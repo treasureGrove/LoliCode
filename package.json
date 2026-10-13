@@ -1,0 +1,31 @@
+{
+  "name": "freehub",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --config apps/desktop/vite.config.ts",
+    "typecheck": "tsc -p apps/desktop/tsconfig.json --noEmit",
+    "build": "npm run typecheck && vite build --config apps/desktop/vite.config.ts",
+    "tauri": "tauri",
+    "test:ui": "node scripts/acceptance-ui.mjs",
+    "test:startup": "node scripts/acceptance-startup.mjs",
+    "desktop:dev": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/desktop.ps1 dev",
+    "desktop:build": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/desktop.ps1 build"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "2.12.3",
+    "lucide-react": "^0.577.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.0",
+    "@tauri-apps/cli": "2.12.2",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "latest",
+    "typescript": "7.0.2",
+    "vite": "8.3.4"
+  }
+}

@@ -1,0 +1,15 @@
+/node_modules/
+/target/
+/dist/
+/apps/desktop/dist/
+/apps/desktop/src-tauri/gen/
+/apps/desktop/src-tauri/icons/android/
+/apps/desktop/src-tauri/icons/ios/
+/artifacts/
+*.db
+*.db-shm
+*.db-wal
+.env
+.env.*
+!*.example
+*.log
