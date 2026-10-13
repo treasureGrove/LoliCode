@@ -15,16 +15,27 @@ async fn check() -> Result<Value, SafeError> {
     let dir = std::env::args_os()
         .nth(1)
         .map(PathBuf::from)
-        .ok_or_else(|| SafeError::invalid("请指定 FreeHub 的应用数据目录。"))?;
+        .ok_or_else(|| SafeError::invalid("请指定 TAI Switch 的应用数据目录。"))?;
     if !dir.join("freehub.db").is_file() {
-        return Err(SafeError::invalid("未找到已配置的 FreeHub 数据库。"));
+        return Err(SafeError::invalid("未找到已配置的 TAI Switch 数据库。"));
     }
     let store = Store::open(&dir, Arc::new(SystemCredentials::default()))?;
     let channels = store.channels()?;
-    let channel = channels
-        .iter()
-        .find(|c| c.enabled && c.confirmed_free && c.key_present)
-        .ok_or_else(|| SafeError::invalid("请先在应用中保存并启用已确认免费的渠道。"))?;
+    let mut selected = None;
+    for c in channels.iter().filter(|c| c.enabled && c.key_present) {
+        if let Some(free) = store
+            .model_settings(&c.id)?
+            .into_iter()
+            .find(|s| s.billing_mode == "free")
+        {
+            let mut c = c.clone();
+            c.model = free.model;
+            selected = Some(c);
+            break;
+        }
+    }
+    let channel =
+        selected.ok_or_else(|| SafeError::invalid("诊断工具只自动测试已明确设置为免费的模型。"))?;
     let key = SystemCredentials::default()
         .get(&format!("channel:{}", channel.id))?
         .ok_or_else(SafeError::credentials)?;
@@ -73,7 +84,7 @@ async fn check() -> Result<Value, SafeError> {
             SafeError::new(
                 503,
                 "gateway_unreachable",
-                "本地网关无法连接，请先启动 FreeHub。",
+                "本地网关无法连接，请先启动 TAI Switch。",
             )
         })?;
     if !models.status().is_success() {

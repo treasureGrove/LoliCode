@@ -6,7 +6,7 @@ if (Test-Path -LiteralPath (Join-Path $taskCargoBin 'cargo.exe')) {
     $env:Path = $taskCargoBin + ';' + $env:Path
 }
 if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) {
-    throw 'Install the Rust MSVC toolchain before building FreeHub.'
+    throw 'Install the Rust MSVC toolchain before building TAI Switch.'
 }
 Push-Location (Join-Path $taskRoot 'apps/desktop')
 try {

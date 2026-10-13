@@ -41,7 +41,7 @@ impl Harness {
             async move {
                 counted.fetch_add(1,Ordering::SeqCst);
                 assert_eq!(headers.get("authorization").unwrap(),format!("Bearer {KEY}").as_str());
-                assert_eq!(body["model"],"test-model");
+                assert_eq!(body["model"],if kind=="multi" {"paid-model"} else {"test-model"});
                 if let Some(code)=kind.strip_prefix("status-") {
                     return (StatusCode::from_u16(code.parse().unwrap()).unwrap(),Json(json!({"error":{"message":format!("{KEY} {PROMPT}")}}))).into_response();
                 }
@@ -49,11 +49,13 @@ impl Harness {
                     return (StatusCode::TEMPORARY_REDIRECT,[("location","http://127.0.0.1:1/steal")]).into_response();
                 }
                 if body["stream"]==true {
+                    assert_eq!(body["stream_options"]["include_usage"],true);
                     let data=match kind {
                         "initial-error"=>format!("data: {}\n\n",json!({"error":{"message":KEY}})),
                         "mid-error"=>format!("data: {}\n\ndata: {}\n\n",json!({"choices":[{"delta":{"content":"hello"}}]}),json!({"error":{"message":KEY}})),
                         "incomplete"=>format!("data: {}\n\n",json!({"choices":[{"delta":{"content":"hello"}}]})),
                         "cancel"=>format!("data: {}\n\n",json!({"choices":[{"delta":{"content":"hello"}}]})),
+                        "usage"=>format!("data: {}\n\ndata: {}\n\ndata: {}\n\ndata: [DONE]\n\n",json!({"choices":[{"delta":{"content":"hello"}}],"usage":{"prompt_tokens":100,"completion_tokens":10}}),json!({"choices":[],"usage":{"prompt_tokens":100,"completion_tokens":20,"prompt_tokens_details":{"cached_tokens":40}}}),json!({"usage":{"prompt_tokens":100,"completion_tokens":20,"prompt_tokens_details":{"cached_tokens":40}}})),
                         _=>format!(": ping\r\n\r\ndata: {}\r\n\r\ndata: {}\n\ndata: [DONE]\n\n",json!({"id":"test","choices":[{"delta":{"content":"你好"}}]}),json!({"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{}"}}]}}]})),
                     };
                     let events=async_stream::stream! {
@@ -64,7 +66,7 @@ impl Harness {
                 }
                 Json(json!({"id":"test","object":"chat.completion","model":"test-model","choices":[{"message":{"role":"assistant","content":"OK"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}})).into_response()
             }
-        }));
+        })).route("/v1/models",axum::routing::get(||async {Json(json!({"data":[{"id":"test-model"},{"id":"paid-model"}]}))}));
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let port = listener.local_addr().unwrap().port();
         let task = tokio::spawn(async move {
@@ -175,6 +177,75 @@ async fn stream_preserves_fragmented_utf8_tools_and_done() {
 }
 
 #[tokio::test]
+async fn stream_usage_is_cumulative_and_missing_usage_remains_unknown() {
+    let h = Harness::new("usage").await;
+    h.client_request(true)
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+    let log = &h.store.logs().unwrap()[0];
+    assert_eq!(log.input_tokens, Some(60));
+    assert_eq!(log.output_tokens, Some(20));
+    assert_eq!(log.cache_read_tokens, Some(40));
+    assert!(log.is_streaming);
+    assert_eq!(h.store.usage_summary().unwrap().output_tokens, 20);
+    let h = Harness::new("ok").await;
+    h.client_request(true)
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+    assert_eq!(h.store.logs().unwrap()[0].input_tokens, None);
+}
+
+#[tokio::test]
+async fn paid_secondary_model_routes_and_discovery_does_not_enable_models() {
+    let h = Harness::new("multi").await;
+    let gateway = Gateway::new(h.store.clone(), CancellationToken::new()).unwrap();
+    let candidates = gateway.discover_models(&h.channel.id).await.unwrap();
+    assert_eq!(candidates, vec!["paid-model", "test-model"]);
+    assert_eq!(h.store.channels().unwrap()[0].models.len(), 1);
+    assert_eq!(h.calls.load(Ordering::SeqCst), 0);
+    h.store
+        .db
+        .lock()
+        .unwrap()
+        .execute(
+            "UPDATE channels SET confirmed_free=0 WHERE id=?1",
+            [&h.channel.id],
+        )
+        .unwrap();
+    h.store
+        .db
+        .lock()
+        .unwrap()
+        .execute(
+            "UPDATE channel_models SET models=?1 WHERE channel_id=?2",
+            rusqlite::params!["[\"test-model\",\"paid-model\"]", h.channel.id],
+        )
+        .unwrap();
+    let response=reqwest::Client::new().post(h.url("/v1/chat/completions")).bearer_auth(h.store.local_token().unwrap().as_str()).json(&json!({"model":format!("{}/paid-model",h.channel.id),"messages":[{"role":"user","content":PROMPT}]})).send().await.unwrap();
+    assert_eq!(response.status(), 200);
+    assert_eq!(h.store.logs().unwrap()[0].model, "paid-model");
+    assert_eq!(h.store.logs().unwrap()[0].billing_status, "unpriced");
+    let models: Value = reqwest::Client::new()
+        .get(h.url("/v1/models"))
+        .bearer_auth(h.store.local_token().unwrap().as_str())
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(models["data"].as_array().unwrap().len(), 2);
+}
+
+#[tokio::test]
 async fn raw_upstream_errors_are_never_exposed_or_persisted() {
     for kind in ["status-401", "status-429", "status-500", "redirect"] {
         let h = Harness::new(kind).await;
@@ -264,7 +335,7 @@ async fn gateway_reports_port_conflict_and_stops_active_stream() {
 }
 
 #[test]
-fn config_rejects_unconfirmed_free_model_and_unsafe_urls() {
+fn config_allows_paid_models_and_rejects_unsafe_urls() {
     let dir = tempfile::tempdir().unwrap();
     let store = Store::open(dir.path(), Arc::new(MemoryCredentials::default())).unwrap();
     for url in [
@@ -280,6 +351,7 @@ fn config_rejects_unconfirmed_free_model_and_unsafe_urls() {
                 provider_id: "test".into(),
                 base_url: url.into(),
                 model: "test-model".into(),
+                models: vec![],
                 enabled: true,
                 confirmed_free: true,
                 api_key: Some(KEY.into())
@@ -293,12 +365,13 @@ fn config_rejects_unconfirmed_free_model_and_unsafe_urls() {
             provider_id: "test".into(),
             base_url: "https://example.com/v1".into(),
             model: "test-model".into(),
+            models: vec!["test-model".into(), "paid-model".into()],
             enabled: true,
             confirmed_free: false,
             api_key: Some(KEY.into())
         })
-        .is_err());
-    assert!(store.channels().unwrap().is_empty());
+        .is_ok());
+    assert_eq!(store.channels().unwrap()[0].models.len(), 2);
 }
 
 #[test]

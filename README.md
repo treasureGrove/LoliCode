@@ -1,53 +1,37 @@
-# FreeHub
+# TAI Switch · 太极 AI 路由器
 
-Windows 本地模型渠道网关。桌面管理界面使用 Tauri 2、React 与 TypeScript；网关使用 Rust、axum 与 reqwest；配置存储在 SQLite，真实 API Key 存储在 Windows Credential Manager。
-
-开发依据：[TASKBOOK.md](TASKBOOK.md)。当前实现 M0，真实智谱和 Cherry Studio 验收需用户在应用内填入自己的 Key。
+Windows 本地 AI 路由器。管理自己的供应商 Key、多模型、用量与免费额度，通过一个 OpenAI Chat Completions 兼容入口连接客户端。
 
 ## 使用
 
-1. 启动 FreeHub，点击“连接智谱 BigModel”。
-2. 核对账户中的免费模型，粘贴自己的 Key，确认免费条件并保存。
-3. 点击“测试连接”。测试会发起两次简短请求，分别验证普通与流式调用。
-4. 在“接入客户端”复制 API 地址、本地令牌和模型 ID，填写到 Cherry Studio 的 OpenAI 兼容供应商设置。
+1. 启动 TAI Switch，在“模型渠道”添加供应商与自己的 Key，填写一个或多个模型 ID。
+2. 在“价格与额度”逐模型选择按量计费、免费模型或免费额度抵扣；按控制台实际权益录入额度，可自定义。
+3. 点击“测试连接”会对所选模型发起两次短请求，付费模型可能产生费用。
+4. 在“客户端接入”复制地址、本地令牌和公共模型 ID，填写到 Cherry Studio 等兼容客户端。
+5. 在侧栏直接打开提供商/免费模型站，或使用资源页的过滤与搜索。
 
-默认接口：`http://127.0.0.1:4310/v1`。上游 Key 不显示在第三方客户端配置中。只认证模型调用，管理功能通过受限的桌面 IPC。
+默认地址 `http://127.0.0.1:4310/v1`。真实 Key 只存 Windows Credential Manager；费用按高精度 USD 单价估算，支持输入/输出/缓存读取/缓存写入。价格和 usage 未知时不记作零；账户余额需从控制台核对后录入，未实现通用余额自动查询。共享额度不要重复分配。日月账本本轮按 UTC+8 重置。
 
-## 开发
+升级保留 FreeHub 的原应用标识、数据目录、数据库和系统凭据命名空间，已有配置无需重填。项目目录保留 `D:\projectGithub\FreeHub`。
 
-需要 Node.js、Rust MSVC、Visual Studio C++ 构建工具和 WebView2。Windows 脚本可使用用户 `.cargo/bin` 中的 Rust 工具，不修改系统 PATH。
+## 开发与验证
+
+需要 Node.js、Rust MSVC、Visual Studio C++ 构建工具和 WebView2。
 
 ```powershell
 npm ci
 npm run desktop:dev
 npm run desktop:build
-```
-
-仅运行界面预览：`npm run dev`。浏览器预览不允许保存 Key 或调用模型，真实管理功能需要 Windows 桌面应用。
-
-```powershell
 cargo test -p freehub-gateway
 cargo fmt --all --check
-cargo clippy -p freehub-gateway --all-targets -- -D warnings
-npm run build
-npm run test:startup
+cargo clippy --workspace --all-targets -- -D warnings
 npm run test:ui
 ```
 
-依赖版本锁定在 `Cargo.lock` 和 `package-lock.json`。运行数据位于用户应用数据目录 `art.treasuregrove.freehub`，不会写入项目仓库。
+`test:ui` 需要先启动 `npm run dev` 并安装 Playwright Chromium；它使用合成 IPC，不能替代原生操作验收。`test:startup` 需要先构建带 custom-protocol 的 debug 桌面程序并保证 4310 端口空闲；仅停止测试自身创建的进程，使用隔离数据/凭据。
 
-## 已实现范围
+Windows 输出：`target/release/tai-switch.exe` 与 `target/release/bundle/nsis/TAI Switch_0.2.0_x64-setup.exe`。安装包尚未签名。
 
-- 渠道添加、编辑、删除与 Windows 系统凭据存取。
-- 本地随机令牌、令牌轮换、凭据库保存与数据库摘要校验。
-- 模型列表、Chat Completions 普通调用与 SSE；文本和工具事件透传。
-- 首个有效 SSE 事件前验证上游，流式断流不自动重放。
-- 受控错误分类、超时、取消、并发与响应体限制。
-- 请求元数据记录，自动清理超过 30 天的记录。
-- 单实例启动、端口冲突提示和网关退出取消。
+任务书：[TASKBOOK.md](TASKBOOK.md)。参考记录：[CC Switch](docs/reference-cc-switch.md)。验收：[v0.2.0](docs/tai-switch-acceptance.md)、[最初 M0](docs/m0-acceptance.md)。
 
-多渠道自动切换、目录订阅、Responses/Messages 转换、配置接管、自动升级、授权和支付尚未实现。调用成功不自动证明模型免费；用户必须核对账户套餐。
-
-源码参考：[CC Switch 检查记录](docs/reference-cc-switch.md)。本项目独立实现，未复制该项目源码。
-
-界面测试使用合成 IPC 数据，不能代替真实桌面操作；启动测试使用隔离的数据目录与凭据命名空间。运行 `test:ui` 前先启动 `npm run dev`，并安装 Playwright 的 Chromium headless shell。启动测试需要先完成 debug 桌面构建，并保证生产应用已退出、4310 端口空闲。
+自动故障切换、云端目录订阅、Responses/Messages 转换、自动修改客户端配置、账户余额同步、自动升级、Pro 授权与支付尚未实现。填写任意模型 ID 不代表已经适配其所有原生协议。Cherry Studio 和干净 Windows 安装仍需单独验收。

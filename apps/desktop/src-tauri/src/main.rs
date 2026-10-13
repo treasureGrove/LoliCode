@@ -1,8 +1,9 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use freehub_gateway::{
-    credentials::SystemCredentials, Channel, Gateway, GatewayHandle, ProbeResult, RequestLog,
-    SafeError, SaveChannel, Store,
+    credentials::SystemCredentials, provider_catalog as catalog, Channel, Gateway, GatewayHandle,
+    ModelSettings, ProbeResult, ProviderLink, RequestLog, SafeError, SaveChannel, Store,
+    UsageSummary,
 };
 use serde::Serialize;
 use std::sync::{Arc, Mutex};
@@ -31,7 +32,7 @@ async fn gateway_status(state: State<'_, AppState>) -> Result<Status, SafeError>
     Ok(Status {
         running: state.handle.lock().await.is_some(),
         base_url: "http://127.0.0.1:4310/v1".into(),
-        version: "0.1.0".into(),
+        version: "0.2.0".into(),
         error: state.error.lock().unwrap().clone(),
     })
 }
@@ -48,8 +49,50 @@ fn delete_channel(id: String, state: State<'_, AppState>) -> Result<(), SafeErro
     state.store.delete_channel(&id)
 }
 #[tauri::command]
-async fn test_channel(id: String, state: State<'_, AppState>) -> Result<ProbeResult, SafeError> {
-    state.gateway.probe(&id).await
+async fn test_channel(
+    id: String,
+    model: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<ProbeResult, SafeError> {
+    state.gateway.probe(&id, model.as_deref()).await
+}
+#[tauri::command]
+async fn discover_models(id: String, state: State<'_, AppState>) -> Result<Vec<String>, SafeError> {
+    state.gateway.discover_models(&id).await
+}
+#[tauri::command]
+fn list_model_settings(
+    channel_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<ModelSettings>, SafeError> {
+    state.store.model_settings(&channel_id)
+}
+#[tauri::command]
+fn save_model_settings(
+    channel_id: String,
+    settings: Vec<ModelSettings>,
+    state: State<'_, AppState>,
+) -> Result<(), SafeError> {
+    state.store.save_model_settings(&channel_id, settings)
+}
+#[tauri::command]
+fn usage_summary(state: State<'_, AppState>) -> Result<UsageSummary, SafeError> {
+    state.store.usage_summary()
+}
+#[tauri::command]
+fn provider_catalog() -> Vec<ProviderLink> {
+    catalog()
+}
+#[tauri::command]
+fn open_resource(id: String, app: tauri::AppHandle) -> Result<(), SafeError> {
+    let url = catalog()
+        .into_iter()
+        .find(|p| p.id == id)
+        .ok_or_else(|| SafeError::invalid("该资源不在内置导航中。"))?
+        .url;
+    app.opener()
+        .open_url(url, None::<&str>)
+        .map_err(|_| SafeError::new(500, "browser_unavailable", "无法打开浏览器。"))
 }
 #[tauri::command]
 fn request_logs(state: State<'_, AppState>) -> Result<Vec<RequestLog>, SafeError> {
@@ -63,18 +106,25 @@ fn rotate_token(state: State<'_, AppState>) -> Result<(), SafeError> {
 fn copy_connection(
     kind: String,
     id: Option<String>,
+    model: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<(), SafeError> {
     let text = match kind.as_str() {
         "token" => state.store.local_token()?.to_string(),
         "url" => "http://127.0.0.1:4310/v1".into(),
-        "model" => state
-            .store
-            .channels()?
-            .into_iter()
-            .find(|c| Some(&c.id) == id.as_ref())
-            .ok_or_else(|| SafeError::invalid("请选择渠道。"))?
-            .public_model(),
+        "model" => {
+            let c = state
+                .store
+                .channels()?
+                .into_iter()
+                .find(|c| Some(&c.id) == id.as_ref())
+                .ok_or_else(|| SafeError::invalid("请选择渠道。"))?;
+            let m = model.as_deref().unwrap_or(&c.model);
+            if !c.models.iter().any(|saved| saved == m) {
+                return Err(SafeError::invalid("请选择已配置的模型。"));
+            }
+            format!("{}/{}", c.id, m)
+        }
         _ => return Err(SafeError::invalid("无效的复制请求。")),
     };
     arboard::Clipboard::new()
@@ -89,16 +139,7 @@ fn copy_connection(
 }
 #[tauri::command]
 fn open_provider(provider_id: String, app: tauri::AppHandle) -> Result<(), SafeError> {
-    let url = match provider_id.as_str() {
-        "zhipu-bigmodel" => "https://open.bigmodel.cn/",
-        "groq" => "https://console.groq.com/keys",
-        "siliconflow" => "https://cloud.siliconflow.cn/",
-        "zhipu-docs" => "https://docs.bigmodel.cn/cn/guide/models/free/glm-4.7-flash",
-        _ => return Err(SafeError::invalid("该渠道没有内置注册链接。")),
-    };
-    app.opener()
-        .open_url(url, None::<&str>)
-        .map_err(|_| SafeError::new(500, "browser_unavailable", "无法打开浏览器。"))
+    open_resource(provider_id, app)
 }
 #[tauri::command]
 async fn retry_gateway(state: State<'_, AppState>) -> Result<(), SafeError> {
@@ -171,6 +212,12 @@ fn main() {
             save_channel,
             delete_channel,
             test_channel,
+            discover_models,
+            list_model_settings,
+            save_model_settings,
+            usage_summary,
+            provider_catalog,
+            open_resource,
             request_logs,
             rotate_token,
             copy_connection,
@@ -179,7 +226,7 @@ fn main() {
             quit_app
         ])
         .build(tauri::generate_context!())
-        .expect("FreeHub startup failed; check Windows Credential Manager and WebView2");
+        .expect("TAI Switch startup failed; check Windows Credential Manager and WebView2");
     app.run(|app, event| {
         if matches!(event, tauri::RunEvent::ExitRequested { .. }) {
             app.state::<AppState>().shutdown.cancel();

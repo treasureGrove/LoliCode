@@ -1,70 +1,81 @@
 import { chromium, expect } from '@playwright/test';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-const dir = resolve('artifacts/ui-acceptance');
-await mkdir(dir, { recursive: true });
-const browser = await chromium.launch({ headless: true });
-const context = await browser.newContext({ viewport: { width: 1120, height: 768 } });
-// This fixture tests React behavior only. Vault and network behavior are tested in Rust.
-await context.addInitScript(() => {
-  let channels = [];
-  window.isTauri = true;
-  window.__TAURI_INTERNALS__ = { invoke: async (cmd, args) => {
-    switch (cmd) {
-      case 'gateway_status': return { running: true, baseUrl: 'http://127.0.0.1:4310/v1', version: '0.1.0', error: null };
-      case 'list_channels': return channels.map(c => ({ ...c }));
-      case 'request_logs': return [];
-      case 'save_channel': {
-        const { apiKey, ...metadata } = args.input;
-        const channel = { ...metadata, id: metadata.id || 'ui-fixture-channel', keyPresent: true };
-        channels = [...channels.filter(c => c.id !== channel.id), channel];
-        return channel;
-      }
-      case 'delete_channel': channels = channels.filter(c => c.id !== args.id); return;
-      case 'copy_connection': case 'rotate_token': case 'open_provider': return;
-      default: throw { code: 'unimplemented_fixture', message: '此界面测试未模拟这个操作。' };
-    }
-  }};
+const dir=resolve('artifacts/ui-acceptance');await mkdir(dir,{recursive:true});
+const browser=await chromium.launch({headless:true});
+const context=await browser.newContext({viewport:{width:1120,height:800}});
+// Synthetic React/IPC contract fixture. Rust tests verify actual vault, network and accounting.
+await context.addInitScript(()=>{
+ let channels=[],prices={};window.isTauri=true;window.fixtureCalls=[];
+ const price=model=>({model,billingMode:'metered',inputCostPerMillion:null,outputCostPerMillion:null,cacheReadCostPerMillion:null,cacheCreationCostPerMillion:null,quotaType:'tokens',quotaTotal:'0',quotaPeriod:'once',quotaUsed:'0'});
+ window.__TAURI_INTERNALS__={invoke:async(cmd,args)=>{window.fixtureCalls.push(cmd);switch(cmd){
+ case 'gateway_status':return {running:true,baseUrl:'http://127.0.0.1:4310/v1',version:'0.2.0',error:null};
+ case 'list_channels':return channels.map(c=>({...c}));
+ case 'request_logs':return [{id:1,timestamp:1791849600,channelId:'ui-fixture-channel',model:'glm-4.7-flash',status:200,durationMs:25,result:'completed',inputTokens:null,outputTokens:null,cacheReadTokens:null,cacheCreationTokens:null,grossCostUsd:null,freeDiscountUsd:null,billableCostUsd:null,billingStatus:'unreported',isStreaming:true}];
+ case 'usage_summary':return {totalRequests:1,failedRequests:0,unknownCostRequests:1,inputTokens:0,outputTokens:0,cacheReadTokens:0,cacheCreationTokens:0,grossCostUsd:'0',freeDiscountUsd:'0',billableCostUsd:'0',currency:'USD',daily:[]};
+ case 'provider_catalog':return [{id:'zhipu-bigmodel',name:'智谱 BigModel',url:'https://open.bigmodel.cn/',category:'provider',description:'账户控制台',region:'cn',freeNote:'按实际额度填写。'},{id:'openrouter-free',name:'OpenRouter 免费模型',url:'https://openrouter.ai/models?max_price=0',category:'directory',description:'免费模型导航',region:'global',freeNote:'核对账户限额。'},{id:'groq-limits',name:'Groq 免费方案限额',url:'https://console.groq.com/docs/rate-limits',category:'directory',description:'免费方案说明',region:'global',freeNote:'核对账户限额。'}];
+ case 'save_channel':{const {apiKey,...metadata}=args.input;const c={...metadata,id:metadata.id||'ui-fixture-channel',keyPresent:true};channels=[...channels.filter(x=>x.id!==c.id),c];return c;}
+ case 'list_model_settings':return prices[args.channelId]||channels.find(c=>c.id===args.channelId).models.map(price);
+ case 'save_model_settings':prices[args.channelId]=args.settings;return;
+ case 'discover_models':return ['glm-4.7-flash','synthetic-paid-model'];
+ case 'test_channel':window.fixtureTestModel=args.model;return {nonStream:true,stream:true,durationMs:25,verifiedAt:1791849600};
+ case 'delete_channel':channels=channels.filter(c=>c.id!==args.id);return;
+ case 'copy_connection':case 'rotate_token':case 'open_provider':case 'open_resource':return;
+ default:throw {code:'unimplemented_fixture',message:'测试未模拟这个操作。'};
+ }}};
 });
-const page = await context.newPage();
-const errors = [];
-page.on('pageerror', e => errors.push(e.message));
-const checks = [];
-try {
-  await page.goto('http://127.0.0.1:1420');
-  await expect(page.getByRole('heading', { name: '从你的第一个渠道开始' })).toBeVisible();
-  await page.screenshot({ path: resolve(dir, 'channels-empty.png') });
-  await page.getByRole('button', { name: '添加渠道', exact: true }).click();
-  const dialog = page.getByRole('dialog');
-  await dialog.getByLabel('API Key', { exact: false }).fill('SYNTHETIC-UI-FIXTURE-NOT-A-REAL-KEY');
-  await expect(dialog.getByRole('button', { name: '保存渠道', exact: true })).toBeDisabled();
-  await dialog.getByLabel('我已确认此模型在我的账户套餐中免费').check();
-  await dialog.getByRole('button', { name: '保存渠道', exact: true }).click();
-  await expect(dialog).not.toBeVisible();
-  await expect(page.getByRole('heading', { name: '智谱 BigModel', exact: true })).toBeVisible();
-  checks.push('channel form, free confirmation and save flow');
-  await page.screenshot({ path: resolve(dir, 'channel-fixture.png') });
-  await page.getByRole('button', { name: '编辑 智谱 BigModel', exact: true }).click();
-  await expect(dialog.getByLabel('API Key', { exact: false })).toHaveValue('');
-  await dialog.getByLabel('显示名称', { exact: true }).fill('智谱 · 工作渠道');
-  await dialog.getByRole('button', { name: '保存渠道', exact: true }).click();
-  await expect(page.getByRole('heading', { name: '智谱 · 工作渠道' })).toBeVisible();
-  checks.push('edit form never refills upstream secret');
-  await page.getByRole('button', { name: '接入客户端', exact: true }).click();
-  await expect(page.getByRole('heading', { name: '在 Cherry Studio 添加供应商' })).toBeVisible();
-  await expect(page.getByText('ui-fixture-channel/glm-4.7-flash', { exact: true })).toBeVisible();
-  await page.screenshot({ path: resolve(dir, 'client-setup.png') });
-  checks.push('client setup shows actual configured public model ID');
-  await page.getByRole('button', { name: /我的渠道/ }).click();
-  page.once('dialog', d => d.accept());
-  await page.getByRole('button', { name: '删除 智谱 · 工作渠道', exact: true }).click();
-  await expect(page.getByRole('heading', { name: '从你的第一个渠道开始' })).toBeVisible();
-  checks.push('channel removal and empty state');
-  await page.getByRole('button', { name: '调用记录', exact: true }).click();
-  await expect(page.getByText('还没有调用记录', { exact: true })).toBeVisible();
-  const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
-  if (overflow || errors.length) throw new Error('UI overflow or browser runtime errors');
-  const report = { passed: true, kind: 'React UI with synthetic IPC fixture', checks, nativeIPC: 'not verified by this test' };
-  await writeFile(resolve(dir, 'results.json'), JSON.stringify(report, null, 2));
-  console.log(JSON.stringify(report, null, 2));
-} finally { await browser.close(); }
+const page=await context.newPage(),errors=[],checks=[];page.on('pageerror',e=>errors.push(e.message));
+try{
+ await page.goto('http://127.0.0.1:1420');
+ await expect(page.getByRole('heading',{name:'让每一次调用，恰到好处。'})).toBeVisible();
+ await page.screenshot({path:resolve(dir,'overview.png')});
+ await page.getByRole('button',{name:'添加渠道',exact:true}).click();
+ let dialog=page.getByRole('dialog');
+ await dialog.getByLabel('API Key',{exact:false}).fill('SYNTHETIC-UI-FIXTURE-NOT-A-REAL-KEY');
+ await dialog.getByRole('button',{name:'保存渠道',exact:true}).click();await expect(dialog).not.toBeVisible();
+ checks.push('paid-capable channel saves without free-only confirmation');
+ await page.getByRole('button',{name:/模型渠道/}).click();
+ await page.getByRole('button',{name:'编辑 智谱 BigModel',exact:true}).click();dialog=page.getByRole('dialog');
+ await expect(dialog.getByLabel('API Key',{exact:false})).toHaveValue('');
+ await dialog.getByRole('button',{name:'查询模型',exact:true}).click();
+ await expect(dialog.getByLabel('synthetic-paid-model',{exact:true})).not.toBeChecked();
+ await dialog.getByLabel('synthetic-paid-model',{exact:true}).check();
+ await dialog.getByRole('button',{name:'保存渠道',exact:true}).click();await expect(dialog).not.toBeVisible();
+ await expect(page.getByText('synthetic-paid-model',{exact:true}).first()).toBeVisible();
+ checks.push('secret never refilled; discovery requires manual model selection');
+ await page.getByLabel('智谱 BigModel 测试模型',{exact:true}).selectOption('synthetic-paid-model');
+ await page.getByRole('button',{name:'测试连接',exact:true}).click();
+ await expect(page.getByText('所选模型测试通过',{exact:true})).toBeVisible();
+ if((await page.evaluate(()=>window.fixtureTestModel))!=='synthetic-paid-model')throw new Error('Wrong selected probe model');
+ checks.push('connection test invokes the selected secondary model');
+ await page.screenshot({path:resolve(dir,'channels.png')});
+ await page.getByRole('button',{name:'价格与额度',exact:true}).first().click();
+ await page.getByRole('button',{name:'设置价格',exact:false}).click();dialog=page.getByRole('dialog');
+ await dialog.getByLabel('glm-4.7-flash 计费方式',{exact:true}).selectOption('quota');
+ await dialog.getByLabel('免费额度类型',{exact:false}).selectOption('tokens');
+ await dialog.getByLabel('每期额度',{exact:true}).fill('100000');
+ await dialog.getByLabel('重置周期',{exact:false}).selectOption('monthly');
+ await expect(dialog.getByLabel('本期已用额度（自动记录）')).toHaveAttribute('readonly','');
+ await dialog.getByLabel('输入单价',{exact:true}).first().fill('0.125');
+ await dialog.getByLabel('输出单价',{exact:true}).first().fill('0.5');
+ await page.screenshot({path:resolve(dir,'quota-settings.png')});
+ await dialog.getByRole('button',{name:'保存设置',exact:true}).click();await expect(dialog).not.toBeVisible();
+ checks.push('decimal prices and actual free quotas save; used ledger read-only');
+ await page.getByRole('button',{name:'客户端接入',exact:true}).click();
+ await expect(page.getByText('ui-fixture-channel/synthetic-paid-model',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'复制本地令牌',exact:true}).click();checks.push('all public models and secure clipboard available');
+ await page.getByRole('button',{name:'调用明细',exact:true}).click();
+ await expect(page.getByText('待计价').first()).toBeVisible();await expect(page.getByText('未知').first()).toBeVisible();checks.push('missing price and usage stay unknown');
+ await page.getByRole('button',{name:'OpenRouter 免费模型',exact:true}).click();
+ await page.getByRole('button',{name:'模型资源导航',exact:false}).click();
+ await expect(page.getByRole('heading',{name:'OpenRouter 免费模型',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'免费模型导航',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'智谱 BigModel',exact:true})).not.toBeVisible();
+ await page.screenshot({path:resolve(dir,'resources.png')});
+ if(!(await page.evaluate(()=>window.fixtureCalls)).includes('open_resource'))throw new Error('Website shortcut is inert');
+ checks.push('sidebar website invokes allowlisted browser navigation; filters work');
+ for(const width of [860,1120,1280]){await page.setViewportSize({width,height:800});if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth))throw new Error('UI overflow');}
+ if(errors.length)throw new Error('Browser runtime errors');
+ const preview=await browser.newPage();await preview.goto('http://127.0.0.1:1420');await preview.getByRole('button',{name:'添加渠道',exact:true}).click();await expect(preview.getByRole('dialog').getByLabel('API Key',{exact:false})).toBeDisabled();await preview.close();checks.push('browser preview blocks real credential entry');
+ const report={passed:true,kind:'React UI with synthetic IPC fixture',checks,nativeIPC:'not verified by this test'};await writeFile(resolve(dir,'results.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));
+}finally{await browser.close();}

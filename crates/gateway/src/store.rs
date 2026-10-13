@@ -8,8 +8,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
     path::Path,
-    sync::{Arc, Mutex},
-    time::{SystemTime, UNIX_EPOCH},
+    sync::{atomic::AtomicBool, Arc, Mutex},
 };
 use subtle::ConstantTimeEq;
 use url::Url;
@@ -25,6 +24,8 @@ pub struct Channel {
     pub provider_id: String,
     pub base_url: String,
     pub model: String,
+    #[serde(default)]
+    pub models: Vec<String>,
     pub enabled: bool,
     pub confirmed_free: bool,
     pub key_present: bool,
@@ -47,6 +48,8 @@ pub struct SaveChannel {
     pub provider_id: String,
     pub base_url: String,
     pub model: String,
+    #[serde(default)]
+    pub models: Vec<String>,
     pub enabled: bool,
     pub confirmed_free: bool,
     pub api_key: Option<String>,
@@ -55,18 +58,29 @@ pub struct SaveChannel {
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RequestLog {
+    pub id: i64,
     pub timestamp: i64,
     pub channel_id: String,
     pub model: String,
     pub status: u16,
     pub duration_ms: u64,
     pub result: String,
+    pub input_tokens: Option<u64>,
+    pub output_tokens: Option<u64>,
+    pub cache_read_tokens: Option<u64>,
+    pub cache_creation_tokens: Option<u64>,
+    pub gross_cost_usd: Option<String>,
+    pub free_discount_usd: Option<String>,
+    pub billable_cost_usd: Option<String>,
+    pub billing_status: String,
+    pub is_streaming: bool,
 }
 
 pub struct Store {
-    db: Mutex<Connection>,
+    pub(crate) db: Mutex<Connection>,
     credentials: Arc<dyn Credentials>,
-    updates: Mutex<()>,
+    pub(crate) updates: Mutex<()>,
+    pub(crate) billing_fault: AtomicBool,
 }
 
 impl Store {
@@ -76,12 +90,52 @@ impl Store {
         db.execute_batch("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=3000;
           CREATE TABLE IF NOT EXISTS settings (name TEXT PRIMARY KEY,value TEXT NOT NULL);
           CREATE TABLE IF NOT EXISTS channels (id TEXT PRIMARY KEY,name TEXT NOT NULL,provider_id TEXT NOT NULL,base_url TEXT NOT NULL,model TEXT NOT NULL,enabled INTEGER NOT NULL,confirmed_free INTEGER NOT NULL);
-          CREATE TABLE IF NOT EXISTS requests (id INTEGER PRIMARY KEY,timestamp INTEGER NOT NULL,channel_id TEXT NOT NULL,model TEXT NOT NULL,status INTEGER NOT NULL,duration_ms INTEGER NOT NULL,result TEXT NOT NULL);")
+          CREATE TABLE IF NOT EXISTS requests (id INTEGER PRIMARY KEY,timestamp INTEGER NOT NULL,channel_id TEXT NOT NULL,model TEXT NOT NULL,status INTEGER NOT NULL,duration_ms INTEGER NOT NULL,result TEXT NOT NULL);
+          CREATE TABLE IF NOT EXISTS channel_models (channel_id TEXT PRIMARY KEY,models TEXT NOT NULL);
+          CREATE TABLE IF NOT EXISTS model_settings (channel_id TEXT NOT NULL,model TEXT NOT NULL,config TEXT NOT NULL,revision INTEGER NOT NULL,PRIMARY KEY(channel_id,model));
+          CREATE TABLE IF NOT EXISTS quota_ledger (channel_id TEXT NOT NULL,model TEXT NOT NULL,revision INTEGER NOT NULL,period TEXT NOT NULL,used TEXT NOT NULL,PRIMARY KEY(channel_id,model,revision,period));")
             .map_err(|_| SafeError::storage())?;
+        let columns: Vec<String> = db
+            .prepare("PRAGMA table_info(requests)")
+            .map_err(|_| SafeError::storage())?
+            .query_map([], |r| r.get(1))
+            .map_err(|_| SafeError::storage())?
+            .collect::<std::result::Result<_, _>>()
+            .map_err(|_| SafeError::storage())?;
+        for (name, definition) in [
+            ("input_tokens", "INTEGER"),
+            ("output_tokens", "INTEGER"),
+            ("cache_read_tokens", "INTEGER"),
+            ("cache_creation_tokens", "INTEGER"),
+            ("gross_cost_usd", "TEXT"),
+            ("free_discount_usd", "TEXT"),
+            ("billable_cost_usd", "TEXT"),
+            ("billing_status", "TEXT NOT NULL DEFAULT 'legacy'"),
+            ("is_streaming", "INTEGER NOT NULL DEFAULT 0"),
+        ] {
+            if !columns.iter().any(|c| c == name) {
+                db.execute_batch(&format!(
+                    "ALTER TABLE requests ADD COLUMN {name} {definition}"
+                ))
+                .map_err(|_| SafeError::storage())?;
+            }
+        }
+        // Only the original single model had a user-confirmed free policy.
+        // Seed it once; newly added models always start metered with unknown prices.
+        let legacy: Vec<(String,String)> = db.prepare("SELECT id,model FROM channels WHERE confirmed_free=1 AND NOT EXISTS (SELECT 1 FROM channel_models WHERE channel_id=channels.id)").map_err(|_|SafeError::storage())?.query_map([],|r|Ok((r.get(0)?,r.get(1)?))).map_err(|_|SafeError::storage())?.collect::<std::result::Result<_,_>>().map_err(|_|SafeError::storage())?;
+        for (id, model) in legacy {
+            let config = serde_json::json!({"model":model,"billingMode":"free","inputCostPerMillion":null,"outputCostPerMillion":null,"cacheReadCostPerMillion":null,"cacheCreationCostPerMillion":null,"quotaType":"tokens","quotaTotal":"0","quotaPeriod":"once"});
+            db.execute(
+                "INSERT OR IGNORE INTO model_settings VALUES (?1,?2,?3,0)",
+                params![id, model, config.to_string()],
+            )
+            .map_err(|_| SafeError::storage())?;
+        }
         let store = Arc::new(Self {
             db: Mutex::new(db),
             credentials,
             updates: Mutex::new(()),
+            billing_fault: AtomicBool::new(false),
         });
         store.ensure_token()?;
         Ok(store)
@@ -112,7 +166,7 @@ impl Store {
         let mut bytes = [0u8; 32];
         rand::rngs::OsRng.fill_bytes(&mut bytes);
         let token = Zeroizing::new(format!(
-            "sk-freehub-{}",
+            "sk-tai-switch-{}",
             bytes.iter().map(|b| format!("{b:02x}")).collect::<String>()
         ));
         let old = self.credentials.get(LOCAL_TOKEN)?;
@@ -148,7 +202,7 @@ impl Store {
     pub fn channels(&self) -> Result<Vec<Channel>> {
         let rows = {
             let db = self.db.lock().map_err(|_| SafeError::storage())?;
-            let mut query = db.prepare("SELECT id,name,provider_id,base_url,model,enabled,confirmed_free FROM channels ORDER BY rowid").map_err(|_| SafeError::storage())?;
+            let mut query = db.prepare("SELECT c.id,c.name,c.provider_id,c.base_url,c.model,c.enabled,c.confirmed_free,m.models FROM channels c LEFT JOIN channel_models m ON m.channel_id=c.id ORDER BY c.rowid").map_err(|_| SafeError::storage())?;
             let result = query
                 .query_map([], |r| {
                     Ok(Channel {
@@ -157,6 +211,10 @@ impl Store {
                         provider_id: r.get(2)?,
                         base_url: r.get(3)?,
                         model: r.get(4)?,
+                        models: r
+                            .get::<_, Option<String>>(7)?
+                            .and_then(|s| serde_json::from_str(&s).ok())
+                            .unwrap_or_else(|| vec![r.get::<_, String>(4).unwrap_or_default()]),
                         enabled: r.get(5)?,
                         confirmed_free: r.get(6)?,
                         key_present: false,
@@ -200,13 +258,29 @@ impl Store {
                 .chars()
                 .all(|c| c.is_ascii_alphanumeric() || c == '-')
             || input.provider_id.is_empty()
+            || input.provider_id.len() > 80
         {
             return Err(SafeError::invalid("请填写有效的渠道名称和模型 ID。"));
         }
-        if input.enabled && !input.confirmed_free {
-            return Err(SafeError::invalid(
-                "启用前请确认此模型在你的账户套餐中免费。",
-            ));
+        let models = if input.models.is_empty() {
+            vec![input.model.trim().to_string()]
+        } else {
+            input
+                .models
+                .into_iter()
+                .map(|m| m.trim().to_string())
+                .collect()
+        };
+        let mut unique = std::collections::HashSet::new();
+        if models.len() > 200
+            || models.iter().any(|m| {
+                m.is_empty()
+                    || m.len() > 200
+                    || m.chars().any(char::is_control)
+                    || !unique.insert(m)
+            })
+        {
+            return Err(SafeError::invalid("请填写最多 200 个不重复的有效模型 ID。"));
         }
         let id = if let Some(id) = input.id {
             if !self.channels()?.iter().any(|c| c.id == id) {
@@ -225,7 +299,8 @@ impl Store {
             name: input.name.trim().into(),
             provider_id: input.provider_id,
             base_url: url.to_string().trim_end_matches('/').into(),
-            model: input.model.trim().into(),
+            model: models[0].clone(),
+            models,
             enabled: input.enabled,
             confirmed_free: input.confirmed_free,
             key_present: true,
@@ -244,9 +319,20 @@ impl Store {
         } else if old_key.is_none() {
             return Err(SafeError::invalid("请填写渠道 API Key。"));
         }
-        let written = self.db.lock().map_err(|_| SafeError::storage())?
-            .execute("INSERT INTO channels VALUES (?1,?2,?3,?4,?5,?6,?7) ON CONFLICT(id) DO UPDATE SET name=excluded.name,provider_id=excluded.provider_id,base_url=excluded.base_url,model=excluded.model,enabled=excluded.enabled,confirmed_free=excluded.confirmed_free",
-                params![c.id,c.name,c.provider_id,c.base_url,c.model,c.enabled,c.confirmed_free]);
+        let written = (|| -> Result<()> {
+            let mut db = self.db.lock().map_err(|_| SafeError::storage())?;
+            let tx = db.transaction().map_err(|_| SafeError::storage())?;
+            tx.execute("INSERT INTO channels VALUES (?1,?2,?3,?4,?5,?6,?7) ON CONFLICT(id) DO UPDATE SET name=excluded.name,provider_id=excluded.provider_id,base_url=excluded.base_url,model=excluded.model,enabled=excluded.enabled,confirmed_free=excluded.confirmed_free",params![c.id,c.name,c.provider_id,c.base_url,c.model,c.enabled,c.confirmed_free]).map_err(|_|SafeError::storage())?;
+            tx.execute(
+                "INSERT OR REPLACE INTO channel_models VALUES (?1,?2)",
+                params![
+                    c.id,
+                    serde_json::to_string(&c.models).map_err(|_| SafeError::storage())?
+                ],
+            )
+            .map_err(|_| SafeError::storage())?;
+            tx.commit().map_err(|_| SafeError::storage())
+        })();
         if written.is_err() {
             if new_key.is_some() {
                 if let Some(old) = old_key {
@@ -269,13 +355,18 @@ impl Store {
             .ok_or_else(|| SafeError::invalid("渠道不存在。"))?;
         let old = self.credentials.get(&channel.credential_id())?;
         self.credentials.delete(&channel.credential_id())?;
-        if self
-            .db
-            .lock()
-            .map_err(|_| SafeError::storage())?
-            .execute("DELETE FROM channels WHERE id=?1", [id])
-            .is_err()
-        {
+        let deleted = (|| -> Result<()> {
+            let mut db = self.db.lock().map_err(|_| SafeError::storage())?;
+            let tx = db.transaction().map_err(|_| SafeError::storage())?;
+            tx.execute("DELETE FROM channels WHERE id=?1", [id])
+                .map_err(|_| SafeError::storage())?;
+            tx.execute("DELETE FROM channel_models WHERE channel_id=?1", [id])
+                .map_err(|_| SafeError::storage())?;
+            tx.execute("DELETE FROM model_settings WHERE channel_id=?1", [id])
+                .map_err(|_| SafeError::storage())?;
+            tx.commit().map_err(|_| SafeError::storage())
+        })();
+        if deleted.is_err() {
             if let Some(old) = old {
                 self.credentials.set(&channel.credential_id(), &old)?;
             }
@@ -288,29 +379,9 @@ impl Store {
             .get(&c.credential_id())?
             .ok_or_else(SafeError::credentials)
     }
-    pub(crate) fn record(
-        &self,
-        channel_id: &str,
-        model: &str,
-        status: u16,
-        duration_ms: u64,
-        result: &str,
-    ) {
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs() as i64;
-        if let Ok(db) = self.db.lock() {
-            let _ = db.execute("INSERT INTO requests (timestamp,channel_id,model,status,duration_ms,result) VALUES (?1,?2,?3,?4,?5,?6)",params![now,channel_id,model,status,duration_ms,result]);
-            let _ = db.execute(
-                "DELETE FROM requests WHERE timestamp < ?1",
-                [now - 30 * 86400],
-            );
-        }
-    }
     pub fn logs(&self) -> Result<Vec<RequestLog>> {
         let db = self.db.lock().map_err(|_| SafeError::storage())?;
-        let mut q = db.prepare("SELECT timestamp,channel_id,model,status,duration_ms,result FROM requests ORDER BY id DESC LIMIT 30").map_err(|_| SafeError::storage())?;
+        let mut q = db.prepare("SELECT timestamp,channel_id,model,status,duration_ms,result,id,input_tokens,output_tokens,cache_read_tokens,cache_creation_tokens,gross_cost_usd,free_discount_usd,billable_cost_usd,billing_status,is_streaming FROM requests ORDER BY id DESC LIMIT 100").map_err(|_| SafeError::storage())?;
         let result = q
             .query_map([], |r| {
                 Ok(RequestLog {
@@ -320,6 +391,16 @@ impl Store {
                     status: r.get(3)?,
                     duration_ms: r.get(4)?,
                     result: r.get(5)?,
+                    id: r.get(6)?,
+                    input_tokens: r.get(7)?,
+                    output_tokens: r.get(8)?,
+                    cache_read_tokens: r.get(9)?,
+                    cache_creation_tokens: r.get(10)?,
+                    gross_cost_usd: r.get(11)?,
+                    free_discount_usd: r.get(12)?,
+                    billable_cost_usd: r.get(13)?,
+                    billing_status: r.get(14)?,
+                    is_streaming: r.get(15)?,
                 })
             })
             .map_err(|_| SafeError::storage())?
@@ -336,6 +417,7 @@ impl Store {
                 provider_id: "test".into(),
                 base_url: "https://example.com/v1".into(),
                 model: "test-model".into(),
+                models: vec![],
                 enabled: true,
                 confirmed_free: true,
                 api_key: Some(key.into()),

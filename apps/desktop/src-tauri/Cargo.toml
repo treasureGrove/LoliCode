@@ -1,12 +1,12 @@
 [package]
-name = "freehub-desktop"
-version = "0.1.0"
-description = "FreeHub local model gateway"
+name = "tai-switch-desktop"
+version = "0.2.0"
+description = "TAI Switch local AI router"
 edition = "2021"
-default-run = "freehub"
+default-run = "tai-switch"
 
 [[bin]]
-name = "freehub"
+name = "tai-switch"
 path = "src/main.rs"
 
 [build-dependencies]

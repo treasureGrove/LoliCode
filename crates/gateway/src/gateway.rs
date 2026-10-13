@@ -1,3 +1,4 @@
+use crate::billing::{BillingSnapshot, RequestAccounting, Usage};
 use crate::{Channel, Result, SafeError, Store};
 use axum::{
     body::{Body, Bytes},
@@ -63,7 +64,7 @@ impl Gateway {
         let client = reqwest::Client::builder()
             .redirect(reqwest::redirect::Policy::none())
             .connect_timeout(Duration::from_secs(10))
-            .user_agent("FreeHub/0.1")
+            .user_agent("TAI-Switch/0.2")
             .build()
             .map_err(|_| SafeError::new(500, "http_initialization", "无法初始化安全网络连接。"))?;
         Ok(Self {
@@ -79,7 +80,7 @@ impl Gateway {
             .fallback(|| async { SafeError::new(404,"not_found","此接口不存在。") })
             .layer(DefaultBodyLimit::max(1024*1024))
             .route_layer(middleware::from_fn_with_state(self.clone(),authenticate))
-            .route("/health",get(|| async { Json(json!({"status":"ok","protocol":"openai-chat-completions","version":"0.1.0"})) }))
+            .route("/health",get(|| async { Json(json!({"status":"ok","protocol":"openai-chat-completions","version":"0.2.0"})) }))
             .with_state(self.clone())
     }
     pub async fn start(&self, port: u16) -> Result<GatewayHandle> {
@@ -112,13 +113,19 @@ impl Gateway {
             task,
         })
     }
-    pub async fn probe(&self, id: &str) -> Result<ProbeResult> {
-        let c = self
+    pub async fn probe(&self, id: &str, model: Option<&str>) -> Result<ProbeResult> {
+        let mut c = self
             .store
             .channels()?
             .into_iter()
-            .find(|c| c.id == id && c.enabled && c.confirmed_free)
-            .ok_or_else(|| SafeError::invalid("请先保存并启用已确认免费的渠道。"))?;
+            .find(|c| c.id == id && c.enabled)
+            .ok_or_else(|| SafeError::invalid("请先保存并启用渠道。"))?;
+        if let Some(model) = model {
+            if !c.models.iter().any(|m| m == model) {
+                return Err(SafeError::invalid("请先保存所选模型。"));
+            }
+            c.model = model.into();
+        }
         let start = Instant::now();
         for stream in [false, true] {
             let mut body = json!({"model":c.model,"messages":[{"role":"user","content":"Reply with OK."}],"max_tokens":32,"stream":stream});
@@ -159,8 +166,14 @@ impl Gateway {
             .clone()
             .try_acquire_owned()
             .map_err(|_| SafeError::new(429, "gateway_busy", "本地网关正忙，请稍后重试。"))?;
-        let mut record = Completion::new(self.store.clone(), c.clone());
+        let mut record = Completion::new(self.store.clone(), c.clone(), streaming)?;
         body["model"] = Value::String(c.model.clone());
+        if streaming {
+            if !body.get("stream_options").is_some_and(Value::is_object) {
+                body["stream_options"] = json!({});
+            }
+            body["stream_options"]["include_usage"] = json!(true);
+        }
         let key = self.store.key(&c)?;
         let request = self
             .client
@@ -227,15 +240,17 @@ impl Gateway {
                     return Err(e);
                 }
             };
+            record.usage = reader.usage;
             let shutdown = self.shutdown.clone();
             let stream = async_stream::stream! {
                 let _permit: OwnedSemaphorePermit = permit;
                 yield Ok::<Bytes,std::io::Error>(first);
                 while !reader.done {
                     match reader.next(&shutdown,120).await {
-                        Ok(Some(event)) => yield Ok(event),
+                        Ok(Some(event)) => { record.usage = reader.usage; yield Ok(event); },
                         Ok(None) => break,
                         Err(e) => {
+                            record.usage = reader.usage;
                             record.fail(&e.code,e.status);
                             // Error text is controlled; never forward the upstream error payload.
                             let event = format!("event: error\ndata: {}\n\n",json!({"error":{"code":e.code,"message":e.message}}));
@@ -293,6 +308,7 @@ impl Gateway {
             };
             match result {
                 Ok(value) => {
+                    record.usage = Usage::parse(&value);
                     record.success();
                     Ok(([(header::CACHE_CONTROL, "no-store")], Json(value)).into_response())
                 }
@@ -302,6 +318,58 @@ impl Gateway {
                 }
             }
         }
+    }
+    /// Discovery only lists candidates; it never enables them or issues inference requests.
+    pub async fn discover_models(&self, id: &str) -> Result<Vec<String>> {
+        let c = self
+            .store
+            .channels()?
+            .into_iter()
+            .find(|c| c.id == id)
+            .ok_or_else(|| SafeError::invalid("请先保存渠道。"))?;
+        let key = self.store.key(&c)?;
+        let request = self
+            .client
+            .get(format!("{}/models", c.base_url))
+            .bearer_auth(key.as_str());
+        drop(key);
+        let read = async {
+            let response = request
+                .send()
+                .await
+                .map_err(|_| SafeError::new(502, "network_error", "无法读取渠道模型列表。"))?;
+            if !response.status().is_success() {
+                return Err(SafeError::from_upstream(response.status().as_u16()));
+            }
+            let mut stream = response.bytes_stream();
+            let mut bytes = vec![];
+            while let Some(chunk) = stream.next().await {
+                let chunk = chunk.map_err(|_| {
+                    SafeError::new(502, "response_interrupted", "模型列表读取中断。")
+                })?;
+                if bytes.len() + chunk.len() > MAX_RESPONSE {
+                    return Err(SafeError::invalid("模型列表超过大小限制。"));
+                }
+                bytes.extend_from_slice(&chunk);
+            }
+            let v: Value = serde_json::from_slice(&bytes)
+                .map_err(|_| SafeError::invalid("渠道未提供兼容的模型列表，请手动填写。"))?;
+            let data = v
+                .get("data")
+                .and_then(Value::as_array)
+                .ok_or_else(|| SafeError::invalid("渠道未提供兼容的模型列表，请手动填写。"))?;
+            let mut models: Vec<String> = data
+                .iter()
+                .filter_map(|m| m.get("id").and_then(Value::as_str))
+                .filter(|m| !m.is_empty() && m.len() <= 200 && !m.chars().any(char::is_control))
+                .take(5000)
+                .map(str::to_string)
+                .collect();
+            models.sort();
+            models.dedup();
+            Ok(models)
+        };
+        tokio::select! { _=self.shutdown.cancelled()=>Err(SafeError::new(503,"gateway_stopping","网关正在退出。")), r=tokio::time::timeout(Duration::from_secs(20),read)=>r.unwrap_or_else(|_|Err(SafeError::new(504,"upstream_timeout","模型列表读取超时，请手动填写。"))) }
     }
 }
 
@@ -328,8 +396,8 @@ async fn unsupported() -> SafeError {
     )
 }
 async fn models(State(g): State<Gateway>) -> Result<Json<Value>> {
-    let data:Vec<Value> = g.store.channels()?.iter().filter(|c|c.enabled && c.confirmed_free && c.key_present)
-        .map(|c|json!({"id":c.public_model(),"object":"model","created":0,"owned_by":c.provider_id})).collect();
+    let data:Vec<Value> = g.store.channels()?.iter().filter(|c|c.enabled && c.key_present)
+        .flat_map(|c|c.models.iter().map(|m|json!({"id":format!("{}/{}",c.id,m),"object":"model","created":0,"owned_by":c.provider_id}))).collect();
     Ok(Json(json!({"object":"list","data":data})))
 }
 async fn chat(
@@ -395,11 +463,15 @@ async fn chat(
         None => false,
         _ => return Err(SafeError::invalid("stream 必须为 true 或 false。")),
     };
-    let c = g
+    let mut c = g
         .store
         .channels()?
         .into_iter()
-        .find(|c| c.enabled && c.confirmed_free && c.key_present && c.public_model() == model)
+        .find(|c| {
+            c.enabled
+                && c.key_present
+                && c.models.iter().any(|m| format!("{}/{}", c.id, m) == model)
+        })
         .ok_or_else(|| {
             SafeError::new(
                 404,
@@ -407,6 +479,10 @@ async fn chat(
                 "模型不存在或渠道未启用，请获取最新网关模型列表。",
             )
         })?;
+    c.model = model
+        .strip_prefix(&format!("{}/", c.id))
+        .unwrap()
+        .to_string();
     g.forward(c, body, streaming).await
 }
 
@@ -416,16 +492,23 @@ struct Completion {
     start: Instant,
     status: u16,
     result: String,
+    usage: Option<Usage>,
+    snapshot: BillingSnapshot,
+    streaming: bool,
 }
 impl Completion {
-    fn new(store: Arc<Store>, channel: Channel) -> Self {
-        Self {
+    fn new(store: Arc<Store>, channel: Channel, streaming: bool) -> Result<Self> {
+        let snapshot = store.billing_snapshot(&channel)?;
+        Ok(Self {
             store,
             channel,
             start: Instant::now(),
             status: 499,
             result: "cancelled".into(),
-        }
+            usage: None,
+            snapshot,
+            streaming,
+        })
     }
     fn fail(&mut self, code: &str, status: u16) {
         self.result = code.into();
@@ -438,13 +521,15 @@ impl Completion {
 }
 impl Drop for Completion {
     fn drop(&mut self) {
-        self.store.record(
-            &self.channel.id,
-            &self.channel.model,
-            self.status,
-            self.start.elapsed().as_millis() as u64,
-            &self.result,
-        );
+        self.store.record_accounting(RequestAccounting {
+            channel: &self.channel,
+            status: self.status,
+            duration_ms: self.start.elapsed().as_millis() as u64,
+            result: &self.result,
+            streaming: self.streaming,
+            usage: self.usage,
+            snapshot: &self.snapshot,
+        });
     }
 }
 
@@ -452,6 +537,7 @@ struct SseReader {
     stream: Pin<Box<dyn Stream<Item = std::result::Result<Bytes, reqwest::Error>> + Send>>,
     buffer: Vec<u8>,
     done: bool,
+    usage: Option<Usage>,
 }
 impl SseReader {
     fn new(
@@ -461,6 +547,7 @@ impl SseReader {
             stream: Box::pin(stream),
             buffer: Vec::new(),
             done: false,
+            usage: None,
         }
     }
     async fn next(&mut self, cancel: &CancellationToken, seconds: u64) -> Result<Option<Bytes>> {
@@ -496,12 +583,18 @@ impl SseReader {
                             "渠道在流式调用中返回错误，请检查账户和模型。",
                         ));
                     }
-                    if !value.get("choices").is_some_and(Value::is_array) {
+                    if !value.get("choices").is_some_and(Value::is_array)
+                        && Usage::parse(&value).is_none()
+                    {
                         return Err(SafeError::new(
                             502,
                             "invalid_stream",
                             "渠道返回了不支持的流式事件。",
                         ));
+                    }
+                    // Usage events are cumulative. Retain only the latest complete counters.
+                    if let Some(usage) = Usage::parse(&value) {
+                        self.usage = Some(usage);
                     }
                     return Ok(Some(Bytes::from(format!("data: {value}\n\n"))));
                 }
