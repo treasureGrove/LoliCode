@@ -199,7 +199,7 @@ fn opt_text<T: ToString>(value: Option<T>) -> String {
 }
 
 fn open_db_read_only() -> rusqlite::Connection {
-    let path = home().join(".cc-switch").join("cc-switch.db");
+    let path = home().join(".tai-switch").join("cc-switch.db");
     rusqlite::Connection::open_with_flags(&path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
         .unwrap_or_else(|e| panic!("open {}: {e}", path.display()))
 }

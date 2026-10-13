@@ -9,7 +9,7 @@
 - 逐文件校验：1,568 个上游文件的 Git blob 哈希全部一致，文件执行标记亦按原 Git tree 保留。
 - 许可证：原 `LICENSE` 完整保留，MIT，Copyright (c) 2025 Jason Young。
 
-本文件与 FORK_VALIDATION.md 是额外的交接说明；未改动上游业务文件。README、产品名称、图标、数据格式、代理、计费、客户端切换、MCP、Skills 和其他模块均保持上游原样。
+以上描述纯复制提交 `b04540d`。该提交的 README、产品名称、图标、数据格式、代理、计费、客户端切换、MCP、Skills 和其他模块均保持上游原样。后续用户授权的测试修复和 TAI 隔离打包在其上单独提交，交付说明见 `TESTING_TAI.md`。
 
 ## 目录与保留版本
 

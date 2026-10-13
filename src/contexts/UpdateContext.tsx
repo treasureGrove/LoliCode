@@ -8,6 +8,7 @@ import React, {
 } from "react";
 import type { UpdateInfo } from "../lib/updater";
 import { checkForUpdate } from "../lib/updater";
+import { APP_UPDATES_ENABLED } from "../lib/branding";
 import { extractErrorMessage } from "../utils/errorUtils";
 
 interface UpdateContextValue {
@@ -60,6 +61,7 @@ export function UpdateProvider({ children }: { children: React.ReactNode }) {
   const isCheckingRef = useRef(false);
 
   const checkUpdate = useCallback(async () => {
+    if (!APP_UPDATES_ENABLED) return false;
     if (isCheckingRef.current) return false;
     isCheckingRef.current = true;
     setIsChecking(true);

@@ -11,7 +11,7 @@ use std::time::SystemTime;
 use serde::Serialize;
 
 use crate::codex_history_migration;
-use crate::config::{get_app_config_dir, get_home_dir};
+use crate::config::get_app_config_dir;
 use crate::database::Database;
 use crate::error::AppError;
 use crate::live::engine::DeviceStore;
@@ -51,7 +51,7 @@ fn categories() -> Vec<Category> {
     let app_dir = get_app_config_dir();
     let app_backups = app_dir.join("backups");
     // 写入引擎与旧版接管备份按设备目录落盘（不受 app_config_dir 覆盖影响）。
-    let device_backups = get_home_dir().join(".cc-switch").join("backups");
+    let device_backups = crate::config::get_device_config_dir().join("backups");
     let env_backups =
         crate::services::env_manager::backup_dir().unwrap_or_else(|_| device_backups.clone());
 

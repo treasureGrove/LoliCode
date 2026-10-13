@@ -13,7 +13,7 @@ use crate::error::AppError;
 /// - `dirs::home_dir()` 在 Windows 上使用 `SHGetKnownFolderPath(FOLDERID_Profile)`，
 ///   返回的是真实用户目录（类似 `C:\\Users\\Alice`），与 v3.10.2 行为一致。
 /// - 不要直接使用 `HOME` 环境变量：它可能由 Git/Cygwin/MSYS 等第三方工具注入，
-///   且不一定等于用户目录，可能导致 `.cc-switch/cc-switch.db` 路径变化，从而“看起来像数据丢失”。
+///   且不一定等于用户目录，可能导致 `.tai-switch/cc-switch.db` 路径变化，从而“看起来像数据丢失”。
 ///
 /// ## 测试隔离
 ///
@@ -309,50 +309,19 @@ pub fn get_claude_settings_path() -> PathBuf {
     settings
 }
 
-/// 获取应用配置目录路径 (~/.cc-switch)
+/// 本机设备状态与设置目录，独立于 CC Switch 和配置同步目录。
+pub fn get_device_config_dir() -> PathBuf {
+    get_home_dir().join(".tai-switch")
+}
+
+/// 获取应用配置目录路径 (~/.tai-switch)
 pub fn get_app_config_dir() -> PathBuf {
     if let Some(custom) = crate::app_store::get_app_config_dir_override() {
         return custom;
     }
 
-    let default_dir = get_home_dir().join(".cc-switch");
-
-    // 兼容 v3.10.3：当用户环境存在 `HOME` 且与真实用户目录不同，
-    // v3.10.3 可能在 `HOME/.cc-switch/` 下创建/使用了数据库。
-    // 这里仅在“默认位置没有数据库”时回退到旧位置，避免再次出现“供应商消失”问题，
-    // 同时也避免新安装因为 `HOME` 被设置而写入非预期路径。
-    //
-    // `CC_SWITCH_TEST_HOME` 是测试用的显式 home 覆盖，必须在这里短路：测试的临时
-    // 目录本来就不带 cc-switch.db，若不先返回，下面的 HOME 回退会把测试指向真实
-    // 用户库（Windows 上 runner 的 HOME 下常常确实有该 db），既污染用户数据，又让
-    // 隔离测试读到别人写的状态而失败。
-    #[cfg(windows)]
-    if test_home_override().is_some() {
-        return default_dir;
-    }
-
-    #[cfg(windows)]
-    {
-        let default_db = default_dir.join("cc-switch.db");
-        if !default_db.exists() {
-            if let Ok(home_env) = std::env::var("HOME") {
-                let trimmed = home_env.trim();
-                if !trimmed.is_empty() {
-                    let legacy_dir = PathBuf::from(trimmed).join(".cc-switch");
-                    if legacy_dir.join("cc-switch.db").exists() {
-                        log::info!(
-                            "Detected v3.10.3 legacy database at {}, using it instead of {}",
-                            legacy_dir.display(),
-                            default_dir.display()
-                        );
-                        return legacy_dir;
-                    }
-                }
-            }
-        }
-    }
-
-    default_dir
+    // This fork never adopts the original application's HOME fallback.
+    get_device_config_dir()
 }
 
 /// 获取应用配置文件路径
@@ -997,15 +966,11 @@ mod tests {
         );
     }
 
-    /// 回归：`CC_SWITCH_TEST_HOME` 必须盖过 v3.10.3 的 `HOME` 兼容回退。
-    ///
-    /// Windows 上回退只看"默认位置有没有 cc-switch.db"，而测试临时目录里通常没有，
-    /// 于是会被引向 `HOME/.cc-switch`——runner 的 HOME 下往往真有一份 db，测试就此
-    /// 读写到真实用户数据（既污染用户库，又让断言读到别人写下的状态）。
+    /// TAI 使用自己的空目录，即使 HOME 下已有原 CC Switch 数据库也不能回退。
     #[cfg(windows)]
     #[test]
     #[serial_test::serial]
-    fn test_home_short_circuits_the_home_legacy_fallback() {
+    fn test_home_does_not_adopt_the_original_cc_switch_database() {
         // 进程级环境变量的读写必须与同样改它们的测试互斥。锁是模块级共享的
         // （写成测试函数体内的 static 只能锁住自己，等于没锁），见
         // `proxy::http_client` 里同一套 env_lock() 用法。
@@ -1035,7 +1000,7 @@ mod tests {
             None => std::env::remove_var("HOME"),
         }
 
-        let expected = test_home.path().join(".cc-switch");
+        let expected = test_home.path().join(".tai-switch");
         assert_eq!(
             dir, expected,
             "测试 home 优先：不得回退到 HOME 下的旧库目录"

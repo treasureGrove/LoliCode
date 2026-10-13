@@ -1,3 +1,6 @@
+> **TAI Switch fork:** Windows test-build instructions are in [TESTING_TAI.md](TESTING_TAI.md).
+> This fork is based on the full CC Switch snapshot recorded in [FORK_BASELINE.md](FORK_BASELINE.md). The upstream README below is retained as reference; its release links download CC Switch.
+
 <div align="center">
 
 # CC Switch

@@ -22,6 +22,7 @@ import { WhatsNewDialog } from "@/components/WhatsNewDialog";
 import { WHATS_NEW_ENTRIES, entriesUpTo } from "@/lib/whatsNew";
 import appIcon from "@/assets/icons/app-icon.png";
 import { extractErrorMessage } from "@/utils/errorUtils";
+import { APP_NAME, APP_UPDATES_ENABLED } from "@/lib/branding";
 
 interface AboutSectionProps {
   isPortable: boolean;
@@ -95,31 +96,19 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
 
   const handleOpenReleaseNotes = useCallback(async () => {
     try {
-      const targetVersion = updateInfo?.availableVersion ?? version ?? "";
-      const displayVersion = targetVersion.startsWith("v")
-        ? targetVersion
-        : targetVersion
-          ? `v${targetVersion}`
-          : "";
-
-      if (!displayVersion) {
-        await settingsApi.openExternal(
-          "https://github.com/farion1231/cc-switch/releases",
-        );
-        return;
-      }
-
       await settingsApi.openExternal(
-        `https://github.com/farion1231/cc-switch/releases/tag/${displayVersion}`,
+        "https://github.com/treasureGrove/TAI-Switch/blob/TG/freehub-m0/TESTING_TAI.md",
       );
     } catch (error) {
       console.error("[AboutSection] Failed to open release notes", error);
       toast.error(t("settings.openReleaseNotesFailed"));
     }
-  }, [t, updateInfo?.availableVersion, version]);
+  }, [t]);
 
   const handleOpenGithub = useCallback(() => {
-    void settingsApi.openExternal("https://github.com/farion1231/cc-switch");
+    void settingsApi.openExternal(
+      "https://github.com/treasureGrove/TAI-Switch",
+    );
   }, []);
 
   const handleDismissStarPrompt = useCallback(() => {
@@ -190,7 +179,12 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
       <div className="flex flex-wrap items-center gap-4 px-5 py-4">
         <img src={appIcon} alt="" className="h-10 w-10 shrink-0" />
         <div className="min-w-0 flex-1">
-          <div className="text-title text-fg-1">CC Switch</div>
+          <div className="text-title text-fg-1">{APP_NAME}</div>
+          <div className="text-caption text-fg-2">
+            {t("settings.forkAttribution", {
+              defaultValue: "Based on CC Switch · MIT · Jason Young",
+            })}
+          </div>
           <div className="flex flex-wrap items-center gap-2 text-caption text-fg-2">
             {isLoadingVersion ? (
               <Loader2 className="h-3 w-3 animate-spin" />
@@ -213,9 +207,13 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
           variant={hasUpdate ? "solid" : "neutral"}
           size="regular"
           onClick={handleCheckUpdate}
-          disabled={isChecking || isDownloading}
+          disabled={!APP_UPDATES_ENABLED || isChecking || isDownloading}
         >
-          {isDownloading ? (
+          {!APP_UPDATES_ENABLED ? (
+            t("settings.manualUpdateOnly", {
+              defaultValue: "Test build · manual updates",
+            })
+          ) : isDownloading ? (
             <>
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
               {t("settings.updating")}
@@ -270,7 +268,11 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
           type="button"
           variant="neutral"
           size="compact"
-          onClick={() => settingsApi.openExternal("https://ccswitch.io")}
+          onClick={() =>
+            settingsApi.openExternal(
+              "https://github.com/treasureGrove/TAI-Switch",
+            )
+          }
         >
           <Globe className="h-3.5 w-3.5" />
           {t("settings.officialWebsite")}

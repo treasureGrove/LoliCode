@@ -5,7 +5,7 @@
 //!
 //! 1. 自己拉的官方列表（`chatgpt.com/backend-api/codex/models`）：唯一在写了目录之后还能
 //!    更新的来源，身份和版本都能核对。按「工作区 ID + 用户身份」分条缓存在
-//!    `~/.cc-switch/codex-official-models.json`；
+//!    `~/.tai-switch/codex-official-models.json`；
 //! 2. 本机 Codex 自带的列表（`codex debug models --bundled`）：和账号无关，可能缺账号专属
 //!    的模型。
 //!

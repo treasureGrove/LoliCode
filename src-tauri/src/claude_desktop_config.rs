@@ -1410,7 +1410,7 @@ mod tests {
                 .join("Application Support")
                 .join("Claude-3p"),
         );
-        paths.device = DeviceStore::at(home.join(".cc-switch"));
+        paths.device = DeviceStore::at(home.join(".tai-switch"));
         paths
     }
 

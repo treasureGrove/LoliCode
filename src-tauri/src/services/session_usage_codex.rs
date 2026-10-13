@@ -4164,7 +4164,7 @@ mod tests {
         }
 
         // 临时 HOME 里只放一个指向真实语料的只读 symlink，避免测试
-        // 触碰真实 ~/.cc-switch / ~/.codex 下的任何其他内容。
+        // 触碰真实 ~/.tai-switch / ~/.codex 下的任何其他内容。
         let temp = tempfile::tempdir().expect("create temp home");
         fs::create_dir_all(temp.path().join(".codex")).expect("mkdir .codex");
         #[cfg(unix)]

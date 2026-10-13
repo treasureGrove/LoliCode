@@ -171,6 +171,7 @@ mod tests {
         original_local_app_data: Option<String>,
         original_userprofile: Option<String>,
         original_test_home: Option<String>,
+        original_hermes_home: Option<std::ffi::OsString>,
         #[cfg(target_os = "linux")]
         original_xdg_config_home: Option<std::ffi::OsString>,
     }
@@ -183,6 +184,7 @@ mod tests {
             let original_local_app_data = env::var("LOCALAPPDATA").ok();
             let original_userprofile = env::var("USERPROFILE").ok();
             let original_test_home = env::var("CC_SWITCH_TEST_HOME").ok();
+            let original_hermes_home = env::var_os("HERMES_HOME");
             #[cfg(target_os = "linux")]
             let original_xdg_config_home = env::var_os("XDG_CONFIG_HOME");
 
@@ -191,6 +193,7 @@ mod tests {
             env::set_var("LOCALAPPDATA", dir.path().join("AppData").join("Local"));
             env::set_var("USERPROFILE", dir.path());
             env::set_var("CC_SWITCH_TEST_HOME", dir.path());
+            env::remove_var("HERMES_HOME");
             // Claude Desktop Linux paths follow XDG_CONFIG_HOME; pin them under the temp home.
             #[cfg(target_os = "linux")]
             env::remove_var("XDG_CONFIG_HOME");
@@ -202,6 +205,7 @@ mod tests {
                 original_local_app_data,
                 original_userprofile,
                 original_test_home,
+                original_hermes_home,
                 #[cfg(target_os = "linux")]
                 original_xdg_config_home,
             }
@@ -210,6 +214,10 @@ mod tests {
 
     impl Drop for TempHome {
         fn drop(&mut self) {
+            match &self.original_hermes_home {
+                Some(value) => env::set_var("HERMES_HOME", value),
+                None => env::remove_var("HERMES_HOME"),
+            }
             match &self.original_home {
                 Some(value) => env::set_var("HOME", value),
                 None => env::remove_var("HOME"),
@@ -278,26 +286,13 @@ mod tests {
 
     fn with_test_home<T>(test: impl FnOnce(&AppState, &Path) -> T) -> T {
         let _guard = test_guard();
-        let temp = tempfile::tempdir().expect("tempdir");
-        let old_test_home = std::env::var_os("CC_SWITCH_TEST_HOME");
-        let old_home = std::env::var_os("HOME");
-        std::env::set_var("CC_SWITCH_TEST_HOME", temp.path());
-        std::env::set_var("HOME", temp.path());
-
+        // Use the same RAII guard as the other provider tests. Hermes and
+        // Claude Desktop resolve LOCALAPPDATA on Windows, not HOME; Hermes
+        // also honors HERMES_HOME. Restore all overrides even after a panic.
+        let home = TempHome::new();
         let db = Arc::new(Database::memory().expect("in-memory database"));
         let state = AppState::new(db);
-        let result = test(&state, temp.path());
-
-        match old_test_home {
-            Some(value) => std::env::set_var("CC_SWITCH_TEST_HOME", value),
-            None => std::env::remove_var("CC_SWITCH_TEST_HOME"),
-        }
-        match old_home {
-            Some(value) => std::env::set_var("HOME", value),
-            None => std::env::remove_var("HOME"),
-        }
-
-        result
+        test(&state, home.dir.path())
     }
 
     fn codex_settings(base_url: &str, api_key: &str) -> Value {
@@ -4372,6 +4367,26 @@ wire_api = "responses"
 
     #[test]
     #[serial]
+    fn provider_test_home_isolates_ambient_hermes_paths() {
+        let ambient = TempHome::new();
+        let external_hermes = ambient.dir.path().join("external-hermes");
+        env::set_var("HERMES_HOME", &external_hermes);
+
+        with_test_home(|_, home| {
+            assert!(crate::hermes_config::get_hermes_dir().starts_with(home));
+            crate::hermes_config::set_provider(
+                "isolated",
+                hermes_provider("isolated").settings_config,
+            )
+            .expect("write isolated Hermes fixture");
+            assert!(!external_hermes.exists());
+        });
+
+        assert_eq!(env::var_os("HERMES_HOME"), Some(external_hermes.into()));
+    }
+
+    #[test]
+    #[serial]
     fn import_hermes_providers_from_live_updates_existing_provider_from_live() {
         with_test_home(|state, _| {
             let provider = hermes_provider("existing-hermes");
@@ -4407,6 +4422,8 @@ wire_api = "responses"
                 json!("GPT-4o Updated")
             );
             assert_eq!(saved.settings_config["models"][0]["id"], json!("gpt-4o"));
+            assert_eq!(state.db.get_provider_ids("hermes").unwrap().len(), 1);
+            assert_eq!(import_hermes_providers_from_live(state).unwrap(), 0);
         });
     }
 

@@ -29,7 +29,7 @@ interface SkillsStorageSheetProps {
 
 const appName = (app: string) => APP_DISPLAY_NAME[app as AppId] ?? app;
 
-const DEFAULT_CC_SWITCH_DIR = "~/.cc-switch/skills";
+const DEFAULT_CC_SWITCH_DIR = "~/.tai-switch/skills";
 const UNIFIED_DIR = "~/.agents/skills";
 
 /** 和后端 SyncMethod（auto / symlink / copy）一一对应。 */
