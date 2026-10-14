@@ -89,6 +89,36 @@ node scripts/lolicode-release.mjs verify `
 
 ```powershell
 node --test scripts/lolicode-release.test.mjs
+node --test scripts/lolicode-publish.test.mjs
 ```
 
 这些测试是本地签名与发布格式测试，使用公开验签向量和临时测试密钥对象，不读取真实私钥或发网络请求。正式交付仍要求：本项目专用公钥已经嵌入正式构建、真实 NSIS 签名通过验证、站点路径确认与部署成功、上一版应用的更新演练成功。本次工具准备本身不代表更新地址已经上线。
+
+## 部署辅助工具
+
+`scripts/lolicode-publish.mjs` 固定使用已授权的 OpenSSH `tools` 别名，且只能写 `/www/wwwroot/tools.treasuregrove.art/lolicode/`。需要本机 `ssh`／`scp` 和远端 Python 3；脚本不读取 SSH 私钥、不安装服务、不执行 `git pull`／`reset`，不会触及工具站原有的 index、CSS、JS 或其他 git dirty 文件。
+
+先仅验证本地发布计划：
+
+```powershell
+node scripts/lolicode-publish.mjs `
+  --release-dir "<暂存目录>\4.0.13" `
+  --public-key-file "src-tauri/updater.pub" `
+  --site-dir "<TAWEBTOOL绝对路径>\lolicode" `
+  --dry-run
+```
+
+`--dry-run` 不执行 SSH、SCP 或网络请求。`--site-dir` 可省略；传入时只允许独立 `lolicode` 目录的五个文件：`index.html`、`assets/site.css`、`assets/downloads.js`、`assets/logo.svg`、`assets/maid.png`。根目录 `README.md` 作为本地说明忽略，不读取或上传。整个工具站目录、其他额外文件和 symlink 都会被拒绝。正式执行时去掉 `--dry-run`。
+
+正式流程会先重跑发布目录验签，再通过唯一 UUID 暂存目录上传，验证远端 SHA256／字节数后生成不可覆盖的 `releases/<version>/`。随后从真实公开 HTTPS 地址重新下载安装器、签名和可选便携包，完成验签／哈希校验，才原子更新网站指定文件和 `updates/latest.json`。更新清单是最后的公开写入；同版或更高版已存在时拒绝回退。
+
+远端 `.publish-lock` 通过原子建目录持有，包含当前操作 ID，覆盖整个 SCP／公开下载／发布周期。失败保留暂存、已提交的版本文件与本地下载记录，只尝试释放自己拥有的锁，不做递归删除。输出中的 staging ID 可用于同一份准备产物的恢复：
+
+```powershell
+node scripts/lolicode-publish.mjs `
+  --release-dir "<暂存目录>\4.0.13" `
+  --public-key-file "src-tauri/updater.pub" `
+  --resume-stage "<失败记录中的UUID>"
+```
+
+若原来传了 `--site-dir`，恢复时也必须传入字节完全相同的网站目录。恢复只能核对并使用原操作已提交的同一批内容，不能覆盖版本目录或接受变更后的文件。不要在原进程仍运行时启动恢复。若最后步骤异常，先核对远端／公开的 `latest.json` 是否已完成替换；已经发布的同版不能再次覆盖。遗留锁应由维护者核对操作 ID 与进程状态后处理，本工具不会删除其他操作的锁或暂存。
