@@ -1,0 +1,10 @@
+{
+  "version": "4.0.13",
+  "originalSignatureVerified": true,
+  "tamperedOwnedCopyRejected": true,
+  "changedBytes": 1,
+  "originalInstallerReverified": true,
+  "publicKeyFingerprintSha256": "6e5f32bd5f6dd5c1d6257dd65678288769aec4c729a86b7cf497b29668db0b51",
+  "noPrivateKeyRead": true,
+  "noSSHOrUpload": true
+}

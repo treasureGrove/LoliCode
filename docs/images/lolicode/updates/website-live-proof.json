@@ -1,0 +1,13 @@
+{
+  "checkedAtUtc": "2026-10-14T15:52:23.688Z",
+  "url": "https://tools.treasuregrove.art/lolicode/",
+  "status": 200,
+  "version": "4.0.13",
+  "installer": "https://tools.treasuregrove.art/lolicode/releases/4.0.13/LoliCode-4.0.13-Windows-x64-Setup.exe",
+  "portable": "https://tools.treasuregrove.art/lolicode/releases/4.0.13/LoliCode-Portable.zip",
+  "pageErrors": [],
+  "horizontalOverflow": false,
+  "packageDownloadsTriggered": 0,
+  "liveMetadataUsed": true,
+  "passed": true
+}

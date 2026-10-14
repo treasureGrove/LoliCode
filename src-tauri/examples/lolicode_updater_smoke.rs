@@ -98,6 +98,7 @@ mod smoke {
             Error::ReleaseNotFound => "release_unavailable",
             Error::Serialization(_) | Error::Semver(_) | Error::FormatDate => "invalid_release",
             Error::TargetNotFound(_) | Error::TargetsNotFound(_) => "target_not_available",
+            Error::Reqwest(error) if error.is_decode() => "invalid_release",
             Error::Reqwest(_) | Error::Network(_) | Error::Http(_) => "network_or_http_error",
             Error::EmptyEndpoints | Error::InsecureTransportProtocol | Error::UrlParse(_) => {
                 "invalid_updater_configuration"
@@ -173,15 +174,19 @@ mod smoke {
         };
         let exit_hook_called = Arc::new(AtomicBool::new(false));
         let exit_probe = exit_hook_called.clone();
-        let updater = match app
+        let builder = app
             .updater_builder()
             .target("windows-x86_64")
-            .timeout(Duration::from_secs(180))
+            .timeout(Duration::from_secs(600))
             .on_before_exit(move || {
                 exit_probe.store(true, Ordering::Release);
-            })
-            .build()
-        {
+            });
+        let builder = if loopback(&endpoint) {
+            builder.no_proxy()
+        } else {
+            builder
+        };
+        let updater = match builder.build() {
             Ok(updater) => updater,
             Err(error) => {
                 reject(proof, "configuration", classify(&error));

@@ -1,0 +1,158 @@
+{
+  "scope": "Real official Tauri updater SDK against owned loopback HTTP fixtures; no install, cleanup, restart or WebView.",
+  "cases": [
+    {
+      "name": "404",
+      "passed": true,
+      "exitCode": 1,
+      "proof": {
+        "runtime": "tauri_mockruntime",
+        "currentVersion": "4.0.12",
+        "target": "windows-x86_64",
+        "latestVersion": null,
+        "downloadAttempted": false,
+        "downloadedBytes": 0,
+        "sha256": null,
+        "signatureVerified": false,
+        "installerExitHookInvoked": false,
+        "installationSupported": false,
+        "userConfigurationRead": false,
+        "webviewCreated": false,
+        "result": "error",
+        "endpointKind": "loopback_fixture",
+        "stage": "checking",
+        "errorCategory": "release_unavailable"
+      }
+    },
+    {
+      "name": "no_update",
+      "passed": true,
+      "exitCode": 0,
+      "proof": {
+        "runtime": "tauri_mockruntime",
+        "currentVersion": "4.0.12",
+        "target": "windows-x86_64",
+        "latestVersion": null,
+        "downloadAttempted": false,
+        "downloadedBytes": 0,
+        "sha256": null,
+        "signatureVerified": false,
+        "installerExitHookInvoked": false,
+        "installationSupported": false,
+        "userConfigurationRead": false,
+        "webviewCreated": false,
+        "result": "up_to_date",
+        "endpointKind": "loopback_fixture",
+        "stage": "checked"
+      }
+    },
+    {
+      "name": "invalid_metadata",
+      "passed": true,
+      "exitCode": 1,
+      "proof": {
+        "runtime": "tauri_mockruntime",
+        "currentVersion": "4.0.12",
+        "target": "windows-x86_64",
+        "latestVersion": null,
+        "downloadAttempted": false,
+        "downloadedBytes": 0,
+        "sha256": null,
+        "signatureVerified": false,
+        "installerExitHookInvoked": false,
+        "installationSupported": false,
+        "userConfigurationRead": false,
+        "webviewCreated": false,
+        "result": "error",
+        "endpointKind": "loopback_fixture",
+        "stage": "checking",
+        "errorCategory": "invalid_release"
+      }
+    },
+    {
+      "name": "missing_platform",
+      "passed": true,
+      "exitCode": 1,
+      "proof": {
+        "runtime": "tauri_mockruntime",
+        "currentVersion": "4.0.12",
+        "target": "windows-x86_64",
+        "latestVersion": null,
+        "downloadAttempted": false,
+        "downloadedBytes": 0,
+        "sha256": null,
+        "signatureVerified": false,
+        "installerExitHookInvoked": false,
+        "installationSupported": false,
+        "userConfigurationRead": false,
+        "webviewCreated": false,
+        "result": "error",
+        "endpointKind": "loopback_fixture",
+        "stage": "checking",
+        "errorCategory": "target_not_available"
+      }
+    },
+    {
+      "name": "invalid_signature_encoding",
+      "passed": true,
+      "exitCode": 1,
+      "proof": {
+        "runtime": "tauri_mockruntime",
+        "currentVersion": "4.0.12",
+        "target": "windows-x86_64",
+        "latestVersion": "4.0.13",
+        "downloadAttempted": true,
+        "downloadedBytes": 67,
+        "sha256": null,
+        "signatureVerified": false,
+        "installerExitHookInvoked": false,
+        "installationSupported": false,
+        "userConfigurationRead": false,
+        "webviewCreated": false,
+        "result": "error",
+        "endpointKind": "loopback_fixture",
+        "stage": "verification",
+        "errorCategory": "signature_rejected"
+      }
+    },
+    {
+      "name": "real_public_signature_rejects_tampered_bytes",
+      "passed": true,
+      "exitCode": 1,
+      "proof": {
+        "runtime": "tauri_mockruntime",
+        "currentVersion": "4.0.12",
+        "target": "windows-x86_64",
+        "latestVersion": "4.0.13",
+        "downloadAttempted": true,
+        "downloadedBytes": 67,
+        "sha256": null,
+        "signatureVerified": false,
+        "installerExitHookInvoked": false,
+        "installationSupported": false,
+        "userConfigurationRead": false,
+        "webviewCreated": false,
+        "result": "error",
+        "endpointKind": "loopback_fixture",
+        "stage": "verification",
+        "errorCategory": "signature_rejected"
+      }
+    }
+  ],
+  "publicSignatureUsed": true,
+  "testPayloadBytes": 67,
+  "testPayloadSha256": "026d4bf8b03d81ac53e2d905ed5cb41ad549ae67e769bbfdfcfac7fba5667c6f",
+  "requests": [
+    "/404.json",
+    "/none.json",
+    "/invalid.json",
+    "/missing-platform.json",
+    "/invalid-signature.json",
+    "/tampered.bin",
+    "/tampered.json",
+    "/tampered.bin"
+  ],
+  "completedAt": "2026-10-14T15:30:43.324157+00:00",
+  "allPassed": true,
+  "ownedServerClosed": true
+}

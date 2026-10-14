@@ -12,6 +12,21 @@
 
 ## 一次性准备
 
+此工作区的独立密钥已生成，当前公钥已写入 `src-tauri/updater.pub` 和应用配置，指纹为 `6e5f32bd5f6dd5c1d6257dd65678288769aec4c729a86b7cf497b29668db0b51`。本机私钥位于 `%LOCALAPPDATA%\LoliCode\release-signing\updater.key`，目录仅授予当前 Windows 用户和 SYSTEM 访问。后续发版使用并备份这份现有私钥；不要重新生成、覆盖或把它上传到工具站。下方生成命令仅供首次设置新的独立分发使用。
+
+在本机沿用现有密钥构建签名安装器：
+
+```powershell
+$env:TAURI_SIGNING_PRIVATE_KEY = Join-Path $env:LOCALAPPDATA 'LoliCode\release-signing\updater.key'
+$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = ''
+try {
+  pnpm tauri build --bundles nsis --ci
+} finally {
+  Remove-Item Env:\TAURI_SIGNING_PRIVATE_KEY -ErrorAction SilentlyContinue
+  Remove-Item Env:\TAURI_SIGNING_PRIVATE_KEY_PASSWORD -ErrorAction SilentlyContinue
+}
+```
+
 维护者在版本库以外生成并备份 **LoliCode 专用**签名密钥。私钥与密码进入本机秘密存储或 CI secrets，不能进入仓库、安装包、交付目录、命令日志或网站。不要使用继承自 CCSwitch 的公钥；发布工具明确拒绝该继承公钥的指纹。
 
 使用安装的 Tauri CLI 操作密钥，运行方式示例：
@@ -122,3 +137,9 @@ node scripts/lolicode-publish.mjs `
 ```
 
 若原来传了 `--site-dir`，恢复时也必须传入字节完全相同的网站目录。恢复只能核对并使用原操作已提交的同一批内容，不能覆盖版本目录或接受变更后的文件。不要在原进程仍运行时启动恢复。若最后步骤异常，先核对远端／公开的 `latest.json` 是否已完成替换；已经发布的同版不能再次覆盖。遗留锁应由维护者核对操作 ID 与进程状态后处理，本工具不会删除其他操作的锁或暂存。
+
+## 4.0.13 实际发布记录
+
+2026-10-14 已上线 [LoliCode 下载页](https://tools.treasuregrove.art/lolicode/) 与 [更新清单](https://tools.treasuregrove.art/lolicode/updates/latest.json)。安装器 87020838 字节，SHA256 为 `57b239e7cfda94c6668050d2534da6938034bc6dc32653da6226c41eef74fae7`；便携包 117787171 字节，SHA256 为 `15a7f5bb7bf2360cb3c853a91041c5b7c70d31bdf9a533956485b4952abe9e2d`。正式安装器的签名通过验证，改动一字节的副本被拒绝。
+
+发布器完成真实 SCP、远端哈希校验和公网完整下载复验后，最后原子发布清单。官方 updater SDK 另通过隔离 MockRuntime 下载公开候选地址的安装器并验签；随后使用应用默认配置的更新地址仅检查，成功识别 4.0.13。两阶段验证没有伪装成一次默认地址下载，也没有执行安装器或修改用户状态。真实桌面原地安装与重启尚未演练；首次 bootstrap 仍需手动安装。证据见 `docs/images/lolicode/updates/` 和交付目录的 `build-manifest.json`。

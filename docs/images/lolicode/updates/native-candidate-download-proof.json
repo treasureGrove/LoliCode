@@ -1,0 +1,26 @@
+{
+  "scope": "Real public immutable releases/4.0.13/latest.json candidate download with official updater SDK; no install or restart.",
+  "testedAt": "2026-10-14T15:47:29.554772+00:00",
+  "passed": true,
+  "exitCode": 0,
+  "localPublishedArtifactBytes": 87020838,
+  "localPublishedArtifactSha256": "57b239e7cfda94c6668050d2534da6938034bc6dc32653da6226c41eef74fae7",
+  "downloadMatchesPublishedArtifact": true,
+  "proof": {
+    "runtime": "tauri_mockruntime",
+    "currentVersion": "4.0.12",
+    "target": "windows-x86_64",
+    "latestVersion": "4.0.13",
+    "downloadAttempted": true,
+    "downloadedBytes": 87020838,
+    "sha256": "57b239e7cfda94c6668050d2534da6938034bc6dc32653da6226c41eef74fae7",
+    "signatureVerified": true,
+    "installerExitHookInvoked": false,
+    "installationSupported": false,
+    "userConfigurationRead": false,
+    "webviewCreated": false,
+    "result": "signature_verified",
+    "endpointKind": "https_release",
+    "stage": "verified"
+  }
+}

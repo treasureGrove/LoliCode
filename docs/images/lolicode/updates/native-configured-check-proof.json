@@ -1,0 +1,26 @@
+{
+  "scope": "Real configured updates/latest.json check only; no package downloaded in this stage.",
+  "testedAt": "2026-10-14T15:49:15.930279+00:00",
+  "passed": true,
+  "exitCode": 0,
+  "localPublishedArtifactBytes": 87020838,
+  "localPublishedArtifactSha256": "57b239e7cfda94c6668050d2534da6938034bc6dc32653da6226c41eef74fae7",
+  "downloadMatchesPublishedArtifact": null,
+  "proof": {
+    "runtime": "tauri_mockruntime",
+    "currentVersion": "4.0.12",
+    "target": "windows-x86_64",
+    "latestVersion": "4.0.13",
+    "downloadAttempted": false,
+    "downloadedBytes": 0,
+    "sha256": null,
+    "signatureVerified": false,
+    "installerExitHookInvoked": false,
+    "installationSupported": false,
+    "userConfigurationRead": false,
+    "webviewCreated": false,
+    "result": "update_available_check_only",
+    "endpointKind": "https_release",
+    "stage": "checked"
+  }
+}
