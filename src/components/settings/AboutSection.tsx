@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Download,
   ExternalLink,
@@ -22,10 +22,10 @@ import { WhatsNewDialog } from "@/components/WhatsNewDialog";
 import { WHATS_NEW_ENTRIES, entriesUpTo } from "@/lib/whatsNew";
 import appIcon from "@/assets/brand/lolicode.svg";
 import { extractErrorMessage } from "@/utils/errorUtils";
-import { APP_NAME, APP_UPDATES_ENABLED } from "@/lib/branding";
+import { APP_NAME, APP_UPDATES_ENABLED, APP_WEBSITE } from "@/lib/branding";
 
 interface AboutSectionProps {
-  isPortable: boolean;
+  isPortable: boolean | null;
 }
 
 // 应用自身版本（getVersion，本地毫秒级、无网络）也缓存一份，纯为重挂时免去 loading 闪烁。
@@ -48,13 +48,16 @@ function readStarPromptDismissed(): boolean {
  */
 export function AboutSection({ isPortable }: AboutSectionProps) {
   const { t } = useTranslation();
+  // Unknown installation mode must never authorize the native installer.
+  const requiresManualDownload = isPortable !== false;
   // 惰性初始化自模块缓存：重挂时首帧即渲染上次的值，避免 loading 闪烁；首次挂载缓存
   // 为空则回退到原始初值（null / loading）。
   const [version, setVersion] = useState<string | null>(() => appVersionCache);
   const [isLoadingVersion, setIsLoadingVersion] = useState(
     () => appVersionCache === null,
   );
-  const [isDownloading, setIsDownloading] = useState(false);
+  const [openingDownloadPage, setOpeningDownloadPage] = useState(false);
+  const openingDownload = useRef(false);
   const [whatsNewOpen, setWhatsNewOpen] = useState(false);
   const [starPromptDismissed, setStarPromptDismissed] = useState(
     readStarPromptDismissed,
@@ -64,8 +67,18 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
     [version],
   );
 
-  const { hasUpdate, updateInfo, checkUpdate, resetDismiss, isChecking } =
-    useUpdate();
+  const {
+    hasUpdate,
+    updateInfo,
+    checkUpdate,
+    installUpdate,
+    resetDismiss,
+    isChecking,
+    isInstalling,
+    phase,
+    progress,
+    error,
+  } = useUpdate();
 
   useEffect(() => {
     let active = true;
@@ -96,9 +109,7 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
 
   const handleOpenReleaseNotes = useCallback(async () => {
     try {
-      await settingsApi.openExternal(
-        "https://github.com/treasureGrove/TAI-Switch/blob/TG/freehub-m0/TESTING_TAI.md",
-      );
+      await settingsApi.openExternal(APP_WEBSITE);
     } catch (error) {
       console.error("[AboutSection] Failed to open release notes", error);
       toast.error(t("settings.openReleaseNotesFailed"));
@@ -121,43 +132,6 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
   }, []);
 
   const handleCheckUpdate = useCallback(async () => {
-    if (hasUpdate) {
-      if (isPortable) {
-        try {
-          await settingsApi.checkUpdates();
-        } catch (error) {
-          console.error("[AboutSection] Portable update failed", error);
-        }
-        return;
-      }
-
-      setIsDownloading(true);
-      try {
-        resetDismiss();
-        const installed = await settingsApi.installUpdateAndRestart();
-        if (!installed) {
-          toast.success(t("settings.upToDate"), { closeButton: true });
-        }
-      } catch (error) {
-        console.error("[AboutSection] Update failed", error);
-        toast.error(t("settings.updateFailed"), {
-          description: extractErrorMessage(error) || undefined,
-          closeButton: true,
-        });
-        try {
-          await settingsApi.checkUpdates();
-        } catch (fallbackError) {
-          console.error(
-            "[AboutSection] Failed to open fallback updater",
-            fallbackError,
-          );
-        }
-      } finally {
-        setIsDownloading(false);
-      }
-      return;
-    }
-
     try {
       const available = await checkUpdate();
       if (!available) {
@@ -170,7 +144,67 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
         closeButton: true,
       });
     }
-  }, [checkUpdate, hasUpdate, isPortable, resetDismiss, t]);
+  }, [checkUpdate, t]);
+
+  const handleInstallUpdate = useCallback(async () => {
+    if (requiresManualDownload) {
+      if (openingDownload.current) return;
+      openingDownload.current = true;
+      setOpeningDownloadPage(true);
+      try {
+        await settingsApi.openExternal(APP_WEBSITE);
+      } catch (cause) {
+        toast.error(t("settings.openReleaseNotesFailed"), {
+          description: extractErrorMessage(cause) || undefined,
+        });
+      } finally {
+        openingDownload.current = false;
+        setOpeningDownloadPage(false);
+      }
+      return;
+    }
+    try {
+      resetDismiss();
+      const installed = await installUpdate();
+      if (!installed)
+        toast.success(t("settings.upToDate"), { closeButton: true });
+    } catch (cause) {
+      toast.error(
+        t("settings.appUpdate.installFailed", {
+          defaultValue: "更新未完成，请查看原因后重试。",
+        }),
+        {
+          description: extractErrorMessage(cause) || undefined,
+          closeButton: true,
+        },
+      );
+    }
+  }, [installUpdate, requiresManualDownload, resetDismiss, t]);
+
+  const downloadPercent =
+    progress?.total && progress.total > 0
+      ? Math.min(100, Math.round((progress.downloaded / progress.total) * 100))
+      : undefined;
+  const phaseLabel = {
+    checking: t("settings.checking"),
+    downloading: t("settings.appUpdate.downloading", {
+      defaultValue: "正在下载更新包…",
+    }),
+    verifying: t("settings.appUpdate.verifying", {
+      defaultValue: "正在校验更新包…",
+    }),
+    installing: t("settings.appUpdate.installing", {
+      defaultValue: "正在安装并重启…",
+    }),
+    up_to_date: t("settings.upToDate"),
+  }[
+    phase as
+      | "checking"
+      | "downloading"
+      | "verifying"
+      | "installing"
+      | "up_to_date"
+  ];
 
   const displayVersion = version ?? t("common.unknown");
 
@@ -202,42 +236,137 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
             )}
           </div>
         </div>
-        <Button
-          type="button"
-          variant={hasUpdate ? "solid" : "neutral"}
-          size="regular"
-          onClick={handleCheckUpdate}
-          disabled={!APP_UPDATES_ENABLED || isChecking || isDownloading}
-        >
-          {!APP_UPDATES_ENABLED ? (
-            t("settings.manualUpdateOnly", {
-              defaultValue: "Test build · manual updates",
-            })
-          ) : isDownloading ? (
-            <>
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              {t("settings.updating")}
-            </>
-          ) : hasUpdate ? (
-            <>
-              <Download className="h-3.5 w-3.5" />
-              {t("settings.updateTo", {
-                version: updateInfo?.availableVersion ?? "",
-              })}
-            </>
-          ) : isChecking ? (
-            <>
-              <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-              {t("settings.checking")}
-            </>
-          ) : (
-            <>
-              <RefreshCw className="h-3.5 w-3.5" />
-              {t("settings.checkForUpdates")}
-            </>
-          )}
-        </Button>
       </div>
+      <section
+        aria-label={t("nav.softwareUpdates", { defaultValue: "软件更新" })}
+        className="space-y-3 px-5 py-4"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-body font-semibold text-fg-1">
+            {t("nav.softwareUpdates", { defaultValue: "软件更新" })}
+          </h2>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="neutral"
+              size="regular"
+              onClick={handleCheckUpdate}
+              disabled={
+                !APP_UPDATES_ENABLED ||
+                isChecking ||
+                isInstalling ||
+                openingDownloadPage
+              }
+            >
+              {!APP_UPDATES_ENABLED ? (
+                t("settings.manualUpdateOnly", {
+                  defaultValue: "Test build · manual updates",
+                })
+              ) : isChecking ? (
+                <>
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                  {t("settings.checking")}
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  {t("settings.checkForUpdates")}
+                </>
+              )}
+            </Button>
+            {hasUpdate && (
+              <Button
+                type="button"
+                variant="solid"
+                size="regular"
+                onClick={() => void handleInstallUpdate()}
+                disabled={
+                  !APP_UPDATES_ENABLED ||
+                  isChecking ||
+                  isInstalling ||
+                  openingDownloadPage
+                }
+              >
+                {isInstalling || openingDownloadPage ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Download className="h-3.5 w-3.5" />
+                )}
+                {requiresManualDownload
+                  ? t("settings.appUpdate.downloadPage", {
+                      defaultValue: "打开下载页面",
+                    })
+                  : isInstalling
+                    ? phaseLabel
+                    : phase === "error"
+                      ? t("settings.appUpdate.retryInstall", {
+                          defaultValue: "重试下载并安装",
+                        })
+                      : t("settings.appUpdate.install", {
+                          defaultValue: "下载并安装",
+                        })}
+              </Button>
+            )}
+          </div>
+        </div>
+        <p className="text-caption text-fg-2">
+          {isPortable === null
+            ? t("settings.appUpdate.unknownModeHelp", {
+                defaultValue:
+                  "尚未确认安装方式，请从下载页面获取新版本，完成任务后手动安装。",
+              })
+            : isPortable
+              ? t("settings.appUpdate.portableHelp", {
+                  defaultValue:
+                    "便携版请从下载页面获取新版本，完成任务后替换程序。",
+                })
+              : t("settings.appUpdate.restartHelp", {
+                  defaultValue:
+                    "检查更新不会中断任务。安装会重启 LoliCode；请先完成正在运行的任务和待处理的授权。",
+                })}
+        </p>
+        {phaseLabel && (
+          <p role="status" className="text-caption text-fg-2">
+            {phaseLabel}
+          </p>
+        )}
+        {isInstalling && progress && (
+          <div className="space-y-1">
+            <div
+              role="progressbar"
+              aria-label={t("settings.appUpdate.downloadProgress", {
+                defaultValue: "下载更新包",
+              })}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={downloadPercent}
+              className="h-2 overflow-hidden rounded-full bg-subtle"
+            >
+              <div
+                className="h-full rounded-full bg-action"
+                style={{
+                  width:
+                    downloadPercent === undefined
+                      ? "0%"
+                      : `${downloadPercent}%`,
+                }}
+              />
+            </div>
+            <p className="text-caption tabular-nums text-fg-2">
+              {downloadPercent !== undefined ? `${downloadPercent}% · ` : ""}
+              {(progress.downloaded / (1024 * 1024)).toFixed(1)} MB
+              {progress.total
+                ? ` / ${(progress.total / (1024 * 1024)).toFixed(1)} MB`
+                : ""}
+            </p>
+          </div>
+        )}
+        {error && (
+          <p role="alert" className="break-words text-caption text-danger-text">
+            {error}
+          </p>
+        )}
+      </section>
 
       {hasUpdate && updateInfo && (
         <div className="space-y-1 px-5 py-4 text-body">
@@ -268,11 +397,7 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
           type="button"
           variant="neutral"
           size="compact"
-          onClick={() =>
-            settingsApi.openExternal(
-              "https://github.com/treasureGrove/TAI-Switch",
-            )
-          }
+          onClick={() => settingsApi.openExternal(APP_WEBSITE)}
         >
           <Globe className="h-3.5 w-3.5" />
           {t("settings.officialWebsite")}
@@ -299,8 +424,7 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
         )}
       </div>
 
-      {/* 下载与更新都走 ccswitch.io，用户不再经过仓库页，邀 Star 单独占一行；按钮即 GitHub 入口。
-          关掉后链接行补回 GitHub 按钮 */}
+      {/* 项目仓库入口与软件更新入口各自独立。 */}
       {!starPromptDismissed && (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-3 bg-action-soft py-3.5 ps-5 pe-3">
           <div className="flex min-w-0 flex-1 items-center gap-3">

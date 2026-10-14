@@ -11,11 +11,24 @@ use lolicode_agent::{AgentModelRef, AgentSession, AgentSnapshot, Engine, EngineO
 use serde::Serialize;
 use serde_json::Value;
 use std::collections::{BTreeSet, HashMap};
+use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tauri::Manager;
-use tokio::sync::{Mutex, OnceCell, RwLock};
+use tokio::sync::{Mutex, MutexGuard, OnceCell, RwLock};
+
+async fn acquire_idle_update_lease<'a>(
+    lifecycle: &'a Mutex<()>,
+    activity: impl Future<Output = Result<bool, String>>,
+) -> Result<MutexGuard<'a, ()>, String> {
+    let lease = lifecycle.lock().await;
+    match activity.await {
+        Ok(false) => Ok(lease),
+        Ok(true) => Err("仍有编程任务或授权/提问等待处理，请等待任务结束后重试更新。".into()),
+        Err(_) => Err("无法确认后台任务是否已结束，更新尚未安装；请稍后重试。".into()),
+    }
+}
 
 #[derive(Default)]
 pub struct AgentState {
@@ -144,6 +157,25 @@ fn selected_model(catalog: &AgentCatalog, id: &str) -> Result<AgentModelRef, Str
 }
 
 impl AgentState {
+    /// The update installer keeps this lease through cleanup and installation.
+    /// New sends/project changes cannot race with the final host-wide idle check.
+    pub async fn acquire_idle_for_update(&self) -> Result<MutexGuard<'_, ()>, String> {
+        acquire_idle_update_lease(&self.lifecycle, async {
+            let engine = self
+                .connection
+                .read()
+                .await
+                .as_ref()
+                .filter(|connection| connection.engine.is_running())
+                .map(|connection| connection.engine.clone());
+            match engine {
+                Some(engine) => engine.has_active_sessions().await,
+                None => Ok(false),
+            }
+        })
+        .await
+    }
+
     /// Builds only an isolated test carrier; production initialization still
     /// requires the desktop resource path and the managed channel catalog.
     #[cfg(feature = "test-hooks")]
@@ -821,6 +853,48 @@ impl AgentState {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn update_lease_keeps_new_work_blocked_until_installation_finishes() {
+        let state = AgentState::default();
+        let lease = state.acquire_idle_for_update().await.unwrap();
+        assert!(state.lifecycle.try_lock().is_err());
+        drop(lease);
+        assert!(state.lifecycle.try_lock().is_ok());
+    }
+
+    #[tokio::test]
+    async fn update_idle_check_runs_after_an_inflight_send_finishes() {
+        let lifecycle = Mutex::new(());
+        let inflight_send = lifecycle.lock().await;
+        let active = AtomicBool::new(false);
+        let check =
+            acquire_idle_update_lease(&lifecycle, async { Ok(active.load(Ordering::SeqCst)) });
+        tokio::pin!(check);
+        assert!(
+            tokio::time::timeout(std::time::Duration::from_millis(10), &mut check)
+                .await
+                .is_err()
+        );
+        // Sending finishes, but its queued task continues in the background.
+        active.store(true, Ordering::SeqCst);
+        drop(inflight_send);
+        assert!(check.await.unwrap_err().contains("等待任务结束"));
+        assert!(lifecycle.try_lock().is_ok());
+    }
+
+    #[tokio::test]
+    async fn failed_background_inspection_prevents_install_and_releases_the_lease() {
+        let lifecycle = Mutex::new(());
+        let error = acquire_idle_update_lease(&lifecycle, async {
+            Err("a private engine transport failure".to_string())
+        })
+        .await
+        .unwrap_err();
+        assert!(error.contains("更新尚未安装"));
+        assert!(!error.contains("private"));
+        assert!(lifecycle.try_lock().is_ok());
+    }
 
     #[test]
     fn project_identity_is_canonical_and_does_not_write_selected_directory() {

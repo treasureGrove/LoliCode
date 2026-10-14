@@ -169,6 +169,23 @@ export function GeneralSection({
       <SettingsBlock title={t("settings.general.updates")}>
         <SettingsCard>
           <SettingsSwitchRow
+            label={t("settings.general.checkAppUpdates", {
+              defaultValue: "启动时检查 LoliCode 更新",
+            })}
+            help={{
+              title: t("settings.general.checkAppUpdates", {
+                defaultValue: "启动时检查 LoliCode 更新",
+              }),
+              body: t("settings.general.checkAppUpdatesHelp", {
+                defaultValue: "检查新版本并显示提醒，由你点击下载并安装。",
+              }),
+            }}
+            checked={settings.checkUpdates ?? true}
+            onCheckedChange={(value) =>
+              void onAutoSave({ checkUpdates: value })
+            }
+          />
+          <SettingsSwitchRow
             label={t("settings.general.checkToolUpdates")}
             help={{
               title: t("settings.general.checkToolUpdates"),

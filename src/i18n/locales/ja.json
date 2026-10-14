@@ -391,10 +391,25 @@
     }
   },
   "settings": {
+    "appUpdate": {
+      "unknownModeHelp": "インストール方式を確認できていません。ダウンロードページから新しいバージョンを取得し、タスクの完了後に手動でインストールしてください。",
+      "installFailed": "更新が完了しませんでした。理由を確認して再試行してください。",
+      "downloading": "更新をダウンロード中…",
+      "verifying": "更新を検証中…",
+      "installing": "インストールして再起動中…",
+      "downloadPage": "ダウンロードページを開く",
+      "retryInstall": "ダウンロードとインストールを再試行",
+      "install": "ダウンロードしてインストール",
+      "portableHelp": "ポータブル版はダウンロードページから取得し、タスクの完了後にアプリを置き換えてください。",
+      "restartHelp": "更新の確認はタスクを中断しません。インストールで LoliCode が再起動するため、実行中のタスクと承認待ちの操作を先に完了してください。",
+      "downloadProgress": "更新のダウンロード"
+    },
     "manualUpdateOnly": "テスト版 · 手動更新",
     "forkAttribution": "CC Switch ベース · MIT · Jason Young",
     "title": "設定",
     "general": {
+      "checkAppUpdates": "起動時に LoliCode の更新を確認",
+      "checkAppUpdatesHelp": "新しいバージョンを通知します。ダウンロードとインストールはクリック後に行います。",
       "appearance": "外観",
       "quotaDisplay": "残量の表示",
       "quotaDisplayLeft": "残り",
@@ -403,7 +418,7 @@
       "sidebarAndHeader": "サイドバーとヘッダー",
       "visibleApps": "サイドバーに表示するアプリ",
       "goToApps": "「アプリ」を開く",
-      "updates": "各アプリの新しいバージョン",
+      "updates": "バージョン更新",
       "checkToolUpdates": "起動時に各アプリの新しいバージョンを確認",
       "checkToolUpdatesHelp": "オンにすると、LoliCode の起動時にインストール済みのコマンドラインアプリの新しいバージョンを確認し、見つかればサイドバーの「アプリ」に点を表示します。自動でアップグレードはしません。",
       "windowAndTerminal": "ウィンドウとターミナル",
@@ -4079,6 +4094,8 @@
     "refresh": "更新"
   },
   "nav": {
+    "softwareUpdates": "ソフトウェア更新",
+    "softwareUpdatesAvailable": "LoliCode の新しいバージョンがあります",
     "mainLabel": "メインナビゲーション",
     "skipToContent": "メインコンテンツへスキップ",
     "expandSidebar": "サイドバーを展開",

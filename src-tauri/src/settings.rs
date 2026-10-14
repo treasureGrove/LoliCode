@@ -415,6 +415,10 @@ pub struct AppSettings {
     /// Cmd/Ctrl+F still opens the search when it is hidden)
     #[serde(default = "default_true")]
     pub show_provider_search: bool,
+    /// Check for LoliCode application updates automatically. Preserve an explicit
+    /// disabled preference when loading settings from older versions.
+    #[serde(default = "default_true")]
+    pub check_updates: bool,
     /// Check installed CLI tools for new versions at startup (off by default:
     /// many users do not want to chase every release).
     #[serde(default)]
@@ -587,6 +591,7 @@ impl Default for AppSettings {
             enable_failover_toggle: false,
             show_profile_switcher: false,
             show_provider_search: true,
+            check_updates: true,
             check_tool_updates_on_startup: false,
             preserve_codex_official_auth_on_switch: false,
             unify_codex_session_history: false,
@@ -1301,6 +1306,22 @@ pub fn update_s3_sync_status(status: WebDavSyncStatus) -> Result<(), AppError> {
 mod tests {
     use super::*;
     use crate::app_config::AppType;
+
+    #[test]
+    fn application_update_preference_preserves_legacy_opt_out() {
+        let legacy: AppSettings = serde_json::from_value(serde_json::json!({
+            "language": "zh", "checkUpdates": false
+        }))
+        .expect("legacy settings");
+        assert!(!legacy.check_updates);
+        let saved = serde_json::to_value(&legacy).expect("settings roundtrip");
+        assert_eq!(saved["checkUpdates"], false);
+        assert_eq!(saved["language"], "zh");
+
+        let missing: AppSettings = serde_json::from_value(serde_json::json!({}))
+            .expect("older settings without update preference");
+        assert!(missing.check_updates);
+    }
 
     #[test]
     fn visible_apps_old_settings_default_claude_desktop_visible() {

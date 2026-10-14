@@ -1,0 +1,19 @@
+{
+  "version": "4.0.13",
+  "items": [
+    {
+      "type": "new",
+      "zh": "新增软件更新入口，自动检查新版本，可一键下载安装并重启。",
+      "zh-TW": "新增軟體更新入口，自動檢查新版本，可一鍵下載安裝並重新啟動。",
+      "en": "A software update entry checks for new versions and lets you download, install and restart with one click.",
+      "ja": "ソフトウェア更新を追加。新しいバージョンを自動確認し、ワンクリックでダウンロード・インストール・再起動できます。"
+    },
+    {
+      "type": "improve",
+      "zh": "更新包使用 LoliCode 专用签名；正在执行或等待授权的会话会阻止安装，便携版从工具站获取更新。",
+      "zh-TW": "更新套件使用 LoliCode 專用簽章；執行中或等待授權的工作階段會阻止安裝，可攜版從工具站取得更新。",
+      "en": "Updates use LoliCode's own signing key. Running sessions and pending approvals block installation; portable users get updates from the tools site.",
+      "ja": "LoliCode 専用署名で更新を検証。実行中や承認待ちのセッションがある場合はインストールを停止し、ポータブル版はツールサイトから更新します。"
+    }
+  ]
+}

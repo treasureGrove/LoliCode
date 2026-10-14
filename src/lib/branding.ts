@@ -1,4 +1,5 @@
 export const APP_NAME = "LoliCode";
+export const APP_WEBSITE = "https://tools.treasuregrove.art/lolicode/";
 
-// Enable only after LoliCode has its own signed releases and update feed.
-export const APP_UPDATES_ENABLED = false;
+// LoliCode's signed release feed is configured in tauri.conf.json.
+export const APP_UPDATES_ENABLED = true;

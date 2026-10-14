@@ -1544,6 +1544,7 @@ function App() {
           settingsSection={settingsSection}
           onSelectApp={selectApp}
           onSelectPage={openPageFromNav}
+          onOpenUpdates={() => openSettings("about")}
           onSelectSettingsSection={(section) => {
             setAppConfigScrollTarget(undefined);
             setSettingsSection(section);

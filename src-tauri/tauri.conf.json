@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "LoliCode",
-  "version": "4.0.12",
+  "version": "4.0.13",
   "identifier": "art.treasuregrove.tai-switch",
   "build": {
     "frontendDist": "../dist",
@@ -37,7 +37,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "createUpdaterArtifacts": false,
+    "createUpdaterArtifacts": true,
     "resources": {
       "resources/agent/": "agent/"
     },
@@ -67,8 +67,13 @@
       }
     },
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEM4MDI4QzlBNTczOTI4RTMKUldUaktEbFhtb3dDeUM5US9kT0FmdGR5Ti9vQzcwa2dTMlpibDVDUmQ2M0VGTzVOWnd0SGpFVlEK",
-      "endpoints": []
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEE4QzUyM0RFRjAwRDNBNkYKUldSdk9nM3czaVBGcUZ1RzBYRFJPRjV2cEduT1Z2LzR4NDg2ZU1vaEFvL1FTQjIwL3M3UW14SjAK",
+      "endpoints": [
+        "https://tools.treasuregrove.art/lolicode/updates/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
     }
   }
 }

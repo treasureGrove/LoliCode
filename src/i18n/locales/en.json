@@ -393,10 +393,25 @@
     }
   },
   "settings": {
+    "appUpdate": {
+      "unknownModeHelp": "Installation mode is not confirmed. Download the new version and install it manually after your tasks finish.",
+      "installFailed": "Update did not finish. Check the reason and try again.",
+      "downloading": "Downloading update…",
+      "verifying": "Verifying update…",
+      "installing": "Installing and restarting…",
+      "downloadPage": "Open download page",
+      "retryInstall": "Retry download and install",
+      "install": "Download and install",
+      "portableHelp": "Download the new portable version and replace the application after your tasks finish.",
+      "restartHelp": "Checking does not interrupt tasks. Installation restarts LoliCode; finish running tasks and pending approvals first.",
+      "downloadProgress": "Update download"
+    },
     "manualUpdateOnly": "Test build · manual updates",
     "forkAttribution": "Based on CC Switch · MIT · Jason Young",
     "title": "Settings",
     "general": {
+      "checkAppUpdates": "Check for LoliCode updates on startup",
+      "checkAppUpdatesHelp": "Show an update notification. Download and install only when you choose.",
       "appearance": "Appearance",
       "quotaDisplay": "Quota display",
       "quotaDisplayLeft": "Left",
@@ -405,7 +420,7 @@
       "sidebarAndHeader": "Sidebar and header",
       "visibleApps": "Apps shown in the sidebar",
       "goToApps": "Open Apps",
-      "updates": "New versions of your apps",
+      "updates": "Version updates",
       "checkToolUpdates": "Check for new versions of your apps at launch",
       "checkToolUpdatesHelp": "When on, LoliCode checks your installed command-line apps for new versions each time it starts, and shows a dot on Apps in the sidebar if it finds one. Nothing is upgraded automatically.",
       "windowAndTerminal": "Window and terminal",
@@ -4081,6 +4096,8 @@
     "refresh": "Refresh"
   },
   "nav": {
+    "softwareUpdates": "Software updates",
+    "softwareUpdatesAvailable": "A new LoliCode version is available",
     "mainLabel": "Main navigation",
     "skipToContent": "Skip to main content",
     "expandSidebar": "Expand sidebar",

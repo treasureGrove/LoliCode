@@ -1,0 +1,709 @@
+{
+  "scope": "下载页本地浏览器验证；拦截元数据 fixture-only；未下载或安装软件",
+  "viewportCases": [
+    {
+      "width": 1280,
+      "height": 940,
+      "viewport": 1280,
+      "body": 1280,
+      "document": 1280,
+      "title": 634.796875,
+      "download": 634.796875,
+      "passed": true
+    },
+    {
+      "width": 1000,
+      "height": 650,
+      "viewport": 1000,
+      "body": 1000,
+      "document": 1000,
+      "title": 546,
+      "download": 546,
+      "passed": true
+    },
+    {
+      "width": 390,
+      "height": 844,
+      "viewport": 390,
+      "body": 390,
+      "document": 390,
+      "title": 358,
+      "download": 358,
+      "passed": true
+    },
+    {
+      "width": 320,
+      "height": 740,
+      "viewport": 320,
+      "body": 320,
+      "document": 320,
+      "title": 288,
+      "download": 288,
+      "passed": true
+    }
+  ],
+  "gates": [
+    {
+      "name": "correct_installer_and_portable_hrefs",
+      "passed": true,
+      "links": {
+        "installer": {
+          "href": "https://tools.treasuregrove.art/lolicode/releases/4.0.13/LoliCode_4.0.13_x64-setup.exe",
+          "ariaDisabled": "false",
+          "hidden": false,
+          "display": "flex",
+          "visible": true
+        },
+        "portable": {
+          "href": "https://tools.treasuregrove.art/lolicode/releases/4.0.13/LoliCode-Portable.zip",
+          "ariaDisabled": "false",
+          "hidden": false,
+          "display": "flex",
+          "visible": true
+        },
+        "retry": {
+          "href": null,
+          "ariaDisabled": null,
+          "hidden": true,
+          "display": "none",
+          "visible": false
+        }
+      }
+    },
+    {
+      "name": "retry_hidden_after_success",
+      "passed": true,
+      "retry": {
+        "href": null,
+        "ariaDisabled": null,
+        "hidden": true,
+        "display": "none",
+        "visible": false
+      }
+    },
+    {
+      "name": "readable_without_horizontal_overflow_1280",
+      "passed": true,
+      "geometry": {
+        "viewport": 1280,
+        "body": 1280,
+        "document": 1280,
+        "title": 634.796875,
+        "download": 634.796875
+      }
+    },
+    {
+      "name": "readable_without_horizontal_overflow_1000",
+      "passed": true,
+      "geometry": {
+        "viewport": 1000,
+        "body": 1000,
+        "document": 1000,
+        "title": 546,
+        "download": 546
+      }
+    },
+    {
+      "name": "readable_without_horizontal_overflow_390",
+      "passed": true,
+      "geometry": {
+        "viewport": 390,
+        "body": 390,
+        "document": 390,
+        "title": 358,
+        "download": 358
+      }
+    },
+    {
+      "name": "readable_without_horizontal_overflow_320",
+      "passed": true,
+      "geometry": {
+        "viewport": 320,
+        "body": 320,
+        "document": 320,
+        "title": 288,
+        "download": 288
+      }
+    },
+    {
+      "name": "portable_hidden_when_metadata_missing",
+      "passed": true,
+      "portable": {
+        "href": null,
+        "ariaDisabled": "true",
+        "hidden": true,
+        "display": "none",
+        "visible": false
+      }
+    },
+    {
+      "name": "notes_injection_rendered_as_plain_text",
+      "passed": true,
+      "injection": {
+        "text": "<img src=\"https://invalid.example/x\" onerror=\"window.__notesExecuted=true\"><script>window.__notesExecuted=true</script>",
+        "childElements": 0,
+        "executed": false
+      }
+    },
+    {
+      "name": "http_404_disables_every_download",
+      "passed": true,
+      "links": {
+        "installer": {
+          "href": null,
+          "ariaDisabled": "true",
+          "hidden": false,
+          "display": "flex",
+          "visible": true
+        },
+        "portable": {
+          "href": null,
+          "ariaDisabled": "true",
+          "hidden": false,
+          "display": "flex",
+          "visible": true
+        },
+        "retry": {
+          "href": null,
+          "ariaDisabled": null,
+          "hidden": false,
+          "display": "flex",
+          "visible": true
+        }
+      }
+    },
+    {
+      "name": "http_404_retry_recovers",
+      "passed": true,
+      "links": {
+        "installer": {
+          "href": "https://tools.treasuregrove.art/lolicode/releases/4.0.13/LoliCode_4.0.13_x64-setup.exe",
+          "ariaDisabled": "false",
+          "hidden": false,
+          "display": "flex",
+          "visible": true
+        },
+        "portable": {
+          "href": "https://tools.treasuregrove.art/lolicode/releases/4.0.13/LoliCode-Portable.zip",
+          "ariaDisabled": "false",
+          "hidden": false,
+          "display": "flex",
+          "visible": true
+        },
+        "retry": {
+          "href": null,
+          "ariaDisabled": null,
+          "hidden": true,
+          "display": "none",
+          "visible": false
+        }
+      }
+    },
+    {
+      "name": "invalid_json_disables_every_download",
+      "passed": true,
+      "links": {
+        "installer": {
+          "href": null,
+          "ariaDisabled": "true",
+          "hidden": false,
+          "display": "flex",
+          "visible": true
+        },
+        "portable": {
+          "href": null,
+          "ariaDisabled": "true",
+          "hidden": false,
+          "display": "flex",
+          "visible": true
+        },
+        "retry": {
+          "href": null,
+          "ariaDisabled": null,
+          "hidden": false,
+          "display": "flex",
+          "visible": true
+        }
+      }
+    },
+    {
+      "name": "invalid_json_retry_recovers",
+      "passed": true,
+      "links": {
+        "installer": {
+          "href": "https://tools.treasuregrove.art/lolicode/releases/4.0.13/LoliCode_4.0.13_x64-setup.exe",
+          "ariaDisabled": "false",
+          "hidden": false,
+          "display": "flex",
+          "visible": true
+        },
+        "portable": {
+          "href": "https://tools.treasuregrove.art/lolicode/releases/4.0.13/LoliCode-Portable.zip",
+          "ariaDisabled": "false",
+          "hidden": false,
+          "display": "flex",
+          "visible": true
+        },
+        "retry": {
+          "href": null,
+          "ariaDisabled": null,
+          "hidden": true,
+          "display": "none",
+          "visible": false
+        }
+      }
+    },
+    {
+      "name": "missing_signature_disables_every_download",
+      "passed": true,
+      "links": {
+        "installer": {
+          "href": null,
+          "ariaDisabled": "true",
+          "hidden": false,
+          "display": "flex",
+          "visible": true
+        },
+        "portable": {
+          "href": null,
+          "ariaDisabled": "true",
+          "hidden": false,
+          "display": "flex",
+          "visible": true
+        },
+        "retry": {
+          "href": null,
+          "ariaDisabled": null,
+          "hidden": false,
+          "display": "flex",
+          "visible": true
+        }
+      }
+    },
+    {
+      "name": "missing_signature_retry_recovers",
+      "passed": true,
+      "links": {
+        "installer": {
+          "href": "https://tools.treasuregrove.art/lolicode/releases/4.0.13/LoliCode_4.0.13_x64-setup.exe",
+          "ariaDisabled": "false",
+          "hidden": false,
+          "display": "flex",
+          "visible": true
+        },
+        "portable": {
+          "href": "https://tools.treasuregrove.art/lolicode/releases/4.0.13/LoliCode-Portable.zip",
+          "ariaDisabled": "false",
+          "hidden": false,
+          "display": "flex",
+          "visible": true
+        },
+        "retry": {
+          "href": null,
+          "ariaDisabled": null,
+          "hidden": true,
+          "display": "none",
+          "visible": false
+        }
+      }
+    },
+    {
+      "name": "invalid_version_disables_every_download",
+      "passed": true,
+      "links": {
+        "installer": {
+          "href": null,
+          "ariaDisabled": "true",
+          "hidden": false,
+          "display": "flex",
+          "visible": true
+        },
+        "portable": {
+          "href": null,
+          "ariaDisabled": "true",
+          "hidden": false,
+          "display": "flex",
+          "visible": true
+        },
+        "retry": {
+          "href": null,
+          "ariaDisabled": null,
+          "hidden": false,
+          "display": "flex",
+          "visible": true
+        }
+      }
+    },
+    {
+      "name": "invalid_version_retry_recovers",
+      "passed": true,
+      "links": {
+        "installer": {
+          "href": "https://tools.treasuregrove.art/lolicode/releases/4.0.13/LoliCode_4.0.13_x64-setup.exe",
+          "ariaDisabled": "false",
+          "hidden": false,
+          "display": "flex",
+          "visible": true
+        },
+        "portable": {
+          "href": "https://tools.treasuregrove.art/lolicode/releases/4.0.13/LoliCode-Portable.zip",
+          "ariaDisabled": "false",
+          "hidden": false,
+          "display": "flex",
+          "visible": true
+        },
+        "retry": {
+          "href": null,
+          "ariaDisabled": null,
+          "hidden": true,
+          "display": "none",
+          "visible": false
+        }
+      }
+    },
+    {
+      "name": "offsite_installer_disables_every_download",
+      "passed": true,
+      "links": {
+        "installer": {
+          "href": null,
+          "ariaDisabled": "true",
+          "hidden": false,
+          "display": "flex",
+          "visible": true
+        },
+        "portable": {
+          "href": null,
+          "ariaDisabled": "true",
+          "hidden": false,
+          "display": "flex",
+          "visible": true
+        },
+        "retry": {
+          "href": null,
+          "ariaDisabled": null,
+          "hidden": false,
+          "display": "flex",
+          "visible": true
+        }
+      }
+    },
+    {
+      "name": "offsite_installer_retry_recovers",
+      "passed": true,
+      "links": {
+        "installer": {
+          "href": "https://tools.treasuregrove.art/lolicode/releases/4.0.13/LoliCode_4.0.13_x64-setup.exe",
+          "ariaDisabled": "false",
+          "hidden": false,
+          "display": "flex",
+          "visible": true
+        },
+        "portable": {
+          "href": "https://tools.treasuregrove.art/lolicode/releases/4.0.13/LoliCode-Portable.zip",
+          "ariaDisabled": "false",
+          "hidden": false,
+          "display": "flex",
+          "visible": true
+        },
+        "retry": {
+          "href": null,
+          "ariaDisabled": null,
+          "hidden": true,
+          "display": "none",
+          "visible": false
+        }
+      }
+    },
+    {
+      "name": "offsite_portable_disables_every_download",
+      "passed": true,
+      "links": {
+        "installer": {
+          "href": null,
+          "ariaDisabled": "true",
+          "hidden": false,
+          "display": "flex",
+          "visible": true
+        },
+        "portable": {
+          "href": null,
+          "ariaDisabled": "true",
+          "hidden": false,
+          "display": "flex",
+          "visible": true
+        },
+        "retry": {
+          "href": null,
+          "ariaDisabled": null,
+          "hidden": false,
+          "display": "flex",
+          "visible": true
+        }
+      }
+    },
+    {
+      "name": "offsite_portable_retry_recovers",
+      "passed": true,
+      "links": {
+        "installer": {
+          "href": "https://tools.treasuregrove.art/lolicode/releases/4.0.13/LoliCode_4.0.13_x64-setup.exe",
+          "ariaDisabled": "false",
+          "hidden": false,
+          "display": "flex",
+          "visible": true
+        },
+        "portable": {
+          "href": "https://tools.treasuregrove.art/lolicode/releases/4.0.13/LoliCode-Portable.zip",
+          "ariaDisabled": "false",
+          "hidden": false,
+          "display": "flex",
+          "visible": true
+        },
+        "retry": {
+          "href": null,
+          "ariaDisabled": null,
+          "hidden": true,
+          "display": "none",
+          "visible": false
+        }
+      }
+    },
+    {
+      "name": "invalid_version_folder_disables_every_download",
+      "passed": true,
+      "links": {
+        "installer": {
+          "href": null,
+          "ariaDisabled": "true",
+          "hidden": false,
+          "display": "flex",
+          "visible": true
+        },
+        "portable": {
+          "href": null,
+          "ariaDisabled": "true",
+          "hidden": false,
+          "display": "flex",
+          "visible": true
+        },
+        "retry": {
+          "href": null,
+          "ariaDisabled": null,
+          "hidden": false,
+          "display": "flex",
+          "visible": true
+        }
+      }
+    },
+    {
+      "name": "invalid_version_folder_retry_recovers",
+      "passed": true,
+      "links": {
+        "installer": {
+          "href": "https://tools.treasuregrove.art/lolicode/releases/4.0.13/LoliCode_4.0.13_x64-setup.exe",
+          "ariaDisabled": "false",
+          "hidden": false,
+          "display": "flex",
+          "visible": true
+        },
+        "portable": {
+          "href": "https://tools.treasuregrove.art/lolicode/releases/4.0.13/LoliCode-Portable.zip",
+          "ariaDisabled": "false",
+          "hidden": false,
+          "display": "flex",
+          "visible": true
+        },
+        "retry": {
+          "href": null,
+          "ariaDisabled": null,
+          "hidden": true,
+          "display": "none",
+          "visible": false
+        }
+      }
+    },
+    {
+      "name": "invalid_installer_extension_disables_every_download",
+      "passed": true,
+      "links": {
+        "installer": {
+          "href": null,
+          "ariaDisabled": "true",
+          "hidden": false,
+          "display": "flex",
+          "visible": true
+        },
+        "portable": {
+          "href": null,
+          "ariaDisabled": "true",
+          "hidden": false,
+          "display": "flex",
+          "visible": true
+        },
+        "retry": {
+          "href": null,
+          "ariaDisabled": null,
+          "hidden": false,
+          "display": "flex",
+          "visible": true
+        }
+      }
+    },
+    {
+      "name": "invalid_installer_extension_retry_recovers",
+      "passed": true,
+      "links": {
+        "installer": {
+          "href": "https://tools.treasuregrove.art/lolicode/releases/4.0.13/LoliCode_4.0.13_x64-setup.exe",
+          "ariaDisabled": "false",
+          "hidden": false,
+          "display": "flex",
+          "visible": true
+        },
+        "portable": {
+          "href": "https://tools.treasuregrove.art/lolicode/releases/4.0.13/LoliCode-Portable.zip",
+          "ariaDisabled": "false",
+          "hidden": false,
+          "display": "flex",
+          "visible": true
+        },
+        "retry": {
+          "href": null,
+          "ariaDisabled": null,
+          "hidden": true,
+          "display": "none",
+          "visible": false
+        }
+      }
+    },
+    {
+      "name": "invalid_installer_query_disables_every_download",
+      "passed": true,
+      "links": {
+        "installer": {
+          "href": null,
+          "ariaDisabled": "true",
+          "hidden": false,
+          "display": "flex",
+          "visible": true
+        },
+        "portable": {
+          "href": null,
+          "ariaDisabled": "true",
+          "hidden": false,
+          "display": "flex",
+          "visible": true
+        },
+        "retry": {
+          "href": null,
+          "ariaDisabled": null,
+          "hidden": false,
+          "display": "flex",
+          "visible": true
+        }
+      }
+    },
+    {
+      "name": "invalid_installer_query_retry_recovers",
+      "passed": true,
+      "links": {
+        "installer": {
+          "href": "https://tools.treasuregrove.art/lolicode/releases/4.0.13/LoliCode_4.0.13_x64-setup.exe",
+          "ariaDisabled": "false",
+          "hidden": false,
+          "display": "flex",
+          "visible": true
+        },
+        "portable": {
+          "href": "https://tools.treasuregrove.art/lolicode/releases/4.0.13/LoliCode-Portable.zip",
+          "ariaDisabled": "false",
+          "hidden": false,
+          "display": "flex",
+          "visible": true
+        },
+        "retry": {
+          "href": null,
+          "ariaDisabled": null,
+          "hidden": true,
+          "display": "none",
+          "visible": false
+        }
+      }
+    },
+    {
+      "name": "invalid_installer_userinfo_disables_every_download",
+      "passed": true,
+      "links": {
+        "installer": {
+          "href": null,
+          "ariaDisabled": "true",
+          "hidden": false,
+          "display": "flex",
+          "visible": true
+        },
+        "portable": {
+          "href": null,
+          "ariaDisabled": "true",
+          "hidden": false,
+          "display": "flex",
+          "visible": true
+        },
+        "retry": {
+          "href": null,
+          "ariaDisabled": null,
+          "hidden": false,
+          "display": "flex",
+          "visible": true
+        }
+      }
+    },
+    {
+      "name": "invalid_installer_userinfo_retry_recovers",
+      "passed": true,
+      "links": {
+        "installer": {
+          "href": "https://tools.treasuregrove.art/lolicode/releases/4.0.13/LoliCode_4.0.13_x64-setup.exe",
+          "ariaDisabled": "false",
+          "hidden": false,
+          "display": "flex",
+          "visible": true
+        },
+        "portable": {
+          "href": "https://tools.treasuregrove.art/lolicode/releases/4.0.13/LoliCode-Portable.zip",
+          "ariaDisabled": "false",
+          "hidden": false,
+          "display": "flex",
+          "visible": true
+        },
+        "retry": {
+          "href": null,
+          "ariaDisabled": null,
+          "hidden": true,
+          "display": "none",
+          "visible": false
+        }
+      }
+    },
+    {
+      "name": "no_external_download_or_injection_request",
+      "passed": true,
+      "count": 0
+    },
+    {
+      "name": "no_unexpected_runtime_errors",
+      "passed": true,
+      "errors": []
+    }
+  ],
+  "failures": [],
+  "consoleErrors": [
+    "Failed to load resource: the server responded with a status of 404 (Not Found)"
+  ],
+  "blockedExternalRequests": [],
+  "screenshots": [
+    "D:/projectGithub/TAI-Switch/docs/images/lolicode/updates/website-desktop-qa.png",
+    "D:/projectGithub/TAI-Switch/docs/images/lolicode/updates/website-mobile-qa.png"
+  ],
+  "completedAt": "2026-10-14T15:06:38.676Z"
+}

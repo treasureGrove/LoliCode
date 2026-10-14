@@ -42,6 +42,7 @@ function props(overrides: Partial<SidebarProps> = {}): SidebarProps {
     onSelectPage: vi.fn(),
     onSelectSettingsSection: vi.fn(),
     onExitSettings: vi.fn(),
+    onOpenUpdates: vi.fn(),
     appsUpdateAvailable: true,
     ...overrides,
   };
@@ -65,6 +66,20 @@ beforeEach(() => {
 });
 
 describe("simple channel navigation", () => {
+  it("opens software updates directly and keeps the About entry available", () => {
+    const values = props({ view: "settings" });
+    mount(values);
+    const updates = screen.getByRole("button", { name: /^软件更新/ });
+    expect(updates).toHaveAccessibleName(/发现 LoliCode 新版本/);
+    fireEvent.click(updates);
+    expect(values.onOpenUpdates).toHaveBeenCalledOnce();
+    expect(values.onSelectPage).not.toHaveBeenCalled();
+    fireEvent.click(
+      screen.getByRole("button", { name: /^settings.sections.about/ }),
+    );
+    expect(values.onSelectSettingsSection).toHaveBeenLastCalledWith("about");
+  });
+
   it("opens shared channels and retains only the core destinations", () => {
     const values = props({ view: "channels" });
     mount(values);

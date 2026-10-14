@@ -13,6 +13,7 @@ import {
   Info,
   LayoutGrid,
   PanelsTopLeft,
+  Download,
   Settings,
   SlidersHorizontal,
 } from "lucide-react";
@@ -41,6 +42,7 @@ interface SidebarProps {
   onSelectPage: (page: GlobalPage | "settings") => void;
   onSelectSettingsSection: (section: SettingsSection) => void;
   onExitSettings: () => void;
+  onOpenUpdates: () => void;
   appsUpdateAvailable?: boolean;
 }
 
@@ -76,6 +78,22 @@ export function Sidebar(props: SidebarProps) {
           />
         )}
         <div className="tai-shell-footer">
+          <NavItem
+            collapsed={collapsed}
+            selected={false}
+            icon={Download}
+            label={t("nav.softwareUpdates", { defaultValue: "软件更新" })}
+            title={
+              hasUpdate
+                ? t("nav.softwareUpdatesAvailable", {
+                    defaultValue: "发现 LoliCode 新版本",
+                  })
+                : undefined
+            }
+            dot={hasUpdate}
+            dotTone="success"
+            onClick={props.onOpenUpdates}
+          />
           <NavItem
             collapsed={collapsed}
             selected={props.view === "apps"}

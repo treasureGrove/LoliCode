@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { settingsApi } from "@/lib/api";
 
 export interface UseSettingsMetadataResult {
-  isPortable: boolean;
+  isPortable: boolean | null;
   requiresRestart: boolean;
   isLoading: boolean;
   acknowledgeRestart: () => void;
@@ -16,7 +16,7 @@ export interface UseSettingsMetadataResult {
  * - requiresRestart（需要重启标志）
  */
 export function useSettingsMetadata(): UseSettingsMetadataResult {
-  const [isPortable, setIsPortable] = useState(false);
+  const [isPortable, setIsPortable] = useState<boolean | null>(null);
   const [requiresRestart, setRequiresRestart] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -28,6 +28,8 @@ export function useSettingsMetadata(): UseSettingsMetadataResult {
     const load = async () => {
       try {
         const portable = await settingsApi.isPortable();
+        if (typeof portable !== "boolean")
+          throw new Error("无法确认应用的安装方式");
 
         if (!active) return;
 

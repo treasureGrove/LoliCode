@@ -1,7 +1,27 @@
 #![allow(non_snake_case)]
 
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_updater::UpdaterExt;
+
+static UPDATE_INSTALL_OPERATION: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+fn acquire_update_operation(
+    gate: &tokio::sync::Mutex<()>,
+) -> Result<tokio::sync::MutexGuard<'_, ()>, String> {
+    gate.try_lock()
+        .map_err(|_| "更新正在进行，请等待当前更新完成。".into())
+}
+
+#[derive(Clone, serde::Serialize)]
+struct AppUpdateProgress<'a> {
+    phase: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    message: Option<&'a str>,
+}
+
+fn emit_update_phase(app: &AppHandle, phase: &str, message: Option<&str>) {
+    let _ = app.emit("app-update-progress", AppUpdateProgress { phase, message });
+}
 
 /// 应用更新下载进度（通过 `update-download-progress` 事件发给前端）。
 #[derive(Clone, serde::Serialize)]
@@ -259,8 +279,43 @@ pub async fn restart_app(app: AppHandle) -> Result<bool, String> {
 /// 这里把退出清理、安装和重启串在同一个后端流程中，避免依赖旧前端继续执行。
 #[tauri::command]
 pub async fn install_update_and_restart(app: AppHandle) -> Result<bool, String> {
-    let updater = app
-        .updater_builder()
+    // The frontend's async metadata can be late or fail. Never let a portable
+    // build dispatch an NSIS installer into the installed application's path.
+    if crate::commands::misc::is_portable_mode().await? {
+        return Err("便携版请从工具站下载新 ZIP，完成任务后替换程序。".into());
+    }
+    // Keep the whole check/download/install flow exclusive across windows and
+    // repeated IPC requests. A rejected duplicate must not alter its progress.
+    let _operation = acquire_update_operation(&UPDATE_INSTALL_OPERATION)?;
+    emit_update_phase(&app, "checking", None);
+    let result = install_update_and_restart_inner(&app).await;
+    if let Err(error) = &result {
+        emit_update_phase(&app, "error", Some(error));
+    }
+    result
+}
+
+async fn install_update_and_restart_inner(app: &AppHandle) -> Result<bool, String> {
+    let builder = app.updater_builder();
+    #[cfg(target_os = "windows")]
+    let cleanup_started = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    #[cfg(target_os = "windows")]
+    let builder = {
+        let exit_app = app.clone();
+        let cleanup_started = cleanup_started.clone();
+        builder.on_before_exit(move || {
+            // This callback is reached only after package extraction succeeds.
+            // install runs on a blocking thread so awaiting cleanup here does
+            // not nest an async runtime on one of its worker threads.
+            cleanup_started.store(true, std::sync::atomic::Ordering::Release);
+            crate::save_window_state_before_exit(&exit_app);
+            tauri::async_runtime::block_on(crate::cleanup_before_exit(&exit_app));
+            crate::remove_tray_icon_before_exit(&exit_app);
+            crate::destroy_single_instance_lock(&exit_app);
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        })
+    };
+    let updater = builder
         .build()
         .map_err(|e| format!("初始化更新器失败: {e}"))?;
 
@@ -269,11 +324,14 @@ pub async fn install_update_and_restart(app: AppHandle) -> Result<bool, String> 
         .await
         .map_err(|e| format!("检查更新失败: {e}"))?
     else {
+        emit_update_phase(app, "up_to_date", None);
         return Ok(false);
     };
 
     log::info!("开始下载应用更新: {}", update.version);
+    emit_update_phase(app, "downloading", None);
     let progress_handle = app.clone();
+    let verification_handle = app.clone();
     let mut downloaded: u64 = 0;
     let bytes = update
         .download(
@@ -287,28 +345,36 @@ pub async fn install_update_and_restart(app: AppHandle) -> Result<bool, String> 
                     },
                 );
             },
-            || {},
+            move || emit_update_phase(&verification_handle, "verifying", None),
         )
         .await
-        .map_err(|e| format!("下载更新失败: {e}"))?;
+        .map_err(|e| format!("下载或验证更新失败: {e}"))?;
+
+    // download() has verified the signature. Only now take the host lifecycle
+    // lease: downloads may run beside tasks, but installation must not stop
+    // a background project or race with a new queued send.
+    let agent = app.try_state::<crate::services::agent::AgentState>();
+    let _idle_lease = match agent.as_ref() {
+        Some(agent) => Some(agent.acquire_idle_for_update().await?),
+        None => None, // The database-recovery window has no agent carrier.
+    };
 
     log::info!("开始安装应用更新: {}", update.version);
+    emit_update_phase(app, "installing", None);
+    let installed = tauri::async_runtime::spawn_blocking(move || update.install(bytes))
+        .await
+        .map_err(|e| format!("更新安装任务未完成: {e}"))?;
 
     #[cfg(target_os = "windows")]
     {
-        // Windows updater 会在 install() 内启动安装器并直接退出当前进程
-        // （插件内部 std::process::exit(0)，绕过 TrayIcon::drop、不发
-        // NIM_DELETE，会残留死图标——与托盘"退出"路径相同的问题）。
-        // 因此清理只能放在 install 前执行，且必须显式移除托盘图标。
-        crate::save_window_state_before_exit(&app);
-        crate::cleanup_before_exit(&app).await;
-        crate::remove_tray_icon_before_exit(&app);
-        crate::destroy_single_instance_lock(&app);
-        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-        update.install(bytes).map_err(|e| {
-            format!(
-                "Windows 更新安装失败: {e}。已执行退出前清理，代理或 Live 接管可能已暂停；请重启应用或重新开启代理后再试。"
-            )
+        // Windows exits inside install(); its before-exit callback owns cleanup.
+        // Invalid/extraction-failed packages leave the running application alone.
+        installed.map_err(|e| {
+            if cleanup_started.load(std::sync::atomic::Ordering::Acquire) {
+                format!("Windows 更新安装失败: {e}。已执行退出前清理，请重启应用后再试。")
+            } else {
+                format!("Windows 更新安装失败: {e}。当前应用尚未关闭，请稍后重试。")
+            }
         })?;
         Ok(true)
     }
@@ -316,16 +382,14 @@ pub async fn install_update_and_restart(app: AppHandle) -> Result<bool, String> 
     #[cfg(not(target_os = "windows"))]
     {
         // macOS/Linux install() 会返回；先安装，避免安装失败时误停代理/撤回接管。
-        update
-            .install(bytes)
-            .map_err(|e| format!("安装更新失败: {e}"))?;
+        installed.map_err(|e| format!("安装更新失败: {e}"))?;
 
-        crate::save_window_state_before_exit(&app);
-        crate::cleanup_before_exit(&app).await;
+        crate::save_window_state_before_exit(app);
+        crate::cleanup_before_exit(app).await;
 
         log::info!("应用更新安装完成，正在重启应用");
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-        crate::restart_process(&app);
+        crate::restart_process(app);
     }
 }
 
@@ -377,12 +441,34 @@ pub async fn set_auto_launch(enabled: bool) -> Result<bool, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::merge_settings_for_save;
+    use super::{acquire_update_operation, merge_settings_for_save};
     use crate::settings::{
         AppSettings, CodexOfficialHistoryUnifyMigration, CodexProviderTemplateMigration,
         CodexThirdPartyHistoryProviderBucketMigration, LocalMigrations, S3SyncSettings,
         WebDavSyncSettings,
     };
+
+    #[test]
+    fn repeated_update_install_is_rejected_until_the_first_attempt_finishes() {
+        let gate = tokio::sync::Mutex::new(());
+        let first = acquire_update_operation(&gate).unwrap();
+        assert!(acquire_update_operation(&gate)
+            .unwrap_err()
+            .contains("更新正在进行"));
+        drop(first);
+        assert!(acquire_update_operation(&gate).is_ok());
+    }
+
+    #[test]
+    fn failed_update_attempt_releases_the_operation_for_retry() {
+        let gate = tokio::sync::Mutex::new(());
+        let attempt = || -> Result<(), String> {
+            let _lease = acquire_update_operation(&gate)?;
+            Err("signature verification failed".into())
+        };
+        assert!(attempt().is_err());
+        assert!(acquire_update_operation(&gate).is_ok());
+    }
 
     #[test]
     fn save_settings_should_keep_the_existing_proxy_client_host() {

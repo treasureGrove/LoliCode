@@ -26,7 +26,7 @@ export interface UseSettingsResult {
   settings: SettingsFormState | null;
   isLoading: boolean;
   isSaving: boolean;
-  isPortable: boolean;
+  isPortable: boolean | null;
   appConfigDir?: string;
   /** 已保存的 CC Switch 数据目录（没覆盖时为空），用来判断有没有改动没保存 */
   initialAppConfigDir?: string;

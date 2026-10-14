@@ -31,18 +31,25 @@ export async function checkForUpdate(
   const { check } = await import("@tauri-apps/plugin-updater");
 
   const currentVersion = await getCurrentVersion();
-  const update = await check({ timeout: opts.timeout ?? 30000 } as any);
+  const update = await check({ timeout: opts.timeout ?? 30000 });
 
   if (!update) {
     return { status: "up-to-date" };
   }
 
-  const info: UpdateInfo = {
-    currentVersion,
-    availableVersion: (update as any).version ?? "",
-    notes: (update as any).notes,
-    pubDate: (update as any).date,
-  };
-
-  return { status: "available", info };
+  try {
+    if (!update.version) throw new Error("更新服务没有返回有效版本号，请重试");
+    return {
+      status: "available",
+      info: {
+        currentVersion: currentVersion || update.currentVersion,
+        availableVersion: update.version,
+        notes: update.body,
+        pubDate: update.date,
+      },
+    };
+  } finally {
+    // Only the backend installs. The JS check resource is not retained.
+    await update.close();
+  }
 }

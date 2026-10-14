@@ -391,10 +391,25 @@
     }
   },
   "settings": {
+    "appUpdate": {
+      "unknownModeHelp": "尚未确认安装方式，请从下载页面获取新版本，完成任务后手动安装。",
+      "installFailed": "更新未完成，请查看原因后重试。",
+      "downloading": "正在下载更新包…",
+      "verifying": "正在校验更新包…",
+      "installing": "正在安装并重启…",
+      "downloadPage": "打开下载页面",
+      "retryInstall": "重试下载并安装",
+      "install": "下载并安装",
+      "portableHelp": "便携版请从下载页面获取新版本，完成任务后替换程序。",
+      "restartHelp": "检查更新不会中断任务。安装会重启 LoliCode；请先完成正在运行的任务和待处理的授权。",
+      "downloadProgress": "下载更新包"
+    },
     "manualUpdateOnly": "测试版 · 手动更新",
     "forkAttribution": "基于 CC Switch · MIT · 原作者 Jason Young",
     "title": "设置",
     "general": {
+      "checkAppUpdates": "启动时检查 LoliCode 更新",
+      "checkAppUpdatesHelp": "检查新版本并显示提醒，由你点击下载并安装。",
       "appearance": "外观",
       "quotaDisplay": "额度显示",
       "quotaDisplayLeft": "剩余",
@@ -403,7 +418,7 @@
       "sidebarAndHeader": "侧栏与页头",
       "visibleApps": "在侧栏显示哪些应用",
       "goToApps": "前往「应用」",
-      "updates": "各应用的新版本",
+      "updates": "版本更新",
       "checkToolUpdates": "启动时检查各应用的新版本",
       "checkToolUpdatesHelp": "打开后，每次启动 LoliCode 会查一次已安装的命令行应用有没有新版本，查到了就在侧栏「应用」上显示一个圆点。不会自动升级。",
       "windowAndTerminal": "窗口与终端",
@@ -4079,6 +4094,8 @@
     "refresh": "刷新"
   },
   "nav": {
+    "softwareUpdates": "软件更新",
+    "softwareUpdatesAvailable": "发现 LoliCode 新版本",
     "mainLabel": "主导航",
     "skipToContent": "跳到主要内容",
     "expandSidebar": "展开侧栏",

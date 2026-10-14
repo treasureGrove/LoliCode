@@ -405,6 +405,8 @@ export interface Settings {
   showProviderSearch?: boolean;
   // 启动时检查已安装的命令行应用有没有新版本（默认关）
   checkToolUpdatesOnStartup?: boolean;
+  // 启动时检查 LoliCode 软件更新（默认开；不自动安装）
+  checkUpdates?: boolean;
   // Preserve Codex ChatGPT login in auth.json when switching third-party providers
   preserveCodexOfficialAuthOnSwitch?: boolean;
   // Run official Codex under the shared "custom" provider id so future
