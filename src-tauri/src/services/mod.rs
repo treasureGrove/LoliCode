@@ -1,3 +1,4 @@
+pub mod agent;
 pub mod backup_storage;
 pub mod balance;
 pub mod channel_center;

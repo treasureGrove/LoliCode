@@ -1,4 +1,4 @@
-> **Lolicode：** 将 API 与订阅账号作为统一渠道添加，自动获取模型，再配置到兼容的 AI 工具。使用与适配说明见[渠道与模型](docs/CHANNEL_CENTER.md)，临时界面素材见[资源替换说明](src/assets/brand/README.md)。
+> **Lolicode：** 桌面编程 agent：选择项目和模型，通过聊天完成代码修改并查看真实改动。API 与已支持的订阅账号统一放在渠道与模型中，也能配置到其他兼容工具。使用说明见[编程工作台](docs/LOLICODE_AGENT.md)、[渠道与模型](docs/CHANNEL_CENTER.md)，临时界面素材见[资源替换说明](src/assets/brand/README.md)。
 > 本项目基于 [CC Switch 基线](FORK_BASELINE.md)。下方保留原版说明作参考，其中的下载链接指向 CC Switch。
 
 <div align="center">

@@ -1,0 +1,12 @@
+{
+  "caption": "真实 GLM 临时项目测试记录 · 界面回放",
+  "fixture": "C:\\Users\\admin\\AppData\\Local\\Temp\\lolicode-real-glm-agent-evidence.json",
+  "screenshots": [
+    "D:\\projectGithub\\TAI-Switch\\docs\\images\\lolicode\\agent-glm-chat.png",
+    "D:\\projectGithub\\TAI-Switch\\docs\\images\\lolicode\\agent-glm-diff.png",
+    "D:\\projectGithub\\TAI-Switch\\docs\\images\\lolicode\\agent-glm-chat-dark.png"
+  ],
+  "errors": [],
+  "network": "local renderer only",
+  "liveAgentMutations": 0
+}

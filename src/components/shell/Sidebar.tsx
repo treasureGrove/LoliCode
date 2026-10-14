@@ -5,6 +5,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { LayoutGroup, motion, useReducedMotion } from "framer-motion";
 import {
   ArrowLeft,
+  Bot,
   ChartColumn,
   ChevronsLeft,
   ChevronsRight,
@@ -131,7 +132,7 @@ function SidebarTopBar({
         {!collapsed && (
           <div className="tai-shell-wordmark" {...DRAG_REGION_ATTR}>
             <span {...DRAG_REGION_ATTR}>{APP_NAME}</span>
-            <small {...DRAG_REGION_ATTR}>MODEL CHANNELS</small>
+            <small {...DRAG_REGION_ATTR}>CODING AGENT</small>
           </div>
         )}
       </div>
@@ -167,6 +168,13 @@ function MainDirectory({
   return (
     <div className="tai-shell-directory">
       <div role="group" aria-label={workbench} className="tai-shell-task-group">
+        <NavItem
+          collapsed={collapsed}
+          selected={view === "agent"}
+          icon={Bot}
+          label={chinese ? "编程工作台" : "Coding workspace"}
+          onClick={() => onSelectPage("agent")}
+        />
         <NavItem
           collapsed={collapsed}
           selected={view === "channels" || view === "auth" || isAppPage(view)}

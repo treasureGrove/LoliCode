@@ -1,4 +1,4 @@
-> **Lolicode:** Add API keys or subscription accounts as shared channels, discover models, and configure compatible AI tools from one page. See [Channels & models](docs/CHANNEL_CENTER.md) and [replaceable UI resources](src/assets/brand/README.md). Historical Windows build instructions are in [TESTING_TAI.md](TESTING_TAI.md).
+> **Lolicode:** A desktop coding agent: select a project, choose a shared model, chat, and review real code changes. API keys and supported subscription accounts share the same channel catalog used to configure other AI tools. See [Coding workspace](docs/LOLICODE_AGENT.md), [Channels & models](docs/CHANNEL_CENTER.md), and [replaceable UI resources](src/assets/brand/README.md). Historical Windows build instructions are in [TESTING_TAI.md](TESTING_TAI.md).
 > This fork is based on the full CC Switch snapshot recorded in [FORK_BASELINE.md](FORK_BASELINE.md). The upstream README below is retained as reference; its release links download CC Switch.
 
 <div align="center">

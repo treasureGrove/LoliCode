@@ -123,6 +123,37 @@ pub struct ChannelApplyReport {
     pub requires_background: bool,
 }
 
+/// Safe model references for the desktop renderer and the future CLI.
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentCatalogModel {
+    pub id: String,
+    pub provider_id: String,
+    pub model_id: String,
+    pub name: String,
+    pub channel_name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub context_limit: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output_limit: Option<u64>,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentCatalog {
+    pub revision: u64,
+    pub models: Vec<AgentCatalogModel>,
+    pub default_model: Option<String>,
+    pub excluded_sources: Vec<String>,
+}
+
+/// The engine-owned config contains a local gateway credential. Do not serialize
+/// or log this wrapper, or return it from a renderer-facing command.
+pub struct PreparedAgentCatalog {
+    pub catalog: AgentCatalog,
+    pub config: Value,
+}
+
 fn catalog_lock() -> &'static Mutex<()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
     LOCK.get_or_init(|| Mutex::new(()))
@@ -1693,6 +1724,257 @@ fn api_catalog_snapshot(snapshot: &ChannelCenterSnapshot) -> ChannelCenterSnapsh
     api
 }
 
+/// Read only the saved channel center, without triggering legacy migration or
+/// touching any external client's applied catalog or native configuration.
+pub fn agent_source_snapshot(db: &Database) -> Result<ChannelCenterSnapshot, AppError> {
+    let _guard = catalog_lock().lock()?;
+    let snapshot = read_stored(db)?.unwrap_or_default();
+    validate(&snapshot)?;
+    if snapshot
+        .channels
+        .iter()
+        .any(|source| source.auth_kind != "api_key" && !source.api_key.is_empty())
+    {
+        return Err(AppError::Config(
+            "登录渠道含有不应保留的临时凭据，请重新保存渠道后重试".into(),
+        ));
+    }
+    Ok(snapshot)
+}
+
+fn agent_catalog_from_snapshot(snapshot: &ChannelCenterSnapshot) -> AgentCatalog {
+    let api = api_catalog_snapshot(snapshot);
+    let models = api
+        .channels
+        .iter()
+        .filter(|source| source.enabled)
+        .flat_map(|source| {
+            source
+                .models
+                .iter()
+                .filter(|model| model.available())
+                .map(move |model| {
+                    let model_id = route_id(source, model);
+                    AgentCatalogModel {
+                        id: format!("lolicode/{model_id}"),
+                        provider_id: "lolicode".into(),
+                        model_id,
+                        name: format!(
+                            "{} · {}",
+                            source.name,
+                            model.name.as_deref().unwrap_or(&model.id)
+                        ),
+                        channel_name: source.name.clone(),
+                        context_limit: model.context_limit,
+                        output_limit: model.output_limit,
+                    }
+                })
+        })
+        .collect();
+    AgentCatalog {
+        revision: snapshot.revision,
+        models,
+        default_model: api.default_model.map(|id| format!("lolicode/{id}")),
+        excluded_sources: snapshot
+            .channels
+            .iter()
+            .filter(|source| source.enabled)
+            .filter_map(|source| {
+                native_auth_target(&source.auth_kind).map(|app| {
+                    format!(
+                        "{}：此原生账号仅可用于 {}，不能用于 Lolicode agent",
+                        source.name,
+                        app.as_str()
+                    )
+                })
+            })
+            .collect(),
+    }
+}
+
+/// This is a stored model catalog, not a paid inference or entitlement check.
+pub fn agent_catalog(db: &Database) -> Result<AgentCatalog, AppError> {
+    Ok(agent_catalog_from_snapshot(&agent_source_snapshot(db)?))
+}
+
+fn agent_opencode_v2_config(
+    catalog: &AgentCatalog,
+    base_url: &str,
+    local_token: &str,
+) -> Result<Value, AppError> {
+    let default = catalog
+        .default_model
+        .as_deref()
+        .filter(|id| catalog.models.iter().any(|model| model.id == *id))
+        .ok_or_else(|| {
+            AppError::InvalidInput(
+                "请先在渠道与模型中添加并启用支持工具调用的 API 或订阅模型；原生 Claude/Gemini 账号只能用于各自官方工具".into(),
+            )
+        })?;
+    let models: Map<String, Value> = catalog
+        .models
+        .iter()
+        .map(|model| {
+            let mut entry = json!({"modelID":model.model_id,"name":model.name});
+            let mut limit = Map::new();
+            if let Some(context) = model.context_limit {
+                limit.insert("context".into(), json!(context));
+            }
+            if let Some(output) = model.output_limit {
+                limit.insert("output".into(), json!(output));
+            }
+            if !limit.is_empty() {
+                entry["limit"] = Value::Object(limit);
+            }
+            // Missing capability metadata stays unknown; it is not a false
+            // declaration that would disable the engine's coding tools.
+            (model.model_id.clone(), entry)
+        })
+        .collect();
+    let provider = json!({
+        "name":"Lolicode",
+        "package":"@ai-sdk/openai-compatible",
+        "settings":{"baseURL":base_url,"apiKey":local_token},
+        "models":models
+    });
+    crate::opencode_config::validate_native_provider("lolicode", &provider)?;
+    Ok(json!({
+        "providers":{"lolicode":provider},
+        "model":default,
+        "default_agent":"build",
+        "update":"disable",
+        "share":"disabled",
+        "snapshots":true,
+        "permissions":[
+            {"action":"*","resource":"*","effect":"ask"},
+            {"action":"read","resource":"*","effect":"allow"},
+            {"action":"glob","resource":"*","effect":"allow"},
+            {"action":"grep","resource":"*","effect":"allow"},
+            {"action":"list","resource":"*","effect":"allow"},
+            {"action":"edit","resource":"*","effect":"allow"},
+            {"action":"question","resource":"*","effect":"allow"},
+            {"action":"shell","resource":"*","effect":"ask"},
+            {"action":"external_directory","resource":"*","effect":"ask"}
+        ],
+        "experimental":{"policies":[
+            {"action":"provider.use","resource":"*","effect":"deny"},
+            {"action":"provider.use","resource":"lolicode","effect":"allow"}
+        ]}
+    }))
+}
+
+/// Roll back only our background marker if preparation fails or its future is
+/// cancelled. Successful preparation deliberately keeps the persisted marker,
+/// so restart can restore agent-only catalogs without writing LAST_APPLIED.
+struct AgentGatewayPreparation<'db> {
+    db: &'db Database,
+    previous_background: Option<String>,
+    committed: bool,
+}
+
+impl Drop for AgentGatewayPreparation<'_> {
+    fn drop(&mut self) {
+        if self.committed {
+            return;
+        }
+        let restored = (|| -> Result<(), AppError> {
+            let conn = crate::database::lock_conn!(self.db.conn);
+            match &self.previous_background {
+                Some(previous) => {
+                    conn.execute(
+                        "INSERT OR REPLACE INTO settings (key,value) VALUES (?1,?2)",
+                        rusqlite::params![BACKGROUND_KEY, previous],
+                    )?;
+                }
+                None => {
+                    conn.execute("DELETE FROM settings WHERE key=?1", [BACKGROUND_KEY])?;
+                }
+            }
+            Ok(())
+        })();
+        if let Err(error) = restored {
+            // Keeping the service alive is safer than discarding an existing
+            // external tool's background requirement on a damaged database.
+            log::warn!("恢复 agent 渠道服务后台标记失败：{error}");
+        }
+    }
+}
+
+fn prepare_agent_gateway_write<'db>(
+    db: &'db Database,
+    snapshot: &ChannelCenterSnapshot,
+) -> Result<AgentGatewayPreparation<'db>, AppError> {
+    use rusqlite::OptionalExtension;
+    let _guard = catalog_lock().lock()?;
+    let mut conn = crate::database::lock_conn!(db.conn);
+    let tx = conn.transaction()?;
+    let key = format!("channel_center_catalog_{}", snapshot.revision);
+    let raw = serialize(snapshot)?;
+    let existing: Option<String> = tx
+        .query_row("SELECT value FROM settings WHERE key=?1", [&key], |row| {
+            row.get(0)
+        })
+        .optional()?;
+    match existing {
+        Some(existing) if existing != raw => {
+            return Err(AppError::Conflict(
+                "此渠道版本已经应用且内容不同，请重新保存以创建新版本".into(),
+            ));
+        }
+        Some(_) => {}
+        None => {
+            tx.execute(
+                "INSERT INTO settings (key,value) VALUES (?1,?2)",
+                rusqlite::params![key, raw],
+            )?;
+        }
+    }
+    let previous_background = tx
+        .query_row(
+            "SELECT value FROM settings WHERE key=?1",
+            [BACKGROUND_KEY],
+            |row| row.get(0),
+        )
+        .optional()?;
+    tx.execute(
+        "INSERT OR REPLACE INTO settings (key,value) VALUES (?1,'true')",
+        [BACKGROUND_KEY],
+    )?;
+    tx.commit()?;
+    Ok(AgentGatewayPreparation {
+        db,
+        previous_background,
+        committed: false,
+    })
+}
+
+/// Prepare only an engine-owned profile. Callers must validate the pinned
+/// catalog's managed account references before launching the engine. This does
+/// not switch providers, write global OpenCode files, or change LAST_APPLIED.
+pub async fn prepare_agent_catalog(state: &AppState) -> Result<PreparedAgentCatalog, AppError> {
+    let _guard = apply_lock().lock().await;
+    let snapshot = agent_source_snapshot(state.db.as_ref())?;
+    let catalog = agent_catalog_from_snapshot(&snapshot);
+    // Validate the pure profile before publishing anything or acquiring a lease.
+    agent_opencode_v2_config(&catalog, "http://127.0.0.1/tai/v1", "validation-only")?;
+    let api_snapshot = api_catalog_snapshot(&snapshot);
+    let mut preparation = prepare_agent_gateway_write(state.db.as_ref(), &api_snapshot)?;
+    let info = state.proxy_service.start().await.map_err(|error| {
+        AppError::Message(format!(
+            "本地渠道服务无法启动：{}",
+            crate::error_for_log(&error)
+        ))
+    })?;
+    let base_url = crate::proxy::channel_gateway::gateway_catalog_base_url(
+        &info.address,
+        info.port,
+        api_snapshot.revision,
+    )?;
+    let config = agent_opencode_v2_config(&catalog, &base_url, &gateway_token(state.db.as_ref())?)?;
+    preparation.committed = true;
+    Ok(PreparedAgentCatalog { catalog, config })
+}
+
 fn native_selection_for<'a>(
     snapshot: &'a ChannelCenterSnapshot,
     app: &AppType,
@@ -2618,6 +2900,305 @@ mod tests {
             default_model: Some("one/model-b".into()),
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn agent_catalog_is_read_only_and_does_not_migrate_legacy_providers() {
+        let db = Database::memory().unwrap();
+        let legacy = crate::provider::UniversalProvider::new(
+            "agent-readonly-fixture".into(),
+            "Legacy".into(),
+            "custom".into(),
+            "https://example.test/v1".into(),
+            "legacy-private-key".into(),
+        );
+        db.save_universal_provider(&legacy).unwrap();
+        let before = db.get_all_universal_providers().unwrap();
+        let catalog = agent_catalog(&db).unwrap();
+        assert!(catalog.models.is_empty());
+        assert!(catalog.default_model.is_none());
+        assert!(db.get_setting(SETTINGS_KEY).unwrap().is_none());
+        assert!(db.get_setting(TOKEN_KEY).unwrap().is_none());
+        assert!(db.get_setting(APPLIED_KEY).unwrap().is_none());
+        assert!(db.get_setting(BACKGROUND_KEY).unwrap().is_none());
+        assert_eq!(
+            serialize(&db.get_all_universal_providers().unwrap()).unwrap(),
+            serialize(&before).unwrap()
+        );
+        db.set_setting(SETTINGS_KEY, "{invalid-private-data")
+            .unwrap();
+        let error = agent_catalog(&db).err().unwrap().to_string();
+        assert!(!error.contains("invalid-private-data"));
+        assert_eq!(
+            db.get_setting(SETTINGS_KEY).unwrap().as_deref(),
+            Some("{invalid-private-data")
+        );
+        assert!(!db.get_bool_flag(BACKGROUND_KEY).unwrap());
+    }
+
+    #[test]
+    fn agent_catalog_projects_all_managed_sources_without_credentials_or_native_accounts() {
+        let db = Database::memory().unwrap();
+        let mut saved = snapshot();
+        saved.revision = 17;
+        saved.channels[0].models[0].id = "vendor/model-a".into();
+        saved.channels[0].models[0].context_limit = Some(131072);
+        saved.channels[0].models[0].output_limit = Some(8192);
+        let mut no_tools = blank_model("no-tools".into());
+        no_tools.supports_tools = Some(false);
+        saved.channels[0].models.push(no_tools);
+        let mut disabled = source("disabled");
+        disabled.enabled = false;
+        saved.channels.push(disabled);
+        for kind in ["github_copilot", "codex_oauth", "xai_oauth", "zhipu_oauth"] {
+            let mut managed = source(kind);
+            managed.auth_kind = kind.into();
+            managed.account_id = Some(format!("selected-{kind}"));
+            managed.api_key.clear();
+            if let Some((base, protocol)) = managed_subscription_route(kind) {
+                managed.base_url = base.into();
+                managed.protocol = protocol.into();
+            }
+            saved.channels.push(managed);
+        }
+        saved
+            .channels
+            .push(native_subscription_channel("claude").unwrap());
+        saved
+            .channels
+            .push(native_subscription_channel("gemini").unwrap());
+        saved.default_model = Some("claude-native/native-default".into());
+        db.set_setting(SETTINGS_KEY, &serialize(&saved).unwrap())
+            .unwrap();
+        let catalog = agent_catalog(&db).unwrap();
+        assert_eq!(catalog.revision, 17);
+        assert_eq!(catalog.models.len(), 10);
+        assert_eq!(
+            catalog.default_model.as_deref(),
+            Some("lolicode/one/vendor/model-a")
+        );
+        assert_eq!(catalog.excluded_sources.len(), 2);
+        assert!(catalog.models.iter().all(|model| {
+            model.provider_id == "lolicode"
+                && model.id == format!("lolicode/{}", model.model_id)
+                && !model.model_id.contains("native-default")
+                && !model.model_id.starts_with("disabled/")
+                && !model.model_id.ends_with("/no-tools")
+        }));
+        for kind in ["github_copilot", "codex_oauth", "xai_oauth", "zhipu_oauth"] {
+            assert!(catalog
+                .models
+                .iter()
+                .any(|model| { model.model_id == format!("{kind}/model-a") }));
+        }
+        let exposed = serialize(&catalog).unwrap();
+        assert!(!exposed.contains("test-fixture-key"));
+        assert!(!exposed.contains("selected-"));
+        assert!(!exposed.contains("example.test"));
+        assert!(!exposed.contains("apiKey"));
+        let config = agent_opencode_v2_config(
+            &catalog,
+            "http://127.0.0.1:1234/tai/catalogs/17/v1",
+            "agent-local-token-fixture",
+        )
+        .unwrap();
+        let provider = &config["providers"]["lolicode"];
+        assert_eq!(provider["package"], "@ai-sdk/openai-compatible");
+        assert_eq!(provider["settings"]["apiKey"], "agent-local-token-fixture");
+        assert_eq!(
+            provider["models"]["one/vendor/model-a"]["modelID"],
+            "one/vendor/model-a"
+        );
+        assert_eq!(
+            provider["models"]["one/vendor/model-a"]["limit"]["context"],
+            131072
+        );
+        assert_eq!(
+            provider["models"]["one/vendor/model-a"]["limit"]["output"],
+            8192
+        );
+        assert!(provider["models"]["one/model-b"].get("limit").is_none());
+        assert!(provider["models"]["one/model-b"]
+            .get("capabilities")
+            .is_none());
+        assert!(config.get("provider").is_none());
+        assert_eq!(config["model"], "lolicode/one/vendor/model-a");
+        assert_eq!(config["default_agent"], "build");
+        assert_eq!(config["update"], "disable");
+        assert_eq!(config["share"], "disabled");
+        assert_eq!(config["snapshots"], true);
+        let permissions = config["permissions"].as_array().unwrap();
+        for action in ["shell", "external_directory"] {
+            assert_eq!(
+                permissions
+                    .iter()
+                    .rev()
+                    .find(|rule| rule["action"] == action)
+                    .unwrap()["effect"],
+                "ask"
+            );
+        }
+        assert!(!permissions.iter().any(|rule| rule["action"] == "bash"));
+        assert_eq!(config["experimental"]["policies"][0]["effect"], "deny");
+        assert_eq!(
+            config["experimental"]["policies"][1]["resource"],
+            "lolicode"
+        );
+        assert!(!serialize(&config).unwrap().contains("test-fixture-key"));
+        assert_eq!(agent_source_snapshot(&db).unwrap(), saved);
+    }
+
+    #[test]
+    fn agent_catalog_rejects_retained_managed_tokens_and_invalid_engine_limits() {
+        let db = Database::memory().unwrap();
+        let mut saved = snapshot();
+        saved.channels[0].auth_kind = "github_copilot".into();
+        saved.channels[0].account_id = Some("account-fixture".into());
+        saved.channels[0].api_key = "retained-short-token-fixture".into();
+        db.set_setting(SETTINGS_KEY, &serialize(&saved).unwrap())
+            .unwrap();
+        let error = agent_catalog(&db).err().unwrap().to_string();
+        assert!(!error.contains("retained-short-token-fixture"));
+        assert!(!db.get_bool_flag(BACKGROUND_KEY).unwrap());
+        let mut saved = snapshot();
+        saved.channels[0].models[0].context_limit = Some(u64::MAX);
+        let catalog = agent_catalog_from_snapshot(&saved);
+        assert!(agent_opencode_v2_config(&catalog, "http://127.0.0.1/v1", "private").is_err());
+        let empty = agent_catalog_from_snapshot(&ChannelCenterSnapshot::default());
+        assert!(agent_opencode_v2_config(&empty, "http://127.0.0.1/v1", "private").is_err());
+    }
+
+    #[test]
+    fn agent_gateway_publication_and_background_acquisition_are_atomic_and_rollback_on_failure() {
+        let db = Database::memory().unwrap();
+        let mut catalog = snapshot();
+        catalog.revision = 9;
+        let before_applied = snapshot();
+        commit_applied(&db, &before_applied).unwrap();
+        db.set_setting(BACKGROUND_KEY, "false").unwrap();
+        {
+            let conn = db.conn.lock().unwrap();
+            conn.execute_batch("CREATE TRIGGER fail_agent_background BEFORE INSERT ON settings WHEN NEW.key='channel_center_requires_background' BEGIN SELECT RAISE(ABORT,'fixture marker failure'); END;").unwrap();
+        }
+        assert!(prepare_agent_gateway_write(&db, &catalog).is_err());
+        assert!(db
+            .get_setting("channel_center_catalog_9")
+            .unwrap()
+            .is_none());
+        assert!(!db.get_bool_flag(BACKGROUND_KEY).unwrap());
+        {
+            let conn = db.conn.lock().unwrap();
+            conn.execute_batch("DROP TRIGGER fail_agent_background;")
+                .unwrap();
+        }
+        {
+            let _cancelled = prepare_agent_gateway_write(&db, &catalog).unwrap();
+            assert!(db.get_bool_flag(BACKGROUND_KEY).unwrap());
+        }
+        assert_eq!(
+            db.get_setting(BACKGROUND_KEY).unwrap().as_deref(),
+            Some("false")
+        );
+        assert_eq!(load_catalog(&db, 9).unwrap(), catalog);
+        assert_eq!(load_applied(&db).unwrap(), before_applied);
+        let mut changed = catalog.clone();
+        changed.channels[0].api_key = "changed-api-fixture".into();
+        assert!(prepare_agent_gateway_write(&db, &changed).is_err());
+        assert!(!db.get_bool_flag(BACKGROUND_KEY).unwrap());
+        assert_eq!(load_catalog(&db, 9).unwrap(), catalog);
+        db.set_setting(BACKGROUND_KEY, "1").unwrap();
+        drop(prepare_agent_gateway_write(&db, &catalog).unwrap());
+        assert_eq!(
+            db.get_setting(BACKGROUND_KEY).unwrap().as_deref(),
+            Some("1")
+        );
+        let missing = Database::memory().unwrap();
+        drop(prepare_agent_gateway_write(&missing, &catalog).unwrap());
+        assert!(missing.get_setting(BACKGROUND_KEY).unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn agent_only_catalog_restores_gateway_without_applying_external_clients() {
+        use std::sync::Arc;
+        let db = Arc::new(Database::memory().unwrap());
+        let credentials = tempfile::tempdir().unwrap();
+        let state = AppState {
+            db: db.clone(),
+            proxy_service: crate::services::ProxyService::new(db.clone()),
+            usage_cache: Arc::new(crate::services::UsageCache::new()),
+            codex_oauth_manager: Arc::new(
+                crate::proxy::providers::codex_oauth_auth::CodexOAuthManager::new(
+                    credentials.path().to_path_buf(),
+                ),
+            ),
+        };
+        let mut proxy = db.get_global_proxy_config().await.unwrap();
+        proxy.listen_address = "127.0.0.1".into();
+        proxy.listen_port = 0;
+        db.update_global_proxy_config(proxy).await.unwrap();
+        let mut saved = snapshot();
+        saved.revision = 22;
+        saved
+            .channels
+            .push(native_subscription_channel("claude").unwrap());
+        db.set_setting(SETTINGS_KEY, &serialize(&saved).unwrap())
+            .unwrap();
+        let expected = api_catalog_snapshot(&saved);
+        // Occupy a local port to exercise a real start failure without contacting
+        // any upstream or using the user's listener or credentials.
+        let occupied = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+            .await
+            .unwrap();
+        let mut proxy = db.get_global_proxy_config().await.unwrap();
+        proxy.listen_port = occupied.local_addr().unwrap().port();
+        db.update_global_proxy_config(proxy).await.unwrap();
+        db.set_setting(BACKGROUND_KEY, "false").unwrap();
+        assert!(prepare_agent_catalog(&state).await.is_err());
+        assert!(!db.get_bool_flag(BACKGROUND_KEY).unwrap());
+        assert!(db.get_setting(APPLIED_KEY).unwrap().is_none());
+        assert_eq!(load_catalog(&db, 22).unwrap(), expected);
+        drop(occupied);
+        let mut proxy = db.get_global_proxy_config().await.unwrap();
+        proxy.listen_port = 0;
+        db.update_global_proxy_config(proxy).await.unwrap();
+        let prepared = prepare_agent_catalog(&state).await.unwrap();
+        assert_eq!(prepared.catalog.revision, 22);
+        assert_eq!(
+            prepared.catalog.default_model.as_deref(),
+            Some("lolicode/one/model-b")
+        );
+        assert_eq!(load_catalog(&db, 22).unwrap(), expected);
+        assert_eq!(agent_source_snapshot(&db).unwrap(), saved);
+        assert!(db.get_setting(APPLIED_KEY).unwrap().is_none());
+        assert!(db.get_bool_flag(BACKGROUND_KEY).unwrap());
+        let settings = &prepared.config["providers"]["lolicode"]["settings"];
+        let base = settings["baseURL"].as_str().unwrap();
+        assert!(base.ends_with("/tai/catalogs/22/v1"));
+        state.proxy_service.stop().await.unwrap();
+        assert!(!state.proxy_service.is_running().await);
+        restore_gateway(&state).await.unwrap();
+        assert!(state.proxy_service.is_running().await);
+        let client = reqwest::Client::builder()
+            .no_proxy()
+            .timeout(std::time::Duration::from_secs(3))
+            .build()
+            .unwrap();
+        let response = client
+            .get(format!("{base}/models"))
+            .bearer_auth(settings["apiKey"].as_str().unwrap())
+            .send()
+            .await
+            .unwrap();
+        assert!(response.status().is_success());
+        let body: Value = response.json().await.unwrap();
+        assert_eq!(body["data"].as_array().unwrap().len(), 2);
+        assert!(body["data"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|model| { !model["id"].as_str().unwrap().contains("native-default") }));
+        assert!(db.get_setting(APPLIED_KEY).unwrap().is_none());
+        state.proxy_service.stop().await.unwrap();
     }
 
     #[test]

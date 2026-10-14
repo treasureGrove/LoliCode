@@ -15,7 +15,7 @@ vi.mock("@/components/channels/ChannelCenterPanel", () => ({
 }));
 
 beforeEach(() => {
-  localStorage.removeItem("cc-switch-last-view");
+  localStorage.setItem("cc-switch-last-view", "channels");
   localStorage.removeItem("cc-switch-last-app");
   setSettings({
     firstRunNoticeConfirmed: true,
@@ -48,7 +48,7 @@ describe("simple application shell", () => {
     ])
       expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
   });
-  it.each(["skillsDiscovery", "auth"])(
+  it.each(["auth"])(
     "merges the old %s destination into the channel center",
     async (destination) => {
       localStorage.setItem("cc-switch-last-view", destination);

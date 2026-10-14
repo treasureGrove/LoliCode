@@ -11,7 +11,7 @@ import { useTranslation } from "react-i18next";
 import { toast } from "@/lib/toast";
 import { invoke } from "@tauri-apps/api/core";
 import { useQueryClient } from "@tanstack/react-query";
-import { ExternalLink, MoreHorizontal, Plus, Search } from "lucide-react";
+import { Bot, ExternalLink, MoreHorizontal, Plus, Search } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { Provider, VisibleApps } from "@/types";
 import { KNOWN_APP_TYPES, type AppTypeFilter } from "@/types/usage";
@@ -63,6 +63,7 @@ import {
 } from "@/lib/navigation";
 import { Sidebar } from "@/components/shell/Sidebar";
 import { ChannelCenterPanel } from "@/components/channels/ChannelCenterPanel";
+import { AgentPage } from "@/components/agent/AgentPage";
 import { SimpleUsagePage } from "@/components/usage/SimpleUsagePage";
 import { useUpdate } from "@/contexts/UpdateContext";
 import { NewLayoutDialog } from "@/components/shell/NewLayoutDialog";
@@ -1433,6 +1434,19 @@ function App() {
 
   const renderGlobalPage = () => {
     switch (currentView) {
+      case "agent":
+        return (
+          <>
+            <AppPageHeader
+              icon={<Bot className="h-5 w-5" strokeWidth={1.5} />}
+              title="Lolicode"
+              subtitle="选项目、描述任务，让 agent 帮你完成代码工作"
+            />
+            <div id="main-content" className="min-h-0 flex-1 overflow-hidden">
+              <AgentPage onOpenChannels={() => openPage("channels")} />
+            </div>
+          </>
+        );
       case "channels":
       case "auth":
         return (
