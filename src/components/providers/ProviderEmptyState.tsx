@@ -1,3 +1,4 @@
+import { TaijiMark } from "@/components/shell/TaijiMark";
 import { Download, Plus } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
@@ -30,7 +31,8 @@ export function ProviderEmptyState({
     appId === "grokbuild";
 
   return (
-    <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
+    <div className="tai-empty-state flex flex-col items-center justify-center px-6 py-10 text-center">
+      <TaijiMark className="tai-empty-mark mb-5 h-20 w-20" />
       <h2 className="text-section text-fg-1">
         {emptyCopyNs
           ? t(`${emptyCopyNs}.empty.title`)

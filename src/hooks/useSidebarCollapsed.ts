@@ -65,7 +65,9 @@ function animateToggle(nav: HTMLElement, fromWidth: number, toWidth: number) {
     width: `${width}px`,
     zIndex: "1",
     pointerEvents: "none",
-    background: expanding ? "var(--bg-app)" : "var(--bg-sidebar)",
+    background: expanding
+      ? getComputedStyle(main).getPropertyValue("--bg-app")
+      : getComputedStyle(nav).getPropertyValue("--bg-sidebar"),
     boxShadow: expanding ? `-1px 0 0 0 ${line}` : `1px 0 0 0 ${line}`,
   });
   nav.after(cover);

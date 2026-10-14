@@ -284,6 +284,22 @@ function App() {
 
   useUsageCacheBridge();
 
+  // Fade the existing page in place: preserve editor state and fixed overlays.
+  useLayoutEffect(() => {
+    const page = mainScrollRef.current?.querySelector<HTMLElement>(".tai-page");
+    if (
+      !page?.animate ||
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
+    ) {
+      return;
+    }
+    const animation = page.animate([{ opacity: 0.55 }, { opacity: 1 }], {
+      duration: 260,
+      easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+    });
+    return () => animation.cancel();
+  }, [activeApp, currentView]);
+
   useLayoutEffect(() => {
     if (currentView !== "providers") return;
 
@@ -1539,7 +1555,7 @@ function App() {
     <WindowControlsContext.Provider
       value={useAppWindowControls ? <WindowControls /> : null}
     >
-      <div className="flex h-screen overflow-hidden bg-app text-fg-1 selection:bg-action/25">
+      <div className="tai-shell flex h-screen overflow-hidden bg-app text-fg-1 selection:bg-action/25">
         <Sidebar
           activeApp={activeApp}
           view={currentView}
@@ -1559,7 +1575,7 @@ function App() {
         <main
           ref={mainScrollRef}
           id="content-area"
-          className="relative isolate flex min-w-0 flex-1 flex-col overflow-hidden bg-app"
+          className="tai-main relative isolate flex min-w-0 flex-1 flex-col overflow-hidden bg-app"
         >
           {showEnvBanner && envConflicts.length > 0 && (
             <EnvWarningBanner
@@ -1593,7 +1609,7 @@ function App() {
                   ? "app"
                   : currentView
             }
-            className="flex min-h-0 flex-1 flex-col"
+            className="tai-page flex min-h-0 flex-1 flex-col"
           >
             {renderContent()}
           </div>

@@ -26,7 +26,7 @@ interface AppPageHeaderProps {
 }
 
 /**
- * 内容区页头：高 52，整条可拖动窗口，左边是图标 + 标题，右边是操作。
+ * 内容区页头：宣纸标题带，整条可拖动窗口，左边是图标 + 标题，右边是操作。
  */
 export function AppPageHeader({
   leading,
@@ -43,7 +43,7 @@ export function AppPageHeader({
   return (
     <header
       className={cn(
-        "flex h-[52px] shrink-0 items-center gap-5 border-b border-border pe-4 ps-6",
+        "tai-page-header flex h-[72px] shrink-0 items-center gap-5 border-b border-border pe-4 ps-6",
         className,
       )}
       {...DRAG_REGION_ATTR}
@@ -73,7 +73,7 @@ export function AppPageHeader({
         <h1
           {...DRAG_REGION_ATTR}
           className={cn(
-            "m-0 whitespace-nowrap",
+            "tai-page-title m-0 whitespace-nowrap",
             variant === "app" ? "text-title" : "text-page",
             truncateTitle && "min-w-0 truncate",
           )}
@@ -83,7 +83,7 @@ export function AppPageHeader({
         {(subtitle || titleExtra) && (
           <div className="flex items-center gap-1" style={NO_DRAG}>
             {subtitle && (
-              <span className="whitespace-nowrap text-body text-fg-3">
+              <span className="tai-page-subtitle whitespace-nowrap text-body text-fg-3">
                 {subtitle}
               </span>
             )}

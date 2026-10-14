@@ -77,3 +77,33 @@ Windows 程序输出：`src-tauri/target/debug/cc-switch.exe`。它是本轮原�
 成品验证证据：`tai-switch-fixed-release-build.log`、`tai-switch-fixed-native-startup.json`、`tai-switch-fixed-installer-native-startup.json`、`tai-switch-fixed-installer-payload-verification.json`（均位于上述 artifacts 目录）。交付目录包含许可证、说明、测试摘要、启动验证与 SHA256SUMS.txt，全部构建产物不纳入 Git。
 
 服务器任务书更新为 v0.4.1，SHA256 `bb2ffc80281730a934271623b08fe2bc9de4d7c86116acf0053fcacf194080c3`；旧稿备份到 `/www/backups/free-gateway/taskbook/TASKBOOK.v0.4.20261013.before-test-fixes.4dd3d64a.md`。服务器仍只负责任务书与 Git 备份。
+
+## 2026-10-14 Astra 太极界面
+
+基线经用户试用确认后，按用户指定由 `gpt-6-astra` 实现太极主题。采用宣纸与玄墨双主题、墨色侧栏、朱砂操作色、太极品牌及应用图标、胶囊模式切换和供应商卡片。切页只对原有元素做透明度动画，不修改页面 key 或导航守卫；侧栏收放继续使用原合成动画，并读取侧栏自身的主题色。增加系统减少动态效果与高对比模式适配。
+
+供应商、路由、计费算法、Rust 源码、依赖和数据库结构均未修改。独立审查修正了深色热力图的最高档颜色和键盘跳转链接的文字对比度。
+
+界面验证：
+
+- 214 个前端测试文件、2,612 项测试全部通过；最终导航动画实现额外复跑 App 集成测试，20 项通过。
+- TypeScript 与改动的 TS/TSX、CSS、Tailwind 配置及四份语言文件的 Prettier 检查通过。第一次完整格式检查因本机内存不足退出，随后完成了上述改动文件的精确检查；未修改的文件沿用已验收基线。
+- 浏览器使用 repo 外独立模拟入口，加载真实 React 界面；全部供应商、额度与金额为内存示例数据，外部连接被阻止。模拟入口不参与正式构建。
+- 验证默认 1000×650 和最小 900×600 窗口，包含手动展开 200px 侧栏；页面无横向溢出，底部导航和窗口操作位于可见范围。
+- 实际操作验证明暗主题、供应商新增表单、路由视图、用量统计、侧栏开合及未保存内容确认；选择“继续编辑”后草稿名称保留。
+- 前端生产构建通过。原生打包第一次遇到 LLVM 内存不足，结束本次预览与测试后重试；未修改系统内存设置或结束用户的其他应用。
+
+测试证据：`C:/Users/admin/.codex/artifacts/tai-switch-taiji-frontend-tests.json`、`tai-switch-taiji-app-final.json`、`tai-switch-taiji-typecheck.log`（同目录）。界面截图位于 `tai-switch-taiji-ui-evidence/`；截图中的数据不代表真实调用或账户费用。
+
+### 太极 UI Windows 成品
+
+- Release 重试及 NSIS 打包成功；日志为 `C:/Users/admin/.codex/artifacts/tai-switch-taiji-release-build-retry.log`。
+- 新交付目录：`D:/projectGithub/TAI-Switch/release/TAI-Switch-4.0.10-taiji-20261014/`。旧基线成品保留且复核哈希未变。
+- 直接运行 `tai-switch.exe`：43,290,624 字节，SHA256 `028eb0dde627fe876b3f7e5dfa2534537dc9b17103dd0d3f3e45c6cd016281d5`。
+- 安装包 `TAI Switch Test_4.0.10_x64-setup.exe`：12,089,405 字节，SHA256 `54f9b2755ad2cf92f3b37aedf41d49552acde7d972eb759ec6fa1b29715fa25f`。
+- 安装包提取校验通过：内含 EXE 与直接运行版仅存在预期 Tauri 标记 `UNK` → `NSS` 差异，其余字节完全相同。
+- 用户退出旧 TAI 后，分别在两个全新临时配置目录启动直接运行版和安装包提取版。两者均保持运行、创建隔离数据库并启动 WebView2 子进程；没有创建 `.cc-switch`，原 CC Switch 进程保留，仅结束本次检查自身进程。
+- 交付目录保存界面测试摘要、两份启动记录、安装包内容校验、示例截图、试用说明、许可证、源码提交记录与 SHA256 清单。程序继续使用用户已有 `.tai-switch` 配置，截图使用示例数据。
+- 本轮没有重新运行未改动的 Rust 业务测试、调用真实渠道或执行修改安装注册表的安装向导；测试包未签名，干净系统安装和升级仍待验证。
+
+服务器任务书已更新为 v0.4.2，SHA256 `39e5d287d82e8d77a80db963d48debd38449d4b73a3dba4971141896912d3d68`；旧稿备份为 `/www/backups/free-gateway/taskbook/TASKBOOK.v0.4.1.20261014.before-taiji-ui.bb2ffc80.md`。未修改服务器网站或定时任务。

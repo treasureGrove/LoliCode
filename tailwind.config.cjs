@@ -173,9 +173,9 @@ module.exports = {
         lg: "0.75rem",
         xl: "0.875rem",
         // v7：按钮、小控件、侧栏行 / 卡片、分段控件、输入框、弹层、通知条 / 对话框、抽屉
-        control: "6px",
-        panel: "10px",
-        dialog: "14px",
+        control: "8px",
+        panel: "14px",
+        dialog: "20px",
       },
       fontSize: {
         // v7 字体角色（AUTHORING.md「颜色与字体」）

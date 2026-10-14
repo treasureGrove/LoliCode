@@ -34,7 +34,7 @@ import { fmtUsd } from "@/components/usage/format";
 import { HoverTip } from "@/components/ui/hover-tip";
 import { DRAG_REGION_ATTR, DRAG_REGION_STYLE, isMac } from "@/lib/platform";
 import { cn } from "@/lib/utils";
-import ccswitchLogo from "@/assets/icons/logo.svg";
+import { TaijiMark } from "./TaijiMark";
 import { APP_DISPLAY_NAME, AppGlyph } from "./AppGlyph";
 
 const NO_DRAG = { WebkitAppRegion: "no-drag" } as React.CSSProperties;
@@ -57,7 +57,7 @@ interface SidebarProps {
 type DirectoryProps = SidebarProps & { collapsed: boolean };
 
 /**
- * 主导航（v7）：顶条 44 → 应用列表（唯一滚动的区域）→ 全局 6 项（贴底）→ 底栏「应用 · 设置」。
+ * 太极主导航：品牌 → 应用列表（独立滚动）→ 全局 6 项（贴底）→ 底栏「应用 · 设置」。
  * 进入设置后整条侧栏换成设置目录。收起时是 72px 的图标轨；
  * 展开 / 收起时宽度一步到位，边缘的滑动由盖板的 transform 动画画出（见 useSidebarCollapsed），文字不换行、被裁掉而不是挤成两行。
  * 收起时各行只剩图标，名字由 HoverTip 从右侧报；展开时文字可见，不再挂提示。
@@ -72,15 +72,16 @@ export function Sidebar(props: SidebarProps) {
   return (
     <nav
       ref={navRef}
+      data-collapsed={collapsed}
       aria-label={t("nav.mainLabel")}
       className={cn(
-        "relative flex h-full shrink-0 flex-col overflow-hidden whitespace-nowrap border-e border-border bg-sidebar text-body text-fg-1",
+        "tai-sidebar relative flex h-full shrink-0 flex-col overflow-hidden whitespace-nowrap border-e border-border bg-sidebar text-body text-fg-1",
       )}
       style={{ width: sidebarWidth(collapsed) }}
     >
       <a
         href="#main-content"
-        className="absolute -start-[999px] top-2 z-10 rounded-control bg-surface px-2 py-1 text-caption shadow-v7-sm focus:start-2"
+        className="absolute -start-[999px] top-2 z-10 rounded-control bg-selected px-2 py-1 text-caption text-fg-1 shadow-v7-sm focus:start-2"
       >
         {t("nav.skipToContent")}
       </a>
@@ -101,7 +102,7 @@ function SidebarTopBar({
   collapsed: boolean;
   onToggle: () => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const tipSide = collapsed ? "right" : "left";
   const label = collapsed ? t("nav.expandSidebar") : t("nav.collapseSidebar");
   const Icon = collapsed ? ChevronsRight : ChevronsLeft;
@@ -119,78 +120,35 @@ function SidebarTopBar({
     </HoverTip>
   );
 
-  // macOS 展开：顶条只放红绿灯；下面一行贴近红绿灯放 logo + 名字，收起箭头放在这一行最右边
-  if (!collapsed && isMac()) {
-    return (
-      <>
-        <div
-          className="h-11 shrink-0"
-          {...DRAG_REGION_ATTR}
-          style={DRAG_REGION_STYLE as React.CSSProperties}
-        />
-        {/* 品牌区与导航之间不画分隔线：靠侧栏底色和留白分开，免得和右侧页头下边框近似平行却差 11px */}
-        <div
-          className="-mt-[18px] mb-2 flex h-9 shrink-0 items-center gap-2 pe-2 ps-4"
-          {...DRAG_REGION_ATTR}
-          style={DRAG_REGION_STYLE as React.CSSProperties}
-        >
-          <img
-            src={ccswitchLogo}
-            alt=""
-            draggable={false}
-            className="pointer-events-none h-5 w-5 shrink-0"
-          />
-          <span className="pointer-events-none me-auto min-w-0 truncate text-strong font-semibold text-fg-1">
-            TAI Switch
-          </span>
-          {toggleButton}
-        </div>
-      </>
-    );
-  }
-
-  // macOS 的红绿灯占着顶条左边约 70px：图标轨只有 72 宽，按钮挪到顶条下面一行
-  if (collapsed && isMac()) {
-    return (
-      <>
-        <div
-          className="h-11 shrink-0"
-          {...DRAG_REGION_ATTR}
-          style={DRAG_REGION_STYLE as React.CSSProperties}
-        />
-        {/* 往上贴近红绿灯，和展开时品牌行同高（中心 y≈44） */}
-        <div className="-mt-4 flex h-8 shrink-0 items-center justify-center">
-          {toggleButton}
-        </div>
-      </>
-    );
-  }
+  const isChinese = i18n.language.startsWith("zh");
 
   return (
     <div
       className={cn(
-        "flex h-11 shrink-0 items-center gap-0.5 px-2",
-        collapsed ? "justify-center" : "justify-end",
+        "tai-brand shrink-0",
+        collapsed && "tai-brand-collapsed",
+        isMac() && "tai-brand-mac",
       )}
       {...DRAG_REGION_ATTR}
       style={DRAG_REGION_STYLE as React.CSSProperties}
     >
-      {!collapsed && !isMac() && (
-        // 左上角品牌（Windows / Linux）：图标 + 名字。macOS 左上角留给红绿灯，不放。
-        // 图片不接收指针事件，拖它也是在拖窗口
-        <span className="pointer-events-none me-auto flex min-w-0 items-center gap-2 ps-1.5">
-          <img
-            src={ccswitchLogo}
-            alt=""
-            draggable={false}
-            className="h-[22px] w-[22px] shrink-0"
-          />
-          <span className="truncate text-strong font-semibold text-fg-1">
-            TAI Switch
-          </span>
-        </span>
+      <div className="tai-brand-heading" {...DRAG_REGION_ATTR}>
+        <TaijiMark className="tai-brand-mark pointer-events-none shrink-0" />
+        {!collapsed && (
+          <div className="pointer-events-none min-w-0">
+            <div className="tai-brand-name">
+              太极<span className="tai-seal">AI</span>
+            </div>
+            <div className="tai-brand-roman">TAI SWITCH</div>
+          </div>
+        )}
+        <div className="tai-brand-toggle">{toggleButton}</div>
+      </div>
+      {!collapsed && (
+        <div className="tai-brand-caption pointer-events-none">
+          {isChinese ? "太极 AI 路由器" : "The AI router"}
+        </div>
       )}
-      {toggleButton}
     </div>
   );
 }
@@ -249,7 +207,7 @@ function MainDirectory({
     <>
       <div
         className={cn(
-          "flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden pb-2 pt-0.5",
+          "tai-app-directory flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden pb-2 pt-0.5",
           // 图标轨只有 72 宽，放不下滚动条
           collapsed && "no-scrollbar",
         )}
@@ -259,6 +217,9 @@ function MainDirectory({
           aria-label={t("nav.appsGroup")}
           className="flex shrink-0 flex-col"
         >
+          {!collapsed && (
+            <div className="tai-nav-caption">{t("nav.appsGroup")}</div>
+          )}
           {apps.map((app) => (
             <AppNavItem
               key={app}
@@ -408,7 +369,7 @@ function AppNavItem({
           aria-label={tip}
           aria-current={selected ? "page" : undefined}
           className={cn(
-            "mx-auto flex h-8 w-12 shrink-0 items-center justify-center rounded-control transition-colors hover:bg-subtle",
+            "tai-nav-item mx-auto flex h-8 w-12 shrink-0 items-center justify-center rounded-control transition-colors hover:bg-subtle",
             selected && "bg-selected hover:bg-selected",
           )}
         >
@@ -438,7 +399,7 @@ function AppNavItem({
       onClick={onSelect}
       aria-current={selected ? "page" : undefined}
       className={cn(
-        "mx-2 flex h-7 w-[184px] shrink-0 items-center gap-2 rounded-control px-2 text-start transition-colors hover:bg-subtle",
+        "tai-nav-item tai-app-nav mx-2 flex h-7 w-[184px] shrink-0 items-center gap-2 rounded-control px-2 text-start transition-colors hover:bg-subtle",
         selected && "bg-selected font-medium hover:bg-selected",
       )}
     >
@@ -557,7 +518,7 @@ function NavItem({
           aria-label={title ?? accessibleName}
           aria-current={selected ? "page" : undefined}
           className={cn(
-            "mx-auto flex h-8 w-12 shrink-0 items-center justify-center rounded-control transition-colors hover:bg-subtle",
+            "tai-nav-item mx-auto flex h-8 w-12 shrink-0 items-center justify-center rounded-control transition-colors hover:bg-subtle",
             selected && "bg-selected hover:bg-selected",
           )}
         >
@@ -579,7 +540,7 @@ function NavItem({
         onClick={onClick}
         aria-current={selected ? "page" : undefined}
         className={cn(
-          "flex h-7 shrink-0 items-center gap-2 rounded-control px-2 text-start transition-colors hover:bg-subtle",
+          "tai-nav-item flex h-7 shrink-0 items-center gap-2 rounded-control px-2 text-start transition-colors hover:bg-subtle",
           compact ? "min-w-0 flex-1" : "mx-2 w-[184px]",
           selected && "bg-selected font-medium hover:bg-selected",
         )}

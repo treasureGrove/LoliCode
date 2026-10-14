@@ -293,15 +293,16 @@ export function ProviderCard({
   };
   return (
     <div
+      data-tone={presentation.tone ?? "default"}
       className={cn(
-        "group relative rounded-panel border transition-[border-color,box-shadow,background-color] duration-150",
+        "tai-provider-card group relative rounded-panel border transition-[border-color,box-shadow,background-color] duration-150",
         presentation.tone
           ? TONE_CLASS[presentation.tone]
           : "border-border bg-surface hover:border-border-strong hover:shadow-v7-sm",
         dragHandleProps?.isDragging && "z-10 cursor-grabbing shadow-v7-md",
       )}
     >
-      <div className="flex min-h-[58px] items-center gap-3 py-2.5 pe-3 ps-2">
+      <div className="tai-provider-row flex min-h-[72px] items-center gap-3 py-3 pe-4 ps-2">
         {dragHandleProps ? (
           <button
             type="button"
