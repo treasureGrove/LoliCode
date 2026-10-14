@@ -1,18 +1,22 @@
-/* Scoped workbench surfaces follow the official ZCode Zai themes (v3.15.1).
-   Structural rules stay local so channel/settings pages keep their own layout. */
+/* Cream, berry and lavender workbench surfaces share the shell's theme tokens.
+   Decorations stay in welcome areas; chat, tools and diffs remain readable. */
 .lolicode-workbench,
 .wb-extensions {
-  --wb-bg: #f8f8f8;
-  --wb-sidebar: #f0f0f0;
-  --wb-panel: #fff;
-  --wb-input: #fff;
-  --wb-text: #262626;
-  --wb-muted: #737373;
-  --wb-border: rgba(13, 13, 13, 0.1);
-  --wb-hover: rgba(13, 13, 13, 0.05);
-  --wb-selected: rgba(13, 13, 13, 0.07);
-  --wb-button: #171717;
-  --wb-button-text: #fff;
+  --wb-bg: var(--bg-app, #fff9f6);
+  --wb-sidebar: var(--bg-sidebar, #fff3f5);
+  --wb-panel: var(--bg-card, #fffdfb);
+  --wb-input: var(--bg-card, #fffdfb);
+  --wb-text: var(--text-1, #3b2c38);
+  --wb-muted: var(--text-2, #796775);
+  --wb-border: var(--brand-border, #e8d6df);
+  --wb-hover: var(--brand-pink-soft, #fbe9f0);
+  --wb-selected: var(--brand-pink-soft, #fbe9f0);
+  --wb-button: var(--action-bg, #c04f7d);
+  --wb-button-text: var(--action-fg, #fff);
+  --wb-accent: var(--brand-berry, #c04f7d);
+  --wb-accent-soft: var(--brand-pink-soft, #fbe9f0);
+  --wb-lavender: var(--brand-lavender, #8d79bb);
+  --wb-lavender-soft: var(--brand-lavender-soft, #f0ebf9);
   color: var(--wb-text);
   background: var(--wb-bg);
   font-size: 14px;
@@ -26,17 +30,21 @@
 }
 .dark .lolicode-workbench,
 .dark .wb-extensions {
-  --wb-bg: #161616;
-  --wb-sidebar: #161616;
-  --wb-panel: #202020;
-  --wb-input: #2b2b2b;
-  --wb-text: #e5e5e5;
-  --wb-muted: #a3a3a3;
-  --wb-border: rgba(255, 255, 255, 0.1);
-  --wb-hover: rgba(255, 255, 255, 0.05);
-  --wb-selected: rgba(255, 255, 255, 0.1);
-  --wb-button: #ededed;
-  --wb-button-text: #171717;
+  --wb-bg: var(--bg-app, #241e2b);
+  --wb-sidebar: var(--bg-sidebar, #2d2333);
+  --wb-panel: var(--bg-card, #332938);
+  --wb-input: var(--bg-card, #332938);
+  --wb-text: var(--text-1, #f9edf4);
+  --wb-muted: var(--text-2, #cfb9c9);
+  --wb-border: var(--brand-border, #514154);
+  --wb-hover: var(--brand-pink-soft, #48303e);
+  --wb-selected: var(--brand-pink-soft, #48303e);
+  --wb-button: var(--action-bg, #f0a4c4);
+  --wb-button-text: var(--action-fg, #2b1927);
+  --wb-accent: var(--brand-berry, #f0a4c4);
+  --wb-accent-soft: var(--brand-pink-soft, #48303e);
+  --wb-lavender: var(--brand-lavender, #cab2ec);
+  --wb-lavender-soft: var(--brand-lavender-soft, #40364f);
 }
 .lolicode-workbench button,
 .lolicode-workbench select,
@@ -53,12 +61,12 @@
 .lolicode-workbench select:focus-visible,
 .lolicode-workbench input:focus-visible,
 .lolicode-workbench textarea:focus-visible {
-  outline: 2px solid var(--wb-muted);
+  outline: 2px solid var(--wb-accent);
   outline-offset: 2px;
 }
 .wb-sidebar {
-  width: 240px;
-  flex: 0 0 240px;
+  width: 232px;
+  flex: 0 0 232px;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -66,25 +74,40 @@
   border-right: 1px solid var(--wb-border);
 }
 .wb-brand {
-  height: 48px;
-  padding: 0 18px;
+  height: 56px;
+  flex-shrink: 0;
+  padding: 0 16px;
   display: flex;
   align-items: center;
+  gap: 9px;
   font-size: 17px;
   letter-spacing: -0.04em;
   font-weight: 650;
 }
-.wb-brand span {
+.wb-brand-label {
+  display: flex;
+  align-items: baseline;
+  white-space: nowrap;
+}
+.wb-brand-label > span {
   color: var(--wb-muted);
   font-size: 11px;
   letter-spacing: 0;
   font-weight: 400;
-  margin-left: 8px;
+  margin-left: 7px;
+}
+.wb-brand-mascot {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  object-fit: contain;
+  border-radius: 50%;
+  background: var(--wb-accent-soft);
 }
 .wb-nav {
   padding: 6px 10px 12px;
   display: grid;
-  gap: 3px;
+  gap: 5px;
 }
 .wb-nav-button {
   border: 0;
@@ -92,12 +115,15 @@
   align-items: center;
   gap: 9px;
   width: 100%;
-  min-height: 34px;
-  padding: 7px 10px;
-  border-radius: 7px;
+  min-height: 36px;
+  padding: 8px 10px;
+  border-radius: 11px;
   background: transparent;
   color: inherit;
   text-align: left;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
 }
 .wb-nav-button:hover,
 .wb-icon-button:hover,
@@ -118,10 +144,11 @@
   display: flex;
   align-items: center;
   gap: 7px;
-  margin: 0 14px 12px;
-  padding: 6px 8px;
-  border-radius: 6px;
-  background: var(--wb-hover);
+  margin: 0 14px 14px;
+  padding: 8px 10px;
+  border: 1px solid var(--wb-border);
+  border-radius: 11px;
+  background: var(--wb-input);
   color: var(--wb-muted);
 }
 .wb-search svg {
@@ -184,7 +211,7 @@
   gap: 7px;
   width: 100%;
   padding: 7px 9px 7px 27px;
-  border-radius: 7px;
+  border-radius: 10px;
   background: transparent;
   color: inherit;
   text-align: left;
@@ -192,6 +219,9 @@
 }
 .wb-session-row[aria-pressed="true"] {
   background: var(--wb-selected);
+  color: var(--wb-accent);
+  box-shadow: inset 3px 0 0 var(--wb-accent);
+  font-weight: 550;
 }
 .wb-session-row > span:first-child {
   min-width: 0;
@@ -270,7 +300,7 @@
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: #0b7fff;
+  background: var(--wb-accent);
   flex-shrink: 0;
 }
 .wb-recent-project {
@@ -305,9 +335,10 @@
   align-items: center;
   flex-shrink: 0;
   gap: 8px;
-  height: 48px;
-  padding: 0 10px;
+  height: 56px;
+  padding: 0 14px;
   border-bottom: 1px solid var(--wb-border);
+  background: var(--wb-panel);
 }
 .wb-titlebar h1 {
   flex: 1;
@@ -342,7 +373,7 @@
 }
 .wb-icon-button {
   border: 0;
-  border-radius: 6px;
+  border-radius: 9px;
   background: transparent;
   color: var(--wb-muted);
   width: 28px;
@@ -362,7 +393,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  padding: 9px 22px 0;
+  padding: 10px 24px 0;
   color: var(--wb-muted);
   font-size: 11px;
 }
@@ -385,6 +416,7 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 24px clamp(20px, 4vw, 52px);
+  scrollbar-color: var(--wb-border) transparent;
 }
 .wb-chat-content {
   max-width: 840px;
@@ -394,29 +426,69 @@
   gap: 22px;
 }
 .wb-message-user {
-  padding: 11px 15px;
-  background: var(--wb-input);
+  padding: 12px 16px;
+  background: var(--wb-accent-soft);
   border: 1px solid var(--wb-border);
-  border-radius: 10px;
+  border-radius: 17px 17px 5px 17px;
   margin-left: auto;
   max-width: 90%;
 }
 .wb-message-assistant {
   min-width: 0;
 }
-.wb-message-meta {
-  margin-bottom: 7px;
+.wb-assistant-avatar {
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--wb-accent-soft);
+  object-fit: contain;
+}
+.wb-message-assistant .wb-message-meta {
+  color: var(--wb-accent);
+}
+.wb-reasoning,
+.wb-tool-target,
+.wb-tool-status {
+  color: var(--wb-muted);
+}
+.wb-tool-status {
   font-size: 11px;
-  font-weight: 500;
+}
+.wb-tool[data-state="running"] > summary > svg,
+.wb-tool[data-state="pending"] > summary > svg {
+  color: var(--wb-accent);
+}
+.wb-tool[data-state="completed"] > summary > svg {
+  color: var(--success-text);
+}
+.wb-code-block,
+.wb-code-diff {
+  border-color: var(--wb-border);
+  border-radius: 9px;
+}
+.wb-code-block pre,
+.wb-code-diff {
+  line-height: 1.65;
+}
+.wb-message-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 26px;
+  margin-bottom: 9px;
+  font-size: 11px;
+  font-weight: 600;
   color: var(--wb-muted);
 }
 .wb-tool {
-  border: 0;
-  background: transparent;
-  margin: 7px 0;
+  border: 1px solid var(--wb-border);
+  border-radius: 11px;
+  background: var(--wb-panel);
+  margin: 9px 0;
 }
 .wb-tool > summary {
-  padding: 4px 0;
+  padding: 9px 11px;
   gap: 7px;
   color: var(--wb-muted);
   font-size: 12px;
@@ -424,9 +496,10 @@
 .wb-tool > div {
   border: 1px solid var(--wb-border);
   background: var(--wb-input);
-  border-radius: 7px;
-  margin: 5px 0;
-  padding: 10px;
+  border-radius: 0 0 11px 11px;
+  border-width: 1px 0 0;
+  margin: 0;
+  padding: 11px;
 }
 .wb-empty {
   display: flex;
@@ -434,12 +507,76 @@
   min-height: 0;
   align-items: center;
   justify-content: center;
-  padding: 28px;
+  padding: 22px;
+  overflow-y: auto;
 }
 .wb-empty-content {
   width: 100%;
   max-width: 540px;
   text-align: center;
+}
+.wb-welcome-art {
+  position: relative;
+  width: 200px;
+  height: 218px;
+  margin: 0 auto 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.wb-welcome-halo {
+  position: absolute;
+  width: 150px;
+  height: 172px;
+  border-radius: 48% 52% 45% 55%;
+  background: var(--wb-accent-soft);
+  box-shadow: 14px -6px 0 -3px var(--wb-lavender-soft);
+}
+.wb-welcome-mascot {
+  position: relative;
+  width: 142px;
+  height: 210px;
+  object-fit: contain;
+}
+.wb-welcome-sparkles {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  color: var(--wb-lavender);
+}
+.wb-welcome-art-compact {
+  width: 146px;
+  height: 166px;
+  margin-bottom: 6px;
+}
+.wb-welcome-art-compact .wb-welcome-mascot {
+  width: 110px;
+  height: 162px;
+}
+.wb-welcome-art-compact .wb-welcome-halo {
+  width: 108px;
+  height: 128px;
+}
+.wb-welcome-eyebrow {
+  display: block;
+  color: var(--wb-accent);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  margin: 0 0 9px;
+}
+.wb-empty-select {
+  display: block;
+  margin: 0 auto 12px;
+  max-width: 100%;
+  border: 1px solid var(--wb-border);
+  border-radius: 10px;
+  padding: 8px 11px;
+  background: var(--wb-input);
+  color: var(--wb-text);
+  font-size: 13px;
 }
 .wb-empty-icon {
   display: inline-flex;
@@ -454,9 +591,9 @@
   height: 26px;
 }
 .wb-empty h2 {
-  font-size: 21px;
+  font-size: 23px;
   letter-spacing: -0.035em;
-  font-weight: 550;
+  font-weight: 650;
   margin-bottom: 8px;
 }
 .wb-empty p {
@@ -468,18 +605,36 @@
   border: 1px solid transparent;
   background: var(--wb-button);
   color: var(--wb-button-text);
-  border-radius: 7px;
-  padding: 7px 11px;
-  font-weight: 500;
+  border-radius: 11px;
+  padding: 8px 13px;
+  font-weight: 600;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  min-height: 32px;
+  min-height: 34px;
+  transition:
+    background-color 140ms ease,
+    box-shadow 140ms ease,
+    transform 140ms ease;
+}
+.wb-primary:not(:disabled):hover {
+  background: var(--action-hover, var(--wb-button));
+}
+.wb-primary:not(:disabled):active {
+  transform: translateY(1px);
 }
 .wb-primary svg {
   width: 15px;
   height: 15px;
+}
+.wb-stop-button {
+  background: var(--wb-lavender-soft);
+  color: var(--wb-text);
+  border-color: var(--wb-border);
+}
+.wb-stop-button:not(:disabled):hover {
+  background: var(--wb-hover);
 }
 .wb-composer-area {
   flex-shrink: 0;
@@ -489,9 +644,16 @@
   max-width: 840px;
   margin: auto;
   border: 1px solid var(--wb-border);
-  border-radius: 12px;
+  border-radius: 17px;
   background: var(--wb-input);
-  box-shadow: 0 2px 7px rgba(0, 0, 0, 0.025);
+  box-shadow: 0 4px 16px rgb(104 44 77 / 5%);
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease;
+}
+.wb-composer:focus-within {
+  border-color: var(--wb-accent);
+  box-shadow: 0 0 0 3px var(--wb-accent-soft);
 }
 .wb-composer textarea {
   display: block;
@@ -521,7 +683,7 @@
   color: inherit;
   background: transparent;
   border: 0;
-  border-radius: 6px;
+  border-radius: 8px;
   padding: 5px 4px;
   min-width: 0;
   max-width: 230px;
@@ -550,7 +712,7 @@
   display: inline-flex;
   align-items: center;
   border: 0;
-  border-radius: 5px;
+  border-radius: 9px;
   gap: 4px;
   background: transparent;
   padding: 5px 7px;
@@ -558,7 +720,7 @@
   font-size: 12px !important;
 }
 .wb-mode-button[aria-pressed="true"] {
-  background: var(--wb-selected);
+  background: var(--wb-lavender-soft);
   color: var(--wb-text);
 }
 .wb-toolbar-spacer {
@@ -575,7 +737,7 @@
 .wb-changes {
   margin: 0 clamp(20px, 4vw, 52px);
   border: 1px solid var(--wb-border);
-  border-radius: 9px;
+  border-radius: 13px;
   background: var(--wb-input);
   max-height: 40%;
   overflow-y: auto;
@@ -584,10 +746,45 @@
   padding: 9px 13px;
   font-size: 12px;
 }
+.wb-change-list {
+  max-height: 280px;
+  overflow: auto;
+  padding: 0 12px 12px;
+  display: grid;
+  gap: 8px;
+}
+.wb-change-file {
+  border: 1px solid var(--wb-border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.wb-change-file > summary {
+  background: var(--wb-lavender-soft);
+  color: var(--wb-text);
+}
 .wb-permission {
   border-color: var(--wb-border);
   background: var(--wb-input);
-  border-radius: 10px;
+  border-radius: 15px;
+  box-shadow: inset 3px 0 0 var(--wb-accent);
+}
+.wb-permission-heading {
+  color: var(--wb-accent);
+}
+.wb-permission-resources {
+  padding: 9px 11px;
+  border: 1px solid var(--wb-border);
+  border-radius: 9px;
+  background: var(--wb-bg);
+  color: var(--wb-text);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+.wb-permission .wb-permission-allow {
+  background: var(--wb-button);
+  color: var(--wb-button-text);
+}
+.wb-permission .wb-permission-allow:not(:disabled):hover {
+  background: var(--action-hover, var(--wb-button));
 }
 .wb-permission button {
   font-size: 12px;
@@ -597,6 +794,49 @@
   width: min(720px, calc(100vw - 40px));
   height: auto;
   background: var(--wb-input);
+  border-color: var(--wb-border);
+  border-radius: 20px;
+}
+.wb-extensions.tai-dialog-surface:has(.wb-extension-header) {
+  height: min(620px, calc(100dvh - 56px));
+  max-height: calc(100dvh - 56px);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.wb-extensions .wb-extension-header {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  flex-shrink: 0;
+  gap: 16px;
+  padding: 20px 22px 12px;
+  text-align: left;
+}
+.wb-extension-heading {
+  flex: 1;
+  min-width: 0;
+}
+.wb-extension-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--wb-border);
+  border-radius: 10px;
+  background: var(--wb-panel);
+  color: var(--wb-muted);
+}
+.wb-extension-close:hover {
+  background: var(--wb-hover);
+  color: var(--wb-text);
+}
+.wb-extensions :focus-visible {
+  outline: 2px solid var(--wb-accent);
+  outline-offset: 2px;
 }
 .wb-skill-description {
   display: -webkit-box;
@@ -610,30 +850,34 @@
 .wb-extension-tabs {
   display: flex;
   gap: 5px;
-  padding: 12px 0;
+  flex-shrink: 0;
+  padding: 8px 22px 12px;
   border-bottom: 1px solid var(--wb-border);
-  margin-bottom: 14px;
+  margin-bottom: 0;
 }
 .wb-extension-tabs button {
   padding: 6px 13px;
-  border-radius: 6px;
+  border-radius: 10px;
   color: var(--wb-muted);
 }
 .wb-extension-tabs button[aria-selected="true"] {
   color: var(--wb-text);
-  background: var(--wb-selected);
+  background: var(--wb-lavender-soft);
 }
 .wb-extension-list {
   overflow-y: auto;
   min-height: 0;
-  max-height: 52vh;
+  flex: 1;
+  max-height: none;
   display: grid;
   gap: 10px;
-  padding: 1px;
+  align-content: start;
+  padding: 16px 22px;
+  scrollbar-color: var(--wb-border) transparent;
 }
 .wb-extension-card {
   border: 1px solid var(--wb-border);
-  border-radius: 8px;
+  border-radius: 13px;
   padding: 13px;
 }
 .wb-extension-card-heading {
@@ -666,7 +910,7 @@
   align-items: center;
 }
 .wb-extension-toggle input {
-  accent-color: var(--wb-text);
+  accent-color: var(--wb-accent);
 }
 .wb-extension-card > p {
   font-size: 12px;
@@ -715,6 +959,50 @@
   font-size: 12px;
   color: var(--wb-muted);
 }
+.wb-extension-footer {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--wb-border);
+  background: var(--wb-sidebar);
+}
+.wb-extension-window-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--wb-muted);
+}
+.wb-extension-window-controls small {
+  font-size: 10px;
+  margin-right: 2px;
+}
+.wb-extension-footer .wb-extension-reload {
+  flex: 1;
+  min-width: 170px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+.wb-extension-dismiss {
+  margin-left: auto;
+  border: 1px solid var(--wb-border);
+  border-radius: 10px;
+  padding: 7px 11px;
+  background: var(--wb-panel);
+  color: var(--wb-text);
+  white-space: nowrap;
+}
+.wb-extension-dismiss:hover {
+  background: var(--wb-hover);
+}
+.wb-extensions > [role="alert"],
+.wb-extensions > [role="status"] {
+  flex-shrink: 0;
+  margin: 10px 22px 0;
+}
 .wb-mcp-form {
   display: grid;
   gap: 10px;
@@ -742,14 +1030,47 @@
 }
 @media (max-width: 1050px) {
   .wb-sidebar {
-    width: 220px;
-    flex-basis: 220px;
+    width: 210px;
+    flex-basis: 210px;
   }
   .wb-titlebar-project {
     max-width: 100px;
   }
   .wb-composer-toolbar select {
     max-width: 170px;
+  }
+}
+@media (max-height: 700px) {
+  .wb-empty {
+    padding: 16px 20px;
+  }
+  .wb-welcome-art {
+    width: 174px;
+    height: 188px;
+    margin-bottom: 8px;
+  }
+  .wb-welcome-mascot {
+    width: 122px;
+    height: 180px;
+  }
+  .wb-welcome-art-compact {
+    width: 130px;
+    height: 144px;
+  }
+  .wb-welcome-art-compact .wb-welcome-mascot {
+    width: 94px;
+    height: 138px;
+  }
+  .wb-welcome-art-compact .wb-welcome-halo {
+    width: 94px;
+    height: 112px;
+  }
+  .wb-composer textarea {
+    min-height: 78px;
+  }
+  .wb-composer-area {
+    padding-top: 9px;
+    padding-bottom: 12px;
   }
 }
 @media (max-width: 760px) {
@@ -765,5 +1086,14 @@
   }
   .wb-titlebar-project {
     display: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lolicode-workbench button,
+  .wb-composer {
+    transition: none;
+  }
+  .wb-primary:not(:disabled):active {
+    transform: none;
   }
 }

@@ -19,12 +19,9 @@ export function AgentChanges({ diffs }: { diffs: AgentDiff[] }) {
           </span>
         </span>
       </summary>
-      <div className="max-h-80 space-y-2 overflow-auto px-5 pb-4">
+      <div className="wb-change-list">
         {diffs.map((diff) => (
-          <details
-            key={diff.path}
-            className="rounded-control border border-border"
-          >
+          <details key={diff.path} className="wb-change-file">
             <summary className="cursor-pointer break-all px-3 py-2 text-caption">
               {diff.path}{" "}
               <span className="text-fg-3">
@@ -36,7 +33,7 @@ export function AgentChanges({ diffs }: { diffs: AgentDiff[] }) {
               </span>
             </summary>
             <div className="px-3 pb-3">
-              <SessionDiff text={diff.patch} />
+              <SessionDiff className="wb-code-diff" text={diff.patch} />
             </div>
           </details>
         ))}

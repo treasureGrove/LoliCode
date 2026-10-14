@@ -1,0 +1,98 @@
+{
+  "version": "4.0.12",
+  "kind": "mock_renderer_visual_qa",
+  "caption": "4.0.12 界面演示；聊天及 diff 为历史实际 GLM 测试回放，未发起新调用。",
+  "nativeWindowDisclaimer": "窗口动作只验证 mock IPC 调用，不代表原生应用运行截图；没有关闭任何用户进程。",
+  "screenshots": [
+    "D:\\projectGithub\\TAI-Switch\\docs\\images\\lolicode\\maid\\maid-welcome-light-1000x650.png",
+    "D:\\projectGithub\\TAI-Switch\\docs\\images\\lolicode\\maid\\maid-welcome-dark-1000x650.png",
+    "D:\\projectGithub\\TAI-Switch\\docs\\images\\lolicode\\maid\\maid-chat-diff-light-1280x940.png",
+    "D:\\projectGithub\\TAI-Switch\\docs\\images\\lolicode\\maid\\maid-chat-diff-dark-1280x940.png",
+    "D:\\projectGithub\\TAI-Switch\\docs\\images\\lolicode\\maid\\maid-skills-light-1000x650.png",
+    "D:\\projectGithub\\TAI-Switch\\docs\\images\\lolicode\\maid\\maid-skills-loading-1000x650.png",
+    "D:\\projectGithub\\TAI-Switch\\docs\\images\\lolicode\\maid\\maid-skills-dark-1000x650.png"
+  ],
+  "gates": {
+    "headerX": true,
+    "focusReturned": true,
+    "escape": true,
+    "footerDismiss": true,
+    "closeWhileReadUnresolved": true,
+    "reopenedGenerationIgnoresLateResponse": true,
+    "reopenedViewBlocksSecondMutationUntilPriorReadSettles": true,
+    "lateConfigReadDoesNotDispatchWrite": true,
+    "mockWindowCloseDispatched": true,
+    "mockWindowCloseKeptBrowserOpen": true
+  },
+  "layouts": {
+    "welcomeMascot": {
+      "x": 572,
+      "y": 186.75,
+      "width": 122,
+      "height": 180,
+      "insideViewport": true
+    },
+    "diff-light": {
+      "x": 339.1875,
+      "y": 569.828125,
+      "width": 889.625,
+      "height": 177,
+      "insideViewport": true
+    },
+    "composer-light": {
+      "x": 364,
+      "y": 758.828125,
+      "width": 840,
+      "height": 143.171875,
+      "insideViewport": true
+    },
+    "diff-dark": {
+      "x": 339.1875,
+      "y": 569.828125,
+      "width": 889.625,
+      "height": 177,
+      "insideViewport": true
+    },
+    "composer-dark": {
+      "x": 364,
+      "y": 758.828125,
+      "width": 840,
+      "height": 143.171875,
+      "insideViewport": true
+    },
+    "modalClose": {
+      "x": 805,
+      "y": 49,
+      "width": 32,
+      "height": 32,
+      "insideViewport": true
+    },
+    "modalFooter": {
+      "x": 141,
+      "y": 552.5,
+      "width": 718,
+      "height": 68.5,
+      "insideViewport": true
+    }
+  },
+  "pageErrors": [],
+  "consoleErrors": [],
+  "blockedExternalRequests": [],
+  "liveAgentMutations": 0,
+  "unexpectedIpc": [],
+  "windowCalls": [
+    "plugin:window|set_decorations",
+    "plugin:window|set_decorations",
+    "plugin:window|set_decorations",
+    "plugin:window|set_decorations",
+    "plugin:window|set_decorations",
+    "plugin:window|set_decorations",
+    "plugin:window|set_decorations",
+    "plugin:window|set_decorations",
+    "plugin:window|set_decorations",
+    "plugin:window|set_decorations",
+    "plugin:window|close",
+    "plugin:window|set_decorations",
+    "plugin:window|set_decorations"
+  ]
+}

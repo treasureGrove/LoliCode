@@ -26,7 +26,10 @@ export function WindowControls() {
           if (active) setMaximized(value);
         };
         await update();
-        unlisten = await win.onResized(() => void update());
+        if (!active) return;
+        const stopListening = await win.onResized(() => void update());
+        if (active) unlisten = stopListening;
+        else stopListening();
       } catch (error) {
         console.error("[WindowControls] Failed to sync maximized state", error);
       }

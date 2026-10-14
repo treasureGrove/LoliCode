@@ -40,6 +40,7 @@ import { AgentChanges } from "./AgentChanges";
 import { AgentPermissionCard } from "./AgentPermissionCard";
 import { AgentQuestionCard } from "./AgentQuestionCard";
 import { WindowControlsContext } from "@/components/shell/AppPageHeader";
+import LolicodeMascot from "@/components/shell/LolicodeMascot";
 import { DRAG_REGION_ATTR, DRAG_REGION_STYLE } from "@/lib/platform";
 import "./lolicode-workbench.css";
 import { AgentSessionMenu } from "./AgentSessionMenu";
@@ -59,6 +60,37 @@ const EMPTY_CATALOG: AgentCatalog = {
   excludedSources: [],
 };
 type PendingSend = { requestId: string; assistantIds: Set<string> };
+
+function WelcomeMascot({ compact = false }: { compact?: boolean }) {
+  return (
+    <div
+      className={`wb-welcome-art${compact ? " wb-welcome-art-compact" : ""}`}
+      aria-hidden="true"
+    >
+      <div className="wb-welcome-halo" />
+      <LolicodeMascot className="wb-welcome-mascot" variant="full" decorative />
+      <svg
+        className="wb-welcome-sparkles"
+        viewBox="0 0 180 150"
+        fill="none"
+        focusable="false"
+      >
+        <path
+          d="m25 25 3.5 8 8 3.5-8 3.5-3.5 8-3.5-8-8-3.5 8-3.5ZM151 92l2.5 6 6 2.5-6 2.5-2.5 6-2.5-6-6-2.5 6-2.5Z"
+          fill="currentColor"
+        />
+        <path
+          d="M139 31c-6-5-13-7-14-2-1 4 6 8 14 9m0-7c6-5 13-7 14-2 1 4-6 8-14 9m0-7v7"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <circle cx="139" cy="34" r="3" fill="currentColor" />
+      </svg>
+    </div>
+  );
+}
 const nameOf = (path: string) =>
   path
     .replace(/[\\/]+$/, "")
@@ -782,7 +814,14 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
             {...DRAG_REGION_ATTR}
             style={DRAG_REGION_STYLE as React.CSSProperties}
           >
-            LoliCode <span>工作台</span>
+            <LolicodeMascot
+              className="wb-brand-mascot"
+              variant="portrait"
+              decorative
+            />
+            <div className="wb-brand-label">
+              LoliCode <span>工作台</span>
+            </div>
           </div>
           <nav className="wb-nav" aria-label="工作台操作">
             <button
@@ -1138,9 +1177,8 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
         {!workspace ? (
           <div className="wb-empty">
             <div className="wb-empty-content">
-              <div className="wb-empty-icon">
-                <FolderOpen />
-              </div>
+              <WelcomeMascot />
+              <span className="wb-welcome-eyebrow">LoliCode 工作台</span>
               <h2>从一个项目开始</h2>
               <p>选择项目，与 LoliCode 一起分析和实现代码。</p>
               <button
@@ -1167,9 +1205,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
         ) : !sessionId ? (
           <div className="wb-empty">
             <div className="wb-empty-content">
-              <div className="wb-empty-icon">
-                <MessageSquarePlus />
-              </div>
+              <WelcomeMascot compact />
               <h2>开始新的任务</h2>
               <p>
                 {catalog.models.length
@@ -1181,7 +1217,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
               </label>
               <select
                 id="agent-new-model"
-                className="mb-4 rounded border border-border bg-surface p-2"
+                className="wb-empty-select"
                 disabled={Boolean(busy) || !catalog.models.length}
                 value={modelId}
                 onChange={(event) => setModelId(event.target.value)}
@@ -1223,7 +1259,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
               </label>
               <select
                 id="agent-new-permission"
-                className="mb-4 rounded border border-border bg-surface p-2"
+                className="wb-empty-select"
                 value={permissionMode}
                 disabled={Boolean(busy)}
                 onChange={(event) => {
@@ -1327,6 +1363,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
                 {snapshot && !snapshot.messages.length && (
                   <div className="wb-empty">
                     <div className="wb-empty-content">
+                      <WelcomeMascot compact />
                       <h2>今天想完成什么？</h2>
                       <p>说说你想完成的任务。</p>
                     </div>
@@ -1528,7 +1565,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
                   {(runningHere || queuedHere || stoppingHere) && (
                     <button
                       type="button"
-                      className="wb-primary"
+                      className="wb-primary wb-stop-button"
                       disabled={Boolean(busy) || stoppingHere}
                       onClick={() => void stop()}
                     >
@@ -1581,7 +1618,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
         }
       />
       <Dialog open={confirmFullAccess} onOpenChange={setConfirmFullAccess}>
-        <DialogContent className="wb-extensions p-5">
+        <DialogContent className="wb-extensions wb-permission-confirm p-5">
           <DialogHeader>
             <DialogTitle>为此会话启用完整权限？</DialogTitle>
             <DialogDescription>

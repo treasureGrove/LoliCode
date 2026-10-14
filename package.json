@@ -1,6 +1,6 @@
 {
   "name": "lolicode",
-  "version": "4.0.11",
+  "version": "4.0.12",
   "description": "LoliCode desktop coding agent with shared model channels",
   "type": "module",
   "scripts": {

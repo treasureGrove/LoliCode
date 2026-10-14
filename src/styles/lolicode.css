@@ -1,156 +1,216 @@
-/* Neutral workspace surfaces reference ZCode's Zai light/dark roles.
-   Local tokens remain compatible with the existing configuration pages. */
+/* LoliCode's cream, berry and lavender palette stays quiet behind code.
+   Keep the shared token names so every configuration page inherits the theme. */
 :root {
-  --background: 0 0% 97%;
-  --foreground: 0 0% 5%;
-  --card: 0 0% 100%;
-  --card-foreground: 0 0% 5%;
-  --popover: 0 0% 100%;
-  --popover-foreground: 0 0% 5%;
-  --primary: 0 0% 8%;
+  color-scheme: light;
+  --background: 30 100% 98%;
+  --foreground: 307 19% 19%;
+  --card: 30 100% 99.2%;
+  --card-foreground: 307 19% 19%;
+  --popover: 30 100% 99.2%;
+  --popover-foreground: 307 19% 19%;
+  --primary: 335.6 47.3% 53.1%;
   --primary-foreground: 0 0% 100%;
-  --secondary: 0 0% 94%;
-  --secondary-foreground: 0 0% 12%;
-  --muted: 0 0% 94%;
-  --muted-foreground: 0 0% 44%;
-  --accent: 0 0% 94%;
-  --accent-foreground: 0 0% 12%;
-  --border: 0 0% 88%;
-  --input: 0 0% 84%;
-  --ring: 0 0% 25%;
-  --bg-app: #f8f8f8;
-  --bg-sidebar: #f0f0f0;
-  --bg-subtle: #f3f3f3;
-  --bg-selected: #e7e7e7;
-  --bg-card: #ffffff;
-  --border-strong: #cecece;
-  --text-1: #171717;
-  --text-2: #626262;
-  --text-3: #858585;
-  --action-bg: #1c1c1c;
+  --secondary: 261 54% 95%;
+  --secondary-foreground: 267 25% 35%;
+  --muted: 342 42% 95%;
+  --muted-foreground: 308 12% 36%;
+  --accent: 335 52% 91%;
+  --accent-foreground: 307 19% 19%;
+  --border: 331 29% 84.5%;
+  --input: 328 27% 76.5%;
+  --ring: 335.6 46.1% 48%;
+  --radius: 0.75rem;
+  --brand-berry: #c04f7d;
+  --brand-lavender: #8d79bb;
+  --brand-lavender-soft: #f0ebf9;
+  --brand-pink-soft: #fbe9f0;
+  --brand-border: #e8d6df;
+  --bg-app: #fffaf5;
+  --bg-sidebar: #fff6f3;
+  --bg-subtle: #f8eef1;
+  --bg-selected: #f4dce6;
+  --bg-card: #fffdfb;
+  --border-strong: #d3b3c4;
+  --text-1: #392737;
+  --text-2: #685165;
+  --text-3: #755e6e;
+  --action-bg: #c04f7d;
   --action-fg: #ffffff;
-  --action-hover: #373737;
-  --action-text: #202020;
-  --action-soft: #ededed;
-  --inverse-bg: #202020;
+  --action-hover: #a83d67;
+  --action-text: #a03661;
+  --action-soft: #fbe7ef;
+  --inverse-bg: #493348;
   --inverse-fg: #ffffff;
-  --inverse-hover: #363636;
-  --overlay: rgb(0 0 0 / 32%);
-  --control-off: #a3a3a3;
-  --chart-1: #303030;
-  --chart-2: #638597;
-  --chart-grid: #e7e7e7;
-  --heat-4: #414141;
-  --shadow-sm: 0 1px 3px rgb(0 0 0 / 3%);
-  --shadow-md: 0 8px 26px rgb(0 0 0 / 7%);
-  --shadow-lg: 0 20px 70px rgb(0 0 0 / 16%);
+  --inverse-hover: #5a4059;
+  --overlay: rgb(42 21 42 / 45%);
+  --control-off: #967b8d;
+  --chart-1: #b23d6f;
+  --chart-2: #8265b2;
+  --chart-grid: #efdee5;
+  --heat-4: #943057;
+  --shadow-sm: 0 2px 5px rgb(102 48 79 / 5%);
+  --shadow-md: 0 8px 28px rgb(102 48 79 / 9%);
+  --shadow-lg: 0 24px 80px rgb(69 35 65 / 19%);
 }
 .dark {
-  --background: 0 0% 9%;
-  --foreground: 0 0% 94%;
-  --card: 0 0% 13%;
-  --card-foreground: 0 0% 94%;
-  --popover: 0 0% 13%;
-  --popover-foreground: 0 0% 94%;
-  --primary: 0 0% 95%;
-  --primary-foreground: 0 0% 10%;
-  --secondary: 0 0% 17%;
-  --secondary-foreground: 0 0% 92%;
-  --muted: 0 0% 17%;
-  --muted-foreground: 0 0% 68%;
-  --accent: 0 0% 19%;
-  --accent-foreground: 0 0% 92%;
-  --border: 0 0% 22%;
-  --input: 0 0% 30%;
-  --ring: 0 0% 65%;
-  --bg-app: #161616;
-  --bg-sidebar: #161616;
-  --bg-subtle: #252525;
-  --bg-selected: #303030;
-  --bg-card: #202020;
-  --border-strong: #444444;
-  --text-1: #ededed;
-  --text-2: #b0b0b0;
-  --text-3: #808080;
-  --action-bg: #eaeaea;
-  --action-fg: #171717;
-  --action-hover: #ffffff;
-  --action-text: #e4e4e4;
-  --action-soft: #303030;
-  --inverse-bg: #eaeaea;
-  --inverse-fg: #171717;
-  --inverse-hover: #ffffff;
-  --chart-1: #dedede;
-  --chart-2: #91b0c0;
-  --chart-grid: #343434;
-  --heat-4: #dedede;
+  color-scheme: dark;
+  --background: 268 17% 14.7%;
+  --foreground: 322 41% 94.7%;
+  --card: 276 16% 18.2%;
+  --card-foreground: 322 41% 94.7%;
+  --popover: 276 16% 18.2%;
+  --popover-foreground: 322 41% 94.7%;
+  --primary: 334.7 71.7% 79.2%;
+  --primary-foreground: 294 27% 15.5%;
+  --secondary: 264 19% 26%;
+  --secondary-foreground: 267 55% 90%;
+  --muted: 273 17% 21%;
+  --muted-foreground: 309 17% 77%;
+  --accent: 319 21% 26%;
+  --accent-foreground: 322 41% 94.7%;
+  --border: 290 13% 29%;
+  --input: 289 12% 44%;
+  --ring: 334.7 71.7% 79.2%;
+  --brand-berry: #f0a4c4;
+  --brand-lavender: #cab2ec;
+  --brand-lavender-soft: #40364f;
+  --brand-pink-soft: #48303e;
+  --brand-border: #514154;
+  --bg-app: #251f2c;
+  --bg-sidebar: #2a2230;
+  --bg-subtle: #382d40;
+  --bg-selected: #513548;
+  --bg-card: #302736;
+  --border-strong: #78627d;
+  --text-1: #f7ecf3;
+  --text-2: #cebacb;
+  --text-3: #bea8ba;
+  --action-bg: #f0a4c4;
+  --action-fg: #301d32;
+  --action-hover: #f7bfd5;
+  --action-text: #f7bad3;
+  --action-soft: #48303e;
+  --inverse-bg: #eddfef;
+  --inverse-fg: #352a3e;
+  --inverse-hover: #fff0f6;
+  --overlay: rgb(15 7 24 / 65%);
+  --control-off: #8c7891;
+  --chart-1: #e4a0be;
+  --chart-2: #baa1df;
+  --chart-grid: #463549;
+  --heat-4: #f4b8d4;
+  --shadow-sm: 0 2px 5px rgb(13 7 19 / 18%);
+  --shadow-md: 0 8px 28px rgb(13 7 19 / 28%);
+  --shadow-lg: 0 24px 80px rgb(13 7 19 / 50%);
 }
 .tai-shell-sidebar {
-  --bg-sidebar: #f0f0f0;
-  --bg-subtle: #e7e7e7;
-  --bg-selected: #dedede;
-  --text-1: #202020;
-  --text-2: #666666;
-  --text-3: #858585;
-  --border: 0 0% 87%;
-  --ring: 0 0% 35%;
+  --bg-sidebar: #fff6f3;
+  --bg-subtle: #f8eef1;
+  --bg-selected: #f4dce6;
+  --text-1: #392737;
+  --text-2: #685165;
+  --text-3: #755e6e;
+  --border: 331 29% 84.5%;
+  --ring: 335.6 46.1% 48%;
   border-inline-end: 1px solid hsl(var(--border));
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--brand-lavender-soft) 45%, transparent),
+    transparent 130px
+  );
 }
 .dark .tai-shell-sidebar {
-  --bg-sidebar: #161616;
-  --bg-subtle: #252525;
-  --bg-selected: #303030;
-  --text-1: #eeeeee;
-  --text-2: #aaaaaa;
-  --text-3: #858585;
-  --border: 0 0% 23%;
-  --ring: 0 0% 65%;
+  --bg-sidebar: #2a2230;
+  --bg-subtle: #382d40;
+  --bg-selected: #513548;
+  --text-1: #f7ecf3;
+  --text-2: #cebacb;
+  --text-3: #bea8ba;
+  --border: 290 13% 29%;
+  --ring: 334.7 71.7% 79.2%;
 }
 .lolicode-global-rail .tai-shell-brand,
 .lolicode-global-rail[data-collapsed="true"] .tai-shell-brand {
-  height: 54px;
-  min-height: 54px;
-  padding: 12px;
+  height: 60px;
+  min-height: 60px;
+  padding: 10px;
   justify-content: center;
 }
+.lolicode-global-rail .tai-shell-brand-lockup {
+  width: 36px;
+  height: 36px;
+  justify-content: center;
+  border: 1px solid var(--brand-border);
+  border-radius: 13px;
+  background: var(--bg-card);
+  box-shadow: var(--shadow-sm);
+}
 .lolicode-global-rail .tai-shell-mark {
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
 }
 .lolicode-global-rail .tai-shell-directory {
-  padding: 6px;
+  padding: 4px 6px 8px;
 }
 .lolicode-global-rail .tai-shell-task-group {
-  gap: 6px;
+  gap: 7px;
 }
 .lolicode-global-rail[data-collapsed="true"] .tai-shell-nav-item {
   width: 40px;
   min-height: 40px;
   padding: 0;
   margin-inline: auto;
+  border-radius: 13px;
+  border: 1px solid transparent;
+  justify-content: center;
 }
 .lolicode-global-rail .tai-shell-footer {
-  padding: 8px 6px;
-  gap: 6px;
+  padding: 10px 6px;
+  gap: 7px;
 }
 .lolicode-global-rail .tai-shell-selection {
   background: var(--bg-selected);
-  box-shadow: none;
-  border-radius: 8px;
+  box-shadow: inset 0 0 0 1px var(--brand-border);
+  border-radius: 12px;
+}
+.lolicode-global-rail .tai-shell-nav-item[aria-current="page"]::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: -4px;
+  top: 12px;
+  width: 3px;
+  height: 14px;
+  border-radius: 4px;
+  background: var(--brand-berry);
 }
 .tai-shell-sidebar :focus-visible {
   outline-color: hsl(var(--ring));
 }
-.tai-shell-nav-item[aria-current="page"] {
+.tai-shell-skip:focus-visible {
+  position: fixed;
+  inset-inline-start: 68px;
+  top: 12px;
   color: var(--text-1);
+  background: var(--bg-card);
+  outline-offset: 3px;
+  box-shadow: var(--shadow-md);
+}
+.tai-shell-nav-item[aria-current="page"] {
+  color: var(--action-text);
 }
 .tai-shell-nav-item:hover {
   background: var(--bg-subtle);
+  color: var(--text-1);
+}
+.tai-shell-nav-item[aria-current="page"]:hover {
+  color: var(--action-text);
+  background: transparent;
 }
 .tai-shell-footer {
   border-color: hsl(var(--border));
 }
 .tai-main {
+  background-color: var(--bg-app);
   background-image: none;
 }
 .lolicode-mark {
@@ -159,21 +219,79 @@
 }
 .tai-shell-page-header {
   min-height: 60px;
+  border-color: hsl(var(--border));
+}
+.tai-button {
+  border-radius: 10px;
+}
+.tai-button.bg-action {
+  box-shadow: 0 2px 3px color-mix(in srgb, var(--brand-berry) 16%, transparent);
+}
+.tai-button.bg-danger {
+  background: #bd3551;
+  color: #ffffff;
+}
+.tai-button.bg-danger:hover {
+  background: #9c2942;
+  filter: none;
+}
+.tai-button:focus-visible,
+.tai-shell-nav-item:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+:where(
+  input,
+  textarea,
+  select,
+  a,
+  [role="checkbox"],
+  [role="switch"]
+):focus-visible {
+  outline-color: hsl(var(--ring));
+}
+::selection {
+  color: var(--text-1);
+  background: var(--bg-selected);
+}
+.tai-dialog-overlay {
+  backdrop-filter: blur(4px);
+}
+.tai-dialog-surface {
+  border-color: var(--brand-border);
+  border-radius: 18px;
+  background: var(--bg-card);
+  box-shadow: var(--shadow-lg);
+}
+.tai-dialog-header {
+  border-bottom: 1px solid hsl(var(--border));
+  background: linear-gradient(
+    120deg,
+    var(--brand-pink-soft),
+    var(--bg-card) 75%
+  );
+  border-radius: 17px 17px 0 0;
+}
+.tai-dialog-footer {
+  border-top: 1px solid hsl(var(--border));
+  background: color-mix(in srgb, var(--bg-app) 65%, var(--bg-card));
+  border-radius: 0 0 17px 17px;
 }
 .lolicode-channel-center section {
   box-shadow: none;
 }
 .lolicode-channel-center [aria-pressed="true"] {
-  border-color: var(--border-strong);
+  border-color: var(--brand-berry);
 }
 .lolicode-channel-center .lolicode-channel-form {
   border: 1px solid hsl(var(--border));
   background: var(--bg-card);
-  border-radius: 10px;
+  border-radius: 16px;
   padding: 18px;
 }
 @media (prefers-reduced-motion: reduce) {
-  .lolicode-global-rail * {
+  .lolicode-global-rail *,
+  .tai-button {
     transition: none !important;
   }
 }

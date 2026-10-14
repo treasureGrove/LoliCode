@@ -4,6 +4,7 @@ import type { AgentMessage, AgentPart } from "@/types/agent";
 import { SessionMarkdown } from "@/components/sessions/reader/SessionMarkdown";
 import { SessionCodeBlock } from "@/components/sessions/reader/SessionCodeBlock";
 import { cn } from "@/lib/utils";
+import LolicodeMascot from "@/components/shell/LolicodeMascot";
 
 const TOOL_NAMES: Record<string, string> = {
   read: "读取文件",
@@ -48,7 +49,7 @@ export const AgentToolPart = memo(function AgentToolPart({
   const active = part.state === "pending" || part.state === "running";
   const label = TOOL_NAMES[part.name] || part.name;
   return (
-    <details className="wb-tool my-2">
+    <details className="wb-tool my-2" data-state={part.state}>
       <summary className="flex cursor-pointer items-start gap-2 px-3 py-2 text-caption">
         {active ? (
           <Loader2 className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin" />
@@ -62,10 +63,12 @@ export const AgentToolPart = memo(function AgentToolPart({
         <span className="min-w-0 flex-1">
           <span className="font-medium">{label}</span>
           {toolTarget(part) && (
-            <span className="ml-2 break-all text-fg-3">{toolTarget(part)}</span>
+            <span className="wb-tool-target ml-2 break-all">
+              {toolTarget(part)}
+            </span>
           )}
         </span>
-        <span className="shrink-0 text-fg-3">
+        <span className="wb-tool-status shrink-0">
           {part.state === "pending"
             ? "等待执行"
             : part.state === "running"
@@ -85,7 +88,10 @@ export const AgentToolPart = memo(function AgentToolPart({
           </p>
         )}
         {part.output ? (
-          <SessionCodeBlock code={part.output.slice(0, 30000)} />
+          <SessionCodeBlock
+            className="wb-code-block"
+            code={part.output.slice(0, 30000)}
+          />
         ) : (
           <p className="text-caption text-fg-3">
             {active ? "正在等待工具输出…" : "此步骤没有额外输出。"}
@@ -124,11 +130,20 @@ export const AgentMessageView = memo(function AgentMessageView({
       )}
     >
       <p className="wb-message-meta">
-        {message.role === "user"
-          ? "你"
-          : message.role === "assistant"
-            ? "LoliCode"
-            : "系统"}
+        {message.role === "assistant" && (
+          <LolicodeMascot
+            className="wb-assistant-avatar"
+            variant="portrait"
+            decorative
+          />
+        )}
+        <span>
+          {message.role === "user"
+            ? "你"
+            : message.role === "assistant"
+              ? "LoliCode"
+              : "系统"}
+        </span>
       </p>
       {message.parts.map((part, index) =>
         part.type === "tool" ? (
@@ -136,7 +151,7 @@ export const AgentMessageView = memo(function AgentMessageView({
         ) : part.type === "reasoning" ? (
           <details
             key={part.id || index}
-            className="my-2 text-caption text-fg-3"
+            className="wb-reasoning my-2 text-caption"
           >
             <summary className="cursor-pointer">思考过程</summary>
             <SessionMarkdown

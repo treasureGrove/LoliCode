@@ -1,0 +1,7 @@
+Use case: stylized-concept.
+Asset type: transparent mascot illustration for the LoliCode desktop coding workspace.
+Primary request: an original cute anime chibi maid mascot, wholesome and approachable, designed to make a coding app feel friendly.
+Subject: one smiling little-proportioned chibi character with lavender hair in short twin tails, soft berry-pink ribbon bows, large expressive violet eyes, a white frilled maid headband, and a fully covered classic charcoal-and-white maid uniform with a neat apron, puff sleeves, below-knee skirt and opaque tights. The clothing is modest, comfortable and nonsexual. Small rounded shoes. She holds a small closed lavender laptop close to her chest, with a simple tiny heart emblem.
+Style: polished Japanese 2D anime mascot illustration, clean controlled outlines, soft cel shading, rounded silhouette, thoughtful small details. Charming, not toy-plastic or photorealistic. Warm cream, lavender and restrained berry pink accents suit the app's planned cute interface.
+Composition: full figure, front facing, all hair, ribbons, shoes and laptop inside frame with generous transparent margin; silhouette readable at 160 pixels. No floor, no background, no text or watermark, no surrounding decorations or extra characters.
+Constraints: true transparent background with clean alpha edges. No sexualized clothing, poses or anatomy.

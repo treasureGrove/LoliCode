@@ -5,6 +5,8 @@ import {
   render,
   screen,
 } from "@testing-library/react";
+import { useState } from "react";
+import { WindowControlsContext } from "@/components/shell/AppPageHeader";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AgentExtensionsPanel } from "@/components/agent/AgentExtensionsPanel";
 import { agentApi } from "@/lib/api/agent";
@@ -61,6 +63,27 @@ const flush = async () => {
 };
 const reload = vi.fn();
 const changeOpen = vi.fn();
+function PanelHarness({
+  windowControls = null,
+}: {
+  windowControls?: React.ReactNode;
+}) {
+  const [visible, setVisible] = useState(true);
+  return (
+    <WindowControlsContext.Provider value={windowControls}>
+      <button onClick={() => setVisible(true)}>打开扩展面板</button>
+      <AgentExtensionsPanel
+        open={visible}
+        working={false}
+        onOpenChange={(value) => {
+          changeOpen(value);
+          setVisible(value);
+        }}
+        onReload={reload}
+      />
+    </WindowControlsContext.Provider>
+  );
+}
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(agentApi.getExtensions).mockResolvedValue(structuredClone(catalog));
@@ -91,6 +114,338 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 describe("AgentExtensionsPanel", () => {
+  it("always exposes both dismiss buttons during a slow initial load and ignores its late reply", async () => {
+    let finish: (value: AgentExtensions) => void = () => {};
+    vi.mocked(agentApi.getExtensions).mockImplementationOnce(
+      () =>
+        new Promise<AgentExtensions>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    render(<PanelHarness />);
+    await flush();
+    const close = screen.getByRole("button", { name: "关闭弹窗" });
+    expect(close).toBeEnabled();
+    expect(close).toHaveFocus();
+    expect(screen.getByRole("button", { name: "返回工作台" })).toBeEnabled();
+    fireEvent.click(close);
+    await flush();
+    expect(changeOpen).toHaveBeenCalledWith(false);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await act(async () => finish({ ...catalog, pendingReload: true }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("lets Escape dismiss a loading modal while preserving standard modal isolation", async () => {
+    vi.mocked(agentApi.getExtensions).mockImplementationOnce(
+      () => new Promise(() => {}),
+    );
+    render(<PanelHarness />);
+    await flush();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(document.body.style.pointerEvents).toBe("none");
+    expect(
+      screen.queryByRole("button", { name: "打开扩展面板" }),
+    ).not.toBeInTheDocument();
+    const outside = screen.getByRole("button", {
+      name: "打开扩展面板",
+      hidden: true,
+    });
+    outside.focus();
+    expect(screen.getByRole("button", { name: "关闭弹窗" })).toHaveFocus();
+    fireEvent.keyDown(document, { key: "Escape" });
+    await flush();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(document.body.style.pointerEvents).toBe("");
+    expect(
+      screen.getByRole("button", { name: "打开扩展面板" }),
+    ).toBeInTheDocument();
+  });
+
+  it("can return to the workbench using the fixed footer button", async () => {
+    render(<PanelHarness />);
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: "返回工作台" }));
+    await flush();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(changeOpen).toHaveBeenCalledWith(false);
+  });
+
+  it("does not overwrite a newly reopened view with the previous initial load", async () => {
+    let finish: (value: AgentExtensions) => void = () => {};
+    vi.mocked(agentApi.getExtensions)
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      )
+      .mockResolvedValueOnce({
+        ...catalog,
+        skills: [{ ...catalog.skills[0], name: "当前技能" }],
+      });
+    render(<PanelHarness />);
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: "关闭弹窗" }));
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: "打开扩展面板" }));
+    await flush();
+    await act(async () =>
+      finish({
+        ...catalog,
+        skills: [{ ...catalog.skills[0], name: "旧的迟到技能" }],
+      }),
+    );
+    expect(screen.getByText("当前技能")).toBeInTheDocument();
+    expect(screen.queryByText("旧的迟到技能")).not.toBeInTheDocument();
+  });
+
+  it("allows dismissal during a write but preserves its mutation barrier across reopen", async () => {
+    let finishOld: (value: AgentExtensions) => void = () => {};
+    let finishNew: (value: AgentExtensions) => void = () => {};
+    vi.mocked(agentApi.setSkillEnabled)
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finishOld = resolve;
+          }),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finishNew = resolve;
+          }),
+      );
+    render(<PanelHarness />);
+    await flush();
+    fireEvent.click(screen.getByLabelText("启用技能 PDF"));
+    fireEvent.click(screen.getByRole("button", { name: "关闭弹窗" }));
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: "打开扩展面板" }));
+    await flush();
+    expect(screen.getByLabelText("启用技能 PDF")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "关闭弹窗" })).toBeEnabled();
+    fireEvent.click(screen.getByLabelText("启用技能 PDF"));
+    expect(agentApi.setSkillEnabled).toHaveBeenCalledTimes(1);
+    await act(async () =>
+      finishOld({
+        ...catalog,
+        skills: [{ ...catalog.skills[0], name: "旧写入结果" }],
+      }),
+    );
+    await flush();
+    expect(screen.queryByText("旧写入结果")).not.toBeInTheDocument();
+    const toggle = screen.getByLabelText("启用技能 PDF");
+    expect(toggle).toBeEnabled();
+    fireEvent.click(toggle);
+    expect(toggle).toBeDisabled();
+    fireEvent.click(toggle);
+    expect(agentApi.setSkillEnabled).toHaveBeenCalledTimes(2);
+    await act(async () =>
+      finishNew({
+        ...catalog,
+        skills: [{ ...catalog.skills[0], enabled: false }],
+      }),
+    );
+    expect(toggle).toBeEnabled();
+    expect(toggle).not.toBeChecked();
+  });
+
+  it("does not start a post-reload catalog read after dismissal or write stale reload state", async () => {
+    let finish: () => void = () => {};
+    reload.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    vi.mocked(agentApi.getExtensions)
+      .mockResolvedValueOnce({ ...catalog, pendingReload: true })
+      .mockResolvedValueOnce(catalog);
+    render(<PanelHarness />);
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: "重新载入扩展" }));
+    fireEvent.click(screen.getByRole("button", { name: "返回工作台" }));
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: "打开扩展面板" }));
+    await flush();
+    await act(async () => finish());
+    expect(agentApi.getExtensions).toHaveBeenCalledTimes(2);
+    expect(
+      screen.queryByRole("button", { name: "重新载入扩展" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByLabelText("启用技能 PDF")).toBeEnabled();
+  });
+
+  it("ignores a late reload snapshot after closing and reopening the modal", async () => {
+    let finish: (value: AgentExtensions) => void = () => {};
+    vi.mocked(agentApi.getExtensions)
+      .mockResolvedValueOnce({ ...catalog, pendingReload: true })
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      )
+      .mockResolvedValueOnce({
+        ...catalog,
+        skills: [{ ...catalog.skills[0], name: "重开后的技能" }],
+      });
+    render(<PanelHarness />);
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: "重新载入扩展" }));
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: "关闭弹窗" }));
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: "打开扩展面板" }));
+    await flush();
+    await act(async () =>
+      finish({
+        ...catalog,
+        skills: [{ ...catalog.skills[0], name: "旧重载结果" }],
+      }),
+    );
+    expect(screen.getByText("重开后的技能")).toBeInTheDocument();
+    expect(screen.queryByText("旧重载结果")).not.toBeInTheDocument();
+  });
+
+  it("does not submit an MCP write after dismissal during the configuration read", async () => {
+    let finish: (
+      value: Awaited<ReturnType<typeof agentApi.getExtensionConfig>>,
+    ) => void = () => {};
+    vi.mocked(agentApi.getExtensionConfig).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    render(<PanelHarness />);
+    await flush();
+    fireEvent.click(screen.getByRole("tab", { name: "MCP 工具" }));
+    fireEvent.change(screen.getByLabelText("名称"), {
+      target: { value: "第一次保存" },
+    });
+    fireEvent.change(screen.getByLabelText("服务地址"), {
+      target: { value: "https://example.test/first" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "保存服务" }));
+    fireEvent.click(screen.getByRole("button", { name: "关闭弹窗" }));
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: "打开扩展面板" }));
+    await flush();
+    fireEvent.change(screen.getByLabelText("名称"), {
+      target: { value: "新的输入" },
+    });
+    await act(async () =>
+      finish({ revision: 4, mcp: { servers: {} }, pluginOptions: {} }),
+    );
+    await flush();
+    expect(agentApi.saveExtensionConfig).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("名称")).toHaveValue("新的输入");
+  });
+
+  it("serializes an already-dispatched MCP save across close and reopen before accepting another change", async () => {
+    let finish: (value: AgentExtensions) => void = () => {};
+    vi.mocked(agentApi.saveExtensionConfig).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    render(<PanelHarness />);
+    await flush();
+    fireEvent.click(screen.getByRole("tab", { name: "MCP 工具" }));
+    fireEvent.click(screen.getByLabelText("启用工具 docs"));
+    await flush();
+    expect(agentApi.saveExtensionConfig).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "关闭弹窗" }));
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: "打开扩展面板" }));
+    await flush();
+    expect(screen.getByLabelText("启用工具 docs")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "返回工作台" })).toBeEnabled();
+    fireEvent.click(screen.getByLabelText("启用工具 docs"));
+    expect(agentApi.getExtensionConfig).toHaveBeenCalledTimes(1);
+    expect(agentApi.saveExtensionConfig).toHaveBeenCalledTimes(1);
+    vi.mocked(agentApi.getExtensions).mockResolvedValueOnce({
+      ...catalog,
+      revision: 5,
+      mcpServers: [{ id: "docs", type: "remote", enabled: false }],
+    });
+    await act(async () => finish({ ...catalog, revision: 5 }));
+    await flush();
+    const toggle = screen.getByLabelText("启用工具 docs");
+    expect(toggle).toBeEnabled();
+    expect(toggle).not.toBeChecked();
+    vi.mocked(agentApi.getExtensionConfig).mockResolvedValueOnce({
+      revision: 5,
+      mcp: {
+        servers: {
+          docs: {
+            type: "remote",
+            url: "https://example.test/mcp",
+            disabled: true,
+          },
+        },
+      },
+      pluginOptions: {},
+    });
+    fireEvent.click(toggle);
+    await flush();
+    expect(agentApi.saveExtensionConfig).toHaveBeenCalledTimes(2);
+    expect(agentApi.saveExtensionConfig).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        revision: 5,
+        mcp: {
+          servers: {
+            docs: {
+              type: "remote",
+              url: "https://example.test/mcp",
+              disabled: false,
+            },
+          },
+        },
+      }),
+    );
+  });
+
+  it("does not import a skill selected after its dialog has already been dismissed", async () => {
+    let finish: (value: string | null) => void = () => {};
+    vi.mocked(settingsApi.pickDirectory).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    render(<PanelHarness />);
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: "导入技能目录" }));
+    fireEvent.click(screen.getByRole("button", { name: "关闭弹窗" }));
+    await flush();
+    await act(async () => finish("D:/fixture/late-skill"));
+    expect(agentApi.importSkill).not.toHaveBeenCalled();
+  });
+
+  it("keeps native window actions inside the modal's accessible subtree with distinct close labels", async () => {
+    const closeWindow = vi.fn();
+    render(
+      <PanelHarness
+        windowControls={<button onClick={closeWindow}>关闭窗口</button>}
+      />,
+    );
+    await flush();
+    const windowButton = screen.getByRole("button", { name: "关闭窗口" });
+    expect(windowButton.closest('[role="dialog"]')).toBe(
+      screen.getByRole("dialog"),
+    );
+    expect(screen.getByRole("group", { name: "窗口操作" })).toContainElement(
+      windowButton,
+    );
+    fireEvent.click(windowButton);
+    expect(closeWindow).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "关闭弹窗" })).toBeEnabled();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
   it("shows the real loaded plugin error and pending revision instead of treating enabled as loaded", async () => {
     vi.mocked(agentApi.getExtensions).mockResolvedValue({
       ...catalog,

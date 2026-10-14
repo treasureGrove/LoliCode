@@ -96,7 +96,7 @@ const DialogHeader = ({
 }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
     className={cn(
-      "flex flex-shrink-0 flex-col gap-1 px-6 pb-3 pt-5 text-start",
+      "tai-dialog-header flex flex-shrink-0 flex-col gap-1 px-6 pb-3 pt-5 text-start",
       className,
     )}
     {...props}
@@ -110,7 +110,7 @@ const DialogFooter = ({
 }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
     className={cn(
-      "flex flex-shrink-0 flex-row items-center justify-end gap-2 px-6 pb-5 pt-3",
+      "tai-dialog-footer flex flex-shrink-0 flex-row items-center justify-end gap-2 px-6 pb-5 pt-3",
       className,
     )}
     {...props}

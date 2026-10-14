@@ -30,7 +30,7 @@ export function AgentPermissionCard({
   };
   return (
     <section aria-label="需要你的许可" className="wb-permission border p-4">
-      <h3 className="flex items-center gap-2 text-body font-medium">
+      <h3 className="wb-permission-heading flex items-center gap-2 text-body font-medium">
         <ShieldCheck className="h-4 w-4" />
         需要你的许可
       </h3>
@@ -38,7 +38,7 @@ export function AgentPermissionCard({
         {request.description || request.action}
       </p>
       {request.resources.length > 0 && (
-        <ul className="mt-2 space-y-1 text-caption text-fg-2">
+        <ul className="wb-permission-resources mt-2 space-y-1 text-caption">
           {request.resources.map((resource, index) => (
             <li key={index} className="break-all">
               {resource}
@@ -47,7 +47,11 @@ export function AgentPermissionCard({
         </ul>
       )}
       <div className="mt-3 flex flex-wrap gap-2">
-        <Button disabled={busy} onClick={() => void reply("once")}>
+        <Button
+          className="wb-permission-allow"
+          disabled={busy}
+          onClick={() => void reply("once")}
+        >
           允许一次
         </Button>
         <Button

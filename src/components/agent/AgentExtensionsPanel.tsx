@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
   Blocks,
@@ -8,6 +8,7 @@ import {
   RefreshCw,
   Sparkles,
   Trash2,
+  X,
 } from "lucide-react";
 import {
   Dialog,
@@ -15,10 +16,13 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogClose,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import { agentApi } from "@/lib/api/agent";
 import { settingsApi } from "@/lib/api";
 import { agentErrorMessage } from "@/hooks/useAgentSnapshot";
+import { WindowControlsContext } from "@/components/shell/AppPageHeader";
 import type {
   AgentExtensionConfig,
   AgentExtensions,
@@ -79,60 +83,97 @@ export function AgentExtensionsPanel({
   const [serverName, setServerName] = useState("");
   const [serverUrl, setServerUrl] = useState("");
   const [serverToken, setServerToken] = useState("");
-  const pending = useRef(false);
+  const windowControls = useContext(WindowControlsContext);
+  const closeButton = useRef<HTMLButtonElement>(null);
+  const opener = useRef<HTMLElement | null>(null);
+  const visibleRef = useRef(visible);
+  visibleRef.current = visible;
+  const pending = useRef<{ id: number; generation: number } | null>(null);
+  const loading = useRef<number | null>(null);
+  const catalogRequestId = useRef(0);
+  const operationId = useRef(0);
   const generation = useRef(0);
-  useEffect(() => {
-    const current = ++generation.current;
-    if (!visible) return;
+  const isCurrent = (current: number) =>
+    visibleRef.current && generation.current === current;
+  const dismiss = () => {
+    // Invalidate synchronously: an IPC reply may arrive before effect cleanup.
+    generation.current += 1;
+    visibleRef.current = false;
+    onOpenChange(false);
+  };
+  const readCatalog = async (current: number) => {
+    const requestId = ++catalogRequestId.current;
+    loading.current = requestId;
     setBusy(true);
     setError(null);
-    setCatalog(null);
-    agentApi
-      .getExtensions()
-      .then((next) => {
-        if (generation.current === current) {
-          setCatalog(next);
-          setNeedsReload(Boolean(next.pendingReload));
-        }
-      })
-      .catch((cause) => {
-        if (generation.current === current) setError(agentErrorMessage(cause));
-      })
-      .finally(() => {
-        if (generation.current === current) setBusy(false);
-      });
-    return () => {
-      generation.current += 1;
-    };
-  }, [visible]);
-  const run = async (operation: () => Promise<AgentExtensions | null>) => {
-    if (pending.current) return;
-    pending.current = true;
-    setBusy(true);
-    setError(null);
-    const current = generation.current;
     try {
-      const next = await operation();
-      if (next && generation.current === current) {
+      const next = await agentApi.getExtensions();
+      if (isCurrent(current) && loading.current === requestId) {
         setCatalog(next);
-        setNeedsReload(true);
+        setNeedsReload(Boolean(next.pendingReload));
       }
-      return Boolean(next);
     } catch (cause) {
-      if (generation.current === current) setError(agentErrorMessage(cause));
-      return false;
+      if (isCurrent(current) && loading.current === requestId)
+        setError(agentErrorMessage(cause));
     } finally {
-      pending.current = false;
-      if (generation.current === current) setBusy(false);
+      if (loading.current === requestId) loading.current = null;
+      if (isCurrent(current))
+        setBusy(Boolean(pending.current || loading.current));
     }
   };
-  const pickSkill = () =>
-    run(async () => {
+  useEffect(() => {
+    const current = ++generation.current;
+    loading.current = null;
+    if (!visible) return;
+    setCatalog(null);
+    setNeedsReload(false);
+    void readCatalog(current);
+    return () => {
+      generation.current += 1;
+      loading.current = null;
+    };
+  }, [visible]);
+  const run = async (
+    operation: () => Promise<AgentExtensions | null>,
+    markReload = true,
+  ) => {
+    const current = generation.current;
+    if (!isCurrent(current) || pending.current) return false;
+    const id = ++operationId.current;
+    pending.current = { id, generation: current };
+    setBusy(true);
+    setError(null);
+    let changed = false;
+    try {
+      const next = await operation();
+      changed = markReload && Boolean(next);
+      if (next && isCurrent(current)) {
+        setCatalog(next);
+        setNeedsReload(markReload || Boolean(next.pendingReload));
+      }
+      return isCurrent(current) && Boolean(next);
+    } catch (cause) {
+      if (isCurrent(current)) setError(agentErrorMessage(cause));
+      return false;
+    } finally {
+      // Dismissal does not cancel a dispatched write. Keep its mutation lock
+      // across reopen, then read fresh state instead of applying its old reply.
+      if (changed && !isCurrent(current) && visibleRef.current)
+        await readCatalog(generation.current);
+      if (pending.current?.id === id) pending.current = null;
+      if (visibleRef.current) setBusy(Boolean(loading.current));
+    }
+  };
+  const pickSkill = () => {
+    const current = generation.current;
+    return run(async () => {
       const path = await settingsApi.pickDirectory();
-      return path ? agentApi.importSkill(path) : null;
+      return path && isCurrent(current) ? agentApi.importSkill(path) : null;
     });
-  const pickPlugin = (directory: boolean) =>
-    run(async () => {
+  };
+  const pickPlugin = (directory: boolean) => {
+    const current = generation.current;
+    return run(async () => {
       const selected = await open({
         directory,
         multiple: false,
@@ -141,15 +182,18 @@ export function AgentExtensionsPanel({
           filters: [{ name: "插件", extensions: ["js", "mjs", "ts"] }],
         }),
       });
-      return typeof selected === "string"
+      return typeof selected === "string" && isCurrent(current)
         ? agentApi.installPlugin(selected)
         : null;
     });
+  };
   const updateMcp = (
     update: (servers: Record<string, unknown>) => Record<string, unknown>,
-  ) =>
-    run(async () => {
+  ) => {
+    const current = generation.current;
+    return run(async () => {
       const config = await agentApi.getExtensionConfig();
+      if (!isCurrent(current)) return null;
       const raw = config.mcp.servers;
       const servers =
         raw && typeof raw === "object" && !Array.isArray(raw)
@@ -161,7 +205,9 @@ export function AgentExtensionsPanel({
       };
       return agentApi.saveExtensionConfig(next);
     });
+  };
   const addMcp = async () => {
+    const current = generation.current;
     const id = serverName.trim();
     if (!id || !serverUrl.trim()) return;
     try {
@@ -182,50 +228,65 @@ export function AgentExtensionsPanel({
           },
         };
       });
-      if (saved) {
+      if (saved && isCurrent(current)) {
         setServerName("");
         setServerUrl("");
         setServerToken("");
       }
     } catch (cause) {
-      setError(agentErrorMessage(cause));
+      if (isCurrent(current)) setError(agentErrorMessage(cause));
     }
   };
   const reload = async () => {
-    if (working || pending.current) return;
-    pending.current = true;
-    setBusy(true);
-    setError(null);
-    try {
+    if (working) return;
+    const current = generation.current;
+    await run(async () => {
       await onReload();
-      const next = await agentApi.getExtensions();
-      setCatalog(next);
-      setNeedsReload(Boolean(next.pendingReload));
-    } catch (cause) {
-      setError(agentErrorMessage(cause));
-    } finally {
-      pending.current = false;
-      setBusy(false);
-    }
+      return isCurrent(current) ? agentApi.getExtensions() : null;
+    }, false);
   };
   return (
     <Dialog
       open={visible}
       onOpenChange={(value) => {
-        if (!busy) onOpenChange(value);
+        if (value) onOpenChange(true);
+        else dismiss();
       }}
     >
       <DialogContent
-        className="wb-extensions p-5"
-        onEscapeKeyDown={(event) => {
-          if (busy) event.preventDefault();
+        className="wb-extensions"
+        onOpenAutoFocus={(event) => {
+          opener.current =
+            document.activeElement instanceof HTMLElement
+              ? document.activeElement
+              : null;
+          event.preventDefault();
+          closeButton.current?.focus();
+        }}
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          if (visibleRef.current) return;
+          if (opener.current?.isConnected) opener.current.focus();
         }}
       >
-        <DialogHeader>
-          <DialogTitle>技能与插件</DialogTitle>
-          <DialogDescription>
-            只配置 LoliCode 工作台，已安装的技能可以由 Agent 按任务选用。
-          </DialogDescription>
+        <DialogHeader className="wb-extension-header">
+          <div className="wb-extension-heading">
+            <DialogTitle>技能与插件</DialogTitle>
+            <DialogDescription>
+              只配置 LoliCode 工作台，已安装的技能可以由 Agent 按任务选用。
+            </DialogDescription>
+          </div>
+          <DialogClose asChild>
+            <button
+              ref={closeButton}
+              type="button"
+              className="wb-extension-close"
+              aria-label="关闭弹窗"
+              title="关闭技能与插件"
+            >
+              <X size={18} aria-hidden="true" />
+            </button>
+          </DialogClose>
         </DialogHeader>
         <div className="wb-extension-tabs" role="tablist" aria-label="扩展类型">
           {(
@@ -260,7 +321,7 @@ export function AgentExtensionsPanel({
           <button
             className="wb-mode-button"
             onClick={() => {
-              void run(async () => agentApi.getExtensions());
+              void run(async () => agentApi.getExtensions(), false);
             }}
           >
             重新读取
@@ -569,25 +630,42 @@ export function AgentExtensionsPanel({
             </>
           )}
         </div>
-        {needsReload && (
-          <div className="wb-extension-reload">
-            <p>
-              {!projectOpen
-                ? "已保存，打开项目后可以载入扩展。"
-                : working
-                  ? "已保存。任务结束后重新载入扩展，当前任务继续使用原配置。"
-                  : "已保存，重新载入后供工作台使用。"}
-            </p>
-            <button
-              className="wb-mode-button"
-              disabled={busy || working || !projectOpen}
-              onClick={() => void reload()}
+        <DialogFooter className="wb-extension-footer">
+          {windowControls && (
+            <div
+              className="wb-extension-window-controls"
+              role="group"
+              aria-label="窗口操作"
             >
-              <RefreshCw size={14} />
-              重新载入扩展
+              <span>窗口</span>
+              {windowControls}
+            </div>
+          )}
+          {needsReload && (
+            <div className="wb-extension-reload">
+              <p>
+                {!projectOpen
+                  ? "已保存，打开项目后可以载入扩展。"
+                  : working
+                    ? "已保存。任务结束后重新载入扩展，当前任务继续使用原配置。"
+                    : "已保存，重新载入后供工作台使用。"}
+              </p>
+              <button
+                className="wb-mode-button"
+                disabled={busy || working || !projectOpen}
+                onClick={() => void reload()}
+              >
+                <RefreshCw size={14} />
+                重新载入扩展
+              </button>
+            </div>
+          )}
+          <DialogClose asChild>
+            <button type="button" className="wb-extension-dismiss">
+              返回工作台
             </button>
-          </div>
-        )}
+          </DialogClose>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
