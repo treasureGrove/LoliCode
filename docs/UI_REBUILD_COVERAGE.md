@@ -83,7 +83,7 @@ pnpm exec vite --config C:/Users/admin/.codex/artifacts/tai-switch-ui-rebuild-pr
 已准备但未替代实测的仓库外辅助脚本：
 
 - `C:/Users/admin/.codex/artifacts/tai-switch-ui-rebuild-validation/prepare-native.ps1`：默认只创建全新隔离空白 profile；加 `-Launch -ExePath <新 EXE>` 才启动。若已有 TAI 进程则拒绝启动并保留现场。分别隔离 TAI home、客户端目录、APPDATA、LOCALAPPDATA、Hermes、MiniMax、OpenCode 与 WebView2，清除继承凭据变量。它不启动 mock 后端。
-- 同目录 `record-native-window.ps1 -SessionRecord <记录 JSON> -Seconds 45`：默认只检查并输出录制参数；加 `-Start` 才录制该自建进程主窗口。PID、程序路径和启动时间必须匹配，禁止抓整个桌面。默认 60fps 编码仅为视频采样参数，不能用作应用 60fps 证据。
+- 同目录 `record-native-window.ps1 -SessionRecord <记录 JSON> -Seconds 45`：默认只检查并输出录制参数；加 `-Start` 才录制该自建进程主窗口。PID、程序路径和启动时间必须匹配，禁止抓整个桌面。默认 30fps 编码仅为视频采样参数，不能用作应用帧率证据。
 - 同目录 `stop-native.ps1 -SessionRecord <记录 JSON>`：只关闭这份记录匹配的自建测试进程，不清理用户目录或其他应用。
 
 原生 GUI 使用 `computer-use` skill 的 `@oai/sky`，由 `node_repl` 导入；先读取对应 `SKILL.md`、`docs/guidance.md`、`api.md`、`confirmations.md`。通过 `list_apps` / `list_windows` 选择实际返回的唯一测试窗口，每次按“观察 → 一次操作 → 刷新”执行。不要把 `mcp__cua_repl` 中禁用的 native surface 误判为整个 Windows Computer Use 不可用；不要另写 PowerShell UI Automation 与它混用。
@@ -112,7 +112,7 @@ pnpm exec tauri build --bundles nsis --config src-tauri/tauri.test.conf.json
 - `tests/integration/App.test.tsx` 定向 21 项通过：导航测试已通过真实客户端切换菜单选择，保留供应商动作、草稿离页保护、客户端切换滚动契约、OpenClaw/Hermes 页面入口及旧 Skills 发现入口 Esc 返回断言。该组夹具显式跳过首次说明；首次说明行为仍由对应组件测试负责。
 - 仓库外三个原生验证脚本通过 PowerShell 语法检查；仅运行了“准备 profile”，没有以准备结果冒充原生启动或交互验证。
 
-以上仅为本文件维护时的局部结果。全量测试、最新构建和真实窗口证据由最终交付验证记录补齐。
+最终源码全量回归为 **218 个文件、2,641 项全部通过**，类型、改动文件格式和前端生产构建通过。详情见 `FORK_VALIDATION.md`。用户随后明确表示“不用录屏，我自己debug”，本轮停止后续窗口操作与录屏；原生交互、系统缩放和帧率采样不作已验收声明。
 
 ## 独立源码终审结论
 
