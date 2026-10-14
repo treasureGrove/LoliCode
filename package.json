@@ -1,7 +1,7 @@
 {
   "name": "lolicode",
-  "version": "4.0.10",
-  "description": "Lolicode desktop coding agent with shared model channels",
+  "version": "4.0.11",
+  "description": "LoliCode desktop coding agent with shared model channels",
   "type": "module",
   "scripts": {
     "dev": "pnpm tauri dev",

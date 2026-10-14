@@ -38,6 +38,13 @@ impl LiveState {
         self.tracked.iter().cloned().collect()
     }
 
+    pub fn untrack(&mut self, session_id: &str) {
+        self.tracked.remove(session_id);
+        self.pending.remove(session_id);
+        self.messages
+            .retain(|_, message| message.session_id != session_id);
+    }
+
     pub fn disconnected(&mut self) {
         self.connected = false;
         for message in self.messages.values_mut() {

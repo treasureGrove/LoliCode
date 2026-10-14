@@ -15,9 +15,51 @@ pub struct AgentSession {
     pub title: String,
     pub project_path: String,
     pub mode: String,
+    #[serde(default = "default_permission_mode")]
+    pub permission_mode: String,
+    /// Host-owned view metadata. The engine does not provide archive/pin writes.
+    #[serde(default)]
+    pub pinned: bool,
+    #[serde(default)]
+    pub archived: bool,
     pub model: Option<AgentModelRef>,
     pub created_at: u64,
     pub updated_at: u64,
+}
+
+fn default_permission_mode() -> String {
+    "custom".into()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSkill {
+    pub id: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub autoinvoke: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentPlugin {
+    pub id: Option<String>,
+    pub source_type: String,
+    pub target: Option<String>,
+    pub version: Option<String>,
+    pub server: bool,
+    pub tui: bool,
+    pub rpc: bool,
+    pub status: String,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentMcpServer {
+    pub name: String,
+    pub status: String,
+    pub error: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -82,6 +124,10 @@ pub struct AgentPermission {
     pub resources: Vec<String>,
     pub description: Option<String>,
     pub tool_name: Option<String>,
+    /// Exact native tool input; parsed permission resources alone omit shell
+    /// operators and cannot be used to auto-approve a command.
+    #[serde(default)]
+    pub tool_input: Option<Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

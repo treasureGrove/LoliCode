@@ -80,7 +80,17 @@ pub use store::AppState;
 #[cfg(feature = "test-hooks")]
 pub mod agent_test_support {
     pub use crate::proxy::providers::codex_oauth_auth::CodexOAuthManager;
-    pub use crate::services::{agent::AgentWorkspace, channel_center, UsageCache};
+    pub use crate::services::{
+        agent::{AgentState, AgentWorkspace},
+        agent_extensions::{AgentExtensionStore, AgentExtensionsCatalog},
+        channel_center, UsageCache,
+    };
+    pub async fn extensions_runtime_catalog(
+        state: &AgentState,
+        catalog: AgentExtensionsCatalog,
+    ) -> Result<serde_json::Value, String> {
+        crate::commands::agent_extensions::runtime_catalog(state, catalog).await
+    }
 }
 use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
@@ -515,7 +525,7 @@ pub fn run() {
 
                 // 用户配置存在数据库中，数据库尚未打开时使用保守的 Info 级别。
                 log::set_max_level(log::LevelFilter::Info);
-                log::info!("=== Lolicode v{} started ===", env!("CARGO_PKG_VERSION"));
+                log::info!("=== LoliCode v{} started ===", env!("CARGO_PKG_VERSION"));
             }
 
             // 首次读取覆盖路径时 logger 尚未可用；此处重放一次，
@@ -745,7 +755,7 @@ pub fn run() {
             // 落成 "default" provider 设为 current，再追加官方预设（is_current=false）。
             // 降级回旧版时，旧版的回填和整份写入仍靠这一行保住用户原来的 live 配置。
             //
-            // 捕获首次运行快照：所有全新装用户都会看到欢迎弹窗介绍 Lolicode 的工作方式。
+            // 捕获首次运行快照：所有全新装用户都会看到欢迎弹窗介绍 LoliCode 的工作方式。
             // 读失败时默认不弹，宁可漏弹也不要因为故障打扰用户。
             let first_run_already_confirmed = crate::settings::get_settings()
                 .first_run_notice_confirmed
@@ -1145,7 +1155,7 @@ pub fn run() {
 
             // 构建托盘
             let mut tray_builder = TrayIconBuilder::with_id(tray::TRAY_ID)
-                .tooltip("Lolicode") // 鼠标悬停提示
+                .tooltip("LoliCode") // 鼠标悬停提示
                 .on_tray_icon_event(|tray, event| {
                     // Windows 的习惯是左键打开应用、右键出菜单（按平台给默认值，不加开关）；
                     // macOS 左键仍出菜单；Linux（AppIndicator）不派发点击事件，只能出菜单。
@@ -1739,7 +1749,14 @@ pub fn run() {
             commands::get_agent_catalog,
             commands::open_agent_project,
             commands::list_agent_sessions,
+            commands::list_agent_projects,
+            commands::set_agent_project_metadata,
+            commands::remove_agent_project,
             commands::create_agent_session,
+            commands::update_agent_session,
+            commands::rename_agent_session,
+            commands::set_agent_session_metadata,
+            commands::delete_agent_session,
             commands::get_agent_session,
             commands::send_agent_message,
             commands::interrupt_agent_session,
@@ -1747,6 +1764,15 @@ pub fn run() {
             commands::reply_agent_question,
             commands::reject_agent_question,
             commands::close_agent_project,
+            commands::get_agent_extensions,
+            commands::set_agent_skill_enabled,
+            commands::import_agent_skill,
+            commands::remove_agent_skill,
+            commands::install_agent_plugin,
+            commands::set_agent_plugin_enabled,
+            commands::uninstall_agent_plugin,
+            commands::get_agent_extension_config,
+            commands::save_agent_extension_config,
             commands::get_channel_center,
             commands::save_channel_center,
             commands::discover_channel_models,
@@ -1958,7 +1984,7 @@ pub fn run() {
 /// 应用退出前的清理工作
 ///
 /// 把接上代理的客户端都指回直连（模式和代理路由保留，下次启动再接上），再停止代理。
-/// 客户端不能一直指着代理：开机自启默认关闭，Lolicode 一关客户端就连不上了。
+/// 客户端不能一直指着代理：开机自启默认关闭，LoliCode 一关客户端就连不上了。
 pub async fn cleanup_before_exit(app_handle: &tauri::AppHandle) {
     if let Some(agent) = app_handle.try_state::<services::agent::AgentState>() {
         if let Err(error) = agent.shutdown().await {
@@ -2124,7 +2150,7 @@ fn show_migration_error_dialog(app: &tauri::AppHandle, error: &str) -> bool {
         format!(
             "从旧版本迁移配置时发生错误：\n\n{error}\n\n\
             您的数据尚未丢失，旧配置文件仍然保留。\n\
-            建议回退到旧版本 Lolicode 以保护数据。\n\n\
+            建议回退到旧版本 LoliCode 以保护数据。\n\n\
             点击「重试」重新尝试迁移\n\
             点击「退出」关闭程序（可回退版本后重新打开）"
         )
@@ -2132,7 +2158,7 @@ fn show_migration_error_dialog(app: &tauri::AppHandle, error: &str) -> bool {
         format!(
             "An error occurred while migrating configuration:\n\n{error}\n\n\
             Your data is NOT lost - the old config file is still preserved.\n\
-            Consider rolling back to an older Lolicode version.\n\n\
+            Consider rolling back to an older LoliCode version.\n\n\
             Click 'Retry' to attempt migration again\n\
             Click 'Exit' to close the program"
         )
@@ -2197,7 +2223,7 @@ fn show_database_init_error_dialog(
             Common causes include: newer database version, corrupted file, permission issues, or low disk space.\n\n\
             Suggestions:\n\
             1) Back up the entire config directory (including cc-switch.db)\n\
-            2) If you see “database version is newer”, please upgrade Lolicode\n\
+            2) If you see “database version is newer”, please upgrade LoliCode\n\
             3) If this happened right after upgrading, consider rolling back to export/backup then upgrade again\n\n\
             Click 'Retry' to attempt initialization again\n\
             Click 'Exit' to close the program",

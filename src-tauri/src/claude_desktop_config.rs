@@ -1645,7 +1645,7 @@ mod tests {
         let original_profile = fs::read(&paths.profile_path).unwrap();
         let original_meta = fs::read(&paths.meta_path).unwrap();
         let source: crate::services::channel_center::ChannelSource = serde_json::from_value(json!({
-            "id":"gateway","name":"Lolicode 聚合","baseUrl":"http://127.0.0.1:15721/tai/catalogs/9/v1",
+            "id":"gateway","name":"LoliCode 聚合","baseUrl":"http://127.0.0.1:15721/tai/catalogs/9/v1",
             "apiKey":"fake-local-token","authKind":"api_key","protocol":"anthropic","enabled":true,
             "models":[{"id":"one/model-a","name":"Model A"}]
         })).unwrap();
@@ -1702,7 +1702,7 @@ mod tests {
         let paths = test_paths(temp.path());
         let db = test_db();
         let source: crate::services::channel_center::ChannelSource = serde_json::from_value(json!({
-            "id":"gateway","name":"Lolicode 聚合","baseUrl":"http://127.0.0.1:15721/tai/catalogs/9/v1",
+            "id":"gateway","name":"LoliCode 聚合","baseUrl":"http://127.0.0.1:15721/tai/catalogs/9/v1",
             "apiKey":"fake-local-token","authKind":"api_key","protocol":"anthropic","enabled":true,
             "models":[{"id":"one/model-a","name":"Model A"},{"id":"two/model-b","name":"Model B","contextLimit":1000000}]
         })).unwrap();

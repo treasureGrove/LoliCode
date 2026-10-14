@@ -1,173 +1,179 @@
-/* Temporary Lolicode palette. Assets and these tokens can be replaced independently. */
+/* Neutral workspace surfaces reference ZCode's Zai light/dark roles.
+   Local tokens remain compatible with the existing configuration pages. */
 :root {
-  --background: 252 50% 98%;
-  --foreground: 245 27% 18%;
+  --background: 0 0% 97%;
+  --foreground: 0 0% 5%;
   --card: 0 0% 100%;
-  --card-foreground: 245 27% 18%;
+  --card-foreground: 0 0% 5%;
   --popover: 0 0% 100%;
-  --popover-foreground: 245 27% 18%;
-  --primary: 251 67% 58%;
+  --popover-foreground: 0 0% 5%;
+  --primary: 0 0% 8%;
   --primary-foreground: 0 0% 100%;
-  --secondary: 250 48% 96%;
-  --secondary-foreground: 245 27% 18%;
-  --muted: 250 48% 96%;
-  --muted-foreground: 245 12% 42%;
-  --accent: 250 48% 96%;
-  --accent-foreground: 245 27% 18%;
-  --border: 250 30% 90%;
-  --input: 250 27% 84%;
-  --ring: 251 67% 58%;
-  --bg-app: #f8f7fd;
-  --bg-sidebar: #f1effa;
-  --bg-subtle: #f2effb;
-  --bg-selected: #e9e3fc;
-  --bg-card: #fff;
-  --border-strong: #cdc5e5;
-  --text-1: #28223d;
-  --text-2: #625c75;
-  --text-3: #777085;
-  --action-bg: #7560dc;
-  --action-fg: #fff;
-  --action-hover: #6550c7;
-  --action-text: #6750c7;
-  --action-soft: #eee8ff;
-  --inverse-bg: #302846;
-  --inverse-fg: #fff;
-  --inverse-hover: #433a5e;
-  --overlay: rgb(28 21 48 / 35%);
-  --control-off: #aba3bd;
-  --direct-fill: #6286d9;
-  --direct-text: #4268bd;
-  --direct-soft: #edf2ff;
-  --direct-solid: #4268bd;
-  --route-fill: #33968d;
-  --route-text: #277c74;
-  --route-soft: #eaf7f5;
-  --route-solid: #277c74;
-  --stack-fill: #8d70d7;
-  --stack-text: #7253bc;
-  --stack-soft: #f1ebfc;
-  --stack-solid: #7253bc;
-  --chart-1: #7560dc;
-  --chart-2: #cc70a0;
-  --chart-grid: #eae5f5;
-  --heat-4: #5140a5;
-  --shadow-sm: 0 2px 6px rgb(58 40 106 / 4%);
-  --shadow-md: 0 8px 28px rgb(58 40 106 / 7%);
-  --shadow-lg: 0 24px 80px rgb(37 26 68 / 18%);
+  --secondary: 0 0% 94%;
+  --secondary-foreground: 0 0% 12%;
+  --muted: 0 0% 94%;
+  --muted-foreground: 0 0% 44%;
+  --accent: 0 0% 94%;
+  --accent-foreground: 0 0% 12%;
+  --border: 0 0% 88%;
+  --input: 0 0% 84%;
+  --ring: 0 0% 25%;
+  --bg-app: #f8f8f8;
+  --bg-sidebar: #f0f0f0;
+  --bg-subtle: #f3f3f3;
+  --bg-selected: #e7e7e7;
+  --bg-card: #ffffff;
+  --border-strong: #cecece;
+  --text-1: #171717;
+  --text-2: #626262;
+  --text-3: #858585;
+  --action-bg: #1c1c1c;
+  --action-fg: #ffffff;
+  --action-hover: #373737;
+  --action-text: #202020;
+  --action-soft: #ededed;
+  --inverse-bg: #202020;
+  --inverse-fg: #ffffff;
+  --inverse-hover: #363636;
+  --overlay: rgb(0 0 0 / 32%);
+  --control-off: #a3a3a3;
+  --chart-1: #303030;
+  --chart-2: #638597;
+  --chart-grid: #e7e7e7;
+  --heat-4: #414141;
+  --shadow-sm: 0 1px 3px rgb(0 0 0 / 3%);
+  --shadow-md: 0 8px 26px rgb(0 0 0 / 7%);
+  --shadow-lg: 0 20px 70px rgb(0 0 0 / 16%);
 }
-
 .dark {
-  --background: 252 22% 11%;
-  --foreground: 252 30% 93%;
-  --card: 251 20% 15%;
-  --card-foreground: 252 30% 93%;
-  --popover: 251 20% 15%;
-  --popover-foreground: 252 30% 93%;
-  --primary: 253 73% 74%;
-  --primary-foreground: 252 22% 11%;
-  --secondary: 251 20% 19%;
-  --secondary-foreground: 252 30% 93%;
-  --muted: 251 20% 19%;
-  --muted-foreground: 251 17% 72%;
-  --accent: 251 20% 21%;
-  --accent-foreground: 252 30% 93%;
-  --border: 250 19% 25%;
-  --input: 250 19% 33%;
-  --ring: 253 73% 74%;
-  --bg-app: #191623;
-  --bg-sidebar: #15121e;
-  --bg-subtle: #292438;
-  --bg-selected: #39304e;
-  --bg-card: #242030;
-  --border-strong: #574a6d;
-  --text-1: #ede9f7;
-  --text-2: #bdb5d2;
-  --text-3: #a69eb8;
-  --action-bg: #a792ed;
-  --action-fg: #20182e;
-  --action-hover: #b9a6f7;
-  --action-text: #bca8fa;
-  --action-soft: #362b4e;
-  --inverse-bg: #ede9f7;
-  --inverse-fg: #20182e;
-  --inverse-hover: #fff;
-  --chart-1: #bba4f4;
-  --chart-2: #e69cbe;
-  --chart-grid: #393047;
-  --heat-4: var(--chart-1);
+  --background: 0 0% 9%;
+  --foreground: 0 0% 94%;
+  --card: 0 0% 13%;
+  --card-foreground: 0 0% 94%;
+  --popover: 0 0% 13%;
+  --popover-foreground: 0 0% 94%;
+  --primary: 0 0% 95%;
+  --primary-foreground: 0 0% 10%;
+  --secondary: 0 0% 17%;
+  --secondary-foreground: 0 0% 92%;
+  --muted: 0 0% 17%;
+  --muted-foreground: 0 0% 68%;
+  --accent: 0 0% 19%;
+  --accent-foreground: 0 0% 92%;
+  --border: 0 0% 22%;
+  --input: 0 0% 30%;
+  --ring: 0 0% 65%;
+  --bg-app: #161616;
+  --bg-sidebar: #161616;
+  --bg-subtle: #252525;
+  --bg-selected: #303030;
+  --bg-card: #202020;
+  --border-strong: #444444;
+  --text-1: #ededed;
+  --text-2: #b0b0b0;
+  --text-3: #808080;
+  --action-bg: #eaeaea;
+  --action-fg: #171717;
+  --action-hover: #ffffff;
+  --action-text: #e4e4e4;
+  --action-soft: #303030;
+  --inverse-bg: #eaeaea;
+  --inverse-fg: #171717;
+  --inverse-hover: #ffffff;
+  --chart-1: #dedede;
+  --chart-2: #91b0c0;
+  --chart-grid: #343434;
+  --heat-4: #dedede;
 }
-
 .tai-shell-sidebar {
-  --bg-sidebar: #f0edf9;
-  --bg-subtle: #eae4fa;
-  --bg-selected: #e1d7f8;
-  --text-1: #31274a;
-  --text-2: #665d7d;
-  --text-3: #82788f;
-  --border: 250 28% 87%;
-  --ring: 251 67% 58%;
+  --bg-sidebar: #f0f0f0;
+  --bg-subtle: #e7e7e7;
+  --bg-selected: #dedede;
+  --text-1: #202020;
+  --text-2: #666666;
+  --text-3: #858585;
+  --border: 0 0% 87%;
+  --ring: 0 0% 35%;
   border-inline-end: 1px solid hsl(var(--border));
 }
 .dark .tai-shell-sidebar {
-  --bg-sidebar: #17131f;
-  --bg-subtle: #2a233a;
-  --bg-selected: #3a2e51;
-  --text-1: #eae3f8;
-  --text-2: #bdb0d3;
-  --text-3: #a092b7;
-  --border: 250 20% 25%;
-  --ring: 253 73% 74%;
+  --bg-sidebar: #161616;
+  --bg-subtle: #252525;
+  --bg-selected: #303030;
+  --text-1: #eeeeee;
+  --text-2: #aaaaaa;
+  --text-3: #858585;
+  --border: 0 0% 23%;
+  --ring: 0 0% 65%;
+}
+.lolicode-global-rail .tai-shell-brand,
+.lolicode-global-rail[data-collapsed="true"] .tai-shell-brand {
+  height: 54px;
+  min-height: 54px;
+  padding: 12px;
+  justify-content: center;
+}
+.lolicode-global-rail .tai-shell-mark {
+  width: 28px;
+  height: 28px;
+}
+.lolicode-global-rail .tai-shell-directory {
+  padding: 6px;
+}
+.lolicode-global-rail .tai-shell-task-group {
+  gap: 6px;
+}
+.lolicode-global-rail[data-collapsed="true"] .tai-shell-nav-item {
+  width: 40px;
+  min-height: 40px;
+  padding: 0;
+  margin-inline: auto;
+}
+.lolicode-global-rail .tai-shell-footer {
+  padding: 8px 6px;
+  gap: 6px;
+}
+.lolicode-global-rail .tai-shell-selection {
+  background: var(--bg-selected);
+  box-shadow: none;
+  border-radius: 8px;
 }
 .tai-shell-sidebar :focus-visible {
   outline-color: hsl(var(--ring));
-}
-.tai-shell-wordmark > span {
-  font-family: inherit;
-  font-size: 19px;
-  font-weight: 730;
-  letter-spacing: -0.6px;
-}
-.tai-shell-wordmark small {
-  font-size: 8px;
-  letter-spacing: 1.2px;
-}
-.tai-shell-selection {
-  background: var(--bg-selected);
-  box-shadow: inset 2px 0 0 var(--action-bg);
 }
 .tai-shell-nav-item[aria-current="page"] {
   color: var(--text-1);
 }
 .tai-shell-nav-item:hover {
-  background: color-mix(in srgb, var(--bg-selected) 45%, transparent);
+  background: var(--bg-subtle);
 }
-.tai-shell-footer,
-.tai-shell-sidebar[data-collapsed="true"]
-  .tai-shell-task-group
-  + .tai-shell-task-group {
+.tai-shell-footer {
   border-color: hsl(var(--border));
 }
 .tai-main {
-  background-image: radial-gradient(
-    ellipse at 97% 0%,
-    rgb(150 126 244 / 7%),
-    transparent 55%
-  );
+  background-image: none;
 }
 .lolicode-mark {
   display: block;
   object-fit: contain;
 }
+.tai-shell-page-header {
+  min-height: 60px;
+}
 .lolicode-channel-center section {
-  box-shadow: var(--shadow-sm);
+  box-shadow: none;
 }
 .lolicode-channel-center [aria-pressed="true"] {
-  border-color: color-mix(in srgb, var(--action-bg) 55%, hsl(var(--border)));
+  border-color: var(--border-strong);
 }
 .lolicode-channel-center .lolicode-channel-form {
   border: 1px solid hsl(var(--border));
-  background: color-mix(in srgb, var(--bg-subtle) 48%, var(--bg-card));
-  border-radius: 16px;
-  padding: 20px;
+  background: var(--bg-card);
+  border-radius: 10px;
+  padding: 18px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lolicode-global-rail * {
+    transition: none !important;
+  }
 }

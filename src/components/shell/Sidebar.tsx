@@ -1,4 +1,4 @@
-import { useRef, type ComponentType } from "react";
+import { type ComponentType } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { getVersion } from "@tauri-apps/api/app";
@@ -7,8 +7,6 @@ import {
   ArrowLeft,
   Bot,
   ChartColumn,
-  ChevronsLeft,
-  ChevronsRight,
   Database,
   Folder,
   Globe,
@@ -23,7 +21,6 @@ import type { VisibleApps } from "@/types";
 import type { GlobalPage, SettingsSection, View } from "@/lib/navigation";
 import { isAppPage } from "@/lib/navigation";
 import { useUpdate } from "@/contexts/UpdateContext";
-import { sidebarWidth, useSidebarCollapsed } from "@/hooks/useSidebarCollapsed";
 import { useSidebarStatus } from "@/hooks/useSidebarStatus";
 import { fmtUsd } from "@/components/usage/format";
 import { HoverTip } from "@/components/ui/hover-tip";
@@ -33,7 +30,6 @@ import { cn } from "@/lib/utils";
 import { LolicodeMark } from "./LolicodeMark";
 import { APP_NAME } from "@/lib/branding";
 
-const NO_DRAG = { WebkitAppRegion: "no-drag" } as React.CSSProperties;
 type IconComponent = ComponentType<{ className?: string }>;
 
 interface SidebarProps {
@@ -53,23 +49,21 @@ type DirectoryProps = SidebarProps & { collapsed: boolean };
 /** The client is context; the task navigation keeps the same positions for every client. */
 export function Sidebar(props: SidebarProps) {
   const { t } = useTranslation();
-  const navRef = useRef<HTMLElement>(null);
-  const { collapsed, toggle } = useSidebarCollapsed(navRef);
+  const collapsed = true;
   const { todayCost, authNeedsAttention } = useSidebarStatus();
   const { hasUpdate } = useUpdate();
 
   return (
     <nav
-      ref={navRef}
       data-collapsed={collapsed}
       aria-label={t("nav.mainLabel")}
-      className="tai-shell-sidebar"
-      style={{ width: sidebarWidth(collapsed) }}
+      className="tai-shell-sidebar lolicode-global-rail"
+      style={{ width: 56 }}
     >
       <a href="#main-content" className="tai-shell-skip">
         {t("nav.skipToContent")}
       </a>
-      <SidebarTopBar collapsed={collapsed} onToggle={toggle} />
+      <SidebarTopBar />
       <LayoutGroup id="shell-navigation">
         {props.view === "settings" ? (
           <SettingsDirectory {...props} collapsed={collapsed} />
@@ -111,16 +105,7 @@ export function Sidebar(props: SidebarProps) {
   );
 }
 
-function SidebarTopBar({
-  collapsed,
-  onToggle,
-}: {
-  collapsed: boolean;
-  onToggle: () => void;
-}) {
-  const { t } = useTranslation();
-  const label = collapsed ? t("nav.expandSidebar") : t("nav.collapseSidebar");
-  const ToggleIcon = collapsed ? ChevronsRight : ChevronsLeft;
+function SidebarTopBar() {
   return (
     <div
       className={cn("tai-shell-brand", isMac() && "tai-shell-brand-mac")}
@@ -129,26 +114,8 @@ function SidebarTopBar({
     >
       <div className="tai-shell-brand-lockup" {...DRAG_REGION_ATTR}>
         <LolicodeMark className="tai-shell-mark" />
-        {!collapsed && (
-          <div className="tai-shell-wordmark" {...DRAG_REGION_ATTR}>
-            <span {...DRAG_REGION_ATTR}>{APP_NAME}</span>
-            <small {...DRAG_REGION_ATTR}>CODING AGENT</small>
-          </div>
-        )}
+        <span className="sr-only">{APP_NAME}</span>
       </div>
-      <HoverTip content={label} side="right" disableHoverableContent>
-        <button
-          type="button"
-          onClick={onToggle}
-          aria-label={label}
-          aria-expanded={!collapsed}
-          aria-keyshortcuts="Control+Backslash Meta+Backslash"
-          className="tai-shell-toggle"
-          style={NO_DRAG}
-        >
-          <ToggleIcon aria-hidden="true" className="h-4 w-4" />
-        </button>
-      </HoverTip>
     </div>
   );
 }

@@ -3,6 +3,10 @@ import type {
   AgentCatalog,
   AgentEngineStatus,
   AgentMode,
+  AgentPermissionMode,
+  AgentProject,
+  AgentExtensions,
+  AgentExtensionConfig,
   AgentPermissionDecision,
   AgentProjectResult,
   AgentQuestionAnswer,
@@ -14,11 +18,47 @@ import type {
 export const agentApi = {
   getStatus: () => invoke<AgentEngineStatus>("get_agent_status"),
   getCatalog: () => invoke<AgentCatalog>("get_agent_catalog"),
-  openProject: (path: string) =>
-    invoke<AgentProjectResult>("open_agent_project", { path }),
-  listSessions: () => invoke<AgentSession[]>("list_agent_sessions"),
-  createSession: (modelId: string, mode: AgentMode, title?: string) =>
-    invoke<AgentSession>("create_agent_session", { modelId, mode, title }),
+  openProject: (path: string, refreshModels?: boolean) =>
+    invoke<AgentProjectResult>("open_agent_project", { path, refreshModels }),
+  listSessions: (projectPath?: string, includeArchived?: boolean) =>
+    invoke<AgentSession[]>("list_agent_sessions", {
+      projectPath,
+      includeArchived,
+    }),
+  listProjects: () => invoke<AgentProject[]>("list_agent_projects"),
+  setProjectMetadata: (path: string, pinned: boolean) =>
+    invoke<AgentProject>("set_agent_project_metadata", { path, pinned }),
+  removeProject: (path: string) =>
+    invoke<void>("remove_agent_project", { path }),
+  createSession: (
+    modelId: string,
+    mode: AgentMode,
+    title?: string,
+    permissionMode?: AgentPermissionMode,
+  ) =>
+    invoke<AgentSession>("create_agent_session", {
+      modelId,
+      mode,
+      title,
+      permissionMode,
+    }),
+  updateSession: (
+    sessionId: string,
+    patch: {
+      modelId?: string;
+      mode?: AgentMode;
+      permissionMode?: AgentPermissionMode;
+    },
+  ) => invoke<AgentSession>("update_agent_session", { sessionId, ...patch }),
+  renameSession: (sessionId: string, title: string) =>
+    invoke<AgentSession>("rename_agent_session", { sessionId, title }),
+  setSessionMetadata: (
+    sessionId: string,
+    patch: { pinned?: boolean; archived?: boolean },
+  ) =>
+    invoke<AgentSession>("set_agent_session_metadata", { sessionId, ...patch }),
+  deleteSession: (sessionId: string) =>
+    invoke<void>("delete_agent_session", { sessionId }),
   getSession: (sessionId: string) =>
     invoke<AgentSnapshot>("get_agent_session", { sessionId }),
   sendMessage: (sessionId: string, text: string, requestId: string) =>
@@ -39,4 +79,21 @@ export const agentApi = {
   rejectQuestion: (sessionId: string, requestId: string) =>
     invoke<void>("reject_agent_question", { sessionId, requestId }),
   closeProject: () => invoke<void>("close_agent_project"),
+  getExtensions: () => invoke<AgentExtensions>("get_agent_extensions"),
+  setSkillEnabled: (id: string, enabled: boolean) =>
+    invoke<AgentExtensions>("set_agent_skill_enabled", { id, enabled }),
+  importSkill: (path: string) =>
+    invoke<AgentExtensions>("import_agent_skill", { path }),
+  removeSkill: (id: string) =>
+    invoke<AgentExtensions>("remove_agent_skill", { id }),
+  installPlugin: (path: string) =>
+    invoke<AgentExtensions>("install_agent_plugin", { path }),
+  setPluginEnabled: (id: string, enabled: boolean) =>
+    invoke<AgentExtensions>("set_agent_plugin_enabled", { id, enabled }),
+  uninstallPlugin: (id: string) =>
+    invoke<AgentExtensions>("uninstall_agent_plugin", { id }),
+  getExtensionConfig: () =>
+    invoke<AgentExtensionConfig>("get_agent_extension_config"),
+  saveExtensionConfig: (config: AgentExtensionConfig) =>
+    invoke<AgentExtensions>("save_agent_extension_config", { config }),
 };

@@ -1,0 +1,10 @@
+{
+  "caption": "默认技能资源清单 · 界面演示，未执行文档技能",
+  "fixture": "C:\\Users\\admin\\AppData\\Local\\Temp\\lolicode-real-glm-agent-evidence.json",
+  "screenshots": [
+    "D:\\projectGithub\\TAI-Switch\\docs\\images\\lolicode\\agent-default-skills.png"
+  ],
+  "errors": [],
+  "network": "local renderer only",
+  "liveAgentMutations": 0
+}

@@ -36,6 +36,12 @@ pub(crate) fn session(value: &Value) -> Result<AgentSession, String> {
         title: optional_string(value, "title").unwrap_or_else(|| "新会话".into()),
         project_path,
         mode: optional_string(value, "agent").unwrap_or_else(|| "build".into()),
+        permission_mode: crate::policy::identify(
+            value["agent"].as_str().unwrap_or("build"),
+            &value["permissions"],
+        ),
+        pinned: false,
+        archived: false,
         model,
         created_at: timestamp(&value["time"], "created"),
         updated_at: timestamp(&value["time"], "updated"),
@@ -144,13 +150,15 @@ pub(crate) fn message(value: &Value) -> Option<AgentMessage> {
 
 pub(crate) fn permission(value: &Value, messages: &[AgentMessage]) -> AgentPermission {
     let tool_id = string(&value["source"], "id");
-    let tool_name = messages
+    let source_message = string(&value["source"], "messageID");
+    let tool = messages
         .iter()
+        .filter(|message| source_message.is_empty() || source_message == message.id)
         .flat_map(|message| message.parts.iter())
         .find_map(|part| match part {
-            AgentPart::Tool { id, name, .. } if !tool_id.is_empty() && id == &tool_id => {
-                Some(name.clone())
-            }
+            AgentPart::Tool {
+                id, name, input, ..
+            } if !tool_id.is_empty() && id == &tool_id => Some((name.clone(), input.clone())),
             _ => None,
         });
     AgentPermission {
@@ -163,7 +171,8 @@ pub(crate) fn permission(value: &Value, messages: &[AgentMessage]) -> AgentPermi
             .map(str::to_owned)
             .collect(),
         description: optional_string(value, "message"),
-        tool_name,
+        tool_name: tool.as_ref().map(|(name, _)| name.clone()),
+        tool_input: tool.map(|(_, input)| input),
     }
 }
 

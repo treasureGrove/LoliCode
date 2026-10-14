@@ -98,9 +98,7 @@ describe("simple channel navigation", () => {
     expect(
       screen.queryByRole("button", { name: /^切换客户端/ }),
     ).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("img", { name: "nav.authNeedsReauth" }),
-    ).toBeInTheDocument();
+    expect(channels).toHaveAccessibleName(/nav.authNeedsReauth/);
   });
 
   it("keeps the channel destination stable across legacy client views", () => {
@@ -133,7 +131,11 @@ describe("simple channel navigation", () => {
     ).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "nav.back" }));
     expect(values.onExitSettings).toHaveBeenCalledOnce();
-    expect(await screen.findByText("Lolicode v4.0.10")).toBeInTheDocument();
+    expect(screen.getByRole("navigation")).toHaveAttribute(
+      "data-collapsed",
+      "true",
+    );
+    expect(screen.queryByText("LoliCode v4.0.10")).not.toBeInTheDocument();
   });
 
   it("keeps named keyboard controls reachable in the compact rail", async () => {

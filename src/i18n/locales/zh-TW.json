@@ -1,6 +1,6 @@
 {
   "app": {
-    "title": "Lolicode",
+    "title": "LoliCode",
     "description": "Claude Code / Codex / Gemini CLI 全方位輔助工具"
   },
   "common": {
@@ -53,9 +53,9 @@
     "required": "必填"
   },
   "firstRunNotice": {
-    "title": "歡迎使用 Lolicode",
-    "bodyDefault": "Lolicode 可以協助您在 Claude Code / Codex / Gemini CLI 的多個供應商之間一鍵切換。如果您之前已經設定過這些工具，Lolicode 會自動將現有設定儲存為名為 default 的供應商，確保您的設定不會遺失。",
-    "bodyOfficial": "清單中還預設了「官方 (Official)」供應商，隨時點擊即可切換回官方預設設定。切換前 Lolicode 會自動將目前設定備份回 default，可以放心來回切換。這就是 Lolicode 的運作方式。",
+    "title": "歡迎使用 LoliCode",
+    "bodyDefault": "LoliCode 可以協助您在 Claude Code / Codex / Gemini CLI 的多個供應商之間一鍵切換。如果您之前已經設定過這些工具，LoliCode 會自動將現有設定儲存為名為 default 的供應商，確保您的設定不會遺失。",
+    "bodyOfficial": "清單中還預設了「官方 (Official)」供應商，隨時點擊即可切換回官方預設設定。切換前 LoliCode 會自動將目前設定備份回 default，可以放心來回切換。這就是 LoliCode 的運作方式。",
     "confirm": "我了解了"
   },
   "apiKeyInput": {
@@ -119,8 +119,8 @@
     "stackBadgeNoModels": "這家沒有設定模型，不會出現在模型選擇器裡",
     "stackSaved": "已儲存，重新啟動 {{client}} 後生效",
     "stackSavedLive": "已儲存，{{client}} 裡立即生效",
-    "stackReselectHint": "Lolicode 每次改寫用戶端設定後，如果模型選擇器裡選的是聚合的模型，需要重新選一次",
-    "stackPartial": "已部分寫入，將在下次操作或重新啟動 Lolicode 時補完",
+    "stackReselectHint": "LoliCode 每次改寫用戶端設定後，如果模型選擇器裡選的是聚合的模型，需要重新選一次",
+    "stackPartial": "已部分寫入，將在下次操作或重新啟動 LoliCode 時補完",
     "stackFailed": "聚合的模型儲存失敗：{{error}}",
     "stackDefaultCannotRemove": "預設供應商不能移除，請先把別的供應商設為預設",
     "stackDefaultHint": "它是預設供應商：列表裡的第一個模型負責 Claude Code 啟動和背景任務",
@@ -139,9 +139,9 @@
       "nothingUsable": "Codex 內建列表：裡面沒有能用的模型，請把 Codex 升級到最新版"
     },
     "routeOwnsCatalog": "聚合的模型不會出現在 Codex 中：路由供應商使用自己的模型目錄檔案（model_catalog_json）",
-    "adoptCatalog": "改用 Lolicode 的模型目錄",
-    "adoptCatalogDone": "已改用 Lolicode 的模型目錄，重新啟動 Codex 後生效",
-    "adoptCatalogFailed": "改用 Lolicode 的模型目錄失敗：{{error}}",
+    "adoptCatalog": "改用 LoliCode 的模型目錄",
+    "adoptCatalogDone": "已改用 LoliCode 的模型目錄，重新啟動 Codex 後生效",
+    "adoptCatalogFailed": "改用 LoliCode 的模型目錄失敗：{{error}}",
     "noRoutingSupport": "不支援路由",
     "blockedByProxyHint": "路由模式下無法切換至官方供應商",
     "editProvider": "編輯供應商",
@@ -308,7 +308,7 @@
     "geminiRestartRequired": "切換成功，請重新啟動 Gemini CLI 以套用",
     "grokBuildRestartRequired": "切換成功，請重新啟動 Grok Build 以套用",
     "claudeDesktopRestartRequired": "切換成功，重新啟動 Claude Desktop 後生效",
-    "claudeDesktopProxyRestartRequired": "切換成功，請保持 Lolicode 執行，並重新啟動 Claude Desktop 後生效",
+    "claudeDesktopProxyRestartRequired": "切換成功，請保持 LoliCode 執行，並重新啟動 Claude Desktop 後生效",
     "addToConfigSuccess": "已新增至設定",
     "removeFromConfigSuccess": "已從設定移除",
     "removeFromConfigFailed": "無法移除供應商",
@@ -355,7 +355,7 @@
     "deleteProvider": "刪除供應商",
     "deleteProviderMessage": "確定要刪除供應商「{{name}}」嗎？此操作無法復原。",
     "removeProvider": "移除供應商",
-    "removeProviderMessage": "確定要從設定中移除供應商「{{name}}」嗎？\n\n移除後該供應商將不再生效，但設定資料會保留在 Lolicode 中，您可以隨時重新新增。",
+    "removeProviderMessage": "確定要從設定中移除供應商「{{name}}」嗎？\n\n移除後該供應商將不再生效，但設定資料會保留在 LoliCode 中，您可以隨時重新新增。",
     "piDefaultProviderWarning": "Pi 的全域預設目前指向此供應商。繼續後，Pi 會嘗試其他可用模型；你可以在 Pi 中使用 /model 重新選擇，或使用 /login 登入其他供應商。",
     "proxy": {
       "title": "啟用本地路由服務",
@@ -405,9 +405,9 @@
       "goToApps": "前往「應用」",
       "updates": "各應用的新版本",
       "checkToolUpdates": "啟動時檢查各應用的新版本",
-      "checkToolUpdatesHelp": "開啟後，每次啟動 Lolicode 會查一次已安裝的命令列應用有沒有新版本，查到了就在側欄「應用」上顯示一個圓點。不會自動升級。",
+      "checkToolUpdatesHelp": "開啟後，每次啟動 LoliCode 會查一次已安裝的命令列應用有沒有新版本，查到了就在側欄「應用」上顯示一個圓點。不會自動升級。",
       "windowAndTerminal": "視窗與終端機",
-      "minimizeToTrayHelp": "開啟時，點關閉按鈕只隱藏視窗，Lolicode 留在系統匣裡繼續執行（輕量模式在系統匣選單裡）；關閉時點關閉按鈕直接結束。",
+      "minimizeToTrayHelp": "開啟時，點關閉按鈕只隱藏視窗，LoliCode 留在系統匣裡繼續執行（輕量模式在系統匣選單裡）；關閉時點關閉按鈕直接結束。",
       "terminalHelp": "點供應商卡片上的「開啟終端機」時用哪個終端機。選的終端機無法使用時，改用系統預設終端機。"
     },
     "tabGeneral": "通用",
@@ -448,7 +448,7 @@
       },
       "globalProxy": {
         "title": "全域出站代理伺服器",
-        "description": "設定 Lolicode 存取外部 API 時使用的代理伺服器"
+        "description": "設定 LoliCode 存取外部 API 時使用的代理伺服器"
       },
       "data": {
         "title": "資料管理",
@@ -521,7 +521,7 @@
     "themeDark": "玄墨 · 深色",
     "themeSystem": "跟隨系統",
     "importExport": "SQL 匯入匯出",
-    "importExportHint": "匯入/匯出資料庫 SQL 備份（僅支援匯入由 Lolicode 匯出的備份），便於備份或遷移。",
+    "importExportHint": "匯入/匯出資料庫 SQL 備份（僅支援匯入由 LoliCode 匯出的備份），便於備份或遷移。",
     "exportConfig": "匯出 SQL 備份",
     "selectConfigFile": "選擇 SQL 檔案",
     "noFileSelected": "尚未選擇設定檔。",
@@ -598,15 +598,15 @@
         },
         "codexHistoryUnifyRestore": {
           "name": "Codex 工作階段統一還原備份",
-          "hint": "執行「還原備份」前留下的工作階段副本，Lolicode 不會再讀取。"
+          "hint": "執行「還原備份」前留下的工作階段副本，LoliCode 不會再讀取。"
         },
         "codexHistoryProviderMigration": {
           "name": "Codex 工作階段分組遷移備份",
-          "hint": "工作階段分組遷移前留下的副本，Lolicode 不會再讀取。"
+          "hint": "工作階段分組遷移前留下的副本，LoliCode 不會再讀取。"
         },
         "liveFirstWrite": {
           "name": "設定檔首次寫入備份",
-          "hint": "Lolicode 第一次改寫各用戶端設定檔前的原始檔案。刪除後無法再找回改寫前的原檔，下次寫入時會重新備份當時的檔案。"
+          "hint": "LoliCode 第一次改寫各用戶端設定檔前的原始檔案。刪除後無法再找回改寫前的原檔，下次寫入時會重新備份當時的檔案。"
         },
         "hermes": {
           "name": "Hermes 設定備份",
@@ -618,7 +618,7 @@
         },
         "proxyLiveBackup": {
           "name": "舊版路由接管備份",
-          "hint": "升級時從舊版路由接管備份轉存出的設定副本，Lolicode 不會再讀取。"
+          "hint": "升級時從舊版路由接管備份轉存出的設定副本，LoliCode 不會再讀取。"
         },
         "envVars": {
           "name": "環境變數清理備份",
@@ -833,7 +833,7 @@
     "windowBehavior": "視窗行為",
     "windowBehaviorHint": "設定視窗最小化與 Claude 外掛程式連動策略。",
     "launchOnStartup": "開機自動啟動",
-    "launchOnStartupDescription": "隨系統啟動自動執行 Lolicode",
+    "launchOnStartupDescription": "隨系統啟動自動執行 LoliCode",
     "silentStartup": "靜默啟動",
     "silentStartupDescription": "程式啟動時不顯示主視窗，僅在系統匣執行",
     "autoLaunchFailed": "設定開機自動啟動失敗",
@@ -854,7 +854,7 @@
     "codexStackClassicSubagentsDescription": "Codex 聚合模式下，主 agent 和子 agent 用不同供應商的模型時，子 agent 可能讀不到任務：Codex 新版的子 agent 工具會把任務交給主 agent 那家加密，換一家就解不開。開啟後聚合的所有模型改用 Codex 經典的子 agent 工具，任務以明文傳遞；代價是沒有 followup_task、interrupt_agent 等新版功能。只影響聚合模式，改完要重新啟動 Codex 才生效",
     "codexStackClassicSubagentsForcedV2": "Codex 的 config.toml 裡開啟了 [features] multi_agent_v2，它比這個開關優先，開關不會生效",
     "codexSessionCompression": "壓縮 Codex 歷史對話",
-    "codexSessionCompressionDescription": "開啟後，Codex 每次啟動時會在背景把 7 天以上沒動過的對話檔案壓縮保存，明顯減少佔用的磁碟空間；在這些對話上繼續對話時 Codex 會自動解壓。Lolicode 照常顯示和統計壓縮過的對話，只是列表裡不顯示它們最後一則回覆的預覽。這是 Codex 還在開發中的功能，開啟後 Codex 每次啟動會顯示一條提示；需要較新版本的 Codex，重新啟動 Codex 後生效。關閉後不再壓縮，已壓縮的對話保持原樣",
+    "codexSessionCompressionDescription": "開啟後，Codex 每次啟動時會在背景把 7 天以上沒動過的對話檔案壓縮保存，明顯減少佔用的磁碟空間；在這些對話上繼續對話時 Codex 會自動解壓。LoliCode 照常顯示和統計壓縮過的對話，只是列表裡不顯示它們最後一則回覆的預覽。這是 Codex 還在開發中的功能，開啟後 Codex 每次啟動會顯示一條提示；需要較新版本的 Codex，重新啟動 Codex 後生效。關閉後不再壓縮，已壓縮的對話保持原樣",
     "codexSessionCompressionUsage": "對話目錄目前佔用 {{size}}",
     "codexSessionCompressionFailed": "修改 Codex 對話壓縮設定失敗",
     "unifyCodexHistoryRestoreCompleted": "已按備份還原官方會話歷史（{{files}} 個會話檔案、{{rows}} 條索引記錄）",
@@ -906,8 +906,8 @@
     },
     "configDirectoryOverride": "設定目錄覆寫（進階）",
     "configDirectoryDescription": "在 WSL 等環境使用 Claude Code 或 Codex 的時候，可手動指定為 WSL 裡的設定目錄，供應商資料與主環境保持一致。",
-    "appConfigDir": "Lolicode 設定目錄",
-    "appConfigDirDescription": "自訂 Lolicode 的設定儲存位置（指定至雲端同步資料夾即可雲端同步設定）",
+    "appConfigDir": "LoliCode 設定目錄",
+    "appConfigDirDescription": "自訂 LoliCode 的設定儲存位置（指定至雲端同步資料夾即可雲端同步設定）",
     "browsePlaceholderApp": "例如：C:\\Users\\Administrator\\.tai-switch",
     "claudeConfigDir": "Claude Code 設定目錄",
     "claudeConfigDirDescription": "覆寫 Claude 設定目錄 (settings.json)。真正自訂目錄會在目錄內存放 Claude MCP 的 .claude.json；預設 ~/.claude 目錄仍使用 Claude 預設的 ~/.claude.json。",
@@ -952,7 +952,7 @@
     "viewCurrentReleaseNotes": "檢視目前版本更新日誌",
     "officialWebsite": "官方網站",
     "github": "GitHub",
-    "starPrompt": "如果 Lolicode 幫到了你，請在 GitHub 點個 Star，這對我們意義重大",
+    "starPrompt": "如果 LoliCode 幫到了你，請在 GitHub 點個 Star，這對我們意義重大",
     "starOnGithub": "去點 Star",
     "manualInstallCommands": "手動安裝指令",
     "manualUninstallCommands": "手動解除安裝指令",
@@ -1012,7 +1012,7 @@
     "toolUpgradeConfirmBtn": "確認更新",
     "toolUpgradeUnanchoredHint": "無法判定命令列實際使用的安裝位置；將執行預設更新指令（可能安裝至 PATH 中第一個 npm）。",
     "toolUpgradeUnmanagedTitle": "以下工具已略過更新",
-    "toolUpgradeUnmanagedDetail": "{{tool}}（{{path}}）不是透過 npm 或可辨識的安裝程式安裝的，Lolicode 無法判斷如何更新它。請使用你原本的安裝方式更新（例如 winget、Scoop 或重新執行官方安裝指令碼）。",
+    "toolUpgradeUnmanagedDetail": "{{tool}}（{{path}}）不是透過 npm 或可辨識的安裝程式安裝的，LoliCode 無法判斷如何更新它。請使用你原本的安裝方式更新（例如 winget、Scoop 或重新執行官方安裝指令碼）。",
     "envBadge": {
       "wsl": "WSL",
       "windows": "Win",
@@ -1026,7 +1026,7 @@
     "importFailedError": "匯入設定失敗：{{message}}",
     "exportFailedError": "匯出設定失敗：",
     "restartRequired": "需要重新啟動應用程式",
-    "restartRequiredMessage": "修改 Lolicode 設定目錄後需要重新啟動應用程式才能生效，是否立即重新啟動？",
+    "restartRequiredMessage": "修改 LoliCode 設定目錄後需要重新啟動應用程式才能生效，是否立即重新啟動？",
     "restartNow": "立即重新啟動",
     "restartLater": "稍後重新啟動",
     "restartFailed": "應用程式重新啟動失敗，請手動關閉後重新開啟。",
@@ -1172,7 +1172,7 @@
     },
     "current": {
       "readFailed": "無法讀取 Pi 供應商設定",
-      "stateUnavailableHint": "Lolicode 讀取到 Pi 供應商設定前，供應商變更會暫時停用。"
+      "stateUnavailableHint": "LoliCode 讀取到 Pi 供應商設定前，供應商變更會暫時停用。"
     },
     "prompts": {
       "globalTab": "提示庫",
@@ -1225,7 +1225,7 @@
       "libraryLabel": "Pi 的提示庫",
       "systemFilesLabel": "Pi 的系統提示檔案",
       "templatesLabel": "Pi 的提示詞範本",
-      "externalTitle": "AGENTS.md 在 Lolicode 之外改過",
+      "externalTitle": "AGENTS.md 在 LoliCode 之外改過",
       "externalDetail": "內容（{{size}}）和提示庫裡的每一條都不同，所以沒有哪條顯示為已啟用；啟用別的之前會先存進提示庫。",
       "saveToLibrary": "存進提示庫",
       "reloadAfterDelete": "已開啟的 Pi 閒置時執行 /reload 後生效。",
@@ -1302,7 +1302,7 @@
     "expandContent": "展開完整內容",
     "collapseContent": "收起",
     "helpTitle": "工作階段從哪裡來",
-    "helpBody": "Lolicode 讀取各個應用保存在本機的工作階段記錄，位置見右上角 ⋯ 裡的「工作階段記錄在哪裡」。Claude Desktop 沒有單獨的工作階段記錄。",
+    "helpBody": "LoliCode 讀取各個應用保存在本機的工作階段記錄，位置見右上角 ⋯ 裡的「工作階段記錄在哪裡」。Claude Desktop 沒有單獨的工作階段記錄。",
     "moreActions": "工作階段的更多操作",
     "refreshList": "重新整理列表",
     "listRefreshed": "已重新整理工作階段列表",
@@ -1310,7 +1310,7 @@
     "preferredTerminal": "偏好終端機",
     "whereMenu": "工作階段記錄在哪裡",
     "whereTitle": "工作階段記錄在哪裡",
-    "whereLead": "Lolicode 從這些位置讀取工作階段。Claude Desktop 沒有單獨的工作階段記錄。",
+    "whereLead": "LoliCode 從這些位置讀取工作階段。Claude Desktop 沒有單獨的工作階段記錄。",
     "whereNote": "在設定裡改過設定目錄的應用，按改過的目錄讀取。",
     "appPrefix": "應用：",
     "chooseApp": "選擇應用",
@@ -1353,7 +1353,7 @@
     "hermesLimit": "Hermes 只顯示最近 500 個工作階段",
     "emptyApp": "還沒有 {{app}} 的工作階段記錄",
     "emptyAll": "還沒有工作階段記錄",
-    "emptyAppHint": "Lolicode 讀取 {{path}} 下的工作階段資料",
+    "emptyAppHint": "LoliCode 讀取 {{path}} 下的工作階段資料",
     "emptySearch": "沒有標題、目錄或首末訊息符合「{{query}}」的工作階段",
     "clearSearchAction": "清除搜尋",
     "backToList": "返回工作階段列表",
@@ -1884,8 +1884,8 @@
     "remove": {
       "titleOne": "刪除帳號「{{login}}」？",
       "titleAll": "刪除全部 {{service}} 帳號？",
-      "leadOne": "會刪除這個帳號儲存在 Lolicode 裡的登入憑證，無法復原。",
-      "leadAll": "會刪除這 {{count}} 個帳號儲存在 Lolicode 裡的登入憑證，無法復原。",
+      "leadOne": "會刪除這個帳號儲存在 LoliCode 裡的登入憑證，無法復原。",
+      "leadAll": "會刪除這 {{count}} 個帳號儲存在 LoliCode 裡的登入憑證，無法復原。",
       "brokenOne": "這些供應商會無法使用，直到重新登入或改選別的帳號：",
       "brokenAll": "這些供應商會無法使用，直到重新登入：",
       "moved": "這些供應商用的是預設帳號，刪除後改用新的預設帳號：",
@@ -2045,7 +2045,7 @@
     "headerName": "請求標頭",
     "headerValue": "值",
     "headerNamePlaceholder": "X-Title",
-    "headerValuePlaceholder": "Lolicode",
+    "headerValuePlaceholder": "LoliCode",
     "removeHeader": "刪除請求標頭",
     "noHeaders": "暫無自訂請求標頭",
     "extraOptions": "額外選項",
@@ -2332,11 +2332,11 @@
     "modelsDevDefaultHint": "預設展示最新發布的 {{shown}} 個模型（共 {{total}} 個），輸入關鍵字可全量搜尋",
     "modelsDevAutoSync": {
       "title": "自動同步 models.dev 定價",
-      "description": "開啟後，Lolicode 會在啟動時定期擷取所選模型的最新價格，並儲存到本機定價檔案。",
+      "description": "開啟後，LoliCode 會在啟動時定期擷取所選模型的最新價格，並儲存到本機定價檔案。",
       "enabled": "已開啟",
       "disabled": "已關閉",
       "enableConfirmTitle": "開啟自動同步定價？",
-      "enableConfirmMessage": "開啟後，Lolicode 會在啟動時定期從 models.dev 更新所選模型的價格（最多每 6 小時一次）。相同模型 ID 的軟體內建價格和手動設定價格都會被覆寫。",
+      "enableConfirmMessage": "開啟後，LoliCode 會在啟動時定期從 models.dev 更新所選模型的價格（最多每 6 小時一次）。相同模型 ID 的軟體內建價格和手動設定價格都會被覆寫。",
       "enableConfirmAction": "開啟自動同步",
       "configure": "選擇模型",
       "configureTitle": "選擇自動同步定價的模型",
@@ -2465,7 +2465,7 @@
     "sources": {
       "scanTitle": "自動掃描工作階段日誌",
       "scanHelpTitle": "工作階段日誌是什麼",
-      "scanHelp": "各應用程式寫在本機的工作階段記錄。Lolicode 從中讀取用量，不開路由也有資料。",
+      "scanHelp": "各應用程式寫在本機的工作階段記錄。LoliCode 從中讀取用量，不開路由也有資料。",
       "coverage": "涵蓋 7 個應用程式：{{apps}}",
       "cadenceOn": "啟動時掃描一次，之後每 60 秒一次",
       "cadenceOff": "自動掃描已關閉，只在點「立即同步」時掃描",
@@ -2597,7 +2597,7 @@
   },
   "dbUpgrade": {
     "title": "資料庫版本過新",
-    "description": "目前資料庫由較新版本的 Lolicode 建立，需要升級應用後才能繼續使用。升級不會刪除你的資料。",
+    "description": "目前資料庫由較新版本的 LoliCode 建立，需要升級應用後才能繼續使用。升級不會刪除你的資料。",
     "versionInfo": "資料庫版本 v{{db}} · 應用支援 v{{supported}}",
     "dbPath": "資料庫檔案",
     "checking": "正在檢查可用更新…",
@@ -2643,7 +2643,7 @@
       "deleteConfirm": "確定要刪除伺服器 \"{{id}}\" 嗎？此操作無法復原。",
       "noServers": "暫無伺服器",
       "enabledApps": "啟用的應用程式",
-      "noImportFound": "未發現需要匯入的 MCP 伺服器。所有伺服器已在 Lolicode 統一管理中。",
+      "noImportFound": "未發現需要匯入的 MCP 伺服器。所有伺服器已在 LoliCode 統一管理中。",
       "importSuccess": "成功匯入 {{count}} 個 MCP 伺服器",
       "searchPlaceholder": "搜尋 MCP 名稱、描述、標籤或命令...",
       "searchAriaLabel": "搜尋已管理的 MCP 伺服器",
@@ -2801,7 +2801,7 @@
     "name": "名稱",
     "namePlaceholder": "例如 團隊編碼規範",
     "description": "說明",
-    "descriptionPlaceholder": "選填，只在 Lolicode 裡顯示",
+    "descriptionPlaceholder": "選填，只在 LoliCode 裡顯示",
     "content": "正文",
     "contentPlaceholder": "# {{filename}}\n\n用 Markdown 寫給 {{appName}} 的長期說明…",
     "loadFailed": "載入提示詞失敗",
@@ -2861,7 +2861,7 @@
     "deleteBlocked": "啟用中的不能刪除，先停用",
     "emptyTitle": "{{app}} 還沒有提示詞",
     "emptyTarget": "啟用的那條會寫進 {{path}}。",
-    "emptyFile": "{{path}} 裡已有 {{size}} 內容，還不在 Lolicode 裡",
+    "emptyFile": "{{path}} 裡已有 {{size}} 內容，還不在 LoliCode 裡",
     "importExisting": "匯入現有內容",
     "formDescription": "名稱、說明和寫進 {{file}} 的正文",
     "requiredMark": "（必填）",
@@ -2902,7 +2902,7 @@
       "savedActive": "已儲存「{{name}}」，已覆寫 {{path}}",
       "savedActivePi": "已儲存「{{name}}」，已寫入 AGENTS.md",
       "deleted": "已刪除「{{name}}」",
-      "deletedSub": "只從 Lolicode 裡刪除，{{path}} 沒有改動",
+      "deletedSub": "只從 LoliCode 裡刪除，{{path}} 沒有改動",
       "deletedPiSub": "只從提示庫刪除，AGENTS.md 沒有改動",
       "restored": "已恢復「{{name}}」",
       "imported": "已匯入 {{path}} 的內容，檔案沒有改動",
@@ -3224,7 +3224,7 @@
     "installSuccess": "技能 {{name}} 已安裝",
     "installFailed": "安裝失敗",
     "uninstallSuccess": "技能 {{name}} 已解除安裝",
-    "uninstallPiPreserved": "無法確認該 Pi 副本由 Lolicode 管理，已保留：{{path}}",
+    "uninstallPiPreserved": "無法確認該 Pi 副本由 LoliCode 管理，已保留：{{path}}",
     "uninstallPiCleanupIncomplete": "Pi 清理未能完成，請手動檢查 Pi Skills 目錄中是否有殘留副本。",
     "uninstallFailed": "解除安裝失敗",
     "update": "更新",
@@ -3323,10 +3323,10 @@
     "noInstalledDescription": "從儲存庫發現並安裝技能，或匯入已有的技能",
     "discover": "發現技能",
     "import": "匯入已有",
-    "importDescription": "選擇要匯入至 Lolicode 統一管理的技能",
+    "importDescription": "選擇要匯入至 LoliCode 統一管理的技能",
     "importSuccess": "成功匯入 {{count}} 個技能",
     "importSelected": "匯入已選 ({{count}})",
-    "noUnmanagedFound": "未發現需要匯入的技能。所有技能已在 Lolicode 統一管理中。",
+    "noUnmanagedFound": "未發現需要匯入的技能。所有技能已在 LoliCode 統一管理中。",
     "unmanagedAvailable": "發現可匯入的技能",
     "foundIn": "發現於",
     "local": "本地",
@@ -3384,7 +3384,7 @@
       "resyncPartial": "{{count}} 個應用沒有同步完整：{{apps}}",
       "resyncSkillItem": "{{directory}}：{{error}}",
       "locationTitle": "主副本放在",
-      "locationCcSwitch": "Lolicode 目錄",
+      "locationCcSwitch": "LoliCode 目錄",
       "locationUnified": "通用目錄",
       "openFolder": "打開",
       "openFolderAria": "打開 {{path}}",
@@ -3392,7 +3392,7 @@
       "move": "移動並切換",
       "moving": "正在移動…",
       "moveConfirmTitle": "把 {{count}} 個 Skill 移到 {{path}}？",
-      "moveConfirmBody": "會逐個移動主副本，再讓各應用裡的連結指向新位置。移動完成前請不要退出 Lolicode。",
+      "moveConfirmBody": "會逐個移動主副本，再讓各應用裡的連結指向新位置。移動完成前請不要退出 LoliCode。",
       "moveConfirmButton": "移動並切換",
       "moveDone": "已把 {{count}} 個 Skill 移到 {{path}}",
       "movePartial": "移動了 {{migrated}} 個 Skill，{{errors}} 個失敗，請查看日誌",
@@ -3408,7 +3408,7 @@
   },
   "deeplink": {
     "confirmImport": "確認匯入供應商設定",
-    "confirmImportDescription": "以下設定將匯入至 Lolicode",
+    "confirmImportDescription": "以下設定將匯入至 LoliCode",
     "importPrompt": "匯入提示詞",
     "importPromptDescription": "請確認是否匯入此系統提示詞",
     "importMcp": "匯入 MCP Servers",
@@ -3696,7 +3696,7 @@
         "authTitle": "Codex 可能仍快取著切換前的帳號；重新啟動背景服務才能載入新登入",
         "title": "Codex 還在用舊的模型清單，切換後的模型不會出現",
         "unverifiedTitle": "切換前就開著的 Codex 可能還在用之前的帳號或模型清單",
-        "unverifiedHint": "Lolicode 看不到桌面版和編輯器擴充功能是否在執行；沒開著的話直接關掉這則提示即可。",
+        "unverifiedHint": "LoliCode 看不到桌面版和編輯器擴充功能是否在執行；沒開著的話直接關掉這則提示即可。",
         "daemon": "命令列：重開 codex 不夠，要重新啟動背景的守護行程。",
         "others": "桌面版：要完全結束再重開（macOS 上按 ⌘Q，只關視窗不行）；編輯器擴充功能要重開編輯器視窗。",
         "restart": "重新啟動 Codex 守護行程",
@@ -4095,7 +4095,7 @@
     "appsTitle": "應用：安裝、升級、在側欄顯示哪些",
     "appsHasUpdate": "應用 · 有可用更新",
     "settings": "設定",
-    "settingsHasUpdate": "設定 · Lolicode 有新版本",
+    "settingsHasUpdate": "設定 · LoliCode 有新版本",
     "mode": {
       "route": "路由",
       "stack": "聚合",
@@ -4123,7 +4123,7 @@
     "columnVersion": "版本",
     "columnVisible": "顯示",
     "visibleHelp": "關掉後，這個應用不再出現在側欄、MCP / Skills 的應用欄，以及提示詞和工作階段的應用下拉選單裡。既有設定不變，照常同步。",
-    "desktopHelp": "Claude Desktop 是桌面應用，不能在這裡安裝或升級；Lolicode 透過它的設定檔接入。",
+    "desktopHelp": "Claude Desktop 是桌面應用，不能在這裡安裝或升級；LoliCode 透過它的設定檔接入。",
     "desktopUnsupported": "目前系統不支援",
     "desktopConnected": "已接入",
     "desktopNotConnected": "未接入",
@@ -4205,15 +4205,15 @@
       "routeTitle": "讓 {{app}} 使用路由模式？",
       "stackTitle": "讓 {{app}} 使用聚合模式？",
       "switchTitle": "把 {{app}} 從「{{from}}」切換到「{{to}}」？",
-      "routeLead": "請求會先經過本機的 Lolicode，再轉給你選的供應商。",
+      "routeLead": "請求會先經過本機的 LoliCode，再轉給你選的供應商。",
       "stackLead": "預設供應商承接不帶前綴的請求。",
       "routeTo": "路由到",
       "stackDefault": "預設供應商",
       "officialOption": "{{name}}（官方）",
       "stackOfficialNote": "如果你在用官方訂閱，請把官方帳號設為預設供應商。",
-      "routeNoteFile": "會改寫 {{file}} 裡的位址和金鑰；真實金鑰留在 Lolicode 裡，其他設定不動。",
+      "routeNoteFile": "會改寫 {{file}} 裡的位址和金鑰；真實金鑰留在 LoliCode 裡，其他設定不動。",
       "routeNoteSwitch": "之後在「路由」分頁裡換供應商，不再改寫設定檔。",
-      "routeNoteKeepRunning": "Lolicode 需要保持執行；結束時自動寫回直連，下次啟動再接上。",
+      "routeNoteKeepRunning": "LoliCode 需要保持執行；結束時自動寫回直連，下次啟動再接上。",
       "stackNoteMembers": "另有 {{names}} 共 {{count}} 個模型，會以 ccs- 前綴出現在 /model 裡。",
       "stackNoteEmpty": "還沒有加入其他供應商，切換後只有預設供應商；可以之後在「聚合」分頁裡加入。",
       "stackNoteNoFailover": "聚合模式不做故障轉移；佇列和設定會保留，回到路由模式後恢復。",
@@ -4228,8 +4228,8 @@
     },
     "help": {
       "title": "連線模式的差別",
-      "direct": "直連：Lolicode 不經手任何請求，用戶端直接連所選供應商，體驗最原生。",
-      "route": "路由：請求經本機 Lolicode 轉發，可熱切換供應商，並支援故障轉移、格式轉換等進階功能。",
+      "direct": "直連：LoliCode 不經手任何請求，用戶端直接連所選供應商，體驗最原生。",
+      "route": "路由：請求經本機 LoliCode 轉發，可熱切換供應商，並支援故障轉移、格式轉換等進階功能。",
       "stack": "聚合：多家供應商的模型同列在 /model，在用戶端內即可無感切換。"
     }
   },
@@ -4332,7 +4332,7 @@
     "clientHost": "連線位址",
     "clientHostHint": "用戶端連路由用的位址；留空依監聽位址",
     "clientHostInvalid": "請輸入用戶端能存取的 IP 位址或主機名稱",
-    "clientHostHelp": "Lolicode 寫入用戶端設定的代理主機（含 Claude Desktop 的閘道位址）。留空時依監聽位址推導。用戶端無法透過本機回送存取時填寫，例如 WSL2（NAT 模式）中的 Claude Desktop 工作階段：將監聽位址設為 0.0.0.0，在此填入 WSL 能存取的 Windows IP（如 vEthernet (WSL) 介面卡的位址），並在防火牆中放行連接埠。",
+    "clientHostHelp": "LoliCode 寫入用戶端設定的代理主機（含 Claude Desktop 的閘道位址）。留空時依監聽位址推導。用戶端無法透過本機回送存取時填寫，例如 WSL2（NAT 模式）中的 Claude Desktop 工作階段：將監聽位址設為 0.0.0.0，在此填入 WSL 能存取的 Windows IP（如 vEthernet (WSL) 介面卡的位址），並在防火牆中放行連接埠。",
     "logging": "記錄請求用量",
     "loggingHelp": "關閉後，用量統計裡沒有經路由的請求明細。",
     "usingApps": "正在使用路由的應用 · {{count}}",
@@ -4430,7 +4430,7 @@
     "failNoticeTitle": "無法寫入 {{app}} 的設定",
     "failNoticeBody": "{{error}}。修好檔案後點「重試」。",
     "loadFailed": "讀取 MCP 列表失敗",
-    "noFilesChanged": "Lolicode 沒有改動任何檔案。",
+    "noFilesChanged": "LoliCode 沒有改動任何檔案。",
     "emptyTitle": "還沒有 MCP 伺服器",
     "emptyBody": "已經在應用裡設定過的 MCP，可以直接匯入",
     "importHelpTitle": "匯入會讀哪些設定",
@@ -4450,8 +4450,8 @@
     "disableEverywhere": "全部關閉",
     "deleteEllipsis": "刪除",
     "deleteTitle": "刪除 {{id}}？",
-    "deleteBodyApps": "會從 Lolicode 以及 {{apps}} 的設定檔裡刪除這一項，無法復原。",
-    "deleteBody": "會從 Lolicode 裡刪除這一項，無法復原。",
+    "deleteBodyApps": "會從 LoliCode 以及 {{apps}} 的設定檔裡刪除這一項，無法復原。",
+    "deleteBody": "會從 LoliCode 裡刪除這一項，無法復原。",
     "toast": {
       "written": "已寫入 {{app}}",
       "rowAllOn": "{{id}} 已在全部 {{count}} 個應用啟用",
@@ -4470,7 +4470,7 @@
       "title": "匯入完成",
       "added": "新增 {{count}} 個 MCP：{{names}}。",
       "none": "沒有發現新的 MCP。",
-      "sameName": "已有的同名 MCP 只打開了對應應用的開關，設定仍以 Lolicode 裡的為準。",
+      "sameName": "已有的同名 MCP 只打開了對應應用的開關，設定仍以 LoliCode 裡的為準。",
       "failedTitle": "有應用沒有讀到",
       "filesTitle": "讀取了哪些檔案",
       "claudeNote": "（頂層 mcpServers）",
@@ -4566,7 +4566,7 @@
       "metaHint": "顯示名稱、描述、標籤、首頁、文件",
       "displayName": "顯示名稱",
       "displayNameHelpTitle": "顯示名稱用在哪",
-      "displayNameHelp": "只在 Lolicode 裡顯示，不寫進應用的設定。",
+      "displayNameHelp": "只在 LoliCode 裡顯示，不寫進應用的設定。",
       "description": "描述",
       "tags": "標籤",
       "tagsPlaceholder": "用逗號分隔，例如 docs, web",
@@ -4578,7 +4578,7 @@
   "skillsPage": {
     "noun": "Skill",
     "helpTitle": "Skills 怎麼同步",
-    "help": "主副本放在 Lolicode 的目錄裡，再同步到你勾選的應用。Claude Desktop、OpenClaw 不支援 Skills，所以表格裡沒有這兩欄。",
+    "help": "主副本放在 LoliCode 的目錄裡，再同步到你勾選的應用。Claude Desktop、OpenClaw 不支援 Skills，所以表格裡沒有這兩欄。",
     "add": "新增 Skill",
     "addMenu": {
       "discover": "在探索裡瀏覽",
@@ -4597,7 +4597,7 @@
     "lastChecked": "上次檢查：{{when}}",
     "justNow": "剛剛",
     "banner": {
-      "unmanaged": "本機有 {{count}} 個 Skill 不在 Lolicode 管理中。",
+      "unmanaged": "本機有 {{count}} 個 Skill 不在 LoliCode 管理中。",
       "reviewImport": "查看並匯入",
       "ignore": "忽略",
       "close": "關閉提示"
@@ -4647,7 +4647,7 @@
     "confirm": {
       "uninstallOne": "解除安裝 {{name}}？",
       "uninstallMany": "解除安裝 {{count}} 個 Skill？",
-      "uninstallBody": "會從所有應用中移除，並刪除 Lolicode 裡的主副本。解除安裝前會自動備份到 {{path}}。",
+      "uninstallBody": "會從所有應用中移除，並刪除 LoliCode 裡的主副本。解除安裝前會自動備份到 {{path}}。",
       "uninstallManyButton": "解除安裝 {{count}} 個",
       "updateAll": "更新 {{count}} 個 Skill？",
       "updateBody": "更新會用倉庫裡的內容取代本機目錄。本機改過的地方只保留在備份裡（{{path}}）。",
@@ -4716,14 +4716,14 @@
     "import": {
       "title": "匯入本機已有的 Skill",
       "helpTitle": "哪些算本機已有",
-      "help": "有 SKILL.md、但還不歸 Lolicode 管理的目錄。",
-      "lead": "匯入會複製一份到 Lolicode 的目錄，原來的檔案不動。",
+      "help": "有 SKILL.md、但還不歸 LoliCode 管理的目錄。",
+      "lead": "匯入會複製一份到 LoliCode 的目錄，原來的檔案不動。",
       "searchPlaceholder": "搜尋名稱或位置",
       "searchAria": "搜尋要匯入的 Skill",
       "selectAll": "全選",
       "selectNone": "全不選",
       "foundIn": "發現於：{{places}}",
-      "foundCcSwitch": "Lolicode 目錄",
+      "foundCcSwitch": "LoliCode 目錄",
       "appsTitle": "匯入後在這些應用裡啟用",
       "appsHelpTitle": "預設勾選哪些應用",
       "appsHelp": "預設勾選「發現於」裡的應用，只在發現它的應用裡啟用；另外勾選的應用，所有匯入的 Skill 都會啟用。Pi 按目錄判斷，不在這裡選。",
@@ -4746,7 +4746,7 @@
   },
   "newLayoutNotice": {
     "title": "介面改版了",
-    "body": "Lolicode 這一版重新設計了介面，常用功能的位置有變化：\n• 模式移到了每個應用頁的頂部\n• 用量統計和授權中心移到了左側邊欄\n想了解全部變化，可以看看這一版的更新說明。",
+    "body": "LoliCode 這一版重新設計了介面，常用功能的位置有變化：\n• 模式移到了每個應用頁的頂部\n• 用量統計和授權中心移到了左側邊欄\n想了解全部變化，可以看看這一版的更新說明。",
     "viewReleaseNotes": "查看更新說明",
     "confirm": "我知道了"
   },

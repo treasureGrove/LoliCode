@@ -976,7 +976,7 @@ export function ChannelCenterPanel({
                 </div>
               ))}
               {response.requiresBackground && (
-                <Notice title="这些配置需要 Lolicode 在后台运行。" />
+                <Notice title="这些配置需要 LoliCode 在后台运行。" />
               )}
               {response.results.length === 0 && (
                 <Notice tone="warning" title="没有收到工具配置结果，请重试。" />

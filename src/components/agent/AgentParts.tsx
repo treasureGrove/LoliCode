@@ -48,7 +48,7 @@ export const AgentToolPart = memo(function AgentToolPart({
   const active = part.state === "pending" || part.state === "running";
   const label = TOOL_NAMES[part.name] || part.name;
   return (
-    <details className="my-2 rounded-control border border-border bg-subtle/40">
+    <details className="wb-tool my-2">
       <summary className="flex cursor-pointer items-start gap-2 px-3 py-2 text-caption">
         {active ? (
           <Loader2 className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin" />
@@ -119,15 +119,15 @@ export const AgentMessageView = memo(function AgentMessageView({
       }
       className={cn(
         "min-w-0",
-        message.role === "user" &&
-          "ml-auto max-w-[90%] rounded-panel bg-subtle px-4 py-3",
+        message.role === "user" && "wb-message-user",
+        message.role === "assistant" && "wb-message-assistant",
       )}
     >
-      <p className="mb-1 text-caption font-medium text-fg-3">
+      <p className="wb-message-meta">
         {message.role === "user"
           ? "你"
           : message.role === "assistant"
-            ? "Lolicode"
+            ? "LoliCode"
             : "系统"}
       </p>
       {message.parts.map((part, index) =>

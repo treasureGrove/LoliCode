@@ -1,4 +1,5 @@
 export type AgentMode = "build" | "plan";
+export type AgentPermissionMode = "ask" | "auto" | "full_access";
 export type AgentStatus =
   | "idle"
   | "running"
@@ -36,12 +37,20 @@ export interface AgentWorkspace {
   name: string;
 }
 
+export interface AgentProject extends AgentWorkspace {
+  pinned: boolean;
+  lastOpenedAt: number;
+}
+
 export interface AgentSession {
   id: string;
   title: string;
   projectPath: string;
   model?: { providerId: string; modelId: string } | null;
   mode?: AgentMode | string;
+  permissionMode?: AgentPermissionMode | "custom" | string;
+  pinned?: boolean;
+  archived?: boolean;
   createdAt: number;
   updatedAt: number;
 }
@@ -73,6 +82,7 @@ export interface AgentPermission {
   resources: string[];
   description?: string | null;
   toolName?: string | null;
+  toolInput?: unknown | null;
 }
 
 export type AgentAnswerValue = string | number | boolean | string[];
@@ -140,3 +150,72 @@ export interface AgentProjectResult {
 }
 
 export type AgentPermissionDecision = "once" | "always" | "reject";
+
+export interface AgentSkill {
+  id: string;
+  name: string;
+  description: string | null;
+  source: "bundled" | "local";
+  installed: boolean;
+  enabled: boolean;
+  license?: string | null;
+  sourceUrl?: string | null;
+  requirements: string[];
+  loaded?: boolean | null;
+  runtimeStatus?: string;
+  runtimeId?: string | null;
+}
+
+export interface AgentPlugin {
+  id: string;
+  name: string;
+  entry: string;
+  enabled: boolean;
+  source: "local";
+  loaded?: boolean | null;
+  runtimeStatus?: string;
+  runtimeId?: string | null;
+  error?: string | null;
+}
+
+export interface AgentExtensions {
+  revision: number;
+  skills: AgentSkill[];
+  plugins: AgentPlugin[];
+  mcpServers: {
+    id: string;
+    type: "local" | "remote";
+    enabled: boolean;
+    loaded?: boolean | null;
+    runtimeStatus?: string;
+    runtimeId?: string | null;
+    error?: string | null;
+  }[];
+  runtimeRevision?: number | null;
+  runtimeRunning?: boolean;
+  pendingReload?: boolean;
+  loadedSkills?: {
+    id: string;
+    name: string;
+    description?: string | null;
+    autoinvoke?: boolean | null;
+  }[];
+  loadedPlugins?: {
+    id?: string | null;
+    sourceType: string;
+    target?: string | null;
+    version?: string | null;
+    server: boolean;
+    tui: boolean;
+    rpc: boolean;
+    status: string;
+    error?: string | null;
+  }[];
+  loadedMcpServers?: { name: string; status: string; error?: string | null }[];
+}
+
+export interface AgentExtensionConfig {
+  revision: number;
+  mcp: Record<string, unknown>;
+  pluginOptions: Record<string, unknown>;
+}

@@ -1,6 +1,7 @@
 #![allow(non_snake_case)]
 
 mod agent;
+pub(crate) mod agent_extensions;
 mod auth;
 mod balance;
 mod channel_center;
@@ -42,6 +43,7 @@ mod webdav_sync;
 mod workspace;
 
 pub use agent::*;
+pub use agent_extensions::*;
 pub use auth::*;
 pub use balance::*;
 pub use channel_center::*;

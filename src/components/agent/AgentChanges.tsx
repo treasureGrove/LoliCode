@@ -6,7 +6,7 @@ import { SessionDiff } from "@/components/sessions/reader/SessionDiff";
 export function AgentChanges({ diffs }: { diffs: AgentDiff[] }) {
   if (!diffs.length) return null;
   return (
-    <details className="shrink-0 border-t border-border bg-surface">
+    <details className="wb-changes shrink-0">
       <summary className="flex cursor-pointer items-center gap-2 px-5 py-3 text-body font-medium">
         <FileDiff className="h-4 w-4" />
         文件修改 · {diffs.length} 个文件

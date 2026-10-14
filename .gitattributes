@@ -36,3 +36,7 @@
 *.ttf binary
 *.exe binary
 *.dll binary
+
+# Pinned upstream skills are verified byte-for-byte by their source manifest.
+# Preserve their original line endings on every platform.
+third-party/zcode/** -text

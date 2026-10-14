@@ -3,7 +3,7 @@ import { parseView, readStoredView, VIEW_STORAGE_KEY } from "@/lib/navigation";
 
 afterEach(() => localStorage.removeItem(VIEW_STORAGE_KEY));
 
-describe("Lolicode startup navigation", () => {
+describe("LoliCode startup navigation", () => {
   it("starts from the coding workspace, including upgrades from resource pages", () => {
     expect(readStoredView()).toBe("agent");
     for (const view of [

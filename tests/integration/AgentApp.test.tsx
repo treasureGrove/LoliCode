@@ -28,7 +28,7 @@ beforeEach(() => {
   });
 });
 
-describe("Lolicode desktop entry", () => {
+describe("LoliCode desktop entry", () => {
   it("opens the coding workspace and reaches shared channels from onboarding", async () => {
     render(
       <QueryClientProvider
@@ -44,9 +44,14 @@ describe("Lolicode desktop entry", () => {
       "aria-current",
       "page",
     );
+    expect(screen.getByText("LoliCode")).toBeInTheDocument();
+    expect(screen.getByRole("navigation")).toHaveAttribute(
+      "data-collapsed",
+      "true",
+    );
     expect(
-      screen.getByRole("heading", { name: "Lolicode" }),
-    ).toBeInTheDocument();
+      screen.queryByRole("heading", { name: "LoliCode" }),
+    ).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "添加模型渠道" }));
     expect(await screen.findByTestId("channel-center")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "渠道与模型" })).toHaveAttribute(

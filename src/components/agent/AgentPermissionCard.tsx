@@ -29,10 +29,7 @@ export function AgentPermissionCard({
     }
   };
   return (
-    <section
-      aria-label="需要你的许可"
-      className="rounded-panel border border-border-strong bg-subtle p-4"
-    >
+    <section aria-label="需要你的许可" className="wb-permission border p-4">
       <h3 className="flex items-center gap-2 text-body font-medium">
         <ShieldCheck className="h-4 w-4" />
         需要你的许可

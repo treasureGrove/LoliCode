@@ -901,7 +901,7 @@ describe("ChannelCenterPanel", () => {
     expect(screen.getByText("OpenClaw · 配置失败")).toBeInTheDocument();
     expect(screen.queryByText("OpenClaw · 配置成功")).not.toBeInTheDocument();
     expect(
-      screen.getByText("这些配置需要 Lolicode 在后台运行。"),
+      screen.getByText("这些配置需要 LoliCode 在后台运行。"),
     ).toBeInTheDocument();
     expect(navigation).toHaveBeenLastCalledWith(false);
   });

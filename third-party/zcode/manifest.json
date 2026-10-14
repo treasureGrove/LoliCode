@@ -1,0 +1,511 @@
+{
+  "skills": [
+    {
+      "id": "zcode-skill-creator",
+      "requirements": [],
+      "files": [
+        {
+          "path": "skills/skill-creator/SKILL.md",
+          "sha256": "f024af258401f943e15443d5d7bd987a14c2adde0fe7af9a734e3ac110dd237d"
+        }
+      ],
+      "license": "MIT",
+      "sourcePath": "apps/zcode-cli/packages/skill-creator-plugin/skills/skill-creator",
+      "sourceUrl": "https://github.com/zai-org/ZCode/tree/aac4755666d09fdcd70272fcf063c077a639015f/apps/zcode-cli/packages/skill-creator-plugin/skills/skill-creator",
+      "directory": "skill-creator"
+    },
+    {
+      "id": "zcode-docx",
+      "requirements": [
+        "Python 3",
+        "Node.js",
+        "LibreOffice for rendering"
+      ],
+      "files": [
+        {
+          "path": "skills/docx/env_setup/env_check.sh",
+          "sha256": "41c99b416ac569381f5e91752dfd7c6f788d13dc3d6b9fddf8d660757a824543"
+        },
+        {
+          "path": "skills/docx/env_setup/font_list.txt",
+          "sha256": "90dabcc8b2bf2917a922f997e4324e56d2320b8b9d3da0ffb0802ea54b339f9d"
+        },
+        {
+          "path": "skills/docx/env_setup/setup_mac_linux.sh",
+          "sha256": "0c27b0c38634d78dda4d73a6f499542bdfee6aedabb7d124db9b1fab99db5ce1"
+        },
+        {
+          "path": "skills/docx/env_setup/setup_windows.ps1",
+          "sha256": "91d438e50ed0b39f1dba76d70f439e76686b92535800fd4f2e25712eb63eddba"
+        },
+        {
+          "path": "skills/docx/env_setup/setup.md",
+          "sha256": "f1b077c39908748b630ec32f5d09687ce28f6d0296171c10560acce3f092cab1"
+        },
+        {
+          "path": "skills/docx/LICENSE.txt",
+          "sha256": "a14e8d7dc01e3612bdc22e86bb19059488831df981295313a71eedfc7247ba3e"
+        },
+        {
+          "path": "skills/docx/references/chart-templates.md",
+          "sha256": "ced9828a56830cfecaf6f06c9e59169ddd127552853d12ee8329d0778ff8f819"
+        },
+        {
+          "path": "skills/docx/references/common-rules.md",
+          "sha256": "1d75386af6b35f98adef08856954ef91eb88b3c44b133e75a0856176e5c08b0f"
+        },
+        {
+          "path": "skills/docx/references/decorations.md",
+          "sha256": "5f8dfe26904fd4f1f1f26f8864225551d45e096f7909ff5dd4d9ac255e6e2cb1"
+        },
+        {
+          "path": "skills/docx/references/design-system.md",
+          "sha256": "42e2f47759bf55aa4f44c3dfb13f8ccfb6de69853c4ed6f579af44c7ef44b753"
+        },
+        {
+          "path": "skills/docx/references/docx-js-advanced.md",
+          "sha256": "67585f37f8501cc54be7e1abe6d76ae116386cc7a32c27cb27e9d2f76f3ca72b"
+        },
+        {
+          "path": "skills/docx/references/docx-js-core.md",
+          "sha256": "e2cd0a84c6902a9d95b7889e09e5a624765f280ff4b4855c9bde50ad489d032d"
+        },
+        {
+          "path": "skills/docx/references/faq.md",
+          "sha256": "8e5451347528cc060e49c8047fda47c960737996f9ec9a40f845af5950099736"
+        },
+        {
+          "path": "skills/docx/references/math-formulas.md",
+          "sha256": "3dca23b48a4ebbdcf399527316de46d63280c313404cc74befebe544fc3a22f4"
+        },
+        {
+          "path": "skills/docx/references/ooxml.md",
+          "sha256": "2d6a31241d715dd6d8e43e8d91e7dd7cd0d9ff2b28af0eae57850f0daa90ae77"
+        },
+        {
+          "path": "skills/docx/references/toc.md",
+          "sha256": "8ef7a3bb4359b73cd4c895cc83cd70c5e2df693c780433402395ccb4a5eb0e38"
+        },
+        {
+          "path": "skills/docx/routes/comment.md",
+          "sha256": "effc6123b11952af20f2280da36b2ff43eafca08b4317c34ff23b5ba65164e8d"
+        },
+        {
+          "path": "skills/docx/routes/create.md",
+          "sha256": "c49ac888c8cbfd6bec658eb8376e4e2f36b274149c68cfa7aa2e62b0484634f7"
+        },
+        {
+          "path": "skills/docx/routes/edit.md",
+          "sha256": "9c1f98e6e1b2a31698de139b6808db5510357cf585f97b778c941927e003a6d3"
+        },
+        {
+          "path": "skills/docx/routes/format.md",
+          "sha256": "7acf93f7ad64b0fa85b53f1f097da79d31101e1ef2a6e231432c449a296bd4ba"
+        },
+        {
+          "path": "skills/docx/routes/read.md",
+          "sha256": "71528cc71f6abaefc7d132b6b5444800af31389df60574793f7d3dc101a47fa9"
+        },
+        {
+          "path": "skills/docx/scenes/academic.md",
+          "sha256": "d16bff88944e9ca0877e39e9e03cf8585d37578092a1fddf94b563ec30cb20e7"
+        },
+        {
+          "path": "skills/docx/scenes/contract.md",
+          "sha256": "cfae37745c3c8a95081e396fdde1614302943fc8ce1cd0aba9fb222df26f7d7c"
+        },
+        {
+          "path": "skills/docx/scenes/copywriting.md",
+          "sha256": "4e07937dae9cf3a528994e566bccc56673db89a929638f7b06b6992f60fe9635"
+        },
+        {
+          "path": "skills/docx/scenes/exam.md",
+          "sha256": "ada45e0f91a17de1654827dffc90eaeff3dbab6b73f5abd0296c31d1bdf311d0"
+        },
+        {
+          "path": "skills/docx/scenes/official-doc.md",
+          "sha256": "0638afde81969d26b0ebaa42235314993edd186868d187497e8afd9ed0e2c415"
+        },
+        {
+          "path": "skills/docx/scenes/report.md",
+          "sha256": "6ec0217bec65384848f504ad1a482f257e8d6ffa576ffd0db7aedd47ab8bceb4"
+        },
+        {
+          "path": "skills/docx/scenes/resume.md",
+          "sha256": "37dc5f81e2746dab90244732351222769610def578adde8824723864e215a1b3"
+        },
+        {
+          "path": "skills/docx/scripts/__init__.py",
+          "sha256": "c9f456f19e3112a11da3c60632de6cdef897c1546db8a8e7b28f8017ea842208"
+        },
+        {
+          "path": "skills/docx/scripts/add_toc_placeholders.py",
+          "sha256": "b8940da7f870d11b4abb9e3b28ad22ca678c5d8d183f5ac54b35fd194849375a"
+        },
+        {
+          "path": "skills/docx/scripts/document.py",
+          "sha256": "28f37215bf685edb1fc6660db3f9569d38d04eff77b2ec9cc877c48f4f7ef22b"
+        },
+        {
+          "path": "skills/docx/scripts/fix_footer_fields.py",
+          "sha256": "9eac05b6598782d8cd1597fea273ed9b9481054671a7e6ab35da82f20adc0560"
+        },
+        {
+          "path": "skills/docx/scripts/postcheck.py",
+          "sha256": "fa272c894154ddeb70e5aad3f8a6bae3c985e8e3a05c1584f8edf49375533e5f"
+        },
+        {
+          "path": "skills/docx/scripts/templates/comments.xml",
+          "sha256": "533d3ce3111182f6bb41b07ab76f7a3b28a8782139f222b24d7bc51dca618496"
+        },
+        {
+          "path": "skills/docx/scripts/templates/commentsExtended.xml",
+          "sha256": "f9d3945015714144bf34278fd5610da8515433a8b9c6e0606d00b89927ec84dd"
+        },
+        {
+          "path": "skills/docx/scripts/templates/commentsExtensible.xml",
+          "sha256": "ebde32f647c95846610b72b292acf99ee1ab983a12528055228dd9f85ab3efad"
+        },
+        {
+          "path": "skills/docx/scripts/templates/commentsIds.xml",
+          "sha256": "ae9f422a4a554a4635860a8ecfc4e8dede4050952f4e4cd0a8a772816c7346ff"
+        },
+        {
+          "path": "skills/docx/scripts/templates/people.xml",
+          "sha256": "1463c677cafbc21b6608462ddf086bf3a463d6a3bb6a0363ab9e6d797e69f163"
+        },
+        {
+          "path": "skills/docx/scripts/utilities.py",
+          "sha256": "f2cb2c4d3f8c0480a8bc85ba3e2367260062d21e5a2fb6153f6f61c05135a7c6"
+        },
+        {
+          "path": "skills/docx/setup.sh",
+          "sha256": "64b769645c2ed7f280f10dd315d759eda1fbfb15e77be5609c15a25b62d1a1e3"
+        },
+        {
+          "path": "skills/docx/SKILL.md",
+          "sha256": "d10a01df62b16b12c2e143e701f5302a934cdcfbd8fe06343763e30fcf8cc824"
+        }
+      ],
+      "license": "Apache-2.0",
+      "sourcePath": "apps/zcode-cli/packages/documents-plugin/skills/docx",
+      "sourceUrl": "https://github.com/zai-org/ZCode/tree/aac4755666d09fdcd70272fcf063c077a639015f/apps/zcode-cli/packages/documents-plugin/skills/docx",
+      "directory": "docx"
+    },
+    {
+      "id": "zcode-pdf",
+      "requirements": [
+        "Python 3",
+        "Node.js for HTML/PDF",
+        "PDF tools or LibreOffice for conversion"
+      ],
+      "files": [
+        {
+          "path": "skills/pdf/briefs/academic.md",
+          "sha256": "daf4246a07c699f0d3b76344392089f38be039949006083aaa7af10de47e8d69"
+        },
+        {
+          "path": "skills/pdf/briefs/creative-fixed-canvas.md",
+          "sha256": "1fb9a205f646c0ca4bb2714a1dbeaecc47ea8b2e212e8ebd5b6d5b4a4744d43e"
+        },
+        {
+          "path": "skills/pdf/briefs/creative-flow.md",
+          "sha256": "e543e6fa206ad5364d557d5d4aeec195b10f615308b2841c3dada052cd93cbe2"
+        },
+        {
+          "path": "skills/pdf/briefs/creative.md",
+          "sha256": "7c8d25eb8e11bac39afe17dff99c70c2c1b21014adc935570eeb2c4a847496c5"
+        },
+        {
+          "path": "skills/pdf/briefs/poster.md",
+          "sha256": "6814a8b4c8f42b248b0eca75e375f3f065a207b2d673d59d599fc5b972acf286"
+        },
+        {
+          "path": "skills/pdf/briefs/process-advanced.md",
+          "sha256": "50cb88e98b11e11b47843713b1fbb218f3d6774193312a21afc9cf873d7bf008"
+        },
+        {
+          "path": "skills/pdf/briefs/process.md",
+          "sha256": "afbf8f84247136476a8758f9ac344d938e5838a6b6de863c801ecfd1ed7ab6b2"
+        },
+        {
+          "path": "skills/pdf/briefs/report.md",
+          "sha256": "371e41194d5908350c3ae36da0916f8dc10027d57b011f8f4b9652d87f8fe2c0"
+        },
+        {
+          "path": "skills/pdf/briefs/resume.md",
+          "sha256": "34bbf954504678c3ed34950610a4817c36de5723aa9d5df31a9fc387eab9b846"
+        },
+        {
+          "path": "skills/pdf/configs/components.md",
+          "sha256": "03bba5c7b95575b2634ddae26bc3cdd89b4585d92de88f6fff29171016abacf9"
+        },
+        {
+          "path": "skills/pdf/configs/fonts.md",
+          "sha256": "d23bc1affb3cddc792f111fd7e5ebde51c3152e6a5d14defd1c5e07bc5a2a18b"
+        },
+        {
+          "path": "skills/pdf/configs/visual_framework.md",
+          "sha256": "7a418458cd3d6132d21e10e94cc2eade8c4af02fc06b9925ace162768faf282a"
+        },
+        {
+          "path": "skills/pdf/env_setup/env_check.sh",
+          "sha256": "08454b18d14ff2f0e1e1159f788f79d9ae9e1f7ee3245c63fcc78737b2ee53a9"
+        },
+        {
+          "path": "skills/pdf/env_setup/font_list.txt",
+          "sha256": "b0d8000f4b702d1409f58ced33f706d802805e15530bc9c5ace641205b091598"
+        },
+        {
+          "path": "skills/pdf/env_setup/setup_mac_linux.sh",
+          "sha256": "16486f0949c37c32f3a75ddbb3f96d130e05408b66d298a6fad504e001518a92"
+        },
+        {
+          "path": "skills/pdf/env_setup/setup_windows.ps1",
+          "sha256": "8649de7867ee8abb4d21066794ada4ef89d4c3efaa7dc76da027fc1bdd156c90"
+        },
+        {
+          "path": "skills/pdf/env_setup/setup.md",
+          "sha256": "10c48ee4fe8bfaba946909698a0e86eeee630c772cf3141ca6ff1b35b0a88eff"
+        },
+        {
+          "path": "skills/pdf/LICENSE.txt",
+          "sha256": "a14e8d7dc01e3612bdc22e86bb19059488831df981295313a71eedfc7247ba3e"
+        },
+        {
+          "path": "skills/pdf/references/resume-academic.tex",
+          "sha256": "6d982a99c840de9eca60ac8e585bf5cade68815301eceafcea9c9cbdcfe9f6dc"
+        },
+        {
+          "path": "skills/pdf/references/resume-altacv.tex",
+          "sha256": "6caf5b3594f1b8c598192ae617fd6f99dd0088ef5e77a6a93539ef21b9556300"
+        },
+        {
+          "path": "skills/pdf/scripts/cover_render.py",
+          "sha256": "76704492e5f784c61a548df3284c6d637c1c4959a8ed4da3be13bb2dae50921d"
+        },
+        {
+          "path": "skills/pdf/scripts/cover_validate.js",
+          "sha256": "1e9256fe10ab05ef826efb2586765d8f24655ae3004a54023a5a6de5fc582f16"
+        },
+        {
+          "path": "skills/pdf/scripts/design_engine.py",
+          "sha256": "d9465245545c882b47e645608bf7f64d1628a66fc52e326c155dda9f6790338e"
+        },
+        {
+          "path": "skills/pdf/scripts/html2pdf-next.js",
+          "sha256": "abf3c8a6f59e55af88c606c95d27c8f0779ff625f42a5e6ac21140e336ab3cf6"
+        },
+        {
+          "path": "skills/pdf/scripts/html2poster.js",
+          "sha256": "ea499503912366fcc7ec07056a9ffb6f98386f5cb1def37da5451e4c19273feb"
+        },
+        {
+          "path": "skills/pdf/scripts/pdf_qa.py",
+          "sha256": "4e6e6f7921da37b8a554f30a5e0d14aae9d17971f610086073a269bf7ca20b66"
+        },
+        {
+          "path": "skills/pdf/scripts/pdf.py",
+          "sha256": "24fc9ea4d4cc7ab021a17292831f1342647a959eb6f95951315178a2b3c4aca3"
+        },
+        {
+          "path": "skills/pdf/scripts/poster_validate.py",
+          "sha256": "7b33fb943ab85fe8abeba33abbd800e30ca4d0cf0e6732dcde03c1ef2dca1e1d"
+        },
+        {
+          "path": "skills/pdf/scripts/setup.sh",
+          "sha256": "4293ba1ae3e881bddf2af62e15082a205a3e0ccd8260042467baaae5954329ab"
+        },
+        {
+          "path": "skills/pdf/scripts/toc_validate.py",
+          "sha256": "db05075d724fed12e7b642e5f69d647657a797db2529b97fa06392540bee3729"
+        },
+        {
+          "path": "skills/pdf/SKILL.md",
+          "sha256": "0016a97a781a002c6feecd8f98cf92ce6b21dcf6e3d2b76c233a0560df8cb7d1"
+        },
+        {
+          "path": "skills/pdf/typesetting/charts.md",
+          "sha256": "3e3ee311e02d3d843d3705c35f572d1d1700edc140144f6cab36139ae2e60f92"
+        },
+        {
+          "path": "skills/pdf/typesetting/cover-backgrounds.md",
+          "sha256": "1345521b728e8be6ca42e9b5dd722be7e64dd20996942488c007515f7c4fb6e8"
+        },
+        {
+          "path": "skills/pdf/typesetting/cover.md",
+          "sha256": "29e5efeb8a32ada94199d2c5dabc28e3066fd48f32b604556b4cd24adc86724e"
+        },
+        {
+          "path": "skills/pdf/typesetting/fill-engine.md",
+          "sha256": "e1aeddb0c16e66d9f2be9f69950859fb3f41b785776bfae9dbac4a87cf4daa30"
+        },
+        {
+          "path": "skills/pdf/typesetting/geometry.md",
+          "sha256": "6885b62abca468baad9d4320b28e4f27d96dde3b4f8c355b0bae2e96df9fff55"
+        },
+        {
+          "path": "skills/pdf/typesetting/overflow.md",
+          "sha256": "625ff7d22cadc23c134f8a6011ed2bdbdf8e6b21654e1c8bf24f3d39879c60e0"
+        },
+        {
+          "path": "skills/pdf/typesetting/pagination.md",
+          "sha256": "0851817b06c4241067b08ae6d7463bd5456bfae2c72609d34c67c00ad9f022c3"
+        },
+        {
+          "path": "skills/pdf/typesetting/palette.md",
+          "sha256": "6763b98a4dee8cf4abd1b8ac06466d7726d4c238820b7793a5d4ef94ec513039"
+        },
+        {
+          "path": "skills/pdf/typesetting/typography.md",
+          "sha256": "c2d804008e9e070836d59b150de31252cd749ee8c9ec2652aa4bff56c4eba001"
+        }
+      ],
+      "license": "Apache-2.0",
+      "sourcePath": "apps/zcode-cli/packages/pdf-plugin/skills/pdf",
+      "sourceUrl": "https://github.com/zai-org/ZCode/tree/aac4755666d09fdcd70272fcf063c077a639015f/apps/zcode-cli/packages/pdf-plugin/skills/pdf",
+      "directory": "pdf"
+    },
+    {
+      "id": "zcode-pptx",
+      "requirements": [
+        "Node.js or Python 3",
+        "LibreOffice for rendering"
+      ],
+      "files": [
+        {
+          "path": "skills/pptx/LICENSE.txt",
+          "sha256": "a14e8d7dc01e3612bdc22e86bb19059488831df981295313a71eedfc7247ba3e"
+        },
+        {
+          "path": "skills/pptx/SKILL.md",
+          "sha256": "cc76a53f58beb1f0c32bb4863ca3d32b48e746ad8fcbdd774498187d917707d4"
+        }
+      ],
+      "license": "Apache-2.0",
+      "sourcePath": "apps/zcode-cli/packages/presentations-plugin/skills/pptx",
+      "sourceUrl": "https://github.com/zai-org/ZCode/tree/aac4755666d09fdcd70272fcf063c077a639015f/apps/zcode-cli/packages/presentations-plugin/skills/pptx",
+      "directory": "pptx"
+    },
+    {
+      "id": "zcode-xlsx",
+      "requirements": [
+        "Python 3",
+        "LibreOffice for rendering"
+      ],
+      "files": [
+        {
+          "path": "skills/xlsx/engines/chart-templates.md",
+          "sha256": "7ffb3f019a8c51d000e8c5fab41cd057f0e2af2f56892aba2b3726a404699091"
+        },
+        {
+          "path": "skills/xlsx/engines/chart.md",
+          "sha256": "f1fa630d23eeb86bbf63d434194d6d1ea5bd13a65901a1b1099e937409bf6b51"
+        },
+        {
+          "path": "skills/xlsx/engines/design.md",
+          "sha256": "ee6ccc2543748d299f9809d9e4f1362ec5eb46e77a950d8238cff621f06a9534"
+        },
+        {
+          "path": "skills/xlsx/engines/vba-templates.md",
+          "sha256": "3b28f39b8120bcc49d8773fc0644a30065e5dcb66e83d0a43001a474bcd9d3f7"
+        },
+        {
+          "path": "skills/xlsx/env_setup/env_check.sh",
+          "sha256": "903a785d085dca4277e7d6121af174eb4d5c9223319d11f4e461e424c9251c0b"
+        },
+        {
+          "path": "skills/xlsx/env_setup/font_list.txt",
+          "sha256": "90dabcc8b2bf2917a922f997e4324e56d2320b8b9d3da0ffb0802ea54b339f9d"
+        },
+        {
+          "path": "skills/xlsx/env_setup/setup_mac_linux.sh",
+          "sha256": "64bdea1798fa5b2d5237f6ad0d7d72740eb249fb0e825545b89d362cc9d6dbcd"
+        },
+        {
+          "path": "skills/xlsx/env_setup/setup_windows.ps1",
+          "sha256": "7c6aa408b43da7b8f195a40f4b021c37a2b64558cc86d6afe81a29a2652cb6ef"
+        },
+        {
+          "path": "skills/xlsx/env_setup/setup.md",
+          "sha256": "9490a3545f9352f6e55d6d280b62d27f7398aa09dd2f218c43eb405f9fc8fa1a"
+        },
+        {
+          "path": "skills/xlsx/LICENSE.txt",
+          "sha256": "a14e8d7dc01e3612bdc22e86bb19059488831df981295313a71eedfc7247ba3e"
+        },
+        {
+          "path": "skills/xlsx/quality/pipeline.md",
+          "sha256": "986c2a114649ba1b302ee162dd8c4a2bffac4c5b6f1294d38cd441ab84f3ec04"
+        },
+        {
+          "path": "skills/xlsx/scenes/advanced.md",
+          "sha256": "57eadfea236f606770cb4b401ceedb8ca24bb6c66802a63659bceba37c3d2723"
+        },
+        {
+          "path": "skills/xlsx/scenes/analyze-recipes.md",
+          "sha256": "567ef26d7a0016eb4cde4490b878adc0239050aeed4ddee8ce34e866366028bf"
+        },
+        {
+          "path": "skills/xlsx/scenes/analyze.md",
+          "sha256": "17c7ac50d9ed15e8f62672720336468543ae39a3ee561f8ffd2950d7acadfc76"
+        },
+        {
+          "path": "skills/xlsx/scenes/convert.md",
+          "sha256": "97fa92ec774100d18eae63da5c56f5cd92910b9cd6a69b542a5cbf20e9a74e92"
+        },
+        {
+          "path": "skills/xlsx/scenes/create.md",
+          "sha256": "fef7910edb5d59853b9b765a3758cd588ca50819cbf437075d06a9c4e2bb5a7e"
+        },
+        {
+          "path": "skills/xlsx/scenes/edit-patterns.md",
+          "sha256": "7be8cba6da2dac7bae227df1ae04791410d45ad97d468b14b7b8da284036a392"
+        },
+        {
+          "path": "skills/xlsx/scenes/edit.md",
+          "sha256": "dc6b6dde8a7dff741d9a797d91a6dac65a4a01024894f65030ffaae193d364a4"
+        },
+        {
+          "path": "skills/xlsx/scenes/finance_lite.md",
+          "sha256": "68aff6931638868aa79043c29b2e83505658f26a5c1e14ceb9c52bf3e1f8a09a"
+        },
+        {
+          "path": "skills/xlsx/scenes/finance.md",
+          "sha256": "50cbdb48ad632519c800eee1763145241f0beabf54d2d02c42f569fd9443c0d5"
+        },
+        {
+          "path": "skills/xlsx/scenes/vba.md",
+          "sha256": "d5265906c572db24205e574fb126ca9ac5a7d199847075d1300ff3035d13d690"
+        },
+        {
+          "path": "skills/xlsx/setup.sh",
+          "sha256": "02419bee2d5f8dbcf21da2903a68cc1c648a8e3f2594a4d81ed9d5dc24ab510f"
+        },
+        {
+          "path": "skills/xlsx/SKILL.md",
+          "sha256": "581e47f93571200bb5f2b8aa248cdb1b1403f7e9fa037a3e002e8a64d62c9f64"
+        },
+        {
+          "path": "skills/xlsx/templates/base.py",
+          "sha256": "02adace10850a81101f7414e2634c049e074f042735a8978d526c254345eb972"
+        },
+        {
+          "path": "skills/xlsx/templates/palettes.py",
+          "sha256": "834c95d46feed0ca9c5bc4aefc83373c365a1f1fafe85a582f0573a4e301e5c9"
+        },
+        {
+          "path": "skills/xlsx/xlsx.py",
+          "sha256": "fc3e4e6f230808a9a39123a7d54cf59bb969c95d9b7ef0d9c6db2f865aca64d5"
+        }
+      ],
+      "license": "Apache-2.0",
+      "sourcePath": "apps/zcode-cli/packages/spreadsheets-plugin/skills/xlsx",
+      "sourceUrl": "https://github.com/zai-org/ZCode/tree/aac4755666d09fdcd70272fcf063c077a639015f/apps/zcode-cli/packages/spreadsheets-plugin/skills/xlsx",
+      "directory": "xlsx"
+    }
+  ],
+  "source": "https://github.com/zai-org/ZCode",
+  "sourceRevision": "aac4755666d09fdcd70272fcf063c077a639015f",
+  "version": 1
+}
