@@ -2,9 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   CheckCircle2,
   CircleAlert,
-  Copy,
-  ExternalLink,
-  Github,
   Loader2,
   Plus,
   RefreshCw,
@@ -17,9 +14,18 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Notice } from "@/components/ui/notice";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { useCopilotAuth } from "@/components/providers/forms/hooks/useCopilotAuth";
-import { APP_IDS, APP_ICON_MAP, getAppLabel } from "@/config/appConfig";
-import { settingsApi } from "@/lib/api";
+import { APP_IDS } from "@/config/appConfig";
+import { APP_DISPLAY_NAME, AppGlyph } from "@/components/shell/AppGlyph";
+import { AuthCenterPanel } from "@/components/settings/AuthCenterPanel";
+import type { ManagedAuthProvider } from "@/lib/api/auth";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   channelCenterApi,
   type ChannelApplyResponse,
@@ -27,7 +33,6 @@ import {
   type ChannelProtocol,
   type ChannelSource,
 } from "@/lib/api/channel-center";
-import { copyText } from "@/lib/clipboard";
 import { useUnsavedChangesTracker } from "@/lib/unsavedChanges";
 import { cn } from "@/lib/utils";
 import {
@@ -40,7 +45,13 @@ import {
 import { ZhipuLoginPanel } from "./ZhipuLoginPanel";
 import { ChannelPresetPicker } from "./ChannelPresetPicker";
 import { ProviderIconBox } from "@/components/ProviderIconBox";
-import { CHANNEL_PRESET_MAP, matchChannelPreset } from "./channelPresets";
+import {
+  ACCOUNT_CHANNEL_PRESET_MAP,
+  CHANNEL_PRESET_MAP,
+  matchChannelPreset,
+} from "./channelPresets";
+import { ManagedChannelLoginPanel } from "./ManagedChannelLoginPanel";
+import { NativeSubscriptionLoginPanel } from "./NativeSubscriptionLoginPanel";
 
 const EMPTY_SNAPSHOT: ChannelCenterSnapshot = {
   channels: [],
@@ -50,11 +61,13 @@ const CARD = "rounded-panel border border-border bg-surface p-5";
 
 export interface ChannelCenterPanelProps {
   onNavigationBlockedChange?: (blocked: boolean) => void;
+  initialAccountManagerOpen?: boolean;
 }
 
 /** One catalog of upstream channels; target writers stay behind the backend API. */
 export function ChannelCenterPanel({
   onNavigationBlockedChange,
+  initialAccountManagerOpen = false,
 }: ChannelCenterPanelProps = {}) {
   const [snapshot, setSnapshot] =
     useState<ChannelCenterSnapshot>(EMPTY_SNAPSHOT);
@@ -78,29 +91,31 @@ export function ChannelCenterPanel({
   const [formTouched, setFormTouched] = useState(false);
   const [search, setSearch] = useState("");
   const [resetRequested, setResetRequested] = useState(false);
-  const [copilotAccountId, setCopilotAccountId] = useState("");
-  const [zhipuBusy, setZhipuBusy] = useState(false);
-  const auth = useCopilotAuth();
+  const [accountBusy, setAccountBusy] = useState(false);
+  const [accountManagerOpen, setAccountManagerOpen] = useState(
+    initialAccountManagerOpen,
+  );
+  const [accountManagerTarget, setAccountManagerTarget] =
+    useState<ManagedAuthProvider | null>(null);
   const mounted = useRef(true);
   const loadGeneration = useRef(0);
   const busyRef = useRef(false);
-  const loginAccounts = useRef<Set<string> | null>(null);
-  const copilotLoginStarted = useRef(false);
   const formRef = useRef<HTMLFormElement>(null);
-  const blocked =
-    dirty || formTouched || Boolean(busy) || auth.isAddingAccount || zhipuBusy;
+  const blocked = dirty || formTouched || Boolean(busy) || accountBusy;
   const tracker = useUnsavedChangesTracker();
+
+  useEffect(() => {
+    if (initialAccountManagerOpen) setAccountManagerOpen(true);
+  }, [initialAccountManagerOpen]);
 
   useEffect(() => {
     if (dirty || formTouched) tracker.markDirty();
     else tracker.markClean();
   }, [dirty, formTouched, tracker.markDirty, tracker.markClean]);
   useEffect(() => {
-    onNavigationBlockedChange?.(
-      Boolean(busy) || auth.isAddingAccount || zhipuBusy,
-    );
+    onNavigationBlockedChange?.(Boolean(busy) || accountBusy);
     return () => onNavigationBlockedChange?.(false);
-  }, [busy, auth.isAddingAccount, zhipuBusy, onNavigationBlockedChange]);
+  }, [busy, accountBusy, onNavigationBlockedChange]);
   useEffect(() => {
     if (!blocked) return;
     const warnBeforeUnload = (event: BeforeUnloadEvent) => {
@@ -157,12 +172,13 @@ export function ChannelCenterPanel({
     if (value === preset) return;
     setApiKey("");
     setPreset(value);
-    setName(value === "custom" ? "" : CHANNEL_PRESET_MAP[value].name);
-    setBaseUrl(value === "custom" ? "" : CHANNEL_PRESET_MAP[value].baseUrl);
-    setSourceProtocol(
-      value === "custom" ? "openai_chat" : CHANNEL_PRESET_MAP[value].protocol,
-    );
-    setFormTouched(true);
+    const accountPreset = ACCOUNT_CHANNEL_PRESET_MAP[value];
+    const apiPreset = CHANNEL_PRESET_MAP[value];
+    setName(apiPreset?.name ?? "");
+    setBaseUrl(apiPreset?.baseUrl ?? "");
+    setSourceProtocol(apiPreset?.protocol ?? "openai_chat");
+    if (accountPreset) setEditingId(null);
+    setFormTouched(!accountPreset);
   };
 
   const updateSnapshot = (next: ChannelCenterSnapshot) => {
@@ -235,15 +251,24 @@ export function ChannelCenterPanel({
   const upsertDiscovered = async (
     channel: ChannelSource,
     onSaved?: () => void,
+    alreadyDiscovered = false,
   ) => {
     const previous = snapshot.channels.find((item) => item.id === channel.id);
     const discovered = mergeDiscoveredChannel(
-      await channelCenterApi.discover(channel),
+      alreadyDiscovered ? channel : await channelCenterApi.discover(channel),
       previous,
     );
     const exists = snapshot.channels.some((item) => item.id === discovered.id);
     const next = {
       ...snapshot,
+      targets:
+        discovered.authKind === "claude_subscription" &&
+        !snapshot.targets.includes("claude")
+          ? [...snapshot.targets, "claude" as const]
+          : discovered.authKind === "gemini_subscription" &&
+              !snapshot.targets.includes("gemini")
+            ? [...snapshot.targets, "gemini" as const]
+            : snapshot.targets,
       channels: exists
         ? snapshot.channels.map((item) =>
             item.id === discovered.id ? discovered : item,
@@ -294,81 +319,32 @@ export function ChannelCenterPanel({
     });
   };
 
-  const addCopilotChannel = (accountId: string) => {
-    const account = auth.accounts.find((item) => item.id === accountId);
-    if (!account) return;
-    void run("discover-copilot", async () => {
-      const source: ChannelSource = {
-        id: `copilot-${account.id}`,
-        name: `GitHub Copilot · ${account.login}`,
-        baseUrl: "https://api.githubcopilot.com",
-        apiKey: "",
-        authKind: "github_copilot",
-        accountId: account.id,
-        protocol: "openai_chat",
-        models: [],
-        enabled: true,
-      };
-      const discovered = await upsertDiscovered(source);
-      if (mounted.current) {
-        setResponse(null);
-        setNotice(
-          `已加入 ${discovered.name}，发现 ${discovered.models.length} 个模型。`,
-        );
-      }
-    });
-  };
-
-  useEffect(() => {
-    if (!loginAccounts.current) return;
-    if (
-      auth.isAddingAccount ||
-      auth.pollingState === "polling" ||
-      auth.pollingState === "success"
-    ) {
-      copilotLoginStarted.current = true;
-    }
-    if (auth.pollingState === "error") {
-      loginAccounts.current = null;
-      copilotLoginStarted.current = false;
-      return;
-    }
-    const added = auth.isStatusSuccess
-      ? auth.accounts.find((account) => !loginAccounts.current?.has(account.id))
-      : undefined;
-    if (added) {
-      if (loading || busy) return;
-      loginAccounts.current = null;
-      copilotLoginStarted.current = false;
-      setCopilotAccountId(added.id);
-      addCopilotChannel(added.id);
-      return;
-    }
-    // The hook sets success before refreshing accounts, then returns to idle.
-    // Wait for that completed refresh so a genuinely new account can still be
-    // auto-added. It does not expose the successfully reauthorized account ID.
-    if (
-      copilotLoginStarted.current &&
-      !auth.isAddingAccount &&
-      auth.pollingState === "idle"
-    ) {
-      loginAccounts.current = null;
-      copilotLoginStarted.current = false;
-      setNotice(
-        "GitHub 授权已完成。选择账号后点击“加入渠道”，已有渠道可点击“刷新模型”。",
-      );
-    }
-  });
+  const connectAccountChannel = (channel: ChannelSource) =>
+    run(
+      "connect-account",
+      async () => {
+        try {
+          const native =
+            channel.authKind === "claude_subscription" ||
+            channel.authKind === "gemini_subscription";
+          const discovered = await upsertDiscovered(channel, undefined, native);
+          if (mounted.current)
+            setNotice(
+              native
+                ? `已加入 ${discovered.name}，模型由原生工具管理。`
+                : `已加入 ${discovered.name}，发现 ${discovered.models.length} 个模型。`,
+            );
+        } catch (cause) {
+          throw new Error(channelErrorMessage(cause, [channel.apiKey]));
+        }
+      },
+      true,
+    );
 
   const selected = selectedChannelModels(snapshot);
-  const disabled = loading || loadFailed || Boolean(busy) || zhipuBusy;
+  const disabled = loading || loadFailed || Boolean(busy) || accountBusy;
   const selectedPreset = CHANNEL_PRESET_MAP[preset];
-  const accountId =
-    copilotAccountId || auth.defaultAccountId || auth.accounts[0]?.id || "";
-  const accountAlreadyAdded = snapshot.channels.some(
-    (channel) =>
-      channel.authKind === "github_copilot" && channel.accountId === accountId,
-  );
+  const selectedAccountPreset = ACCOUNT_CHANNEL_PRESET_MAP[preset];
   const filteredChannels = snapshot.channels.map((channel) => ({
     channel,
     models: channel.models.filter((model) =>
@@ -378,7 +354,7 @@ export function ChannelCenterPanel({
 
   return (
     <div
-      className="h-full overflow-y-auto"
+      className="lolicode-channel-center h-full overflow-y-auto"
       aria-busy={Boolean(busy) || loading}
     >
       <div className="mx-auto max-w-6xl space-y-5 px-6 py-6 sm:px-8">
@@ -438,282 +414,160 @@ export function ChannelCenterPanel({
           >
             1. 添加渠道
           </h2>
+          <Button
+            variant="quiet"
+            size="compact"
+            disabled={disabled}
+            onClick={() => {
+              setAccountManagerTarget(null);
+              setAccountManagerOpen(true);
+            }}
+          >
+            管理登录账号
+          </Button>
           <ChannelPresetPicker
             value={preset}
             disabled={disabled}
             onValueChange={selectPreset}
           />
-          <div className="mt-4 grid gap-6 lg:grid-cols-[1.2fr_1fr]">
-            <form
-              ref={formRef}
-              noValidate
-              className="space-y-3"
-              onSubmit={(event) => {
-                event.preventDefault();
-                addApiChannel();
-              }}
-            >
-              <fieldset disabled={disabled} className="space-y-3">
-                {selectedPreset && (
-                  <div className="flex items-center gap-2.5 rounded-control bg-subtle p-3">
-                    <ProviderIconBox
-                      icon={selectedPreset.icon}
-                      name={selectedPreset.name}
-                    />
-                    <div>
-                      <p className="text-body font-medium text-fg-1">
-                        {selectedPreset.name}
-                      </p>
-                      <p className="mt-0.5 text-caption text-fg-3">
-                        服务地址已准备好，填写密钥即可。
-                      </p>
+          <div className="lolicode-channel-form mt-4 max-w-2xl rounded-control border border-border p-4">
+            {selectedAccountPreset && (
+              <div className="mb-4 flex items-center gap-2.5">
+                <ProviderIconBox
+                  icon={selectedAccountPreset.icon}
+                  name={selectedAccountPreset.name}
+                />
+                <h3 className="text-body font-medium text-fg-1">
+                  {selectedAccountPreset.name}
+                </h3>
+              </div>
+            )}
+            {!selectedAccountPreset ? (
+              <form
+                ref={formRef}
+                noValidate
+                className="space-y-3"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  addApiChannel();
+                }}
+              >
+                <fieldset disabled={disabled} className="space-y-3">
+                  {selectedPreset && (
+                    <div className="flex items-center gap-2.5 rounded-control bg-subtle p-3">
+                      <ProviderIconBox
+                        icon={selectedPreset.icon}
+                        name={selectedPreset.name}
+                      />
+                      <div>
+                        <p className="text-body font-medium text-fg-1">
+                          {selectedPreset.name}
+                        </p>
+                        <p className="mt-0.5 text-caption text-fg-3">
+                          服务地址已准备好，填写密钥即可。
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                )}
-                <div className="space-y-1.5">
-                  <Label htmlFor="channel-name">
-                    名称 <span className="text-fg-3">（可选）</span>
-                  </Label>
-                  <Input
-                    id="channel-name"
-                    value={name}
-                    placeholder="例如：工作账号"
-                    onChange={(event) => {
-                      setName(event.target.value);
-                      setFormTouched(true);
-                    }}
-                  />
-                </div>
-                {preset === "custom" && (
+                  )}
                   <div className="space-y-1.5">
-                    <Label htmlFor="channel-url">API 地址</Label>
+                    <Label htmlFor="channel-name">
+                      名称 <span className="text-fg-3">（可选）</span>
+                    </Label>
                     <Input
-                      id="channel-url"
-                      type="url"
-                      required
-                      value={baseUrl}
-                      placeholder="粘贴服务商提供的 API 地址"
+                      id="channel-name"
+                      value={name}
+                      placeholder="例如：工作账号"
                       onChange={(event) => {
-                        setBaseUrl(event.target.value);
+                        setName(event.target.value);
                         setFormTouched(true);
                       }}
                     />
                   </div>
-                )}
-                <div className="space-y-1.5">
-                  <Label htmlFor="channel-key">API Key</Label>
-                  <Input
-                    id="channel-key"
-                    type="password"
-                    required
-                    value={apiKey}
-                    placeholder="粘贴密钥"
-                    autoComplete="new-password"
-                    onChange={(event) => {
-                      setApiKey(event.target.value);
-                      setFormTouched(true);
-                    }}
-                  />
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button
-                    type="submit"
-                    variant="neutral"
-                    disabled={!baseUrl.trim() || !apiKey.trim()}
-                  >
-                    {busy === "discover-api" ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Plus className="h-4 w-4" />
-                    )}
-                    {editingId ? "保存修改并刷新模型" : "添加并查找模型"}
-                  </Button>
-                  {formTouched && (
-                    <Button
-                      type="button"
-                      variant="quiet"
-                      onClick={() => setResetRequested(true)}
-                    >
-                      {editingId ? "取消修改" : "清空输入"}
-                    </Button>
+                  {preset === "custom" && (
+                    <div className="space-y-1.5">
+                      <Label htmlFor="channel-url">API 地址</Label>
+                      <Input
+                        id="channel-url"
+                        type="url"
+                        required
+                        value={baseUrl}
+                        placeholder="粘贴服务商提供的 API 地址"
+                        onChange={(event) => {
+                          setBaseUrl(event.target.value);
+                          setFormTouched(true);
+                        }}
+                      />
+                    </div>
                   )}
-                </div>
-                <p className="text-caption text-fg-3">
-                  {preset === "custom"
-                    ? "填入服务商的地址和密钥，自动获取模型。"
-                    : "自动获取此账号的模型列表；不同服务可以逐个加入。"}
-                </p>
-              </fieldset>
-            </form>
-
-            <div className="space-y-3 border-t border-border pt-4 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
-              <h3 className="flex items-center gap-2 text-body font-medium text-fg-1">
-                <Github className="h-4 w-4" />
-                GitHub Copilot
-              </h3>
-              <p className="text-caption text-fg-2">
-                浏览器登录订阅账号，授权后自动加入渠道。
-              </p>
-              {!auth.isStatusSuccess && !auth.isStatusError && (
-                <p className="flex items-center gap-2 text-caption text-fg-3">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  正在读取登录状态…
-                </p>
-              )}
-              {auth.isStatusError && (
-                <div role="alert" className="text-caption text-danger-text">
-                  无法读取账号，请重试。
-                  <Button
-                    variant="quiet"
-                    size="compact"
-                    onClick={() => void auth.refetchStatus()}
-                  >
-                    重试
-                  </Button>
-                </div>
-              )}
-              {auth.accounts.length > 0 && (
-                <div className="flex flex-wrap items-center gap-2">
-                  <select
-                    aria-label="GitHub Copilot 账号"
-                    className={cn(fieldClass, "h-8 min-w-0 flex-1")}
-                    value={accountId}
-                    disabled={disabled || auth.isAddingAccount}
-                    onChange={(event) =>
-                      setCopilotAccountId(event.target.value)
-                    }
-                  >
-                    {auth.accounts.map((account) => (
-                      <option key={account.id} value={account.id}>
-                        {account.login}
-                      </option>
-                    ))}
-                  </select>
-                  <Button
-                    variant="neutral"
-                    disabled={
-                      disabled ||
-                      auth.isAddingAccount ||
-                      accountAlreadyAdded ||
-                      !accountId
-                    }
-                    onClick={() => addCopilotChannel(accountId)}
-                  >
-                    {busy === "discover-copilot" && (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    )}
-                    {accountAlreadyAdded ? "已加入渠道" : "加入渠道"}
-                  </Button>
-                </div>
-              )}
-              <Button
-                variant="neutral"
-                disabled={
-                  disabled || auth.isAddingAccount || !auth.isStatusSuccess
-                }
-                onClick={() => {
-                  if (loginAccounts.current) return;
-                  loginAccounts.current = new Set(
-                    auth.accounts.map((account) => account.id),
-                  );
-                  copilotLoginStarted.current = false;
-                  auth.addAccount();
-                }}
-              >
-                {auth.isAddingAccount ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Github className="h-4 w-4" />
-                )}
-                {auth.isAddingAccount
-                  ? "等待浏览器授权…"
-                  : auth.accounts.length > 0
-                    ? "登录另一个账号"
-                    : "使用 GitHub 登录"}
-              </Button>
-              {auth.deviceCode && (
-                <div
-                  className="space-y-2 rounded-control bg-subtle p-3 text-caption text-fg-2"
-                  role="status"
-                >
-                  <p>验证码已复制，请在浏览器中粘贴并完成授权。</p>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-mono text-base tracking-widest text-fg-1">
-                      {auth.deviceCode.user_code}
-                    </span>
-                    <Button
-                      variant="quiet"
-                      size="compact"
-                      onClick={() =>
-                        void copyText(auth.deviceCode!.user_code).catch(() =>
-                          setError("复制失败，请手动复制上面的验证码。"),
-                        )
-                      }
-                    >
-                      <Copy className="h-3.5 w-3.5" />
-                      复制
-                    </Button>
-                    <Button
-                      variant="quiet"
-                      size="compact"
-                      onClick={() =>
-                        void settingsApi
-                          .openExternal(auth.deviceCode!.verification_uri)
-                          .catch(() =>
-                            setError(
-                              "打开浏览器失败，请在账号设置中重试登录。",
-                            ),
-                          )
-                      }
-                    >
-                      <ExternalLink className="h-3.5 w-3.5" />
-                      打开授权页
-                    </Button>
-                    <Button
-                      variant="quiet"
-                      size="compact"
-                      onClick={() => {
-                        loginAccounts.current = null;
-                        copilotLoginStarted.current = false;
-                        auth.cancelAuth();
+                  <div className="space-y-1.5">
+                    <Label htmlFor="channel-key">API Key</Label>
+                    <Input
+                      id="channel-key"
+                      type="password"
+                      required
+                      value={apiKey}
+                      placeholder="粘贴密钥"
+                      autoComplete="new-password"
+                      onChange={(event) => {
+                        setApiKey(event.target.value);
+                        setFormTouched(true);
                       }}
-                    >
-                      取消登录
-                    </Button>
+                    />
                   </div>
-                </div>
-              )}
-              {auth.error && (
-                <div role="alert" className="text-caption text-danger-text">
-                  {channelErrorMessage(auth.error)}
-                </div>
-              )}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      type="submit"
+                      variant="neutral"
+                      disabled={!baseUrl.trim() || !apiKey.trim()}
+                    >
+                      {busy === "discover-api" ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Plus className="h-4 w-4" />
+                      )}
+                      {editingId ? "保存修改并刷新模型" : "添加并查找模型"}
+                    </Button>
+                    {formTouched && (
+                      <Button
+                        type="button"
+                        variant="quiet"
+                        onClick={() => setResetRequested(true)}
+                      >
+                        {editingId ? "取消修改" : "清空输入"}
+                      </Button>
+                    )}
+                  </div>
+                  <p className="text-caption text-fg-3">
+                    {preset === "custom"
+                      ? "填入服务商的地址和密钥，自动获取模型。"
+                      : "自动获取此账号的模型列表；不同服务可以逐个加入。"}
+                  </p>
+                </fieldset>
+              </form>
+            ) : selectedAccountPreset.authProvider === "zhipu_oauth" ? (
               <ZhipuLoginPanel
-                disabled={
-                  loading || loadFailed || Boolean(busy) || auth.isAddingAccount
-                }
-                onBusyChange={setZhipuBusy}
-                onConnected={(channel) =>
-                  run(
-                    "discover-zhipu",
-                    async () => {
-                      try {
-                        const discovered = await upsertDiscovered(channel);
-                        if (mounted.current)
-                          setNotice(
-                            `已加入 ${discovered.name}，发现 ${discovered.models.length} 个模型。`,
-                          );
-                      } catch (cause) {
-                        throw new Error(
-                          channelErrorMessage(cause, [channel.apiKey]),
-                        );
-                      }
-                    },
-                    true,
-                  )
-                }
+                disabled={loading || loadFailed || Boolean(busy)}
+                onBusyChange={setAccountBusy}
+                onConnected={connectAccountChannel}
               />
-            </div>
+            ) : selectedAccountPreset.authProvider ? (
+              <ManagedChannelLoginPanel
+                key={selectedAccountPreset.authProvider}
+                authProvider={selectedAccountPreset.authProvider}
+                channels={snapshot.channels}
+                disabled={loading || loadFailed || Boolean(busy)}
+                onBusyChange={setAccountBusy}
+                onConnected={connectAccountChannel}
+              />
+            ) : (
+              <NativeSubscriptionLoginPanel
+                key={selectedAccountPreset.nativeApp}
+                tool={selectedAccountPreset.nativeApp!}
+                disabled={loading || loadFailed || Boolean(busy)}
+                onBusyChange={setAccountBusy}
+                onConnected={connectAccountChannel}
+              />
+            )}
           </div>
         </section>
 
@@ -743,7 +597,7 @@ export function ChannelCenterPanel({
           </div>
           {snapshot.channels.length === 0 && !loading && (
             <p className="py-8 text-center text-body text-fg-3">
-              添加 API 或登录 Copilot 后，模型会显示在这里。
+              添加 API 或登录订阅账号后，模型会显示在这里。
             </p>
           )}
           <div className="mt-4 space-y-3">
@@ -776,11 +630,24 @@ export function ChannelCenterPanel({
                           ? "githubcopilot"
                           : channel.authKind === "zhipu_oauth"
                             ? "zhipu"
-                            : matchChannelPreset(channel)?.icon || "newapi"
+                            : channel.authKind === "codex_oauth"
+                              ? "openai"
+                              : channel.authKind === "xai_oauth"
+                                ? "grok"
+                                : channel.authKind === "claude_subscription"
+                                  ? "claude"
+                                  : channel.authKind === "gemini_subscription"
+                                    ? "gemini"
+                                    : matchChannelPreset(channel)?.icon ||
+                                      "newapi"
                       }
                       name={channel.name}
                     />
                     <span className="truncate">{channel.name}</span>
+                    {(channel.authKind === "claude_subscription" ||
+                      channel.authKind === "gemini_subscription") && (
+                      <span className="text-caption text-fg-3">仅原生工具</span>
+                    )}
                     <span className="text-caption font-normal text-fg-3">
                       {
                         channel.models.filter(
@@ -793,6 +660,23 @@ export function ChannelCenterPanel({
                     </span>
                   </label>
                   <div className="flex flex-wrap gap-1">
+                    {(channel.authKind === "github_copilot" ||
+                      channel.authKind === "codex_oauth" ||
+                      channel.authKind === "xai_oauth") && (
+                      <Button
+                        variant="quiet"
+                        size="compact"
+                        disabled={disabled}
+                        onClick={() => {
+                          setAccountManagerTarget(
+                            channel.authKind as ManagedAuthProvider,
+                          );
+                          setAccountManagerOpen(true);
+                        }}
+                      >
+                        账号管理
+                      </Button>
+                    )}
                     {channel.authKind === "api_key" && (
                       <Button
                         variant="quiet"
@@ -836,7 +720,10 @@ export function ChannelCenterPanel({
                       ) : (
                         <RefreshCw className="h-3.5 w-3.5" />
                       )}
-                      刷新模型
+                      {channel.authKind === "claude_subscription" ||
+                      channel.authKind === "gemini_subscription"
+                        ? "检测订阅"
+                        : "刷新模型"}
                     </Button>
                     <Button
                       variant="quiet"
@@ -919,7 +806,10 @@ export function ChannelCenterPanel({
                               : ""}
                             {model.supportsTools === false
                               ? "不支持工具调用"
-                              : "未验证"}
+                              : channel.authKind === "claude_subscription" ||
+                                  channel.authKind === "gemini_subscription"
+                                ? "由原生工具管理"
+                                : "未验证"}
                             {model.contextLimit
                               ? ` · ${Math.round(model.contextLimit / 1000)}k 上下文`
                               : ""}
@@ -978,7 +868,7 @@ export function ChannelCenterPanel({
                 )}
               >
                 <Checkbox
-                  aria-label={getAppLabel(app)}
+                  aria-label={APP_DISPLAY_NAME[app]}
                   checked={snapshot.targets.includes(app)}
                   disabled={disabled}
                   onCheckedChange={(enabled) =>
@@ -990,8 +880,8 @@ export function ChannelCenterPanel({
                     })
                   }
                 />
-                {APP_ICON_MAP[app].icon}
-                <span>{getAppLabel(app)}</span>
+                <AppGlyph app={app} size={18} />
+                <span>{APP_DISPLAY_NAME[app]}</span>
               </label>
             ))}
           </div>
@@ -1001,7 +891,6 @@ export function ChannelCenterPanel({
               size="lg"
               disabled={
                 disabled ||
-                auth.isAddingAccount ||
                 selected.length === 0 ||
                 snapshot.targets.length === 0
               }
@@ -1062,7 +951,7 @@ export function ChannelCenterPanel({
                   )}
                   <div>
                     <span className="font-medium">
-                      {getAppLabel(result.app)} ·{" "}
+                      {APP_DISPLAY_NAME[result.app]} ·{" "}
                       {result.status === "success"
                         ? "配置成功"
                         : result.status === "skipped"
@@ -1077,11 +966,17 @@ export function ChannelCenterPanel({
                           )
                         : result.message}
                     </p>
+                    {result.app === "claude" && result.status === "success" && (
+                      <p className="mt-0.5 text-caption text-fg-2">
+                        已运行的 Claude Code 请打开新终端或重启
+                        CLI，使新配置生效。
+                      </p>
+                    )}
                   </div>
                 </div>
               ))}
               {response.requiresBackground && (
-                <Notice title="这些配置需要 TAI Switch 在后台运行。" />
+                <Notice title="这些配置需要 Lolicode 在后台运行。" />
               )}
               {response.results.length === 0 && (
                 <Notice tone="warning" title="没有收到工具配置结果，请重试。" />
@@ -1090,6 +985,30 @@ export function ChannelCenterPanel({
           )}
         </section>
       </div>
+      <Dialog open={accountManagerOpen} onOpenChange={setAccountManagerOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>管理登录账号</DialogTitle>
+            <DialogDescription>
+              维护渠道使用的订阅账号。重新登录或移除账号后，刷新对应渠道的模型；已移除账号不能继续使用。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="overflow-y-auto px-6 pb-3">
+            <AuthCenterPanel
+              showIntro={false}
+              authScrollTarget={accountManagerTarget}
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="neutral"
+              onClick={() => setAccountManagerOpen(false)}
+            >
+              完成
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <ConfirmDialog
         isOpen={resetRequested}
         title="放弃这次输入？"

@@ -68,10 +68,7 @@ export function useManagedAuth(
 
   const cancelBackendFlow = useCallback(
     async (deviceCode: string | null): Promise<boolean> => {
-      if (
-        (authProvider !== "codex_oauth" && authProvider !== "github_copilot") ||
-        !deviceCode
-      ) {
+      if (!deviceCode) {
         return true;
       }
       try {

@@ -205,6 +205,20 @@ pub fn load(db: &Database) -> Result<ChannelCenterSnapshot, AppError> {
 
 pub fn save(db: &Database, mut snapshot: ChannelCenterSnapshot) -> Result<(), AppError> {
     for channel in &mut snapshot.channels {
+        if channel.auth_kind != "api_key" {
+            channel.account_id = channel
+                .account_id
+                .as_deref()
+                .map(str::trim)
+                .map(str::to_string);
+        }
+        if let Some((base, protocol)) = managed_subscription_route(&channel.auth_kind) {
+            channel.base_url = base.into();
+            channel.protocol = protocol.into();
+            for model in &mut channel.models {
+                model.protocol = Some(protocol.into());
+            }
+        }
         exclude_known_non_agent_models(channel);
     }
     validate(&snapshot)?;
@@ -316,11 +330,34 @@ fn validate_channel(channel: &ChannelSource) -> Result<(), AppError> {
     }
     if !matches!(
         channel.auth_kind.as_str(),
-        "api_key" | "github_copilot" | "zhipu_oauth"
+        "api_key"
+            | "github_copilot"
+            | "zhipu_oauth"
+            | "codex_oauth"
+            | "xai_oauth"
+            | "claude_subscription"
+            | "gemini_subscription"
     ) || !valid_protocol(&channel.protocol)
     {
         return Err(AppError::InvalidInput(
             "请选择支持的渠道认证方式与 API 格式".into(),
+        ));
+    }
+    if channel.auth_kind != "api_key"
+        && channel
+            .account_id
+            .as_deref()
+            .is_none_or(|id| id.trim().is_empty())
+    {
+        return Err(AppError::InvalidInput(
+            "登录渠道必须绑定明确账户，请先完成账户授权".into(),
+        ));
+    }
+    if native_auth_target(&channel.auth_kind).is_some()
+        && (channel.account_id.as_deref() != Some("native") || !channel.base_url.is_empty())
+    {
+        return Err(AppError::InvalidInput(
+            "原生订阅只能引用本机官方工具登录，不能设置自定义 API 地址".into(),
         ));
     }
     if !channel.base_url.trim().is_empty() {
@@ -401,7 +438,21 @@ pub fn route_id(channel: &ChannelSource, model: &ChannelModel) -> String {
     format!("{}/{}", channel.id, model.id)
 }
 pub fn claude_route_id(channel: &ChannelSource, model: &ChannelModel) -> String {
-    format!("claude-sonnet-tai-{}--{}", channel.id, model.id)
+    claude_code_gateway_alias(&route_id(channel, model))
+}
+
+pub fn claude_route_matches(
+    channel: &ChannelSource,
+    model: &ChannelModel,
+    published: &str,
+) -> bool {
+    let published = published
+        .strip_suffix("[1M]")
+        .or_else(|| published.strip_suffix("[1m]"))
+        .unwrap_or(published);
+    published == claude_route_id(channel, model)
+        || published == claude_desktop_gateway_alias(&route_id(channel, model))
+        || published == claude_gateway_alias(&route_id(channel, model))
 }
 fn blank_model(id: String) -> ChannelModel {
     ChannelModel {
@@ -915,6 +966,121 @@ pub fn merge_copilot_models(
 }
 
 /// Preserve user identity and selection while refreshing managed account capabilities.
+pub(crate) fn managed_subscription_route(auth_kind: &str) -> Option<(&'static str, &'static str)> {
+    match auth_kind {
+        "codex_oauth" => Some((
+            crate::proxy::providers::CHATGPT_CODEX_BASE_URL,
+            "openai_responses",
+        )),
+        "xai_oauth" => Some((
+            crate::proxy::providers::XAI_API_BASE_URL,
+            "openai_responses",
+        )),
+        _ => None,
+    }
+}
+
+pub fn native_auth_target(auth_kind: &str) -> Option<AppType> {
+    match auth_kind {
+        "claude_subscription" => Some(AppType::Claude),
+        "gemini_subscription" => Some(AppType::Gemini),
+        _ => None,
+    }
+}
+
+/// This is a local CLI-default selector, not a remote model or entitlement list.
+pub fn native_subscription_channel(tool: &str) -> Result<ChannelSource, AppError> {
+    let (kind, name, protocol) = match tool {
+        "claude" => ("claude_subscription", "Claude 原生订阅", "anthropic"),
+        "gemini" => ("gemini_subscription", "Gemini 原生账号", "gemini_native"),
+        _ => {
+            return Err(AppError::InvalidInput(
+                "请选择 Claude Code 或 Gemini CLI".into(),
+            ))
+        }
+    };
+    Ok(ChannelSource {
+        id: format!("{tool}-native"),
+        name: name.into(),
+        base_url: String::new(),
+        api_key: String::new(),
+        auth_kind: kind.into(),
+        account_id: Some("native".into()),
+        protocol: protocol.into(),
+        enabled: true,
+        models: vec![ChannelModel {
+            id: "native-default".into(),
+            name: Some("原生工具默认模型（工具维护目录）".into()),
+            context_limit: None,
+            output_limit: None,
+            supports_tools: None,
+            input_modalities: None,
+            protocol: Some(protocol.into()),
+            enabled: Some(true),
+        }],
+    })
+}
+
+/// Local preflight only. A saved source keeps its account reference so removal
+/// is reported clearly instead of silently falling back to a different account.
+pub fn validate_managed_account_references(
+    snapshot: &ChannelCenterSnapshot,
+    accounts: &[(String, String)],
+) -> Result<(), AppError> {
+    for source in snapshot
+        .channels
+        .iter()
+        .filter(|source| source.enabled && source.models.iter().any(ChannelModel::available))
+    {
+        if matches!(
+            source.auth_kind.as_str(),
+            "github_copilot" | "codex_oauth" | "xai_oauth"
+        ) {
+            let id = source.account_id.as_deref().unwrap_or("");
+            if !accounts
+                .iter()
+                .any(|(kind, account)| kind == &source.auth_kind && account == id)
+            {
+                return Err(AppError::InvalidInput(format!(
+                    "渠道 {} 绑定的账号已退出或移除，请重新登录并选择账户",
+                    source.id
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Reuse the existing managed-auth catalog. Its absence of capability metadata
+/// stays unknown; no token, endpoint or model entitlement is synthesized.
+pub fn merge_subscription_models(
+    mut channel: ChannelSource,
+    models: Vec<crate::services::model_fetch::FetchedModel>,
+) -> Result<ChannelSource, AppError> {
+    let (base, protocol) = managed_subscription_route(&channel.auth_kind)
+        .ok_or_else(|| AppError::InvalidInput("此订阅没有已接入的通用模型调用链路".into()))?;
+    let discovered = models
+        .into_iter()
+        .map(|model| ChannelModel {
+            name: Some(model.id.clone()),
+            id: model.id,
+            context_limit: None,
+            output_limit: None,
+            supports_tools: None,
+            input_modalities: None,
+            protocol: Some(protocol.into()),
+            enabled: None,
+        })
+        .collect();
+    channel.base_url = base.into();
+    channel.protocol = protocol.into();
+    channel.models = merge_discovered(&channel.models, discovered);
+    channel.api_key.clear();
+    exclude_known_non_agent_models(&mut channel);
+    validate_channel(&channel)?;
+    Ok(channel)
+}
+
 pub fn merge_managed_discovery(
     mut channel: ChannelSource,
     discovered: ChannelSource,
@@ -927,6 +1093,9 @@ pub fn merge_managed_discovery(
 }
 
 fn effective_protocol<'a>(channel: &'a ChannelSource, model: &'a ChannelModel) -> &'a str {
+    if let Some((_, protocol)) = managed_subscription_route(&channel.auth_kind) {
+        return protocol;
+    }
     model.protocol.as_deref().unwrap_or(&channel.protocol)
 }
 
@@ -1089,7 +1258,7 @@ fn aggregate_source(
         .collect();
     ChannelSource {
         id: "gateway".into(),
-        name: "TAI 聚合".into(),
+        name: "Lolicode 聚合".into(),
         base_url: base_url.into(),
         api_key: token.into(),
         auth_kind: "api_key".into(),
@@ -1100,7 +1269,7 @@ fn aggregate_source(
     }
 }
 
-fn gateway_provider(
+pub(crate) fn gateway_provider(
     app: &AppType,
     source: &ChannelSource,
     default: &str,
@@ -1115,14 +1284,48 @@ fn gateway_provider(
         );
     }
     let settings = match app {
-        AppType::Claude | AppType::ClaudeDesktop => {
-            json!({"env":{"ANTHROPIC_BASE_URL":source.base_url.trim_end_matches("/v1"),"ANTHROPIC_AUTH_TOKEN":source.api_key,"ANTHROPIC_MODEL":claude_gateway_alias(default),"ANTHROPIC_DEFAULT_SONNET_MODEL":claude_gateway_alias(default),"ANTHROPIC_DEFAULT_OPUS_MODEL":claude_gateway_alias(default),"ANTHROPIC_DEFAULT_HAIKU_MODEL":claude_gateway_alias(default)},"modelPicker":{"replaceBuiltInOptions":true,"options":source.models.iter().map(|m| json!({"model":claude_gateway_alias(&m.id),"label":m.name,"description":"渠道目录 · 未实测"})).collect::<Vec<_>>()}})
+        AppType::Claude => {
+            let selected = source
+                .models
+                .iter()
+                .find(|model| model.id == default)
+                .ok_or_else(|| AppError::InvalidInput("所选 Claude 默认模型不在目录中".into()))?;
+            let alias = claude_client_alias(selected);
+            let mut env = json!({"ANTHROPIC_BASE_URL":source.base_url.trim_end_matches("/v1"),"ANTHROPIC_AUTH_TOKEN":source.api_key,"ANTHROPIC_MODEL":alias,"ANTHROPIC_DEFAULT_SONNET_MODEL":alias,"ANTHROPIC_DEFAULT_OPUS_MODEL":alias,"ANTHROPIC_DEFAULT_HAIKU_MODEL":alias,"ANTHROPIC_DEFAULT_FABLE_MODEL":alias});
+            // Match the original Claude Stack contract: a non-Claude-prefixed
+            // alias lets the client honor the smallest declared non-1M window.
+            if let Some(window) = source
+                .models
+                .iter()
+                .map(|model| {
+                    model
+                        .context_limit
+                        .filter(|limit| *limit > 0)
+                        .unwrap_or(crate::mode::stack::CLAUDE_DEFAULT_WINDOW)
+                })
+                .filter(|window| *window < 1_000_000)
+                .min()
+            {
+                env["CLAUDE_CODE_MAX_CONTEXT_TOKENS"] = json!(window.to_string());
+            }
+            if let Some(output) = source
+                .models
+                .iter()
+                .filter_map(|model| model.output_limit.filter(|limit| *limit > 0))
+                .min()
+            {
+                env["CLAUDE_CODE_MAX_OUTPUT_TOKENS"] = json!(output.to_string());
+            }
+            json!({"env":env,"modelPicker":{"replaceBuiltInOptions":true,"options":source.models.iter().map(|m| json!({"model":claude_client_alias(m),"label":m.name.as_deref().unwrap_or(&m.id),"description":"渠道目录"})).collect::<Vec<_>>()}})
+        }
+        AppType::ClaudeDesktop => {
+            json!({"env":{"ANTHROPIC_BASE_URL":source.base_url.trim_end_matches("/v1"),"ANTHROPIC_AUTH_TOKEN":source.api_key}})
         }
         AppType::Codex => {
             let mut doc = toml_edit::DocumentMut::new();
             doc["model_provider"] = toml_edit::value("custom");
             doc["model"] = toml_edit::value(default);
-            doc["model_providers"]["custom"]["name"] = toml_edit::value("TAI 聚合");
+            doc["model_providers"]["custom"]["name"] = toml_edit::value("Lolicode 聚合");
             doc["model_providers"]["custom"]["base_url"] =
                 toml_edit::value(source.base_url.as_str());
             doc["model_providers"]["custom"]["wire_api"] = toml_edit::value("responses");
@@ -1179,15 +1382,17 @@ fn gateway_provider(
     }
     if *app == AppType::ClaudeDesktop {
         let meta = provider.meta.as_mut().unwrap();
-        meta.claude_desktop_mode = Some(crate::provider::ClaudeDesktopMode::Proxy);
+        // This profile already targets the versioned local Messages gateway.
+        // A second Desktop proxy would replace its immutable routing boundary.
+        meta.claude_desktop_mode = Some(crate::provider::ClaudeDesktopMode::Direct);
         meta.claude_desktop_model_routes = source
             .models
             .iter()
             .map(|model| {
                 (
-                    claude_gateway_alias(&model.id),
+                    claude_desktop_gateway_alias(&model.id),
                     crate::provider::ClaudeDesktopModelRoute {
-                        model: model.id.clone(),
+                        model: claude_desktop_gateway_alias(&model.id),
                         label_override: model.name.clone(),
                         supports_1m: model.context_limit.map(|c| c >= 1_000_000),
                     },
@@ -1202,6 +1407,43 @@ fn claude_gateway_alias(route: &str) -> String {
     match route.split_once('/') {
         Some((source, model)) => format!("claude-sonnet-tai-{source}--{model}"),
         None => route.into(),
+    }
+}
+
+fn claude_code_gateway_alias(route: &str) -> String {
+    match route.split_once('/') {
+        Some((source, model)) => {
+            let key: String = source
+                .as_bytes()
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect();
+            format!("tai-claude-{key}--{model}")
+        }
+        None => route.into(),
+    }
+}
+
+fn claude_desktop_gateway_alias(route: &str) -> String {
+    match route.split_once('/') {
+        Some((source, model)) => {
+            let key: String = source
+                .as_bytes()
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect();
+            format!("claude-sonnet-tai-{key}--{model}")
+        }
+        None => route.into(),
+    }
+}
+
+fn claude_client_alias(model: &ChannelModel) -> String {
+    let alias = claude_code_gateway_alias(&model.id);
+    if model.context_limit.is_some_and(|limit| limit >= 1_000_000) {
+        format!("{alias}[1M]")
+    } else {
+        alias
     }
 }
 
@@ -1249,7 +1491,20 @@ fn upsert_projection(
         }
         provider.created_at = previous.created_at;
         provider.sort_index = previous.sort_index;
-        crate::services::ProviderService::update(state, app.clone(), None, provider.clone())?;
+        if *app == AppType::ClaudeDesktop
+            && crate::claude_desktop_config::provider_mode(&previous)
+                == crate::provider::ClaudeDesktopMode::Proxy
+            && crate::claude_desktop_config::provider_mode(&provider)
+                == crate::provider::ClaudeDesktopMode::Direct
+        {
+            write_desktop_channel_projection(
+                state.db.as_ref(),
+                &provider,
+                crate::claude_desktop_config::apply_provider,
+            )?;
+        } else {
+            crate::services::ProviderService::update(state, app.clone(), None, provider.clone())?;
+        }
     } else if app.is_additive_mode() {
         let exists = match app {
             AppType::OpenCode => {
@@ -1328,6 +1583,18 @@ fn upsert_projection(
     Ok(())
 }
 
+/// Keep the old /claude-desktop routing row until its replacement profile is
+/// completely published. On partial failure the native writer retains pending
+/// files for recovery; restoring old files here would discard that intent.
+pub(crate) fn write_desktop_channel_projection(
+    db: &Database,
+    provider: &Provider,
+    write: impl FnOnce(&Database, &Provider) -> Result<(), AppError>,
+) -> Result<(), AppError> {
+    write(db, provider)?;
+    db.save_provider("claude-desktop", provider)
+}
+
 fn project_opencode_v2(provider: &mut Provider) {
     let Some(settings) = provider.settings_config.as_object_mut() else {
         return;
@@ -1374,6 +1641,9 @@ fn native_plans(
 ) -> Result<Vec<Provider>, AppError> {
     let mut plans = Vec::new();
     for source in snapshot.channels.iter().filter(|channel| channel.enabled) {
+        if native_auth_target(&source.auth_kind).is_some() {
+            continue;
+        }
         let mut groups: BTreeMap<&str, Vec<ChannelModel>> = BTreeMap::new();
         for model in source.models.iter().filter(|m| m.available()) {
             groups
@@ -1395,6 +1665,148 @@ fn native_plans(
         }
     }
     Ok(plans)
+}
+
+fn api_catalog_snapshot(snapshot: &ChannelCenterSnapshot) -> ChannelCenterSnapshot {
+    let mut api = snapshot.clone();
+    api.channels
+        .retain(|channel| native_auth_target(&channel.auth_kind).is_none());
+    let first = api
+        .channels
+        .iter()
+        .filter(|channel| channel.enabled)
+        .flat_map(|channel| {
+            channel
+                .models
+                .iter()
+                .filter(|model| model.available())
+                .map(move |model| route_id(channel, model))
+        })
+        .collect::<Vec<_>>();
+    if api
+        .default_model
+        .as_ref()
+        .is_none_or(|selected| !first.contains(selected))
+    {
+        api.default_model = first.first().cloned();
+    }
+    api
+}
+
+fn native_selection_for<'a>(
+    snapshot: &'a ChannelCenterSnapshot,
+    app: &AppType,
+) -> Option<&'a ChannelSource> {
+    let enabled = |channel: &&ChannelSource| {
+        channel.enabled
+            && native_auth_target(&channel.auth_kind).as_ref() == Some(app)
+            && channel.models.iter().any(ChannelModel::available)
+    };
+    if let Some(default) = &snapshot.default_model {
+        if let Some(channel) = snapshot.channels.iter().filter(enabled).find(|channel| {
+            channel
+                .models
+                .iter()
+                .any(|model| model.available() && route_id(channel, model) == *default)
+        }) {
+            return Some(channel);
+        }
+    }
+    let api = api_catalog_snapshot(snapshot);
+    let has_api = api
+        .channels
+        .iter()
+        .filter(|channel| channel.enabled)
+        .any(|channel| {
+            channel.models.iter().any(|model| {
+                model.available()
+                    && (*app != AppType::Gemini
+                        || (channel.auth_kind == "api_key"
+                            && effective_protocol(channel, model) == "gemini_native"))
+            })
+        });
+    if !has_api {
+        snapshot.channels.iter().find(enabled)
+    } else {
+        None
+    }
+}
+
+fn native_login_provider(app: &AppType, source: &ChannelSource) -> Result<Provider, AppError> {
+    if native_auth_target(&source.auth_kind).as_ref() != Some(app) {
+        return Err(AppError::InvalidInput(
+            "此登录账号只能用于对应的原生工具".into(),
+        ));
+    }
+    let settings = match app {
+        AppType::Claude => json!({"env":{}}),
+        AppType::Gemini => json!({"env":{},"config":{}}),
+        _ => {
+            return Err(AppError::InvalidInput(
+                "此工具不能使用该原生登录账号".into(),
+            ))
+        }
+    };
+    let mut provider = managed_provider(
+        format!("tai-channel-native-{}", app.as_str()),
+        source.name.clone(),
+        settings,
+        &source.protocol,
+    );
+    // Existing official writers clear custom routing/auth and restore CLI login.
+    provider.category = Some("official".into());
+    Ok(provider)
+}
+
+fn validate_native_login(app: &AppType) -> Result<(), AppError> {
+    if crate::commands::local_tool_version(app.as_str()).is_none() {
+        return Err(AppError::InvalidInput(
+            "原生工具尚未安装，配置未改动".into(),
+        ));
+    }
+    if !crate::services::subscription::native_channel_authenticated(app.as_str())
+        .map_err(AppError::Message)?
+    {
+        return Err(AppError::InvalidInput(
+            "原生登录状态已失效，请先在对应工具重新登录".into(),
+        ));
+    }
+    Ok(())
+}
+
+pub(crate) async fn prepare_native_login_mode(
+    state: &AppState,
+    app: &AppType,
+    preflight: impl FnOnce() -> Result<(), AppError> + Send + 'static,
+) -> Result<(), AppError> {
+    tauri::async_runtime::spawn_blocking(preflight)
+        .await
+        .map_err(|_| AppError::Message("原生登录检查任务执行失败".into()))??;
+    if app.supports_local_proxy() && crate::mode::current::is_proxy(app) {
+        crate::mode::controller::exit(state, app)
+            .await
+            .map_err(|error| {
+                AppError::Message(format!(
+                    "旧应用路由无法退出：{}",
+                    crate::error_for_log(&error)
+                ))
+            })?;
+    }
+    Ok(())
+}
+
+fn apply_native_login(
+    state: &AppState,
+    app: &AppType,
+    source: &ChannelSource,
+) -> Result<(), AppError> {
+    let seed = if *app == AppType::Claude {
+        "claude-official"
+    } else {
+        "gemini-official"
+    };
+    state.db.ensure_official_seed_by_id(seed, app.clone())?;
+    upsert_projection(state, app, native_login_provider(app, source)?)
 }
 
 fn reconcile_managed(state: &AppState, app: &AppType, ids: &[String]) -> Result<(), AppError> {
@@ -1457,15 +1869,37 @@ fn apply_plans(
     }
     if *app == AppType::OpenClaw {
         if let Some((provider, model)) = selected_native_model(&plans, default_route, gateway) {
-            let mut defaults = crate::openclaw_config::get_default_model()?.unwrap_or(
-                crate::openclaw_config::OpenClawDefaultModel {
-                    primary: String::new(),
-                    fallbacks: Vec::new(),
-                    extra: Default::default(),
-                },
-            );
-            defaults.primary = format!("{}/{}", provider.id, model);
-            crate::openclaw_config::set_default_model(&defaults)?;
+            let key = "channel_center_managed_openclaw";
+            let old: Vec<String> = state
+                .db
+                .get_setting(key)?
+                .map(|raw| {
+                    serde_json::from_str(&raw)
+                        .map_err(|_| AppError::Config("渠道托管目录记录无法解析".into()))
+                })
+                .transpose()?
+                .unwrap_or_default();
+            let owned: Vec<String> = old
+                .into_iter()
+                .filter(|id| {
+                    state
+                        .db
+                        .get_provider_by_id(id, "openclaw")
+                        .ok()
+                        .flatten()
+                        .is_some_and(|p| p.notes.as_deref() == Some(MANAGED_NOTE))
+                })
+                .collect();
+            let live = crate::openclaw_config::read_openclaw_config()?;
+            let defaults = project_openclaw_defaults(
+                live.pointer("/agents/defaults")
+                    .cloned()
+                    .unwrap_or_else(|| json!({})),
+                &plans,
+                &owned,
+                &format!("{}/{}", provider.id, model),
+            )?;
+            crate::openclaw_config::set_agents_defaults(&defaults)?;
         }
     }
     if *app == AppType::Hermes {
@@ -1484,6 +1918,86 @@ fn apply_plans(
         reconcile_managed(state, app, &ids)?;
     }
     Ok(())
+}
+
+fn project_openclaw_defaults(
+    mut defaults: Value,
+    plans: &[Provider],
+    managed_ids: &[String],
+    default: &str,
+) -> Result<crate::openclaw_config::OpenClawAgentsDefaults, AppError> {
+    let root = defaults.as_object_mut().ok_or_else(|| {
+        AppError::Config("OpenClaw agents.defaults 必须是对象，原配置已保留".into())
+    })?;
+    let mut refs = BTreeMap::new();
+    for provider in plans {
+        for model in provider
+            .settings_config
+            .get("models")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
+            if let Some(id) = model.get("id").and_then(Value::as_str) {
+                refs.insert(
+                    format!("{}/{id}", provider.id),
+                    model
+                        .get("name")
+                        .and_then(Value::as_str)
+                        .map(str::to_string),
+                );
+            }
+        }
+    }
+    let was_managed = |reference: &str| {
+        reference
+            .split_once('/')
+            .is_some_and(|(id, _)| managed_ids.iter().any(|owned| owned == id))
+    };
+    if let Some(catalog) = root.get_mut("models") {
+        let catalog = catalog
+            .as_object_mut()
+            .ok_or_else(|| AppError::Config("OpenClaw 模型目录必须是对象，原配置已保留".into()))?;
+        catalog.retain(|reference, _| !was_managed(reference) || refs.contains_key(reference));
+        for (reference, name) in &refs {
+            catalog
+                .entry(reference.clone())
+                .or_insert_with(|| match name {
+                    Some(name) => json!({"alias":name}),
+                    None => json!({}),
+                });
+        }
+    }
+    if let Some(policy) = root.get_mut("modelPolicy") {
+        let policy = policy.as_object_mut().ok_or_else(|| {
+            AppError::Config("OpenClaw modelPolicy 必须是对象，原配置已保留".into())
+        })?;
+        if let Some(allow) = policy.get_mut("allow") {
+            let allow = allow.as_array_mut().ok_or_else(|| {
+                AppError::Config("OpenClaw modelPolicy.allow 必须是数组，原配置已保留".into())
+            })?;
+            if !allow.is_empty() {
+                allow.retain(|entry| {
+                    entry.as_str().is_none_or(|reference| {
+                        !was_managed(reference) || refs.contains_key(reference)
+                    })
+                });
+                for reference in refs.keys() {
+                    if !allow.iter().any(|entry| entry.as_str() == Some(reference)) {
+                        allow.push(json!(reference));
+                    }
+                }
+            }
+        }
+    }
+    let previous = root.remove("model");
+    let mut selected = previous
+        .filter(Value::is_object)
+        .unwrap_or_else(|| json!({}));
+    selected["primary"] = json!(default);
+    root.insert("model".into(), selected);
+    serde_json::from_value(defaults)
+        .map_err(|_| AppError::Config("OpenClaw 默认模型配置无法解析，原配置已保留".into()))
 }
 
 fn apply_mcode_plans_at(
@@ -1726,17 +2240,35 @@ pub async fn apply(
         }
     }
     let default = default.unwrap();
+    let api_snapshot = api_catalog_snapshot(&snapshot);
+    let api_models: Vec<_> = api_snapshot
+        .channels
+        .iter()
+        .filter(|channel| channel.enabled)
+        .flat_map(|channel| {
+            channel
+                .models
+                .iter()
+                .filter(|model| model.available())
+                .map(move |model| (channel, model))
+        })
+        .collect();
+    let native_count = models.len().saturating_sub(api_models.len());
     let any_gateway = snapshot
         .targets
         .iter()
         .filter_map(|app| AppType::from_str(app).ok())
-        .any(|app| needs_gateway(&snapshot, &app));
+        .any(|app| {
+            !api_models.is_empty()
+                && native_selection_for(&snapshot, &app).is_none()
+                && needs_gateway(&api_snapshot, &app)
+        });
     let mut gateway_error = None;
     let gateway = if any_gateway {
         match state.proxy_service.start().await {
             Ok(info) => {
                 let prepared = (|| {
-                    publish_catalog(state.db.as_ref(), &snapshot)?;
+                    publish_catalog(state.db.as_ref(), &api_snapshot)?;
                     let base = crate::proxy::channel_gateway::gateway_catalog_base_url(
                         &info.address,
                         info.port,
@@ -1768,7 +2300,45 @@ pub async fn apply(
     };
     for target in &snapshot.targets {
         let app = AppType::from_str(target)?;
-        let use_gateway = needs_gateway(&snapshot, &app);
+        if let Some(native) = native_selection_for(&snapshot, &app) {
+            let checked_app = app.clone();
+            if let Err(error) =
+                prepare_native_login_mode(state, &app, move || validate_native_login(&checked_app))
+                    .await
+            {
+                report.results.push(ChannelApplyResult {
+                    app: target.clone(),
+                    status: "error".into(),
+                    message: crate::error_for_log(&error.to_string()),
+                });
+                continue;
+            }
+            let native = native.clone();
+            let native_name = native.name.clone();
+            let owned_state = state.clone();
+            let owned_app = app.clone();
+            let result = tauri::async_runtime::spawn_blocking(move || {
+                apply_native_login(&owned_state, &owned_app, &native)
+            })
+            .await
+            .map_err(|_| AppError::Message("客户端配置任务执行失败".into()))
+            .and_then(|result| result);
+            let (status, message) = match result {
+                Ok(()) => ("success", format!("已切换到 {native_name}，模型和额度由原生工具的登录账号维护；API 渠道需选 API 模型为默认后另行应用")),
+                Err(error) => ("error", crate::error_for_log(&error.to_string())),
+            };
+            report.results.push(ChannelApplyResult {
+                app: target.clone(),
+                status: status.into(),
+                message,
+            });
+            continue;
+        }
+        if api_models.is_empty() {
+            report.results.push(ChannelApplyResult {app:target.clone(),status:"skipped".into(),message:"所选原生登录账号仅可用于对应的 Claude Code 或 Gemini CLI；此工具没有可用 API 渠道，配置未改动".into()});
+            continue;
+        }
+        let use_gateway = needs_gateway(&api_snapshot, &app);
         if use_gateway && gateway.is_none() {
             report.results.push(ChannelApplyResult {
                 app: target.clone(),
@@ -1779,7 +2349,11 @@ pub async fn apply(
             });
             continue;
         }
-        let mut configured_count = models.len();
+        let mut configured_count = api_models.len();
+        let mut effective_default = api_snapshot
+            .default_model
+            .clone()
+            .expect("nonempty API catalog");
         let plans = if use_gateway {
             let (base, token) = gateway.as_ref().expect("gateway started");
             let protocol = if matches!(app, AppType::Claude | AppType::ClaudeDesktop) {
@@ -1791,9 +2365,9 @@ pub async fn apply(
             } else {
                 "openai_chat"
             };
-            let mut source = aggregate_source(&snapshot, base, token, protocol);
+            let mut source = aggregate_source(&api_snapshot, base, token, protocol);
             if app == AppType::Gemini {
-                let native_ids: HashSet<String> = models
+                let native_ids: HashSet<String> = api_models
                     .iter()
                     .filter(|(channel, model)| {
                         channel.auth_kind == "api_key"
@@ -1808,15 +2382,19 @@ pub async fn apply(
                     continue;
                 }
             }
-            source.models.sort_by_key(|model| model.id != default);
-            let effective_default = if source.models.iter().any(|model| model.id == default) {
-                default.as_str()
-            } else {
-                source.models[0].id.as_str()
-            };
-            gateway_provider(&app, &source, effective_default).map(|p| vec![p])
+            source
+                .models
+                .sort_by_key(|model| model.id != effective_default);
+            if !source
+                .models
+                .iter()
+                .any(|model| model.id == effective_default)
+            {
+                effective_default = source.models[0].id.clone();
+            }
+            gateway_provider(&app, &source, &effective_default).map(|p| vec![p])
         } else {
-            native_plans(&snapshot, &app)
+            native_plans(&api_snapshot, &app)
         };
         let plans = match plans {
             Ok(plans) => plans,
@@ -1829,6 +2407,18 @@ pub async fn apply(
                 continue;
             }
         };
+        if use_gateway {
+            // Exiting an older route can stop the shared listener. Pin the
+            // published gateway before any old-mode write or native profile write.
+            if let Err(error) = prepare_gateway_write(state.db.as_ref(), snapshot.revision) {
+                report.results.push(ChannelApplyResult {
+                    app: target.clone(),
+                    status: "error".into(),
+                    message: error.to_string(),
+                });
+                continue;
+            }
+        }
         if app.supports_local_proxy() && crate::mode::current::is_proxy(&app) {
             if let Err(error) = crate::mode::controller::exit(state, &app).await {
                 report.results.push(ChannelApplyResult {
@@ -1850,18 +2440,10 @@ pub async fn apply(
                 });
                 continue;
             }
-            if let Err(error) = prepare_gateway_write(state.db.as_ref(), snapshot.revision) {
-                report.results.push(ChannelApplyResult {
-                    app: target.clone(),
-                    status: "error".into(),
-                    message: error.to_string(),
-                });
-                continue;
-            }
         }
         let owned_state = state.clone();
         let owned_app = app.clone();
-        let owned_default = default.clone();
+        let owned_default = effective_default.clone();
         let result = tauri::async_runtime::spawn_blocking(move || {
             apply_plans(&owned_state, &owned_app, plans, &owned_default, use_gateway)
         })
@@ -1877,7 +2459,7 @@ pub async fn apply(
                         snapshot.revision,
                     )
                     .await
-                    .and_then(|_| commit_applied(state.db.as_ref(), &snapshot));
+                    .and_then(|_| commit_applied(state.db.as_ref(), &api_snapshot));
                     if let Err(error) = healthy {
                         report.results.push(ChannelApplyResult {
                             app: target.clone(),
@@ -1888,8 +2470,10 @@ pub async fn apply(
                     }
                     report.requires_background = true;
                 }
-                let message = if app == AppType::Gemini {
+                let mut message = if app == AppType::Gemini {
                     format!("已配置默认模型，原生目录包含 {configured_count} 个模型。Gemini CLI 菜单显示取决于版本；可手动 /model channelId/modelId，其他协议未配置")
+                } else if app == AppType::ClaudeDesktop {
+                    format!("已配置 {configured_count} 个模型，请完全退出并重启 Claude Desktop，在模型菜单选择需要的模型")
                 } else {
                     format!(
                         "已配置 {configured_count} 个模型与默认模型{}",
@@ -1900,6 +2484,12 @@ pub async fn apply(
                         }
                     )
                 };
+                if native_count > 0 {
+                    message.push_str(&format!("；已过滤 {native_count} 个原生账号入口，它们仅能在对应工具以原生登录模式使用"));
+                }
+                if effective_default != default {
+                    message.push_str(&format!("；本工具使用默认模型 {effective_default}"));
+                }
                 report.results.push(ChannelApplyResult {
                     app: target.clone(),
                     status: "success".into(),
@@ -2149,6 +2739,92 @@ mod tests {
         assert_eq!(merged.account_id.as_deref(), Some("account-fixture"));
         assert_eq!(merged.models[0].context_limit, Some(32768));
         assert!(merged.api_key.is_empty());
+    }
+
+    #[test]
+    fn channel_subscription_bindings_and_default_survive_catalog_refresh_without_tokens() {
+        for kind in ["codex_oauth", "xai_oauth"] {
+            let db = Database::memory().unwrap();
+            let mut draft = snapshot();
+            let channel = &mut draft.channels[0];
+            channel.auth_kind = kind.into();
+            channel.account_id = Some("selected-account".into());
+            channel.api_key = "must-never-be-a-harness-token".into();
+            let original_default = draft.default_model.clone();
+            save(&db, draft).unwrap();
+            let saved = load(&db).unwrap();
+            let original = saved.channels[0].clone();
+            assert_eq!(saved.default_model, original_default);
+            assert!(original.api_key.is_empty());
+            assert_eq!(
+                original.base_url,
+                managed_subscription_route(kind).unwrap().0
+            );
+            assert!(needs_gateway(&saved, &AppType::OpenCode));
+            let selected = original.models[0].id.clone();
+            let merged = merge_subscription_models(
+                original,
+                vec![crate::services::model_fetch::FetchedModel {
+                    id: selected.clone(),
+                    owned_by: None,
+                }],
+            )
+            .unwrap();
+            assert!(merged.api_key.is_empty());
+            assert_eq!(merged.account_id.as_deref(), Some("selected-account"));
+            assert_eq!(merged.models[0].id, selected);
+            assert_eq!(
+                merged.models[0].protocol.as_deref(),
+                Some("openai_responses")
+            );
+            let serialized = serde_json::to_string(&merged).unwrap();
+            assert!(!serialized.contains("must-never-be-a-harness-token"));
+            let mut unbound = merged;
+            unbound.account_id = None;
+            assert!(validate_channel(&unbound).is_err());
+        }
+    }
+
+    #[test]
+    fn channel_native_subscription_is_a_tool_reference_and_never_an_api_token() {
+        for tool in ["claude", "gemini"] {
+            let mut channel = native_subscription_channel(tool).unwrap();
+            assert!(validate_channel(&channel).is_ok());
+            assert_eq!(
+                native_auth_target(&channel.auth_kind).unwrap().as_str(),
+                tool
+            );
+            assert_eq!(channel.account_id.as_deref(), Some("native"));
+            assert!(channel.base_url.is_empty() && channel.api_key.is_empty());
+            assert_eq!(channel.models.len(), 1);
+            assert_eq!(channel.models[0].id, "native-default");
+            channel.base_url = "https://example.invalid/custom".into();
+            assert!(validate_channel(&channel).is_err());
+        }
+        assert!(native_subscription_channel("codex").is_err());
+    }
+
+    #[test]
+    fn channel_managed_account_removal_fails_without_falling_back_to_another_account() {
+        let mut snapshot = snapshot();
+        let channel = &mut snapshot.channels[0];
+        channel.auth_kind = "codex_oauth".into();
+        channel.account_id = Some("selected-account".into());
+        assert!(validate_managed_account_references(
+            &snapshot,
+            &[("codex_oauth".into(), "different-default".into())]
+        )
+        .is_err());
+        assert!(validate_managed_account_references(
+            &snapshot,
+            &[("codex_oauth".into(), "selected-account".into())]
+        )
+        .is_ok());
+        assert!(validate_managed_account_references(
+            &snapshot,
+            &[("xai_oauth".into(), "selected-account".into())]
+        )
+        .is_err());
     }
 
     #[test]
@@ -2418,6 +3094,192 @@ mod tests {
         assert!(!serialize(&[claude, codex, grok])
             .unwrap()
             .contains("test-fixture-key"));
+    }
+
+    #[test]
+    fn claude_gateway_aliases_and_limits_match_the_original_stack_contract() {
+        let mut catalog = snapshot();
+        catalog.channels[0].models[0].context_limit = Some(32768);
+        catalog.channels[0].models[0].output_limit = Some(4096);
+        catalog.channels[0].models[1].context_limit = Some(1_000_000);
+        catalog.channels[0].models[1].output_limit = Some(16384);
+        let gateway_source = aggregate_source(
+            &catalog,
+            "http://127.0.0.1:1/tai/catalogs/2/v1",
+            "fake-local",
+            "anthropic",
+        );
+        let provider = gateway_provider(&AppType::Claude, &gateway_source, "one/model-b").unwrap();
+        let env = &provider.settings_config["env"];
+        assert_eq!(env["CLAUDE_CODE_MAX_CONTEXT_TOKENS"], "32768");
+        assert_eq!(env["CLAUDE_CODE_MAX_OUTPUT_TOKENS"], "4096");
+        let selected = env["ANTHROPIC_MODEL"].as_str().unwrap();
+        assert!(selected.starts_with("tai-claude-") && !selected.starts_with("claude-"));
+        assert!(selected.ends_with("[1M]"));
+        for role in [
+            "ANTHROPIC_DEFAULT_SONNET_MODEL",
+            "ANTHROPIC_DEFAULT_OPUS_MODEL",
+            "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+            "ANTHROPIC_DEFAULT_FABLE_MODEL",
+        ] {
+            assert_eq!(env[role].as_str(), Some(selected));
+        }
+        let channel = &catalog.channels[0];
+        let model = &channel.models[1];
+        assert!(claude_route_matches(channel, model, selected));
+        assert!(claude_route_matches(
+            channel,
+            model,
+            &claude_route_id(channel, model)
+        ));
+        assert!(claude_route_matches(
+            channel,
+            model,
+            &claude_gateway_alias("one/model-b")
+        ));
+        assert!(claude_route_matches(
+            channel,
+            model,
+            &claude_desktop_gateway_alias("one/model-b")
+        ));
+        assert!(!claude_route_matches(
+            channel,
+            model,
+            "tai-claude-one--missing"
+        ));
+        let mut left = source("a--b");
+        left.models[0].id = "c".into();
+        let mut right = source("a");
+        right.models[0].id = "b--c".into();
+        assert_ne!(
+            claude_route_id(&left, &left.models[0]),
+            claude_route_id(&right, &right.models[0])
+        );
+        assert_ne!(
+            claude_desktop_gateway_alias("a--b/c"),
+            claude_desktop_gateway_alias("a/b--c")
+        );
+    }
+
+    #[test]
+    fn native_login_mode_never_publishes_native_placeholders_to_other_tools() {
+        let claude_native = native_subscription_channel("claude").unwrap();
+        let gemini_native = native_subscription_channel("gemini").unwrap();
+        let mut combined = snapshot();
+        combined
+            .channels
+            .extend([claude_native.clone(), gemini_native.clone()]);
+        combined.default_model = Some("claude-native/native-default".into());
+        assert_eq!(
+            native_selection_for(&combined, &AppType::Claude)
+                .unwrap()
+                .id,
+            "claude-native"
+        );
+        assert_eq!(
+            native_selection_for(&combined, &AppType::Gemini)
+                .unwrap()
+                .id,
+            "gemini-native"
+        );
+        assert!(native_selection_for(&combined, &AppType::ClaudeDesktop).is_none());
+        assert!(native_selection_for(&combined, &AppType::OpenCode).is_none());
+        let api = api_catalog_snapshot(&combined);
+        assert_eq!(api.channels.len(), 1);
+        assert_eq!(api.default_model.as_deref(), Some("one/model-a"));
+        assert_eq!(
+            native_plans(&combined, &AppType::Pi).unwrap()[0].settings_config["models"]
+                .as_array()
+                .unwrap()
+                .len(),
+            2
+        );
+        let provider = native_login_provider(&AppType::Claude, &claude_native).unwrap();
+        assert_eq!(provider.category.as_deref(), Some("official"));
+        let live = json!({"env":{"ANTHROPIC_BASE_URL":"http://127.0.0.1:1/tai/catalogs/1","ANTHROPIC_AUTH_TOKEN":"fake-local","ANTHROPIC_MODEL":"old-alias"},"modelPicker":{"options":[]},"hooks":{"Stop":[]}});
+        let cleared = crate::live::project::claude::project_onto(
+            std::path::Path::new("settings.json"),
+            &live,
+            None,
+            &crate::live::project::claude::ClaudeProjection::of(&provider.settings_config),
+        )
+        .unwrap();
+        assert!(cleared["env"].get("ANTHROPIC_BASE_URL").is_none());
+        assert!(cleared["env"].get("ANTHROPIC_AUTH_TOKEN").is_none());
+        assert!(cleared["env"].get("ANTHROPIC_MODEL").is_none());
+        assert!(cleared.get("modelPicker").is_none());
+        assert_eq!(cleared["hooks"], live["hooks"]);
+        let gemini = native_login_provider(&AppType::Gemini, &gemini_native).unwrap();
+        let projected =
+            crate::live::project::gemini::GeminiProjection::of(&gemini.settings_config, true);
+        assert_eq!(projected.selected_type, Some("oauth-personal"));
+        assert!(projected.env.is_empty() && projected.model_name.is_none());
+        assert!(native_login_provider(&AppType::ClaudeDesktop, &claude_native).is_err());
+        combined.default_model = Some("one/model-b".into());
+        assert!(
+            native_selection_for(&combined, &AppType::Claude).is_none(),
+            "an API default must select the API-only catalog"
+        );
+    }
+
+    #[test]
+    fn openclaw_catalog_expands_legacy_and_explicit_policy_without_removing_user_models() {
+        let mut catalog = snapshot();
+        catalog.channels[0].models[0].enabled = Some(false);
+        let plans = native_plans(&catalog, &AppType::OpenClaw).unwrap();
+        let original = json!({"model":"user/keep", "models":{
+            "user/keep":{"alias":"Personal","temperature":0.2},
+            "tai-channel-one-openai-chat/model-a":{},
+            "tai-channel-one-long-openai-chat/keep":{}
+        },"modelPolicy":{"allow":["user/*","tai-channel-one-openai-chat/model-a","tai-channel-one-long-openai-chat/keep"],"unknown":true},"contextTokens":88888});
+        let projected = project_openclaw_defaults(
+            original.clone(),
+            &plans,
+            &["tai-channel-one-openai-chat".into()],
+            "tai-channel-one-openai-chat/model-b",
+        )
+        .unwrap();
+        let next = serde_json::to_value(projected).unwrap();
+        assert_eq!(
+            next["model"]["primary"],
+            "tai-channel-one-openai-chat/model-b"
+        );
+        assert_eq!(next["contextTokens"], 88888);
+        assert_eq!(next["models"]["user/keep"], original["models"]["user/keep"]);
+        assert!(next["models"]
+            .get("tai-channel-one-long-openai-chat/keep")
+            .is_some());
+        assert!(next["models"]
+            .get("tai-channel-one-openai-chat/model-a")
+            .is_none());
+        assert!(next["models"]
+            .get("tai-channel-one-openai-chat/model-b")
+            .is_some());
+        assert_eq!(
+            next["modelPolicy"]["allow"],
+            json!([
+                "user/*",
+                "tai-channel-one-long-openai-chat/keep",
+                "tai-channel-one-openai-chat/model-b"
+            ])
+        );
+        assert_eq!(next["modelPolicy"]["unknown"], true);
+        let unrestricted = project_openclaw_defaults(
+            json!({"modelPolicy":{"allow":[]}}),
+            &plans,
+            &[],
+            "tai-channel-one-openai-chat/model-b",
+        )
+        .unwrap();
+        assert!(unrestricted.models.is_none());
+        assert_eq!(unrestricted.extra["modelPolicy"]["allow"], json!([]));
+        assert!(project_openclaw_defaults(
+            json!({"modelPolicy":{"allow":"invalid"}}),
+            &plans,
+            &[],
+            "tai-channel-one-openai-chat/model-b"
+        )
+        .is_err());
     }
 
     #[test]

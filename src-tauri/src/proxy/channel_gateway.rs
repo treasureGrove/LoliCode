@@ -171,6 +171,9 @@ fn model_enabled(model: &ChannelModel) -> bool {
 }
 
 fn protocol<'a>(source: &'a ChannelSource, model: &'a ChannelModel) -> &'a str {
+    if let Some((_, protocol)) = channel_center::managed_subscription_route(&source.auth_kind) {
+        return protocol;
+    }
     model.protocol.as_deref().unwrap_or(&source.protocol)
 }
 
@@ -194,13 +197,15 @@ fn resolve_model(
     // model picker. Match the exact generated alias; it is not an upstream id.
     if let Some(found) = channels
         .iter()
-        .filter(|source| source.enabled)
+        .filter(|source| {
+            source.enabled && channel_center::native_auth_target(&source.auth_kind).is_none()
+        })
         .find_map(|source| {
             source
                 .models
                 .iter()
                 .filter(|model| model_enabled(model))
-                .find(|model| channel_center::claude_route_id(source, model) == published_id)
+                .find(|model| channel_center::claude_route_matches(source, model, published_id))
                 .map(|model| (source, model))
         })
     {
@@ -214,6 +219,11 @@ fn resolve_model(
         .iter()
         .find(|source| source.enabled && source.id == source_id)
         .ok_or_else(|| ProxyError::InvalidRequest("指定渠道不存在或已禁用".into()))?;
+    if channel_center::native_auth_target(&source.auth_kind).is_some() {
+        return Err(ProxyError::InvalidRequest(
+            "原生订阅只能在对应官方工具中使用，请在渠道中心切换原生配置".into(),
+        ));
+    }
     let model = source
         .models
         .iter()
@@ -234,7 +244,9 @@ pub(crate) async fn handle_models(
     let data: Vec<Value> = snapshot
         .channels
         .iter()
-        .filter(|source| source.enabled)
+        .filter(|source| {
+            source.enabled && channel_center::native_auth_target(&source.auth_kind).is_none()
+        })
         .flat_map(|source| {
             source.models.iter().filter_map(move |model| {
                 if !model_enabled(model) || normalize_protocol(protocol(source, model)).is_err() {
@@ -589,7 +601,13 @@ fn provider_for(
     wire: Wire,
 ) -> Result<Provider, ProxyError> {
     let api_format = normalize_protocol(protocol(source, model))?;
-    let managed = matches!(source.auth_kind.as_str(), "github_copilot" | "copilot");
+    let managed_kind = match source.auth_kind.as_str() {
+        "github_copilot" | "copilot" => Some("github_copilot"),
+        "codex_oauth" => Some("codex_oauth"),
+        "xai_oauth" => Some("xai_oauth"),
+        _ => None,
+    };
+    let managed = managed_kind.is_some();
     if !managed && !matches!(source.auth_kind.as_str(), "api_key" | "apikey") {
         return Err(ProxyError::ConfigError(
             "该渠道认证方式尚不支持本地网关".into(),
@@ -598,6 +616,20 @@ fn provider_for(
     if !managed && source.api_key.trim().is_empty() {
         return Err(ProxyError::AuthError("该渠道缺少 API Key".into()));
     }
+    if managed
+        && source
+            .account_id
+            .as_deref()
+            .is_none_or(|id| id.trim().is_empty())
+    {
+        return Err(ProxyError::AuthError(
+            "登录渠道缺少明确账户绑定，请重新选择账号".into(),
+        ));
+    }
+    let base_url = channel_center::managed_subscription_route(&source.auth_kind)
+        .map(|(base, _)| base)
+        .unwrap_or(&source.base_url);
+    let api_key = if managed { "" } else { source.api_key.as_str() };
     let anthropic_key = api_format == "anthropic"
         && url::Url::parse(&source.base_url)
             .ok()
@@ -611,11 +643,11 @@ fn provider_for(
     };
     let settings = if wire == Wire::Messages {
         let mut env = serde_json::Map::new();
-        env.insert("ANTHROPIC_BASE_URL".into(), json!(source.base_url));
-        env.insert(key_field.into(), json!(source.api_key));
+        env.insert("ANTHROPIC_BASE_URL".into(), json!(base_url));
+        env.insert(key_field.into(), json!(api_key));
         json!({"env": env})
     } else {
-        json!({"base_url": source.base_url, "auth": {"OPENAI_API_KEY": source.api_key}})
+        json!({"base_url": base_url, "auth": {"OPENAI_API_KEY": api_key}})
     };
     let mut provider = Provider::with_id(
         format!("channel-{}", source.id),
@@ -626,15 +658,16 @@ fn provider_for(
     provider.meta = Some(ProviderMeta {
         api_format: Some(api_format.into()),
         api_key_field: anthropic_key.then(|| key_field.into()),
-        provider_type: managed.then(|| "github_copilot".into()),
+        provider_type: managed_kind.map(str::to_string),
         auth_binding: managed.then(|| AuthBinding {
             source: AuthBindingSource::ManagedAccount,
-            auth_provider: Some("github_copilot".into()),
+            auth_provider: managed_kind.map(str::to_string),
             account_id: source.account_id.clone(),
         }),
         // Chat clients require Chat output; auto protocol selection must not
         // replace their endpoint with Responses.
-        codex_copilot_api_format: (managed && wire == Wire::Chat).then(|| "openai_chat".into()),
+        codex_copilot_api_format: (managed_kind == Some("github_copilot") && wire == Wire::Chat)
+            .then(|| "openai_chat".into()),
         ..Default::default()
     });
     Ok(provider)
@@ -646,11 +679,17 @@ async fn forward(
     source: &ChannelSource,
     model: &ChannelModel,
     published_id: &str,
-    body: Value,
+    mut body: Value,
     headers: HeaderMap,
     extensions: http::Extensions,
     wire: Wire,
 ) -> Result<Response, ProxyError> {
+    let client_stream = body.get("stream").and_then(Value::as_bool).unwrap_or(false);
+    if source.auth_kind == "codex_oauth" && wire == Wire::Responses {
+        super::providers::transform_responses::normalize_codex_oauth_responses_request(
+            &mut body, false,
+        );
+    }
     let provider = provider_for(source, model, wire)?;
     let (app, endpoint) = if wire == Wire::Messages {
         (AppType::Claude, "/v1/messages")
@@ -745,7 +784,40 @@ async fn forward(
         Wire::Chat => &OPENAI_PARSER_CONFIG,
         Wire::Responses => &CODEX_PARSER_CONFIG,
     };
-    process_response(result.response, &ctx, state, parser, is_stream, guard).await
+    let response = process_response(result.response, &ctx, state, parser, is_stream, guard).await?;
+    if source.auth_kind == "codex_oauth" && wire == Wire::Responses && !client_stream {
+        return codex_subscription_non_streaming_response(response).await;
+    }
+    Ok(response)
+}
+
+async fn codex_subscription_non_streaming_response(
+    response: Response,
+) -> Result<Response, ProxyError> {
+    if !response
+        .headers()
+        .get("content-type")
+        .and_then(|value| value.to_str().ok())
+        .is_none_or(|value| value.contains("text/event-stream"))
+    {
+        return Ok(response);
+    }
+    let (mut parts, body) = response.into_parts();
+    let bytes = axum::body::to_bytes(body, MAX_REQUEST_BYTES)
+        .await
+        .map_err(|_| ProxyError::TransformError("订阅响应流无法读取或超过限制".into()))?;
+    let text = std::str::from_utf8(&bytes)
+        .map_err(|_| ProxyError::TransformError("订阅响应流编码无效".into()))?;
+    let value = handlers::responses_sse_to_response_value(text)?;
+    strip_entity_headers_for_rebuilt_body(&mut parts.headers);
+    parts.headers.insert(
+        "content-type",
+        http::HeaderValue::from_static("application/json"),
+    );
+    Ok(Response::from_parts(
+        parts,
+        axum::body::Body::from(value.to_string()),
+    ))
 }
 
 /// Convert the function-tool subset of Chat Completions to the existing
@@ -1354,6 +1426,133 @@ mod tests {
             provider.settings_config.pointer("/auth/OPENAI_API_KEY"),
             Some(&json!(""))
         );
+    }
+
+    #[test]
+    fn channel_subscription_routing_reuses_native_auth_bindings_and_fixed_origins() {
+        use super::super::providers::AuthStrategy;
+        for (kind, strategy) in [
+            ("codex_oauth", AuthStrategy::CodexOAuth),
+            ("xai_oauth", AuthStrategy::XaiOAuth),
+        ] {
+            let mut source = source();
+            source.auth_kind = kind.into();
+            source.account_id = Some("specifically-selected-account".into());
+            source.api_key = "never-used-static-key".into();
+            source.base_url = "https://untrusted.invalid".into();
+            // Managed protocols cannot be redirected by editable model metadata.
+            source.models[0].protocol = Some("anthropic".into());
+            for (wire, app) in [
+                (Wire::Messages, AppType::Claude),
+                (Wire::Responses, AppType::Codex),
+            ] {
+                let provider = provider_for(&source, &source.models[0], wire).unwrap();
+                assert_eq!(
+                    provider
+                        .meta
+                        .as_ref()
+                        .unwrap()
+                        .managed_account_id_for(kind)
+                        .as_deref(),
+                    Some("specifically-selected-account")
+                );
+                let adapter = get_adapter(&app).unwrap();
+                if wire == Wire::Responses {
+                    assert!(!super::super::providers::is_codex_official_provider(
+                        &provider
+                    ));
+                }
+                assert_eq!(adapter.extract_auth(&provider).unwrap().strategy, strategy);
+                assert_eq!(
+                    adapter.extract_base_url(&provider).unwrap(),
+                    channel_center::managed_subscription_route(kind).unwrap().0
+                );
+                assert!(!provider
+                    .settings_config
+                    .to_string()
+                    .contains("never-used-static-key"));
+                assert!(!provider
+                    .settings_config
+                    .to_string()
+                    .contains("untrusted.invalid"));
+                assert_eq!(protocol(&source, &source.models[0]), "openai_responses");
+            }
+            source.account_id = None;
+            assert!(provider_for(&source, &source.models[0], Wire::Responses).is_err());
+        }
+    }
+
+    #[tokio::test]
+    async fn channel_native_subscription_is_not_published_or_forwarded_by_gateway() {
+        let native = [
+            channel_center::native_subscription_channel("claude").unwrap(),
+            channel_center::native_subscription_channel("gemini").unwrap(),
+        ];
+        for channel in &native {
+            assert!(resolve_model(&native, &format!("{}/native-default", channel.id)).is_err());
+            assert!(provider_for(channel, &channel.models[0], Wire::Messages).is_err());
+        }
+        let db = std::sync::Arc::new(crate::database::Database::memory().unwrap());
+        let mut channels = vec![source()];
+        channels.extend(native);
+        let snapshot = channel_center::ChannelCenterSnapshot {
+            revision: 1,
+            channels,
+            targets: vec![],
+            default_model: None,
+        };
+        db.set_setting(
+            "channel_center_applied",
+            &serde_json::to_string(&snapshot).unwrap(),
+        )
+        .unwrap();
+        let token = channel_center::gateway_token(&db).unwrap();
+        let state = ProxyState::for_test(db);
+        let mut request = Request::builder()
+            .uri("/tai/v1/models")
+            .header("authorization", format!("Bearer {token}"))
+            .body(axum::body::Body::empty())
+            .unwrap();
+        request
+            .extensions_mut()
+            .insert(GatewayPeer("127.0.0.1:7070".parse().unwrap()));
+        let Json(catalog) = handle_models(State(state), request).await.unwrap();
+        assert_eq!(catalog["data"].as_array().unwrap().len(), 1);
+        assert_eq!(catalog["data"][0]["id"], "test/vendor/model");
+        assert!(!catalog.to_string().contains("native-default"));
+    }
+
+    #[tokio::test]
+    async fn channel_codex_subscription_nonstream_reply_preserves_tools_and_usage() {
+        let value = json!({"id":"resp_subscription","object":"response","status":"completed",
+            "output":[{"type":"function_call","call_id":"call1","name":"read","arguments":"{\"path\":\"文件\"}"}],
+            "usage":{"input_tokens":100,"output_tokens":20,"input_tokens_details":{"cached_tokens":80}}});
+        let data = format!(
+            "event: response.completed\ndata: {}\n\n",
+            json!({"type":"response.completed","response":value})
+        );
+        for explicit_content_type in [true, false] {
+            let mut builder = Response::builder();
+            if explicit_content_type {
+                builder = builder.header("content-type", "text/event-stream");
+            }
+            let chunks = data
+                .as_bytes()
+                .chunks(3)
+                .map(|chunk| Ok::<_, std::io::Error>(Bytes::copy_from_slice(chunk)))
+                .collect::<Vec<_>>();
+            let response = builder
+                .body(axum::body::Body::from_stream(futures::stream::iter(chunks)))
+                .unwrap();
+            let response = codex_subscription_non_streaming_response(response)
+                .await
+                .unwrap();
+            assert_eq!(response.headers()["content-type"], "application/json");
+            let body = axum::body::to_bytes(response.into_body(), MAX_REQUEST_BYTES)
+                .await
+                .unwrap();
+            assert_eq!(serde_json::from_slice::<Value>(&body).unwrap(), value);
+        }
     }
 
     #[test]

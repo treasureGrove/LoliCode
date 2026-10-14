@@ -2006,11 +2006,6 @@ pub fn anthropic_to_responses(
     // - stream: 必须永远 true（codex-rs 硬编码 true，且 cc-switch 的
     //   SSE 解析层只处理流式响应，强制覆盖避免客户端误传 false）
     if is_codex_oauth {
-        result["store"] = json!(false);
-        if codex_fast_mode {
-            result["service_tier"] = json!("priority");
-        }
-
         const REASONING_MARKER: &str = "reasoning.encrypted_content";
         let mut includes: Vec<Value> = body
             .get("include")
@@ -2032,28 +2027,45 @@ pub fn anthropic_to_responses(
         }
         result["include"] = json!(includes);
 
-        if let Some(obj) = result.as_object_mut() {
-            // —— 删除 ChatGPT 反代不接受的字段 ——
-            obj.remove("max_output_tokens");
-            obj.remove("temperature");
-            obj.remove("top_p");
-
-            // —— 兜底必填字段（or_insert：客户端送了什么就保留，否则注入默认值）——
-            obj.entry("instructions".to_string()).or_insert(json!(""));
-            obj.entry("tools".to_string()).or_insert(json!([]));
-            // Anthropic 默认允许并行工具调用。优先保留上方已转换的显式设置，
-            // 否则允许支持该能力的 Codex 模型在同一响应中批量调用独立工具。
-            obj.entry("parallel_tool_calls".to_string())
-                .or_insert(json!(true));
-
-            // —— 强制覆盖 stream = true ——
-            // 即便客户端误传 stream:false 也要覆盖，因为 codex-rs 永远 true，
-            // 且 cc-switch SSE 解析层只支持流式响应。
-            obj.insert("stream".to_string(), json!(true));
-        }
+        normalize_codex_oauth_responses_request(&mut result, codex_fast_mode);
     }
 
     Ok(result)
+}
+
+/// Shared native ChatGPT/Codex contract, also used when a channel gateway
+/// receives Responses directly. Authentication remains in CodexOAuthManager.
+pub(crate) fn normalize_codex_oauth_responses_request(body: &mut Value, fast_mode: bool) {
+    let Some(object) = body.as_object_mut() else {
+        return;
+    };
+    object.insert("store".into(), json!(false));
+    object.insert("stream".into(), json!(true));
+    if fast_mode {
+        object.insert("service_tier".into(), json!("priority"));
+    }
+    for field in ["max_output_tokens", "temperature", "top_p"] {
+        object.remove(field);
+    }
+    object
+        .entry("instructions".to_string())
+        .or_insert(json!(""));
+    object.entry("tools".to_string()).or_insert(json!([]));
+    object
+        .entry("parallel_tool_calls".to_string())
+        .or_insert(json!(true));
+    let mut includes = object
+        .get("include")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    if !includes
+        .iter()
+        .any(|item| item.as_str() == Some("reasoning.encrypted_content"))
+    {
+        includes.push(json!("reasoning.encrypted_content"));
+    }
+    object.insert("include".into(), json!(includes));
 }
 
 fn map_tool_choice_to_responses(

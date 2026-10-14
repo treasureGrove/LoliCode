@@ -108,8 +108,7 @@ export function readStoredView(): View {
     const view = parseView(localStorage.getItem(VIEW_STORAGE_KEY));
     // The simple product starts from shared channels. Old resource pages and
     // per-client configuration are retained internally for existing workflows.
-    return view &&
-      ["channels", "usage", "auth", "apps", "settings"].includes(view)
+    return view && ["channels", "usage", "apps", "settings"].includes(view)
       ? view
       : "channels";
   } catch {

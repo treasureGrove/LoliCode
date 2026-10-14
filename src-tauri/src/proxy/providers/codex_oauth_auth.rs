@@ -696,7 +696,8 @@ impl CodexOAuthManager {
             let status = response.status();
             let text = response.text().await.unwrap_or_default();
             return Err(CodexOAuthError::TokenFetchFailed(format!(
-                "Token 交换失败: {status} - {text}"
+                "Token 交换失败: {status} - {}",
+                safe_oauth_failure_body(&text, &[code, code_verifier])
             )));
         }
 
@@ -743,7 +744,8 @@ impl CodexOAuthManager {
                 return Err(CodexOAuthError::RefreshTokenInvalid);
             }
             return Err(CodexOAuthError::TokenFetchFailed(format!(
-                "Refresh 失败: {status} - {text}"
+                "Refresh 失败: {status} - {}",
+                safe_oauth_failure_body(&text, &[refresh_token])
             )));
         }
 
@@ -2149,9 +2151,41 @@ fn extract_account_metadata_from_tokens(
     (account_id, email)
 }
 
+// Authentication errors are logged before the generation forwarder possesses
+// the access token. Sanitize here, including response-issued token fields, and
+// never retain an unstructured authentication response in an error object.
+fn safe_oauth_failure_body(body: &str, known_secrets: &[&str]) -> String {
+    serde_json::from_str::<serde_json::Value>(body)
+        .ok()
+        .and_then(|value| super::copilot_auth::auth_error_detail(&value, known_secrets))
+        .unwrap_or_else(|| "上游拒绝认证请求".into())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn codex_oauth_errors_redact_request_credentials_and_returned_token_fields() {
+        let refresh = "offline-refresh-secret";
+        let code = "offline-authorization-code";
+        let verifier = "offline-pkce-verifier";
+        let issued = "offline-response-access-token";
+        let body = serde_json::json!({
+            "error":{"code":"temporarily_unavailable",
+                "message":format!("Please retry: {refresh} {code} {verifier} {issued}")},
+            "access_token":issued,
+        })
+        .to_string();
+        let reason = safe_oauth_failure_body(&body, &[refresh, code, verifier]);
+        assert!(reason.contains("temporarily_unavailable"));
+        assert!(reason.contains("Please retry"));
+        assert!(reason.contains("[REDACTED]"));
+        for secret in [refresh, code, verifier, issued] {
+            assert!(!reason.contains(secret));
+        }
+        assert!(!safe_oauth_failure_body(refresh, &[refresh]).contains(refresh));
+    }
 
     #[tokio::test]
     async fn missing_account_recovery_requires_valid_persisted_state() {

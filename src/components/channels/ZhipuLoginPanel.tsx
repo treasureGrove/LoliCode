@@ -177,8 +177,7 @@ export function ZhipuLoginPanel({
   };
 
   return (
-    <div className="mt-5 space-y-3 border-t border-border pt-4">
-      <h3 className="text-body font-medium text-fg-1">智谱 / ZCode 账号</h3>
+    <div className="space-y-3">
       <p className="text-caption text-fg-2">
         通过官方登录加入 Coding Plan，无需复制密钥。
       </p>

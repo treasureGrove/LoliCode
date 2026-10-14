@@ -1,6 +1,6 @@
 {
   "app": {
-    "title": "TAI Switch",
+    "title": "Lolicode",
     "description": "All-in-One Assistant for Claude Code, Codex & Gemini CLI"
   },
   "common": {
@@ -53,8 +53,8 @@
     "required": "required"
   },
   "firstRunNotice": {
-    "title": "Welcome to TAI Switch",
-    "bodyDefault": "Choose an API service and enter its key, or sign in to a subscription account. TAI Switch finds its models and configures the AI tools you select.",
+    "title": "Welcome to Lolicode",
+    "bodyDefault": "Choose an API service and enter its key, or sign in to a subscription account. Lolicode finds its models and configures the AI tools you select.",
     "bodyOfficial": "Add each channel once. Select your models and a default, choose your tools, and apply. Custom services accept your own API address. Configuration writes preserve unrelated settings and create backups.",
     "confirm": "Got it"
   },
@@ -119,8 +119,8 @@
     "stackBadgeNoModels": "This provider has no models configured, so nothing shows up in the model picker",
     "stackSaved": "Saved. Restart {{client}} to apply",
     "stackSavedLive": "Saved. Takes effect in {{client}} right away",
-    "stackReselectHint": "Whenever TAI Switch rewrites the client config, pick the aggregated model again in the model picker",
-    "stackPartial": "Partly written; it will be finished on the next change or when TAI Switch restarts",
+    "stackReselectHint": "Whenever Lolicode rewrites the client config, pick the aggregated model again in the model picker",
+    "stackPartial": "Partly written; it will be finished on the next change or when Lolicode restarts",
     "stackFailed": "Failed to save aggregated models: {{error}}",
     "stackDefaultCannotRemove": "The default provider cannot be removed; set another provider as the default first",
     "stackDefaultHint": "This is the default provider: the first model in its list handles Claude Code's startup and background tasks",
@@ -139,9 +139,9 @@
       "nothingUsable": "Codex built-in list: it has no usable models. Update Codex to the latest version"
     },
     "routeOwnsCatalog": "Aggregated models won't show up in Codex: the routed provider uses its own model catalog file (model_catalog_json)",
-    "adoptCatalog": "Use TAI Switch's model catalog",
-    "adoptCatalogDone": "Now using TAI Switch's model catalog. Restart Codex to apply",
-    "adoptCatalogFailed": "Failed to switch to TAI Switch's model catalog: {{error}}",
+    "adoptCatalog": "Use Lolicode's model catalog",
+    "adoptCatalogDone": "Now using Lolicode's model catalog. Restart Codex to apply",
+    "adoptCatalogFailed": "Failed to switch to Lolicode's model catalog: {{error}}",
     "noRoutingSupport": "No Routing Support",
     "blockedByProxyHint": "Can't switch to an official provider in Routing mode",
     "editProvider": "Edit Provider",
@@ -310,7 +310,7 @@
     "geminiRestartRequired": "Switched successfully. Restart Gemini CLI to apply changes.",
     "grokBuildRestartRequired": "Switched successfully. Restart Grok Build to apply changes.",
     "claudeDesktopRestartRequired": "Switched successfully. Restart Claude Desktop to apply changes.",
-    "claudeDesktopProxyRestartRequired": "Switched successfully. Keep TAI Switch running and restart Claude Desktop to apply changes.",
+    "claudeDesktopProxyRestartRequired": "Switched successfully. Keep Lolicode running and restart Claude Desktop to apply changes.",
     "addToConfigSuccess": "Added to config",
     "removeFromConfigSuccess": "Removed from config",
     "removeFromConfigFailed": "Could not remove provider",
@@ -357,7 +357,7 @@
     "deleteProvider": "Delete Provider",
     "deleteProviderMessage": "Are you sure you want to delete provider \"{{name}}\"? This action cannot be undone.",
     "removeProvider": "Remove Provider",
-    "removeProviderMessage": "Are you sure you want to remove provider \"{{name}}\" from the configuration?\n\nAfter removal, this provider will no longer be active, but the configuration data will be retained in TAI Switch. You can re-add it at any time.",
+    "removeProviderMessage": "Are you sure you want to remove provider \"{{name}}\" from the configuration?\n\nAfter removal, this provider will no longer be active, but the configuration data will be retained in Lolicode. You can re-add it at any time.",
     "piDefaultProviderWarning": "Pi's global default currently points to this provider. If you continue, Pi will try another available model; use /model to choose one or /login to sign in to another provider.",
     "proxy": {
       "title": "Enable Local Routing",
@@ -407,9 +407,9 @@
       "goToApps": "Open Apps",
       "updates": "New versions of your apps",
       "checkToolUpdates": "Check for new versions of your apps at launch",
-      "checkToolUpdatesHelp": "When on, TAI Switch checks your installed command-line apps for new versions each time it starts, and shows a dot on Apps in the sidebar if it finds one. Nothing is upgraded automatically.",
+      "checkToolUpdatesHelp": "When on, Lolicode checks your installed command-line apps for new versions each time it starts, and shows a dot on Apps in the sidebar if it finds one. Nothing is upgraded automatically.",
       "windowAndTerminal": "Window and terminal",
-      "minimizeToTrayHelp": "When on, the close button only hides the window and TAI Switch keeps running in the system tray (lightweight mode is in the tray menu). When off, the close button quits.",
+      "minimizeToTrayHelp": "When on, the close button only hides the window and Lolicode keeps running in the system tray (lightweight mode is in the tray menu). When off, the close button quits.",
       "terminalHelp": "The terminal used by “Open terminal” on provider cards. If it isn't available, the system default terminal is used."
     },
     "tabGeneral": "General",
@@ -450,7 +450,7 @@
       },
       "globalProxy": {
         "title": "Global Outbound Proxy",
-        "description": "Configure proxy for TAI Switch to access external APIs"
+        "description": "Configure proxy for Lolicode to access external APIs"
       },
       "data": {
         "title": "Data Management",
@@ -523,7 +523,7 @@
     "themeDark": "Ink · Dark",
     "themeSystem": "System",
     "importExport": "SQL Import/Export",
-    "importExportHint": "Import or export database SQL backups for migration or restore (import supports only backups exported by TAI Switch).",
+    "importExportHint": "Import or export database SQL backups for migration or restore (import supports only backups exported by Lolicode).",
     "exportConfig": "Export SQL Backup",
     "selectConfigFile": "Select SQL File",
     "noFileSelected": "No configuration file selected.",
@@ -600,15 +600,15 @@
         },
         "codexHistoryUnifyRestore": {
           "name": "Codex session unify restore backups",
-          "hint": "Session copies kept before \"Restore backup\" ran. TAI Switch never reads them again."
+          "hint": "Session copies kept before \"Restore backup\" ran. Lolicode never reads them again."
         },
         "codexHistoryProviderMigration": {
           "name": "Codex session group migration backups",
-          "hint": "Copies kept before session groups were migrated. TAI Switch never reads them again."
+          "hint": "Copies kept before session groups were migrated. Lolicode never reads them again."
         },
         "liveFirstWrite": {
           "name": "Config first-write backups",
-          "hint": "Original client config files from before TAI Switch first rewrote them. After deleting, those originals are gone; the next write backs up the file as it is then."
+          "hint": "Original client config files from before Lolicode first rewrote them. After deleting, those originals are gone; the next write backs up the file as it is then."
         },
         "hermes": {
           "name": "Hermes config backups",
@@ -620,7 +620,7 @@
         },
         "proxyLiveBackup": {
           "name": "Legacy routing takeover backups",
-          "hint": "Config copies moved out of the old routing takeover backups during upgrade. TAI Switch never reads them again."
+          "hint": "Config copies moved out of the old routing takeover backups during upgrade. Lolicode never reads them again."
         },
         "envVars": {
           "name": "Environment variable cleanup backups",
@@ -835,7 +835,7 @@
     "windowBehavior": "Window Behavior",
     "windowBehaviorHint": "Configure window minimize and Claude plugin integration policies.",
     "launchOnStartup": "Launch on Startup",
-    "launchOnStartupDescription": "Automatically run TAI Switch when system starts",
+    "launchOnStartupDescription": "Automatically run Lolicode when system starts",
     "silentStartup": "Silent Startup",
     "silentStartupDescription": "Start in background mode without showing main window",
     "autoLaunchFailed": "Failed to set auto-launch",
@@ -856,7 +856,7 @@
     "codexStackClassicSubagentsDescription": "In Codex aggregation mode, a sub-agent whose model comes from a different provider than the main agent may not be able to read its task: the newer Codex sub-agent tools have the main agent's provider encrypt the task, and no other provider can decrypt it. When enabled, every aggregated model uses the classic Codex sub-agent tools, which pass the task as plain text; the trade-off is losing newer features such as followup_task and interrupt_agent. Only affects aggregation mode; restart Codex for the change to take effect.",
     "codexStackClassicSubagentsForcedV2": "Codex config.toml turns on [features] multi_agent_v2, which takes precedence over this setting, so it has no effect.",
     "codexSessionCompression": "Compress old Codex sessions",
-    "codexSessionCompressionDescription": "When on, Codex compresses session files that haven't changed for 7 days in the background each time it starts, which saves a lot of disk space. Codex decompresses a session automatically when you continue it. TAI Switch still lists and counts compressed sessions; the list just doesn't show a preview of their last reply. This is a Codex feature still under development: Codex shows a notice on every start while it's on. Requires a recent Codex version and takes effect after restarting Codex. Turning it off stops compressing; sessions already compressed stay as they are.",
+    "codexSessionCompressionDescription": "When on, Codex compresses session files that haven't changed for 7 days in the background each time it starts, which saves a lot of disk space. Codex decompresses a session automatically when you continue it. Lolicode still lists and counts compressed sessions; the list just doesn't show a preview of their last reply. This is a Codex feature still under development: Codex shows a notice on every start while it's on. Requires a recent Codex version and takes effect after restarting Codex. Turning it off stops compressing; sessions already compressed stay as they are.",
     "codexSessionCompressionUsage": "Sessions currently use {{size}}",
     "codexSessionCompressionFailed": "Failed to change the Codex session compression setting",
     "unifyCodexHistoryRestoreCompleted": "Official session history restored from backup ({{files}} session files, {{rows}} index rows)",
@@ -908,8 +908,8 @@
     },
     "configDirectoryOverride": "Configuration Directory Override (Advanced)",
     "configDirectoryDescription": "When using Claude Code or Codex in environments like WSL, you can manually specify the configuration directory to the one in WSL to keep provider data consistent with the main environment.",
-    "appConfigDir": "TAI Switch Configuration Directory",
-    "appConfigDirDescription": "Customize the storage location for TAI Switch configuration (point to cloud sync folder to enable config sync)",
+    "appConfigDir": "Lolicode Configuration Directory",
+    "appConfigDirDescription": "Customize the storage location for Lolicode configuration (point to cloud sync folder to enable config sync)",
     "browsePlaceholderApp": "e.g., C:\\Users\\Administrator\\.tai-switch",
     "claudeConfigDir": "Claude Code Configuration Directory",
     "claudeConfigDirDescription": "Override Claude configuration directory (settings.json). Custom directories store .claude.json (MCP) inside the directory; the default ~/.claude directory keeps Claude Code's split ~/.claude.json path.",
@@ -954,7 +954,7 @@
     "viewCurrentReleaseNotes": "View current version release notes",
     "officialWebsite": "Official Website",
     "github": "GitHub",
-    "starPrompt": "If TAI Switch has helped you, please star us on GitHub — it means a lot to us",
+    "starPrompt": "If Lolicode has helped you, please star us on GitHub — it means a lot to us",
     "starOnGithub": "Star on GitHub",
     "manualInstallCommands": "Manual Install Commands",
     "manualUninstallCommands": "Manual uninstall commands",
@@ -1013,7 +1013,7 @@
     "toolUpgradeConfirmBtn": "Confirm upgrade",
     "toolUpgradeUnanchoredHint": "Can't determine which install your command line uses; will run the default upgrade command (may install to the first npm on PATH).",
     "toolUpgradeUnmanagedTitle": "Skipped upgrading these tools",
-    "toolUpgradeUnmanagedDetail": "{{tool}} ({{path}}) wasn't installed by npm or a recognized installer, so TAI Switch can't tell how to upgrade it. Upgrade it the way you installed it (e.g. winget, Scoop, or re-running the official install script).",
+    "toolUpgradeUnmanagedDetail": "{{tool}} ({{path}}) wasn't installed by npm or a recognized installer, so Lolicode can't tell how to upgrade it. Upgrade it the way you installed it (e.g. winget, Scoop, or re-running the official install script).",
     "envBadge": {
       "wsl": "WSL",
       "windows": "Win",
@@ -1027,7 +1027,7 @@
     "importFailedError": "Import config failed: {{message}}",
     "exportFailedError": "Export config failed:",
     "restartRequired": "Restart Required",
-    "restartRequiredMessage": "Modifying the TAI Switch configuration directory requires restarting the application to take effect. Restart now?",
+    "restartRequiredMessage": "Modifying the Lolicode configuration directory requires restarting the application to take effect. Restart now?",
     "restartNow": "Restart Now",
     "restartLater": "Restart Later",
     "restartFailed": "Application restart failed, please manually close and reopen.",
@@ -1173,7 +1173,7 @@
     },
     "current": {
       "readFailed": "Could not read Pi's provider configuration",
-      "stateUnavailableHint": "Provider changes are disabled until TAI Switch can read Pi's provider configuration."
+      "stateUnavailableHint": "Provider changes are disabled until Lolicode can read Pi's provider configuration."
     },
     "prompts": {
       "globalTab": "Library",
@@ -1226,7 +1226,7 @@
       "libraryLabel": "Pi prompt library",
       "systemFilesLabel": "Pi system prompt files",
       "templatesLabel": "Pi prompt templates",
-      "externalTitle": "AGENTS.md was changed outside TAI Switch",
+      "externalTitle": "AGENTS.md was changed outside Lolicode",
       "externalDetail": "Its content ({{size}}) differs from every library prompt, so none shows as enabled. It's saved to the library before another one is enabled.",
       "saveToLibrary": "Save to library",
       "reloadAfterDelete": "Open Pi sessions pick this up after /reload while idle.",
@@ -1303,7 +1303,7 @@
     "expandContent": "Expand full content",
     "collapseContent": "Collapse",
     "helpTitle": "Where sessions come from",
-    "helpBody": "TAI Switch reads the session records each app keeps on this computer. See “Where sessions are stored” in the ⋯ menu. Claude Desktop has no session records of its own.",
+    "helpBody": "Lolicode reads the session records each app keeps on this computer. See “Where sessions are stored” in the ⋯ menu. Claude Desktop has no session records of its own.",
     "moreActions": "More session actions",
     "refreshList": "Refresh list",
     "listRefreshed": "Session list refreshed",
@@ -1311,7 +1311,7 @@
     "preferredTerminal": "Preferred terminal",
     "whereMenu": "Where sessions are stored",
     "whereTitle": "Where sessions are stored",
-    "whereLead": "TAI Switch reads sessions from these locations. Claude Desktop has no session records of its own.",
+    "whereLead": "Lolicode reads sessions from these locations. Claude Desktop has no session records of its own.",
     "whereNote": "Apps with a custom config directory in Settings are read from that directory.",
     "appPrefix": "App: ",
     "chooseApp": "Choose app",
@@ -1354,7 +1354,7 @@
     "hermesLimit": "Hermes shows only the latest 500 sessions",
     "emptyApp": "No {{app}} sessions yet",
     "emptyAll": "No sessions yet",
-    "emptyAppHint": "TAI Switch reads session data from {{path}}",
+    "emptyAppHint": "Lolicode reads session data from {{path}}",
     "emptySearch": "No session titles, folders or first/last messages match “{{query}}”",
     "clearSearchAction": "Clear search",
     "backToList": "Back to sessions",
@@ -1885,8 +1885,8 @@
     "remove": {
       "titleOne": "Delete account “{{login}}”?",
       "titleAll": "Delete all {{service}} accounts?",
-      "leadOne": "This deletes the sign-in credentials TAI Switch keeps for this account. This can’t be undone.",
-      "leadAll": "This deletes the sign-in credentials TAI Switch keeps for these {{count}} accounts. This can’t be undone.",
+      "leadOne": "This deletes the sign-in credentials Lolicode keeps for this account. This can’t be undone.",
+      "leadAll": "This deletes the sign-in credentials Lolicode keeps for these {{count}} accounts. This can’t be undone.",
       "brokenOne": "These providers will stop working until you sign in again or pick another account:",
       "brokenAll": "These providers will stop working until you sign in again:",
       "moved": "These providers use the default account and will switch to the new default:",
@@ -2046,7 +2046,7 @@
     "headerName": "Header",
     "headerValue": "Value",
     "headerNamePlaceholder": "X-Title",
-    "headerValuePlaceholder": "TAI Switch",
+    "headerValuePlaceholder": "Lolicode",
     "removeHeader": "Remove header",
     "noHeaders": "No custom headers configured",
     "extraOptions": "Extra Options",
@@ -2333,11 +2333,11 @@
     "modelsDevDefaultHint": "Showing the {{shown}} most recently released models (of {{total}}) — type to search all",
     "modelsDevAutoSync": {
       "title": "Automatic models.dev pricing sync",
-      "description": "When enabled, periodically fetch selected prices when TAI Switch launches and keep them in your local pricing file.",
+      "description": "When enabled, periodically fetch selected prices when Lolicode launches and keep them in your local pricing file.",
       "enabled": "Enabled",
       "disabled": "Disabled",
       "enableConfirmTitle": "Enable automatic pricing sync?",
-      "enableConfirmMessage": "After enabling, TAI Switch will periodically update prices for the selected models from models.dev when it launches (at most once every 6 hours). Built-in and manually configured prices with the same model ID will be overwritten.",
+      "enableConfirmMessage": "After enabling, Lolicode will periodically update prices for the selected models from models.dev when it launches (at most once every 6 hours). Built-in and manually configured prices with the same model ID will be overwritten.",
       "enableConfirmAction": "Enable automatic sync",
       "configure": "Choose models",
       "configureTitle": "Choose models for automatic pricing sync",
@@ -2466,7 +2466,7 @@
     "sources": {
       "scanTitle": "Scan session logs automatically",
       "scanHelpTitle": "What are session logs?",
-      "scanHelp": "The conversation records each app writes on this computer. TAI Switch reads usage from them, so you get data even without routing.",
+      "scanHelp": "The conversation records each app writes on this computer. Lolicode reads usage from them, so you get data even without routing.",
       "coverage": "Covers 7 apps: {{apps}}",
       "cadenceOn": "Scans once at startup, then every 60 seconds",
       "cadenceOff": "Auto scan is off; logs are scanned only when you click Sync Now",
@@ -2598,7 +2598,7 @@
   },
   "dbUpgrade": {
     "title": "Database version is too new",
-    "description": "This database was created by a newer version of TAI Switch. Upgrade the app to continue. Upgrading will not delete your data.",
+    "description": "This database was created by a newer version of Lolicode. Upgrade the app to continue. Upgrading will not delete your data.",
     "versionInfo": "Database v{{db}} · App supports v{{supported}}",
     "dbPath": "Database file",
     "checking": "Checking for available updates…",
@@ -2644,7 +2644,7 @@
       "deleteConfirm": "Are you sure you want to delete server \"{{id}}\"? This action cannot be undone.",
       "noServers": "No servers yet",
       "enabledApps": "Enabled Apps",
-      "noImportFound": "No MCP servers to import found. All servers are already managed by TAI Switch.",
+      "noImportFound": "No MCP servers to import found. All servers are already managed by Lolicode.",
       "importSuccess": "Successfully imported {{count}} MCP servers",
       "searchPlaceholder": "Search MCP name, description, tag, or command...",
       "searchAriaLabel": "Search managed MCP servers",
@@ -2802,7 +2802,7 @@
     "name": "Name",
     "namePlaceholder": "e.g. Team coding rules",
     "description": "Note",
-    "descriptionPlaceholder": "Optional, shown only in TAI Switch",
+    "descriptionPlaceholder": "Optional, shown only in Lolicode",
     "content": "Text",
     "contentPlaceholder": "# {{filename}}\n\nStanding instructions for {{appName}}, in Markdown…",
     "loadFailed": "Failed to load prompts",
@@ -2862,7 +2862,7 @@
     "deleteBlocked": "Disable it before deleting",
     "emptyTitle": "No {{app}} prompts yet",
     "emptyTarget": "The enabled prompt is written to {{path}}.",
-    "emptyFile": "{{path}} already has {{size}} of content that isn't in TAI Switch yet",
+    "emptyFile": "{{path}} already has {{size}} of content that isn't in Lolicode yet",
     "importExisting": "Import existing content",
     "formDescription": "Name, note and the text written to {{file}}",
     "requiredMark": "(required)",
@@ -2903,7 +2903,7 @@
       "savedActive": "Saved \"{{name}}\" and overwrote {{path}}",
       "savedActivePi": "Saved \"{{name}}\" and wrote AGENTS.md",
       "deleted": "Deleted \"{{name}}\"",
-      "deletedSub": "Removed from TAI Switch only; {{path}} is unchanged",
+      "deletedSub": "Removed from Lolicode only; {{path}} is unchanged",
       "deletedPiSub": "Removed from the library only; AGENTS.md is unchanged",
       "restored": "Restored \"{{name}}\"",
       "imported": "Imported the content of {{path}}; the file is unchanged",
@@ -3225,7 +3225,7 @@
     "installSuccess": "Skill {{name}} installed",
     "installFailed": "Failed to install",
     "uninstallSuccess": "Skill {{name}} uninstalled",
-    "uninstallPiPreserved": "Pi's copy could not be verified as TAI Switch-managed and was left in place: {{path}}",
+    "uninstallPiPreserved": "Pi's copy could not be verified as Lolicode-managed and was left in place: {{path}}",
     "uninstallPiCleanupIncomplete": "Pi cleanup could not be completed. Check the Pi Skills directory manually for a leftover copy.",
     "uninstallFailed": "Failed to uninstall",
     "update": "Update",
@@ -3324,10 +3324,10 @@
     "noInstalledDescription": "Discover and install skills from repositories, or import existing skills",
     "discover": "Discover Skills",
     "import": "Import Existing",
-    "importDescription": "Select skills to import into TAI Switch unified management",
+    "importDescription": "Select skills to import into Lolicode unified management",
     "importSuccess": "Successfully imported {{count}} skills",
     "importSelected": "Import Selected ({{count}})",
-    "noUnmanagedFound": "No skills to import found. All skills are already managed by TAI Switch.",
+    "noUnmanagedFound": "No skills to import found. All skills are already managed by Lolicode.",
     "unmanagedAvailable": "Skills available to import",
     "foundIn": "Found in",
     "local": "Local",
@@ -3385,7 +3385,7 @@
       "resyncPartial": "{{count}} apps didn't fully sync: {{apps}}",
       "resyncSkillItem": "{{directory}}: {{error}}",
       "locationTitle": "Keep the master copies in",
-      "locationCcSwitch": "TAI Switch folder",
+      "locationCcSwitch": "Lolicode folder",
       "locationUnified": "Shared folder",
       "openFolder": "Open",
       "openFolderAria": "Open {{path}}",
@@ -3393,7 +3393,7 @@
       "move": "Move and switch",
       "moving": "Moving…",
       "moveConfirmTitle": "Move {{count}} Skills to {{path}}?",
-      "moveConfirmBody": "Each master copy is moved, then the links in every app are pointed at the new location. Don't quit TAI Switch until the move finishes.",
+      "moveConfirmBody": "Each master copy is moved, then the links in every app are pointed at the new location. Don't quit Lolicode until the move finishes.",
       "moveConfirmButton": "Move and switch",
       "moveDone": "Moved {{count}} Skills to {{path}}",
       "movePartial": "Moved {{migrated}} Skills, {{errors}} failed. Check the logs for details.",
@@ -3409,7 +3409,7 @@
   },
   "deeplink": {
     "confirmImport": "Confirm Import Provider",
-    "confirmImportDescription": "The following configuration will be imported from deep link into TAI Switch",
+    "confirmImportDescription": "The following configuration will be imported from deep link into Lolicode",
     "importPrompt": "Import Prompt",
     "importPromptDescription": "Please confirm whether to import this system prompt",
     "importMcp": "Import MCP Servers",
@@ -3439,7 +3439,7 @@
     "import": "Import",
     "importing": "Importing...",
     "warning": "Please confirm the information above is correct before importing. You can edit or delete it later in the provider list.",
-    "providerEnabledWarning": "After import, TAI Switch will switch to this provider immediately, and client requests will go to the endpoint above",
+    "providerEnabledWarning": "After import, Lolicode will switch to this provider immediately, and client requests will go to the endpoint above",
     "apiFormat": "API format",
     "switchAfterImport": "Switch to this provider after import",
     "addToAppAfterImport": "Add to the {{app}} config after import",
@@ -3697,7 +3697,7 @@
         "authTitle": "Codex may still cache the previous account; restart its background server to load the new login",
         "title": "Codex is still using an old model list, so the current models won't show",
         "unverifiedTitle": "Codex apps that were open before the switch may still use the previous account or model list",
-        "unverifiedHint": "TAI Switch can't tell whether the desktop app or editor extensions are running. If they aren't open, just close this notice.",
+        "unverifiedHint": "Lolicode can't tell whether the desktop app or editor extensions are running. If they aren't open, just close this notice.",
         "daemon": "CLI: reopening codex isn't enough; its background daemon needs a restart.",
         "others": "Desktop app: quit it completely and reopen it (⌘Q on macOS; closing the window isn't enough). Editor extensions: reopen the editor window.",
         "restart": "Restart Codex daemon",
@@ -4096,7 +4096,7 @@
     "appsTitle": "Apps: install, upgrade, choose which show in the sidebar",
     "appsHasUpdate": "Apps · updates available",
     "settings": "Settings",
-    "settingsHasUpdate": "Settings · a new TAI Switch version is available",
+    "settingsHasUpdate": "Settings · a new Lolicode version is available",
     "mode": {
       "route": "Routing",
       "stack": "Aggregation",
@@ -4124,7 +4124,7 @@
     "columnVersion": "Version",
     "columnVisible": "Show",
     "visibleHelp": "When off, the app no longer appears in the sidebar, in the MCP / Skills app columns, or in the app pickers on Prompts and Sessions. Its existing config stays and keeps syncing.",
-    "desktopHelp": "Claude Desktop is a desktop app and can't be installed or upgraded here; TAI Switch connects to it through its config file.",
+    "desktopHelp": "Claude Desktop is a desktop app and can't be installed or upgraded here; Lolicode connects to it through its config file.",
     "desktopUnsupported": "Not supported on this system",
     "desktopConnected": "Connected",
     "desktopNotConnected": "Not connected",
@@ -4206,15 +4206,15 @@
       "routeTitle": "Use routing for {{app}}?",
       "stackTitle": "Use Aggregation for {{app}}?",
       "switchTitle": "Switch {{app}} from “{{from}}” to “{{to}}”?",
-      "routeLead": "Requests go through TAI Switch on this machine first, then to the provider you pick.",
+      "routeLead": "Requests go through Lolicode on this machine first, then to the provider you pick.",
       "stackLead": "The default provider takes requests without a prefix.",
       "routeTo": "Route to",
       "stackDefault": "Default provider",
       "officialOption": "{{name}} (official)",
       "stackOfficialNote": "If you use an official subscription, set the official account as the default provider.",
-      "routeNoteFile": "Rewrites the address and key in {{file}}. The real key stays in TAI Switch; other settings are untouched.",
+      "routeNoteFile": "Rewrites the address and key in {{file}}. The real key stays in Lolicode; other settings are untouched.",
       "routeNoteSwitch": "Changing providers later on the Routing tab won't rewrite the config file.",
-      "routeNoteKeepRunning": "Keep TAI Switch running. Quitting writes the direct config back; it reconnects on the next start.",
+      "routeNoteKeepRunning": "Keep Lolicode running. Quitting writes the direct config back; it reconnects on the next start.",
       "stackNoteMembers": "{{names}} add {{count}} models, shown in /model with the ccs- prefix.",
       "stackNoteEmpty": "No other providers added yet, so only the default is available. You can add more on the Aggregation tab later.",
       "stackNoteNoFailover": "Aggregation has no failover. The queue and its settings are kept and come back with routing.",
@@ -4229,8 +4229,8 @@
     },
     "help": {
       "title": "How the connection modes differ",
-      "direct": "Direct: TAI Switch never touches your requests; the client talks to the chosen provider itself for the most native experience.",
-      "route": "Routing: requests go through TAI Switch on this machine, unlocking hot-switching providers, failover, format conversion, and other advanced features.",
+      "direct": "Direct: Lolicode never touches your requests; the client talks to the chosen provider itself for the most native experience.",
+      "route": "Routing: requests go through Lolicode on this machine, unlocking hot-switching providers, failover, format conversion, and other advanced features.",
       "stack": "Aggregation: models from several providers sit together in /model, so you can switch between them seamlessly inside the client."
     }
   },
@@ -4333,7 +4333,7 @@
     "clientHost": "Connection address",
     "clientHostHint": "Where clients connect. Empty: the listen address",
     "clientHostInvalid": "Enter an IP address or hostname that clients can reach",
-    "clientHostHelp": "The host TAI Switch writes into client configs (including Claude Desktop's gateway URL). Leave it empty to derive it from the listen address. Set it when clients can't reach this machine through loopback, e.g. Claude Desktop sessions inside WSL2 (NAT mode): set the listen address to 0.0.0.0 and enter a Windows IP that WSL can reach (such as the vEthernet (WSL) adapter address), and allow the port through the firewall.",
+    "clientHostHelp": "The host Lolicode writes into client configs (including Claude Desktop's gateway URL). Leave it empty to derive it from the listen address. Set it when clients can't reach this machine through loopback, e.g. Claude Desktop sessions inside WSL2 (NAT mode): set the listen address to 0.0.0.0 and enter a Windows IP that WSL can reach (such as the vEthernet (WSL) adapter address), and allow the port through the firewall.",
     "logging": "Record request usage",
     "loggingHelp": "When off, Usage has no per-request details for routed requests.",
     "usingApps": "Apps using routing · {{count}}",
@@ -4431,7 +4431,7 @@
     "failNoticeTitle": "Couldn't write {{app}}'s config",
     "failNoticeBody": "{{error}}. Fix the file, then click Retry.",
     "loadFailed": "Couldn't load the MCP list",
-    "noFilesChanged": "TAI Switch didn't change any files.",
+    "noFilesChanged": "Lolicode didn't change any files.",
     "emptyTitle": "No MCP servers yet",
     "emptyBody": "MCP servers already set up in your apps can be imported",
     "importHelpTitle": "What import reads",
@@ -4451,8 +4451,8 @@
     "disableEverywhere": "Turn off everywhere",
     "deleteEllipsis": "Delete",
     "deleteTitle": "Delete {{id}}?",
-    "deleteBodyApps": "This removes it from TAI Switch and from the config files of {{apps}}. This can't be undone.",
-    "deleteBody": "This removes it from TAI Switch. This can't be undone.",
+    "deleteBodyApps": "This removes it from Lolicode and from the config files of {{apps}}. This can't be undone.",
+    "deleteBody": "This removes it from Lolicode. This can't be undone.",
     "toast": {
       "written": "Written to {{app}}",
       "rowAllOn": "{{id}} is enabled in all {{count}} apps",
@@ -4471,7 +4471,7 @@
       "title": "Import finished",
       "added": "Added {{count}} MCP servers: {{names}}.",
       "none": "No new MCP servers found.",
-      "sameName": "For servers already in the list, only the matching app switches were turned on; the config in TAI Switch still wins.",
+      "sameName": "For servers already in the list, only the matching app switches were turned on; the config in Lolicode still wins.",
       "failedTitle": "Some apps couldn't be read",
       "filesTitle": "Which files were read",
       "claudeNote": " (top-level mcpServers)",
@@ -4567,7 +4567,7 @@
       "metaHint": "Display name, description, tags, homepage, docs",
       "displayName": "Display name",
       "displayNameHelpTitle": "Where the display name shows",
-      "displayNameHelp": "Only shown in TAI Switch; not written to app configs.",
+      "displayNameHelp": "Only shown in Lolicode; not written to app configs.",
       "description": "Description",
       "tags": "Tags",
       "tagsPlaceholder": "Comma-separated, e.g. docs, web",
@@ -4579,7 +4579,7 @@
   "skillsPage": {
     "noun": "Skills",
     "helpTitle": "How Skills sync",
-    "help": "The main copy lives in TAI Switch's folder and is synced to the apps you tick. Claude Desktop and OpenClaw don't support Skills, so they have no column.",
+    "help": "The main copy lives in Lolicode's folder and is synced to the apps you tick. Claude Desktop and OpenClaw don't support Skills, so they have no column.",
     "add": "Add Skill",
     "addMenu": {
       "discover": "Browse in Discover",
@@ -4598,7 +4598,7 @@
     "lastChecked": "Last checked: {{when}}",
     "justNow": "just now",
     "banner": {
-      "unmanaged": "{{count}} Skills on this computer aren't managed by TAI Switch.",
+      "unmanaged": "{{count}} Skills on this computer aren't managed by Lolicode.",
       "reviewImport": "Review and import",
       "ignore": "Ignore",
       "close": "Dismiss"
@@ -4648,7 +4648,7 @@
     "confirm": {
       "uninstallOne": "Uninstall {{name}}?",
       "uninstallMany": "Uninstall {{count}} Skills?",
-      "uninstallBody": "It's removed from every app and the main copy in TAI Switch is deleted. A backup is saved to {{path}} first.",
+      "uninstallBody": "It's removed from every app and the main copy in Lolicode is deleted. A backup is saved to {{path}} first.",
       "uninstallManyButton": "Uninstall {{count}}",
       "updateAll": "Update {{count}} Skills?",
       "updateBody": "Updating replaces the local folder with the repository's content. Local edits are kept only in the backup ({{path}}).",
@@ -4717,14 +4717,14 @@
     "import": {
       "title": "Import Skills from this computer",
       "helpTitle": "What counts as already on this computer",
-      "help": "Folders that contain a SKILL.md but aren't managed by TAI Switch yet.",
-      "lead": "Importing copies them into TAI Switch's folder; the original files stay as they are.",
+      "help": "Folders that contain a SKILL.md but aren't managed by Lolicode yet.",
+      "lead": "Importing copies them into Lolicode's folder; the original files stay as they are.",
       "searchPlaceholder": "Search name or location",
       "searchAria": "Search Skills to import",
       "selectAll": "Select all",
       "selectNone": "Select none",
       "foundIn": "Found in: {{places}}",
-      "foundCcSwitch": "TAI Switch folder",
+      "foundCcSwitch": "Lolicode folder",
       "appsTitle": "Enable in these apps after importing",
       "appsHelpTitle": "Which apps are ticked by default",
       "appsHelp": "Apps listed under “Found in” are ticked and only enable the Skills found there; any other app you tick enables every imported Skill. Pi is decided by its folder, so it isn't listed.",
@@ -4746,7 +4746,7 @@
     "updatingProgress": "Updating {{done}}/{{total}}…"
   },
   "newLayoutNotice": {
-    "title": "TAI Switch has a new look",
+    "title": "Lolicode has a new look",
     "body": "This version starts from a shared channel center:\n• Add each API service once and discover its models\n• Select tools to configure their models and default model together\n• The main interface keeps channels, accounts, tools, and basic usage\nSimplifying the interface does not automatically delete existing channels or client configuration.",
     "viewReleaseNotes": "View release notes",
     "confirm": "Got it"

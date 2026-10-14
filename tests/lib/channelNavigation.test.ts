@@ -13,6 +13,7 @@ describe("channel center startup navigation", () => {
       "skillsDiscovery",
       "prompts",
       "sessions",
+      "auth",
       "unknown",
     ]) {
       localStorage.setItem(VIEW_STORAGE_KEY, view);
@@ -20,13 +21,7 @@ describe("channel center startup navigation", () => {
     }
   });
   it("retains remembered core destinations and parses legacy views for internal callers", () => {
-    for (const view of [
-      "channels",
-      "usage",
-      "auth",
-      "apps",
-      "settings",
-    ] as const) {
+    for (const view of ["channels", "usage", "apps", "settings"] as const) {
       localStorage.setItem(VIEW_STORAGE_KEY, view);
       expect(readStoredView()).toBe(view);
     }

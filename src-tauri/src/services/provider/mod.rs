@@ -2281,6 +2281,13 @@ requires_openai_auth = true
 
         let db = Arc::new(Database::memory().expect("init db"));
         let state = AppState::new(db.clone());
+        db.update_proxy_config(ProxyConfig {
+            listen_address: "127.0.0.1".into(),
+            listen_port: 0,
+            ..Default::default()
+        })
+        .await
+        .expect("use an isolated loopback listener");
 
         let mut original = Provider::with_id(
             "p1".into(),
@@ -2334,6 +2341,12 @@ requires_openai_auth = true
             .start()
             .await
             .expect("start proxy service");
+        let proxy_origin = state
+            .proxy_service
+            .build_proxy_urls()
+            .await
+            .expect("proxy url")
+            .0;
 
         let mut updated = Provider::with_id(
             "p1".into(),
@@ -2377,7 +2390,10 @@ requires_openai_auth = true
         let profile: Value = read_json_file(&profile_path).expect("read desktop profile");
         assert_eq!(
             profile["inferenceGatewayBaseUrl"],
-            json!("http://127.0.0.1:15721/claude-desktop"),
+            json!(format!(
+                "{}/claude-desktop",
+                proxy_origin.trim_end_matches('/')
+            )),
             "desktop profile should stay pointed at the local gateway during takeover"
         );
         assert_eq!(profile["inferenceGatewayAuthScheme"], json!("bearer"));
@@ -2386,6 +2402,11 @@ requires_openai_auth = true
             json!([{ "name": "claude-sonnet-4-6", "labelOverride": "DeepSeek V4 Flash Updated", "supports1m": true }]),
             "provider edits should propagate into the Claude Desktop 3P profile during takeover"
         );
+        state
+            .proxy_service
+            .stop()
+            .await
+            .expect("stop fixture proxy service");
     }
 
     #[test]

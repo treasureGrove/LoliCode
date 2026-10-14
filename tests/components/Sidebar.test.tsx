@@ -68,13 +68,12 @@ describe("simple channel navigation", () => {
   it("opens shared channels and retains only the core destinations", () => {
     const values = props({ view: "channels" });
     mount(values);
-    const channels = screen.getByRole("button", { name: "渠道与模型" });
+    const channels = screen.getByRole("button", { name: /^渠道与模型/ });
     expect(channels).toHaveAttribute("aria-current", "page");
     fireEvent.click(channels);
     expect(values.onSelectPage).toHaveBeenLastCalledWith("channels");
     for (const [name, page] of [
       [/^nav.usage/, "usage"],
-      [/^nav.auth/, "auth"],
       [/^nav.apps ·/, "apps"],
       [/^nav.settings ·/, "settings"],
     ] as const) {
@@ -83,6 +82,9 @@ describe("simple channel navigation", () => {
     }
     expect(
       screen.queryByRole("button", { name: /^nav.sessions/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /^nav.auth/ }),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "MCP" }),
@@ -104,9 +106,9 @@ describe("simple channel navigation", () => {
   it("keeps the channel destination stable across legacy client views", () => {
     const values = props();
     const { rerender } = mount(values);
-    const channels = screen.getByRole("button", { name: "渠道与模型" });
+    const channels = screen.getByRole("button", { name: /^渠道与模型/ });
     rerender(<Sidebar {...values} activeApp="openclaw" view="workspace" />);
-    expect(screen.getByRole("button", { name: "渠道与模型" })).toBe(channels);
+    expect(screen.getByRole("button", { name: /^渠道与模型/ })).toBe(channels);
     fireEvent.click(channels);
     expect(values.onSelectPage).toHaveBeenCalledWith("channels");
     expect(values.onSelectApp).not.toHaveBeenCalled();
@@ -131,7 +133,7 @@ describe("simple channel navigation", () => {
     ).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "nav.back" }));
     expect(values.onExitSettings).toHaveBeenCalledOnce();
-    expect(await screen.findByText("TAI Switch v4.0.10")).toBeInTheDocument();
+    expect(await screen.findByText("Lolicode v4.0.10")).toBeInTheDocument();
   });
 
   it("keeps named keyboard controls reachable in the compact rail", async () => {
@@ -145,13 +147,13 @@ describe("simple channel navigation", () => {
       "data-collapsed",
       "true",
     );
-    const channels = screen.getByRole("button", { name: "渠道与模型" });
+    const channels = screen.getByRole("button", { name: /^渠道与模型/ });
     expect(channels).toHaveAttribute("aria-current", "page");
     channels.focus();
     await userEvent.setup().keyboard("{Enter}");
     expect(values.onSelectPage).toHaveBeenCalledWith("channels");
     expect(
-      screen.getByRole("button", { name: /^nav.auth/ }),
+      screen.getByRole("button", { name: /^渠道与模型/ }),
     ).toHaveAccessibleName(/nav.authNeedsReauth/);
   });
 });

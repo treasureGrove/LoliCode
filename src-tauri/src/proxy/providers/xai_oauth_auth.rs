@@ -187,6 +187,7 @@ pub struct XaiOAuthStatus {
     pub username: Option<String>,
 }
 
+#[derive(Clone)]
 pub struct XaiOAuthManager {
     accounts: Arc<RwLock<HashMap<String, XaiAccountData>>>,
     default_account_id: Arc<RwLock<Option<String>>>,
@@ -268,6 +269,18 @@ impl XaiOAuthManager {
             expires_in,
             interval,
         })
+    }
+
+    /// Cancellation and successful persistence use the same mutation lock.
+    /// A late HTTP reply cannot restore a removed pending login or token cache.
+    /// False means completion already committed (or the flow no longer exists).
+    pub async fn cancel_device_flow(&self, device_code: &str) -> bool {
+        let _mutation_guard = self.mutation_lock.lock().await;
+        self.pending_device_codes
+            .write()
+            .await
+            .remove(device_code)
+            .is_some()
     }
 
     pub async fn poll_for_token(
@@ -1351,5 +1364,92 @@ mod tests {
         assert!(manager.list_accounts().await.is_empty());
         assert!(manager.access_tokens.read().await.is_empty());
         assert!(!data_dir.path().join("xai_oauth_auth.json").exists());
+    }
+
+    fn pending_login_fixture() -> PendingDeviceCode {
+        PendingDeviceCode {
+            token_endpoint: "https://example.invalid/token".into(),
+            expires_at_ms: chrono::Utc::now().timestamp_millis() + 300_000,
+            interval_secs: 5,
+            next_poll_at_ms: 0,
+        }
+    }
+
+    #[tokio::test]
+    async fn xai_cancel_inflight_poll_blocks_late_account_and_access_token_save() {
+        let dir = tempfile::tempdir().unwrap();
+        let manager = XaiOAuthManager::new(dir.path().into());
+        manager
+            .pending_device_codes
+            .write()
+            .await
+            .insert("device".into(), pending_login_fixture());
+        let (resume, resumed) = tokio::sync::oneshot::channel();
+        let pending = {
+            let manager = manager.clone();
+            tokio::spawn(async move {
+                // Inject the ready HTTP result at the production commit boundary.
+                resumed.await.unwrap();
+                manager
+                    .add_account_internal(
+                        "account-one".into(),
+                        None,
+                        "offline-refresh-token".into(),
+                        Some("device"),
+                        Some(CachedAccessToken {
+                            token: "offline-access-token".into(),
+                            expires_at_ms: i64::MAX,
+                        }),
+                    )
+                    .await
+            })
+        };
+        assert!(manager.cancel_device_flow("device").await);
+        resume.send(()).unwrap();
+        assert!(matches!(
+            pending.await.unwrap(),
+            Err(XaiOAuthError::TokenFetchFailed(_))
+        ));
+        assert!(manager.list_accounts().await.is_empty());
+        assert!(manager.access_tokens.read().await.is_empty());
+        assert!(!manager.storage_path.exists());
+    }
+
+    #[tokio::test]
+    async fn xai_cancel_after_completion_retains_committed_account_and_returns_false() {
+        let dir = tempfile::tempdir().unwrap();
+        let manager = XaiOAuthManager::new(dir.path().into());
+        manager
+            .pending_device_codes
+            .write()
+            .await
+            .insert("device".into(), pending_login_fixture());
+        manager
+            .add_account_internal(
+                "account-one".into(),
+                None,
+                "offline-refresh-token".into(),
+                Some("device"),
+                Some(CachedAccessToken {
+                    token: "offline-access-token".into(),
+                    expires_at_ms: i64::MAX,
+                }),
+            )
+            .await
+            .unwrap();
+        assert!(!manager.cancel_device_flow("device").await);
+        assert_eq!(manager.list_accounts().await.len(), 1);
+        assert!(manager
+            .access_tokens
+            .read()
+            .await
+            .contains_key("account-one"));
+        assert_eq!(
+            XaiOAuthManager::new(dir.path().into())
+                .list_accounts()
+                .await
+                .len(),
+            1
+        );
     }
 }

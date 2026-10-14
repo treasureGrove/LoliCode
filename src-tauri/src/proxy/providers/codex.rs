@@ -1023,6 +1023,9 @@ impl ProviderAdapter for CodexAdapter {
     }
 
     fn extract_base_url(&self, provider: &Provider) -> Result<String, ProxyError> {
+        if provider.is_codex_oauth() {
+            return Ok(super::CHATGPT_CODEX_BASE_URL.to_string());
+        }
         if is_codex_official_provider(provider) {
             return Ok(super::CHATGPT_CODEX_BASE_URL.to_string());
         }
@@ -1087,6 +1090,14 @@ impl ProviderAdapter for CodexAdapter {
     }
 
     fn extract_auth(&self, provider: &Provider) -> Option<AuthInfo> {
+        // Native Codex official routes keep their existing inbound-auth path.
+        // Explicit channel upstreams resolve their binding in the forwarder.
+        if provider.is_codex_oauth() && !is_codex_official_provider(provider) {
+            return Some(AuthInfo::new(
+                "codex_oauth_placeholder".into(),
+                AuthStrategy::CodexOAuth,
+            ));
+        }
         if provider.is_github_copilot() {
             return Some(AuthInfo::new(
                 "copilot_placeholder".to_string(),

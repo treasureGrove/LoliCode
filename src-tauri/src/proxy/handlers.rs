@@ -2580,7 +2580,7 @@ async fn responses_sse_stream_to_anthropic_message(
 ///
 /// 复用 `proxy::sse` 的 `take_sse_block`/`strip_sse_field`：`take_sse_block` 同时支持
 /// `\n\n` 与 `\r\n\r\n` 两种分隔符，`strip_sse_field` 兼容带/不带空格的字段写法。
-fn responses_sse_to_response_value(body: &str) -> Result<Value, ProxyError> {
+pub(super) fn responses_sse_to_response_value(body: &str) -> Result<Value, ProxyError> {
     let mut buffer = body.trim_start_matches('\u{feff}').to_string();
     let mut completed_response: Option<Value> = None;
     let mut output_items = Vec::new();

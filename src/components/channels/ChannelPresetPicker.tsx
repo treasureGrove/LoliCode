@@ -4,7 +4,11 @@ import { ProviderIconBox } from "@/components/ProviderIconBox";
 import { Button } from "@/components/ui/button";
 import { Input, fieldClass } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { CHANNEL_PRESETS, COMMON_CHANNEL_PRESETS } from "./channelPresets";
+import {
+  ACCOUNT_CHANNEL_PRESETS,
+  CHANNEL_PRESETS,
+  COMMON_CHANNEL_PRESETS,
+} from "./channelPresets";
 
 interface ChannelPresetPickerProps {
   value: string;
@@ -19,10 +23,11 @@ export function ChannelPresetPicker({
 }: ChannelPresetPickerProps) {
   const [more, setMore] = useState(false);
   const [search, setSearch] = useState("");
-  const filtered = CHANNEL_PRESETS.filter((preset) =>
-    `${preset.name} ${preset.baseUrl}`
-      .toLowerCase()
-      .includes(search.trim().toLowerCase()),
+  const filtered = [...ACCOUNT_CHANNEL_PRESETS, ...CHANNEL_PRESETS].filter(
+    (preset) =>
+      `${preset.name} ${"baseUrl" in preset ? preset.baseUrl : ""}`
+        .toLowerCase()
+        .includes(search.trim().toLowerCase()),
   );
   return (
     <div className="mt-4 space-y-3">
@@ -31,27 +36,29 @@ export function ChannelPresetPicker({
       </p>
       <div
         role="group"
-        aria-label="常用 API 服务"
+        aria-label="添加渠道方式"
         className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
       >
-        {COMMON_CHANNEL_PRESETS.map((preset) => (
-          <button
-            key={preset.id}
-            type="button"
-            aria-pressed={value === preset.id}
-            disabled={disabled}
-            onClick={() => onValueChange(preset.id)}
-            className={cn(
-              "flex min-w-0 items-center gap-2.5 rounded-control border px-3 py-2.5 text-left text-body text-fg-1 transition-colors hover:bg-subtle disabled:opacity-50",
-              value === preset.id
-                ? "border-ring bg-subtle"
-                : "border-border bg-surface",
-            )}
-          >
-            <ProviderIconBox icon={preset.icon} name={preset.name} />
-            <span className="min-w-0 leading-snug">{preset.name}</span>
-          </button>
-        ))}
+        {[...ACCOUNT_CHANNEL_PRESETS, ...COMMON_CHANNEL_PRESETS].map(
+          (preset) => (
+            <button
+              key={preset.id}
+              type="button"
+              aria-pressed={value === preset.id}
+              disabled={disabled}
+              onClick={() => onValueChange(preset.id)}
+              className={cn(
+                "lolicode-channel-card flex min-w-0 items-center gap-2.5 rounded-control border px-3 py-2.5 text-left text-body text-fg-1 transition-colors hover:bg-subtle disabled:opacity-50",
+                value === preset.id
+                  ? "border-ring bg-subtle"
+                  : "border-border bg-surface",
+              )}
+            >
+              <ProviderIconBox icon={preset.icon} name={preset.name} />
+              <span className="min-w-0 leading-snug">{preset.name}</span>
+            </button>
+          ),
+        )}
       </div>
       <div className="flex flex-wrap gap-2">
         <Button
@@ -81,7 +88,7 @@ export function ChannelPresetPicker({
           <div className="relative">
             <Search className="absolute left-2.5 top-2 h-4 w-4 text-fg-3" />
             <Input
-              aria-label="搜索 API 服务"
+              aria-label="搜索服务"
               className="pl-8"
               placeholder="搜索服务名称"
               value={search}
@@ -89,7 +96,7 @@ export function ChannelPresetPicker({
             />
           </div>
           <select
-            aria-label="更多 API 服务"
+            aria-label="更多渠道服务"
             className={cn(fieldClass, "h-8")}
             value={filtered.some((preset) => preset.id === value) ? value : ""}
             disabled={disabled}

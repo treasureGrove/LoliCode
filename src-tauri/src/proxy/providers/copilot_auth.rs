@@ -423,7 +423,7 @@ fn auth_transport_error(error: reqwest::Error, secrets: &[&str]) -> CopilotAuthE
 
 // Error envelopes can echo both the request credential and a newly issued token.
 // Only structured refusal fields reach diagnostics; never return the raw auth body.
-fn auth_error_detail(value: &Value, known_secrets: &[&str]) -> Option<String> {
+pub(crate) fn auth_error_detail(value: &Value, known_secrets: &[&str]) -> Option<String> {
     fn collect_secrets(value: &Value, secrets: &mut Vec<String>) {
         match value {
             Value::Object(object) => {

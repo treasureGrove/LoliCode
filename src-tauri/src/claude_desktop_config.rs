@@ -1634,6 +1634,123 @@ mod tests {
     }
 
     #[test]
+    fn channel_proxy_to_direct_keeps_old_route_until_native_write_completes() {
+        let temp = TempDir::new().unwrap();
+        let paths = test_paths(temp.path());
+        let db = test_db();
+        let mut old = proxy_provider("tai-channel-gateway");
+        old.notes = Some("TAI Channel Center managed".into());
+        db.save_provider("claude-desktop", &old).unwrap();
+        apply_provider_to_paths(&db, &old, &paths).unwrap();
+        let original_profile = fs::read(&paths.profile_path).unwrap();
+        let original_meta = fs::read(&paths.meta_path).unwrap();
+        let source: crate::services::channel_center::ChannelSource = serde_json::from_value(json!({
+            "id":"gateway","name":"Lolicode 聚合","baseUrl":"http://127.0.0.1:15721/tai/catalogs/9/v1",
+            "apiKey":"fake-local-token","authKind":"api_key","protocol":"anthropic","enabled":true,
+            "models":[{"id":"one/model-a","name":"Model A"}]
+        })).unwrap();
+        let next = crate::services::channel_center::gateway_provider(
+            &AppType::ClaudeDesktop,
+            &source,
+            "one/model-a",
+        )
+        .unwrap();
+        let stored = || {
+            db.get_provider_by_id("tai-channel-gateway", "claude-desktop")
+                .unwrap()
+                .unwrap()
+        };
+        fs::write(&paths.meta_path, b"invalid json").unwrap();
+        let write =
+            |db: &Database, provider: &Provider| apply_provider_to_paths(db, provider, &paths);
+        assert!(
+            crate::services::channel_center::write_desktop_channel_projection(&db, &next, write)
+                .is_err()
+        );
+        assert_eq!(stored().settings_config, old.settings_config);
+        assert_eq!(provider_mode(&stored()), ClaudeDesktopMode::Proxy);
+        assert_eq!(fs::read(&paths.profile_path).unwrap(), original_profile);
+        fs::write(&paths.meta_path, &original_meta).unwrap();
+        operation::failpoint::crash_at(Some("published:0"));
+        let partial =
+            crate::services::channel_center::write_desktop_channel_projection(&db, &next, write);
+        operation::failpoint::crash_at(None);
+        assert!(partial.is_err());
+        assert_eq!(provider_mode(&stored()), ClaudeDesktopMode::Proxy);
+        assert_eq!(stored().settings_config, old.settings_config);
+        assert!(state::pending(&paths.device, "claude-desktop")
+            .unwrap()
+            .is_some_and(|pending| pending.published));
+        // Retry uses the original native recovery mechanism instead of replacing
+        // pending files with an old profile or exposing a new DB route early.
+        crate::services::channel_center::write_desktop_channel_projection(&db, &next, write)
+            .unwrap();
+        assert!(state::pending(&paths.device, "claude-desktop")
+            .unwrap()
+            .is_none());
+        assert_eq!(provider_mode(&stored()), ClaudeDesktopMode::Direct);
+        assert_eq!(stored().settings_config, next.settings_config);
+        assert_eq!(
+            read_json_file::<Value>(&paths.profile_path).unwrap()["inferenceGatewayBaseUrl"],
+            "http://127.0.0.1:15721/tai/catalogs/9"
+        );
+    }
+
+    #[test]
+    fn channel_profile_pins_versioned_gateway_without_desktop_proxy_indirection() {
+        let temp = TempDir::new().expect("tempdir");
+        let paths = test_paths(temp.path());
+        let db = test_db();
+        let source: crate::services::channel_center::ChannelSource = serde_json::from_value(json!({
+            "id":"gateway","name":"Lolicode 聚合","baseUrl":"http://127.0.0.1:15721/tai/catalogs/9/v1",
+            "apiKey":"fake-local-token","authKind":"api_key","protocol":"anthropic","enabled":true,
+            "models":[{"id":"one/model-a","name":"Model A"},{"id":"two/model-b","name":"Model B","contextLimit":1000000}]
+        })).unwrap();
+        let provider = crate::services::channel_center::gateway_provider(
+            &AppType::ClaudeDesktop,
+            &source,
+            "two/model-b",
+        )
+        .unwrap();
+        fs::create_dir_all(paths.profile_path.parent().unwrap()).unwrap();
+        write_json_file(&paths.profile_path, &json!({"userFlag":true})).unwrap();
+        apply_provider_to_paths(&db, &provider, &paths).unwrap();
+        let profile: Value = read_json_file(&paths.profile_path).unwrap();
+        assert_eq!(
+            profile["inferenceGatewayBaseUrl"],
+            "http://127.0.0.1:15721/tai/catalogs/9"
+        );
+        assert_eq!(profile["inferenceGatewayApiKey"], "fake-local-token");
+        assert_eq!(profile["userFlag"], true);
+        let models = profile["inferenceModels"].as_array().unwrap();
+        assert_eq!(models.len(), 2);
+        for model in models {
+            assert!(is_claude_safe_model_id(model["name"].as_str().unwrap()));
+        }
+        assert!(models
+            .iter()
+            .any(|model| model["supports1m"] == true && model["labelOverride"] == "Model B"));
+        assert!(
+            db.get_setting(GATEWAY_TOKEN_SETTING_KEY).unwrap().is_none(),
+            "a direct versioned profile does not require a second gateway token"
+        );
+        let mut later = source;
+        later.base_url = "http://127.0.0.1:15721/tai/catalogs/10/v1".into();
+        let later = crate::services::channel_center::gateway_provider(
+            &AppType::ClaudeDesktop,
+            &later,
+            "two/model-b",
+        )
+        .unwrap();
+        db.save_provider("claude-desktop", &later).unwrap();
+        assert_eq!(
+            read_json_file::<Value>(&paths.profile_path).unwrap()["inferenceGatewayBaseUrl"],
+            profile["inferenceGatewayBaseUrl"],
+            "a DB draft or failed later write cannot change the installed profile's version"
+        );
+    }
+
+    #[test]
     fn claude_desktop_direct_can_write_optional_safe_model_ids() {
         let temp = TempDir::new().expect("tempdir");
         let paths = test_paths(temp.path());

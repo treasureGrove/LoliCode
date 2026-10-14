@@ -24,7 +24,14 @@ export interface ChannelSource {
   name: string;
   baseUrl: string;
   apiKey: string;
-  authKind: "api_key" | "github_copilot" | "zhipu_oauth";
+  authKind:
+    | "api_key"
+    | "github_copilot"
+    | "zhipu_oauth"
+    | "codex_oauth"
+    | "xai_oauth"
+    | "claude_subscription"
+    | "gemini_subscription";
   accountId?: string;
   protocol: ChannelProtocol;
   models: ChannelModel[];
@@ -79,4 +86,8 @@ export const channelCenterApi = {
     invoke<ZhipuLoginStatus>("poll_zhipu_login", { flowId }),
   cancelZhipuLogin: (flowId: string) =>
     invoke<void>("cancel_zhipu_login", { flowId }),
+  openNativeSubscriptionLogin: (tool: "claude" | "gemini") =>
+    invoke<void>("open_native_subscription_login", { tool }),
+  discoverNativeSubscription: (tool: "claude" | "gemini") =>
+    invoke<ChannelSource>("discover_native_subscription_channel", { tool }),
 };

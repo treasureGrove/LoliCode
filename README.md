@@ -1,4 +1,4 @@
-> **TAI Switch fork:** Windows test-build instructions are in [TESTING_TAI.md](TESTING_TAI.md).
+> **Lolicode:** Add API keys or subscription accounts as shared channels, discover models, and configure compatible AI tools from one page. See [Channels & models](docs/CHANNEL_CENTER.md) and [replaceable UI resources](src/assets/brand/README.md). Historical Windows build instructions are in [TESTING_TAI.md](TESTING_TAI.md).
 > This fork is based on the full CC Switch snapshot recorded in [FORK_BASELINE.md](FORK_BASELINE.md). The upstream README below is retained as reference; its release links download CC Switch.
 
 <div align="center">
@@ -335,18 +335,18 @@ For detailed guides on every feature, check out the **[User Manual](docs/user-ma
 
 ### Supported Features by Tool
 
-| Tool | Providers | Local Routing | Aggregation | Tray Switching | MCP | Skills | Prompts | Sessions | Usage Stats |
-| --- | --- | :---: | :---: | :---: | :---: | :---: | --- | :---: | :---: |
-| Claude Code | Switch | ✓ | ✓ | ✓ | ✓ | ✓ | CLAUDE.md | ✓ | ✓ |
-| Claude Desktop | Switch | Model Mapping only | – | ✓ | – | – | – | – | Model Mapping only |
-| Codex | Switch | ✓ | ✓ | ✓ | ✓ | ✓ | AGENTS.md | ✓ | ✓ |
-| Gemini CLI | Switch | ✓ | – | ✓ | ✓ | ✓ | GEMINI.md | ✓ | ✓ |
-| Grok Build | Switch | ✓ | – | ✓ | ✓ | ✓ | AGENTS.md | ✓ | ✓ |
-| OpenCode | Coexist | – | – | – | ✓ | ✓ | AGENTS.md | ✓ | ✓ |
-| OpenClaw | Coexist | – | – | – | – | – | Workspace editor | ✓ | – |
-| Hermes | Coexist | – | – | – | ✓ | ✓ | Memory | ✓ | – |
-| Pi | Coexist | – | – | – | ✓ | ✓ | AGENTS.md, SYSTEM.md, prompt templates | ✓ | ✓ |
-| MiniMax Code | Coexist | – | – | – | ✓ | ✓ | AGENTS.md | ✓ | ✓ |
+| Tool           | Providers |   Local Routing    | Aggregation | Tray Switching | MCP | Skills | Prompts                                | Sessions |    Usage Stats     |
+| -------------- | --------- | :----------------: | :---------: | :------------: | :-: | :----: | -------------------------------------- | :------: | :----------------: |
+| Claude Code    | Switch    |         ✓          |      ✓      |       ✓        |  ✓  |   ✓    | CLAUDE.md                              |    ✓     |         ✓          |
+| Claude Desktop | Switch    | Model Mapping only |      –      |       ✓        |  –  |   –    | –                                      |    –     | Model Mapping only |
+| Codex          | Switch    |         ✓          |      ✓      |       ✓        |  ✓  |   ✓    | AGENTS.md                              |    ✓     |         ✓          |
+| Gemini CLI     | Switch    |         ✓          |      –      |       ✓        |  ✓  |   ✓    | GEMINI.md                              |    ✓     |         ✓          |
+| Grok Build     | Switch    |         ✓          |      –      |       ✓        |  ✓  |   ✓    | AGENTS.md                              |    ✓     |         ✓          |
+| OpenCode       | Coexist   |         –          |      –      |       –        |  ✓  |   ✓    | AGENTS.md                              |    ✓     |         ✓          |
+| OpenClaw       | Coexist   |         –          |      –      |       –        |  –  |   –    | Workspace editor                       |    ✓     |         –          |
+| Hermes         | Coexist   |         –          |      –      |       –        |  ✓  |   ✓    | Memory                                 |    ✓     |         –          |
+| Pi             | Coexist   |         –          |      –      |       –        |  ✓  |   ✓    | AGENTS.md, SYSTEM.md, prompt templates |    ✓     |         ✓          |
+| MiniMax Code   | Coexist   |         –          |      –      |       –        |  ✓  |   ✓    | AGENTS.md                              |    ✓     |         ✓          |
 
 - **Switch**: only one provider is active at a time; **Coexist**: multiple providers are written into the tool's own config at the same time, and you pick one inside the tool.
 - **Local Routing**: CC Switch forwards requests on your machine and converts API formats; see [Local Routing & Failover](#local-routing--failover) below. Claude Desktop providers can use "Direct" or "Model Mapping"; with "Model Mapping", requests go through local routing.

@@ -12,7 +12,6 @@ import {
   Folder,
   Globe,
   Info,
-  KeyRound,
   LayoutGrid,
   PanelsTopLeft,
   Settings,
@@ -30,7 +29,8 @@ import { HoverTip } from "@/components/ui/hover-tip";
 import { DRAG_REGION_ATTR, DRAG_REGION_STYLE, isMac } from "@/lib/platform";
 import { motionTokens } from "@/lib/motion";
 import { cn } from "@/lib/utils";
-import { TaijiMark } from "./TaijiMark";
+import { LolicodeMark } from "./LolicodeMark";
+import { APP_NAME } from "@/lib/branding";
 
 const NO_DRAG = { WebkitAppRegion: "no-drag" } as React.CSSProperties;
 type IconComponent = ComponentType<{ className?: string }>;
@@ -127,11 +127,11 @@ function SidebarTopBar({
       style={DRAG_REGION_STYLE as React.CSSProperties}
     >
       <div className="tai-shell-brand-lockup" {...DRAG_REGION_ATTR}>
-        <TaijiMark className="tai-shell-mark" />
+        <LolicodeMark className="tai-shell-mark" />
         {!collapsed && (
           <div className="tai-shell-wordmark" {...DRAG_REGION_ATTR}>
-            <span {...DRAG_REGION_ATTR}>太极</span>
-            <small {...DRAG_REGION_ATTR}>TAI SWITCH</small>
+            <span {...DRAG_REGION_ATTR}>{APP_NAME}</span>
+            <small {...DRAG_REGION_ATTR}>MODEL CHANNELS</small>
           </div>
         )}
       </div>
@@ -164,17 +164,15 @@ function MainDirectory({
   const workbench = t("channelCenter.navigation", {
     defaultValue: chinese ? "渠道与模型" : "Channels & models",
   });
-  const resources = t("nav.resources", {
-    defaultValue: chinese ? "配置资源" : "RESOURCES",
-  });
   return (
     <div className="tai-shell-directory">
       <div role="group" aria-label={workbench} className="tai-shell-task-group">
         <NavItem
           collapsed={collapsed}
-          selected={view === "channels" || isAppPage(view)}
+          selected={view === "channels" || view === "auth" || isAppPage(view)}
           icon={PanelsTopLeft}
           label={workbench}
+          alert={authNeedsAttention ? t("nav.authNeedsReauth") : undefined}
           onClick={() => onSelectPage("channels")}
         />
         <NavItem
@@ -189,16 +187,6 @@ function MainDirectory({
               : undefined
           }
           onClick={() => onSelectPage("usage")}
-        />
-      </div>
-      <div role="group" aria-label={resources} className="tai-shell-task-group">
-        <NavItem
-          collapsed={collapsed}
-          selected={view === "auth"}
-          icon={KeyRound}
-          label={t("nav.auth")}
-          alert={authNeedsAttention ? t("nav.authNeedsReauth") : undefined}
-          onClick={() => onSelectPage("auth")}
         />
       </div>
     </div>
@@ -349,7 +337,9 @@ function SettingsDirectory({
         ))}
       </div>
       {!collapsed && version && (
-        <div className="tai-shell-version">TAI Switch v{version}</div>
+        <div className="tai-shell-version">
+          {APP_NAME} v{version}
+        </div>
       )}
     </div>
   );

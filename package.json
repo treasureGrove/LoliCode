@@ -1,7 +1,7 @@
 {
-  "name": "tai-switch",
+  "name": "lolicode",
   "version": "4.0.10",
-  "description": "All-in-One Assistant for Claude Code, Codex & Gemini CLI",
+  "description": "Unified model channels and account subscriptions for AI tools",
   "type": "module",
   "scripts": {
     "dev": "pnpm tauri dev",

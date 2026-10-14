@@ -2536,6 +2536,96 @@ mod mode_tests {
 
     #[tokio::test]
     #[serial]
+    async fn channel_native_login_failed_preflight_keeps_old_proxy_and_client_files() {
+        let _home = Home::new();
+        seed_settings(USER_SETTINGS);
+        let state = state_with(
+            AppType::Claude,
+            &[claude("old", "http://127.0.0.1:4100", json!({}))],
+            "old",
+        )
+        .await;
+        enter(&state, &AppType::Claude, false).await.unwrap();
+        let before = fs::read(settings_path()).unwrap();
+        let before_mode = mode(&AppType::Claude);
+        let before_pointer = direct(&state, &AppType::Claude);
+        let failure = crate::services::channel_center::prepare_native_login_mode(
+            &state,
+            &AppType::Claude,
+            || {
+                Err(AppError::InvalidInput(
+                    "fixture: native login expired".into(),
+                ))
+            },
+        )
+        .await;
+        assert!(failure.is_err());
+        assert_eq!(fs::read(settings_path()).unwrap(), before);
+        assert_eq!(mode(&AppType::Claude), before_mode);
+        assert_eq!(direct(&state, &AppType::Claude), before_pointer);
+        assert!(state.db.get_proxy_flags_sync("claude").0);
+        assert!(state.proxy_service.is_running().await);
+        let _ = state.proxy_service.stop().await;
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn channel_center_apply_replaces_legacy_claude_route_and_survives_startup() {
+        let _home = Home::new();
+        seed_settings(USER_SETTINGS);
+        let state = state_with(
+            AppType::Claude,
+            &[claude("old", "http://127.0.0.1:4100", json!({}))],
+            "old",
+        )
+        .await;
+        enter(&state, &AppType::Claude, false)
+            .await
+            .expect("old route");
+        assert!(mode(&AppType::Claude).is_proxy());
+        let catalog: crate::services::channel_center::ChannelCenterSnapshot = serde_json::from_value(json!({
+            "channels":[{"id":"channel","name":"Loopback fixture","baseUrl":"http://127.0.0.1:1/v1","apiKey":"fake-key","authKind":"api_key","protocol":"openai_chat","models":[{"id":"model","contextLimit":32768,"outputLimit":4096}],"enabled":true}],
+            "targets":["claude"],"defaultModel":"channel/model","revision":0
+        })).unwrap();
+        crate::services::channel_center::save(state.db.as_ref(), catalog).unwrap();
+        let report = crate::services::channel_center::apply(&state, Some(1))
+            .await
+            .unwrap();
+        assert_eq!(
+            report.results[0].status, "success",
+            "{}",
+            report.results[0].message
+        );
+        assert!(report.requires_background);
+        let written = settings();
+        let base = written["env"]["ANTHROPIC_BASE_URL"].as_str().unwrap();
+        assert!(base.ends_with("/tai/catalogs/1"), "{base}");
+        assert_ne!(base, "http://127.0.0.1:4100");
+        assert!(written["env"]["ANTHROPIC_MODEL"]
+            .as_str()
+            .unwrap()
+            .starts_with("tai-claude-"));
+        assert_eq!(written["env"]["CLAUDE_CODE_MAX_CONTEXT_TOKENS"], "32768");
+        assert_eq!(written["hooks"], json!({"Stop":[]}));
+        assert_eq!(written["env"]["DISABLE_TELEMETRY"], "1");
+        assert_eq!(mode(&AppType::Claude).mode, Some(Mode::Direct));
+        assert!(!state.db.get_proxy_flags_sync("claude").0);
+        let bytes = fs::read(settings_path()).unwrap();
+        startup(&state).await;
+        crate::services::channel_center::restore_gateway(&state)
+            .await
+            .unwrap();
+        assert_eq!(
+            fs::read(settings_path()).unwrap(),
+            bytes,
+            "startup must retain the versioned route"
+        );
+        assert!(state.proxy_service.is_running().await);
+        let _ = state.proxy_service.stop().await;
+    }
+
+    #[tokio::test]
+    #[serial]
     async fn entering_and_leaving_proxy_mode_only_touches_key_and_exclusive_fields() {
         let _home = Home::new();
         seed_settings(USER_SETTINGS);

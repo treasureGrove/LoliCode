@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "TAI Switch",
+  "productName": "Lolicode",
   "version": "4.0.10",
   "identifier": "art.treasuregrove.tai-switch",
   "build": {
@@ -46,6 +46,9 @@
       "icons/icon.ico"
     ],
     "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      },
       "wix": {
         "template": "wix/per-user-main.wxs"
       }

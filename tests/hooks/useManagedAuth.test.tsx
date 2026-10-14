@@ -150,7 +150,7 @@ describe("useManagedAuth", () => {
     );
   });
 
-  it.each(["codex_oauth", "github_copilot"] as const)(
+  it.each(["codex_oauth", "github_copilot", "xai_oauth"] as const)(
     "cancels the active %s device flow in the backend",
     async (provider) => {
       apiMocks.authStartLogin.mockResolvedValue({

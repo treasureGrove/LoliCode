@@ -3,6 +3,7 @@ import { codexProviderPresets } from "@/config/codexProviderPresets";
 import { providerPresets } from "@/config/claudeProviderPresets";
 import { parse } from "smol-toml";
 import type { ChannelProtocol, ChannelSource } from "@/lib/api/channel-center";
+import type { ManagedAuthProvider } from "@/lib/api/auth";
 
 export interface ChannelPreset {
   id: string;
@@ -12,6 +13,56 @@ export interface ChannelPreset {
   icon: string;
   websiteUrl?: string;
 }
+
+export interface AccountChannelPreset {
+  id: string;
+  name: string;
+  icon: string;
+  authProvider?: ManagedAuthProvider | "zhipu_oauth";
+  nativeApp?: "claude" | "gemini";
+}
+
+export const ACCOUNT_CHANNEL_PRESETS: AccountChannelPreset[] = [
+  {
+    id: "account:copilot",
+    name: "GitHub Copilot · 账号登录",
+    icon: "githubcopilot",
+    authProvider: "github_copilot",
+  },
+  {
+    id: "account:zcode",
+    name: "ZCode · 账号登录",
+    icon: "zhipu",
+    authProvider: "zhipu_oauth",
+  },
+  {
+    id: "account:openai",
+    name: "OpenAI · 账号登录",
+    icon: "openai",
+    authProvider: "codex_oauth",
+  },
+  {
+    id: "account:xai",
+    name: "xAI · 账号登录",
+    icon: "grok",
+    authProvider: "xai_oauth",
+  },
+  {
+    id: "account:claude",
+    name: "Claude · 账号登录",
+    icon: "claude",
+    nativeApp: "claude",
+  },
+  {
+    id: "account:gemini",
+    name: "Gemini · 账号登录",
+    icon: "gemini",
+    nativeApp: "gemini",
+  },
+];
+export const ACCOUNT_CHANNEL_PRESET_MAP = Object.fromEntries(
+  ACCOUNT_CHANNEL_PRESETS.map((preset) => [preset.id, preset]),
+);
 
 const packages: Record<string, ChannelProtocol> = {
   "@ai-sdk/openai-compatible": "openai_chat",

@@ -4,6 +4,7 @@ import App from "./App";
 import { DatabaseUpgrade } from "./components/DatabaseUpgrade";
 import { UpdateProvider } from "./contexts/UpdateContext";
 import "./index.css";
+import "./styles/lolicode.css";
 // 导入国际化配置
 import i18n, { syncLanguageFromSettings } from "./i18n";
 import { QueryClientProvider } from "@tanstack/react-query";

@@ -39,20 +39,29 @@ describe("simple application shell", () => {
       "aria-current",
       "page",
     );
-    for (const name of ["MCP", "Skills", "nav.sessions", "nav.prompts"])
+    for (const name of [
+      "MCP",
+      "Skills",
+      "nav.sessions",
+      "nav.prompts",
+      "nav.auth",
+    ])
       expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
   });
-  it("upgrades an old saved resource destination to the channel center", async () => {
-    localStorage.setItem("cc-switch-last-view", "skillsDiscovery");
-    render(
-      <QueryClientProvider
-        client={
-          new QueryClient({ defaultOptions: { queries: { retry: false } } })
-        }
-      >
-        <App />
-      </QueryClientProvider>,
-    );
-    expect(await screen.findByTestId("channel-center")).toBeInTheDocument();
-  });
+  it.each(["skillsDiscovery", "auth"])(
+    "merges the old %s destination into the channel center",
+    async (destination) => {
+      localStorage.setItem("cc-switch-last-view", destination);
+      render(
+        <QueryClientProvider
+          client={
+            new QueryClient({ defaultOptions: { queries: { retry: false } } })
+          }
+        >
+          <App />
+        </QueryClientProvider>,
+      );
+      expect(await screen.findByTestId("channel-center")).toBeInTheDocument();
+    },
+  );
 });

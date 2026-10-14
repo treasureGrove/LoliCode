@@ -24,6 +24,29 @@ pub enum CredentialStatus {
     ParseError,
 }
 
+/// A native channel holds only a reference to credentials maintained by the
+/// official CLI. Do not expose tokens or private parser diagnostics to callers.
+pub(crate) fn native_channel_authenticated(tool: &str) -> Result<bool, String> {
+    match tool {
+        "claude" => {
+            let (_, status, _) = read_claude_credentials();
+            Ok(matches!(
+                status,
+                CredentialStatus::Valid | CredentialStatus::RefreshPending
+            ))
+        }
+        "gemini" => {
+            let (_, refresh, status, _) = read_gemini_credentials();
+            Ok(matches!(
+                status,
+                CredentialStatus::Valid | CredentialStatus::RefreshPending
+            ) || matches!(status, CredentialStatus::Expired)
+                && refresh.is_some_and(|token| !token.is_empty()))
+        }
+        _ => Err("仅 Claude Code 与 Gemini CLI 支持本机原生订阅引用".into()),
+    }
+}
+
 /// 单个限速窗口（如 5小时会话、7天周期）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

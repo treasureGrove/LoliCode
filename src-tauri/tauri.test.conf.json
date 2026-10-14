@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "TAI Switch Test",
+  "productName": "Lolicode Test",
   "bundle": {
     "targets": ["nsis"],
     "windows": {

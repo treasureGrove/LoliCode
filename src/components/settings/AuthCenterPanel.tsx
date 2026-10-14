@@ -8,15 +8,13 @@ import type { ManagedAuthProvider } from "@/lib/api";
 interface AuthCenterPanelProps {
   authScrollTarget?: ManagedAuthProvider | null;
   /**
-   * 页头没有「?」说明时（供应商表单里打开的全屏「授权中心」）在最上面写一行说明；
-   * 侧栏「授权中心」页的页头已经有了，就不再显示。
+   * 嵌入渠道页的账号管理弹窗时可隐藏重复说明。
    */
   showIntro?: boolean;
 }
 
 /**
- * 授权中心（v7 Auth 画板）：GitHub Copilot、ChatGPT、xAI 三组账号，一组一张卡片。
- * 侧栏的「授权中心」页和供应商表单里「管理账号」打开的全屏页共用。
+ * 渠道内的账号维护：复用 GitHub Copilot、ChatGPT、xAI 三组原有管理组件。
  */
 export function AuthCenterPanel({
   authScrollTarget,
