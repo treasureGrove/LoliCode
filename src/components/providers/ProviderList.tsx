@@ -14,8 +14,8 @@ import {
   type CSSProperties,
 } from "react";
 import { createPortal } from "react-dom";
-import { AnimatePresence, motion } from "framer-motion";
-import { Search, X } from "lucide-react";
+import { useReducedMotion } from "framer-motion";
+import { Search, X, ArrowUpRight, Layers3 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/lib/toast";
@@ -47,6 +47,7 @@ import { isTextEditableTarget } from "@/utils/domUtils";
 import { extractProviderBaseUrl } from "@/utils/providerConfigUtils";
 import { usePiCurrentState } from "@/lib/query/pi";
 import { isHermesReadOnlyProvider } from "@/config/hermesProviderPresets";
+import { isAdditiveAppId } from "@/config/appConfig";
 import {
   buildAdditiveSections,
   buildDesktopSections,
@@ -107,22 +108,32 @@ export function ProviderList({
   onSearchOpenChange,
 }: ProviderListProps) {
   const { t } = useTranslation();
+  const reducedMotion = useReducedMotion();
   const { checkProvider, isChecking } = useStreamCheck(appId);
   const { sortedProviders, sensors, handleDragEnd } = useDragSort(
     providers,
     appId,
   );
 
-  const { data: opencodeLiveIds, isPending: isOpencodeLiveIdsPending } =
-    useQuery({
-      queryKey: ["opencodeLiveProviderIds"],
-      queryFn: () => providersApi.getOpenCodeLiveProviderIds(),
-      enabled: appId === "opencode",
-    });
-  const { data: openclawLiveIds, isPending: isOpenclawLiveIdsPending } =
-    useOpenClawLiveProviderIds(appId === "openclaw");
-  const { data: hermesLiveIds, isPending: isHermesLiveIdsPending } =
-    useHermesLiveProviderIds(appId === "hermes");
+  const {
+    data: opencodeLiveIds,
+    isPending: isOpencodeLiveIdsPending,
+    isError: isOpencodeLiveIdsError,
+  } = useQuery({
+    queryKey: ["opencodeLiveProviderIds"],
+    queryFn: () => providersApi.getOpenCodeLiveProviderIds(),
+    enabled: appId === "opencode",
+  });
+  const {
+    data: openclawLiveIds,
+    isPending: isOpenclawLiveIdsPending,
+    isError: isOpenclawLiveIdsError,
+  } = useOpenClawLiveProviderIds(appId === "openclaw");
+  const {
+    data: hermesLiveIds,
+    isPending: isHermesLiveIdsPending,
+    isError: isHermesLiveIdsError,
+  } = useHermesLiveProviderIds(appId === "hermes");
   const { data: hermesModelConfig } = useHermesModelConfig(appId === "hermes");
   const { data: openclawDefaultModel } = useOpenClawDefaultModel(
     appId === "openclaw",
@@ -227,6 +238,8 @@ export function ProviderList({
   const isSearchOpen = searchOpen ?? innerSearchOpen;
   const setIsSearchOpen = onSearchOpenChange ?? setInnerSearchOpen;
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const searchPanelRef = useRef<HTMLDivElement>(null);
+  const searchReturnFocusRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -253,11 +266,23 @@ export function ProviderList({
 
   useEffect(() => {
     if (isSearchOpen) {
+      if (
+        document.activeElement instanceof HTMLElement &&
+        !searchPanelRef.current?.contains(document.activeElement)
+      ) {
+        searchReturnFocusRef.current = document.activeElement;
+      }
       const frame = requestAnimationFrame(() => {
         searchInputRef.current?.focus();
         searchInputRef.current?.select();
       });
       return () => cancelAnimationFrame(frame);
+    }
+    if (
+      searchPanelRef.current?.contains(document.activeElement) &&
+      searchReturnFocusRef.current?.isConnected
+    ) {
+      searchReturnFocusRef.current.focus({ preventScroll: true });
     }
   }, [isSearchOpen]);
 
@@ -389,11 +414,15 @@ export function ProviderList({
 
   if (isLoading || (isLiveMembershipPending && sortedProviders.length > 0)) {
     return (
-      <div className="space-y-2">
+      <div
+        className="tai-workbench-loading space-y-3"
+        role="status"
+        aria-label={t("common.loading")}
+      >
         {[0, 1, 2].map((index) => (
           <div
             key={index}
-            className="h-[60px] w-full rounded-panel border border-dashed border-border bg-subtle"
+            className="h-[112px] w-full rounded-panel border border-border bg-subtle"
           />
         ))}
       </div>
@@ -406,6 +435,7 @@ export function ProviderList({
         {piStateErrorNotice}
         <ProviderEmptyState
           appId={appId}
+          isImporting={importMutation.isPending}
           onCreate={appId === "pi" ? undefined : onCreate}
           onImport={
             appId === "pi" || appId === "mcode"
@@ -426,6 +456,22 @@ export function ProviderList({
     if (appId === "hermes") return provider.id === hermesModelConfig?.provider;
     return provider.id === currentProviderId;
   };
+
+  const additive = isAdditiveAppId(appId);
+  const membershipUnknown =
+    (appId === "opencode" && isOpencodeLiveIdsError) ||
+    (appId === "openclaw" && isOpenclawLiveIdsError) ||
+    (appId === "hermes" && isHermesLiveIdsError) ||
+    (appId === "pi" && isPiCurrentStateError);
+  const configuredCount = sortedProviders.filter(isInConfig).length;
+  const selectedId = switchMode
+    ? switchMode.active === "direct"
+      ? switchMode.directId
+      : switchMode.routeId
+    : appId === "hermes"
+      ? hermesModelConfig?.provider
+      : currentProviderId;
+  const selectedProvider = selectedId ? providers[selectedId] : undefined;
 
   const renderCard = (provider: Provider, presentation: CardPresentation) => (
     <SortableProviderCard
@@ -450,74 +496,106 @@ export function ProviderList({
 
   // 卡片列表铺满主区域，和页头同宽
   return (
-    <div className="space-y-4">
+    <div className="tai-workbench space-y-4">
+      <div className="tai-workbench-overview">
+        <div className="tai-workbench-current">
+          <span className="tai-workbench-eyebrow">
+            <ArrowUpRight aria-hidden="true" className="h-3.5 w-3.5" />
+            {additive
+              ? t("provider.workbench.inConfig", {
+                  defaultValue: "配置中的渠道",
+                })
+              : t("provider.workbench.current", { defaultValue: "当前使用" })}
+          </span>
+          <strong className="tai-workbench-value">
+            {membershipUnknown || switchMode?.stateUnavailable
+              ? t("provider.workbench.stateUnknown", {
+                  defaultValue: "状态暂不可用",
+                })
+              : additive
+                ? t("provider.workbench.configuredCount", {
+                    count: configuredCount,
+                    defaultValue: "{{count}} 个渠道",
+                  })
+                : selectedProvider?.name || t("mode.noProvider")}
+          </strong>
+          <span className="tai-workbench-hint">
+            {t("provider.workbench.directActions", {
+              defaultValue: "点击名称查看详情，常用操作就在手边。",
+            })}
+          </span>
+        </div>
+        <div className="tai-workbench-count">
+          <Layers3 aria-hidden="true" className="h-4 w-4 text-fg-3" />
+          <strong>{sortedProviders.length}</strong>
+          <span>
+            {t("provider.workbench.saved", { defaultValue: "已保存渠道" })}
+          </span>
+        </div>
+      </div>
       {piStateErrorNotice}
       {/* 面板挂到 body：留在 space-y 容器里会被算作兄弟元素，下面的列表多出 margin-top 往下挤 */}
       {createPortal(
-        <AnimatePresence>
-          {isSearchOpen && (
-            <motion.div
-              key="provider-search"
-              initial={{ opacity: 0, y: -8, scale: 0.98 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -8, scale: 0.98 }}
-              transition={{ duration: 0.18, ease: "easeOut" }}
-              className="fixed end-6 top-[6.5rem] z-40 w-[min(90vw,26rem)]"
-            >
-              <div className="space-y-3 rounded-panel border border-border bg-surface p-4 shadow-v7-lg">
-                <div className="relative flex items-center gap-2">
-                  <Search className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-3" />
-                  <Input
-                    ref={searchInputRef}
-                    value={searchTerm}
-                    onChange={(event) => setSearchTerm(event.target.value)}
-                    placeholder={t("provider.searchPlaceholder", {
-                      defaultValue: "Search name, notes, or URL...",
-                    })}
-                    aria-label={t("provider.searchAriaLabel", {
-                      defaultValue: "Search providers",
-                    })}
-                    className="pe-16 ps-9"
-                  />
-                  {searchTerm && (
-                    <Button
-                      variant="quiet"
-                      size="compact"
-                      className="absolute end-11 top-1/2 -translate-y-1/2"
-                      onClick={() => setSearchTerm("")}
-                    >
-                      {t("common.clear", { defaultValue: "Clear" })}
-                    </Button>
-                  )}
-                  <Button
-                    variant="quiet"
-                    size="icon-compact"
-                    className="ms-auto"
-                    onClick={() => setIsSearchOpen(false)}
-                    aria-label={t("provider.searchCloseAriaLabel", {
-                      defaultValue: "Close provider search",
-                    })}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-                <div className="flex flex-wrap items-center justify-between gap-2 text-caption text-fg-3">
-                  <span>
-                    {t("provider.searchScopeHint", {
-                      defaultValue:
-                        "Matches provider name, notes, website, and API address.",
-                    })}
-                  </span>
-                  <span>
-                    {t("provider.searchCloseHint", {
-                      defaultValue: "Press Esc to close",
-                    })}
-                  </span>
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>,
+        <div
+          ref={searchPanelRef}
+          className="tai-provider-search fixed end-6 top-[6.5rem] z-40 w-[min(90vw,26rem)]"
+          data-open={isSearchOpen}
+          data-reduced-motion={reducedMotion || undefined}
+          aria-hidden={!isSearchOpen}
+          {...(!isSearchOpen ? { inert: "" } : {})}
+        >
+          <div className="space-y-3 rounded-panel border border-border bg-surface p-4 shadow-v7-lg">
+            <div className="relative flex items-center gap-2">
+              <Search className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-3" />
+              <Input
+                ref={searchInputRef}
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                placeholder={t("provider.searchPlaceholder", {
+                  defaultValue: "Search name, notes, or URL...",
+                })}
+                aria-label={t("provider.searchAriaLabel", {
+                  defaultValue: "Search providers",
+                })}
+                className="pe-16 ps-9"
+              />
+              {searchTerm && (
+                <Button
+                  variant="quiet"
+                  size="compact"
+                  className="absolute end-11 top-1/2 -translate-y-1/2"
+                  onClick={() => setSearchTerm("")}
+                >
+                  {t("common.clear", { defaultValue: "Clear" })}
+                </Button>
+              )}
+              <Button
+                variant="quiet"
+                size="icon-compact"
+                className="ms-auto"
+                onClick={() => setIsSearchOpen(false)}
+                aria-label={t("provider.searchCloseAriaLabel", {
+                  defaultValue: "Close provider search",
+                })}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-2 text-caption text-fg-3">
+              <span>
+                {t("provider.searchScopeHint", {
+                  defaultValue:
+                    "Matches provider name, notes, website, and API address.",
+                })}
+              </span>
+              <span>
+                {t("provider.searchCloseHint", {
+                  defaultValue: "Press Esc to close",
+                })}
+              </span>
+            </div>
+          </div>
+        </div>,
         document.body,
       )}
 
@@ -534,12 +612,24 @@ export function ProviderList({
           onDragEnd={handleDragEnd}
         >
           {sections.map((section) => (
-            <section key={section.key} className="space-y-2">
+            <section
+              key={section.key}
+              className="tai-provider-section space-y-3"
+            >
               {section.title && (
                 <div className="flex items-center gap-1 pt-1 text-caption font-semibold text-fg-2">
                   <h2 className="m-0 text-caption font-semibold">
                     {section.title}
                   </h2>
+                  <span
+                    className="tai-section-count"
+                    aria-label={t("provider.workbench.sectionCount", {
+                      count: section.items.length,
+                      defaultValue: "{{count}} 个渠道",
+                    })}
+                  >
+                    {section.items.length}
+                  </span>
                   {section.help && (
                     <HelpTip title={section.help.title}>
                       {section.help.body}
@@ -556,7 +646,7 @@ export function ProviderList({
                   items={section.items.map((item) => item.provider.id)}
                   strategy={verticalListSortingStrategy}
                 >
-                  <div className="space-y-2">
+                  <div className="tai-provider-list space-y-3">
                     {section.items.map((item) =>
                       renderCard(item.provider, item.presentation),
                     )}

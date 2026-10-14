@@ -192,7 +192,13 @@ describe("ProviderList Component", () => {
       <ProviderList {...baseProps} providers={{}} appId="claude" isLoading />,
     );
 
-    expect(container.querySelectorAll(".border-dashed")).toHaveLength(3);
+    expect(screen.getByRole("status")).toHaveAttribute(
+      "aria-label",
+      "common.loading",
+    );
+    expect(
+      container.querySelector('[data-testid^="provider-card-"]'),
+    ).toBeNull();
   });
 
   it("should show empty state and trigger create callback when no providers exist", () => {

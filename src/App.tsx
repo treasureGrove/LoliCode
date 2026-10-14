@@ -1,4 +1,5 @@
 import {
+  Fragment,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -77,6 +78,7 @@ import { WindowControls } from "@/components/shell/WindowControls";
 import { APP_DISPLAY_NAME, AppGlyph } from "@/components/shell/AppGlyph";
 import { ProfileSwitcher } from "@/components/profiles/ProfileSwitcher";
 import { ProviderList } from "@/components/providers/ProviderList";
+import { MotionSurface } from "@/components/motion/MotionSurface";
 import { AddProviderDialog } from "@/components/providers/AddProviderDialog";
 import {
   hasOpencodeDefinition,
@@ -283,22 +285,6 @@ function App() {
   const providerScrollContainerRef = useRef<HTMLDivElement>(null);
 
   useUsageCacheBridge();
-
-  // Fade the existing page in place: preserve editor state and fixed overlays.
-  useLayoutEffect(() => {
-    const page = mainScrollRef.current?.querySelector<HTMLElement>(".tai-page");
-    if (
-      !page?.animate ||
-      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
-    ) {
-      return;
-    }
-    const animation = page.animate([{ opacity: 0.55 }, { opacity: 1 }], {
-      duration: 260,
-      easing: "cubic-bezier(0.22, 1, 0.36, 1)",
-    });
-    return () => animation.cancel();
-  }, [activeApp, currentView]);
 
   useLayoutEffect(() => {
     if (currentView !== "providers") return;
@@ -1181,7 +1167,7 @@ function App() {
 
   const renderAppPageHeader = () => (
     <AppPageHeader
-      variant="app"
+      variant="client"
       icon={<AppGlyph app={activeApp} size={20} badgeClassName="bg-app" />}
       title={APP_DISPLAY_NAME[activeApp]}
       subtitle={
@@ -1601,18 +1587,24 @@ function App() {
               }}
             />
           )}
-          <div
-            key={
-              currentView === "settings"
-                ? "settings"
-                : isAppPage(currentView)
-                  ? "app"
-                  : currentView
-            }
+          <MotionSurface
+            motionKey={`${currentView}:${activeApp}:${currentView === "settings" ? settingsSection : ""}`}
             className="tai-page flex min-h-0 flex-1 flex-col"
           >
-            {renderContent()}
-          </div>
+            {/* Keep the original business-page identity (including legacy
+                Skills discovery). Motion itself never remounts the surface. */}
+            <Fragment
+              key={
+                currentView === "settings"
+                  ? "settings"
+                  : isAppPage(currentView)
+                    ? "app"
+                    : currentView
+              }
+            >
+              {renderContent()}
+            </Fragment>
+          </MotionSurface>
         </main>
       </div>
 

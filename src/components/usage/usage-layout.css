@@ -1,0 +1,106 @@
+.tai-usage-filterbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+  gap: 8px;
+  margin: 0 24px;
+  padding: 14px 0;
+  border-bottom: 1px solid hsl(var(--border));
+}
+.tai-usage-filter-spacer {
+  min-width: 8px;
+  flex: 1;
+}
+.tai-usage-app-filter {
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.tai-usage-body {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding: 18px 24px 28px;
+}
+.tai-usage-body > * {
+  flex-shrink: 0;
+}
+.tai-usage-metrics {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.tai-usage-metrics-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.tai-usage-metrics-heading h2,
+.tai-usage-section-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+  letter-spacing: 0.4px;
+}
+.tai-usage-metric-grid {
+  display: grid;
+  grid-template-columns: 1.2fr repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.tai-usage-metric-grid.is-compact {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.tai-usage-metric {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  min-height: 92px;
+  padding: 15px 16px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 13px;
+  background: var(--bg-card);
+}
+.tai-usage-metric-primary {
+  background: color-mix(in srgb, var(--bg-subtle) 70%, var(--bg-card));
+  border-color: color-mix(in srgb, var(--text-3) 28%, transparent);
+}
+.tai-usage-metric-value {
+  font-size: 24px;
+  font-weight: 500;
+  line-height: 1.15;
+  letter-spacing: -0.7px;
+}
+.tai-usage-metric-primary .tai-usage-metric-value {
+  font-size: 28px;
+}
+.tai-usage-details {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 1px solid hsl(var(--border));
+  border-radius: 14px;
+  background: var(--bg-card);
+  padding: 16px 16px 0;
+}
+.tai-usage-section-title {
+  margin-bottom: 8px;
+}
+@media (max-width: 1000px) {
+  .tai-usage-body {
+    padding-inline: 20px;
+  }
+  .tai-usage-filterbar {
+    margin-inline: 20px;
+  }
+  .tai-usage-metric {
+    padding: 13px;
+  }
+  .tai-usage-details {
+    padding-inline: 12px;
+  }
+}

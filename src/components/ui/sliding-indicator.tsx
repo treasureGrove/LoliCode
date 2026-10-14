@@ -1,5 +1,7 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
+import { motion, useReducedMotion } from "framer-motion";
+import { motionTokens } from "@/lib/motion";
 
 interface IndicatorRect {
   x: number;
@@ -63,18 +65,7 @@ export function useSlidingIndicator<T extends HTMLElement>(
   return { ref, rect, animate };
 }
 
-const MOTION =
-  "transition-[transform,width,height] duration-200 ease-out motion-reduce:transition-none";
-
-/** 滑块挪的是 left / top，不用 transform，理由见 SegmentThumb。 */
-const THUMB_MOTION =
-  "transition-[left,top,width,height] duration-200 ease-out motion-reduce:transition-none";
-
-/**
- * 分段控件的白底凸起块，垫在选中项下面。按钮自己要 relative + 不画底色。
- * 不用 transform 滑：WebKit 给 transform 过渡开合成层，压在滑块上的按钮也被提成层，
- * 层按整像素对齐，图标在滑动开始和结束时会抖半个像素。
- */
+/** One spring follows the latest selection; text never moves with the thumb. */
 export function SegmentThumb({
   rect,
   animate,
@@ -85,21 +76,23 @@ export function SegmentThumb({
   /** 圆角等，和选中项一致 */
   className?: string;
 }) {
+  const reduced = useReducedMotion();
   if (!rect) return null;
   return (
-    <span
+    <motion.span
       aria-hidden="true"
       className={cn(
-        "pointer-events-none absolute bg-surface shadow-v7-sm",
-        animate && THUMB_MOTION,
+        "pointer-events-none absolute left-0 top-0 bg-surface shadow-v7-sm",
         className,
       )}
-      style={{
-        left: rect.x,
-        top: rect.y,
+      initial={false}
+      animate={{
+        x: rect.x,
+        y: rect.y,
         width: rect.width,
         height: rect.height,
       }}
+      transition={animate && !reduced ? motionTokens.spring : { duration: 0 }}
     />
   );
 }
@@ -114,16 +107,18 @@ export function TabUnderline({
   animate: boolean;
   className?: string;
 }) {
+  const reduced = useReducedMotion();
   if (!rect) return null;
   return (
-    <span
+    <motion.span
       aria-hidden="true"
       className={cn(
         "pointer-events-none absolute bottom-0 left-0 h-0.5 rounded-full bg-fg-1",
-        animate && MOTION,
         className,
       )}
-      style={{ transform: `translateX(${rect.x}px)`, width: rect.width }}
+      initial={false}
+      animate={{ x: rect.x, width: rect.width }}
+      transition={animate && !reduced ? motionTokens.spring : { duration: 0 }}
     />
   );
 }

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Notice } from "@/components/ui/notice";
 import { APP_DISPLAY_NAME } from "@/components/shell/AppGlyph";
 import { FullScreenPanel } from "@/components/common/FullScreenPanel";
+import { useEditorCloseGuard } from "@/hooks/useEditorCloseGuard";
 import type { Provider } from "@/types";
 import type { AppMode } from "@/types/proxy";
 import {
@@ -76,6 +77,10 @@ export function EditProviderDialog({
 }: EditProviderDialogProps) {
   const { t } = useTranslation();
   const [isFormSubmitting, setIsFormSubmitting] = useState(false);
+  const { requestLeave, leaveDialog } = useEditorCloseGuard(
+    open,
+    isFormSubmitting,
+  );
   // 表单用了聚合的简化布局：页头应用名后标「聚合模式」
   const [stackLayout, setStackLayout] = useState(false);
   const [authSettingsTarget, setAuthSettingsTarget] =
@@ -131,8 +136,8 @@ export function EditProviderDialog({
       setAuthSettingsTarget(null);
       return;
     }
-    closeDialog();
-  }, [authSettingsTarget, closeDialog]);
+    requestLeave(closeDialog);
+  }, [authSettingsTarget, closeDialog, requestLeave]);
 
   useEffect(() => {
     let cancelled = false;
@@ -361,8 +366,9 @@ export function EditProviderDialog({
       // Keep the list visible until the initial projection is ready.
       // Showing a loading page first causes a flash for fast local reads.
       isOpen={open && !waitingForEditorView}
-      motionPreset="none"
+      motionPreset="slide-from-right"
       trackUnsavedChanges
+      closeOnInputEscape
       title={t("provider.editProviderNamed", { name: provider.name })}
       subtitle={
         stackLayout
@@ -381,7 +387,8 @@ export function EditProviderDialog({
             type="button"
             variant="neutral"
             size="regular"
-            onClick={closeDialog}
+            onClick={() => requestLeave(closeDialog)}
+            disabled={isFormSubmitting}
           >
             {t("common.cancel")}
           </Button>
@@ -409,7 +416,7 @@ export function EditProviderDialog({
           providerId={provider.id}
           submitLabel={t("common.save")}
           onSubmit={handleSubmit}
-          onCancel={closeDialog}
+          onCancel={() => requestLeave(closeDialog)}
           onManageAuthAccounts={setAuthSettingsTarget}
           onSubmittingChange={setIsFormSubmitting}
           onSubmitReadyChange={handleSubmitReadyChange}
@@ -422,6 +429,7 @@ export function EditProviderDialog({
         />
       )}
       {conflictDialog}
+      {leaveDialog}
       <AuthSettingsPanel
         target={authSettingsTarget}
         onClose={() => setAuthSettingsTarget(null)}

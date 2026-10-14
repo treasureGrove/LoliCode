@@ -100,7 +100,13 @@ export function SwitchModePanel({
   const appName = APP_DISPLAY_NAME[app];
   const modes = modesFor(app);
 
-  const { data: modeView } = useAppMode(app);
+  const {
+    data: modeView,
+    isPending: modeLoading,
+    isError: modeFailed,
+    error: modeError,
+    refetch: retryMode,
+  } = useAppMode(app);
   const active: AppMode =
     modeView && modes.includes(modeView.mode) ? modeView.mode : "direct";
   const directId = modeView?.directProviderId ?? null;
@@ -172,7 +178,7 @@ export function SwitchModePanel({
   const previous = { mode: active, routeProviderId: routeId };
 
   const exitAndUse = (provider: Provider) =>
-    void modeActions.exitToDirect({
+    modeActions.exitToDirect({
       previous,
       directProviderId: directId,
       useProviderId: provider.id,
@@ -237,10 +243,19 @@ export function SwitchModePanel({
     queue: queueIds,
     stackMembers,
     serviceRunning,
+    stateUnavailable: modeFailed || modeLoading,
+    disabledReason:
+      modeFailed || modeLoading
+        ? t("provider.workbench.modeUnavailable", {
+            defaultValue: "暂时无法读取当前模式",
+          })
+        : modeActions.pending
+          ? t("provider.workbench.applying", { defaultValue: "正在应用更改…" })
+          : undefined,
     routingReason: (provider: Provider) =>
       getRoutingReason(app, provider, t) ?? "",
     actions: {
-      switchDirect: (provider: Provider) => void onSwitch(provider),
+      switchDirect: (provider: Provider) => onSwitch(provider),
       needsRouteDialog: (provider: Provider) =>
         setDialog({
           kind: "needsRoute",
@@ -248,32 +263,38 @@ export function SwitchModePanel({
           reason: getRoutingReason(app, provider, t) ?? "",
         }),
       exitAndUse,
-      routeTo: (provider: Provider) => void onSwitch(provider),
+      routeTo: (provider: Provider) => onSwitch(provider),
       queueAdd: (provider: Provider) =>
-        addToQueue.mutate({ appType: app, providerId: provider.id }),
+        addToQueue
+          .mutateAsync({ appType: app, providerId: provider.id })
+          .catch(() => undefined),
       queueRemove: (provider: Provider) =>
-        removeFromQueue.mutate({ appType: app, providerId: provider.id }),
+        removeFromQueue
+          .mutateAsync({ appType: app, providerId: provider.id })
+          .catch(() => undefined),
       queueMove: (provider: Provider, delta: -1 | 1) =>
-        void queueMove(provider, delta),
+        queueMove(provider, delta),
       stackAdd: (provider: Provider) => {
-        setStackMember.mutate({
-          appType: app,
-          providerId: provider.id,
-          enabled: true,
-        });
+        return setStackMember
+          .mutateAsync({
+            appType: app,
+            providerId: provider.id,
+            enabled: true,
+          })
+          .catch(() => undefined);
       },
       stackRemove: (provider: Provider) => {
-        setStackMember.mutate({
-          appType: app,
-          providerId: provider.id,
-          enabled: false,
-        });
+        return setStackMember
+          .mutateAsync({
+            appType: app,
+            providerId: provider.id,
+            enabled: false,
+          })
+          .catch(() => undefined);
       },
       // 聚合生效时换默认当场生效（同切换供应商）；没生效时只记下选择，切换时的确认框预选它
       stackSetDefault: (provider: Provider) =>
-        active === "stack"
-          ? void onSwitch(provider)
-          : void rememberDefault(provider),
+        active === "stack" ? onSwitch(provider) : rememberDefault(provider),
     },
   };
 
@@ -287,7 +308,7 @@ export function SwitchModePanel({
     0,
   );
   const status =
-    view !== active
+    view !== active || !modeView
       ? undefined
       : active === "direct"
         ? { lead: t("mode.status.directLead"), value: nameOf(directId) }
@@ -356,6 +377,28 @@ export function SwitchModePanel({
   };
 
   const notices: React.ReactNode[] = [];
+  if (modeFailed) {
+    notices.push(
+      <Notice
+        key="mode-read-failed"
+        tone="warning"
+        title={t("provider.workbench.modeUnavailable", {
+          defaultValue: "暂时无法读取当前模式",
+        })}
+        actions={
+          <Button
+            variant="neutral"
+            size="compact"
+            onClick={() => void retryMode()}
+          >
+            {t("common.retry")}
+          </Button>
+        }
+      >
+        {extractErrorMessage(modeError)}
+      </Notice>,
+    );
+  }
   if (active !== "direct" && proxyStatus !== undefined && !serviceRunning) {
     notices.push(
       <Notice
@@ -475,7 +518,7 @@ export function SwitchModePanel({
       />,
     );
   }
-  if (view !== active) {
+  if (view !== active && modeView) {
     const cta =
       view === "route"
         ? t("mode.activate.route")
@@ -517,10 +560,18 @@ export function SwitchModePanel({
     <>
       <ModeTabs
         modes={modes}
-        active={active}
+        active={modeView ? active : undefined}
         view={view}
         onView={setView}
         status={status}
+        pending={modeLoading || modeActions.pending}
+        pendingLabel={
+          modeLoading
+            ? t("provider.workbench.loadingMode", {
+                defaultValue: "正在读取当前模式…",
+              })
+            : undefined
+        }
         failover={
           view === "route" && active === "route"
             ? {
@@ -551,8 +602,8 @@ export function SwitchModePanel({
           providers={providers}
           currentProviderId={currentProviderId}
           appId={app}
-          isLoading={isLoading}
-          onSwitch={(provider) => void onSwitch(provider)}
+          isLoading={isLoading || modeLoading}
+          onSwitch={(provider) => onSwitch(provider)}
           switchMode={switchMode}
         />
       </div>

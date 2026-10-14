@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { ProviderCard } from "@/components/providers/ProviderCard";
@@ -71,6 +71,33 @@ function renderCard({
 }
 
 describe("ProviderCard cached usage expansion", () => {
+  it("keeps the card and its focus anchor through repeated details reversals", async () => {
+    const user = userEvent.setup();
+    renderCard({ enabled: false });
+    const trigger = screen.getByRole("button", {
+      name: "查看 Usage provider 详情",
+    });
+    const details = document.getElementById(
+      trigger.getAttribute("aria-controls")!,
+    )!;
+    trigger.focus();
+    for (let index = 0; index < 12; index += 1) {
+      await user.keyboard("{Enter}");
+      expect(trigger).toHaveAttribute(
+        "aria-expanded",
+        index % 2 === 0 ? "true" : "false",
+      );
+      expect(trigger).toHaveFocus();
+      expect(document.getElementById(details.id)).toBe(details);
+    }
+    await user.keyboard("{Enter}");
+    expect(within(details).getByText("未检测")).toBeInTheDocument();
+    expect(
+      within(details).getByText("https://example.com/"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("health.operational")).not.toBeInTheDocument();
+  });
+
   it("keeps official subscription quota inline despite cached script tiers", () => {
     renderCard({ official: true, templateType: "official_subscription" });
 

@@ -11,6 +11,8 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { AppPageHeader } from "@/components/shell/AppPageHeader";
+import { MotionSurface } from "@/components/motion/MotionSurface";
+import "./usage-layout.css";
 import { AppGlyph, APP_DISPLAY_NAME } from "@/components/shell/AppGlyph";
 import { HelpTip } from "@/components/ui/help-tip";
 import { PageTabs } from "@/components/ui/page-tabs";
@@ -473,12 +475,12 @@ export function UsageDashboard({
     );
 
   const filterRow = (
-    <div className="flex min-h-12 shrink-0 flex-wrap items-center gap-1.5 px-6 py-2">
+    <div className="tai-usage-filterbar">
       <div
         ref={appFilterIndicator.ref}
         role="group"
         aria-label={t("usage.appFilter.label")}
-        className="relative flex h-8 shrink-0 items-center gap-0.5 rounded-[8px] bg-subtle p-[3px]"
+        className="tai-usage-app-filter relative flex h-8 shrink-0 items-center gap-0.5 rounded-[8px] bg-subtle p-[3px]"
       >
         <SegmentThumb
           rect={appFilterIndicator.rect}
@@ -515,7 +517,7 @@ export function UsageDashboard({
           </HoverTip>
         ))}
       </div>
-      <div className="min-w-2 flex-1" />
+      <div className="tai-usage-filter-spacer" />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
@@ -678,7 +680,8 @@ export function UsageDashboard({
   const scopedAppType = appType === "all" ? undefined : appType;
 
   const tabsSection = (
-    <section aria-label={t("usage.tabs.label")} className="flex flex-col">
+    <section aria-label={t("usage.tabs.label")} className="tai-usage-details">
+      <h2 className="tai-usage-section-title">{t("usage.tabs.label")}</h2>
       <PageTabs<UsageTab>
         aria-label={t("usage.tabs.label")}
         items={TABS.map((id) => ({ value: id, label: tabLabel[id] }))}
@@ -689,7 +692,8 @@ export function UsageDashboard({
         trailing={tabTrailing}
       />
 
-      <div
+      <MotionSurface
+        motionKey={tab}
         role="tabpanel"
         id="usage-tabpanel"
         aria-labelledby={`usage-tab-${tab}`}
@@ -724,7 +728,7 @@ export function UsageDashboard({
           />
         )}
         {tab === "pricing" && <PricingConfigPanel />}
-      </div>
+      </MotionSurface>
     </section>
   );
 
@@ -733,7 +737,7 @@ export function UsageDashboard({
       // 空库里只有定价可配：不画全是 0 的概览和趋势，直接给页签
       <div
         id="main-content"
-        className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto scroll-stable px-6 pb-6 pt-1"
+        className="tai-usage-body min-h-0 flex-1 overflow-y-auto scroll-stable"
       >
         {tabsSection}
       </div>
@@ -778,7 +782,7 @@ export function UsageDashboard({
     ) : (
       <div
         id="main-content"
-        className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto scroll-stable px-6 pb-6 pt-1"
+        className="tai-usage-body min-h-0 flex-1 overflow-y-auto scroll-stable"
       >
         <UsageHero
           range={range}

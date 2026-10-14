@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Switch } from "@/components/ui/switch";
 import { HelpTip } from "@/components/ui/help-tip";
 import { cn } from "@/lib/utils";
+import "./settings-layout.css";
 
 /**
  * 设置页的版式（v7）：分节标题 15/600 → 带边框的卡片 → 一行一项，左边名称、右边控件。
@@ -24,9 +25,9 @@ export function SettingsBlock({
   className?: string;
 }) {
   return (
-    <section id={id} className={cn("space-y-3", className)}>
+    <section id={id} className={cn("tai-settings-block", className)}>
       {(title || actions) && (
-        <div className="flex min-h-7 items-center gap-2">
+        <div className="tai-settings-block-heading">
           {title && <h2 className="m-0 text-section text-fg-1">{title}</h2>}
           {help && <HelpTip title={help.title}>{help.body}</HelpTip>}
           {actions && (
@@ -34,7 +35,7 @@ export function SettingsBlock({
           )}
         </div>
       )}
-      {children}
+      <div className="tai-settings-block-content">{children}</div>
     </section>
   );
 }
@@ -50,7 +51,7 @@ export function SettingsCard({
   return (
     <div
       className={cn(
-        "divide-y divide-border overflow-hidden rounded-panel border border-border bg-surface",
+        "tai-settings-card divide-y divide-border overflow-hidden rounded-panel border border-border bg-surface",
         className,
       )}
     >
@@ -80,7 +81,7 @@ export function SettingsRow({
 }) {
   const Label = htmlFor ? "label" : "div";
   return (
-    <div className={cn("px-4 py-3", className)}>
+    <div className={cn("tai-settings-row px-4 py-3", className)}>
       <div className="flex min-h-[28px] items-center gap-4">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1">
@@ -141,9 +142,5 @@ export function SettingsSwitchRow({
 
 /** 设置页正文：最大宽度 760，左右 24 的内边距，分节间距 28。 */
 export function SettingsBody({ children }: { children: ReactNode }) {
-  return (
-    <div className="mx-auto w-full max-w-[760px] space-y-7 px-6 pb-10 pt-6">
-      {children}
-    </div>
-  );
+  return <div className="tai-settings-body">{children}</div>;
 }

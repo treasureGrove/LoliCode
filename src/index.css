@@ -1,3 +1,7 @@
+@import "./styles/motion.css";
+@import "./components/shell/shell.css";
+@import "./components/providers/workbench.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -438,7 +442,6 @@ html[data-window-active="false"] .status-heartbeat {
 
 .pi-thinking-popover {
   transform-origin: var(--radix-popover-content-transform-origin);
-  will-change: transform, opacity;
 }
 
 .pi-thinking-popover[data-state="open"] {
@@ -715,291 +718,19 @@ input[type="password"]::-ms-clear {
   }
 }
 
-/* The sidebar is deliberately an ink surface in both themes. Its local tokens
-   also keep the existing status badges, focus rings and glyphs accessible. */
-.tai-sidebar {
-  --bg-sidebar: #202b28;
-  --bg-subtle: #303d36;
-  --bg-selected: #3c493d;
-  --text-1: #ede9db;
-  --text-2: #c7c9b9;
-  --text-3: #a9b2a2;
-  --border: 143 12% 25%;
-  --ring: 25 61% 71%;
-  --route-soft: #3e3a2b;
-  --route-text: #dec899;
-  --stack-soft: #3c3543;
-  --stack-text: #d3bfdc;
-  --tai-paper: #ede9db;
-  border-inline-end: 0;
-  background-image: radial-gradient(ellipse at 0 0, #354238 0, transparent 65%);
-}
-
-.tai-sidebar::before {
-  content: "";
-  position: absolute;
-  width: 290px;
-  height: 290px;
-  border: 1px solid rgb(223 225 192 / 7%);
-  border-radius: 50%;
-  inset-inline-start: -180px;
-  bottom: 190px;
-  pointer-events: none;
-  box-shadow:
-    0 0 0 34px rgb(223 225 192 / 2%),
-    0 0 0 70px rgb(223 225 192 / 2%);
-}
-
-.tai-brand {
-  height: 112px;
-  padding: 19px 16px 12px;
-  position: relative;
-}
-.tai-brand-heading {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.tai-brand-mark {
-  width: 42px;
-  height: 42px;
-}
-.tai-brand-name {
-  font-family:
-    "Iowan Old Style", "Palatino Linotype", "Songti SC", "STSong", "SimSun",
-    serif;
-  font-size: 26px;
-  line-height: 30px;
-  font-weight: 400;
-  letter-spacing: 3px;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-.tai-seal {
-  display: inline-grid;
-  place-items: center;
-  width: 18px;
-  height: 20px;
-  margin-top: 1px;
-  border: 1px solid #c98a6a;
-  border-radius: 3px;
-  color: #e5aa87;
-  font:
-    9px/1 ui-serif,
-    Georgia,
-    serif;
-  letter-spacing: 0;
-}
-.tai-brand-roman {
-  margin-top: 3px;
-  font-size: 8px;
-  letter-spacing: 2.1px;
-  color: #c0c5ae;
-}
-.tai-brand-caption {
-  margin-top: 12px;
-  padding-left: 3px;
-  font-size: 10px;
-  color: #a9b2a2;
-  letter-spacing: 1.8px;
-}
-.tai-brand-toggle {
-  position: absolute;
-  right: 4px;
-  top: 18px;
-  opacity: 0;
-  transition: opacity 180ms ease;
-}
-.tai-brand:hover .tai-brand-toggle,
-.tai-brand:focus-within .tai-brand-toggle {
-  opacity: 1;
-}
-.tai-brand-collapsed {
-  padding: 16px 10px 0;
-  height: 101px;
-}
-.tai-brand-collapsed .tai-brand-heading {
-  justify-content: center;
-}
-.tai-brand-collapsed .tai-brand-toggle {
-  top: 64px;
-  right: calc(50% - 14px);
-  opacity: 1;
-}
-.tai-brand-mac {
-  padding-top: 44px;
-  height: 134px;
-}
-.tai-brand-mac .tai-brand-toggle {
-  top: 48px;
-}
-.tai-brand-mac.tai-brand-collapsed .tai-brand-toggle {
-  top: 91px;
-}
-.tai-brand-mac.tai-brand-collapsed {
-  height: 130px;
+/* Component layouts live beside their components; shared motion is in styles/motion.css. */
+.tai-main {
+  background-image: radial-gradient(
+    ellipse at 95% 0%,
+    rgb(178 152 98 / 5%),
+    transparent 52%
+  );
 }
 .tai-mark {
   color: currentColor;
 }
-.tai-mark-turn {
-  transform-origin: 32px 32px;
-  transition: transform 1300ms var(--tai-ease);
-}
-.tai-brand:hover .tai-mark-turn,
-.tai-empty-state:hover .tai-mark-turn {
-  transform: rotate(180deg);
-}
-.tai-nav-caption {
-  padding: 0 18px 9px;
-  font-size: 9px;
-  color: var(--text-3);
-  letter-spacing: 2px;
-}
-.tai-nav-item {
-  position: relative;
-  height: 33px;
-  margin-block: 1px;
-  padding-inline: 11px;
-  font-size: 12px;
-  transition:
-    background-color 220ms ease,
-    color 220ms ease,
-    box-shadow 220ms ease;
-}
-.tai-app-nav {
-  height: 36px;
-}
-.tai-nav-item[aria-current="page"] {
-  background: #3b483d;
-  box-shadow: inset 2px 0 0 #d29a78;
-  color: #fff9e9;
-}
-.tai-nav-item[aria-current="page"]::after {
-  content: "";
-  width: 4px;
-  height: 4px;
-  background: #d7b78d;
-  border-radius: 50%;
-  margin-inline-start: auto;
-  flex-shrink: 0;
-}
-.tai-sidebar[data-collapsed="true"] .tai-nav-item {
-  height: 35px;
-}
-.tai-sidebar[data-collapsed="true"] .tai-nav-item[aria-current="page"]::after {
-  position: absolute;
-  right: 6px;
-  top: 7px;
-  width: 3px;
-  height: 3px;
-}
-.tai-sidebar :focus-visible {
-  outline: 2px solid #d7b78d;
-  outline-offset: -2px;
-}
-
-.tai-main {
-  background-image: radial-gradient(
-    ellipse at 95% 0%,
-    rgb(178 152 98 / 7%),
-    transparent 52%
-  );
-}
-.tai-page-header {
-  position: relative;
-  overflow: hidden;
-  gap: 16px;
-}
-.tai-page-header::before {
-  content: "";
-  position: absolute;
-  pointer-events: none;
-  width: 260px;
-  height: 260px;
-  border: 1px solid color-mix(in srgb, var(--tai-gold) 15%, transparent);
-  border-radius: 50%;
-  top: -207px;
-  left: 40%;
-  box-shadow:
-    0 0 0 16px color-mix(in srgb, var(--tai-gold) 4%, transparent),
-    0 0 0 32px color-mix(in srgb, var(--tai-gold) 3%, transparent);
-}
-.tai-page-header > * {
-  position: relative;
-}
-.tai-page-title {
-  letter-spacing: -0.4px;
-  font-size: 20px;
-  font-weight: 550;
-}
-.tai-page-subtitle {
-  border-inline-start: 1px solid var(--border-strong);
-  padding-inline-start: 12px;
-  margin-inline-start: 4px;
-  font-size: 11px;
-  letter-spacing: 0.5px;
-}
-.tai-mode-bar {
-  padding-top: 20px;
-  padding-bottom: 15px;
-  min-height: 76px;
-}
-.tai-mode-track {
-  border: 1px solid hsl(var(--border));
-  background: color-mix(in srgb, var(--bg-subtle) 85%, transparent);
-}
-.tai-mode-tab {
-  font-size: 12px;
-}
-.tai-mode-tab[aria-pressed="true"] {
-  letter-spacing: 0.3px;
-}
-.tai-mode-status {
-  justify-content: flex-end;
-}
-.tai-provider-card {
-  overflow: hidden;
-  border-color: hsl(var(--border));
-  box-shadow: var(--shadow-sm);
-  transition-duration: 220ms;
-}
-.tai-provider-card:hover {
-  box-shadow: var(--shadow-md);
-}
-.tai-provider-card[data-tone="direct"] {
-  border-color: color-mix(in srgb, var(--direct-fill) 48%, hsl(var(--border)));
-  background: linear-gradient(110deg, var(--direct-soft), var(--bg-card) 70%);
-}
-.tai-provider-card[data-tone="route"] {
-  border-color: color-mix(in srgb, var(--route-fill) 48%, hsl(var(--border)));
-  background: linear-gradient(110deg, var(--route-soft), var(--bg-card) 70%);
-}
-.tai-provider-card[data-tone="stack"] {
-  border-color: color-mix(in srgb, var(--stack-fill) 48%, hsl(var(--border)));
-  background: linear-gradient(110deg, var(--stack-soft), var(--bg-card) 70%);
-}
-.tai-provider-card[data-tone="direct"]::before,
-.tai-provider-card[data-tone="route"]::before,
-.tai-provider-card[data-tone="stack"]::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 16px;
-  bottom: 16px;
-  width: 3px;
-  border-radius: 0 3px 3px 0;
-  background: var(--direct-fill);
-}
-.tai-provider-card[data-tone="route"]::before {
-  background: var(--route-fill);
-}
-.tai-provider-card[data-tone="stack"]::before {
-  background: var(--stack-fill);
-}
 .tai-empty-state {
-  min-height: 280px;
+  min-height: 260px;
   border: 1px solid hsl(var(--border));
   border-radius: 18px;
   background: color-mix(in srgb, var(--bg-card) 68%, transparent);
@@ -1011,81 +742,9 @@ input[type="password"]::-ms-clear {
 .tai-empty-state h2 {
   font-size: 18px;
   font-weight: 500;
-  letter-spacing: 1px;
-}
-
-@media (max-height: 680px) {
-  .tai-brand:not(.tai-brand-mac):not(.tai-brand-collapsed) {
-    height: 98px;
-    padding-top: 14px;
-  }
-  .tai-brand-caption {
-    margin-top: 8px;
-  }
-  .tai-page-header {
-    height: 64px;
-  }
-  .tai-mode-bar {
-    padding-top: 14px;
-    padding-bottom: 12px;
-    min-height: 68px;
-  }
-  .tai-nav-item {
-    height: 31px;
-  }
-  .tai-app-nav {
-    height: 33px;
-  }
-}
-@media (max-width: 1000px) {
-  .tai-page-header {
-    gap: 10px;
-  }
-  .tai-page-title {
-    font-size: 18px;
-  }
-  .tai-page-subtitle {
-    padding-inline-start: 8px;
-    margin-inline-start: 0;
-  }
-  .tai-mode-bar {
-    gap: 9px;
-  }
-  .tai-mode-tab {
-    min-width: 86px;
-    padding-inline: 12px;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .tai-shell *,
-  .tai-shell *::before,
-  .tai-shell *::after,
-  [role="dialog"],
-  [role="menu"],
-  [data-radix-popper-content-wrapper] * {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
-  }
-  .tai-mark-turn {
-    transition: none;
-  }
-  .tai-brand:hover .tai-mark-turn,
-  .tai-empty-state:hover .tai-mark-turn {
-    transform: none;
-  }
 }
 @media (forced-colors: active) {
-  .tai-nav-item[aria-current="page"] {
-    outline: 2px solid Highlight;
-    outline-offset: -2px;
-  }
   .tai-provider-card {
     border-color: CanvasText;
-  }
-  .tai-page-header::before,
-  .tai-sidebar::before {
-    display: none;
   }
 }

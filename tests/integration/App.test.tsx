@@ -1,4 +1,4 @@
-import { Suspense, type ComponentType } from "react";
+import { Suspense, useState, type ComponentType } from "react";
 import App from "@/App";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
@@ -9,6 +9,7 @@ import {
   within,
 } from "@testing-library/react";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { providersApi } from "@/lib/api/providers";
 import {
@@ -16,6 +17,7 @@ import {
   setCurrentProviderId,
   setLiveProviderIds,
   setProviders,
+  setSettings,
 } from "../msw/state";
 import { emitTauriEvent } from "../msw/tauriMocks";
 import { server } from "../msw/server";
@@ -161,7 +163,9 @@ vi.mock("@/components/skills/UnifiedSkillsPanel", () => ({
   // v7：Skills 的页头（添加 / 检查更新 / 存储与同步）在面板自己里面
   default: ({ initialView }: { initialView?: string }) => {
     skillsPanelMocks.initialViews.push(initialView ?? "installed");
-    return <div data-testid="unified-skills-panel">{initialView}</div>;
+    // The real panel seeds its local tab from initialView only on mount.
+    const [view] = useState(initialView ?? "installed");
+    return <div data-testid="unified-skills-panel">{view}</div>;
   },
 }));
 
@@ -176,13 +180,23 @@ vi.mock("@/components/mcp/McpPanel", () => ({
     ),
 }));
 
-/** 侧栏里的应用行（v7 侧栏取代了原来页头的应用切换器） */
-const sidebarApp = (name: string) =>
-  // 首次启动提示是模态对话框，会把侧栏标成 aria-hidden，所以带上 hidden
-  within(document.querySelector("nav") as HTMLElement).getByRole("button", {
-    name,
-    hidden: true,
-  });
+/** 任务入口直接点击；客户端经真实菜单选择，保留原导航用例的业务意图。 */
+const selectSidebarItem = async (name: string) => {
+  const user = userEvent.setup();
+  const nav = within(screen.getByRole("navigation"));
+  const namePattern = new RegExp(
+    `^${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:\\s|$)`,
+  );
+  const destination = nav.queryByRole("button", { name: namePattern });
+  if (destination) {
+    await user.click(destination);
+    return;
+  }
+  await user.click(nav.getByRole("button", { name: /^切换客户端 ·/ }));
+  await user.click(
+    await screen.findByRole("menuitemradio", { name: namePattern }),
+  );
+};
 
 const queryClients = new Set<QueryClient>();
 
@@ -206,6 +220,12 @@ const renderApp = (AppComponent: ComponentType) => {
 describe("App integration with MSW", () => {
   beforeEach(() => {
     resetProviderState();
+    // 本文件测导航/供应商行为，首次使用说明在专门的 notice 测试中覆盖。
+    setSettings({
+      firstRunNoticeConfirmed: true,
+      newLayoutNoticeConfirmed: true,
+      whatsNewSeenVersion: "4.0.10",
+    });
     toastSuccessMock.mockReset();
     toastErrorMock.mockReset();
     skillsPanelMocks.initialViews = [];
@@ -222,7 +242,7 @@ describe("App integration with MSW", () => {
       ),
     );
 
-    fireEvent.click(sidebarApp("Codex"));
+    await selectSidebarItem("Codex");
     await waitFor(() =>
       expect(screen.getByTestId("provider-list").textContent).toContain(
         "codex-1",
@@ -291,7 +311,7 @@ describe("App integration with MSW", () => {
     providerScrollContainer()!.scrollTop = 640;
     providerScrollContainer()!.scrollLeft = 24;
 
-    fireEvent.click(sidebarApp("Codex"));
+    await selectSidebarItem("Codex");
 
     await waitFor(() =>
       expect(screen.getByTestId("provider-list").textContent).toContain(
@@ -318,7 +338,7 @@ describe("App integration with MSW", () => {
     // 供应商会以 appId=codex 保存进 Codex
     fireEvent.click(screen.getByText("edit"));
     expect(screen.getByTestId("edit-provider-dialog")).toBeInTheDocument();
-    fireEvent.click(sidebarApp("Codex"));
+    await selectSidebarItem("Codex");
     await waitFor(() =>
       expect(screen.getByTestId("provider-list").textContent).toContain(
         "codex-1",
@@ -330,12 +350,12 @@ describe("App integration with MSW", () => {
 
     fireEvent.click(screen.getByText("usage"));
     expect(screen.getByTestId("usage-modal")).toBeInTheDocument();
-    fireEvent.click(sidebarApp("nav.usage"));
+    await selectSidebarItem("nav.usage");
     await waitFor(() =>
       expect(screen.queryByTestId("usage-modal")).not.toBeInTheDocument(),
     );
 
-    fireEvent.click(sidebarApp("Codex"));
+    await selectSidebarItem("Codex");
     await waitFor(() =>
       expect(screen.getByTestId("provider-list").textContent).toContain(
         "codex-1",
@@ -358,7 +378,7 @@ describe("App integration with MSW", () => {
 
     // 没改过：照常离开，不问
     fireEvent.click(screen.getByText("edit"));
-    fireEvent.click(sidebarApp("Codex"));
+    await selectSidebarItem("Codex");
     await waitFor(() =>
       expect(screen.getByTestId("provider-list").textContent).toContain(
         "codex-1",
@@ -372,7 +392,7 @@ describe("App integration with MSW", () => {
     fireEvent.input(screen.getByLabelText("edit-field"), {
       target: { value: "draft" },
     });
-    fireEvent.click(sidebarApp("Claude Code"));
+    await selectSidebarItem("Claude Code");
     expect(await screen.findByTestId("confirm-message")).toHaveTextContent(
       "common.unsavedLeaveMessage",
     );
@@ -456,7 +476,7 @@ describe("App integration with MSW", () => {
 
     renderApp(App);
 
-    fireEvent.click(sidebarApp("OpenClaw"));
+    await selectSidebarItem("OpenClaw");
 
     await waitFor(() =>
       expect(screen.getByTestId("provider-list").textContent).toContain(
@@ -785,7 +805,7 @@ describe("App integration with MSW", () => {
 
     renderApp(App);
 
-    fireEvent.click(sidebarApp("OpenClaw"));
+    await selectSidebarItem("OpenClaw");
 
     await waitFor(() =>
       expect(screen.getByTestId("provider-list").textContent).toContain(
@@ -818,11 +838,10 @@ describe("App integration with MSW", () => {
     );
   });
 
-  it("navigates OpenClaw and Hermes pages with underline tabs", async () => {
+  it("navigates OpenClaw and Hermes pages with accessible tabs", async () => {
     renderApp(App);
 
-    fireEvent.click(sidebarApp("OpenClaw"));
-    // 首次启动提示是模态对话框，页面其余部分是 aria-hidden，所以带上 hidden
+    await selectSidebarItem("OpenClaw");
     const openclawTabs = await screen.findByRole("tablist", {
       name: "OpenClaw",
       hidden: true,
@@ -851,7 +870,7 @@ describe("App integration with MSW", () => {
       "openclaw-config-env",
     );
 
-    fireEvent.click(sidebarApp("Hermes"));
+    await selectSidebarItem("Hermes");
     const hermesTabs = await screen.findByRole("tablist", {
       name: "Hermes",
       hidden: true,
@@ -902,6 +921,25 @@ describe("App integration with MSW", () => {
 
     expect(await screen.findByTestId("unified-skills-panel")).toHaveTextContent(
       "discover",
+    );
+  });
+
+  it("returns the legacy Skills discovery entry to Installed with Escape", async () => {
+    localStorage.setItem("cc-switch-last-view", "skillsDiscovery");
+    renderApp(App);
+    expect(await screen.findByTestId("unified-skills-panel")).toHaveTextContent(
+      "discover",
+    );
+    // Wait for startup overlays to release their global keyboard lock.
+    await waitFor(() =>
+      expect(document.body.style.overflow).not.toBe("hidden"),
+    );
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() =>
+      expect(localStorage.getItem("cc-switch-last-view")).toBe("skills"),
+    );
+    expect(screen.getByTestId("unified-skills-panel")).toHaveTextContent(
+      "installed",
     );
   });
 });

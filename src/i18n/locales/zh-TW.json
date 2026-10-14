@@ -216,7 +216,26 @@
     "formSubtitleStack": "{{app}}（聚合模式）",
     "editCurrentNoticeFile": "這是正在使用的供應商。儲存後會立即寫進",
     "editCurrentNoticeFileEnd": "，下一次請求生效。",
-    "editCurrentNotice": "這是正在使用的供應商。儲存後立即生效，下一次請求就用新的設定。"
+    "editCurrentNotice": "這是正在使用的供應商。儲存後立即生效，下一次請求就用新的設定。",
+    "workbench": {
+      "detailsFor": "查看 {{name}} 詳情",
+      "endpoint": "請求位址",
+      "endpointUnavailable": "介面位址無法使用，請在編輯中檢查",
+      "notes": "備註",
+      "connection": "連線狀態",
+      "checking": "檢測中…",
+      "unchecked": "未檢測",
+      "inConfig": "設定中的管道",
+      "current": "目前使用",
+      "configuredCount": "{{count}} 個管道",
+      "directActions": "點選名稱查看詳情，常用操作就在手邊。",
+      "saved": "已儲存管道",
+      "sectionCount": "{{count}} 個管道",
+      "applying": "正在套用變更…",
+      "modeUnavailable": "暫時無法讀取目前模式",
+      "loadingMode": "正在讀取目前模式…",
+      "stateUnknown": "狀態暫時無法取得"
+    }
   },
   "claudeCode": {
     "needsRouting": "需要路由",
@@ -1054,6 +1073,14 @@
     },
     "data": {
       "location": "儲存位置"
+    },
+    "sectionDescriptions": {
+      "general": "調整外觀、啟動方式與日常使用偏好。",
+      "appConfig": "管理用戶端設定與授權；修改目錄後需按儲存。",
+      "routing": "管理本機路由服務與正在使用路由的用戶端。",
+      "network": "設定應用程式存取外部服務時使用的代理。",
+      "data": "管理資料位置、備份、同步與診斷記錄。",
+      "about": "查看應用程式版本、更新與開源資訊。"
     }
   },
   "apps": {
@@ -4076,7 +4103,11 @@
       "mappingFull": "模型映射"
     },
     "needsAttention": "需要處理",
-    "back": "返回"
+    "back": "返回",
+    "clientSwitcher": "切換用戶端",
+    "currentClient": "目前用戶端",
+    "workbench": "工作台",
+    "resources": "設定資源"
   },
   "appsPage": {
     "showInSidebar": "在側欄顯示 {{name}}",

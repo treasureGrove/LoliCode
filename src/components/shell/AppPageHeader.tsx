@@ -2,32 +2,24 @@ import { createContext, useContext, type ReactNode } from "react";
 import { DRAG_REGION_ATTR, DRAG_REGION_STYLE } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 
-/** 由外壳提供：Linux 自绘窗口按钮要接在每一屏页头的最右端。 */
+/** Linux window controls follow the actions on every page. */
 export const WindowControlsContext = createContext<ReactNode>(null);
-
 const NO_DRAG = { WebkitAppRegion: "no-drag" } as React.CSSProperties;
 
 interface AppPageHeaderProps {
-  /** 标题前的可操作元素（二级页的返回按钮）；和 icon 二选一 */
   leading?: ReactNode;
   icon?: ReactNode;
   title: ReactNode;
-  /** 应用页用 16px 的名字 + 13px 的页面名；全局页和设置用 18px 的页面标题 */
-  variant?: "app" | "page";
-  /** 应用页的页面名（如「供应商」），灰字跟在应用名后面 */
+  /** Only client headers receive a client name as title and task name as subtitle. */
+  variant?: "app" | "page" | "client";
   subtitle?: ReactNode;
-  /** 标题后面的「?」、Beta 徽标、计数等 */
   titleExtra?: ReactNode;
-  /** 右侧操作区：主按钮放最后一个、⋯ 放它后面 */
   actions?: ReactNode;
-  /** 标题可能很长（如会话阅读页的会话名）：标题占满剩余宽度，放不下就截断 */
   truncateTitle?: boolean;
   className?: string;
 }
 
-/**
- * 内容区页头：宣纸标题带，整条可拖动窗口，左边是图标 + 标题，右边是操作。
- */
+/** Client context sits above the task title, with a stable desktop action lane. */
 export function AppPageHeader({
   leading,
   icon,
@@ -40,68 +32,68 @@ export function AppPageHeader({
   className,
 }: AppPageHeaderProps) {
   const windowControls = useContext(WindowControlsContext);
+  const contextualTitle = variant === "client" && subtitle;
   return (
     <header
-      className={cn(
-        "tai-page-header flex h-[72px] shrink-0 items-center gap-5 border-b border-border pe-4 ps-6",
-        className,
-      )}
+      className={cn("tai-shell-page-header", className)}
       {...DRAG_REGION_ATTR}
       style={DRAG_REGION_STYLE as React.CSSProperties}
     >
-      {/* Tauri 只认按下的元素自身带拖动属性：标题区、标题、占位条都要带，整条才能拖窗口 */}
-      <div
-        {...DRAG_REGION_ATTR}
-        className={cn(
-          "flex min-w-0 items-center gap-2.5",
-          truncateTitle ? "flex-1" : "shrink-0",
-        )}
-      >
+      <div {...DRAG_REGION_ATTR} className="tai-shell-heading">
         {leading && (
-          <span className="-ms-2 flex shrink-0 items-center" style={NO_DRAG}>
+          <span className="flex shrink-0 items-center" style={NO_DRAG}>
             {leading}
           </span>
         )}
         {icon && (
           <span
             aria-hidden="true"
-            className="flex h-[22px] w-[22px] shrink-0 items-center justify-center text-fg-1"
+            className="tai-shell-heading-icon"
+            {...DRAG_REGION_ATTR}
           >
             {icon}
           </span>
         )}
-        <h1
-          {...DRAG_REGION_ATTR}
-          className={cn(
-            "tai-page-title m-0 whitespace-nowrap",
-            variant === "app" ? "text-title" : "text-page",
-            truncateTitle && "min-w-0 truncate",
+        <div className="tai-shell-heading-copy" {...DRAG_REGION_ATTR}>
+          {contextualTitle && (
+            <span
+              className="tai-shell-heading-eyebrow truncate"
+              {...DRAG_REGION_ATTR}
+            >
+              {title}
+            </span>
           )}
-        >
-          {title}
-        </h1>
-        {(subtitle || titleExtra) && (
-          <div className="flex items-center gap-1" style={NO_DRAG}>
-            {subtitle && (
-              <span className="tai-page-subtitle whitespace-nowrap text-body text-fg-3">
-                {subtitle}
-              </span>
+          <h1
+            className={cn(
+              "tai-shell-heading-title",
+              truncateTitle ? "truncate" : "whitespace-nowrap",
             )}
+            {...DRAG_REGION_ATTR}
+          >
+            {contextualTitle ? subtitle : title}
+          </h1>
+          {!contextualTitle && subtitle && (
+            <span
+              className="tai-shell-heading-eyebrow truncate"
+              {...DRAG_REGION_ATTR}
+            >
+              {subtitle}
+            </span>
+          )}
+        </div>
+        {titleExtra && (
+          <div className="tai-shell-heading-extra" style={NO_DRAG}>
             {titleExtra}
           </div>
         )}
       </div>
-      {!truncateTitle && <div {...DRAG_REGION_ATTR} className="flex-1" />}
       {actions && (
-        <div
-          className="flex min-w-0 shrink items-center justify-end gap-2"
-          style={NO_DRAG}
-        >
+        <div className="tai-shell-header-actions" style={NO_DRAG}>
           {actions}
         </div>
       )}
       {windowControls && (
-        <div className="flex shrink-0 items-center gap-1" style={NO_DRAG}>
+        <div className="tai-shell-window-controls" style={NO_DRAG}>
           {windowControls}
         </div>
       )}

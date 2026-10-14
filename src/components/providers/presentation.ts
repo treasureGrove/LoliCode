@@ -50,7 +50,7 @@ export interface CardMenuItem {
 export interface CardButton {
   key: string;
   label: string;
-  onClick: () => void;
+  onClick: () => unknown;
   /** 不能点的原因：按钮照常画出来，原因挂在按钮的说明卡上 */
   disabledReason?: string;
   /** 点开选一项（OpenClaw 的「设为默认 ▾」选默认模型） */
@@ -111,6 +111,9 @@ export interface SwitchModeInput {
   /** 需要路由的原因（悬停「需要路由」时的说明） */
   routingReason: (provider: Provider) => string;
   serviceRunning: boolean;
+  /** 当前模式尚未读到，或模式写入进行中时禁止再发起写入。 */
+  disabledReason?: string;
+  stateUnavailable?: boolean;
   actions: {
     switchDirect: (provider: Provider) => void;
     needsRouteDialog: (provider: Provider) => void;
@@ -134,8 +137,25 @@ export function buildSwitchSections(input: SwitchModeInput): ProviderSection[] {
   const inUseReason = t("providerCard.reason.inUseCannotDelete");
   return buildSwitchSectionsByView(input).map((section) => ({
     ...section,
-    items: section.items.map((item) =>
-      inUse(item.provider.id)
+    items: section.items.map((original) => {
+      const item = input.disabledReason
+        ? {
+            ...original,
+            presentation: {
+              ...original.presentation,
+              buttons: original.presentation.buttons.map((button) => ({
+                ...button,
+                disabledReason: button.disabledReason || input.disabledReason,
+              })),
+              menuItems: original.presentation.menuItems?.map((entry) => ({
+                ...entry,
+                disabledReason: entry.disabledReason || input.disabledReason,
+              })),
+              move: undefined,
+            },
+          }
+        : original;
+      return inUse(item.provider.id)
         ? {
             ...item,
             presentation: {
@@ -143,8 +163,8 @@ export function buildSwitchSections(input: SwitchModeInput): ProviderSection[] {
               deleteDisabledReason: inUseReason,
             },
           }
-        : item,
-    ),
+        : item;
+    }),
   }));
 }
 

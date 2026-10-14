@@ -1,4 +1,4 @@
-import type * as React from "react";
+import * as React from "react";
 import { useTranslation } from "react-i18next";
 import {
   ArrowDown,
@@ -32,6 +32,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { toast } from "@/lib/toast";
+import { extractErrorMessage } from "@/utils/errorUtils";
 import type { CardButton, CardPresentation, CardTone } from "./presentation";
 
 const DOT: Record<CardTone | "muted", string> = {
@@ -90,7 +92,7 @@ export function ProviderCardActions({
   const { status, buttons, move, menuItems = [] } = presentation;
 
   return (
-    <div className="flex shrink-0 items-center gap-2">
+    <div className="tai-provider-actions flex shrink-0 items-center gap-2">
       <div className="flex items-center justify-end gap-1">
         {status && (
           <span className="inline-flex items-center gap-1.5 whitespace-nowrap px-1 text-body font-medium text-fg-1">
@@ -249,20 +251,47 @@ function IconAction({
 }
 
 function PrimaryButton({ button }: { button: CardButton }) {
+  const { t } = useTranslation();
+  const [pending, setPending] = React.useState(false);
+  const pendingRef = React.useRef(false);
+  const invoke = async () => {
+    if (pendingRef.current || button.disabledReason) return;
+    pendingRef.current = true;
+    try {
+      const result = button.onClick();
+      if (
+        result &&
+        typeof (result as PromiseLike<unknown>).then === "function"
+      ) {
+        setPending(true);
+        await result;
+      }
+    } catch (error) {
+      toast.error(extractErrorMessage(error) || t("common.unknown"));
+    } finally {
+      pendingRef.current = false;
+      setPending(false);
+    }
+  };
   const Icon = BUTTON_ICON[button.key] ?? CircleDot;
-  const icon = <Icon className="h-4 w-4" strokeWidth={1.5} />;
+  const icon = pending ? (
+    <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />
+  ) : (
+    <Icon aria-hidden="true" className="h-4 w-4" strokeWidth={1.5} />
+  );
   if (button.menu && !button.disabledReason) {
     return (
       <DropdownMenu>
         <HoverTip content={button.label}>
           <DropdownMenuTrigger asChild>
             <Button
-              variant="quiet"
+              variant="neutral"
               size="compact"
               aria-label={button.label}
-              className="w-auto gap-0.5 px-1.5 text-fg-2 hover:text-fg-1"
+              className="tai-provider-primary w-auto gap-1.5"
             >
               {icon}
+              <span>{button.label}</span>
               <ChevronDown className="h-3 w-3 opacity-70" />
             </Button>
           </DropdownMenuTrigger>
@@ -293,12 +322,16 @@ function PrimaryButton({ button }: { button: CardButton }) {
   return (
     <IconAction tip={button.label} disabledReason={button.disabledReason}>
       <Button
-        variant="quiet"
-        size="icon-compact"
+        variant="neutral"
+        size="compact"
+        className="tai-provider-primary"
         aria-label={button.label}
-        onClick={button.onClick}
+        aria-busy={pending || undefined}
+        disabled={pending || Boolean(button.disabledReason)}
+        onClick={() => void invoke()}
       >
         {icon}
+        <span>{button.label}</span>
       </Button>
     </IconAction>
   );

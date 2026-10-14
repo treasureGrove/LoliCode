@@ -1,0 +1,70 @@
+.tai-settings-body {
+  width: 100%;
+  max-width: 940px;
+  margin-inline: auto;
+  padding: 24px 28px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+}
+.tai-settings-intro {
+  margin: 0;
+  padding: 0 0 18px;
+  border-bottom: 1px solid hsl(var(--border));
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 1.7;
+}
+.tai-settings-block {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.tai-settings-block-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+}
+.tai-settings-block-heading h2 {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.15px;
+}
+.tai-settings-block-content {
+  min-width: 0;
+}
+.tai-settings-card {
+  border-radius: 14px;
+  box-shadow: 0 2px 3px rgb(25 30 23 / 2%);
+}
+.tai-settings-row {
+  padding-block: 14px;
+}
+.tai-settings-row:focus-within {
+  background: color-mix(in srgb, var(--bg-subtle) 45%, transparent);
+}
+@media (min-width: 1280px) {
+  .tai-settings-block {
+    grid-template-columns: 150px minmax(0, 1fr);
+    gap: 26px;
+  }
+  .tai-settings-block-heading {
+    align-content: start;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    padding-top: 10px;
+  }
+  .tai-settings-block-heading > div:last-child {
+    margin-inline-start: 0;
+  }
+  .tai-settings-block-content:only-child {
+    grid-column: 1 / -1;
+  }
+}
+@media (max-width: 1000px) {
+  .tai-settings-body {
+    padding-inline: 22px;
+    gap: 22px;
+  }
+}

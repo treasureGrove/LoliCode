@@ -1,0 +1,454 @@
+/* Shell owns its ink surface; content remains on the shared paper tokens. */
+.tai-shell-sidebar {
+  --bg-sidebar: #252b29;
+  --bg-subtle: #353d38;
+  --bg-selected: #424940;
+  --text-1: #f0eee3;
+  --text-2: #c7cabf;
+  --text-3: #a7afa5;
+  --border: 145 9% 27%;
+  --ring: 23 48% 71%;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  flex-shrink: 0;
+  height: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  background: var(--bg-sidebar);
+  color: var(--text-1);
+  font-size: 12px;
+  transition: width var(--motion-normal, 240ms) var(--motion-ease, ease);
+}
+.dark .tai-shell-sidebar {
+  --bg-sidebar: #181e1c;
+}
+.tai-shell-skip {
+  position: absolute;
+  inset-inline-start: -999px;
+  top: 8px;
+  z-index: 20;
+  padding: 8px;
+  background: var(--bg-selected);
+  border-radius: 8px;
+}
+.tai-shell-skip:focus {
+  inset-inline-start: 8px;
+}
+.tai-shell-sidebar :focus-visible {
+  outline: 2px solid #e4b899;
+  outline-offset: -2px;
+}
+.tai-shell-brand {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 82px;
+  min-height: 82px;
+  padding: 16px 18px;
+  gap: 8px;
+}
+.tai-shell-brand-lockup {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+.tai-shell-mark {
+  width: 31px;
+  height: 31px;
+  flex-shrink: 0;
+  pointer-events: none;
+}
+.tai-shell-wordmark {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+.tai-shell-wordmark > span {
+  font-family: "Songti SC", "STSong", "SimSun", serif;
+  letter-spacing: 5px;
+  font-size: 23px;
+}
+.tai-shell-wordmark small {
+  margin-top: 5px;
+  font-size: 8px;
+  letter-spacing: 1.8px;
+  color: var(--text-3);
+}
+.tai-shell-toggle {
+  margin-inline-start: auto;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 28px;
+  color: var(--text-3);
+  border-radius: 7px;
+  transition:
+    color 140ms,
+    background-color 140ms;
+}
+.tai-shell-toggle:hover {
+  background: var(--bg-subtle);
+  color: var(--text-1);
+}
+.tai-shell-brand-mac {
+  height: 106px;
+  min-height: 106px;
+  padding-top: 40px;
+}
+.tai-shell-client {
+  flex-shrink: 0;
+  padding: 0 12px 16px;
+}
+.tai-shell-caption {
+  padding: 4px 9px 9px;
+  color: var(--text-3);
+  font-size: 10px;
+  letter-spacing: 1.25px;
+  line-height: 1.3;
+}
+.tai-shell-client-trigger {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 58px;
+  padding: 10px 12px;
+  text-align: start;
+  border: 1px solid rgb(232 229 204 / 15%);
+  border-radius: 12px;
+  background: rgb(240 240 220 / 4%);
+  transition:
+    background-color var(--motion-fast, 140ms),
+    border-color var(--motion-fast, 140ms);
+}
+.tai-shell-client-trigger:hover,
+.tai-shell-client-trigger[data-state="open"] {
+  background: var(--bg-subtle);
+  border-color: rgb(232 229 204 / 28%);
+}
+.tai-shell-client-glyph {
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+}
+.tai-shell-client-glyph > .tai-shell-alert-dot {
+  position: absolute;
+  top: -5px;
+  right: -6px;
+}
+.tai-shell-client-copy {
+  min-width: 0;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+}
+.tai-shell-client-copy strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  font-weight: 550;
+}
+.tai-shell-client-chevron {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+  color: var(--text-3);
+  transition: transform var(--motion-normal, 240ms);
+}
+.tai-shell-client-trigger[data-state="open"] .tai-shell-client-chevron {
+  transform: rotate(-180deg);
+}
+.tai-shell-client-status {
+  font-size: 10px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.tai-shell-client-status.is-alert {
+  color: #de9a86;
+}
+.tai-shell-client-menu {
+  width: 278px;
+  max-height: min(540px, var(--radix-dropdown-menu-content-available-height));
+  overflow-y: auto;
+  padding: 7px;
+  border-radius: 14px;
+}
+.tai-shell-client-option {
+  min-height: 40px;
+  padding-inline-start: 30px;
+  padding-inline-end: 8px;
+  border-radius: 8px;
+  gap: 10px;
+}
+.tai-shell-client-option-name {
+  flex: 1;
+}
+.tai-shell-client-menu .tai-shell-client-status.is-alert {
+  color: var(--danger, #b94832);
+}
+.tai-shell-directory {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0 12px 12px;
+  scrollbar-width: thin;
+}
+.tai-shell-task-group {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.tai-shell-task-group + .tai-shell-task-group {
+  margin-top: 16px;
+}
+.tai-shell-directory > .tai-shell-nav-item + .tai-shell-task-group {
+  margin-top: 16px;
+}
+.tai-shell-nav-item {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 36px;
+  flex-shrink: 0;
+  padding: 8px 11px;
+  text-align: start;
+  border-radius: 9px;
+  color: var(--text-2);
+  transition:
+    color var(--motion-fast, 140ms),
+    background-color var(--motion-fast, 140ms);
+}
+.tai-shell-nav-item:hover {
+  background: rgb(232 229 204 / 5%);
+  color: var(--text-1);
+}
+.tai-shell-nav-item[aria-current="page"] {
+  color: #fff9eb;
+  font-weight: 550;
+}
+.tai-shell-selection {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  border-radius: inherit;
+  background: #424a40;
+  box-shadow: inset 2px 0 0 #d4a384;
+  pointer-events: none;
+}
+.tai-shell-nav-glyph {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+}
+.tai-shell-nav-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tai-shell-nav-trailing {
+  flex-shrink: 0;
+  color: var(--text-3);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.tai-shell-notice {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  top: -4px;
+  right: -4px;
+  background: #c5c9bd;
+  border-radius: 50%;
+}
+.tai-shell-notice.is-update {
+  background: #a8c59d;
+}
+.tai-shell-notice.is-alert,
+.tai-shell-alert-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #e3a08a;
+  flex-shrink: 0;
+}
+.tai-shell-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex-shrink: 0;
+  margin: 0 12px;
+  padding: 10px 0 12px;
+  border-top: 1px solid rgb(232 229 204 / 13%);
+}
+.tai-shell-version {
+  padding: 24px 10px 4px;
+  color: var(--text-3);
+  font-size: 10px;
+}
+.tai-shell-sidebar[data-collapsed="true"] .tai-shell-brand {
+  height: 104px;
+  min-height: 104px;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 20px 8px;
+}
+.tai-shell-sidebar[data-collapsed="true"] .tai-shell-brand-mac {
+  height: 128px;
+  min-height: 128px;
+  padding-top: 44px;
+}
+.tai-shell-sidebar[data-collapsed="true"] .tai-shell-toggle {
+  position: absolute;
+  bottom: 13px;
+  inset-inline-start: calc(50% - 13px);
+}
+.tai-shell-sidebar[data-collapsed="true"] .tai-shell-client {
+  padding-inline: 12px;
+  padding-bottom: 16px;
+}
+.tai-shell-sidebar[data-collapsed="true"] .tai-shell-client-trigger {
+  justify-content: center;
+  padding: 8px;
+  min-height: 46px;
+}
+.tai-shell-sidebar[data-collapsed="true"] .tai-shell-nav-item {
+  justify-content: center;
+  min-height: 38px;
+  padding-inline: 8px;
+}
+.tai-shell-sidebar[data-collapsed="true"]
+  .tai-shell-task-group
+  + .tai-shell-task-group {
+  padding-top: 13px;
+  border-top: 1px solid rgb(232 229 204 / 13%);
+  margin-top: 13px;
+}
+.tai-shell-sidebar[data-collapsed="true"] .tai-shell-directory {
+  scrollbar-width: none;
+}
+
+.tai-shell-page-header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 80px;
+  flex-shrink: 0;
+  padding: 15px 24px;
+  border-bottom: 1px solid hsl(var(--border));
+}
+.tai-shell-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  flex: 1;
+}
+.tai-shell-heading-icon {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  background: var(--bg-subtle);
+  color: var(--text-2);
+}
+.tai-shell-heading-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.tai-shell-heading-eyebrow {
+  font-size: 10px;
+  letter-spacing: 0.7px;
+  color: var(--text-3);
+  line-height: 1.2;
+}
+.tai-shell-heading-title {
+  margin: 0;
+  font-size: 21px;
+  line-height: 1.3;
+  font-weight: 550;
+  letter-spacing: -0.5px;
+}
+.tai-shell-heading-extra {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.tai-shell-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+  flex-shrink: 0;
+}
+.tai-shell-window-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+@media (max-height: 650px) {
+  .tai-shell-brand {
+    height: 74px;
+    min-height: 74px;
+  }
+  .tai-shell-brand-mac {
+    height: 98px;
+    min-height: 98px;
+  }
+  .tai-shell-client {
+    padding-bottom: 12px;
+  }
+  .tai-shell-task-group + .tai-shell-task-group {
+    margin-top: 12px;
+  }
+  .tai-shell-page-header {
+    min-height: 72px;
+    padding-block: 12px;
+  }
+}
+@media (max-width: 1100px) {
+  .tai-shell-page-header {
+    padding-inline: 20px;
+    gap: 12px;
+  }
+  .tai-shell-header-actions {
+    gap: 6px;
+  }
+  .tai-shell-heading-title {
+    font-size: 19px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tai-shell-sidebar,
+  .tai-shell-sidebar *,
+  .tai-shell-page-header * {
+    transition: none !important;
+  }
+}
+@media (forced-colors: active) {
+  .tai-shell-sidebar {
+    border-inline-end: 1px solid CanvasText;
+  }
+  .tai-shell-nav-item[aria-current="page"] {
+    outline: 2px solid Highlight;
+  }
+  .tai-shell-client-trigger {
+    border-color: ButtonText;
+  }
+}

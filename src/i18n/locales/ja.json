@@ -216,7 +216,26 @@
     "formSubtitleStack": "{{app}}（集約モード）",
     "editCurrentNoticeFile": "使用中のプロバイダーです。保存するとすぐに",
     "editCurrentNoticeFileEnd": " に書き込まれ、次のリクエストから反映されます。",
-    "editCurrentNotice": "使用中のプロバイダーです。保存するとすぐに反映され、次のリクエストから新しい設定が使われます。"
+    "editCurrentNotice": "使用中のプロバイダーです。保存するとすぐに反映され、次のリクエストから新しい設定が使われます。",
+    "workbench": {
+      "detailsFor": "{{name}} の詳細を表示",
+      "endpoint": "API アドレス",
+      "endpointUnavailable": "API アドレスを取得できません。編集画面で確認してください。",
+      "notes": "メモ",
+      "connection": "接続状態",
+      "checking": "確認中…",
+      "unchecked": "未確認",
+      "inConfig": "設定済みプロバイダー",
+      "current": "現在使用中",
+      "configuredCount": "{{count}} 件",
+      "directActions": "名前を押すと詳細を表示します。よく使う操作はすぐ手元に。",
+      "saved": "保存済み",
+      "sectionCount": "{{count}} 件",
+      "applying": "変更を適用中…",
+      "modeUnavailable": "現在のモードを取得できません",
+      "loadingMode": "現在のモードを読み込み中…",
+      "stateUnknown": "状態を取得できません"
+    }
   },
   "claudeCode": {
     "needsRouting": "ルーティングが必要",
@@ -1053,6 +1072,14 @@
     },
     "data": {
       "location": "保存場所"
+    },
+    "sectionDescriptions": {
+      "general": "外観、起動方法、日常の動作を設定します。",
+      "appConfig": "クライアント設定と認証を管理します。ディレクトリの変更後は保存してください。",
+      "routing": "ローカルルーティングと利用中のクライアントを管理します。",
+      "network": "外部サービスへの接続に使用するプロキシを設定します。",
+      "data": "データの保存先、バックアップ、同期、診断ログを管理します。",
+      "about": "アプリのバージョン、更新、オープンソース情報を確認します。"
     }
   },
   "apps": {
@@ -4075,7 +4102,11 @@
       "mappingFull": "モデルマッピング"
     },
     "needsAttention": "対応が必要",
-    "back": "戻る"
+    "back": "戻る",
+    "clientSwitcher": "クライアントを切り替え",
+    "currentClient": "現在のクライアント",
+    "workbench": "ワークベンチ",
+    "resources": "設定リソース"
   },
   "appsPage": {
     "showInSidebar": "{{name}} をサイドバーに表示",

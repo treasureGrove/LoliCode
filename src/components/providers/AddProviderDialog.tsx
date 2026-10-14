@@ -4,6 +4,8 @@ import { Loader2 } from "lucide-react";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/button";
 import { FullScreenPanel } from "@/components/common/FullScreenPanel";
+import { MotionSurface } from "@/components/motion/MotionSurface";
+import { useEditorCloseGuard } from "@/hooks/useEditorCloseGuard";
 import { APP_DISPLAY_NAME } from "@/components/shell/AppGlyph";
 import {
   PresetStepContext,
@@ -94,6 +96,10 @@ export function AddProviderDialog({
   const [selectedUniversalPreset, setSelectedUniversalPreset] =
     useState<UniversalProviderPreset | null>(null);
   const [isFormSubmitting, setIsFormSubmitting] = useState(false);
+  const { requestLeave, leaveDialog } = useEditorCloseGuard(
+    open,
+    isFormSubmitting,
+  );
   // 表单用了聚合的简化布局：页头应用名后标「聚合模式」
   const [stackLayout, setStackLayout] = useState(false);
   const [authSettingsTarget, setAuthSettingsTarget] =
@@ -167,11 +173,11 @@ export function AddProviderDialog({
     }
     // 第 2 步的返回回到选预设
     if (step === "form") {
-      setStep("pick");
+      requestLeave(() => setStep("pick"));
       return;
     }
     closeDialog();
-  }, [authSettingsTarget, closeDialog, step]);
+  }, [authSettingsTarget, closeDialog, step, requestLeave]);
   const formReadyToken = useMemo(
     () => Symbol("provider-form-ready"),
     [appId, open],
@@ -484,7 +490,8 @@ export function AddProviderDialog({
           type="button"
           variant="neutral"
           size="regular"
-          onClick={closeDialog}
+          onClick={() => requestLeave(closeDialog)}
+          disabled={isFormSubmitting}
         >
           {t("common.cancel")}
         </Button>
@@ -508,7 +515,7 @@ export function AddProviderDialog({
       modeView={modeView}
       onStackLayoutChange={setStackLayout}
       onSubmit={handleSubmit}
-      onCancel={closeDialog}
+      onCancel={() => requestLeave(closeDialog)}
       onManageAuthAccounts={setAuthSettingsTarget}
       onSubmittingChange={setIsFormSubmitting}
       onSubmitReadyChange={handleSubmitReadyChange}
@@ -534,8 +541,9 @@ export function AddProviderDialog({
   return (
     <FullScreenPanel
       isOpen={open}
-      motionPreset="none"
+      motionPreset="slide-from-right"
       trackUnsavedChanges={step === "form"}
+      closeOnInputEscape
       title={t("provider.addNewProvider")}
       subtitle={
         stackLayout
@@ -564,7 +572,10 @@ export function AddProviderDialog({
         {step === "pick" && (
           <div ref={setPickerHost} className="min-h-0 flex-1" />
         )}
-        <div className={step === "pick" ? "hidden" : undefined}>
+        <MotionSurface
+          motionKey={step}
+          className={step === "pick" ? "hidden" : "tai-editor-form"}
+        >
           {waitingForClaudeBase ? (
             <div className="py-12 text-center text-body text-fg-2">
               {t("common.loading")}
@@ -572,7 +583,7 @@ export function AddProviderDialog({
           ) : (
             form
           )}
-        </div>
+        </MotionSurface>
       </PresetStepContext.Provider>
 
       {showUniversalTab && (
@@ -599,6 +610,7 @@ export function AddProviderDialog({
         onClose={() => setAuthSettingsTarget(null)}
       />
       {conflictDialog}
+      {leaveDialog}
     </FullScreenPanel>
   );
 }

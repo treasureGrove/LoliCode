@@ -113,6 +113,59 @@ beforeEach(() => {
 });
 
 describe("SwitchModePanel — Stack mode", () => {
+  it("does not advertise a default mode or enable writes when current state cannot be read", async () => {
+    server.use(
+      http.post(`${TAURI_ENDPOINT}/get_app_mode`, () =>
+        HttpResponse.json({ message: "Mode read failed" }, { status: 500 }),
+      ),
+    );
+    renderPanel("claude", { a: provider("a") });
+    await screen.findByText("暂时无法读取当前模式");
+    expect(screen.queryByLabelText("mode.active")).not.toBeInTheDocument();
+    expect(screen.getByTestId("switch-a")).toBeDisabled();
+    expect(screen.getByText("状态暂不可用")).toBeInTheDocument();
+  });
+
+  it("keeps the mode confirmation open while saving, then shows the real failure", async () => {
+    const user = userEvent.setup();
+    mockMode("direct", null, "a");
+    let finish!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    server.use(
+      http.post(`${TAURI_ENDPOINT}/set_proxy_takeover_for_app`, async () => {
+        await gate;
+        return HttpResponse.json(
+          { message: "Unable to write configuration" },
+          { status: 500 },
+        );
+      }),
+    );
+    renderPanel("claude", { a: provider("a") });
+    await screen.findByTestId("card-a");
+    await user.click(
+      screen.getByRole("button", { name: /mode\.names\.route/ }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "mode.activate.route" }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "mode.dialog.confirmRoute" }),
+    );
+    expect(
+      screen.getByRole("button", { name: "common.cancel" }),
+    ).toBeDisabled();
+    await user.keyboard("{Escape}");
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    finish();
+    await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "mode.dialog.confirmRoute" }),
+    ).toBeEnabled();
+  });
+
   it("adds and removes Stack members through the backend", async () => {
     mockMode("stack", "route");
     const setCalls: unknown[] = [];
@@ -361,7 +414,11 @@ describe("SwitchModePanel — mode layer", () => {
     );
     const takeover = captureTakeover();
     const onSwitch = vi.fn();
-    renderPanel("claude", { a: provider("a"), kimi: provider("kimi") }, onSwitch);
+    renderPanel(
+      "claude",
+      { a: provider("a"), kimi: provider("kimi") },
+      onSwitch,
+    );
 
     await user.click(
       await screen.findByRole("button", { name: /mode\.names\.stack/ }),
@@ -382,7 +439,9 @@ describe("SwitchModePanel — mode layer", () => {
     );
     // 记下的那家成了「切换后的默认」：自己不再有「设为默认」，原来那家有了
     await screen.findByTestId("menu-setDefault-a");
-    expect(screen.queryByTestId("menu-setDefault-kimi")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("menu-setDefault-kimi"),
+    ).not.toBeInTheDocument();
 
     // 确认框预选它
     await user.click(
@@ -420,7 +479,9 @@ describe("SwitchModePanel — mode layer", () => {
     fireEvent.click(await screen.findByTestId("menu-setDefault-kimi"));
     fireEvent.click(screen.getByTestId("menu-setDefault-other"));
     expect(onSwitch.mock.calls.map(([p]) => p)).toEqual([kimi, other]);
-    expect(screen.queryByTestId("menu-setDefault-route")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("menu-setDefault-route"),
+    ).not.toBeInTheDocument();
     expect(routeCalls).toEqual([]);
   });
 

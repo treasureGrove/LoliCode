@@ -24,10 +24,8 @@ const ThemeProviderContext = createContext<ThemeContextValue | undefined>(
   undefined,
 );
 
-/**
- * 切换 html 上的 light / dark。切换期间暂停所有过渡（`.theme-switching`），
- * 否则各处的 transition-colors 会让颜色一块块慢慢变过去。
- */
+// The initial theme is immediate; later changes ease only the shared surfaces.
+let themeTransitionTimer: ReturnType<typeof setTimeout> | undefined;
 function applyColorScheme(isDark: boolean) {
   const root = window.document.documentElement;
   if (
@@ -36,16 +34,16 @@ function applyColorScheme(isDark: boolean) {
   ) {
     return;
   }
-  root.classList.add("theme-switching");
+  const initialized =
+    root.classList.contains("light") || root.classList.contains("dark");
+  clearTimeout(themeTransitionTimer);
+  if (initialized) root.classList.add("theme-changing");
   root.classList.toggle("dark", isDark);
   root.classList.toggle("light", !isDark);
-  // 强制重排一次，让不带过渡的新颜色先落定，再在第二帧恢复过渡。
-  void window.document.body?.offsetHeight;
-  window.requestAnimationFrame(() => {
-    window.requestAnimationFrame(() => {
-      root.classList.remove("theme-switching");
-    });
-  });
+  themeTransitionTimer = setTimeout(
+    () => root.classList.remove("theme-changing"),
+    240,
+  );
 }
 
 export function ThemeProvider({

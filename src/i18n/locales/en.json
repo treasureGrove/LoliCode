@@ -216,7 +216,28 @@
     "formSubtitleStack": "{{app}} (Aggregation mode)",
     "editCurrentNoticeFile": "This is the provider in use. Saving writes it to",
     "editCurrentNoticeFileEnd": " right away; the next request uses it.",
-    "editCurrentNotice": "This is the provider in use. Saving takes effect right away; the next request uses the new settings."
+    "editCurrentNotice": "This is the provider in use. Saving takes effect right away; the next request uses the new settings.",
+    "workbench": {
+      "detailsFor": "View {{name}} details",
+      "endpoint": "API address",
+      "endpointUnavailable": "API address unavailable. Check it in the editor.",
+      "notes": "Notes",
+      "connection": "Connection",
+      "checking": "Checking…",
+      "unchecked": "Not checked",
+      "inConfig": "Providers in configuration",
+      "current": "Currently using",
+      "configuredCount_one": "{{count}} provider",
+      "configuredCount_other": "{{count}} providers",
+      "directActions": "Open a name for details. Common actions stay within reach.",
+      "saved": "Saved providers",
+      "sectionCount_one": "{{count}} provider",
+      "sectionCount_other": "{{count}} providers",
+      "applying": "Applying changes…",
+      "modeUnavailable": "Current mode is unavailable",
+      "loadingMode": "Reading current mode…",
+      "stateUnknown": "Status unavailable"
+    }
   },
   "claudeCode": {
     "needsRouting": "Needs Routing",
@@ -1053,6 +1074,14 @@
     },
     "data": {
       "location": "Location"
+    },
+    "sectionDescriptions": {
+      "general": "Personalize appearance, startup and everyday behavior.",
+      "appConfig": "Manage client configuration and accounts. Save directory changes when ready.",
+      "routing": "Manage local routing and the clients that use it.",
+      "network": "Set the proxy used to reach external services.",
+      "data": "Manage data locations, backups, sync and diagnostic logs.",
+      "about": "App version, updates and open-source information."
     }
   },
   "apps": {
@@ -4075,7 +4104,11 @@
       "mappingFull": "Model mapping"
     },
     "needsAttention": "Needs attention",
-    "back": "Back"
+    "back": "Back",
+    "clientSwitcher": "Switch client",
+    "currentClient": "Current client",
+    "workbench": "Workbench",
+    "resources": "Resources"
   },
   "appsPage": {
     "showInSidebar": "Show {{name}} in the sidebar",

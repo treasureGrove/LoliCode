@@ -216,7 +216,26 @@
     "formSubtitleStack": "{{app}}（聚合模式）",
     "editCurrentNoticeFile": "这是正在使用的供应商。保存后会立即写进",
     "editCurrentNoticeFileEnd": "，下一次请求生效。",
-    "editCurrentNotice": "这是正在使用的供应商。保存后立即生效，下一次请求就用新的设置。"
+    "editCurrentNotice": "这是正在使用的供应商。保存后立即生效，下一次请求就用新的设置。",
+    "workbench": {
+      "detailsFor": "查看 {{name}} 详情",
+      "endpoint": "请求地址",
+      "endpointUnavailable": "接口地址不可用，请在编辑中检查",
+      "notes": "备注",
+      "connection": "连接状态",
+      "checking": "检测中…",
+      "unchecked": "未检测",
+      "inConfig": "配置中的渠道",
+      "current": "当前使用",
+      "configuredCount": "{{count}} 个渠道",
+      "directActions": "点击名称查看详情，常用操作就在手边。",
+      "saved": "已保存渠道",
+      "sectionCount": "{{count}} 个渠道",
+      "applying": "正在应用更改…",
+      "modeUnavailable": "暂时无法读取当前模式",
+      "loadingMode": "正在读取当前模式…",
+      "stateUnknown": "状态暂不可用"
+    }
   },
   "claudeCode": {
     "needsRouting": "需要路由",
@@ -1053,6 +1072,14 @@
     },
     "data": {
       "location": "存储位置"
+    },
+    "sectionDescriptions": {
+      "general": "调整外观、启动方式与日常使用偏好。",
+      "appConfig": "管理客户端配置与授权；目录修改后需点击保存。",
+      "routing": "管理本地路由服务与正在使用路由的客户端。",
+      "network": "配置应用访问外部服务时使用的代理。",
+      "data": "管理数据位置、备份、同步与诊断日志。",
+      "about": "查看应用版本、更新与开源信息。"
     }
   },
   "apps": {
@@ -4075,7 +4102,11 @@
       "mappingFull": "模型映射"
     },
     "needsAttention": "需要处理",
-    "back": "返回"
+    "back": "返回",
+    "clientSwitcher": "切换客户端",
+    "currentClient": "当前客户端",
+    "workbench": "工作台",
+    "resources": "配置资源"
   },
   "appsPage": {
     "showInSidebar": "在侧栏显示 {{name}}",

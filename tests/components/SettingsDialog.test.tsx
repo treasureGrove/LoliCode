@@ -363,17 +363,24 @@ describe("SettingsPage", () => {
     expect(screen.queryByText("settings.restartRequired")).toBeNull();
   });
 
-  it("scrolls back to the top when the section changes", () => {
+  it("starts new sections at the top and restores each section's reading position", () => {
     const { container, rerenderWith } = renderSettingsPage();
     const scrollContainer = container.querySelector(
       "#main-content",
     ) as HTMLDivElement;
 
     scrollContainer.scrollTop = 640;
+    fireEvent.scroll(scrollContainer);
     rerenderWith({ section: "about" });
 
     expect(scrollContainer.scrollTop).toBe(0);
     expect(screen.getByText("about:false")).toBeInTheDocument();
+    scrollContainer.scrollTop = 120;
+    fireEvent.scroll(scrollContainer);
+    rerenderWith({ section: "general" });
+    expect(scrollContainer.scrollTop).toBe(640);
+    rerenderWith({ section: "about" });
+    expect(scrollContainer.scrollTop).toBe(120);
   });
 
   describe("app configuration navigation", () => {

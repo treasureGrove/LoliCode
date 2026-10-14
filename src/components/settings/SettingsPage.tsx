@@ -31,6 +31,7 @@ import { settingsApi, type AppId } from "@/lib/api";
 import { useSettingsQuery } from "@/lib/query";
 import type { SettingsSection } from "@/lib/navigation";
 import { AppPageHeader } from "@/components/shell/AppPageHeader";
+import { MotionSurface } from "@/components/motion/MotionSurface";
 import { DirectoryInput } from "@/components/settings/DirectorySettings";
 import { ImportExportSection } from "@/components/settings/ImportExportSection";
 import { BackupListSection } from "@/components/settings/BackupListSection";
@@ -124,6 +125,7 @@ export function SettingsPage({
 
   const [showRestartPrompt, setShowRestartPrompt] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const sectionScroll = useRef<Partial<Record<SettingsSection, number>>>({});
 
   useEffect(() => {
     resetStatus();
@@ -137,7 +139,7 @@ export function SettingsPage({
 
   useLayoutEffect(() => {
     if (scrollRef.current) {
-      scrollRef.current.scrollTop = 0;
+      scrollRef.current.scrollTop = sectionScroll.current[section] ?? 0;
     }
   }, [section]);
 
@@ -531,18 +533,29 @@ export function SettingsPage({
       <AppPageHeader
         icon={<SectionIcon className="h-5 w-5" strokeWidth={1.5} />}
         title={t(`settings.sections.${section}`)}
+        subtitle={t("nav.settings")}
       />
       <div
         ref={scrollRef}
         id="main-content"
         className="min-h-0 flex-1 overflow-y-auto scroll-stable"
+        onScroll={(event) => {
+          sectionScroll.current[section] = event.currentTarget.scrollTop;
+        }}
       >
         {isBusy ? (
           <div className="flex h-full items-center justify-center">
             <Loader2 className="h-8 w-8 animate-spin text-fg-3" />
           </div>
         ) : (
-          <SettingsBody>{renderSection()}</SettingsBody>
+          <MotionSurface motionKey={section}>
+            <SettingsBody>
+              <p className="tai-settings-intro">
+                {t(`settings.sectionDescriptions.${section}`)}
+              </p>
+              {renderSection()}
+            </SettingsBody>
+          </MotionSurface>
         )}
       </div>
 

@@ -5,6 +5,8 @@ import { useUsageSummaryByApp } from "@/lib/query/usage";
 import { HelpTip } from "@/components/ui/help-tip";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { MotionSurface } from "@/components/motion/MotionSurface";
+import "./usage-layout.css";
 import {
   fmtInt,
   fmtUsd,
@@ -87,14 +89,18 @@ function MetricCard({
   help,
   value,
   title,
+  primary = false,
 }: {
   label: string;
   help?: { title: string; body: string };
   value: string;
   title?: string;
+  primary?: boolean;
 }) {
   return (
-    <div className="flex h-[76px] min-w-0 flex-col justify-between rounded-panel border border-border bg-surface px-3.5 py-3">
+    <div
+      className={cn("tai-usage-metric", primary && "tai-usage-metric-primary")}
+    >
       <div className="flex min-w-0 items-center gap-0.5">
         <span className="truncate text-caption text-fg-2">{label}</span>
         {help && (
@@ -104,7 +110,7 @@ function MetricCard({
         )}
       </div>
       <span
-        className="truncate text-metric tabular-nums text-fg-1"
+        className="tai-usage-metric-value truncate tabular-nums text-fg-1"
         title={title}
       >
         {value}
@@ -161,7 +167,7 @@ export function UsageHero({
   const locale = getLocaleFromLanguage(getResolvedLang(i18n));
   const [moreOpen, setMoreOpen] = useState(false);
 
-  const { data, isLoading } = useUsageSummaryByApp(
+  const { data, isLoading, isError } = useUsageSummaryByApp(
     range,
     { providerName, model },
     {
@@ -190,7 +196,7 @@ export function UsageHero({
 
   const hitPercent = Math.max(0, Math.min(100, hitRate * 100));
   const hitPercentLabel = hitPercent.toFixed(hitPercent >= 99.95 ? 0 : 1);
-  const placeholder = isLoading ? "…" : undefined;
+  const placeholder = isLoading ? "…" : isError && !data ? "--" : undefined;
 
   const cacheWriteHelp =
     cacheWriteState === "na"
@@ -202,17 +208,33 @@ export function UsageHero({
   return (
     <section
       aria-label={t("usage.metrics.label")}
-      className="flex shrink-0 flex-col gap-2.5"
+      className="tai-usage-metrics"
     >
-      <div className="flex items-start gap-2.5">
-        <div className="flex min-w-0 flex-1 flex-col gap-2.5">
-          <div
+      <div className="tai-usage-metrics-heading">
+        <h2>{t("usage.metrics.label")}</h2>
+        <Button
+          type="button"
+          variant="quiet"
+          size="compact"
+          aria-expanded={moreOpen}
+          aria-controls="usage-extra-metrics"
+          onClick={() => setMoreOpen((open) => !open)}
+          className="shrink-0 gap-1 text-fg-2"
+        >
+          {t("usage.metrics.more")}
+          <ChevronDown
             className={cn(
-              "grid gap-2.5",
-              compact ? "grid-cols-2" : "grid-cols-4",
+              "h-3.5 w-3.5 transition-transform duration-150",
+              moreOpen && "rotate-180",
             )}
-          >
+          />
+        </Button>
+      </div>
+      <div>
+        <div className="flex min-w-0 flex-1 flex-col gap-2.5">
+          <div className={cn("tai-usage-metric-grid", compact && "is-compact")}>
             <MetricCard
+              primary
               label={t("usage.totalCost")}
               value={
                 placeholder ?? (totalCost == null ? "--" : fmtUsd(totalCost, 2))
@@ -230,7 +252,7 @@ export function UsageHero({
                 body: t("usage.metrics.realTotalHelp"),
               }}
               value={placeholder ?? formatTokensCompact(realTotal, locale)}
-              title={fmtInt(realTotal, locale)}
+              title={placeholder ? undefined : fmtInt(realTotal, locale)}
             />
             <MetricCard
               label={t("usage.cacheHitRate")}
@@ -241,64 +263,53 @@ export function UsageHero({
               value={placeholder ?? `${hitPercentLabel}%`}
             />
           </div>
-          {moreOpen && (
-            <div
-              className={cn(
-                "grid gap-2.5",
-                compact ? "grid-cols-2" : "grid-cols-4",
-              )}
-            >
-              <MiniMetric
-                label={t("usage.freshInput")}
-                value={formatTokensCompact(input, locale)}
-                title={fmtInt(input, locale)}
-              />
-              <MiniMetric
-                label={t("usage.output")}
-                value={formatTokensCompact(output, locale)}
-                title={fmtInt(output, locale)}
-              />
-              <MiniMetric
-                label={t("usage.cacheWrite")}
-                value={
-                  cacheWriteState === "na"
-                    ? "N/A"
-                    : formatTokensCompact(cacheWrite, locale)
-                }
-                title={
-                  cacheWriteState === "na" ? undefined : fmtInt(cacheWrite)
-                }
-                muted={cacheWriteState === "na"}
-                help={
-                  cacheWriteHelp
-                    ? { title: t("usage.cacheWrite"), body: cacheWriteHelp }
-                    : undefined
-                }
-              />
-              <MiniMetric
-                label={t("usage.cacheRead")}
-                value={formatTokensCompact(cacheRead, locale)}
-                title={fmtInt(cacheRead, locale)}
-              />
-            </div>
-          )}
-        </div>
-        <Button
-          type="button"
-          variant="quiet"
-          size="regular"
-          aria-expanded={moreOpen}
-          onClick={() => setMoreOpen((open) => !open)}
-          className="shrink-0 gap-1 pe-2 ps-2.5 text-fg-2"
-        >
-          {t("usage.metrics.more")}
-          <ChevronDown
-            className={cn(
-              "h-3.5 w-3.5 transition-transform duration-150",
-              moreOpen && "rotate-180",
+          <MotionSurface id="usage-extra-metrics" motionKey={String(moreOpen)}>
+            {moreOpen && (
+              <div
+                className={cn(
+                  "grid gap-2.5",
+                  compact ? "grid-cols-2" : "grid-cols-4",
+                )}
+              >
+                <MiniMetric
+                  label={t("usage.freshInput")}
+                  value={placeholder ?? formatTokensCompact(input, locale)}
+                  title={placeholder ? undefined : fmtInt(input, locale)}
+                />
+                <MiniMetric
+                  label={t("usage.output")}
+                  value={placeholder ?? formatTokensCompact(output, locale)}
+                  title={placeholder ? undefined : fmtInt(output, locale)}
+                />
+                <MiniMetric
+                  label={t("usage.cacheWrite")}
+                  value={
+                    placeholder ??
+                    (cacheWriteState === "na"
+                      ? "N/A"
+                      : formatTokensCompact(cacheWrite, locale))
+                  }
+                  title={
+                    placeholder || cacheWriteState === "na"
+                      ? undefined
+                      : fmtInt(cacheWrite)
+                  }
+                  muted={cacheWriteState === "na"}
+                  help={
+                    cacheWriteHelp
+                      ? { title: t("usage.cacheWrite"), body: cacheWriteHelp }
+                      : undefined
+                  }
+                />
+                <MiniMetric
+                  label={t("usage.cacheRead")}
+                  value={placeholder ?? formatTokensCompact(cacheRead, locale)}
+                  title={placeholder ? undefined : fmtInt(cacheRead, locale)}
+                />
+              </div>
             )}
-          />
-        </Button>
+          </MotionSurface>
+        </div>
       </div>
     </section>
   );

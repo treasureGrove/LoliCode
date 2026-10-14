@@ -8,6 +8,7 @@ interface ProviderEmptyStateProps {
   appId: AppId;
   onCreate?: () => void;
   onImport?: () => void;
+  isImporting?: boolean;
 }
 
 /**
@@ -18,6 +19,7 @@ export function ProviderEmptyState({
   appId,
   onCreate,
   onImport,
+  isImporting = false,
 }: ProviderEmptyStateProps) {
   const { t } = useTranslation();
   // Pi / MiniMax Code 的"当前供应商"可以是原生应用自管的内置账号（不在可管理的
@@ -46,7 +48,13 @@ export function ProviderEmptyState({
       {(onImport || onCreate) && (
         <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
           {onImport && (
-            <Button variant="neutral" size="regular" onClick={onImport}>
+            <Button
+              variant="neutral"
+              size="regular"
+              onClick={onImport}
+              disabled={isImporting}
+              aria-busy={isImporting || undefined}
+            >
               <Download className="h-4 w-4" />
               {appId === "claude-desktop"
                 ? t("provider.importFromClaude")

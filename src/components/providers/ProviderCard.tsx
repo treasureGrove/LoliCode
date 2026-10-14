@@ -1,9 +1,10 @@
-import { useMemo, useState, useEffect } from "react";
+import { useId, useMemo, useState, useEffect } from "react";
 import {
   AlertTriangle,
   GripVertical,
   ChevronDown,
   ChevronUp,
+  ChevronRight,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
@@ -34,7 +35,7 @@ import { useUsageQuery } from "@/lib/query/queries";
 import { resolveProviderIcon } from "@/utils/providerIcon";
 import { isAdditiveAppId, isProxyAppId } from "@/config/appConfig";
 import { ProviderCardActions } from "./ProviderCardActions";
-import type { CardChip, CardPresentation, CardTone } from "./presentation";
+import type { CardChip, CardPresentation } from "./presentation";
 
 interface DragHandleProps {
   attributes: DraggableAttributes;
@@ -60,14 +61,6 @@ interface ProviderCardProps {
   isTesting?: boolean;
   dragHandleProps?: DragHandleProps;
 }
-
-/** 当前那张：模式色边框 + 淡底；共存式「已添加」是中性的。 */
-const TONE_CLASS: Record<CardTone, string> = {
-  direct: "border-direct-border bg-direct-soft",
-  route: "border-route-border bg-route-soft",
-  stack: "border-stack-border bg-stack-soft",
-  neutral: "border-border-strong bg-subtle",
-};
 
 const CHIP_CLASS: Record<CardChip["tone"], string> = {
   outline: "border border-border-strong text-fg-2",
@@ -175,6 +168,9 @@ export function ProviderCard({
   dragHandleProps,
 }: ProviderCardProps) {
   const { t } = useTranslation();
+  const detailsId = useId();
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [detailsVisited, setDetailsVisited] = useState(false);
   const codexOfficialIdentity = resolveCodexOfficialIdentity(appId, provider);
   const managedCodexAccountId = resolveManagedAccountId(
     provider.meta,
@@ -291,18 +287,32 @@ export function ProviderCard({
     }
     onOpenWebsite(displayUrl);
   };
+  // Details are deliberately descriptive: never render the raw configuration or
+  // credentials (including credentials embedded in a URL's query string).
+  const endpoint = useMemo(() => {
+    const value = extractProviderBaseUrl(provider.settingsConfig);
+    if (!value) return fallbackUrlText;
+    try {
+      const url = new URL(value);
+      return `${url.protocol}//${url.host}${url.pathname}`;
+    } catch {
+      return t("provider.workbench.endpointUnavailable", {
+        defaultValue: "接口地址不可用，请在编辑中检查",
+      });
+    }
+  }, [provider.settingsConfig, fallbackUrlText, t]);
   return (
     <div
       data-tone={presentation.tone ?? "default"}
+      data-provider-id={provider.id}
+      data-details-open={detailsOpen}
+      data-dragging={dragHandleProps?.isDragging || undefined}
       className={cn(
-        "tai-provider-card group relative rounded-panel border transition-[border-color,box-shadow,background-color] duration-150",
-        presentation.tone
-          ? TONE_CLASS[presentation.tone]
-          : "border-border bg-surface hover:border-border-strong hover:shadow-v7-sm",
+        "tai-provider-card group relative border",
         dragHandleProps?.isDragging && "z-10 cursor-grabbing shadow-v7-md",
       )}
     >
-      <div className="tai-provider-row flex min-h-[72px] items-center gap-3 py-3 pe-4 ps-2">
+      <div className="tai-provider-row flex items-center gap-3 ps-2">
         {dragHandleProps ? (
           <button
             type="button"
@@ -342,7 +352,26 @@ export function ProviderCard({
               )}
               title={provider.name}
             >
-              {provider.name}
+              <button
+                type="button"
+                className="tai-provider-title"
+                aria-expanded={detailsOpen}
+                aria-controls={detailsId}
+                aria-label={t("provider.workbench.detailsFor", {
+                  name: provider.name,
+                  defaultValue: "查看 {{name}} 详情",
+                })}
+                onClick={() => {
+                  setDetailsVisited(true);
+                  setDetailsOpen((open) => !open);
+                }}
+              >
+                <span className="truncate">{provider.name}</span>
+                <ChevronRight
+                  aria-hidden="true"
+                  className="tai-provider-chevron h-3.5 w-3.5 shrink-0"
+                />
+              </button>
             </h3>
             {presentation.chips.map((chip) => (
               <CardChipBadge key={chip.key} chip={chip} />
@@ -351,6 +380,17 @@ export function ProviderCard({
               <HealthChip
                 consecutiveFailures={health.consecutive_failures}
                 isHealthy={health.is_healthy}
+              />
+            )}
+            {presentation.showHealth && !health && (
+              <CardChipBadge
+                chip={{
+                  key: "unknown-health",
+                  tone: "outline",
+                  label: t("provider.workbench.unchecked", {
+                    defaultValue: "未检测",
+                  }),
+                }}
               />
             )}
           </div>
@@ -438,113 +478,165 @@ export function ProviderCard({
             </button>
           ) : null}
         </div>
+      </div>
 
-        <div className="flex shrink-0 items-center gap-3">
-          {/* 额度列 136 宽，带重置倒计时时 194 宽（见 QuotaLines） */}
-          <div className="max-w-[208px] text-end">
-            <div className="flex items-center justify-end gap-1">
-              {isCopilot ? (
-                <CopilotQuotaFooter
-                  meta={provider.meta}
-                  inline={true}
-                  isCurrent={isCurrent}
-                />
-              ) : isCodexOauth ? (
-                !isBoundCodexOfficial || usageEnabled ? (
-                  <CodexOauthQuotaFooter
-                    meta={provider.meta}
-                    inline={true}
-                    isCurrent={isCurrent}
-                    autoQueryInterval={
-                      isBoundCodexOfficial
-                        ? (provider.meta?.usage_script?.autoQueryInterval ?? 5)
-                        : undefined
-                    }
-                  />
-                ) : null
-              ) : isXaiOauth ? (
-                <XaiOauthQuotaFooter
-                  meta={provider.meta}
-                  inline={true}
-                  isCurrent={isCurrent}
-                />
-              ) : isOfficial ? (
-                officialSubscriptionEnabled ? (
-                  <SubscriptionQuotaFooter
-                    appId={appId}
-                    inline={true}
-                    isCurrent={isCurrent}
-                    autoQueryInterval={
-                      provider.meta?.usage_script?.autoQueryInterval ?? 0
-                    }
-                  />
-                ) : null
-              ) : hasMultiplePlans ? (
-                <span className="text-caption text-fg-2">
-                  {t("usage.multiplePlans", {
-                    count: usage?.data?.length || 0,
-                    defaultValue: `${usage?.data?.length || 0} 个套餐`,
+      <div
+        id={detailsId}
+        className="tai-provider-details"
+        data-open={detailsOpen}
+        aria-hidden={!detailsOpen}
+      >
+        <div className="tai-provider-details-clip">
+          {detailsVisited && (
+            <dl className="tai-provider-facts">
+              <div>
+                <dt>
+                  {t("provider.workbench.endpoint", {
+                    defaultValue: "请求地址",
                   })}
-                </span>
-              ) : (
-                <UsageFooter
-                  provider={provider}
-                  providerId={provider.id}
-                  appId={appId}
-                  usageEnabled={usageEnabled}
-                  isCurrent={isCurrent}
-                  isInConfig={isInConfig}
-                  inline={true}
-                />
+                </dt>
+                <dd>{endpoint}</dd>
+              </div>
+              {provider.notes?.trim() && (
+                <div>
+                  <dt>
+                    {t("provider.workbench.notes", { defaultValue: "备注" })}
+                  </dt>
+                  <dd>{provider.notes}</dd>
+                </div>
               )}
-              {hasMultiplePlans && (
-                <HoverTip content={expandLabel}>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setIsExpanded(!isExpanded);
-                    }}
-                    className="shrink-0 rounded-control p-1 text-fg-3 transition-colors hover:bg-subtle hover:text-fg-1"
-                    aria-label={expandLabel}
-                    aria-expanded={isExpanded}
-                  >
-                    {isExpanded ? (
-                      <ChevronUp size={14} />
-                    ) : (
-                      <ChevronDown size={14} />
-                    )}
-                  </button>
-                </HoverTip>
-              )}
-            </div>
-          </div>
-          <ProviderCardActions
-            providerName={provider.name}
-            presentation={presentation}
-            onEdit={() => onEdit(provider)}
-            onDelete={() => onDelete(provider)}
-            onDuplicate={onDuplicate ? () => onDuplicate(provider) : undefined}
-            onTest={
-              // 连通检测对第三方/自定义/Copilot/Codex-OAuth 供应商开放。官方供应商一律不给：
-              // 它们 base_url 故意留空、走客户端默认/OAuth 端点，没有可靠的探测目标。
-              onTest && appId !== "mcode" && provider.category !== "official"
-                ? () => onTest(provider)
-                : undefined
-            }
-            isTesting={isTesting}
-            onConfigureUsage={
-              (isOfficial && !supportsOfficialSubscription) ||
-              isCopilot ||
-              (isCodexOauth && !isBoundCodexOfficial) ||
-              isXaiOauth
-                ? undefined
-                : () => onConfigureUsage(provider)
-            }
-            onOpenTerminal={
-              onOpenTerminal ? () => onOpenTerminal(provider) : undefined
-            }
-          />
+              <div>
+                <dt>
+                  {t("provider.workbench.connection", {
+                    defaultValue: "连接状态",
+                  })}
+                </dt>
+                <dd>
+                  {isTesting
+                    ? t("provider.workbench.checking", {
+                        defaultValue: "检测中…",
+                      })
+                    : health
+                      ? health.is_healthy === false
+                        ? t("health.circuitOpen")
+                        : health.consecutive_failures > 0
+                          ? t("health.degraded")
+                          : t("health.operational")
+                      : t("provider.workbench.unchecked", {
+                          defaultValue: "未检测",
+                        })}
+                </dd>
+              </div>
+            </dl>
+          )}
         </div>
+      </div>
+
+      <div className="tai-provider-footer flex items-center gap-3">
+        {/* 额度列 136 宽，带重置倒计时时 194 宽（见 QuotaLines） */}
+        <div className="tai-provider-quota max-w-[208px]">
+          <div className="flex items-center gap-1">
+            {isCopilot ? (
+              <CopilotQuotaFooter
+                meta={provider.meta}
+                inline={true}
+                isCurrent={isCurrent}
+              />
+            ) : isCodexOauth ? (
+              !isBoundCodexOfficial || usageEnabled ? (
+                <CodexOauthQuotaFooter
+                  meta={provider.meta}
+                  inline={true}
+                  isCurrent={isCurrent}
+                  autoQueryInterval={
+                    isBoundCodexOfficial
+                      ? (provider.meta?.usage_script?.autoQueryInterval ?? 5)
+                      : undefined
+                  }
+                />
+              ) : null
+            ) : isXaiOauth ? (
+              <XaiOauthQuotaFooter
+                meta={provider.meta}
+                inline={true}
+                isCurrent={isCurrent}
+              />
+            ) : isOfficial ? (
+              officialSubscriptionEnabled ? (
+                <SubscriptionQuotaFooter
+                  appId={appId}
+                  inline={true}
+                  isCurrent={isCurrent}
+                  autoQueryInterval={
+                    provider.meta?.usage_script?.autoQueryInterval ?? 0
+                  }
+                />
+              ) : null
+            ) : hasMultiplePlans ? (
+              <span className="text-caption text-fg-2">
+                {t("usage.multiplePlans", {
+                  count: usage?.data?.length || 0,
+                  defaultValue: `${usage?.data?.length || 0} 个套餐`,
+                })}
+              </span>
+            ) : (
+              <UsageFooter
+                provider={provider}
+                providerId={provider.id}
+                appId={appId}
+                usageEnabled={usageEnabled}
+                isCurrent={isCurrent}
+                isInConfig={isInConfig}
+                inline={true}
+              />
+            )}
+            {hasMultiplePlans && (
+              <HoverTip content={expandLabel}>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsExpanded(!isExpanded);
+                  }}
+                  className="shrink-0 rounded-control p-1 text-fg-3 transition-colors hover:bg-subtle hover:text-fg-1"
+                  aria-label={expandLabel}
+                  aria-expanded={isExpanded}
+                >
+                  {isExpanded ? (
+                    <ChevronUp size={14} />
+                  ) : (
+                    <ChevronDown size={14} />
+                  )}
+                </button>
+              </HoverTip>
+            )}
+          </div>
+        </div>
+        <ProviderCardActions
+          providerName={provider.name}
+          presentation={presentation}
+          onEdit={() => onEdit(provider)}
+          onDelete={() => onDelete(provider)}
+          onDuplicate={onDuplicate ? () => onDuplicate(provider) : undefined}
+          onTest={
+            // 连通检测对第三方/自定义/Copilot/Codex-OAuth 供应商开放。官方供应商一律不给：
+            // 它们 base_url 故意留空、走客户端默认/OAuth 端点，没有可靠的探测目标。
+            onTest && appId !== "mcode" && provider.category !== "official"
+              ? () => onTest(provider)
+              : undefined
+          }
+          isTesting={isTesting}
+          onConfigureUsage={
+            (isOfficial && !supportsOfficialSubscription) ||
+            isCopilot ||
+            (isCodexOauth && !isBoundCodexOfficial) ||
+            isXaiOauth
+              ? undefined
+              : () => onConfigureUsage(provider)
+          }
+          onOpenTerminal={
+            onOpenTerminal ? () => onOpenTerminal(provider) : undefined
+          }
+        />
       </div>
 
       {isExpanded && hasMultiplePlans && (

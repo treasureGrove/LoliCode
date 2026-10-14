@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Loader2 } from "lucide-react";
 import type { AppId } from "@/lib/api";
@@ -64,6 +64,7 @@ interface ModeDialogProps {
   onEnter: (target: Exclude<AppMode, "direct">, pick: string) => Promise<void>;
   /** 对话框 F：仍然直连切换 */
   onSwitchDirect: (providerId: string) => void;
+  onBusyChange?: (busy: boolean) => void;
 }
 
 /**
@@ -73,27 +74,49 @@ interface ModeDialogProps {
  */
 export function ModeDialog(props: ModeDialogProps) {
   const { app, state, onClose } = props;
+  const busyRef = useRef(false);
+  // Radix owns exit presence. Keep the last real body until its exit completes
+  // instead of blanking the panel the moment the controlled state closes.
+  const lastState = useRef(state);
+  if (state) lastState.current = state;
+  const visibleState = state ?? lastState.current;
+  const onBusyChange = useCallback((busy: boolean) => {
+    busyRef.current = busy;
+  }, []);
 
   useEffect(() => {
     if (state) logDialog(app, state, "弹出");
   }, [app, state]);
 
   const cancel = () => {
+    if (busyRef.current) return;
     if (state) logDialog(app, state, "取消");
     onClose();
   };
 
   return (
     <Dialog open={state !== null} onOpenChange={(open) => !open && cancel()}>
-      {state && (
+      {visibleState && (
         <DialogContent
           zIndex="alert"
+          aria-hidden={state === null || undefined}
+          {...(state === null ? { inert: "" } : {})}
           className="max-w-[480px] gap-0 rounded-dialog border-border bg-surface p-6 shadow-v7-lg sm:rounded-dialog"
         >
-          {state.kind === "enter" ? (
-            <EnterBody {...props} state={state} onCancel={cancel} />
+          {visibleState.kind === "enter" ? (
+            <EnterBody
+              {...props}
+              state={visibleState}
+              onCancel={cancel}
+              onBusyChange={onBusyChange}
+            />
           ) : (
-            <NeedsRouteBody {...props} state={state} onCancel={cancel} />
+            <NeedsRouteBody
+              {...props}
+              state={visibleState}
+              onCancel={cancel}
+              onBusyChange={onBusyChange}
+            />
           )}
         </DialogContent>
       )}
@@ -112,6 +135,7 @@ function EnterBody({
   onClose,
   onCancel,
   onEnter,
+  onBusyChange,
 }: ModeDialogProps & {
   state: Extract<ModeDialogState, { kind: "enter" }>;
   onCancel: () => void;
@@ -174,6 +198,7 @@ function EnterBody({
     if (!pick || busy) return;
     logDialog(app, state, `确认，选 ${pick}`);
     setBusy(true);
+    onBusyChange?.(true);
     setError(null);
     try {
       await onEnter(target, pick);
@@ -182,6 +207,7 @@ function EnterBody({
       setError(extractErrorMessage(err) || t("common.unknown"));
     } finally {
       setBusy(false);
+      onBusyChange?.(false);
     }
   };
 
@@ -296,6 +322,7 @@ function NeedsRouteBody({
   onCancel,
   onEnter,
   onSwitchDirect,
+  onBusyChange,
 }: ModeDialogProps & {
   state: Extract<ModeDialogState, { kind: "needsRoute" }>;
   onCancel: () => void;
@@ -307,8 +334,10 @@ function NeedsRouteBody({
   const name = provider?.name ?? state.providerId;
 
   const route = async () => {
+    if (busy) return;
     logDialog(app, state, "开始路由并使用");
     setBusy(true);
+    onBusyChange?.(true);
     setError(null);
     try {
       await onEnter("route", state.providerId);
@@ -317,6 +346,7 @@ function NeedsRouteBody({
       setError(extractErrorMessage(err) || t("common.unknown"));
     } finally {
       setBusy(false);
+      onBusyChange?.(false);
     }
   };
 

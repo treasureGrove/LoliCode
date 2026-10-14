@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { ProviderCardActions } from "@/components/providers/ProviderCardActions";
@@ -22,6 +22,62 @@ async function openMenu(presentation: CardPresentation) {
 }
 
 describe("ProviderCardActions — mode items in the more menu", () => {
+  it("waits for a real provider action and rejects duplicate clicks", async () => {
+    const user = userEvent.setup();
+    let resolve!: () => void;
+    const onClick = vi.fn(
+      () =>
+        new Promise<void>((done) => {
+          resolve = done;
+        }),
+    );
+    render(
+      <ProviderCardActions
+        providerName="Kimi"
+        presentation={{
+          chips: [],
+          buttons: [{ key: "switch", label: "Use Kimi", onClick }],
+        }}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+    const button = screen.getByRole("button", { name: "Use Kimi" });
+
+    await user.click(button);
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute("aria-busy", "true");
+    await user.click(button);
+    expect(onClick).toHaveBeenCalledTimes(1);
+
+    await act(async () => resolve());
+    await waitFor(() => expect(button).toBeEnabled());
+    expect(button).not.toHaveAttribute("aria-busy");
+  });
+
+  it("leaves a failed provider action available for retry", async () => {
+    const user = userEvent.setup();
+    const onClick = vi
+      .fn()
+      .mockRejectedValue(new Error("Connection unavailable"));
+    render(
+      <ProviderCardActions
+        providerName="Kimi"
+        presentation={{
+          chips: [],
+          buttons: [{ key: "switch", label: "Use Kimi", onClick }],
+        }}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+    const button = screen.getByRole("button", { name: "Use Kimi" });
+    await user.click(button);
+    await waitFor(() => expect(button).toBeEnabled());
+    await user.click(button);
+    expect(onClick).toHaveBeenCalledTimes(2);
+  });
+
   it("lists them first", async () => {
     const onSelect = vi.fn();
     const { user, menu } = await openMenu({

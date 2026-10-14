@@ -1,0 +1,194 @@
+:root {
+  --motion-fast: 140ms;
+  --motion-normal: 240ms;
+  --motion-panel: 320ms;
+  --motion-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.tai-button {
+  transition:
+    background-color var(--motion-fast),
+    color var(--motion-fast),
+    border-color var(--motion-fast),
+    scale 180ms var(--motion-ease);
+}
+.tai-button:active:not(:disabled):not([aria-disabled="true"]) {
+  scale: 0.98;
+  transition-duration: 70ms;
+}
+.tai-button:disabled {
+  scale: 1;
+}
+.tai-segment-button:active:not(:disabled) {
+  opacity: 0.72;
+}
+.tai-switch-thumb {
+  transition:
+    transform var(--motion-normal) var(--motion-ease),
+    background-color var(--motion-fast);
+}
+.tai-field {
+  transition:
+    border-color var(--motion-fast),
+    box-shadow var(--motion-fast);
+}
+.tai-editor-panel {
+  box-shadow: -12px 0 44px rgb(0 0 0 / 6%);
+}
+.tai-editor-form {
+  max-width: 1120px;
+  margin-inline: auto;
+}
+
+/* Radix owns presence, focus, dismissal and scroll locking. */
+.tai-dialog-overlay[data-state="open"] {
+  animation: tai-overlay-in var(--motion-normal) ease-out;
+}
+.tai-dialog-overlay[data-state="closed"] {
+  animation: tai-overlay-out var(--motion-fast) ease-in;
+}
+.tai-dialog-surface[data-state="open"] {
+  animation: tai-dialog-in var(--motion-panel) var(--motion-ease);
+}
+.tai-dialog-surface[data-state="closed"] {
+  animation: tai-dialog-out 180ms var(--motion-ease);
+}
+.tai-sheet-surface[data-state="open"] {
+  animation: tai-sheet-in var(--motion-panel) var(--motion-ease);
+}
+.tai-sheet-surface[data-state="closed"] {
+  animation: tai-sheet-out 180ms var(--motion-ease);
+}
+.tai-floating-surface {
+  animation-duration: 180ms;
+  animation-timing-function: var(--motion-ease);
+  transform-origin: var(
+    --radix-popover-content-transform-origin,
+    var(--radix-dropdown-menu-content-transform-origin, center top)
+  );
+}
+.tai-floating-surface[data-state="open"] {
+  animation: tai-floating-in 180ms var(--motion-ease);
+}
+.tai-floating-surface[data-state="closed"] {
+  animation: tai-overlay-out var(--motion-fast) ease-in;
+}
+.tai-dialog-surface[data-state="closed"],
+.tai-sheet-surface[data-state="closed"],
+.tai-floating-surface[data-state="closed"] {
+  pointer-events: none;
+}
+.tai-collapsible {
+  overflow: hidden;
+}
+.tai-collapsible[data-state="open"] {
+  animation: tai-expand var(--motion-normal) var(--motion-ease);
+}
+.tai-collapsible[data-state="closed"] {
+  animation: tai-collapse 180ms var(--motion-ease);
+}
+
+@keyframes tai-overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes tai-floating-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes tai-overlay-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes tai-dialog-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, calc(-50% + 12px)) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+@keyframes tai-dialog-out {
+  to {
+    opacity: 0;
+    transform: translate(-50%, calc(-50% + 8px)) scale(0.99);
+  }
+}
+@keyframes tai-sheet-in {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes tai-sheet-out {
+  to {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+}
+@keyframes tai-expand {
+  from {
+    height: 0;
+    opacity: 0;
+  }
+  to {
+    height: var(--radix-collapsible-content-height);
+    opacity: 1;
+  }
+}
+@keyframes tai-collapse {
+  from {
+    height: var(--radix-collapsible-content-height);
+    opacity: 1;
+  }
+  to {
+    height: 0;
+    opacity: 0;
+  }
+}
+
+/* Theme colors transition only on surfaces; text and charts remain readable. */
+.theme-changing .tai-main,
+.theme-changing .tai-editor-panel,
+.theme-changing .tai-provider-card,
+.theme-changing .tai-settings-card {
+  transition:
+    background-color 200ms ease,
+    border-color 200ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .tai-button:active:not(:disabled) {
+    scale: 1;
+  }
+  .tai-dialog-surface,
+  .tai-sheet-surface,
+  .tai-floating-surface {
+    animation: none !important;
+  }
+}
