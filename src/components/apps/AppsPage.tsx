@@ -104,7 +104,9 @@ function formatCheckedAt(timestamp: number, locale: string): string {
  * 「应用」页（v7）：每个应用一行 = 安装状态 / 版本 + 安装 / 升级 / 卸载 + 在侧栏显示的开关。
  * 隐藏一个应用只影响界面（侧栏、MCP / Skills 的列、提示词和会话的下拉），配置照常同步。
  */
-export function AppsPage() {
+export function AppsPage({
+  simpleMode = false,
+}: { simpleMode?: boolean } = {}) {
   const { t, i18n } = useTranslation();
   const tools = useToolManagement();
   const { settings, updateSettings, autoSaveSettings } = useSettings();
@@ -173,9 +175,11 @@ export function AppsPage() {
         icon={<LayoutGrid className="h-5 w-5" strokeWidth={1.5} />}
         title={t("nav.apps")}
         titleExtra={
-          <HelpTip title={t("appsPage.helpTitle")}>
-            {t("appsPage.helpBody")}
-          </HelpTip>
+          !simpleMode && (
+            <HelpTip title={t("appsPage.helpTitle")}>
+              {t("appsPage.helpBody")}
+            </HelpTip>
+          )
         }
         actions={
           <>
@@ -246,15 +250,19 @@ export function AppsPage() {
                 >
                   {t("settings.toolDiagnose")}
                 </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => setShowCommands(true)}>
-                  {t("appsPage.manualCommands")}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  className="text-red-500 focus:text-red-500 dark:text-red-400 dark:focus:text-red-400"
-                  onSelect={() => setShowUninstallCommands(true)}
-                >
-                  {t("settings.manualUninstallCommands")}
-                </DropdownMenuItem>
+                {!simpleMode && (
+                  <DropdownMenuItem onSelect={() => setShowCommands(true)}>
+                    {t("appsPage.manualCommands")}
+                  </DropdownMenuItem>
+                )}
+                {!simpleMode && (
+                  <DropdownMenuItem
+                    className="text-red-500 focus:text-red-500 dark:text-red-400 dark:focus:text-red-400"
+                    onSelect={() => setShowUninstallCommands(true)}
+                  >
+                    {t("settings.manualUninstallCommands")}
+                  </DropdownMenuItem>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           </>
@@ -272,12 +280,14 @@ export function AppsPage() {
               {t("appsPage.columnVersion")}
             </span>
             <span className="w-[200px]" />
-            <span className="flex w-[56px] items-center justify-end gap-0.5">
-              {t("appsPage.columnVisible")}
-              <HelpTip title={t("appsPage.columnVisible")} align="end">
-                {t("appsPage.visibleHelp")}
-              </HelpTip>
-            </span>
+            {!simpleMode && (
+              <span className="flex w-[56px] items-center justify-end gap-0.5">
+                {t("appsPage.columnVisible")}
+                <HelpTip title={t("appsPage.columnVisible")} align="end">
+                  {t("appsPage.visibleHelp")}
+                </HelpTip>
+              </span>
+            )}
           </div>
 
           <div className="divide-y divide-border overflow-hidden rounded-panel border border-border bg-surface">
@@ -303,7 +313,9 @@ export function AppsPage() {
                           : t("appsPage.desktopNotConnected")}
                     </span>
                   }
-                  visibility={visibilitySwitch("claude-desktop")}
+                  visibility={
+                    simpleMode ? null : visibilitySwitch("claude-desktop")
+                  }
                 />
               ) : (
                 <ToolRow
@@ -318,7 +330,9 @@ export function AppsPage() {
                       [row.tool]: !prev[row.tool],
                     }))
                   }
-                  visibility={visibilitySwitch(TOOL_APP_IDS[row.tool])}
+                  visibility={
+                    simpleMode ? null : visibilitySwitch(TOOL_APP_IDS[row.tool])
+                  }
                 />
               ),
             )}

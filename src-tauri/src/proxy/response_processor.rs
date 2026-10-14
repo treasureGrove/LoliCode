@@ -250,6 +250,11 @@ pub async fn handle_non_streaming(
         if let Ok(json_value) = serde_json::from_slice::<Value>(&body_bytes) {
             // 解析使用量
             if let Some(usage) = (parser_config.response_parser)(&json_value) {
+                let usage = normalize_gateway_usage(
+                    ctx.app_type_str,
+                    parser_config.input_includes_cache,
+                    usage,
+                );
                 // 归因优先级：usage 解析出的模型 → 响应 model 字段 → 映射后的出站
                 // 模型（路由接管真值）→ 客户端请求模型。空字符串视为缺失。
                 let model = usage
@@ -524,6 +529,7 @@ pub(crate) fn create_usage_collector(
     let tag = ctx.tag;
     let start_time = ctx.start_time;
     let stream_parser = parser_config.stream_parser;
+    let input_includes_cache = parser_config.input_includes_cache;
     let model_extractor = parser_config.model_extractor;
     let session_id = ctx.session_id.clone();
 
@@ -532,6 +538,7 @@ pub(crate) fn create_usage_collector(
         parser_config.stream_event_filter,
         move |events, first_token_ms| {
             if let Some(usage) = stream_parser(&events) {
+                let usage = normalize_gateway_usage(app_type_str, input_includes_cache, usage);
                 let model = model_extractor(&events, &fallback_model);
                 let latency_ms = start_time.elapsed().as_millis() as u64;
 
@@ -588,6 +595,23 @@ pub(crate) fn create_usage_collector(
             }
         },
     ))
+}
+
+/// The gateway serves several wire formats under one accounting app identity.
+/// Store fresh input consistently; native Messages has already excluded cache.
+/// Existing app rows retain their established inclusive/fresh semantics.
+pub(crate) fn normalize_gateway_usage(
+    app_type: &str,
+    input_includes_cache: bool,
+    mut usage: TokenUsage,
+) -> TokenUsage {
+    if app_type == "channel-gateway" && input_includes_cache {
+        usage.input_tokens = usage
+            .input_tokens
+            .saturating_sub(usage.cache_read_tokens)
+            .saturating_sub(usage.cache_creation_tokens);
+    }
+    usage
 }
 
 /// 异步记录使用量
@@ -915,6 +939,136 @@ mod tests {
     use rust_decimal::Decimal;
     use std::str::FromStr;
     use std::sync::Arc;
+
+    #[tokio::test]
+    async fn channel_gateway_usage_counts_cached_input_once_for_each_wire_format() {
+        use crate::proxy::handler_config::{
+            CLAUDE_PARSER_CONFIG, CODEX_PARSER_CONFIG, GEMINI_PARSER_CONFIG, OPENAI_PARSER_CONFIG,
+        };
+        let db = Arc::new(Database::memory().unwrap());
+        {
+            let conn = db.conn.lock().unwrap();
+            conn.execute(
+                "INSERT OR REPLACE INTO model_pricing
+                (model_id,display_name,input_cost_per_million,output_cost_per_million,
+                 cache_read_cost_per_million,cache_creation_cost_per_million)
+                VALUES ('usage-model','Usage Model','10','40','1','20')",
+                [],
+            )
+            .unwrap();
+        }
+        let state = build_state(db.clone());
+        let chat = serde_json::json!({"usage":{
+            "prompt_tokens":1000,"completion_tokens":50,
+            "prompt_tokens_details":{"cached_tokens":200},"cache_creation_input_tokens":100,
+        }});
+        let responses = serde_json::json!({"usage":{
+            "input_tokens":1000,"output_tokens":50,
+            "input_tokens_details":{"cached_tokens":200,"cache_write_tokens":100},
+        }});
+        let gemini = serde_json::json!({"usageMetadata":{
+            "promptTokenCount":1000,"totalTokenCount":1050,"cachedContentTokenCount":200,
+        }});
+        let messages = serde_json::json!({"usage":{
+            "input_tokens":700,"output_tokens":50,
+            "cache_read_input_tokens":200,"cache_creation_input_tokens":100,
+        }});
+        let cases = [
+            (
+                "chat",
+                OPENAI_PARSER_CONFIG,
+                chat.clone(),
+                vec![chat],
+                700,
+                100,
+                "0.0112",
+            ),
+            (
+                "responses",
+                CODEX_PARSER_CONFIG,
+                responses.clone(),
+                vec![serde_json::json!({"type":"response.completed","response":responses})],
+                700,
+                100,
+                "0.0112",
+            ),
+            (
+                "gemini",
+                GEMINI_PARSER_CONFIG,
+                gemini.clone(),
+                vec![gemini],
+                800,
+                0,
+                "0.0102",
+            ),
+            (
+                "messages",
+                CLAUDE_PARSER_CONFIG,
+                messages.clone(),
+                vec![
+                    serde_json::json!({"type":"message_start","message":messages}),
+                    serde_json::json!({"type":"message_delta","usage":{"output_tokens":50}}),
+                ],
+                700,
+                100,
+                "0.0112",
+            ),
+        ];
+        for (name, parser, body, events, fresh, cache_creation, expected_cost) in cases {
+            let parsed = (parser.response_parser)(&body).unwrap();
+            for app in ["claude", "codex", "gemini"] {
+                assert_eq!(
+                    normalize_gateway_usage(app, parser.input_includes_cache, parsed.clone())
+                        .input_tokens,
+                    parsed.input_tokens
+                );
+            }
+            for (suffix, usage) in [
+                ("json", parsed),
+                ("sse", (parser.stream_parser)(&events).unwrap()),
+            ] {
+                let mut usage =
+                    normalize_gateway_usage("channel-gateway", parser.input_includes_cache, usage);
+                assert_eq!(usage.input_tokens, fresh, "{name}/{suffix}");
+                assert_eq!(usage.cache_read_tokens, 200);
+                assert_eq!(usage.cache_creation_tokens, cache_creation);
+                assert_eq!(usage.output_tokens, 50);
+                let id = format!("usage-{name}-{suffix}");
+                usage.message_id = Some(id.clone());
+                log_usage_internal(
+                    &state,
+                    "usage-channel",
+                    "channel-gateway",
+                    "usage-model",
+                    "usage-model",
+                    "usage-model",
+                    usage,
+                    10,
+                    None,
+                    suffix == "sse",
+                    200,
+                    None,
+                )
+                .await;
+                let conn = db.conn.lock().unwrap();
+                let row: (u32,u32,u32,i64,String) = conn.query_row(
+                    "SELECT input_tokens,cache_read_tokens,cache_creation_tokens,input_token_semantics,total_cost_usd
+                     FROM proxy_request_logs WHERE request_id LIKE ?1",
+                    [format!("%:{id}")],
+                    |row| Ok((row.get(0)?,row.get(1)?,row.get(2)?,row.get(3)?,row.get(4)?)),
+                ).unwrap();
+                assert_eq!((row.0, row.1, row.2), (fresh, 200, cache_creation));
+                assert_eq!(
+                    row.3,
+                    crate::services::sql_helpers::INPUT_TOKEN_SEMANTICS_FRESH
+                );
+                assert_eq!(
+                    Decimal::from_str(&row.4).unwrap(),
+                    Decimal::from_str(expected_cost).unwrap()
+                );
+            }
+        }
+    }
 
     #[test]
     fn sse_data_starts_output_skips_metadata_events() {

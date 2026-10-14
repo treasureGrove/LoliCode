@@ -917,6 +917,10 @@ fn write_direct_for_exit(
 async fn stop_server_if_unused(state: &AppState) {
     if current::proxy_flags(PROXY_APPS).contains(&true)
         || crate::claude_desktop_config::current_provider_uses_proxy(&state.db)
+        || state
+            .db
+            .get_bool_flag("channel_center_requires_background")
+            .unwrap_or(true)
     {
         return;
     }

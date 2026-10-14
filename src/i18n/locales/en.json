@@ -54,8 +54,8 @@
   },
   "firstRunNotice": {
     "title": "Welcome to TAI Switch",
-    "bodyDefault": "TAI Switch lets you switch between multiple Claude Code / Codex / Gemini CLI providers with a single click. If you already had these tools configured, TAI Switch has saved your existing setup as a provider named “default” so none of your previous configuration is lost.",
-    "bodyOfficial": "An “Official” preset is also included in the list — click it any time you want to switch back to the official default. TAI Switch automatically backs up your current config to “default” before switching, so you can move back and forth freely. That's how TAI Switch works 😊",
+    "bodyDefault": "Choose an API service and enter its key, or sign in to a subscription account. TAI Switch finds its models and configures the AI tools you select.",
+    "bodyOfficial": "Add each channel once. Select your models and a default, choose your tools, and apply. Custom services accept your own API address. Configuration writes preserve unrelated settings and create backups.",
     "confirm": "Got it"
   },
   "apiKeyInput": {
@@ -4747,7 +4747,7 @@
   },
   "newLayoutNotice": {
     "title": "TAI Switch has a new look",
-    "body": "This version redesigns the interface, so a few things have moved:\n• Modes now sit at the top of each app page\n• Usage and Accounts are in the sidebar\nSee the release notes for everything that changed.",
+    "body": "This version starts from a shared channel center:\n• Add each API service once and discover its models\n• Select tools to configure their models and default model together\n• The main interface keeps channels, accounts, tools, and basic usage\nSimplifying the interface does not automatically delete existing channels or client configuration.",
     "viewReleaseNotes": "View release notes",
     "confirm": "Got it"
   },

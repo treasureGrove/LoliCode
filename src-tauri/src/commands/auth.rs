@@ -165,7 +165,9 @@ pub async fn auth_poll_for_account(
     let auth_provider = ensure_auth_provider(&auth_provider)?;
     match auth_provider {
         AUTH_PROVIDER_GITHUB_COPILOT => {
-            let auth_manager = copilot_state.0.write().await;
+            // The manager owns its flow commit lock; allow cancellation while
+            // OAuth/user/subscription HTTP requests are still in flight.
+            let auth_manager = copilot_state.0.read().await.clone();
             match auth_manager
                 .poll_for_token(&device_code, github_domain.as_deref())
                 .await
@@ -222,12 +224,19 @@ pub async fn auth_cancel_login(
     auth_provider: String,
     device_code: String,
     codex_state: State<'_, CodexOAuthState>,
+    copilot_state: State<'_, CopilotAuthState>,
 ) -> Result<bool, String> {
     let auth_provider = ensure_auth_provider(&auth_provider)?;
-    if auth_provider != AUTH_PROVIDER_CODEX_OAUTH {
-        return Err("Login cancellation is only supported for Codex OAuth".to_string());
+    match auth_provider {
+        AUTH_PROVIDER_CODEX_OAUTH => Ok(codex_state.0.cancel_device_flow(&device_code).await),
+        AUTH_PROVIDER_GITHUB_COPILOT => Ok(copilot_state
+            .0
+            .read()
+            .await
+            .cancel_device_flow(&device_code)
+            .await),
+        _ => Err("Login cancellation is only supported for Codex OAuth and GitHub Copilot".into()),
     }
-    Ok(codex_state.0.cancel_device_flow(&device_code).await)
 }
 
 #[tauri::command(rename_all = "camelCase")]

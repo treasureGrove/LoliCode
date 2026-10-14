@@ -1286,6 +1286,9 @@ pub fn run() {
                 // 定下各应用的直连 / 代理模式（处理旧版遗留的接管状态），再把代理模式的
                 // 应用接上。要排在通用配置片段的自动提取之后：它读的是直连的 live。
                 crate::mode::controller::startup(&state).await;
+                if let Err(error) = crate::services::channel_center::restore_gateway(&state).await {
+                    log::warn!("渠道中心后台连接未能恢复，请在渠道页面重试配置: {error}");
+                }
                 // 启动流程走完：托盘这时才开始报「路由服务没在运行」，并记下退回直连的应用。
                 crate::tray::mark_startup_settled(&app_handle);
                 // Codex 官方做路由、发布了 Stack 模型时，官方模型列表过期就在后台刷新。
@@ -1722,6 +1725,14 @@ pub fn run() {
             commands::upsert_universal_provider,
             commands::delete_universal_provider,
             commands::sync_universal_provider,
+            // Shared channels and one-click harness configuration
+            commands::get_channel_center,
+            commands::save_channel_center,
+            commands::discover_channel_models,
+            commands::apply_channel_center,
+            commands::start_zhipu_login,
+            commands::poll_zhipu_login,
+            commands::cancel_zhipu_login,
             // Custom icon library
             commands::get_custom_icons,
             commands::add_custom_icon,

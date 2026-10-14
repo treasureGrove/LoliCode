@@ -1,5 +1,7 @@
 pub mod backup_storage;
 pub mod balance;
+pub mod channel_center;
+pub mod channel_grok;
 pub mod codex_oauth_models;
 pub mod codex_session_compression;
 pub mod coding_plan;
@@ -37,6 +39,7 @@ pub mod usage_stats;
 pub mod webdav;
 pub mod webdav_auto_sync;
 pub mod webdav_sync;
+pub mod zhipu_login;
 
 pub use config::ConfigService;
 pub use mcp::McpService;

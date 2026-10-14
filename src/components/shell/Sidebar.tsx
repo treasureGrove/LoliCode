@@ -5,50 +5,32 @@ import { getVersion } from "@tauri-apps/api/app";
 import { LayoutGroup, motion, useReducedMotion } from "framer-motion";
 import {
   ArrowLeft,
-  BookOpen,
   ChartColumn,
-  ChevronDown,
   ChevronsLeft,
   ChevronsRight,
   Database,
   Folder,
   Globe,
-  History,
   Info,
   KeyRound,
   LayoutGrid,
   PanelsTopLeft,
-  Route,
-  Server,
   Settings,
   SlidersHorizontal,
 } from "lucide-react";
 import type { AppId } from "@/lib/api";
 import type { VisibleApps } from "@/types";
-import { APP_IDS } from "@/config/appConfig";
 import type { GlobalPage, SettingsSection, View } from "@/lib/navigation";
 import { isAppPage } from "@/lib/navigation";
-import { SkillsIcon } from "@/components/BrandIcons";
 import { useUpdate } from "@/contexts/UpdateContext";
 import { sidebarWidth, useSidebarCollapsed } from "@/hooks/useSidebarCollapsed";
-import { useSidebarStatus, type AppNavStatus } from "@/hooks/useSidebarStatus";
+import { useSidebarStatus } from "@/hooks/useSidebarStatus";
 import { fmtUsd } from "@/components/usage/format";
 import { HoverTip } from "@/components/ui/hover-tip";
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuItem,
-} from "@/components/ui/dropdown-menu";
 import { DRAG_REGION_ATTR, DRAG_REGION_STYLE, isMac } from "@/lib/platform";
 import { motionTokens } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import { TaijiMark } from "./TaijiMark";
-import { APP_DISPLAY_NAME, AppGlyph } from "./AppGlyph";
 
 const NO_DRAG = { WebkitAppRegion: "no-drag" } as React.CSSProperties;
 type IconComponent = ComponentType<{ className?: string }>;
@@ -72,7 +54,7 @@ export function Sidebar(props: SidebarProps) {
   const { t } = useTranslation();
   const navRef = useRef<HTMLElement>(null);
   const { collapsed, toggle } = useSidebarCollapsed(navRef);
-  const { appStatus, todayCost, authNeedsAttention } = useSidebarStatus();
+  const { todayCost, authNeedsAttention } = useSidebarStatus();
   const { hasUpdate } = useUpdate();
 
   return (
@@ -87,7 +69,6 @@ export function Sidebar(props: SidebarProps) {
         {t("nav.skipToContent")}
       </a>
       <SidebarTopBar collapsed={collapsed} onToggle={toggle} />
-      <ClientSwitcher {...props} collapsed={collapsed} appStatus={appStatus} />
       <LayoutGroup id="shell-navigation">
         {props.view === "settings" ? (
           <SettingsDirectory {...props} collapsed={collapsed} />
@@ -171,129 +152,17 @@ function SidebarTopBar({
   );
 }
 
-function ClientSwitcher({
-  activeApp,
-  visibleApps,
-  collapsed,
-  onSelectApp,
-  onSelectPage,
-  appStatus,
-}: DirectoryProps & { appStatus: (app: AppId) => AppNavStatus }) {
-  const { t, i18n } = useTranslation();
-  const label = t("nav.clientSwitcher", {
-    defaultValue: i18n.language.startsWith("zh")
-      ? "切换客户端"
-      : "Switch client",
-  });
-  const context = t("nav.currentClient", {
-    defaultValue: i18n.language.startsWith("zh")
-      ? "当前客户端"
-      : "CURRENT CLIENT",
-  });
-  const apps = APP_IDS.filter((app) => visibleApps[app]);
-  const status = appStatus(activeApp);
-  const attentionCount = apps.filter((app) => appStatus(app).alert).length;
-  return (
-    <div className="tai-shell-client">
-      {!collapsed && <div className="tai-shell-caption">{context}</div>}
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <button
-            type="button"
-            className="tai-shell-client-trigger"
-            aria-label={`${label} · ${APP_DISPLAY_NAME[activeApp]}${attentionCount ? ` · ${t("nav.needsAttention")}` : ""}`}
-          >
-            <span className="tai-shell-client-glyph">
-              <AppGlyph app={activeApp} size={22} />
-              {attentionCount > 0 && <span className="tai-shell-alert-dot" />}
-            </span>
-            {!collapsed && (
-              <span className="tai-shell-client-copy">
-                <strong>{APP_DISPLAY_NAME[activeApp]}</strong>
-                <ClientStatus status={status} />
-              </span>
-            )}
-            {!collapsed && (
-              <ChevronDown
-                className="tai-shell-client-chevron"
-                aria-hidden="true"
-              />
-            )}
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent
-          side="right"
-          align="start"
-          sideOffset={10}
-          className="tai-shell-client-menu"
-          collisionPadding={12}
-        >
-          <DropdownMenuLabel>{label}</DropdownMenuLabel>
-          <DropdownMenuRadioGroup
-            value={activeApp}
-            onValueChange={(value) => onSelectApp(value as AppId)}
-          >
-            {apps.map((app) => (
-              <DropdownMenuRadioItem
-                value={app}
-                key={app}
-                className="tai-shell-client-option"
-                textValue={APP_DISPLAY_NAME[app]}
-              >
-                <AppGlyph app={app} size={19} badgeClassName="bg-popover" />
-                <span className="tai-shell-client-option-name">
-                  {APP_DISPLAY_NAME[app]}
-                </span>
-                <ClientStatus status={appStatus(app)} />
-              </DropdownMenuRadioItem>
-            ))}
-          </DropdownMenuRadioGroup>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onSelect={() => onSelectPage("apps")}>
-            <LayoutGrid className="h-4 w-4" />
-            {t("nav.appsTitle")}
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </div>
-  );
-}
-
-function ClientStatus({ status }: { status: AppNavStatus }) {
-  const { t } = useTranslation();
-  if (status.alert)
-    return (
-      <span className="tai-shell-client-status is-alert">
-        {t("nav.needsAttention")}
-      </span>
-    );
-  if (status.mapping)
-    return (
-      <span className="tai-shell-client-status">{t("nav.mode.mapping")}</span>
-    );
-  if (status.mode === "route" || status.mode === "stack") {
-    return (
-      <span className="tai-shell-client-status">
-        {t(`nav.mode.${status.mode}`)}
-      </span>
-    );
-  }
-  return null;
-}
-
 function MainDirectory({
   collapsed,
-  activeApp,
   view,
-  onSelectApp,
   onSelectPage,
   todayCost,
   authNeedsAttention,
 }: DirectoryProps & { todayCost: number; authNeedsAttention: boolean }) {
   const { t, i18n } = useTranslation();
   const chinese = i18n.language.startsWith("zh");
-  const workbench = t("nav.workbench", {
-    defaultValue: chinese ? "工作台" : "Workbench",
+  const workbench = t("channelCenter.navigation", {
+    defaultValue: chinese ? "渠道与模型" : "Channels & models",
   });
   const resources = t("nav.resources", {
     defaultValue: chinese ? "配置资源" : "RESOURCES",
@@ -303,10 +172,10 @@ function MainDirectory({
       <div role="group" aria-label={workbench} className="tai-shell-task-group">
         <NavItem
           collapsed={collapsed}
-          selected={isAppPage(view)}
+          selected={view === "channels" || isAppPage(view)}
           icon={PanelsTopLeft}
           label={workbench}
-          onClick={() => onSelectApp(activeApp)}
+          onClick={() => onSelectPage("channels")}
         />
         <NavItem
           collapsed={collapsed}
@@ -321,37 +190,8 @@ function MainDirectory({
           }
           onClick={() => onSelectPage("usage")}
         />
-        <NavItem
-          collapsed={collapsed}
-          selected={view === "sessions"}
-          icon={History}
-          label={t("nav.sessions")}
-          onClick={() => onSelectPage("sessions")}
-        />
       </div>
       <div role="group" aria-label={resources} className="tai-shell-task-group">
-        {!collapsed && <div className="tai-shell-caption">{resources}</div>}
-        <NavItem
-          collapsed={collapsed}
-          selected={view === "mcp"}
-          icon={Server}
-          label="MCP"
-          onClick={() => onSelectPage("mcp")}
-        />
-        <NavItem
-          collapsed={collapsed}
-          selected={view === "skills" || view === "skillsDiscovery"}
-          icon={SkillsIcon}
-          label="Skills"
-          onClick={() => onSelectPage("skills")}
-        />
-        <NavItem
-          collapsed={collapsed}
-          selected={view === "prompts"}
-          icon={BookOpen}
-          label={t("nav.prompts")}
-          onClick={() => onSelectPage("prompts")}
-        />
         <NavItem
           collapsed={collapsed}
           selected={view === "auth"}
@@ -454,7 +294,6 @@ function NavItem({
 const SETTINGS_ITEMS: { section: SettingsSection; icon: IconComponent }[] = [
   { section: "general", icon: SlidersHorizontal },
   { section: "appConfig", icon: Folder },
-  { section: "routing", icon: Route },
   { section: "network", icon: Globe },
   { section: "data", icon: Database },
   { section: "about", icon: Info },

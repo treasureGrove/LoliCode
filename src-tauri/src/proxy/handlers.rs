@@ -36,8 +36,8 @@ use super::{
         transform_gemini, transform_responses,
     },
     response_processor::{
-        create_logged_passthrough_stream, create_usage_collector, process_response,
-        read_decoded_body, strip_entity_headers_for_rebuilt_body,
+        create_logged_passthrough_stream, create_usage_collector, normalize_gateway_usage,
+        process_response, read_decoded_body, strip_entity_headers_for_rebuilt_body,
         strip_hop_by_hop_response_headers, usage_logging_enabled, SseUsageCollector,
     },
     server::ProxyState,
@@ -512,7 +512,7 @@ fn spawn_claude_usage_log(
     });
 }
 
-async fn handle_claude_transform(
+pub(super) async fn handle_claude_transform(
     response: super::hyper_client::ProxyResponse,
     ctx: &RequestContext,
     state: &ProxyState,
@@ -1595,6 +1595,11 @@ async fn handle_codex_xai_native_responses_rewrite(
             if let Some(usage) =
                 TokenUsage::from_codex_response_auto(&value).filter(TokenUsage::has_billable_tokens)
             {
+                let usage = normalize_gateway_usage(
+                    ctx.app_type_str,
+                    CODEX_PARSER_CONFIG.input_includes_cache,
+                    usage,
+                );
                 let model = value
                     .get("model")
                     .and_then(|m| m.as_str())
@@ -1662,7 +1667,7 @@ async fn handle_codex_xai_native_responses_rewrite(
         })
 }
 
-async fn handle_codex_chat_to_responses_transform(
+pub(super) async fn handle_codex_chat_to_responses_transform(
     response: super::hyper_client::ProxyResponse,
     ctx: &RequestContext,
     state: &ProxyState,
@@ -1703,6 +1708,11 @@ async fn handle_codex_chat_to_responses_transform(
                 move |events, first_token_ms| {
                     let usage =
                         TokenUsage::from_codex_stream_events_auto(&events).unwrap_or_default();
+                    let usage = normalize_gateway_usage(
+                        app_type_str,
+                        CODEX_PARSER_CONFIG.input_includes_cache,
+                        usage,
+                    );
                     // 上游遵守 OpenAI 语义省略 usage 时，Chat→Responses 转换器会合成一个
                     // 全 0 的 response.completed，from_codex_response 对 input/output 字段
                     // 存在（哪怕=0）即返回 Some。缺 nonzero 闸门会让全 0 usage 也被写入：
@@ -1828,6 +1838,11 @@ async fn handle_codex_chat_to_responses_transform(
     if let Some(usage) = TokenUsage::from_codex_response_auto(&responses_response)
         .filter(TokenUsage::has_billable_tokens)
     {
+        let usage = normalize_gateway_usage(
+            ctx.app_type_str,
+            CODEX_PARSER_CONFIG.input_includes_cache,
+            usage,
+        );
         let model = responses_response
             .get("model")
             .and_then(|m| m.as_str())
@@ -1901,7 +1916,7 @@ async fn handle_codex_chat_to_responses_transform(
 /// `handle_codex_chat_error_response` (whose extraction logic also works for
 /// Anthropic's `{"error":{type,message}}`). It does not involve codex_chat_history
 /// (tool ids round-trip natively through Anthropic).
-async fn handle_codex_anthropic_to_responses_transform(
+pub(super) async fn handle_codex_anthropic_to_responses_transform(
     response: super::hyper_client::ProxyResponse,
     ctx: &RequestContext,
     state: &ProxyState,
@@ -1993,6 +2008,11 @@ async fn handle_codex_anthropic_to_responses_transform(
     if let Some(usage) = TokenUsage::from_codex_response_auto(&responses_response)
         .filter(TokenUsage::has_billable_tokens)
     {
+        let usage = normalize_gateway_usage(
+            ctx.app_type_str,
+            CODEX_PARSER_CONFIG.input_includes_cache,
+            usage,
+        );
         let model = responses_response
             .get("model")
             .and_then(|m| m.as_str())
@@ -2081,6 +2101,11 @@ fn build_codex_anthropic_sse_response(
             Some(codex_stream_usage_event_filter),
             move |events, first_token_ms| {
                 let usage = TokenUsage::from_codex_stream_events_auto(&events).unwrap_or_default();
+                let usage = normalize_gateway_usage(
+                    app_type_str,
+                    CODEX_PARSER_CONFIG.input_includes_cache,
+                    usage,
+                );
                 if !usage.has_billable_tokens() {
                     log::debug!("[Codex] Anthropic streaming response usage is all-zero or missing, skipping usage recording");
                     return;

@@ -68,6 +68,8 @@ import {
   type View,
 } from "@/lib/navigation";
 import { Sidebar } from "@/components/shell/Sidebar";
+import { ChannelCenterPanel } from "@/components/channels/ChannelCenterPanel";
+import { SimpleUsagePage } from "@/components/usage/SimpleUsagePage";
 import { useUpdate } from "@/contexts/UpdateContext";
 import { NewLayoutDialog } from "@/components/shell/NewLayoutDialog";
 import {
@@ -94,7 +96,6 @@ import {
   checkToolUpdatesInBackground,
   useToolUpdatesAvailable,
 } from "@/components/apps/useToolManagement";
-import { UsagePage } from "@/components/usage/UsagePage";
 import { EnvWarningBanner } from "@/components/env/EnvWarningBanner";
 import { SwitchModePanel } from "@/components/providers/mode/SwitchModePanel";
 import { DesktopAccessBar } from "@/components/providers/mode/DesktopAccessBar";
@@ -168,7 +169,7 @@ function App() {
     useState<SettingsSection>("general");
   const [appConfigScrollTarget, setAppConfigScrollTarget] = useState<AppId>();
   // 进设置前停留的页面：设置目录里的「← 返回」回到这里
-  const settingsReturnViewRef = useRef<View>("providers");
+  const settingsReturnViewRef = useRef<View>("channels");
   const [openclawConfigTab, setOpenclawConfigTab] =
     useState<OpenClawConfigTab>("env");
   const [promptsApp, setPromptsApp] = useState<AppId>(() =>
@@ -200,6 +201,7 @@ function App() {
   const [mcpManagementBusy, setMcpManagementBusy] = useState(false);
   const [skillsNavigationBusy, setSkillsNavigationBusy] = useState(false);
   const [promptNavigationBusy, setPromptNavigationBusy] = useState(false);
+  const [channelNavigationBusy, setChannelNavigationBusy] = useState(false);
 
   useEffect(() => {
     storeView(currentView);
@@ -621,7 +623,10 @@ function App() {
 
   const currentViewRef = useRef(currentView);
   const managementBusy =
-    mcpManagementBusy || skillsNavigationBusy || promptNavigationBusy;
+    mcpManagementBusy ||
+    skillsNavigationBusy ||
+    promptNavigationBusy ||
+    channelNavigationBusy;
   const managementBusyRef = useRef(false);
   managementBusyRef.current = managementBusy;
 
@@ -658,7 +663,7 @@ function App() {
     if (currentViewRef.current !== "settings") {
       settingsReturnViewRef.current = currentViewRef.current;
     }
-    setSettingsSection(section);
+    setSettingsSection(section === "routing" ? "general" : section);
     setAppConfigScrollTarget(appConfigTarget);
     setCurrentView("settings");
   };
@@ -728,7 +733,7 @@ function App() {
 
   const openSettingsRef = useRef(openSettings);
   openSettingsRef.current = openSettings;
-  const [usageAppFilter, setUsageAppFilter] = useState<AppTypeFilter>("all");
+  const [, setUsageAppFilter] = useState<AppTypeFilter>("all");
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -1437,13 +1442,31 @@ function App() {
 
   const renderGlobalPage = () => {
     switch (currentView) {
-      case "usage":
+      case "channels":
         return (
-          <UsagePage
-            initialAppType={usageAppFilter}
-            onOpenRoutingSettings={() => openSettings("routing")}
-          />
+          <>
+            <AppPageHeader
+              title={t("channelCenter.navigation", {
+                defaultValue: "渠道与模型",
+              })}
+              subtitle={t("channelCenter.subtitle", {
+                defaultValue: "添加一次，配置到你的 AI 工具",
+              })}
+            />
+            <div
+              id="main-content"
+              className="min-h-0 flex-1 overflow-y-auto scroll-stable"
+            >
+              <div className="px-6 pb-10 pt-4">
+                <ChannelCenterPanel
+                  onNavigationBlockedChange={setChannelNavigationBusy}
+                />
+              </div>
+            </div>
+          </>
         );
+      case "usage":
+        return <SimpleUsagePage />;
       case "auth":
         return (
           <>
@@ -1516,7 +1539,7 @@ function App() {
           />
         );
       case "apps":
-        return <AppsPage />;
+        return <AppsPage simpleMode />;
       default:
         return null;
     }

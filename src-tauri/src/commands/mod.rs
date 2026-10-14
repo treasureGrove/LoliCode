@@ -2,6 +2,7 @@
 
 mod auth;
 mod balance;
+mod channel_center;
 mod codex_oauth;
 mod coding_plan;
 mod config;
@@ -31,6 +32,7 @@ mod stream_check;
 mod subscription;
 mod sync_support;
 mod xai_oauth;
+mod zhipu_login;
 
 mod lightweight;
 mod s3_sync;
@@ -40,6 +42,7 @@ mod workspace;
 
 pub use auth::*;
 pub use balance::*;
+pub use channel_center::*;
 pub use codex_oauth::*;
 pub use coding_plan::*;
 pub use config::*;
@@ -68,6 +71,7 @@ pub use skill::*;
 pub use stream_check::*;
 pub use subscription::*;
 pub use xai_oauth::*;
+pub use zhipu_login::*;
 
 pub use lightweight::*;
 pub use s3_sync::*;

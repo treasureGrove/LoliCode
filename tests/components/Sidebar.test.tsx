@@ -64,22 +64,16 @@ beforeEach(() => {
   });
 });
 
-describe("task navigation and client context", () => {
-  it("keeps task anchors in place when changing client and exposes every global destination", () => {
-    const values = props();
-    const { rerender } = mount(values);
-    const workbench = screen.getByRole("button", { name: "工作台" });
-    expect(workbench).toHaveAttribute("aria-current", "page");
-    rerender(<Sidebar {...values} activeApp="openclaw" view="workspace" />);
-    expect(screen.getByRole("button", { name: "工作台" })).toBe(workbench);
-    fireEvent.click(workbench);
-    expect(values.onSelectApp).toHaveBeenCalledWith("openclaw");
+describe("simple channel navigation", () => {
+  it("opens shared channels and retains only the core destinations", () => {
+    const values = props({ view: "channels" });
+    mount(values);
+    const channels = screen.getByRole("button", { name: "渠道与模型" });
+    expect(channels).toHaveAttribute("aria-current", "page");
+    fireEvent.click(channels);
+    expect(values.onSelectPage).toHaveBeenLastCalledWith("channels");
     for (const [name, page] of [
       [/^nav.usage/, "usage"],
-      [/^nav.sessions/, "sessions"],
-      [/^MCP$/, "mcp"],
-      [/^Skills$/, "skills"],
-      [/^nav.prompts/, "prompts"],
       [/^nav.auth/, "auth"],
       [/^nav.apps ·/, "apps"],
       [/^nav.settings ·/, "settings"],
@@ -88,49 +82,42 @@ describe("task navigation and client context", () => {
       expect(values.onSelectPage).toHaveBeenLastCalledWith(page);
     }
     expect(
+      screen.queryByRole("button", { name: /^nav.sessions/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "MCP" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Skills" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /^nav.prompts/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /^切换客户端/ }),
+    ).not.toBeInTheDocument();
+    expect(
       screen.getByRole("img", { name: "nav.authNeedsReauth" }),
     ).toBeInTheDocument();
   });
 
-  it("opens the independent client switcher by keyboard and chooses a visible client", async () => {
-    const user = userEvent.setup();
+  it("keeps the channel destination stable across legacy client views", () => {
     const values = props();
-    mount(values);
-    const trigger = screen.getByRole("button", {
-      name: /^切换客户端 · Claude Code/,
-    });
-    trigger.focus();
-    await user.keyboard("{Enter}");
-    expect(screen.getAllByRole("menuitemradio")).toHaveLength(APP_IDS.length);
-    expect(
-      screen.getByRole("menuitemradio", { name: "Claude Code" }),
-    ).toHaveAttribute("aria-checked", "true");
-    await user.click(screen.getByRole("menuitemradio", { name: /Codex/ }));
-    expect(values.onSelectApp).toHaveBeenCalledTimes(1);
-    expect(values.onSelectApp).toHaveBeenCalledWith("codex");
-    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
-  });
-
-  it("keeps hidden clients out of the chooser and returns focus after Escape", async () => {
-    const user = userEvent.setup();
-    const values = props();
-    values.visibleApps.codex = false;
-    mount(values);
-    const trigger = screen.getByRole("button", { name: /^切换客户端/ });
-    trigger.focus();
-    await user.keyboard("{Enter}");
-    expect(
-      screen.queryByRole("menuitemradio", { name: /Codex/ }),
-    ).not.toBeInTheDocument();
-    await user.keyboard("{Escape}");
-    expect(trigger).toHaveFocus();
+    const { rerender } = mount(values);
+    const channels = screen.getByRole("button", { name: "渠道与模型" });
+    rerender(<Sidebar {...values} activeApp="openclaw" view="workspace" />);
+    expect(screen.getByRole("button", { name: "渠道与模型" })).toBe(channels);
+    fireEvent.click(channels);
+    expect(values.onSelectPage).toHaveBeenCalledWith("channels");
     expect(values.onSelectApp).not.toHaveBeenCalled();
   });
 
-  it("retains all six settings groups, update information and the exit action", async () => {
+  it("keeps ordinary settings and removes the complex routing entry", async () => {
     const values = props({ view: "settings", settingsSection: "network" });
     mount(values);
-    for (const section of SETTINGS_SECTIONS) {
+    for (const section of SETTINGS_SECTIONS.filter(
+      (section) => section !== "routing",
+    )) {
       const item = screen.getByRole("button", {
         name: new RegExp(`^settings.sections.${section}`),
       });
@@ -139,34 +126,35 @@ describe("task navigation and client context", () => {
       fireEvent.click(item);
       expect(values.onSelectSettingsSection).toHaveBeenLastCalledWith(section);
     }
+    expect(
+      screen.queryByRole("button", { name: /^settings.sections.routing/ }),
+    ).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "nav.back" }));
     expect(values.onExitSettings).toHaveBeenCalledOnce();
     expect(await screen.findByText("TAI Switch v4.0.10")).toBeInTheDocument();
   });
 
-  it("keeps named controls and client choice reachable in the compact rail", () => {
+  it("keeps named keyboard controls reachable in the compact rail", async () => {
     Object.defineProperty(window, "innerWidth", {
       configurable: true,
       value: 900,
     });
-    mount(props({ view: "skillsDiscovery" }));
+    const values = props({ view: "channels" });
+    mount(values);
     expect(screen.getByRole("navigation")).toHaveAttribute(
       "data-collapsed",
       "true",
     );
-    expect(screen.getByRole("button", { name: "Skills" })).toHaveAttribute(
-      "aria-current",
-      "page",
-    );
-    expect(
-      screen.getByRole("button", { name: /^切换客户端/ }),
-    ).toBeInTheDocument();
+    const channels = screen.getByRole("button", { name: "渠道与模型" });
+    expect(channels).toHaveAttribute("aria-current", "page");
+    channels.focus();
+    await userEvent.setup().keyboard("{Enter}");
+    expect(values.onSelectPage).toHaveBeenCalledWith("channels");
     expect(
       screen.getByRole("button", { name: /^nav.auth/ }),
     ).toHaveAccessibleName(/nav.authNeedsReauth/);
   });
 });
-
 describe("sidebar width preference", () => {
   it("uses the latest intent for rapid reversal and retains manual preference across resize", () => {
     const { result } = renderHook(() => useSidebarCollapsed({ current: null }));

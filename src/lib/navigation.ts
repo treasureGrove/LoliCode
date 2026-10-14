@@ -15,6 +15,7 @@ export type AppPage =
   | "hermesMemory";
 
 export type GlobalPage =
+  | "channels"
   | "usage"
   | "auth"
   | "mcp"
@@ -51,6 +52,7 @@ const APP_PAGES: AppPage[] = [
 ];
 
 const GLOBAL_PAGES: GlobalPage[] = [
+  "channels",
   "usage",
   "auth",
   "mcp",
@@ -103,9 +105,15 @@ export function appPageBelongsTo(page: AppPage, app: AppId): boolean {
 
 export function readStoredView(): View {
   try {
-    return parseView(localStorage.getItem(VIEW_STORAGE_KEY)) ?? "providers";
+    const view = parseView(localStorage.getItem(VIEW_STORAGE_KEY));
+    // The simple product starts from shared channels. Old resource pages and
+    // per-client configuration are retained internally for existing workflows.
+    return view &&
+      ["channels", "usage", "auth", "apps", "settings"].includes(view)
+      ? view
+      : "channels";
   } catch {
-    return "providers";
+    return "channels";
   }
 }
 

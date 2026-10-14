@@ -33,6 +33,9 @@ pub struct UsageParserConfig {
     pub stream_event_filter: Option<StreamUsageEventFilter>,
     /// 应用类型字符串（用于日志记录）
     pub app_type_str: &'static str,
+    /// Whether this parser returns input including cache reads/writes. This is
+    /// the parsed wire format's semantics, independent of the requesting app.
+    pub input_includes_cache: bool,
 }
 
 // ============================================================================
@@ -142,6 +145,7 @@ pub const CLAUDE_PARSER_CONFIG: UsageParserConfig = UsageParserConfig {
     model_extractor: claude_model_extractor,
     stream_event_filter: Some(claude_stream_usage_event_filter),
     app_type_str: "claude",
+    input_includes_cache: false,
 };
 
 /// OpenAI Chat Completions API 解析配置（用于 Codex /v1/chat/completions）
@@ -151,6 +155,7 @@ pub const OPENAI_PARSER_CONFIG: UsageParserConfig = UsageParserConfig {
     model_extractor: openai_model_extractor,
     stream_event_filter: Some(openai_stream_usage_event_filter),
     app_type_str: "codex",
+    input_includes_cache: true,
 };
 
 /// Codex 智能解析配置（自动检测 OpenAI 或 Codex 格式）
@@ -160,6 +165,7 @@ pub const CODEX_PARSER_CONFIG: UsageParserConfig = UsageParserConfig {
     model_extractor: codex_auto_model_extractor,
     stream_event_filter: Some(codex_stream_usage_event_filter),
     app_type_str: "codex",
+    input_includes_cache: true,
 };
 
 /// Gemini API 解析配置
@@ -169,6 +175,7 @@ pub const GEMINI_PARSER_CONFIG: UsageParserConfig = UsageParserConfig {
     model_extractor: gemini_model_extractor,
     stream_event_filter: Some(gemini_stream_usage_event_filter),
     app_type_str: "gemini",
+    input_includes_cache: true,
 };
 
 // ============================================================================

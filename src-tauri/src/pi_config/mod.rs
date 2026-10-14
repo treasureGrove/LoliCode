@@ -99,6 +99,38 @@ pub(crate) fn read_pi_native_defaults() -> Result<PiNativeDefaults, AppError> {
     })
 }
 
+/// Select a declared model while preserving Pi-owned settings and account state.
+pub(crate) fn set_pi_default_model(provider_key: &str, model_id: &str) -> Result<(), AppError> {
+    let _guard = lock_models_file()?;
+    let native = read_pi_native_providers_locked(&get_pi_models_path()?)?;
+    if !native
+        .get(provider_key)
+        .and_then(|provider| provider.get("models"))
+        .and_then(Value::as_array)
+        .is_some_and(|models| {
+            models
+                .iter()
+                .any(|model| model.get("id").and_then(Value::as_str) == Some(model_id))
+        })
+    {
+        return Err(AppError::InvalidInput(
+            "The selected Pi model is not in its provider catalog".into(),
+        ));
+    }
+    let path = get_pi_settings_path()?;
+    select_pi_settings(&path, provider_key, model_id)
+}
+
+fn select_pi_settings(path: &Path, provider_key: &str, model_id: &str) -> Result<(), AppError> {
+    let (mut document, expected_revision) = read_models_document_with_revision(&path)?;
+    let root = document
+        .as_object_mut()
+        .ok_or_else(|| AppError::Config("Pi settings root must be an object".into()))?;
+    root.insert("defaultProvider".into(), Value::String(provider_key.into()));
+    root.insert("defaultModel".into(), Value::String(model_id.into()));
+    write_models_document(&path, &document, &expected_revision)
+}
+
 pub(crate) fn read_pi_native_providers() -> Result<IndexMap<String, Value>, AppError> {
     let _guard = lock_models_file()?;
     read_pi_native_providers_locked(&get_pi_models_path()?)
@@ -515,6 +547,21 @@ pub(crate) mod test_support {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn channel_default_selection_preserves_pi_owned_settings_and_rejects_bad_roots() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("settings.json");
+        fs::write(&path,"{sessionDir: 'keep-sessions', theme: 'user-theme', defaultProvider: 'old', defaultModel: 'old-model'}").unwrap();
+        select_pi_settings(&path, "tai-channel-a", "new-model").unwrap();
+        let document = read_json5_value(&path, "test").unwrap();
+        assert_eq!(document["defaultProvider"], "tai-channel-a");
+        assert_eq!(document["defaultModel"], "new-model");
+        assert_eq!(document["sessionDir"], "keep-sessions");
+        assert_eq!(document["theme"], "user-theme");
+        fs::write(&path, "[]").unwrap();
+        assert!(select_pi_settings(&path, "tai-channel-a", "model").is_err());
+        assert_eq!(fs::read_to_string(path).unwrap(), "[]");
+    }
     use serde_json::json;
     use serial_test::serial;
 

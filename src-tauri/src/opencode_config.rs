@@ -161,6 +161,36 @@ pub fn read_opencode_config() -> Result<Value, AppError> {
     read_opencode_config_from_path(&get_opencode_config_path()?)
 }
 
+/// Select an existing catalog model without rewriting unrelated JSONC content.
+pub fn set_default_model(provider: &str, model: &str) -> Result<(), AppError> {
+    set_default_model_at(get_opencode_config_path, provider, model)
+}
+
+fn set_default_model_at(
+    resolve_path: impl FnOnce() -> Result<PathBuf, AppError>,
+    provider: &str,
+    model: &str,
+) -> Result<(), AppError> {
+    try_edit_config(resolve_path, |config| {
+        let found = ["provider", "providers"].into_iter().any(|key| {
+            config
+                .get(key)
+                .and_then(|p| p.get(provider))
+                .and_then(|p| p.get("models"))
+                .and_then(|m| m.get(model))
+                .is_some()
+        });
+        if !found {
+            return Err(AppError::InvalidInput(
+                "The selected OpenCode model is not in its provider catalog".into(),
+            ));
+        }
+        config["model"] = json!(format!("{provider}/{model}"));
+        Ok(())
+    })
+    .map(|_| ())
+}
+
 fn edit_config(
     resolve_path: impl FnOnce() -> Result<PathBuf, AppError>,
     edit: impl FnOnce(&mut Value),
@@ -679,6 +709,25 @@ fn remove_plugins(config: &mut Value, prefixes: &[&str]) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn channel_default_selection_preserves_jsonc_and_native_provider_format() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("opencode.jsonc");
+        let text="{\n // user comment\n \"theme\":\"keep\",\n \"providers\":{\"tai-channel-a\":{\"package\":\"@ai-sdk/openai\",\"models\":{\"m\":{\"modelID\":\"upstream\"}}}}\n}\n";
+        std::fs::write(&path, text).unwrap();
+        set_default_model_at(|| Ok(path.clone()), "tai-channel-a", "m").unwrap();
+        let written = std::fs::read_to_string(&path).unwrap();
+        assert!(written.contains("// user comment"));
+        let document = read_opencode_config_from_path(&path).unwrap();
+        assert_eq!(document["theme"], "keep");
+        assert_eq!(document["model"], "tai-channel-a/m");
+        assert_eq!(
+            document["providers"]["tai-channel-a"]["models"]["m"]["modelID"],
+            "upstream"
+        );
+        assert!(set_default_model_at(|| Ok(path.clone()), "tai-channel-a", "missing").is_err());
+        assert_eq!(std::fs::read_to_string(path).unwrap(), written);
+    }
 
     struct TestHomeGuard(Option<std::ffi::OsString>, crate::settings::AppSettings);
     impl TestHomeGuard {

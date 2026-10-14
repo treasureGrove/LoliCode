@@ -9,6 +9,7 @@
 //! a direct (non-proxied) CLI request.
 
 use super::{
+    channel_gateway,
     failover_switch::FailoverSwitchManager,
     handlers,
     log_codes::srv as log_srv,
@@ -151,7 +152,7 @@ impl ProxyServer {
             loop {
                 tokio::select! {
                     result = listener.accept() => {
-                        let (stream, _remote_addr) = match result {
+                        let (stream, remote_addr) = match result {
                             Ok(v) => v,
                             Err(e) => {
                                 log::error!("[{SRV}] accept 失败: {e}", SRV = log_srv::ACCEPT_ERR);
@@ -192,6 +193,7 @@ impl ProxyServer {
 
                                     // Insert our own header case map alongside hyper's internal one
                                     parts.extensions.insert(cases);
+                                    parts.extensions.insert(channel_gateway::GatewayPeer(remote_addr));
 
                                     let body = axum::body::Body::new(body);
                                     let axum_req = http::Request::from_parts(parts, body);
@@ -301,6 +303,35 @@ impl ProxyServer {
             // 健康检查
             .route("/health", get(handlers::health_check))
             .route("/status", get(handlers::get_status))
+            // Channel center has its own authenticated, explicitly selected upstreams.
+            .route("/tai/v1/models", get(channel_gateway::handle_models))
+            .route("/tai/v1/messages", post(channel_gateway::handle_messages))
+            .route(
+                "/tai/v1/chat/completions",
+                post(channel_gateway::handle_chat),
+            )
+            .route("/tai/v1/responses", post(channel_gateway::handle_responses))
+            .route("/tai/v1beta/*path", any(channel_gateway::handle_gemini))
+            .route(
+                "/tai/catalogs/:revision/v1/models",
+                get(channel_gateway::handle_models),
+            )
+            .route(
+                "/tai/catalogs/:revision/v1/messages",
+                post(channel_gateway::handle_messages),
+            )
+            .route(
+                "/tai/catalogs/:revision/v1/chat/completions",
+                post(channel_gateway::handle_chat),
+            )
+            .route(
+                "/tai/catalogs/:revision/v1/responses",
+                post(channel_gateway::handle_responses),
+            )
+            .route(
+                "/tai/catalogs/:revision/v1beta/*path",
+                any(channel_gateway::handle_gemini),
+            )
             // Claude API (支持带前缀和不带前缀两种格式)
             .route("/v1/messages", post(handlers::handle_messages))
             .route("/claude/v1/messages", post(handlers::handle_messages))

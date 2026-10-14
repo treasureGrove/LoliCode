@@ -150,32 +150,37 @@ describe("useManagedAuth", () => {
     );
   });
 
-  it("cancels the active Codex device flow in the backend", async () => {
-    apiMocks.authStartLogin.mockResolvedValue({
-      provider: "codex_oauth",
-      device_code: "device-1",
-      user_code: "ABCD-EFGH",
-      verification_uri: "https://example.com/device",
-      expires_in: 600,
-      interval: 5,
-    });
-    apiMocks.authPollForAccount.mockImplementation(() => new Promise(() => {}));
-    const { result } = renderHook(() => useManagedAuth("codex_oauth"), {
-      wrapper: createWrapper(),
-    });
-    act(() => result.current.reauthAccount("acct-1"));
-    await waitFor(() => expect(result.current.deviceCode).not.toBeNull());
+  it.each(["codex_oauth", "github_copilot"] as const)(
+    "cancels the active %s device flow in the backend",
+    async (provider) => {
+      apiMocks.authStartLogin.mockResolvedValue({
+        provider,
+        device_code: "device-1",
+        user_code: "ABCD-EFGH",
+        verification_uri: "https://example.com/device",
+        expires_in: 600,
+        interval: 5,
+      });
+      apiMocks.authPollForAccount.mockImplementation(
+        () => new Promise(() => {}),
+      );
+      const { result } = renderHook(() => useManagedAuth(provider), {
+        wrapper: createWrapper(),
+      });
+      act(() => result.current.addAccount());
+      await waitFor(() => expect(result.current.deviceCode).not.toBeNull());
 
-    act(() => result.current.cancelAuth());
+      act(() => result.current.cancelAuth());
 
-    await waitFor(() =>
-      expect(apiMocks.authCancelLogin).toHaveBeenCalledWith(
-        "codex_oauth",
-        "device-1",
-      ),
-    );
-    expect(result.current.pollingState).toBe("idle");
-  });
+      await waitFor(() =>
+        expect(apiMocks.authCancelLogin).toHaveBeenCalledWith(
+          provider,
+          "device-1",
+        ),
+      );
+      expect(result.current.pollingState).toBe("idle");
+    },
+  );
 
   it("refreshes status when login committed before cancellation", async () => {
     let resolvePoll!: (account: object) => void;

@@ -2085,7 +2085,10 @@ impl RequestForwarder {
 
         // 获取认证头（提前准备，用于内联替换），同时保留仅用于日志脱敏的
         // 精确认证材料。实际日志永远不输出这些值。
-        let mut log_secrets: Vec<String> = Vec::new();
+        let mut log_secrets: Vec<String> = extensions
+            .get::<super::channel_gateway::GatewaySecrets>()
+            .map(|secrets| secrets.0.clone())
+            .unwrap_or_default();
         let mut auth_headers = if let Some(mut auth) = adapter.extract_auth(provider) {
             // GitHub Copilot 特殊处理：从 CopilotAuthManager 获取真实 token
             if auth.strategy == AuthStrategy::GitHubCopilot {
@@ -2788,13 +2791,18 @@ impl RequestForwarder {
             let mut response = self
                 .prepare_success_response_for_failover(response, request_is_streaming)
                 .await?;
+            if !request_is_streaming || response.is_json() {
+                response = self
+                    .validate_success_error_envelope(response, &log_secrets)
+                    .await?;
+            }
             // Streaming requests normally return SSE. If a compatible gateway
             // explicitly returns JSON instead, buffer and validate it inside the retry
             // loop as well so a 2xx Anthropic error envelope can still fail over. Do
             // not buffer unknown content types: some gateways omit the SSE header.
             if codex_responses_to_anthropic && (!request_is_streaming || response.is_json()) {
                 response = self
-                    .validate_codex_anthropic_success_response(response)
+                    .validate_codex_anthropic_success_response(response, &log_secrets)
                     .await?;
             } else if matches!(
                 resolved_claude_api_format.as_deref(),
@@ -2804,12 +2812,16 @@ impl RequestForwarder {
                     // Claude→Responses gateways can also return a semantic failure in an
                     // HTTP 2xx Response object. Validate buffered/JSON bodies inside the
                     // retry loop so an early failure can still select another provider.
-                    response = self.validate_responses_success_response(response).await?;
+                    response = self
+                        .validate_responses_success_response(response, &log_secrets)
+                        .await?;
                 } else {
                     // Delay committing the downstream stream until the upstream emits
                     // either productive output or a valid non-failure terminal event.
                     // A response.failed/error before output remains failover-safe.
-                    response = self.validate_responses_stream_start(response).await?;
+                    response = self
+                        .validate_responses_stream_start(response, &log_secrets)
+                        .await?;
                 }
             } else if matches!(app_type, AppType::Codex | AppType::GrokBuild)
                 && !codex_responses_to_chat
@@ -2823,6 +2835,21 @@ impl RequestForwarder {
                     .hold_encrypted_agent_task_stream(response, &filtered_body)
                     .await?;
             }
+            // After productive output a provider cannot be switched, but a late
+            // SSE error still must not expose the credentials used by this turn.
+            if request_is_streaming
+                && !response.is_json()
+                && get_content_encoding(response.headers()).is_some()
+            {
+                return Err(ProxyError::TransformError(
+                    "Upstream returned unsupported compressed SSE".into(),
+                ));
+            }
+            let response = if request_is_streaming && !response.is_json() {
+                redact_error_events(response, log_secrets)
+            } else {
+                response
+            };
             Ok((response, resolved_claude_api_format, outbound_model))
         } else {
             let status_code = status.as_u16();
@@ -2842,7 +2869,9 @@ impl RequestForwarder {
                 }
                 None => raw.to_vec(),
             };
-            let body_text = String::from_utf8(decoded).ok();
+            let body_text = String::from_utf8(decoded)
+                .ok()
+                .map(|body| crate::redact_known_secrets_strict(&body, &log_secrets));
 
             Err(ProxyError::UpstreamError {
                 status: status_code,
@@ -2889,9 +2918,40 @@ impl RequestForwarder {
     /// Some Anthropic-compatible gateways return an Anthropic error envelope with
     /// HTTP 2xx. Validate it inside the retry loop so the request can fail over to
     /// the next provider; the response transformer runs too late for that.
+    async fn validate_success_error_envelope(
+        &self,
+        response: ProxyResponse,
+        known_secrets: &[String],
+    ) -> Result<ProxyResponse, ProxyError> {
+        let status = response.status();
+        let headers = response.headers().clone();
+        let raw = response.bytes_with_limit(MAX_RESPONSE_BODY_BYTES).await?;
+        let decoded = match get_content_encoding(&headers) {
+            Some(encoding) => decompress_body_with_limit(&encoding, &raw, MAX_RESPONSE_BODY_BYTES)
+                .ok()
+                .flatten()
+                .unwrap_or_else(|| raw.to_vec()),
+            None => raw.to_vec(),
+        };
+        if let Ok(body) = serde_json::from_slice::<Value>(&decoded) {
+            if body.get("error").is_some_and(|error| !error.is_null())
+                || body.get("type").and_then(Value::as_str) == Some("error")
+            {
+                return Err(ProxyError::TransformError(
+                    crate::redact_known_secrets_strict(
+                        &format!("Upstream returned a 2xx error envelope: {}", body),
+                        known_secrets,
+                    ),
+                ));
+            }
+        }
+        Ok(ProxyResponse::buffered(status, headers, raw))
+    }
+
     async fn validate_codex_anthropic_success_response(
         &self,
         response: ProxyResponse,
+        known_secrets: &[String],
     ) -> Result<ProxyResponse, ProxyError> {
         let status = response.status();
         let headers = response.headers().clone();
@@ -2908,9 +2968,12 @@ impl RequestForwarder {
         };
 
         if let Some(message) = codex_anthropic_error_envelope_message(&decoded) {
-            return Err(ProxyError::TransformError(format!(
-                "Anthropic upstream returned a 2xx error envelope: {message}"
-            )));
+            return Err(ProxyError::TransformError(
+                crate::redact_known_secrets_strict(
+                    &format!("Anthropic upstream returned a 2xx error envelope: {message}"),
+                    known_secrets,
+                ),
+            ));
         }
 
         Ok(ProxyResponse::buffered(status, headers, raw))
@@ -2919,6 +2982,7 @@ impl RequestForwarder {
     async fn validate_responses_success_response(
         &self,
         response: ProxyResponse,
+        known_secrets: &[String],
     ) -> Result<ProxyResponse, ProxyError> {
         let status = response.status();
         let headers = response.headers().clone();
@@ -2935,9 +2999,12 @@ impl RequestForwarder {
         };
 
         if let Some(message) = responses_error_envelope_message(&decoded) {
-            return Err(ProxyError::TransformError(format!(
-                "Responses upstream returned a 2xx failure: {message}"
-            )));
+            return Err(ProxyError::TransformError(
+                crate::redact_known_secrets_strict(
+                    &format!("Responses upstream returned a 2xx failure: {message}"),
+                    known_secrets,
+                ),
+            ));
         }
 
         Ok(ProxyResponse::buffered(status, headers, raw))
@@ -2946,6 +3013,7 @@ impl RequestForwarder {
     async fn validate_responses_stream_start(
         &self,
         response: ProxyResponse,
+        known_secrets: &[String],
     ) -> Result<ProxyResponse, ProxyError> {
         const MAX_PRIME_BYTES: usize = 256 * 1024;
 
@@ -2971,13 +3039,18 @@ impl RequestForwarder {
             };
 
             let Some(chunk) = next else {
-                if let Some(outcome) = inspect_responses_json_document(&parse_buffer) {
+                if let Some(outcome) =
+                    inspect_responses_json_document_with_secrets(&parse_buffer, known_secrets)
+                {
                     outcome?;
                     let replay = futures::stream::iter(replay_chunks.into_iter().map(Ok));
                     return Ok(ProxyResponse::streamed(status, headers, replay));
                 }
                 if !parse_buffer.trim().is_empty() {
-                    if let Some(outcome) = inspect_responses_start_event(parse_buffer.trim()) {
+                    if let Some(outcome) = inspect_responses_start_event_with_secrets(
+                        parse_buffer.trim(),
+                        known_secrets,
+                    ) {
                         outcome?;
                         let replay = futures::stream::iter(replay_chunks.into_iter().map(Ok));
                         return Ok(ProxyResponse::streamed(status, headers, replay));
@@ -3000,14 +3073,18 @@ impl RequestForwarder {
             // Responses JSON document without a JSON content-type. Recognize that
             // shape before looking for SSE delimiters; pretty-printed JSON may itself
             // contain blank lines and must stay intact.
-            if let Some(outcome) = inspect_responses_json_document(&parse_buffer) {
+            if let Some(outcome) =
+                inspect_responses_json_document_with_secrets(&parse_buffer, known_secrets)
+            {
                 outcome?;
                 let replay = futures::stream::iter(replay_chunks.into_iter().map(Ok)).chain(stream);
                 return Ok(ProxyResponse::streamed(status, headers, replay));
             }
 
             while let Some(block) = crate::proxy::sse::take_sse_block(&mut parse_buffer) {
-                if let Some(outcome) = inspect_responses_start_event(&block) {
+                if let Some(outcome) =
+                    inspect_responses_start_event_with_secrets(&block, known_secrets)
+                {
                     outcome?;
                     let replay =
                         futures::stream::iter(replay_chunks.into_iter().map(Ok)).chain(stream);
@@ -3336,6 +3413,48 @@ impl RequestForwarder {
 }
 
 /// 从 ProxyError 中提取错误消息
+fn redact_error_events(response: ProxyResponse, known_secrets: Vec<String>) -> ProxyResponse {
+    if known_secrets.is_empty() {
+        return response;
+    }
+    let status = response.status();
+    let mut headers = response.headers().clone();
+    headers.remove(http::header::CONTENT_LENGTH);
+    let stream = response.bytes_stream();
+    let output = async_stream::stream! {
+        let mut stream=Box::pin(stream);
+        let mut buffer=String::new();
+        let mut remainder=Vec::new();
+        while let Some(chunk)=stream.next().await {
+            let chunk=match chunk {
+                Ok(chunk)=>chunk,
+                Err(error)=>{yield Err(std::io::Error::other(crate::redact_known_secrets_strict(&error.to_string(),&known_secrets)));return;}
+            };
+            crate::proxy::sse::append_utf8_safe(&mut buffer,&mut remainder,&chunk);
+            while let Some(block)=crate::proxy::sse::take_sse_block(&mut buffer) {
+                let error=block.lines().filter_map(|line|crate::proxy::sse::strip_sse_field(line,"data"))
+                    .collect::<Vec<_>>().join("\n");
+                let is_error=serde_json::from_str::<Value>(&error).ok().is_some_and(|value| {
+                    value.get("error").is_some_and(|error|!error.is_null())
+                        || value.pointer("/response/error").is_some_and(|error|!error.is_null())
+                        || matches!(value.get("type").and_then(Value::as_str),Some("error"|"response.failed"))
+                }) || block.lines().any(|line|crate::proxy::sse::strip_sse_field(line,"event")
+                    .is_some_and(|event|matches!(event.trim(),"error"|"response.failed")));
+                let block=if is_error {crate::redact_known_secrets_strict(&block,&known_secrets)} else {block};
+                yield Ok(Bytes::from(format!("{block}\n\n")));
+            }
+            if buffer.len()>4*1024*1024 {
+                yield Err(std::io::Error::other("Upstream SSE event exceeds limit"));return;
+            }
+        }
+        // An undelimited terminal error is still an error; never replay its raw text.
+        if !buffer.is_empty() {
+            yield Ok(Bytes::from(crate::redact_known_secrets_strict(&buffer,&known_secrets)));
+        }
+    };
+    ProxyResponse::streamed(status, headers, output)
+}
+
 fn extract_error_message(error: &ProxyError) -> Option<String> {
     match error {
         ProxyError::UpstreamError { body, .. } => body.clone(),
@@ -3685,16 +3804,27 @@ fn encrypted_task_stream_start(block: &str, request: &Value) -> StreamStart {
 /// A streaming request may receive a whole JSON document even when the gateway
 /// omits `application/json`. `None` means either "not JSON" or "not complete yet";
 /// a parsed document is safe to commit unless it is a semantic failure envelope.
+#[cfg(test)]
 fn inspect_responses_json_document(buffer: &str) -> Option<Result<(), ProxyError>> {
+    inspect_responses_json_document_with_secrets(buffer, &[])
+}
+
+fn inspect_responses_json_document_with_secrets(
+    buffer: &str,
+    known_secrets: &[String],
+) -> Option<Result<(), ProxyError>> {
     let trimmed = buffer.trim();
     if !matches!(trimmed.as_bytes().first(), Some(b'{') | Some(b'[')) {
         return None;
     }
     let _: Value = serde_json::from_str(trimmed).ok()?;
     if let Some(message) = responses_error_envelope_message(trimmed.as_bytes()) {
-        return Some(Err(ProxyError::TransformError(format!(
-            "Responses upstream returned a 2xx failure: {message}"
-        ))));
+        return Some(Err(ProxyError::TransformError(
+            crate::redact_known_secrets_strict(
+                &format!("Responses upstream returned a 2xx failure: {message}"),
+                known_secrets,
+            ),
+        )));
     }
     Some(Ok(()))
 }
@@ -3702,7 +3832,15 @@ fn inspect_responses_json_document(buffer: &str) -> Option<Result<(), ProxyError
 /// Inspect one complete Responses SSE block while the response is still inside
 /// the retry loop. `None` means the event is lifecycle-only and priming should
 /// continue; `Some(Ok(()))` means it is safe to commit/replay the stream.
+#[cfg(test)]
 fn inspect_responses_start_event(block: &str) -> Option<Result<(), ProxyError>> {
+    inspect_responses_start_event_with_secrets(block, &[])
+}
+
+fn inspect_responses_start_event_with_secrets(
+    block: &str,
+    known_secrets: &[String],
+) -> Option<Result<(), ProxyError>> {
     let mut named_event = None;
     let mut data_lines = Vec::new();
     for line in block.lines() {
@@ -3743,9 +3881,12 @@ fn inspect_responses_start_event(block: &str) -> Option<Result<(), ProxyError>> 
             .or_else(|| error.get("code").and_then(Value::as_str))
             .or_else(|| response.get("status").and_then(Value::as_str))
             .unwrap_or("upstream_error");
-        return Some(Err(ProxyError::TransformError(format!(
-            "Responses upstream {error_type}: {message}"
-        ))));
+        return Some(Err(ProxyError::TransformError(
+            crate::redact_known_secrets_strict(
+                &format!("Responses upstream {error_type}: {message}"),
+                known_secrets,
+            ),
+        )));
     }
 
     match event {
@@ -3761,9 +3902,12 @@ fn inspect_responses_start_event(block: &str) -> Option<Result<(), ProxyError>> 
                 .and_then(Value::as_str)
                 .or_else(|| error.get("code").and_then(Value::as_str))
                 .unwrap_or("upstream_error");
-            Some(Err(ProxyError::TransformError(format!(
-                "Responses upstream {error_type}: {message}"
-            ))))
+            Some(Err(ProxyError::TransformError(
+                crate::redact_known_secrets_strict(
+                    &format!("Responses upstream {error_type}: {message}"),
+                    known_secrets,
+                ),
+            )))
         }
         "response.created" | "response.in_progress" | "response.queued" => None,
         "" => None,
@@ -3801,6 +3945,7 @@ fn codex_copilot_lookup_error(model_id: &str, error: CopilotAuthError) -> ProxyE
         format!("Failed to resolve GitHub Copilot capabilities for model {model_id}: {error}");
     match error {
         CopilotAuthError::DeviceFlowNotStarted
+        | CopilotAuthError::DeviceFlowCancelled
         | CopilotAuthError::AuthorizationPending
         | CopilotAuthError::AccessDenied
         | CopilotAuthError::ExpiredToken
@@ -4503,6 +4648,49 @@ fn value_for_log(value: &Value) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn channel_errors_redact_dynamic_credentials_before_logging_and_late_sse_delivery() {
+        let secrets = vec![
+            "dynamic-copilot-token".to_string(),
+            "local-gateway-token".to_string(),
+        ];
+        let error=inspect_responses_json_document_with_secrets(
+            r#"{"status":"failed","error":{"message":"echo dynamic-copilot-token local-gateway-token"}}"#,
+            &secrets,
+        ).unwrap().unwrap_err();
+        let logged = summarize_proxy_error(&error);
+        assert!(!logged.contains(&secrets[0]));
+        assert!(!logged.contains(&secrets[1]));
+        assert!(logged.contains("[REDACTED]"));
+        let mut headers = http::HeaderMap::new();
+        headers.insert(
+            "content-type",
+            http::HeaderValue::from_static("text/event-stream"),
+        );
+        let input=concat!(
+            "data: {\"type\":\"response.output_text.delta\",\"delta\":\"正常输出\"}\n\n",
+            "data: {\"type\":\"error\",\"error\":{\"message\":\"echo dynamic-copilot-token local-gateway-token\"}}\n\n",
+        );
+        let chunks = input
+            .as_bytes()
+            .chunks(7)
+            .map(|chunk| Ok::<_, std::io::Error>(Bytes::copy_from_slice(chunk)))
+            .collect::<Vec<_>>();
+        let response =
+            ProxyResponse::streamed(http::StatusCode::OK, headers, futures::stream::iter(chunks));
+        let response = redact_error_events(response, secrets.clone());
+        let bytes = response
+            .bytes_with_limit(MAX_RESPONSE_BODY_BYTES)
+            .await
+            .unwrap();
+        let output = String::from_utf8(bytes.to_vec()).unwrap();
+        assert!(output.contains("正常输出"));
+        assert!(output.contains("[REDACTED]"));
+        for secret in secrets {
+            assert!(!output.contains(&secret));
+        }
+    }
     use crate::database::Database;
     use crate::provider::LocalProxyRequestOverrides;
     use axum::http::header::{HeaderValue, ACCEPT};

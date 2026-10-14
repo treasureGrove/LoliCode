@@ -46,6 +46,9 @@ export function useUnsavedChangesTracker(enabled = true) {
   const markDirty = useCallback(() => {
     if (enabled) dirtyEditors.add(token);
   }, [enabled, token]);
+  const markClean = useCallback(() => {
+    dirtyEditors.delete(token);
+  }, [token]);
 
   const onClickCapture = useCallback(
     (event: SyntheticEvent) => {
@@ -60,9 +63,15 @@ export function useUnsavedChangesTracker(enabled = true) {
     [markDirty],
   );
 
-  return {
+  const handlers = {
     onInputCapture: markDirty,
     onChangeCapture: markDirty,
     onClickCapture,
   };
+  // Callers spread the capture handlers onto DOM elements. Keep explicit
+  // registration methods non-enumerable so they are never forwarded as props.
+  return Object.defineProperties(handlers, {
+    markClean: { value: markClean },
+    markDirty: { value: markDirty },
+  }) as typeof handlers & { markClean: () => void; markDirty: () => void };
 }

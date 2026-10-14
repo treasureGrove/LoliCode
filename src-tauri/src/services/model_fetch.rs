@@ -89,6 +89,46 @@ pub async fn fetch_models(
     api_format: Option<&str>,
     request_headers: Option<&BTreeMap<String, String>>,
 ) -> Result<Vec<FetchedModel>, String> {
+    let value = fetch_model_catalog(
+        base_url,
+        api_key,
+        is_full_url,
+        models_url_override,
+        user_agent,
+        api_format,
+        request_headers,
+    )
+    .await?;
+    let resp: ModelsResponse =
+        serde_json::from_value(value).map_err(|e| format!("Failed to parse response: {e}"))?;
+    let mut models: Vec<FetchedModel> = if let Some(data) = resp.data {
+        data.into_iter()
+            .map(|m| FetchedModel {
+                id: m.id,
+                owned_by: m.owned_by,
+            })
+            .collect()
+    } else {
+        catalog_model_ids(resp.models)
+            .into_iter()
+            .map(|id| FetchedModel { id, owned_by: None })
+            .collect()
+    };
+    models.sort_by(|a, b| a.id.cmp(&b.id));
+    Ok(models)
+}
+
+/// Raw catalog access for consumers that retain declared capabilities and protocol metadata.
+/// Shares endpoint fallback, auth validation, timeout and strict redaction with the legacy API.
+pub async fn fetch_model_catalog(
+    base_url: &str,
+    api_key: &str,
+    is_full_url: bool,
+    models_url_override: Option<&str>,
+    user_agent: Option<HeaderValue>,
+    api_format: Option<&str>,
+    request_headers: Option<&BTreeMap<String, String>>,
+) -> Result<serde_json::Value, String> {
     let candidates = build_models_url_candidates(base_url, is_full_url, models_url_override)?;
     let headers =
         build_model_fetch_headers(api_key, api_format, user_agent.as_ref(), request_headers)?;
@@ -118,27 +158,12 @@ pub async fn fetch_models(
         let status = response.status();
 
         if status.is_success() {
-            let resp: ModelsResponse = response
+            let resp: serde_json::Value = response
                 .json()
                 .await
                 .map_err(|e| format!("Failed to parse response: {e}"))?;
 
-            let mut models: Vec<FetchedModel> = if let Some(data) = resp.data {
-                data.into_iter()
-                    .map(|m| FetchedModel {
-                        id: m.id,
-                        owned_by: m.owned_by,
-                    })
-                    .collect()
-            } else {
-                catalog_model_ids(resp.models)
-                    .into_iter()
-                    .map(|id| FetchedModel { id, owned_by: None })
-                    .collect()
-            };
-
-            models.sort_by(|a, b| a.id.cmp(&b.id));
-            return Ok(models);
+            return Ok(resp);
         }
 
         if status == StatusCode::NOT_FOUND || status == StatusCode::METHOD_NOT_ALLOWED {

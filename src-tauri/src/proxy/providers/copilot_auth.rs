@@ -15,6 +15,7 @@
 //! - Provider 通过 meta.authBinding 关联账号
 //! - 自动迁移 v1 单账号格式到 v3 多账号 + 默认账号格式
 
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -361,6 +362,9 @@ pub enum CopilotAuthError {
     #[error("设备码流程未启动")]
     DeviceFlowNotStarted,
 
+    #[error("登录已取消，请重新开始")]
+    DeviceFlowCancelled,
+
     #[error("等待用户授权中")]
     AuthorizationPending,
 
@@ -405,6 +409,133 @@ impl From<std::io::Error> for CopilotAuthError {
     fn from(err: std::io::Error) -> Self {
         CopilotAuthError::IoError(err.to_string())
     }
+}
+
+const MAX_AUTH_RESPONSE_BYTES: usize = 8 * 1024 * 1024;
+
+fn auth_transport_error(error: reqwest::Error, secrets: &[&str]) -> CopilotAuthError {
+    let secrets: Vec<String> = secrets.iter().map(|secret| (*secret).to_string()).collect();
+    CopilotAuthError::NetworkError(crate::redact_known_secrets_strict(
+        &error.without_url().to_string(),
+        &secrets,
+    ))
+}
+
+// Error envelopes can echo both the request credential and a newly issued token.
+// Only structured refusal fields reach diagnostics; never return the raw auth body.
+fn auth_error_detail(value: &Value, known_secrets: &[&str]) -> Option<String> {
+    fn collect_secrets(value: &Value, secrets: &mut Vec<String>) {
+        match value {
+            Value::Object(object) => {
+                for (key, value) in object {
+                    let key = key.to_ascii_lowercase().replace(['_', '-'], "");
+                    if matches!(
+                        key.as_str(),
+                        "token"
+                            | "githubtoken"
+                            | "copilottoken"
+                            | "accesstoken"
+                            | "refreshtoken"
+                            | "devicecode"
+                            | "authorization"
+                            | "apikey"
+                    ) {
+                        if let Some(secret) = value.as_str() {
+                            secrets.push(secret.to_string());
+                        }
+                    }
+                    collect_secrets(value, secrets);
+                }
+            }
+            Value::Array(array) => {
+                for value in array {
+                    collect_secrets(value, secrets);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    let mut secrets: Vec<String> = known_secrets
+        .iter()
+        .map(|secret| (*secret).into())
+        .collect();
+    collect_secrets(value, &mut secrets);
+    let details: Vec<&str> = [
+        "/error/code",
+        "/error/type",
+        "/error/message",
+        "/error_description",
+        "/message",
+        "/error",
+    ]
+    .iter()
+    .filter_map(|pointer| value.pointer(pointer).and_then(Value::as_str))
+    .filter(|detail| !detail.trim().is_empty())
+    .collect();
+    if details.is_empty() {
+        return None;
+    }
+    let sanitized = crate::redact_known_secrets_strict(&details.join(": "), &secrets);
+    // Redact before truncating, so a partial credential cannot survive the bound.
+    Some(sanitized.chars().take(1024).collect())
+}
+
+fn decode_auth_response<T: DeserializeOwned>(
+    operation: &str,
+    status: reqwest::StatusCode,
+    body: &[u8],
+    secrets: &[&str],
+    oauth_poll: bool,
+) -> Result<T, CopilotAuthError> {
+    let value: Value = serde_json::from_slice(body).map_err(|_| {
+        CopilotAuthError::ParseError(format!("{operation}返回了无效 JSON（HTTP {status}）"))
+    })?;
+    let semantic_error = value
+        .get("error")
+        .is_some_and(|error| !error.is_null() && error != &Value::Bool(false));
+    // GitHub device polling uses JSON error codes for pending/slow_down, including
+    // non-2xx replies. The caller retains those control-flow variants.
+    let oauth_error = oauth_poll && value.get("error").and_then(Value::as_str).is_some();
+    if (!status.is_success() || semantic_error) && !oauth_error {
+        let detail = auth_error_detail(&value, secrets)
+            .map(|detail| format!(" - {detail}"))
+            .unwrap_or_default();
+        return Err(CopilotAuthError::CopilotTokenFetchFailed(format!(
+            "{operation}失败: HTTP {status}{detail}"
+        )));
+    }
+    // serde's invalid-type diagnostics may include upstream strings. Preserve a
+    // sanitized refusal reason, but never include the parser's raw offending value.
+    let detail = auth_error_detail(&value, secrets)
+        .map(|detail| format!(" - {detail}"))
+        .unwrap_or_default();
+    serde_json::from_value(value).map_err(|_| {
+        CopilotAuthError::ParseError(format!("{operation}响应格式无效（HTTP {status}）{detail}"))
+    })
+}
+
+async fn read_auth_response<T: DeserializeOwned>(
+    mut response: reqwest::Response,
+    operation: &str,
+    secrets: &[&str],
+    oauth_poll: bool,
+) -> Result<T, CopilotAuthError> {
+    let status = response.status();
+    let mut body = Vec::new();
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|e| auth_transport_error(e, secrets))?
+    {
+        if body.len().saturating_add(chunk.len()) > MAX_AUTH_RESPONSE_BYTES {
+            return Err(CopilotAuthError::ParseError(format!(
+                "{operation}响应过大（HTTP {status}）"
+            )));
+        }
+        body.extend_from_slice(&chunk);
+    }
+    decode_auth_response(operation, status, &body, secrets, oauth_poll)
 }
 
 /// GitHub 设备码响应
@@ -553,6 +684,7 @@ struct CopilotAuthStore {
 }
 
 /// Copilot 认证管理器（支持多账号）
+#[derive(Clone)]
 pub struct CopilotAuthManager {
     /// 所有 GitHub 账号（key = GitHub user ID）
     accounts: Arc<RwLock<HashMap<String, GitHubAccountData>>>,
@@ -574,6 +706,15 @@ pub struct CopilotAuthManager {
     pending_migration: Arc<RwLock<Option<String>>>,
     /// 旧认证数据迁移失败时的状态消息
     migration_error: Arc<RwLock<Option<String>>>,
+    /// Local cancellation and account persistence share this lock. Device codes
+    /// and generations are process-local and are never written to the auth file.
+    device_flows: Arc<Mutex<HashMap<String, PendingDeviceFlow>>>,
+}
+
+struct PendingDeviceFlow {
+    generation: String,
+    domain: String,
+    expires_at: i64,
 }
 
 impl CopilotAuthManager {
@@ -592,6 +733,7 @@ impl CopilotAuthManager {
             storage_path,
             pending_migration: Arc::new(RwLock::new(None)),
             migration_error: Arc::new(RwLock::new(None)),
+            device_flows: Arc::new(Mutex::new(HashMap::new())),
         };
 
         // 尝试从磁盘加载（同步，不发起网络请求）
@@ -755,18 +897,10 @@ impl CopilotAuthManager {
             .send()
             .await?;
 
-        if !response.status().is_success() {
-            let status = response.status();
-            let text = response.text().await.unwrap_or_default();
-            return Err(CopilotAuthError::NetworkError(format!(
-                "GitHub 设备码请求失败: {status} - {text}"
-            )));
-        }
+        let device_code: GitHubDeviceCodeResponse =
+            read_auth_response(response, "GitHub 设备码请求", &[], false).await?;
 
-        let device_code: GitHubDeviceCodeResponse = response
-            .json()
-            .await
-            .map_err(|e| CopilotAuthError::ParseError(e.to_string()))?;
+        self.register_device_flow(&device_code, &domain).await;
 
         log::info!(
             "[CopilotAuth] 获取设备码成功，user_code: {}",
@@ -774,6 +908,77 @@ impl CopilotAuthManager {
         );
 
         Ok(device_code)
+    }
+
+    async fn register_device_flow(&self, response: &GitHubDeviceCodeResponse, domain: &str) {
+        let now = chrono::Utc::now().timestamp();
+        let mut flows = self.device_flows.lock().await;
+        flows.retain(|_, flow| flow.expires_at > now);
+        flows.insert(
+            response.device_code.clone(),
+            PendingDeviceFlow {
+                generation: uuid::Uuid::new_v4().to_string(),
+                domain: domain.into(),
+                expires_at: now.saturating_add(response.expires_in.min(i64::MAX as u64) as i64),
+            },
+        );
+    }
+
+    /// Returns false when completion already committed. Cancelling an in-flight
+    /// HTTP request removes its generation before it can save credentials.
+    pub async fn cancel_device_flow(&self, device_code: &str) -> bool {
+        self.device_flows.lock().await.remove(device_code).is_some()
+    }
+
+    async fn device_flow_generation(
+        &self,
+        device_code: &str,
+        domain: &str,
+    ) -> Result<String, CopilotAuthError> {
+        let mut flows = self.device_flows.lock().await;
+        let flow = flows
+            .get(device_code)
+            .ok_or(CopilotAuthError::DeviceFlowNotStarted)?;
+        if flow.expires_at <= chrono::Utc::now().timestamp() {
+            flows.remove(device_code);
+            return Err(CopilotAuthError::ExpiredToken);
+        }
+        if flow.domain != domain {
+            return Err(CopilotAuthError::DeviceFlowNotStarted);
+        }
+        Ok(flow.generation.clone())
+    }
+
+    async fn commit_device_login(
+        &self,
+        device_code: &str,
+        generation: &str,
+        github_token: String,
+        user: GitHubUser,
+        domain: String,
+        copilot_token: Option<CopilotToken>,
+    ) -> Result<GitHubAccount, CopilotAuthError> {
+        let mut flows = self.device_flows.lock().await;
+        if !flows.get(device_code).is_some_and(|flow| {
+            flow.generation == generation
+                && flow.domain == domain
+                && flow.expires_at > chrono::Utc::now().timestamp()
+        }) {
+            return Err(CopilotAuthError::DeviceFlowCancelled);
+        }
+        // Keep the same lock through disk persistence: either cancellation wins
+        // before this check, or completion commits and cancellation returns false.
+        flows.remove(device_code);
+        let account = self
+            .add_account_internal(github_token, user, domain)
+            .await?;
+        if let Some(token) = copilot_token {
+            self.copilot_tokens
+                .write()
+                .await
+                .insert(account.id.clone(), token);
+        }
+        Ok(account)
     }
 
     /// 轮询获取 OAuth Token（返回新添加的账号，如果成功）
@@ -786,6 +991,7 @@ impl CopilotAuthManager {
             Some(d) => normalize_github_domain(d)?,
             None => DEFAULT_GITHUB_DOMAIN.to_string(),
         };
+        let generation = self.device_flow_generation(device_code, &domain).await?;
         log::debug!("[CopilotAuth] 轮询 OAuth Token (domain: {domain})");
 
         let response = crate::proxy::http_client::get()
@@ -798,12 +1004,11 @@ impl CopilotAuthManager {
                 ("grant_type", "urn:ietf:params:oauth:grant-type:device_code"),
             ])
             .send()
-            .await?;
-
-        let oauth_response: GitHubOAuthResponse = response
-            .json()
             .await
-            .map_err(|e| CopilotAuthError::ParseError(e.to_string()))?;
+            .map_err(|error| auth_transport_error(error, &[device_code]))?;
+
+        let oauth_response: GitHubOAuthResponse =
+            read_auth_response(response, "GitHub OAuth 轮询", &[device_code], true).await?;
 
         // 检查错误
         if let Some(error) = oauth_response.error {
@@ -812,11 +1017,18 @@ impl CopilotAuthManager {
                 "slow_down" => Err(CopilotAuthError::AuthorizationPending),
                 "expired_token" => Err(CopilotAuthError::ExpiredToken),
                 "access_denied" => Err(CopilotAuthError::AccessDenied),
-                _ => Err(CopilotAuthError::NetworkError(format!(
-                    "{}: {}",
-                    error,
-                    oauth_response.error_description.unwrap_or_default()
-                ))),
+                _ => {
+                    let detail = auth_error_detail(
+                        &serde_json::json!({
+                            "error":error,
+                            "error_description":oauth_response.error_description,
+                            "access_token":oauth_response.access_token,
+                        }),
+                        &[device_code],
+                    )
+                    .unwrap_or_else(|| "GitHub OAuth 授权失败".into());
+                    Err(CopilotAuthError::NetworkError(detail))
+                }
             };
         }
 
@@ -834,21 +1046,27 @@ impl CopilotAuthManager {
 
         // GHES 无需换取 Copilot Token，直接使用 OAuth token 作为 Bearer
         // 参考 OpenCode 的实现：GHE Copilot 直接用 OAuth token 调用 copilot-api.{domain}
-        if !is_ghes(&domain) {
+        let copilot_token = if !is_ghes(&domain) {
             // github.com：验证 Copilot 订阅（获取 Copilot Token）
-            self.fetch_copilot_token_with_github_token(
-                &access_token,
-                &user.id.to_string(),
-                &domain,
+            Some(
+                self.fetch_copilot_token_material(&access_token, &user.id.to_string(), &domain)
+                    .await?,
             )
-            .await?;
         } else {
             log::info!("[CopilotAuth] GHES 账号，跳过 Copilot Token 兑换，直接使用 OAuth token");
-        }
+            None
+        };
 
         // 添加账号
         let account = self
-            .add_account_internal(access_token, user, domain)
+            .commit_device_login(
+                device_code,
+                &generation,
+                access_token,
+                user,
+                domain,
+                copilot_token,
+            )
             .await?;
 
         Ok(Some(account))
@@ -993,20 +1211,11 @@ impl CopilotAuthManager {
             .header("user-agent", COPILOT_USER_AGENT)
             .header("x-github-api-version", COPILOT_API_VERSION)
             .send()
-            .await?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let text = response.text().await.unwrap_or_default();
-            return Err(CopilotAuthError::CopilotTokenFetchFailed(format!(
-                "获取模型列表失败: {status} - {text}"
-            )));
-        }
-
-        let models_response: CopilotModelsResponse = response
-            .json()
             .await
-            .map_err(|e| CopilotAuthError::ParseError(e.to_string()))?;
+            .map_err(|error| auth_transport_error(error, &[&copilot_token]))?;
+
+        let models_response: CopilotModelsResponse =
+            read_auth_response(response, "获取模型列表", &[&copilot_token], false).await?;
 
         let models: Vec<CopilotModel> = models_response
             .data
@@ -1107,24 +1316,15 @@ impl CopilotAuthManager {
             .header("user-agent", COPILOT_USER_AGENT)
             .header("x-github-api-version", COPILOT_API_VERSION)
             .send()
-            .await?;
+            .await
+            .map_err(|error| auth_transport_error(error, &[&github_token]))?;
 
         if response.status() == reqwest::StatusCode::UNAUTHORIZED {
             return Err(CopilotAuthError::GitHubTokenInvalid);
         }
 
-        if !response.status().is_success() {
-            let status = response.status();
-            let text = response.text().await.unwrap_or_default();
-            return Err(CopilotAuthError::CopilotTokenFetchFailed(format!(
-                "获取使用量失败: {status} - {text}"
-            )));
-        }
-
-        let usage: CopilotUsageResponse = response
-            .json()
-            .await
-            .map_err(|e| CopilotAuthError::ParseError(e.to_string()))?;
+        let usage: CopilotUsageResponse =
+            read_auth_response(response, "获取使用量", &[&github_token], false).await?;
 
         // 存储动态 API 端点（如果有）
         if let Some(ref endpoints) = usage.endpoints {
@@ -1221,23 +1421,15 @@ impl CopilotAuthManager {
             .header("user-agent", COPILOT_USER_AGENT)
             .header("x-github-api-version", COPILOT_API_VERSION)
             .send()
-            .await?;
+            .await
+            .map_err(|error| auth_transport_error(error, &[&github_token]))?;
 
         if response.status() == reqwest::StatusCode::UNAUTHORIZED {
             return Err(CopilotAuthError::GitHubTokenInvalid);
         }
 
-        if !response.status().is_success() {
-            return Err(CopilotAuthError::CopilotTokenFetchFailed(format!(
-                "获取 API 端点失败: {}",
-                response.status()
-            )));
-        }
-
-        let usage: CopilotUsageResponse = response
-            .json()
-            .await
-            .map_err(|e| CopilotAuthError::ParseError(e.to_string()))?;
+        let usage: CopilotUsageResponse =
+            read_auth_response(response, "获取 API 端点", &[&github_token], false).await?;
 
         let endpoint = match usage.endpoints {
             Some(endpoints) => endpoints.api.clone(),
@@ -1311,6 +1503,9 @@ impl CopilotAuthManager {
     /// 清除所有认证（登出所有账号）
     pub async fn clear_auth(&self) -> Result<(), CopilotAuthError> {
         log::info!("[CopilotAuth] 清除所有认证");
+
+        // A pending login cannot restore credentials after explicit logout.
+        self.device_flows.lock().await.clear();
 
         // 先清理内存状态，确保即使文件删除失败用户也能看到已登出
         {
@@ -1496,16 +1691,15 @@ impl CopilotAuthManager {
             .header("Editor-Version", COPILOT_EDITOR_VERSION)
             .header("Editor-Plugin-Version", COPILOT_PLUGIN_VERSION)
             .send()
-            .await?;
+            .await
+            .map_err(|error| auth_transport_error(error, &[github_token]))?;
 
         if !response.status().is_success() {
             return Err(CopilotAuthError::GitHubTokenInvalid);
         }
 
-        let user: GitHubUser = response
-            .json()
-            .await
-            .map_err(|e| CopilotAuthError::ParseError(e.to_string()))?;
+        let user: GitHubUser =
+            read_auth_response(response, "获取 GitHub 用户信息", &[github_token], false).await?;
 
         log::info!("[CopilotAuth] 获取用户信息成功: {}", user.login);
 
@@ -1519,6 +1713,22 @@ impl CopilotAuthManager {
         account_id: &str,
         domain: &str,
     ) -> Result<(), CopilotAuthError> {
+        let token = self
+            .fetch_copilot_token_material(github_token, account_id, domain)
+            .await?;
+        self.copilot_tokens
+            .write()
+            .await
+            .insert(account_id.to_string(), token);
+        Ok(())
+    }
+
+    async fn fetch_copilot_token_material(
+        &self,
+        github_token: &str,
+        account_id: &str,
+        domain: &str,
+    ) -> Result<CopilotToken, CopilotAuthError> {
         log::debug!("[CopilotAuth] 获取账号 {account_id} 的 Copilot Token (domain: {domain})");
 
         let response = crate::proxy::http_client::get()
@@ -1528,7 +1738,8 @@ impl CopilotAuthManager {
             .header("Editor-Version", COPILOT_EDITOR_VERSION)
             .header("Editor-Plugin-Version", COPILOT_PLUGIN_VERSION)
             .send()
-            .await?;
+            .await
+            .map_err(|error| auth_transport_error(error, &[github_token]))?;
 
         if response.status() == reqwest::StatusCode::UNAUTHORIZED {
             return Err(CopilotAuthError::GitHubTokenInvalid);
@@ -1538,18 +1749,8 @@ impl CopilotAuthManager {
             return Err(CopilotAuthError::NoCopilotSubscription);
         }
 
-        if !response.status().is_success() {
-            let status = response.status();
-            let text = response.text().await.unwrap_or_default();
-            return Err(CopilotAuthError::CopilotTokenFetchFailed(format!(
-                "{status}: {text}"
-            )));
-        }
-
-        let token_response: CopilotTokenResponse = response
-            .json()
-            .await
-            .map_err(|e| CopilotAuthError::ParseError(e.to_string()))?;
+        let token_response: CopilotTokenResponse =
+            read_auth_response(response, "交换 Copilot Token", &[github_token], false).await?;
 
         log::info!(
             "[CopilotAuth] 账号 {} 的 Copilot Token 获取成功，过期时间: {}",
@@ -1557,15 +1758,10 @@ impl CopilotAuthManager {
             token_response.expires_at
         );
 
-        let copilot_token = CopilotToken {
+        Ok(CopilotToken {
             token: token_response.token,
             expires_at: token_response.expires_at,
-        };
-
-        let mut tokens = self.copilot_tokens.write().await;
-        tokens.insert(account_id.to_string(), copilot_token);
-
-        Ok(())
+        })
     }
 
     // ==================== 存储和迁移 ====================
@@ -1697,6 +1893,230 @@ mod tests {
     use super::*;
     use crate::provider::CodexCopilotApiFormat;
     use tempfile::tempdir;
+
+    fn offline_device_code() -> GitHubDeviceCodeResponse {
+        GitHubDeviceCodeResponse {
+            device_code: "offline-device-code".into(),
+            user_code: "OFFLINE".into(),
+            verification_uri: "https://github.com/login/device".into(),
+            expires_in: 300,
+            interval: 5,
+        }
+    }
+
+    fn offline_user() -> GitHubUser {
+        GitHubUser {
+            login: "offline-user".into(),
+            id: 707,
+            avatar_url: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn copilot_cancel_inflight_poll_prevents_account_and_token_persistence() {
+        let dir = tempdir().unwrap();
+        let manager = Arc::new(CopilotAuthManager::new(dir.path().into()));
+        let response = offline_device_code();
+        manager
+            .register_device_flow(&response, DEFAULT_GITHUB_DOMAIN)
+            .await;
+        let generation = manager
+            .device_flow_generation(&response.device_code, DEFAULT_GITHUB_DOMAIN)
+            .await
+            .unwrap();
+        let (resume, resumed) = tokio::sync::oneshot::channel();
+        let pending = {
+            let manager = manager.clone();
+            let device_code = response.device_code.clone();
+            tokio::spawn(async move {
+                // Inject the remote-ready result at the production commit boundary.
+                resumed.await.unwrap();
+                manager
+                    .commit_device_login(
+                        &device_code,
+                        &generation,
+                        "offline-github-secret".into(),
+                        offline_user(),
+                        DEFAULT_GITHUB_DOMAIN.into(),
+                        Some(CopilotToken {
+                            token: "offline-copilot-secret".into(),
+                            expires_at: i64::MAX,
+                        }),
+                    )
+                    .await
+            })
+        };
+        assert!(manager.cancel_device_flow(&response.device_code).await);
+        resume.send(()).unwrap();
+        assert!(matches!(
+            pending.await.unwrap(),
+            Err(CopilotAuthError::DeviceFlowCancelled)
+        ));
+        assert!(manager.list_accounts().await.is_empty());
+        assert!(manager.copilot_tokens.read().await.is_empty());
+        assert!(!manager.storage_path.exists());
+    }
+
+    #[tokio::test]
+    async fn copilot_cancel_generation_cannot_be_reused_and_completed_login_is_retained() {
+        let dir = tempdir().unwrap();
+        let manager = CopilotAuthManager::new(dir.path().into());
+        let response = offline_device_code();
+        manager
+            .register_device_flow(&response, DEFAULT_GITHUB_DOMAIN)
+            .await;
+        let stale = manager
+            .device_flow_generation(&response.device_code, DEFAULT_GITHUB_DOMAIN)
+            .await
+            .unwrap();
+        assert!(manager.cancel_device_flow(&response.device_code).await);
+        manager
+            .register_device_flow(&response, DEFAULT_GITHUB_DOMAIN)
+            .await;
+        let current = manager
+            .device_flow_generation(&response.device_code, DEFAULT_GITHUB_DOMAIN)
+            .await
+            .unwrap();
+        assert_ne!(stale, current);
+        assert!(matches!(
+            manager
+                .commit_device_login(
+                    &response.device_code,
+                    &stale,
+                    "offline-stale-secret".into(),
+                    offline_user(),
+                    DEFAULT_GITHUB_DOMAIN.into(),
+                    None,
+                )
+                .await,
+            Err(CopilotAuthError::DeviceFlowCancelled)
+        ));
+        let account = manager
+            .commit_device_login(
+                &response.device_code,
+                &current,
+                "offline-current-secret".into(),
+                offline_user(),
+                DEFAULT_GITHUB_DOMAIN.into(),
+                None,
+            )
+            .await
+            .unwrap();
+        assert!(!manager.cancel_device_flow(&response.device_code).await);
+        assert_eq!(manager.list_accounts().await.len(), 1);
+        assert_eq!(
+            manager.get_account(&account.id).await.unwrap().login,
+            "offline-user"
+        );
+        assert_eq!(
+            CopilotAuthManager::new(dir.path().into())
+                .list_accounts()
+                .await
+                .len(),
+            1
+        );
+    }
+
+    #[test]
+    fn copilot_auth_errors_redact_request_and_response_tokens() {
+        let github_token = "offline-github-oauth-secret";
+        let copilot_token = "offline-copilot-session-secret";
+        let issued_token = "offline-newly-issued-secret";
+        let payload = serde_json::json!({
+            "error": {
+                "code":"subscription_required",
+                "message":format!("Plan rejected: {github_token}, {copilot_token}, {issued_token}"),
+            },
+            "access_token":issued_token,
+        });
+        let body = serde_json::to_vec(&payload).unwrap();
+        // Non-2xx and HTTP 200 semantic errors share the same path, before any
+        // authentication error can be returned to the forwarder or UI.
+        for status in [reqwest::StatusCode::BAD_GATEWAY, reqwest::StatusCode::OK] {
+            for operation in ["获取模型列表", "获取使用量", "交换 Copilot Token"] {
+                let error = decode_auth_response::<Value>(
+                    operation,
+                    status,
+                    &body,
+                    &[github_token, copilot_token],
+                    false,
+                )
+                .unwrap_err();
+                for text in [error.to_string(), format!("{error:?}")] {
+                    assert!(text.contains("subscription_required"));
+                    assert!(text.contains("Plan rejected"));
+                    assert!(text.contains(&status.to_string()));
+                    assert!(text.contains("[REDACTED]"));
+                    for token in [github_token, copilot_token, issued_token] {
+                        assert!(!text.contains(token));
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn copilot_auth_errors_never_include_raw_or_invalid_type_bodies() {
+        let token = "offline-token-not-a-model-array";
+        for (status, body) in [
+            (
+                reqwest::StatusCode::INTERNAL_SERVER_ERROR,
+                token.as_bytes().to_vec(),
+            ),
+            (
+                reqwest::StatusCode::OK,
+                serde_json::to_vec(&serde_json::json!({"data":token})).unwrap(),
+            ),
+        ] {
+            let error = decode_auth_response::<CopilotModelsResponse>(
+                "获取模型列表",
+                status,
+                &body,
+                &[token],
+                false,
+            )
+            .unwrap_err();
+            assert!(!error.to_string().contains(token));
+            assert!(!format!("{error:?}").contains(token));
+            assert!(error.to_string().contains(&status.to_string()));
+        }
+        let body = serde_json::to_vec(&serde_json::json!({
+            "error":{"message":"Invalid short token xy"},
+        }))
+        .unwrap();
+        let error = decode_auth_response::<Value>(
+            "交换 Copilot Token",
+            reqwest::StatusCode::BAD_REQUEST,
+            &body,
+            &["xy"],
+            false,
+        )
+        .unwrap_err();
+        assert!(!error.to_string().contains("xy"));
+        assert!(error.to_string().contains("Invalid short token [REDACTED]"));
+    }
+
+    #[test]
+    fn copilot_auth_errors_preserve_device_poll_control_flow_and_redact_before_truncation() {
+        let pending: GitHubOAuthResponse = decode_auth_response(
+            "GitHub OAuth 轮询",
+            reqwest::StatusCode::BAD_REQUEST,
+            br#"{"error":"authorization_pending"}"#,
+            &["offline-device-code"],
+            true,
+        )
+        .unwrap();
+        assert_eq!(pending.error.as_deref(), Some("authorization_pending"));
+        let token = "offline-long-credential-crossing-the-diagnostic-limit";
+        let payload = serde_json::json!({
+            "error_description":format!("{}{token}", "x".repeat(1010)),
+            "refresh_token":token,
+        });
+        let detail = auth_error_detail(&payload, &[]).unwrap();
+        assert!(detail.contains("[REDACTED]"));
+        assert!(!detail.contains("offline-long"));
+        assert!(detail.chars().count() <= 1024);
+    }
 
     #[test]
     fn extracts_model_capabilities_and_supported_endpoints() {

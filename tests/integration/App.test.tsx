@@ -22,6 +22,56 @@ import {
 import { emitTauriEvent } from "../msw/tauriMocks";
 import { server } from "../msw/server";
 
+// These regression cases exercise the retained per-client controllers through
+// an explicit navigation fixture. The production simple shell is covered by
+// Sidebar/channelNavigation/ChannelApp tests and does not expose these entries.
+vi.mock("@/lib/navigation", async () => {
+  const actual =
+    await vi.importActual<typeof import("@/lib/navigation")>(
+      "@/lib/navigation",
+    );
+  return {
+    ...actual,
+    readStoredView: () =>
+      actual.parseView(localStorage.getItem(actual.VIEW_STORAGE_KEY)) ??
+      "providers",
+  };
+});
+vi.mock("@/components/shell/Sidebar", async () => {
+  const { APP_DISPLAY_NAME } = await vi.importActual<
+    typeof import("@/components/shell/AppGlyph")
+  >("@/components/shell/AppGlyph");
+  return {
+    Sidebar: ({
+      visibleApps,
+      onSelectApp,
+      onSelectPage,
+    }: import("@/components/shell/Sidebar").SidebarProps) => (
+      <nav aria-label="Legacy controller test navigation">
+        {Object.entries(APP_DISPLAY_NAME)
+          .filter(([id]) => visibleApps[id as keyof typeof visibleApps])
+          .map(([id, name]) => (
+            <button
+              key={id}
+              onClick={() => onSelectApp(id as import("@/lib/api").AppId)}
+            >
+              {name}
+            </button>
+          ))}
+        {(
+          ["usage", "sessions", "prompts", "auth", "apps", "settings"] as const
+        ).map((page) => (
+          <button key={page} onClick={() => onSelectPage(page)}>
+            nav.{page}
+          </button>
+        ))}
+        <button onClick={() => onSelectPage("mcp")}>MCP</button>
+        <button onClick={() => onSelectPage("skills")}>Skills</button>
+      </nav>
+    ),
+  };
+});
+
 const { toastSuccessMock, toastErrorMock } = vi.hoisted(() => ({
   toastSuccessMock: vi.fn(),
   toastErrorMock: vi.fn(),
@@ -217,7 +267,7 @@ const renderApp = (AppComponent: ComponentType) => {
   );
 };
 
-describe("App integration with MSW", () => {
+describe("Retained client controller integration with MSW", () => {
   beforeEach(() => {
     resetProviderState();
     // 本文件测导航/供应商行为，首次使用说明在专门的 notice 测试中覆盖。

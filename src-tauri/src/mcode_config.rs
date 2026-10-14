@@ -285,10 +285,297 @@ pub(crate) fn remove_provider(id: &str) -> Result<(), AppError> {
     update(&config_path(), id, None)
 }
 
+/// Replace the managed catalog and its selection under one native lock. The commit
+/// runs before releasing that lock, so a database failure can restore the file.
+pub(crate) fn apply_channel_catalog<T>(
+    path: &Path,
+    catalog: &IndexMap<String, Value>,
+    managed_ids: &[String],
+    selected_provider: &str,
+    selected_model: &str,
+    commit: impl FnOnce() -> Result<T, AppError>,
+) -> Result<T, AppError> {
+    for (id, provider) in catalog {
+        validate_provider(id, provider)?;
+    }
+    fs::create_dir_all(
+        path.parent()
+            .ok_or_else(|| AppError::Config("MCode config has no parent directory".into()))?,
+    )
+    .map_err(|error| AppError::io(path, error))?;
+    let path = if path.exists() {
+        fs::canonicalize(path).map_err(|error| AppError::io(path, error))?
+    } else {
+        path.to_path_buf()
+    };
+    let lock_path = PathBuf::from(format!("{}.lock", path.display()));
+    fs::create_dir(&lock_path).map_err(|error| {
+        if error.kind() == std::io::ErrorKind::AlreadyExists {
+            AppError::Conflict(
+                "MCode configuration is busy; retry after MCode finishes saving".into(),
+            )
+        } else {
+            AppError::io(&lock_path, error)
+        }
+    })?;
+    let _lock = ConfigLock(lock_path);
+    let previous = match fs::read(&path) {
+        Ok(bytes) => Some(bytes),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => return Err(AppError::io(&path, error)),
+    };
+    let mut document = read(&path)?;
+    let root = document.as_mapping_mut().expect("Validated mapping");
+    let entry = root
+        .entry("custom_provider".into())
+        .or_insert_with(|| serde_yaml::Value::Mapping(Default::default()));
+    if entry.is_null() {
+        *entry = serde_yaml::Value::Mapping(Default::default());
+    }
+    let providers = entry
+        .as_mapping_mut()
+        .ok_or_else(|| AppError::Config("Invalid MCode custom_provider configuration".into()))?;
+    for id in managed_ids.iter().chain(catalog.keys()) {
+        if let Some(existing) = providers.get(serde_yaml::Value::from(id.as_str())) {
+            if !managed_ids.contains(id) {
+                return Err(AppError::Conflict(
+                    "客户端已有同名供应商，原配置已保留，请修改渠道标识后重试".into(),
+                ));
+            }
+            if existing
+                .get("kind")
+                .and_then(serde_yaml::Value::as_str)
+                .is_some_and(|kind| kind != "custom")
+            {
+                return Err(AppError::InvalidInput(
+                    "MCode owns this account provider".into(),
+                ));
+            }
+        }
+    }
+    for id in managed_ids.iter().filter(|id| !catalog.contains_key(*id)) {
+        providers.remove(serde_yaml::Value::from(id.as_str()));
+    }
+    for (id, config) in catalog {
+        let mut replacement = serde_yaml::to_value(config)
+            .map_err(|_| AppError::Config("Invalid MCode provider".into()))?;
+        if let (Some(existing), Some(next)) = (
+            providers
+                .get(serde_yaml::Value::from(id.as_str()))
+                .and_then(serde_yaml::Value::as_mapping),
+            replacement.as_mapping_mut(),
+        ) {
+            for (key, value) in existing {
+                next.entry(key.clone()).or_insert_with(|| value.clone());
+            }
+        }
+        providers.insert(id.as_str().into(), replacement);
+    }
+    let selected = format!("custom_provider:{selected_provider}/{selected_model}");
+    if !catalog.contains_key(selected_provider)
+        || !catalog_selection_available(&document, &selected)
+    {
+        return Err(AppError::InvalidInput(
+            "The selected MCode model is not enabled in its provider catalog".into(),
+        ));
+    }
+    if let Some(light) = document
+        .get("defaultLightModel")
+        .and_then(serde_yaml::Value::as_str)
+    {
+        let managed_light = light
+            .strip_prefix("custom_provider:")
+            .and_then(|value| value.split_once('/'))
+            .is_some_and(|(id, _)| {
+                managed_ids.iter().any(|managed| managed == id) || catalog.contains_key(id)
+            });
+        if managed_light && !catalog_selection_available(&document, light) {
+            return Err(AppError::InvalidInput(
+                "MCode 的轻量默认模型仍使用将移除的模型，请先更换轻量模型后重试".into(),
+            ));
+        }
+    }
+    document["defaultModel"] = selected.into();
+    let yaml = serde_yaml::to_string(&document)
+        .map_err(|_| AppError::Config("Cannot serialize MCode configuration".into()))?;
+    write_and_commit(
+        &path,
+        || {
+            let current = match fs::read(&path) {
+                Ok(bytes) => Some(bytes),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+                Err(error) => return Err(AppError::io(&path, error)),
+            };
+            if current != previous {
+                return Err(AppError::Conflict(
+                    "MCode configuration changed; reload and retry".into(),
+                ));
+            }
+            atomic_write_private(&path, yaml.as_bytes())
+        },
+        commit,
+    )
+}
+
+fn catalog_selection_available(document: &serde_yaml::Value, selection: &str) -> bool {
+    selection
+        .strip_prefix("custom_provider:")
+        .and_then(|value| value.split_once('/'))
+        .and_then(|(id, model)| {
+            document
+                .get("custom_provider")
+                .and_then(|providers| providers.get(id))
+                .filter(|provider| provider.get("enabled") != Some(&serde_yaml::Value::Bool(false)))
+                .and_then(|provider| provider.get("models"))
+                .and_then(|models| models.get(model))
+        })
+        .is_some_and(|model| {
+            model.is_mapping() && model.get("enabled") != Some(&serde_yaml::Value::Bool(false))
+        })
+}
+
+#[cfg(test)]
+fn set_default_model_at(path: &Path, provider_id: &str, model_id: &str) -> Result<(), AppError> {
+    fs::create_dir_all(
+        path.parent()
+            .ok_or_else(|| AppError::Config("MCode config has no parent directory".into()))?,
+    )
+    .map_err(|error| AppError::io(path, error))?;
+    let path = if path.exists() {
+        fs::canonicalize(path).map_err(|error| AppError::io(path, error))?
+    } else {
+        path.to_path_buf()
+    };
+    let lock_path = PathBuf::from(format!("{}.lock", path.display()));
+    fs::create_dir(&lock_path).map_err(|error| {
+        if error.kind() == std::io::ErrorKind::AlreadyExists {
+            AppError::Conflict(
+                "MCode configuration is busy; retry after MCode finishes saving".into(),
+            )
+        } else {
+            AppError::io(&lock_path, error)
+        }
+    })?;
+    let _lock = ConfigLock(lock_path);
+    let previous = fs::read(&path).map_err(|error| AppError::io(&path, error))?;
+    let mut document = read(&path)?;
+    let provider = document
+        .get("custom_provider")
+        .and_then(|p| p.get(provider_id));
+    if !provider.is_some_and(|p| {
+        p.get("enabled") != Some(&serde_yaml::Value::Bool(false))
+            && p.get("models")
+                .and_then(|m| m.get(model_id))
+                .is_some_and(|m| {
+                    m.is_mapping() && m.get("enabled") != Some(&serde_yaml::Value::Bool(false))
+                })
+    }) {
+        return Err(AppError::InvalidInput(
+            "The selected MCode model is not enabled in its provider catalog".into(),
+        ));
+    }
+    document["defaultModel"] =
+        serde_yaml::Value::String(format!("custom_provider:{provider_id}/{model_id}"));
+    let yaml = serde_yaml::to_string(&document)
+        .map_err(|_| AppError::Config("Cannot serialize MCode configuration".into()))?;
+    if fs::read(&path).map_err(|error| AppError::io(&path, error))? != previous {
+        return Err(AppError::Conflict(
+            "MCode configuration changed during selection; reload and retry".into(),
+        ));
+    }
+    atomic_write_private(&path, yaml.as_bytes())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
+    #[test]
+    fn channel_catalog_keeps_light_selection_and_checks_lock_and_ownership() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("config.yaml");
+        let original = "defaultModel: custom_provider:tai-channel-one/A\ndefaultLightModel: custom_provider:tai-channel-one/A\ncustom_provider:\n  tai-channel-one:\n    kind: custom\n    models:\n      A: {}\n  user-owned:\n    models:\n      light: {}\n";
+        fs::write(&path, original).unwrap();
+        let catalog = IndexMap::from([(
+            "tai-channel-one".into(),
+            json!({"kind":"custom","api":"openai-completions","options":{"baseURL":"https://example.test/v1","apiKey":"fixture-key"},"models":{"B":{}}}),
+        )]);
+        let managed = vec!["tai-channel-one".into()];
+        assert!(apply_channel_catalog(
+            &path,
+            &catalog,
+            &managed,
+            "tai-channel-one",
+            "B",
+            || Ok(())
+        )
+        .is_err());
+        assert_eq!(fs::read_to_string(&path).unwrap(), original);
+        let keep_light = original.replace(
+            "defaultLightModel: custom_provider:tai-channel-one/A",
+            "defaultLightModel: custom_provider:user-owned/light",
+        );
+        fs::write(&path, &keep_light).unwrap();
+        let lock = path.with_extension("yaml.lock");
+        fs::create_dir(&lock).unwrap();
+        assert!(apply_channel_catalog(
+            &path,
+            &catalog,
+            &managed,
+            "tai-channel-one",
+            "B",
+            || Ok(())
+        )
+        .is_err());
+        assert_eq!(fs::read_to_string(&path).unwrap(), keep_light);
+        fs::remove_dir(&lock).unwrap();
+        let user_collision =
+            IndexMap::from([("user-owned".into(), catalog["tai-channel-one"].clone())]);
+        assert!(
+            apply_channel_catalog(&path, &user_collision, &managed, "user-owned", "B", || Ok(
+                ()
+            ))
+            .is_err()
+        );
+        assert_eq!(fs::read_to_string(&path).unwrap(), keep_light);
+        apply_channel_catalog(&path, &catalog, &managed, "tai-channel-one", "B", || {
+            assert!(
+                lock.exists(),
+                "the native lock must cover the database commit"
+            );
+            Ok(())
+        })
+        .unwrap();
+        let written = read(&path).unwrap();
+        assert_eq!(written["defaultModel"], "custom_provider:tai-channel-one/B");
+        assert_eq!(
+            written["defaultLightModel"],
+            "custom_provider:user-owned/light"
+        );
+        assert_eq!(
+            written["custom_provider"]["user-owned"]["models"]["light"],
+            serde_yaml::Value::Mapping(Default::default())
+        );
+        assert!(!lock.exists());
+    }
+    #[test]
+    fn channel_default_selection_preserves_light_model_and_account_settings() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("config.yaml");
+        fs::write(&path,"defaultLightModel: minimax/light\nminimax_api:\n  apiKey: untouched-fixture\nunknown: [a, b]\ncustom_provider:\n  tai-channel-a:\n    enabled: true\n    models:\n      m: {}\n").unwrap();
+        set_default_model_at(&path, "tai-channel-a", "m").unwrap();
+        let written = fs::read_to_string(&path).unwrap();
+        let document = read(&path).unwrap();
+        assert_eq!(document["defaultModel"], "custom_provider:tai-channel-a/m");
+        assert_eq!(document["defaultLightModel"], "minimax/light");
+        assert_eq!(document["minimax_api"]["apiKey"], "untouched-fixture");
+        assert_eq!(document["unknown"].as_sequence().unwrap().len(), 2);
+        assert!(set_default_model_at(&path, "tai-channel-a", "missing").is_err());
+        assert_eq!(fs::read_to_string(&path).unwrap(), written);
+        fs::create_dir(path.with_extension("yaml.lock")).unwrap();
+        assert!(set_default_model_at(&path, "tai-channel-a", "m").is_err());
+        assert_eq!(fs::read_to_string(path).unwrap(), written);
+    }
     #[test]
     fn native_data_directory_precedence_and_blank_values() {
         assert_eq!(
