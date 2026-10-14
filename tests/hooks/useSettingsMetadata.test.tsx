@@ -21,7 +21,7 @@ describe("useSettingsMetadata", () => {
     const { result } = renderHook(() => useSettingsMetadata());
 
     expect(result.current.isLoading).toBe(true);
-    expect(result.current.isPortable).toBe(false);
+    expect(result.current.isPortable).toBeNull();
 
     await act(async () => {
       await Promise.resolve();
@@ -40,7 +40,7 @@ describe("useSettingsMetadata", () => {
       await Promise.resolve();
     });
 
-    expect(result.current.isPortable).toBe(false);
+    expect(result.current.isPortable).toBeNull();
     expect(result.current.isLoading).toBe(false);
   });
 
@@ -53,6 +53,7 @@ describe("useSettingsMetadata", () => {
       await Promise.resolve();
     });
 
+    expect(result.current.isPortable).toBe(false);
     await act(async () => {
       result.current.setRequiresRestart(true);
       await Promise.resolve();

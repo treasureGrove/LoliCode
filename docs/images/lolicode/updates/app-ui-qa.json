@@ -1,0 +1,127 @@
+{
+  "productVersion": "4.0.13",
+  "mockAvailableVersion": "4.0.14",
+  "kind": "isolated_renderer_qa",
+  "boundary": "Real renderer with mocked Tauri IPC; no download, signature validation, native installer, agent task, or process restart was executed. All external network requests blocked.",
+  "gates": {
+    "railOpensAbout": true,
+    "checkExclusionAndLatest": true,
+    "checkFailureVisibleAndRetry": true,
+    "availableBadge": true,
+    "busyIsErrorNotLatest": true,
+    "installFailureCanRetry": true,
+    "installFalseClearsAvailable": true,
+    "progressAndRepeatedClickExclusion": true,
+    "progressSurvivesAboutNavigation": true,
+    "verifyingIsDistinct": true,
+    "installDispatchLocksActions": true,
+    "portableOpensWebsiteOnly": true,
+    "pendingPortableCannotInstall": true
+  },
+  "screenshots": [
+    "D:\\projectGithub\\TAI-Switch\\docs\\images\\lolicode\\updates\\app-available-light-1000x650.png",
+    "D:\\projectGithub\\TAI-Switch\\docs\\images\\lolicode\\updates\\app-retry-light-1000x650.png",
+    "D:\\projectGithub\\TAI-Switch\\docs\\images\\lolicode\\updates\\app-download-light-1000x650.png",
+    "D:\\projectGithub\\TAI-Switch\\docs\\images\\lolicode\\updates\\app-available-dark-1000x650.png",
+    "D:\\projectGithub\\TAI-Switch\\docs\\images\\lolicode\\updates\\app-verifying-dark-1000x650.png",
+    "D:\\projectGithub\\TAI-Switch\\docs\\images\\lolicode\\updates\\app-installing-dark-1000x650.png"
+  ],
+  "pageErrors": [],
+  "unexpectedConsoleErrors": [],
+  "expectedConsoleErrors": [
+    "[AboutSection] Check update failed Error: QA_FEED_UNAVAILABLE：更新服务暂时不可用，请稍后重试。\n    at Object.invoke (<anonymous>:18:46)\n    at invoke (http://127.0.0.1:14319/@fs/D:/projectGithub/TAI-Switch/node_modules/.vite/deps/chunk-ES5NGWZA.js?v=8e153961:109:37)\n    at check (http://127.0.0.1:14319/@fs/D:/projectGithub/TAI-Switch/node_modules/.vite/deps/@tauri-apps_plugin-updater.js?v=8e153961:64:26)\n    at checkForUpdate (http://127.0.0.1:14319/lib/updater.ts:12:24)\n    at async http://127.0.0.1:14319/contexts/UpdateContext.tsx:91:24\n    at async http://127.0.0.1:14319/components/settings/AboutSection.tsx:129:25"
+  ],
+  "unexpectedIpc": [],
+  "agentMutations": [],
+  "blockedExternalRequests": [],
+  "scenarios": [
+    {
+      "name": "installed-build-all-states",
+      "checkCalls": 4,
+      "installCalls": 4,
+      "opens": [],
+      "unknown": [],
+      "agentMutations": [],
+      "closedResources": [
+        403,
+        404
+      ]
+    },
+    {
+      "name": "dark-installation-states",
+      "checkCalls": 1,
+      "installCalls": 1,
+      "opens": [],
+      "unknown": [],
+      "agentMutations": [],
+      "closedResources": [
+        401
+      ]
+    },
+    {
+      "name": "portable",
+      "checkCalls": 1,
+      "installCalls": 0,
+      "opens": [
+        "https://tools.treasuregrove.art/lolicode/"
+      ],
+      "unknown": [],
+      "agentMutations": [],
+      "closedResources": [
+        401
+      ]
+    },
+    {
+      "name": "pending-portable-detection",
+      "checkCalls": 1,
+      "installCalls": 0,
+      "opens": [
+        "https://tools.treasuregrove.art/lolicode/"
+      ],
+      "unknown": [],
+      "agentMutations": [],
+      "closedResources": [
+        401
+      ]
+    }
+  ],
+  "layouts": {
+    "app-available-light-1000x650.png": {
+      "inside": true,
+      "width": 894,
+      "height": 95
+    },
+    "app-retry-light-1000x650.png": {
+      "inside": true,
+      "width": 894,
+      "height": 125
+    },
+    "app-download-light-1000x650.png": {
+      "inside": true,
+      "width": 894,
+      "height": 167
+    },
+    "app-available-dark-1000x650.png": {
+      "inside": true,
+      "width": 894,
+      "height": 95
+    },
+    "app-verifying-dark-1000x650.png": {
+      "inside": true,
+      "width": 894,
+      "height": 167
+    },
+    "app-installing-dark-1000x650.png": {
+      "inside": true,
+      "width": 894,
+      "height": 167
+    }
+  },
+  "passed": true,
+  "preview": {
+    "pid": 82640,
+    "stopped": true,
+    "command": "pnpm exec vite --host 127.0.0.1 --port 14319 --strictPort",
+    "url": "http://127.0.0.1:14319/"
+  }
+}
