@@ -1,0 +1,34 @@
+{
+  "version": "4.0.14",
+  "applicationCompiledCommit": "39caf4e3f2d7c2bfaa77529943cd365731d7de06",
+  "nativeInstallPerformed": false,
+  "assetKeys": [
+    {
+      "name": "lolicode-4ZAyB5Mh.svg",
+      "embedded": true
+    },
+    {
+      "name": "index-21IOHAKg.js",
+      "embedded": true
+    },
+    {
+      "name": "index-CMO7uKiN.css",
+      "embedded": true
+    },
+    {
+      "name": "lolicode-maid-BIsWmGLa.png",
+      "embedded": true
+    }
+  ],
+  "exeSha256": "ca325b0dd6185b6b0745a3dbb3fdd3af80d9ecd56d2ddc7f376af0ada3f3ae67",
+  "bytes": 49876992,
+  "mascotSourceBytesPreserved": true,
+  "bundleType": "UNK (portable)",
+  "installerMainExe": {
+    "sha256": "8309dfc565dbbe15047bfc81f95d16a535234b557ce7d85d71833f05587f3415",
+    "bundleType": "NSS",
+    "differentBytes": 3,
+    "differenceOffset": 39753136,
+    "codeAndRendererOtherwiseIdentical": true
+  }
+}

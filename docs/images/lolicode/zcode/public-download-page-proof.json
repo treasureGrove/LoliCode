@@ -1,0 +1,118 @@
+{
+  "kind": "live_public_site_chromium_check",
+  "expectedVersion": "4.0.14",
+  "url": "https://tools.treasuregrove.art/lolicode/",
+  "startedAt": "2026-10-15T04:25:53.857Z",
+  "browser": "Chromium",
+  "gates": {
+    "publicVersionDisplayed": true,
+    "latestIs4014": true,
+    "immutableInstallerAndPortableLinks": true,
+    "packageHeadRequestsSucceed": true,
+    "currentReleaseNotesVisible": true,
+    "pageImagesDecoded": true,
+    "noHorizontalOverflow": true,
+    "resourcesAndConsoleClean": true
+  },
+  "pageErrors": [],
+  "consoleErrors": [],
+  "httpErrors": [],
+  "failedRequests": [],
+  "preventedWrites": [],
+  "preventedLargeDownloads": [],
+  "assetResponses": [
+    {
+      "url": "https://tools.treasuregrove.art/lolicode/",
+      "status": 200,
+      "type": "document"
+    },
+    {
+      "url": "https://tools.treasuregrove.art/lolicode/assets/site.css?v=4.0.14",
+      "status": 200,
+      "type": "stylesheet"
+    },
+    {
+      "url": "https://tools.treasuregrove.art/lolicode/assets/maid.png",
+      "status": 200,
+      "type": "image"
+    },
+    {
+      "url": "https://tools.treasuregrove.art/lolicode/assets/downloads.js?v=4.0.14",
+      "status": 200,
+      "type": "script"
+    },
+    {
+      "url": "https://tools.treasuregrove.art/lolicode/assets/logo.svg",
+      "status": 200,
+      "type": "image"
+    },
+    {
+      "url": "https://tools.treasuregrove.art/lolicode/updates/latest.json",
+      "status": 200,
+      "type": "fetch"
+    }
+  ],
+  "downloadHeads": [
+    {
+      "url": "https://tools.treasuregrove.art/lolicode/releases/4.0.14/LoliCode-4.0.14-Windows-x64-Setup.exe",
+      "status": 200,
+      "bytes": 263829458,
+      "contentType": "application/octet-stream"
+    },
+    {
+      "url": "https://tools.treasuregrove.art/lolicode/releases/4.0.14/LoliCode-Portable.zip",
+      "status": 200,
+      "bytes": 384878884,
+      "contentType": "application/zip"
+    }
+  ],
+  "largePackagesDownloaded": 0,
+  "paidCalls": 0,
+  "nativeAppOrUserConfigurationChanged": false,
+  "documentStatus": 200,
+  "documentTitle": "LoliCode · 下载与更新",
+  "headings": [
+    "从一个项目开始，让想法变成代码。",
+    "这次更新了什么"
+  ],
+  "latest": {
+    "version": "4.0.14",
+    "pubDate": "2026-10-15T04:00:29.627Z"
+  },
+  "downloadLinks": {
+    "installer": {
+      "text": "下载安装版",
+      "href": "https://tools.treasuregrove.art/lolicode/releases/4.0.14/LoliCode-4.0.14-Windows-x64-Setup.exe"
+    },
+    "portable": {
+      "text": "下载便携版",
+      "href": "https://tools.treasuregrove.art/lolicode/releases/4.0.14/LoliCode-Portable.zip"
+    }
+  },
+  "releaseNotesExcerpt": "4.0.14\nWindows · x64\n\n正式版已发布，可以下载。\n\n下载安装版\n下载便携版\n\n推荐安装版，后续可在应用内更新。首次从旧版升级时，请先从托盘退出旧版。\n\n软件更新\n\n这次更新了什么\n\n# LoliCode 4.0.14\n\n- Agent 生成的项目内本地图片可在聊天中预览、放大和关闭。\n- 保存渠道后自动同步编程模型目录，并保留手动刷新。任务执行时延迟同步，刷新后等待真实运行时应用目录。\n- 模型状态改为可理解的说明；自动获取上游明确提供的上下文、输出上限和思考档位，缺失项不冒充已验证能力。\n- 新会话使用固定源码的 ZCode 3.15.1 原生执行器，接入 Guarded / Plan / 完整访问、真实问答及单次授权。权限卡直接显示将执行的命令和涉及路径。\n- 加入原生工作流、持久自动化及 SSH / WSL 远程项目入口，使用现有界面组件，整体视觉等待后续设计稿。\n- 保留旧 OpenCode 会话与原始配置。修复迟到发送回执清除新草稿、请求不确定时重复提交及历史分页缺失提示。\n- 应用内继续使用 LoliCode 自有更新地址和签名校验；更新前检查本地及远程任务状态。\n\nLinux 远程资源目前准备为 x64 / glibc 2.34 及以上，连接在独立 LoliCode 目录部署。WSL 运行需本机实际安装兼容发行版。公开上游的 Computer Us",
+  "images": [
+    {
+      "src": "https://tools.treasuregrove.art/lolicode/assets/logo.svg",
+      "width": 256,
+      "height": 256,
+      "complete": true
+    },
+    {
+      "src": "https://tools.treasuregrove.art/lolicode/assets/maid.png",
+      "width": 1024,
+      "height": 1536,
+      "complete": true
+    }
+  ],
+  "desktopLayout": {
+    "viewport": 1280,
+    "scrollWidth": 1280
+  },
+  "screenshot": "D:\\projectGithub\\TAI-Switch\\release\\LoliCode-4.0.14-zcode-20261015\\public-download-page.png",
+  "mobileLayout": {
+    "viewport": 390,
+    "scrollWidth": 390
+  },
+  "completedAt": "2026-10-15T04:26:00.509Z",
+  "success": true
+}

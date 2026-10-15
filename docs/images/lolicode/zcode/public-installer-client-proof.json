@@ -1,0 +1,20 @@
+{
+  "version": "4.0.14",
+  "artifact": "LoliCode-4.0.14-Windows-x64-Setup.exe",
+  "url": "https://tools.treasuregrove.art/lolicode/releases/4.0.14/LoliCode-4.0.14-Windows-x64-Setup.exe",
+  "method": "Full external Windows-client HTTPS download; initial Node fetch timed out after 600 seconds, curl added a partial HTTP Range segment, and Node completed the same owned cache with a validated HTTP Range",
+  "bytes": 263829458,
+  "sha256": "0999b25697039226ad29d942b3b4b4d0e907872de77e9ca82fff1501a581d016",
+  "signatureVerified": true,
+  "verified": true,
+  "installerExecuted": false,
+  "transferReceipt": {
+    "httpStatus": 206,
+    "initialNodeTimedOutAtBytes": 176438995,
+    "finalRangeStart": 198176467,
+    "resumedBytes": 65652991,
+    "totalBytes": 263829458,
+    "seconds": 242,
+    "transport": "Node HTTPS Range; exact original partial cache; curl intermediate partial transfer closed before final resume"
+  }
+}

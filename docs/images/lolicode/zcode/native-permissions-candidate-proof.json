@@ -1,0 +1,158 @@
+{
+  "sourceRevision": "aac4755666d09fdcd70272fcf063c077a639015f",
+  "workerSha256": "3fe3b79193f4787e1087c5f3f6efd33997d76d8653e7fecc1d33ca6e10ed735f",
+  "temporaryGitProjectsOnly": true,
+  "externalNetworkBlocked": true,
+  "controlPlane": "production worker local-only transport; no fake official response",
+  "paidCalls": 0,
+  "cases": [
+    {
+      "id": "guarded-read",
+      "nativeTool": "Bash",
+      "modelCalls": 2,
+      "titleCalls": 1,
+      "permissionSeen": false,
+      "permissionReplies": 0,
+      "stalePermissionSnapshots": 0,
+      "terminalPermissions": 0,
+      "alwaysRejected": false,
+      "questionSeen": false,
+      "terminal": "idle",
+      "continuedAfterResult": true,
+      "fixturePreserved": true,
+      "planFileAbsent": true,
+      "toolStates": [
+        "completed"
+      ]
+    },
+    {
+      "id": "guarded-danger-denied",
+      "nativeTool": "Bash",
+      "modelCalls": 2,
+      "titleCalls": 1,
+      "permissionSeen": true,
+      "permissionReplies": 1,
+      "stalePermissionSnapshots": 0,
+      "terminalPermissions": 0,
+      "alwaysRejected": true,
+      "questionSeen": false,
+      "terminal": "idle",
+      "continuedAfterResult": true,
+      "fixturePreserved": true,
+      "planFileAbsent": true,
+      "toolStates": [
+        "error"
+      ]
+    },
+    {
+      "id": "plan-write",
+      "nativeTool": "Write",
+      "modelCalls": 2,
+      "titleCalls": 1,
+      "permissionSeen": false,
+      "permissionReplies": 0,
+      "stalePermissionSnapshots": 0,
+      "terminalPermissions": 0,
+      "alwaysRejected": false,
+      "questionSeen": false,
+      "terminal": "idle",
+      "continuedAfterResult": true,
+      "fixturePreserved": true,
+      "planFileAbsent": true,
+      "toolStates": [
+        "error"
+      ]
+    },
+    {
+      "id": "full-access-clean",
+      "nativeTool": "Bash",
+      "modelCalls": 2,
+      "titleCalls": 1,
+      "permissionSeen": false,
+      "permissionReplies": 0,
+      "stalePermissionSnapshots": 0,
+      "terminalPermissions": 0,
+      "alwaysRejected": false,
+      "questionSeen": false,
+      "terminal": "idle",
+      "continuedAfterResult": true,
+      "fixturePreserved": false,
+      "planFileAbsent": true,
+      "toolStates": [
+        "completed"
+      ]
+    },
+    {
+      "id": "full-access-write",
+      "nativeTool": "Write",
+      "modelCalls": 2,
+      "titleCalls": 1,
+      "permissionSeen": false,
+      "permissionReplies": 0,
+      "stalePermissionSnapshots": 0,
+      "terminalPermissions": 0,
+      "alwaysRejected": false,
+      "questionSeen": false,
+      "terminal": "idle",
+      "continuedAfterResult": true,
+      "fixturePreserved": true,
+      "planFileAbsent": false,
+      "writtenDiff": {
+        "path": "written-by-full-access.txt",
+        "patch": "diff --git \"a/C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\lolicode-native-permissions-GHcqu2\\\\full-access-write-5dCg9U\\\\written-by-full-access.txt\" \"b/C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\lolicode-native-permissions-GHcqu2\\\\full-access-write-5dCg9U\\\\written-by-full-access.txt\"\n--- \"a/C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\lolicode-native-permissions-GHcqu2\\\\full-access-write-5dCg9U\\\\written-by-full-access.txt\"\n+++ \"b/C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\lolicode-native-permissions-GHcqu2\\\\full-access-write-5dCg9U\\\\written-by-full-access.txt\"\n@@ -1,0 +1,1 @@\n+Native FullAccess wrote this isolated fixture.\n",
+        "additions": 1,
+        "deletions": 0,
+        "status": "modified"
+      },
+      "toolStates": [
+        "completed"
+      ]
+    },
+    {
+      "id": "native-question-multi",
+      "nativeTool": "AskUserQuestion",
+      "modelCalls": 2,
+      "titleCalls": 1,
+      "permissionSeen": false,
+      "permissionReplies": 0,
+      "stalePermissionSnapshots": 0,
+      "terminalPermissions": 0,
+      "alwaysRejected": false,
+      "questionSeen": true,
+      "terminal": "idle",
+      "continuedAfterResult": true,
+      "fixturePreserved": true,
+      "planFileAbsent": true,
+      "toolStates": [
+        "completed"
+      ]
+    },
+    {
+      "id": "native-plan-approval",
+      "nativeTool": "ExitPlanMode",
+      "modelCalls": 2,
+      "titleCalls": 1,
+      "permissionSeen": false,
+      "permissionReplies": 0,
+      "stalePermissionSnapshots": 0,
+      "terminalPermissions": 0,
+      "alwaysRejected": false,
+      "questionSeen": true,
+      "planBodyVisible": true,
+      "nativePlanExited": true,
+      "terminal": "idle",
+      "continuedAfterResult": true,
+      "fixturePreserved": true,
+      "planFileAbsent": true,
+      "toolStates": [
+        "completed"
+      ]
+    }
+  ],
+  "cleanup": true,
+  "modelRequests": 21,
+  "success": true,
+  "candidateSourceCommit": "39caf4e",
+  "command": "node scripts/tests/zcode-permissions-smoke.mjs",
+  "evidenceKind": "Production candidate worker; owned loopback fake model; no paid inference"
+}

@@ -1,0 +1,562 @@
+{
+  "schemaVersion": 1,
+  "product": "LoliCode",
+  "version": "4.0.14",
+  "builtAt": "2026-10-15T04:00:51.681Z",
+  "platform": "windows-x86_64",
+  "applicationCompiledCommit": "39caf4e3f2d7c2bfaa77529943cd365731d7de06",
+  "validationCommit": "60025004f0efa1a5ba18f7317addd5fcef93c0a6",
+  "sourcePin": {
+    "name": "ZCode",
+    "version": "3.15.1",
+    "commit": "aac4755666d09fdcd70272fcf063c077a639015f",
+    "pristineGitBlobs": 3145
+  },
+  "validation": {
+    "typecheckPassed": true,
+    "frontend": {
+      "files": 240,
+      "passed": 2861
+    },
+    "rust": {
+      "passed": 3696,
+      "ignored": 10
+    },
+    "facadeTestsPassed": 49,
+    "releaseAndPublisherTestsPassed": 15,
+    "nativePermissionCasesPassed": 7,
+    "nativePermissionPaidCalls": 0,
+    "remoteActualPlatform": "Linux x64 glibc >= 2.34 via SSH",
+    "remoteActualAgentReadPassed": true,
+    "remotePaidCalls": 0,
+    "nativeInstallerExecuted": false,
+    "realUserConfigurationModified": false,
+    "remoteWSLActualTested": false,
+    "runtimeBuildTestsPassed": 10
+  },
+  "packages": [
+    {
+      "name": "LoliCode-4.0.14-Windows-x64-Setup.exe",
+      "bytes": 263829458,
+      "sha256": "0999b25697039226ad29d942b3b4b4d0e907872de77e9ca82fff1501a581d016"
+    },
+    {
+      "name": "LoliCode-4.0.14-Windows-x64-Setup.exe.sig",
+      "bytes": 420,
+      "sha256": "4d1d7d4c737a00496fce4a60dbc197c3e81a20122b85aac4af5e7ac67409e715"
+    },
+    {
+      "name": "LoliCode-Portable.zip",
+      "bytes": 384878884,
+      "sha256": "d1db4163b9f3fe5c1f4ca26871436cbcbdc19fff85e4df2ac98bf070501bffde"
+    },
+    {
+      "name": "latest.json",
+      "bytes": 2534,
+      "sha256": "bfdd2f32a6a49c575109b4919eee302d773c9bfbbbd9b69e6aa2cfb76c7b1eed"
+    }
+  ],
+  "renderer": {
+    "version": "4.0.14",
+    "applicationCompiledCommit": "39caf4e3f2d7c2bfaa77529943cd365731d7de06",
+    "nativeInstallPerformed": false,
+    "assetKeys": [
+      {
+        "name": "lolicode-4ZAyB5Mh.svg",
+        "embedded": true
+      },
+      {
+        "name": "index-21IOHAKg.js",
+        "embedded": true
+      },
+      {
+        "name": "index-CMO7uKiN.css",
+        "embedded": true
+      },
+      {
+        "name": "lolicode-maid-BIsWmGLa.png",
+        "embedded": true
+      }
+    ],
+    "exeSha256": "ca325b0dd6185b6b0745a3dbb3fdd3af80d9ecd56d2ddc7f376af0ada3f3ae67",
+    "bytes": 49876992,
+    "mascotSourceBytesPreserved": true,
+    "bundleType": "UNK (portable)",
+    "installerMainExe": {
+      "sha256": "8309dfc565dbbe15047bfc81f95d16a535234b557ce7d85d71833f05587f3415",
+      "bundleType": "NSS",
+      "differentBytes": 3,
+      "differenceOffset": 39753136,
+      "codeAndRendererOtherwiseIdentical": true
+    }
+  },
+  "resources": {
+    "format": 1,
+    "version": "4.0.14",
+    "sourceCommit": "39caf4e3f2d7c2bfaa77529943cd365731d7de06",
+    "verifiedAt": "2026-10-15T03:43:42.031Z",
+    "beforeBuildCompletedAndCargoStarted": true,
+    "resources": [
+      {
+        "directory": "agent",
+        "sourceManifestSha256": "a46c9871b3c49be3b7c1edffd086fdfa23d5380a8e6d06d7f7f14f06372841b8",
+        "copiedManifestSha256": "a46c9871b3c49be3b7c1edffd086fdfa23d5380a8e6d06d7f7f14f06372841b8",
+        "fileCount": 117,
+        "bytes": 205265960,
+        "licenseAndNoticeFileCount": 8,
+        "pinnedSkillFilesVerified": 110,
+        "originalManifestVerified": true,
+        "independentFullInventoryEqual": true,
+        "hiddenAndNativeFilesIncluded": true
+      },
+      {
+        "directory": "zcode-runtime",
+        "sourceManifestSha256": "443ea94fdf0f787df8c3471d24bfaf0bbd3c130cf0e47ce609733afcf10dd7f8",
+        "copiedManifestSha256": "443ea94fdf0f787df8c3471d24bfaf0bbd3c130cf0e47ce609733afcf10dd7f8",
+        "fileCount": 12272,
+        "bytes": 808116869,
+        "licenseAndNoticeFileCount": 214,
+        "originalManifestVerified": true,
+        "independentFullInventoryEqual": true,
+        "hiddenAndNativeFilesIncluded": true
+      }
+    ],
+    "totalFiles": 12389,
+    "totalBytes": 1013382829,
+    "applicationExecutableCopied": false,
+    "archiveCreated": false
+  },
+  "signatureVerified": true,
+  "publicKeyFingerprintSha256": "6e5f32bd5f6dd5c1d6257dd65678288769aec4c729a86b7cf497b29668db0b51",
+  "updateURL": "https://tools.treasuregrove.art/lolicode/updates/latest.json",
+  "publication": {
+    "version": "4.0.14",
+    "sshAlias": "tools",
+    "namespace": "/www/wwwroot/tools.treasuregrove.art/lolicode",
+    "stageId": "f692a9a3-5ab3-48c3-be71-a2b691dc921d",
+    "files": [
+      {
+        "role": "release",
+        "name": "LoliCode-4.0.14-Windows-x64-Setup.exe",
+        "bytes": 263829458,
+        "sha256": "0999b25697039226ad29d942b3b4b4d0e907872de77e9ca82fff1501a581d016"
+      },
+      {
+        "role": "release",
+        "name": "LoliCode-4.0.14-Windows-x64-Setup.exe.sig",
+        "bytes": 420,
+        "sha256": "4d1d7d4c737a00496fce4a60dbc197c3e81a20122b85aac4af5e7ac67409e715"
+      },
+      {
+        "role": "release",
+        "name": "LoliCode-Portable.zip",
+        "bytes": 384878884,
+        "sha256": "d1db4163b9f3fe5c1f4ca26871436cbcbdc19fff85e4df2ac98bf070501bffde"
+      },
+      {
+        "role": "release",
+        "name": "latest.json",
+        "bytes": 2534,
+        "sha256": "bfdd2f32a6a49c575109b4919eee302d773c9bfbbbd9b69e6aa2cfb76c7b1eed"
+      },
+      {
+        "role": "release",
+        "name": "release-manifest.json",
+        "bytes": 1120,
+        "sha256": "f8c38148d9557535f187e0283acc91b6b5b92b4d1fc791587bce1aeda7bf3761"
+      },
+      {
+        "role": "release",
+        "name": "upload-plan.json",
+        "bytes": 1601,
+        "sha256": "d8f159143b99a757ebeae23491aea3223bf7eb9af97ff222493c4c3bc1fdbc4c"
+      },
+      {
+        "role": "site",
+        "name": "assets/downloads.js",
+        "bytes": 2727,
+        "sha256": "da276784e5c4f62403673e0600b92271f4748a666050c6fc973b734cedff989c"
+      },
+      {
+        "role": "site",
+        "name": "assets/logo.svg",
+        "bytes": 2713,
+        "sha256": "35bf715b8d27a30734adf1d361c50b31d7c83020842bd14561d16a181eb284ad"
+      },
+      {
+        "role": "site",
+        "name": "assets/maid.png",
+        "bytes": 1889567,
+        "sha256": "4fb84ad2a46ea2803d9aea7dcd260a2b783c5dc9d18cdea49d69e69f96e63ceb"
+      },
+      {
+        "role": "site",
+        "name": "assets/site.css",
+        "bytes": 3615,
+        "sha256": "cc034bf5bd5eebee83867ceedd74a5b1b95fde5564faa19564149223b15eb7c9"
+      },
+      {
+        "role": "site",
+        "name": "index.html",
+        "bytes": 2922,
+        "sha256": "8afc9089dbb1c65c2fcaa369592e0afea85d50e4eaf1f8293b21f8726194d1e9"
+      }
+    ],
+    "publishLatestLast": true,
+    "downloadTimeoutSeconds": 7200,
+    "published": true,
+    "publicSignatureAndHashesVerified": true,
+    "stagingRetained": true,
+    "publicDownloadChecks": [
+      {
+        "artifact": "LoliCode-4.0.14-Windows-x64-Setup.exe",
+        "publicDownloadMethod": "Full external Windows-client HTTPS download; initial Node fetch timed out after 600 seconds, curl added a partial HTTP Range segment, and Node completed the same owned cache with a validated HTTP Range",
+        "bytes": 263829458,
+        "sha256": "0999b25697039226ad29d942b3b4b4d0e907872de77e9ca82fff1501a581d016",
+        "reusedVerifiedBytes": true
+      },
+      {
+        "artifact": "LoliCode-4.0.14-Windows-x64-Setup.exe.sig",
+        "publicDownloadMethod": "Fresh external-client HTTPS download",
+        "bytes": 420,
+        "sha256": "4d1d7d4c737a00496fce4a60dbc197c3e81a20122b85aac4af5e7ac67409e715"
+      },
+      {
+        "artifact": "LoliCode-Portable.zip",
+        "publicDownloadMethod": "Full HTTPS download from release host using public hostname/SNI and loopback address; default certificate validation; not an external-client bandwidth test",
+        "bytes": 384878884,
+        "sha256": "d1db4163b9f3fe5c1f4ca26871436cbcbdc19fff85e4df2ac98bf070501bffde",
+        "reusedVerifiedBytes": true
+      }
+    ],
+    "portableClientFullDownloadPerformed": false,
+    "installerClientFullDownloadPerformed": true,
+    "installerExecuted": false
+  },
+  "appearance": "Existing overall layout and styling retained pending user design",
+  "installerResourceQA": {
+    "format": 1,
+    "version": "4.0.14",
+    "sourceCommit": "39caf4e3f2d7c2bfaa77529943cd365731d7de06",
+    "verifiedAt": "2026-10-15T04:00:58.899Z",
+    "installer": {
+      "name": "LoliCode_4.0.14_x64-setup.exe",
+      "bytes": 263829458,
+      "sha256": "0999b25697039226ad29d942b3b4b4d0e907872de77e9ca82fff1501a581d016",
+      "nsisIntegrityTestPassed": true,
+      "extractionNamesRecovered": true,
+      "executed": false
+    },
+    "application": {
+      "extractedPath": "tai-switch.exe",
+      "bytes": 49876992,
+      "sha256": "8309dfc565dbbe15047bfc81f95d16a535234b557ce7d85d71833f05587f3415",
+      "matchesBuiltApplication": false,
+      "matchesDeliveredApplication": false,
+      "builtApplicationSha256": "ca325b0dd6185b6b0745a3dbb3fdd3af80d9ecd56d2ddc7f376af0ada3f3ae67",
+      "deliveredApplicationSha256": "ca325b0dd6185b6b0745a3dbb3fdd3af80d9ecd56d2ddc7f376af0ada3f3ae67",
+      "bundleMarker": {
+        "offset": 39753136,
+        "differingBytes": 3,
+        "installer": "NSS",
+        "completedBuild": "UNK",
+        "delivered": "UNK",
+        "onlyDifferenceFromCompletedBuild": true,
+        "source": "Tauri bundler temporarily stamps its three-byte package type and restores the original binary",
+        "officialSource": "https://github.com/tauri-apps/tauri/blob/tauri-cli-v2.10.1/crates/tauri-bundler/src/bundle.rs#L107"
+      },
+      "fileVersion": "4.0.14",
+      "productVersion": "4.0.14"
+    },
+    "resources": [
+      {
+        "directory": "agent",
+        "fileCount": 117,
+        "bytes": 205265960,
+        "fullInventoryEqual": true,
+        "everyFileSha256Equal": true,
+        "runtimeManifestVerified": true,
+        "manifestSha256": "a46c9871b3c49be3b7c1edffd086fdfa23d5380a8e6d06d7f7f14f06372841b8",
+        "licenseAndNoticeFileCount": 8
+      },
+      {
+        "directory": "zcode-runtime",
+        "fileCount": 12272,
+        "bytes": 808116869,
+        "fullInventoryEqual": true,
+        "everyFileSha256Equal": true,
+        "runtimeManifestVerified": true,
+        "manifestSha256": "443ea94fdf0f787df8c3471d24bfaf0bbd3c130cf0e47ce609733afcf10dd7f8",
+        "licenseAndNoticeFileCount": 214
+      }
+    ],
+    "totalFiles": 12389,
+    "totalBytes": 1013382829,
+    "defaultSkills": {
+      "count": 5,
+      "fileCount": 110,
+      "originalHashesVerified": true
+    },
+    "remoteRuntime": {
+      "platform": "linux-x64",
+      "filesVerified": 6096,
+      "originalManifestVerified": true,
+      "nativeAssetsPresent": true
+    },
+    "noInstallNoRestart": true,
+    "ownedExtractionRemoved": false,
+    "success": true,
+    "cleanupStatus": "Automatic approval review rejected owned temporary extraction cleanup: blocked by policy; no detailed reason provided",
+    "retainedTemporaryDirectory": "lolicode-installer-qa-4f06f396aa884d35a449e466541ca8b5"
+  },
+  "portableQA": {
+    "zipMainExecutable": {
+      "entry": "LoliCode.exe",
+      "bytes": 49876992,
+      "sha256": "ca325b0dd6185b6b0745a3dbb3fdd3af80d9ecd56d2ddc7f376af0ada3f3ae67",
+      "bundleType": "UNK",
+      "matchesFinalTarget": true
+    },
+    "archiveIntegrityPassed": true,
+    "archiveBytes": 384878884
+  },
+  "releaseToolCommit": "13df3dd",
+  "publicPackageChecks": {
+    "installer": {
+      "version": "4.0.14",
+      "artifact": "LoliCode-4.0.14-Windows-x64-Setup.exe",
+      "url": "https://tools.treasuregrove.art/lolicode/releases/4.0.14/LoliCode-4.0.14-Windows-x64-Setup.exe",
+      "method": "Full external Windows-client HTTPS download; initial Node fetch timed out after 600 seconds, curl added a partial HTTP Range segment, and Node completed the same owned cache with a validated HTTP Range",
+      "bytes": 263829458,
+      "sha256": "0999b25697039226ad29d942b3b4b4d0e907872de77e9ca82fff1501a581d016",
+      "signatureVerified": true,
+      "verified": true,
+      "installerExecuted": false,
+      "transferReceipt": {
+        "httpStatus": 206,
+        "initialNodeTimedOutAtBytes": 176438995,
+        "finalRangeStart": 198176467,
+        "resumedBytes": 65652991,
+        "totalBytes": 263829458,
+        "seconds": 242,
+        "transport": "Node HTTPS Range; exact original partial cache; curl intermediate partial transfer closed before final resume"
+      }
+    },
+    "portableFull": {
+      "version": "4.0.14",
+      "artifact": "LoliCode-Portable.zip",
+      "url": "https://tools.treasuregrove.art/lolicode/releases/4.0.14/LoliCode-Portable.zip",
+      "method": "Full HTTPS download from release host using public hostname/SNI and loopback address; default certificate validation; not an external-client bandwidth test",
+      "bytes": 384878884,
+      "sha256": "d1db4163b9f3fe5c1f4ca26871436cbcbdc19fff85e4df2ac98bf070501bffde",
+      "seconds": 1.693,
+      "downloadedToDisk": false,
+      "verified": true
+    },
+    "portableExternalRange": {
+      "version": "4.0.14",
+      "url": "https://tools.treasuregrove.art/lolicode/releases/4.0.14/LoliCode-Portable.zip",
+      "method": "External Windows client HTTPS 512-byte range compared byte-for-byte with signed-release preparation input; full-file verification separately performed on release host",
+      "status": 206,
+      "bytes": 512,
+      "totalBytes": 384878884,
+      "sha256": "3427655fb191c5f8c1ea9b0c55682cfbec62cc5ee69d47bce8dc726af893d2b1",
+      "verified": true
+    }
+  },
+  "nativeUpdater": {
+    "candidate": {
+      "format": 1,
+      "version": "4.0.14",
+      "verifiedAt": "2026-10-15T04:25:06.4609375Z",
+      "evidenceKind": "Official Tauri updater SDK; local-distribution of the exact complete HTTPS-downloaded candidate",
+      "distribution": "local-distribution",
+      "defaultPublicSdkDownload": false,
+      "publicCacheWholeSha256Verified": true,
+      "signatureUnchanged": true,
+      "noInstallNoRestart": true,
+      "officialSdkExitCode": 0,
+      "exampleSha256": "a440526a399c1a674d3dcabe7d6e1d2b7c7a6f0411259e39c214d0d94319b200",
+      "sdk": {
+        "runtime": "tauri_mockruntime",
+        "currentVersion": "4.0.13",
+        "target": "windows-x86_64",
+        "latestVersion": "4.0.14",
+        "downloadAttempted": true,
+        "downloadedBytes": 263829458,
+        "sha256": "0999b25697039226ad29d942b3b4b4d0e907872de77e9ca82fff1501a581d016",
+        "signatureVerified": true,
+        "installerExitHookInvoked": false,
+        "installationSupported": false,
+        "userConfigurationRead": false,
+        "webviewCreated": false,
+        "result": "signature_verified",
+        "endpointKind": "loopback_fixture",
+        "stage": "verified"
+      },
+      "server": {
+        "bind": "127.0.0.1",
+        "installerSha256": "0999b25697039226ad29d942b3b4b4d0e907872de77e9ca82fff1501a581d016",
+        "bytes": 263829458,
+        "requests": {
+          "metadata": 1,
+          "installer": 1,
+          "unsupported": 0
+        },
+        "servedBytes": 263829458,
+        "completedDownloads": 1,
+        "noExternalFetch": true,
+        "stopped": true
+      }
+    },
+    "defaultHttpsCheck": {
+      "format": 1,
+      "version": "4.0.14",
+      "verifiedAt": "2026-10-15T04:25:55.6104557Z",
+      "evidenceKind": "Official Tauri updater SDK default configured public HTTPS metadata check",
+      "endpoint": "https://tools.treasuregrove.art/lolicode/updates/latest.json",
+      "usesDefaultConfiguredEndpoint": true,
+      "command": "lolicode_updater_smoke.exe --check-only --expect-version 4.0.14",
+      "officialSdkExitCode": 0,
+      "noPackageDownload": true,
+      "noInstallNoRestart": true,
+      "exampleSha256": "a440526a399c1a674d3dcabe7d6e1d2b7c7a6f0411259e39c214d0d94319b200",
+      "sdk": {
+        "runtime": "tauri_mockruntime",
+        "currentVersion": "4.0.13",
+        "target": "windows-x86_64",
+        "latestVersion": "4.0.14",
+        "downloadAttempted": false,
+        "downloadedBytes": 0,
+        "sha256": null,
+        "signatureVerified": false,
+        "installerExitHookInvoked": false,
+        "installationSupported": false,
+        "userConfigurationRead": false,
+        "webviewCreated": false,
+        "result": "update_available_check_only",
+        "endpointKind": "https_release",
+        "stage": "checked"
+      }
+    }
+  },
+  "publicWebsite": {
+    "kind": "live_public_site_chromium_check",
+    "expectedVersion": "4.0.14",
+    "url": "https://tools.treasuregrove.art/lolicode/",
+    "startedAt": "2026-10-15T04:25:53.857Z",
+    "browser": "Chromium",
+    "gates": {
+      "publicVersionDisplayed": true,
+      "latestIs4014": true,
+      "immutableInstallerAndPortableLinks": true,
+      "packageHeadRequestsSucceed": true,
+      "currentReleaseNotesVisible": true,
+      "pageImagesDecoded": true,
+      "noHorizontalOverflow": true,
+      "resourcesAndConsoleClean": true
+    },
+    "pageErrors": [],
+    "consoleErrors": [],
+    "httpErrors": [],
+    "failedRequests": [],
+    "preventedWrites": [],
+    "preventedLargeDownloads": [],
+    "assetResponses": [
+      {
+        "url": "https://tools.treasuregrove.art/lolicode/",
+        "status": 200,
+        "type": "document"
+      },
+      {
+        "url": "https://tools.treasuregrove.art/lolicode/assets/site.css?v=4.0.14",
+        "status": 200,
+        "type": "stylesheet"
+      },
+      {
+        "url": "https://tools.treasuregrove.art/lolicode/assets/maid.png",
+        "status": 200,
+        "type": "image"
+      },
+      {
+        "url": "https://tools.treasuregrove.art/lolicode/assets/downloads.js?v=4.0.14",
+        "status": 200,
+        "type": "script"
+      },
+      {
+        "url": "https://tools.treasuregrove.art/lolicode/assets/logo.svg",
+        "status": 200,
+        "type": "image"
+      },
+      {
+        "url": "https://tools.treasuregrove.art/lolicode/updates/latest.json",
+        "status": 200,
+        "type": "fetch"
+      }
+    ],
+    "downloadHeads": [
+      {
+        "url": "https://tools.treasuregrove.art/lolicode/releases/4.0.14/LoliCode-4.0.14-Windows-x64-Setup.exe",
+        "status": 200,
+        "bytes": 263829458,
+        "contentType": "application/octet-stream"
+      },
+      {
+        "url": "https://tools.treasuregrove.art/lolicode/releases/4.0.14/LoliCode-Portable.zip",
+        "status": 200,
+        "bytes": 384878884,
+        "contentType": "application/zip"
+      }
+    ],
+    "largePackagesDownloaded": 0,
+    "paidCalls": 0,
+    "nativeAppOrUserConfigurationChanged": false,
+    "documentStatus": 200,
+    "documentTitle": "LoliCode · 下载与更新",
+    "headings": [
+      "从一个项目开始，让想法变成代码。",
+      "这次更新了什么"
+    ],
+    "latest": {
+      "version": "4.0.14",
+      "pubDate": "2026-10-15T04:00:29.627Z"
+    },
+    "downloadLinks": {
+      "installer": {
+        "text": "下载安装版",
+        "href": "https://tools.treasuregrove.art/lolicode/releases/4.0.14/LoliCode-4.0.14-Windows-x64-Setup.exe"
+      },
+      "portable": {
+        "text": "下载便携版",
+        "href": "https://tools.treasuregrove.art/lolicode/releases/4.0.14/LoliCode-Portable.zip"
+      }
+    },
+    "releaseNotesExcerpt": "4.0.14\nWindows · x64\n\n正式版已发布，可以下载。\n\n下载安装版\n下载便携版\n\n推荐安装版，后续可在应用内更新。首次从旧版升级时，请先从托盘退出旧版。\n\n软件更新\n\n这次更新了什么\n\n# LoliCode 4.0.14\n\n- Agent 生成的项目内本地图片可在聊天中预览、放大和关闭。\n- 保存渠道后自动同步编程模型目录，并保留手动刷新。任务执行时延迟同步，刷新后等待真实运行时应用目录。\n- 模型状态改为可理解的说明；自动获取上游明确提供的上下文、输出上限和思考档位，缺失项不冒充已验证能力。\n- 新会话使用固定源码的 ZCode 3.15.1 原生执行器，接入 Guarded / Plan / 完整访问、真实问答及单次授权。权限卡直接显示将执行的命令和涉及路径。\n- 加入原生工作流、持久自动化及 SSH / WSL 远程项目入口，使用现有界面组件，整体视觉等待后续设计稿。\n- 保留旧 OpenCode 会话与原始配置。修复迟到发送回执清除新草稿、请求不确定时重复提交及历史分页缺失提示。\n- 应用内继续使用 LoliCode 自有更新地址和签名校验；更新前检查本地及远程任务状态。\n\nLinux 远程资源目前准备为 x64 / glibc 2.34 及以上，连接在独立 LoliCode 目录部署。WSL 运行需本机实际安装兼容发行版。公开上游的 Computer Us",
+    "images": [
+      {
+        "src": "https://tools.treasuregrove.art/lolicode/assets/logo.svg",
+        "width": 256,
+        "height": 256,
+        "complete": true
+      },
+      {
+        "src": "https://tools.treasuregrove.art/lolicode/assets/maid.png",
+        "width": 1024,
+        "height": 1536,
+        "complete": true
+      }
+    ],
+    "desktopLayout": {
+      "viewport": 1280,
+      "scrollWidth": 1280
+    },
+    "screenshot": "D:\\projectGithub\\TAI-Switch\\release\\LoliCode-4.0.14-zcode-20261015\\public-download-page.png",
+    "mobileLayout": {
+      "viewport": 390,
+      "scrollWidth": 390
+    },
+    "completedAt": "2026-10-15T04:26:00.509Z",
+    "success": true
+  },
+  "deliveryVerifiedAt": "2026-10-15T04:27:13.053Z"
+}

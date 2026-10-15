@@ -1,0 +1,44 @@
+{
+  "format": 1,
+  "version": "4.0.14",
+  "verifiedAt": "2026-10-15T04:25:06.4609375Z",
+  "evidenceKind": "Official Tauri updater SDK; local-distribution of the exact complete HTTPS-downloaded candidate",
+  "distribution": "local-distribution",
+  "defaultPublicSdkDownload": false,
+  "publicCacheWholeSha256Verified": true,
+  "signatureUnchanged": true,
+  "noInstallNoRestart": true,
+  "officialSdkExitCode": 0,
+  "exampleSha256": "a440526a399c1a674d3dcabe7d6e1d2b7c7a6f0411259e39c214d0d94319b200",
+  "sdk": {
+    "runtime": "tauri_mockruntime",
+    "currentVersion": "4.0.13",
+    "target": "windows-x86_64",
+    "latestVersion": "4.0.14",
+    "downloadAttempted": true,
+    "downloadedBytes": 263829458,
+    "sha256": "0999b25697039226ad29d942b3b4b4d0e907872de77e9ca82fff1501a581d016",
+    "signatureVerified": true,
+    "installerExitHookInvoked": false,
+    "installationSupported": false,
+    "userConfigurationRead": false,
+    "webviewCreated": false,
+    "result": "signature_verified",
+    "endpointKind": "loopback_fixture",
+    "stage": "verified"
+  },
+  "server": {
+    "bind": "127.0.0.1",
+    "installerSha256": "0999b25697039226ad29d942b3b4b4d0e907872de77e9ca82fff1501a581d016",
+    "bytes": 263829458,
+    "requests": {
+      "metadata": 1,
+      "installer": 1,
+      "unsupported": 0
+    },
+    "servedBytes": 263829458,
+    "completedDownloads": 1,
+    "noExternalFetch": true,
+    "stopped": true
+  }
+}

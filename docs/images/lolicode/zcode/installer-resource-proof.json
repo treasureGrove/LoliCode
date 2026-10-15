@@ -1,0 +1,75 @@
+{
+  "format": 1,
+  "version": "4.0.14",
+  "sourceCommit": "39caf4e3f2d7c2bfaa77529943cd365731d7de06",
+  "verifiedAt": "2026-10-15T04:00:58.899Z",
+  "installer": {
+    "name": "LoliCode_4.0.14_x64-setup.exe",
+    "bytes": 263829458,
+    "sha256": "0999b25697039226ad29d942b3b4b4d0e907872de77e9ca82fff1501a581d016",
+    "nsisIntegrityTestPassed": true,
+    "extractionNamesRecovered": true,
+    "executed": false
+  },
+  "application": {
+    "extractedPath": "tai-switch.exe",
+    "bytes": 49876992,
+    "sha256": "8309dfc565dbbe15047bfc81f95d16a535234b557ce7d85d71833f05587f3415",
+    "matchesBuiltApplication": false,
+    "matchesDeliveredApplication": false,
+    "builtApplicationSha256": "ca325b0dd6185b6b0745a3dbb3fdd3af80d9ecd56d2ddc7f376af0ada3f3ae67",
+    "deliveredApplicationSha256": "ca325b0dd6185b6b0745a3dbb3fdd3af80d9ecd56d2ddc7f376af0ada3f3ae67",
+    "bundleMarker": {
+      "offset": 39753136,
+      "differingBytes": 3,
+      "installer": "NSS",
+      "completedBuild": "UNK",
+      "delivered": "UNK",
+      "onlyDifferenceFromCompletedBuild": true,
+      "source": "Tauri bundler temporarily stamps its three-byte package type and restores the original binary",
+      "officialSource": "https://github.com/tauri-apps/tauri/blob/tauri-cli-v2.10.1/crates/tauri-bundler/src/bundle.rs#L107"
+    },
+    "fileVersion": "4.0.14",
+    "productVersion": "4.0.14"
+  },
+  "resources": [
+    {
+      "directory": "agent",
+      "fileCount": 117,
+      "bytes": 205265960,
+      "fullInventoryEqual": true,
+      "everyFileSha256Equal": true,
+      "runtimeManifestVerified": true,
+      "manifestSha256": "a46c9871b3c49be3b7c1edffd086fdfa23d5380a8e6d06d7f7f14f06372841b8",
+      "licenseAndNoticeFileCount": 8
+    },
+    {
+      "directory": "zcode-runtime",
+      "fileCount": 12272,
+      "bytes": 808116869,
+      "fullInventoryEqual": true,
+      "everyFileSha256Equal": true,
+      "runtimeManifestVerified": true,
+      "manifestSha256": "443ea94fdf0f787df8c3471d24bfaf0bbd3c130cf0e47ce609733afcf10dd7f8",
+      "licenseAndNoticeFileCount": 214
+    }
+  ],
+  "totalFiles": 12389,
+  "totalBytes": 1013382829,
+  "defaultSkills": {
+    "count": 5,
+    "fileCount": 110,
+    "originalHashesVerified": true
+  },
+  "remoteRuntime": {
+    "platform": "linux-x64",
+    "filesVerified": 6096,
+    "originalManifestVerified": true,
+    "nativeAssetsPresent": true
+  },
+  "noInstallNoRestart": true,
+  "ownedExtractionRemoved": false,
+  "success": true,
+  "cleanupStatus": "Automatic approval review rejected owned temporary extraction cleanup: blocked by policy; no detailed reason provided",
+  "retainedTemporaryDirectory": "lolicode-installer-qa-4f06f396aa884d35a449e466541ca8b5"
+}

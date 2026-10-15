@@ -1,0 +1,12 @@
+{
+  "version": "4.0.14",
+  "url": "https://tools.treasuregrove.art/lolicode/updates/latest.json",
+  "checkedAt": "2026-10-15T04:26:04.174Z",
+  "status": 200,
+  "bytes": 2534,
+  "sha256": "bfdd2f32a6a49c575109b4919eee302d773c9bfbbbd9b69e6aa2cfb76c7b1eed",
+  "exactlyMatchesPreparedManifest": true,
+  "installerURL": "https://tools.treasuregrove.art/lolicode/releases/4.0.14/LoliCode-4.0.14-Windows-x64-Setup.exe",
+  "portableURL": "https://tools.treasuregrove.art/lolicode/releases/4.0.14/LoliCode-Portable.zip",
+  "verified": true
+}

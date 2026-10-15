@@ -1,0 +1,11 @@
+{
+  "zipMainExecutable": {
+    "entry": "LoliCode.exe",
+    "bytes": 49876992,
+    "sha256": "ca325b0dd6185b6b0745a3dbb3fdd3af80d9ecd56d2ddc7f376af0ada3f3ae67",
+    "bundleType": "UNK",
+    "matchesFinalTarget": true
+  },
+  "archiveIntegrityPassed": true,
+  "archiveBytes": 384878884
+}

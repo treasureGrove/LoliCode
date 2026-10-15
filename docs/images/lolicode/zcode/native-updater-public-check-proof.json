@@ -1,0 +1,30 @@
+{
+  "format": 1,
+  "version": "4.0.14",
+  "verifiedAt": "2026-10-15T04:25:55.6104557Z",
+  "evidenceKind": "Official Tauri updater SDK default configured public HTTPS metadata check",
+  "endpoint": "https://tools.treasuregrove.art/lolicode/updates/latest.json",
+  "usesDefaultConfiguredEndpoint": true,
+  "command": "lolicode_updater_smoke.exe --check-only --expect-version 4.0.14",
+  "officialSdkExitCode": 0,
+  "noPackageDownload": true,
+  "noInstallNoRestart": true,
+  "exampleSha256": "a440526a399c1a674d3dcabe7d6e1d2b7c7a6f0411259e39c214d0d94319b200",
+  "sdk": {
+    "runtime": "tauri_mockruntime",
+    "currentVersion": "4.0.13",
+    "target": "windows-x86_64",
+    "latestVersion": "4.0.14",
+    "downloadAttempted": false,
+    "downloadedBytes": 0,
+    "sha256": null,
+    "signatureVerified": false,
+    "installerExitHookInvoked": false,
+    "installationSupported": false,
+    "userConfigurationRead": false,
+    "webviewCreated": false,
+    "result": "update_available_check_only",
+    "endpointKind": "https_release",
+    "stage": "checked"
+  }
+}

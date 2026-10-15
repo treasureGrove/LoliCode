@@ -1,0 +1,36 @@
+{
+  "format": 1,
+  "version": "4.0.14",
+  "sourceCommit": "39caf4e3f2d7c2bfaa77529943cd365731d7de06",
+  "verifiedAt": "2026-10-15T03:43:42.031Z",
+  "beforeBuildCompletedAndCargoStarted": true,
+  "resources": [
+    {
+      "directory": "agent",
+      "sourceManifestSha256": "a46c9871b3c49be3b7c1edffd086fdfa23d5380a8e6d06d7f7f14f06372841b8",
+      "copiedManifestSha256": "a46c9871b3c49be3b7c1edffd086fdfa23d5380a8e6d06d7f7f14f06372841b8",
+      "fileCount": 117,
+      "bytes": 205265960,
+      "licenseAndNoticeFileCount": 8,
+      "pinnedSkillFilesVerified": 110,
+      "originalManifestVerified": true,
+      "independentFullInventoryEqual": true,
+      "hiddenAndNativeFilesIncluded": true
+    },
+    {
+      "directory": "zcode-runtime",
+      "sourceManifestSha256": "443ea94fdf0f787df8c3471d24bfaf0bbd3c130cf0e47ce609733afcf10dd7f8",
+      "copiedManifestSha256": "443ea94fdf0f787df8c3471d24bfaf0bbd3c130cf0e47ce609733afcf10dd7f8",
+      "fileCount": 12272,
+      "bytes": 808116869,
+      "licenseAndNoticeFileCount": 214,
+      "originalManifestVerified": true,
+      "independentFullInventoryEqual": true,
+      "hiddenAndNativeFilesIncluded": true
+    }
+  ],
+  "totalFiles": 12389,
+  "totalBytes": 1013382829,
+  "applicationExecutableCopied": false,
+  "archiveCreated": false
+}

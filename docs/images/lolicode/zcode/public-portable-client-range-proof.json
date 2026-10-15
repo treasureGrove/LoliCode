@@ -1,0 +1,10 @@
+{
+  "version": "4.0.14",
+  "url": "https://tools.treasuregrove.art/lolicode/releases/4.0.14/LoliCode-Portable.zip",
+  "method": "External Windows client HTTPS 512-byte range compared byte-for-byte with signed-release preparation input; full-file verification separately performed on release host",
+  "status": 206,
+  "bytes": 512,
+  "totalBytes": 384878884,
+  "sha256": "3427655fb191c5f8c1ea9b0c55682cfbec62cc5ee69d47bce8dc726af893d2b1",
+  "verified": true
+}

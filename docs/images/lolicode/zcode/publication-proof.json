@@ -1,0 +1,104 @@
+{
+  "version": "4.0.14",
+  "sshAlias": "tools",
+  "namespace": "/www/wwwroot/tools.treasuregrove.art/lolicode",
+  "stageId": "f692a9a3-5ab3-48c3-be71-a2b691dc921d",
+  "files": [
+    {
+      "role": "release",
+      "name": "LoliCode-4.0.14-Windows-x64-Setup.exe",
+      "bytes": 263829458,
+      "sha256": "0999b25697039226ad29d942b3b4b4d0e907872de77e9ca82fff1501a581d016"
+    },
+    {
+      "role": "release",
+      "name": "LoliCode-4.0.14-Windows-x64-Setup.exe.sig",
+      "bytes": 420,
+      "sha256": "4d1d7d4c737a00496fce4a60dbc197c3e81a20122b85aac4af5e7ac67409e715"
+    },
+    {
+      "role": "release",
+      "name": "LoliCode-Portable.zip",
+      "bytes": 384878884,
+      "sha256": "d1db4163b9f3fe5c1f4ca26871436cbcbdc19fff85e4df2ac98bf070501bffde"
+    },
+    {
+      "role": "release",
+      "name": "latest.json",
+      "bytes": 2534,
+      "sha256": "bfdd2f32a6a49c575109b4919eee302d773c9bfbbbd9b69e6aa2cfb76c7b1eed"
+    },
+    {
+      "role": "release",
+      "name": "release-manifest.json",
+      "bytes": 1120,
+      "sha256": "f8c38148d9557535f187e0283acc91b6b5b92b4d1fc791587bce1aeda7bf3761"
+    },
+    {
+      "role": "release",
+      "name": "upload-plan.json",
+      "bytes": 1601,
+      "sha256": "d8f159143b99a757ebeae23491aea3223bf7eb9af97ff222493c4c3bc1fdbc4c"
+    },
+    {
+      "role": "site",
+      "name": "assets/downloads.js",
+      "bytes": 2727,
+      "sha256": "da276784e5c4f62403673e0600b92271f4748a666050c6fc973b734cedff989c"
+    },
+    {
+      "role": "site",
+      "name": "assets/logo.svg",
+      "bytes": 2713,
+      "sha256": "35bf715b8d27a30734adf1d361c50b31d7c83020842bd14561d16a181eb284ad"
+    },
+    {
+      "role": "site",
+      "name": "assets/maid.png",
+      "bytes": 1889567,
+      "sha256": "4fb84ad2a46ea2803d9aea7dcd260a2b783c5dc9d18cdea49d69e69f96e63ceb"
+    },
+    {
+      "role": "site",
+      "name": "assets/site.css",
+      "bytes": 3615,
+      "sha256": "cc034bf5bd5eebee83867ceedd74a5b1b95fde5564faa19564149223b15eb7c9"
+    },
+    {
+      "role": "site",
+      "name": "index.html",
+      "bytes": 2922,
+      "sha256": "8afc9089dbb1c65c2fcaa369592e0afea85d50e4eaf1f8293b21f8726194d1e9"
+    }
+  ],
+  "publishLatestLast": true,
+  "downloadTimeoutSeconds": 7200,
+  "published": true,
+  "publicSignatureAndHashesVerified": true,
+  "stagingRetained": true,
+  "publicDownloadChecks": [
+    {
+      "artifact": "LoliCode-4.0.14-Windows-x64-Setup.exe",
+      "publicDownloadMethod": "Full external Windows-client HTTPS download; initial Node fetch timed out after 600 seconds, curl added a partial HTTP Range segment, and Node completed the same owned cache with a validated HTTP Range",
+      "bytes": 263829458,
+      "sha256": "0999b25697039226ad29d942b3b4b4d0e907872de77e9ca82fff1501a581d016",
+      "reusedVerifiedBytes": true
+    },
+    {
+      "artifact": "LoliCode-4.0.14-Windows-x64-Setup.exe.sig",
+      "publicDownloadMethod": "Fresh external-client HTTPS download",
+      "bytes": 420,
+      "sha256": "4d1d7d4c737a00496fce4a60dbc197c3e81a20122b85aac4af5e7ac67409e715"
+    },
+    {
+      "artifact": "LoliCode-Portable.zip",
+      "publicDownloadMethod": "Full HTTPS download from release host using public hostname/SNI and loopback address; default certificate validation; not an external-client bandwidth test",
+      "bytes": 384878884,
+      "sha256": "d1db4163b9f3fe5c1f4ca26871436cbcbdc19fff85e4df2ac98bf070501bffde",
+      "reusedVerifiedBytes": true
+    }
+  ],
+  "portableClientFullDownloadPerformed": false,
+  "installerClientFullDownloadPerformed": true,
+  "installerExecuted": false
+}
