@@ -14,6 +14,8 @@ export interface ChannelModel {
   outputLimit?: number;
   /** Exact effort values advertised by the upstream catalog; absent is unknown. */
   reasoningEfforts?: string[];
+  reasoningEffortSource?: string;
+  reasoningEffortTransport?: "declared" | "unconfirmed" | "mixed";
   supportsTools?: boolean;
   inputModalities?: string[];
   protocol?: ChannelProtocol;

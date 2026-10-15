@@ -145,6 +145,8 @@ fn metadata(value: &Value) -> Option<AgentSession> {
         model,
         created_at: value["time"]["created"].as_u64().unwrap_or(0),
         updated_at: value["time"]["updated"].as_u64().unwrap_or(0),
+        activity: None,
+        reasoning_effort: None,
     })
 }
 fn valid_id(id: &str) -> bool {
@@ -407,6 +409,8 @@ pub fn legacy_snapshot(root: &Path, session_id: &str) -> Result<AgentSnapshot, S
         error: None,
         stream_connected: false,
         stream_gap: false,
+        title_pending: false,
+        compacting: false,
     })
 }
 fn notice(id: &str, text: &str) -> AgentMessage {

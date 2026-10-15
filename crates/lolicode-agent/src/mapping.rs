@@ -45,6 +45,8 @@ pub(crate) fn session(value: &Value) -> Result<AgentSession, String> {
         model,
         created_at: timestamp(&value["time"], "created"),
         updated_at: timestamp(&value["time"], "updated"),
+        activity: None,
+        reasoning_effort: None,
     })
 }
 

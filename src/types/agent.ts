@@ -29,6 +29,8 @@ export interface AgentModel {
   contextLimit?: number | null;
   outputLimit?: number | null;
   reasoningEfforts?: string[] | null;
+  reasoningEffortSource?: string | null;
+  reasoningEffortTransport?: "declared" | "unconfirmed" | "mixed" | null;
 }
 
 export interface AgentCatalog {
@@ -55,10 +57,13 @@ export interface AgentSession {
   model?: { providerId: string; modelId: string } | null;
   mode?: AgentMode | string;
   permissionMode?: AgentPermissionMode | "custom" | string;
+  reasoningEffort?: string | null;
   pinned?: boolean;
   archived?: boolean;
   createdAt: number;
   updatedAt: number;
+  /** Lightweight list metadata; subsequent snapshots remain authoritative. */
+  activity?: { status: AgentStatus; titlePending: boolean };
 }
 
 export type AgentPart =
@@ -148,6 +153,10 @@ export interface AgentSnapshot {
   error?: string | null;
   streamConnected?: boolean;
   streamGap?: boolean;
+  /** A background title job is queued/running; it does not block another prompt. */
+  titlePending?: boolean;
+  /** True only while the engine is building an automatic context checkpoint. */
+  compacting?: boolean;
 }
 
 export interface AgentProjectResult {

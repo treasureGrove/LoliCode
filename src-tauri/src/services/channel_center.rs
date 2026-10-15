@@ -42,6 +42,10 @@ pub struct ChannelModel {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reasoning_efforts: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort_source: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort_transport: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub supports_tools: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub input_modalities: Option<Vec<String>>,
@@ -140,6 +144,10 @@ pub struct AgentCatalogModel {
     pub output_limit: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reasoning_efforts: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort_source: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort_transport: Option<String>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -504,6 +512,8 @@ fn blank_model(id: String) -> ChannelModel {
         context_limit: None,
         output_limit: None,
         reasoning_efforts: None,
+        reasoning_effort_source: None,
+        reasoning_effort_transport: None,
         supports_tools: None,
         input_modalities: None,
         protocol: None,
@@ -523,7 +533,7 @@ pub async fn discover_api_models(mut channel: ChannelSource) -> Result<ChannelSo
     if channel.api_key.trim().is_empty() {
         return Err(AppError::InvalidInput("请先填写 API Key".into()));
     }
-    let discovered = if channel.protocol == "gemini_native" {
+    let mut discovered = if channel.protocol == "gemini_native" {
         discover_gemini_models(&channel).await?
     } else {
         let mut headers = BTreeMap::new();
@@ -572,6 +582,7 @@ pub async fn discover_api_models(mut channel: ChannelSource) -> Result<ChannelSo
         }
         parsed
     };
+    super::litellm_capabilities::enrich(&channel, &mut discovered).await;
     channel.models = merge_discovered(&channel.models, discovered);
     exclude_known_non_agent_models(&mut channel);
     Ok(channel)
@@ -599,9 +610,27 @@ fn merge_discovered(existing: &[ChannelModel], discovered: Vec<ChannelModel>) ->
             model.name = model.name.or_else(|| saved.name.clone());
             model.context_limit = model.context_limit.or(saved.context_limit);
             model.output_limit = model.output_limit.or(saved.output_limit);
-            model.reasoning_efforts = model
-                .reasoning_efforts
-                .or_else(|| saved.reasoning_efforts.clone());
+            // Keep capability provenance attached to the exact enum it describes.
+            // Saved values without provenance can be user-provided; a registry
+            // suggestion must not silently overwrite that explicit choice.
+            // Successful auxiliary refreshes mark unknown routes with transport;
+            // failed requests leave it absent and retain cached capabilities.
+            let stale_inference = model.reasoning_efforts.is_none()
+                && model.reasoning_effort_transport.is_some()
+                && matches!(
+                    saved.reasoning_effort_source.as_deref(),
+                    Some(super::litellm_capabilities::REGISTRY_SOURCE | "litellm:model-info")
+                );
+            let saved_enum_wins = saved.reasoning_efforts.is_some()
+                && ((model.reasoning_efforts.is_none() && !stale_inference)
+                    || (saved.reasoning_effort_source.is_none()
+                        && model.reasoning_effort_source.as_deref()
+                            == Some(super::litellm_capabilities::REGISTRY_SOURCE)));
+            if saved_enum_wins {
+                model.reasoning_efforts = saved.reasoning_efforts.clone();
+                model.reasoning_effort_source = saved.reasoning_effort_source.clone();
+                model.reasoning_effort_transport = saved.reasoning_effort_transport.clone();
+            }
             model.supports_tools = model.supports_tools.or(saved.supports_tools);
             model.input_modalities = model
                 .input_modalities
@@ -799,6 +828,10 @@ fn parse_channel_catalog(raw: &Value) -> Result<Vec<ChannelModel>, AppError> {
         model.context_limit = metadata.context_limit.or(model.context_limit);
         model.output_limit = metadata.output_limit.or(model.output_limit);
         model.reasoning_efforts = metadata.reasoning_efforts;
+        if model.reasoning_efforts.is_some() {
+            model.reasoning_effort_source = Some("relay:model-directory".into());
+            model.reasoning_effort_transport = Some("declared".into());
+        }
         model.supports_tools = [
             "/supports_tools",
             "/supportsTools",
@@ -1010,6 +1043,8 @@ pub fn merge_copilot_models(
                         })
                         .collect()
                 }),
+                reasoning_effort_source: None,
+                reasoning_effort_transport: None,
                 // Lack of parallel calls does not mean lack of ordinary tool calls.
                 supports_tools: if model.supports_parallel_tool_calls == Some(true) {
                     Some(true)
@@ -1076,6 +1111,8 @@ pub fn native_subscription_channel(tool: &str) -> Result<ChannelSource, AppError
             context_limit: None,
             output_limit: None,
             reasoning_efforts: None,
+            reasoning_effort_source: None,
+            reasoning_effort_transport: None,
             supports_tools: None,
             input_modalities: None,
             protocol: Some(protocol.into()),
@@ -1130,6 +1167,8 @@ pub fn merge_subscription_models(
             context_limit: model.metadata.context_limit,
             output_limit: model.metadata.output_limit,
             reasoning_efforts: model.metadata.reasoning_efforts,
+            reasoning_effort_source: None,
+            reasoning_effort_transport: None,
             supports_tools: None,
             input_modalities: None,
             protocol: Some(protocol.into()),
@@ -1801,6 +1840,8 @@ fn agent_catalog_from_snapshot(snapshot: &ChannelCenterSnapshot) -> AgentCatalog
                         context_limit: model.context_limit,
                         output_limit: model.output_limit,
                         reasoning_efforts: model.reasoning_efforts.clone(),
+                        reasoning_effort_source: model.reasoning_effort_source.clone(),
+                        reasoning_effort_transport: model.reasoning_effort_transport.clone(),
                     }
                 })
         })
@@ -3990,6 +4031,84 @@ mod tests {
             Some("openai_responses")
         );
         server.abort();
+    }
+
+    #[tokio::test]
+    async fn litellm_discovery_joins_exact_model_names_and_keeps_relay_limits_and_selection() {
+        use axum::{routing::get, Json, Router};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let router = Router::new()
+            .route("/v1/models", get(|| async { Json(json!({"data":[{"id":"published","max_input_tokens":32000,"max_output_tokens":4000}]})) }))
+            .route("/model/info", get(|headers: axum::http::HeaderMap| async move {
+                assert_eq!(headers.get("authorization").unwrap(), "Bearer test-fixture-key");
+                Json(json!({"data":[
+                    {"model_name":"published","litellm_params":{"model":"openai/gpt-6-astra","api_key":"must-not-escape"},"model_info":{"max_input_tokens":200000,"max_output_tokens":128000,"supported_openai_params":["reasoning_effort"]}},
+                    {"model_name":"not-published","litellm_params":{"model":"openai/gpt-6-astra"},"model_info":{}}
+                ]}))
+            }));
+        let server = tokio::spawn(async move { axum::serve(listener, router).await.unwrap(); });
+        let mut channel = source("fixture");
+        channel.name = "LiteLLM".into();
+        channel.base_url = format!("http://{address}/v1");
+        channel.models = vec![blank_model("published".into())];
+        channel.models[0].enabled = Some(false);
+        let discovered = discover_api_models(channel).await.unwrap();
+        assert_eq!(discovered.models.len(), 1);
+        let model = &discovered.models[0];
+        assert_eq!(model.id, "published");
+        assert_eq!(model.context_limit, Some(32000));
+        assert_eq!(model.output_limit, Some(4000));
+        assert_eq!(model.enabled, Some(false));
+        assert!(model.reasoning_efforts.as_ref().unwrap().contains(&"xhigh".into()));
+        assert_eq!(model.reasoning_effort_transport.as_deref(), Some("declared"));
+        assert!(!serde_json::to_string(model).unwrap().contains("must-not-escape"));
+        let expected_source = model.reasoning_effort_source.clone();
+        let mut snapshot = ChannelCenterSnapshot { channels: vec![discovered], ..Default::default() };
+        snapshot.channels[0].models[0].enabled = Some(true);
+        let catalog = agent_catalog_from_snapshot(&snapshot);
+        assert_eq!(catalog.models[0].reasoning_effort_source, expected_source);
+        assert_eq!(catalog.models[0].reasoning_effort_transport.as_deref(), Some("declared"));
+        server.abort();
+    }
+
+    #[test]
+    fn inferred_reasoning_refresh_preserves_manual_values_and_their_provenance() {
+        let mut saved = blank_model("alias".into());
+        saved.reasoning_efforts = Some(vec!["custom".into()]);
+        let mut fresh = blank_model("alias".into());
+        fresh.reasoning_efforts = Some(vec!["low".into(), "high".into()]);
+        fresh.reasoning_effort_source = Some(super::super::litellm_capabilities::REGISTRY_SOURCE.into());
+        fresh.reasoning_effort_transport = Some("unconfirmed".into());
+        let merged = merge_discovered(&[saved], vec![fresh]);
+        assert_eq!(merged[0].reasoning_efforts, Some(vec!["custom".into()]));
+        assert!(merged[0].reasoning_effort_source.is_none());
+        assert!(merged[0].reasoning_effort_transport.is_none());
+    }
+
+    #[test]
+    fn successful_unknown_refresh_discards_stale_inferences_but_failure_keeps_them() {
+        for source in [super::super::litellm_capabilities::REGISTRY_SOURCE, "litellm:model-info"] {
+            let mut saved = blank_model("alias".into());
+            saved.reasoning_efforts = Some(vec!["low".into(), "high".into()]);
+            saved.reasoning_effort_source = Some(source.into());
+            saved.reasoning_effort_transport = Some("declared".into());
+            saved.enabled = Some(false);
+            let failed = merge_discovered(&[saved.clone()], vec![blank_model("alias".into())]);
+            assert_eq!(failed[0].reasoning_efforts, saved.reasoning_efforts);
+            let mut unknown = blank_model("alias".into());
+            unknown.reasoning_effort_transport = Some("mixed".into());
+            let refreshed = merge_discovered(&[saved], vec![unknown.clone()]);
+            assert!(refreshed[0].reasoning_efforts.is_none());
+            assert!(refreshed[0].reasoning_effort_source.is_none());
+            assert_eq!(refreshed[0].reasoning_effort_transport.as_deref(), Some("mixed"));
+            assert_eq!(refreshed[0].enabled, Some(false));
+            let mut manual = blank_model("alias".into());
+            manual.reasoning_efforts = Some(vec!["custom".into()]);
+            let preserved = merge_discovered(&[manual], vec![unknown]);
+            assert_eq!(preserved[0].reasoning_efforts, Some(vec!["custom".into()]));
+            assert!(preserved[0].reasoning_effort_source.is_none());
+        }
     }
 
     #[test]

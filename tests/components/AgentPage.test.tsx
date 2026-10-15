@@ -110,6 +110,15 @@ function fill(text = "修复这个项目的测试") {
     target: { value: text },
   });
 }
+function selectModel(name: string) {
+  fireEvent.click(screen.getByRole("button", { name: "模型" }));
+  fireEvent.change(screen.getByRole("searchbox", { name: "搜索模型或渠道" }), {
+    target: { value: name },
+  });
+  fireEvent.click(
+    screen.getByRole("button", { name: new RegExp(` · ${name}$`) }),
+  );
+}
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -150,9 +159,17 @@ beforeEach(() => {
         id,
         ...(model && {
           model: { providerId: model.providerId, modelId: model.modelId },
+          reasoningEffort: model.reasoningEfforts?.includes(
+            snapshot.session.reasoningEffort || "",
+          )
+            ? snapshot.session.reasoningEffort
+            : null,
         }),
         ...(patch.mode && { mode: patch.mode }),
         ...(patch.permissionMode && { permissionMode: patch.permissionMode }),
+        ...(patch.reasoningEffort !== undefined && {
+          reasoningEffort: patch.reasoningEffort || null,
+        }),
       };
       return structuredClone(snapshot.session);
     });
@@ -272,9 +289,7 @@ describe("AgentPage", () => {
       expect(screen.getByRole("button", { name: "分析" })).toBeDisabled();
       expect(screen.getByRole("button", { name: "实现" })).toBeDisabled();
       expect(screen.getByLabelText(`管理会话：${legacy.title}`)).toBeDisabled();
-      fireEvent.change(screen.getByLabelText("模型", { exact: true }), {
-        target: { value: catalog.models[1].id },
-      });
+      fireEvent.click(screen.getByLabelText("模型", { exact: true }));
       fireEvent.change(screen.getByLabelText("执行权限"), {
         target: { value: "auto" },
       });
@@ -415,8 +430,15 @@ describe("AgentPage", () => {
     fill("热刷新保留的草稿");
     await tick(1);
     expect(agentApi.openProject).toHaveBeenCalledWith(project, true);
+    fireEvent.click(screen.getByRole("button", { name: "模型" }));
+    fireEvent.change(
+      screen.getByRole("searchbox", { name: "搜索模型或渠道" }),
+      {
+        target: { value: "Added Model" },
+      },
+    );
     expect(
-      screen.getByRole("option", { name: /Added Model/ }),
+      screen.getByRole("button", { name: / · Added Model$/ }),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
       "热刷新保留的草稿",
@@ -480,12 +502,10 @@ describe("AgentPage", () => {
     render(<AgentPage />);
     await flush();
     fill("保留模型切换前的草稿");
-    fireEvent.change(screen.getByLabelText("模型", { exact: true }), {
-      target: { value: catalog.models[1].id },
-    });
+    selectModel("Model B");
     await flush();
-    expect(screen.getByLabelText("模型", { exact: true })).toHaveValue(
-      catalog.models[0].id,
+    expect(screen.getByLabelText("模型", { exact: true })).toHaveTextContent(
+      "DeepSeek · Code Model",
     );
     expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
       "保留模型切换前的草稿",
@@ -503,13 +523,11 @@ describe("AgentPage", () => {
     });
     render(<AgentPage />);
     await flush();
-    fireEvent.change(screen.getByLabelText("模型", { exact: true }), {
-      target: { value: catalog.models[1].id },
-    });
+    selectModel("Model B");
     await flush();
     await tick(5000);
-    expect(screen.getByLabelText("模型", { exact: true })).toHaveValue(
-      catalog.models[1].id,
+    expect(screen.getByLabelText("模型", { exact: true })).toHaveTextContent(
+      "Copilot · Model B",
     );
     snapshot.session.model = {
       providerId: catalog.models[1].providerId,
@@ -541,6 +559,71 @@ describe("AgentPage", () => {
     expect(screen.getByText(/分析模式只读取文件/)).toBeInTheDocument();
   });
 
+  it("saves a declared reasoning effort during a running task without sending another prompt", async () => {
+    snapshot.status = "running";
+    const models = structuredClone(catalog);
+    models.models[0].reasoningEfforts = ["low", "high"];
+    vi.mocked(agentApi.getCatalog).mockResolvedValue(models);
+    render(<AgentPage />);
+    await flush();
+    fill("保留待发送的要求");
+    fireEvent.click(screen.getByRole("button", { name: "思考档位" }));
+    fireEvent.click(screen.getByRole("button", { name: "思考档位 high" }));
+    await flush();
+    expect(agentApi.updateSession).toHaveBeenLastCalledWith(session.id, {
+      reasoningEffort: "high",
+    });
+    expect(screen.getByRole("button", { name: "思考档位" })).toHaveTextContent(
+      "high",
+    );
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
+      "保留待发送的要求",
+    );
+    expect(screen.getByRole("button", { name: "发送" })).toBeDisabled();
+    expect(agentApi.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("keeps the saved effort when an explicit manual override fails", async () => {
+    vi.mocked(agentApi.updateSession).mockRejectedValue(
+      new Error("中转不接受此思考档位"),
+    );
+    render(<AgentPage />);
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: "思考档位" }));
+    fireEvent.change(screen.getByLabelText("手动档位标识（未验证）"), {
+      target: { value: "high" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "应用手动档位" }));
+    await flush();
+    expect(agentApi.updateSession).toHaveBeenCalledWith(session.id, {
+      reasoningEffort: "high",
+    });
+    expect(screen.getByRole("button", { name: "思考档位" })).toHaveTextContent(
+      "上游默认",
+    );
+    expect(screen.getByText("中转不接受此思考档位")).toBeInTheDocument();
+  });
+
+  it("passes an explicit reasoning override when creating a new conversation", async () => {
+    vi.mocked(agentApi.listSessions).mockResolvedValue([]);
+    render(<AgentPage />);
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: "思考档位" }));
+    fireEvent.change(screen.getByLabelText("手动档位标识（未验证）"), {
+      target: { value: "high" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "应用手动档位" }));
+    fireEvent.click(sessionCreationButton());
+    await flush();
+    expect(agentApi.createSession).toHaveBeenCalledWith(
+      catalog.models[0].id,
+      "build",
+      undefined,
+      "ask",
+      "high",
+    );
+  });
+
   it("requires an explicit confirmation before enabling full access", async () => {
     render(<AgentPage />);
     await flush();
@@ -556,14 +639,67 @@ describe("AgentPage", () => {
     });
   });
 
-  it("disables changing the running session configuration and never sends a fake update", async () => {
+  it.each(["running", "waiting_permission", "waiting_question"] as const)(
+    "changes model and permissions during %s while retaining the draft and blocking another send",
+    async (status) => {
+      snapshot.status = status;
+      render(<AgentPage />);
+      await flush();
+      fill("任务结束后再发送的草稿");
+      expect(screen.getByLabelText("模型", { exact: true })).toBeEnabled();
+      expect(screen.getByLabelText("执行权限")).toBeEnabled();
+      selectModel("Model B");
+      await flush();
+      expect(agentApi.updateSession).toHaveBeenLastCalledWith(session.id, {
+        modelId: catalog.models[1].id,
+      });
+      expect(screen.getByLabelText("模型", { exact: true })).toHaveTextContent(
+        "Model B",
+      );
+      fireEvent.change(screen.getByLabelText("执行权限"), {
+        target: { value: "auto" },
+      });
+      await flush();
+      expect(agentApi.updateSession).toHaveBeenLastCalledWith(session.id, {
+        permissionMode: "auto",
+      });
+      fireEvent.click(screen.getByRole("button", { name: "分析" }));
+      await flush();
+      expect(agentApi.updateSession).toHaveBeenLastCalledWith(session.id, {
+        mode: "plan",
+      });
+      const input = screen.getByLabelText("发送给 Agent 的消息");
+      expect(input).toHaveValue("任务结束后再发送的草稿");
+      expect(input).toBeEnabled();
+      expect(screen.getByRole("button", { name: "发送" })).toBeDisabled();
+      fireEvent.keyDown(input, { key: "Enter" });
+      fireEvent.submit(input.closest("form")!);
+      await flush();
+      expect(agentApi.sendMessage).not.toHaveBeenCalled();
+      expect(
+        screen.getByText(/模型与执行方式从下一次模型请求生效/),
+      ).toBeInTheDocument();
+    },
+  );
+
+  it("keeps stop available while a running session model update is pending", async () => {
     snapshot.status = "running";
+    let finish!: (value: AgentSession) => void;
+    vi.mocked(agentApi.updateSession).mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
     render(<AgentPage />);
+    await flush();
+    selectModel("Model B");
     await flush();
     expect(screen.getByLabelText("模型", { exact: true })).toBeDisabled();
     expect(screen.getByLabelText("执行权限")).toBeDisabled();
-    expect(screen.getByRole("button", { name: "分析" })).toBeDisabled();
-    expect(agentApi.updateSession).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "停止" }));
+    await flush();
+    expect(agentApi.interruptSession).toHaveBeenCalledOnce();
+    await act(async () => finish({ ...session, model: catalog.models[1] }));
   });
 
   it("switches projects while a previous task continues and preserves its isolated draft", async () => {
@@ -688,9 +824,7 @@ describe("AgentPage", () => {
     expect(
       screen.getByRole("heading", { name: "修复测试" }),
     ).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("模型", { exact: true }), {
-      target: { value: catalog.models[1].id },
-    });
+    selectModel("Model B");
     await flush();
     expect(agentApi.updateSession).toHaveBeenCalledWith(session.id, {
       modelId: catalog.models[1].id,
@@ -705,6 +839,7 @@ describe("AgentPage", () => {
       "plan",
       undefined,
       "ask",
+      undefined,
     );
     expect(agentApi.openProject).not.toHaveBeenCalled();
   });
@@ -749,14 +884,12 @@ describe("AgentPage", () => {
     });
     render(<AgentPage />);
     await flush();
-    expect(
-      screen.getByRole("option", { name: "DeepSeek · Code Model" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("option", {
-        name: "DeepSeek · DeepSeek · Code Model",
-      }),
-    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "模型" })).toHaveTextContent(
+      "DeepSeek · Code Model",
+    );
+    expect(screen.getByRole("button", { name: "模型" })).not.toHaveTextContent(
+      "DeepSeek · DeepSeek · Code Model",
+    );
     expect(
       screen.getByText("Claude 订阅仅可用于 Claude Code"),
     ).toBeInTheDocument();
@@ -803,9 +936,7 @@ describe("AgentPage", () => {
     expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
       "刷新后继续的草稿",
     );
-    fireEvent.change(screen.getByLabelText("模型", { exact: true }), {
-      target: { value: "lolicode/new-channel/new-model" },
-    });
+    selectModel("New Model");
     await flush();
     fireEvent.click(sessionCreationButton());
     await flush();
@@ -814,6 +945,7 @@ describe("AgentPage", () => {
       "build",
       undefined,
       "ask",
+      undefined,
     );
   });
 
@@ -853,9 +985,9 @@ describe("AgentPage", () => {
     expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
       "保留这段输入",
     );
-    expect(
-      screen.getByRole("option", { name: "DeepSeek · Code Model" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "模型" })).toHaveTextContent(
+      "DeepSeek · Code Model",
+    );
     expect(agentApi.getCatalog).toHaveBeenCalledTimes(1);
   });
 
@@ -1080,9 +1212,7 @@ describe("AgentPage", () => {
     );
     render(<AgentPage />);
     await flush();
-    fireEvent.change(screen.getByLabelText("模型", { exact: true }), {
-      target: { value: catalog.models[1].id },
-    });
+    selectModel("Model B");
     await flush();
     snapshot.status = "running";
     await tick(5000);
@@ -1384,6 +1514,83 @@ describe("AgentPage", () => {
     expect(agentApi.interruptSession).not.toHaveBeenCalled();
   });
 
+  it.each(["running", "title"] as const)(
+    "discovers a nonselected %s job from lightweight session metadata after mounting",
+    async (job) => {
+      const background: AgentSnapshot = {
+        ...emptySnapshot(),
+        session: { ...session, id: "background", title: "后台临时标题" },
+        status: job === "running" ? "running" : "idle",
+        titlePending: true,
+      };
+      vi.mocked(agentApi.listSessions).mockResolvedValue([
+        { ...session, pinned: true },
+        {
+          ...background.session,
+          activity: { status: background.status, titlePending: true },
+        },
+      ]);
+      vi.mocked(agentApi.getSession).mockImplementation(async (id) =>
+        structuredClone(id === background.session.id ? background : snapshot),
+      );
+      render(<AgentPage />);
+      await flush();
+      expect(agentApi.getSession).toHaveBeenCalledWith(background.session.id);
+      fill("保留当前输入");
+      background.status = "idle";
+      await tick(1500);
+      background.session.title = "后台归纳完成";
+      background.titlePending = false;
+      await tick(1500);
+      expect(
+        screen.getByRole("button", { name: /^后台归纳完成/ }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", { name: session.title }),
+      ).toBeInTheDocument();
+      expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
+        "保留当前输入",
+      );
+      expect(agentApi.interruptSession).not.toHaveBeenCalled();
+    },
+  );
+
+  it("updates a late background title after the task is idle without changing the selected conversation or draft", async () => {
+    const second = { ...session, id: "s2", title: "正在查看的历史" };
+    snapshot.status = "running";
+    snapshot.titlePending = true;
+    vi.mocked(agentApi.listSessions).mockResolvedValue([session, second]);
+    vi.mocked(agentApi.getSession).mockImplementation(async (id) =>
+      id === session.id
+        ? structuredClone(snapshot)
+        : { ...emptySnapshot(), session: second },
+    );
+    render(<AgentPage />);
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: /^正在查看的历史/ }));
+    await flush();
+    fill("另一会话中未发送的草稿");
+    snapshot.status = "idle";
+    await tick(1500);
+    expect(screen.getByRole("button", { name: "刷新可用模型" })).toBeEnabled();
+    snapshot.session.title = "自动归纳的任务标题";
+    snapshot.titlePending = false;
+    await tick(1500);
+    expect(
+      screen.getByRole("button", { name: /^自动归纳的任务标题/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: second.title }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
+      "另一会话中未发送的草稿",
+    );
+    vi.mocked(agentApi.getSession).mockClear();
+    await tick(5000);
+    expect(agentApi.getSession).not.toHaveBeenCalledWith(session.id);
+    expect(agentApi.interruptSession).not.toHaveBeenCalled();
+  });
+
   it("keeps an in-flight stop associated with its original conversation when another history is selected", async () => {
     const second = { ...session, id: "s2", title: "完成的会话" };
     snapshot.status = "running";
@@ -1539,6 +1746,12 @@ describe("AgentPage", () => {
     expect(screen.getByText("执行中")).toBeInTheDocument();
     expect(screen.queryByText(/not-for-display/)).not.toBeInTheDocument();
     expect(screen.getByText(/文件修改 · 1 个文件/)).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByText(/文件修改 · 1 个文件/).closest("summary")!,
+    );
+    await tick(1);
+    fireEvent.click(screen.getByTitle("src/example.ts").closest("summary")!);
+    await tick(1);
     expect(screen.getByText("new")).toBeInTheDocument();
   });
 

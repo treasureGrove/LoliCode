@@ -122,3 +122,49 @@ async fn unconfirmed_cleanup_is_an_error_and_fences_new_work_and_updates() {
     );
     assert!(engine.shutdown().await.is_err());
 }
+
+#[tokio::test]
+async fn cancellation_while_a_completed_summary_waits_for_the_session_lock_preserves_history() {
+    let (_data, _project, engine, entry, _id, receiver) = fixture().await;
+    let mut state = entry.lock().await;
+    state.stored.history.push(json!({"role":"tool","tool_call_id":"fixture-call","content":"Previously completed work; never replay."}));
+    state.stored.snapshot.compacting = true;
+    persistence::save(&engine.inner.root, &state.stored).await.unwrap();
+    let original_history = state.stored.history.clone();
+    let plan = context::Plan {
+        source_history: original_history.clone(),
+        previous_summary: None,
+        retained: vec![json!({"role":"user","content":"Continue the original task"})],
+        summary_messages: Vec::new(),
+        maximum_summary_bytes: 1000,
+        original_request_bytes: 10000,
+    };
+    let entered = Arc::new(tokio::sync::Notify::new());
+    let started = entered.clone();
+    let committing = engine.clone();
+    let committing_entry = entry.clone();
+    let task = tokio::spawn(async move {
+        // The caller has already received and validated a successful summary.
+        // This task must suspend at the held session lock before cancellation.
+        assert!(!*receiver.borrow());
+        started.notify_one();
+        committing.commit_compaction(&committing_entry, plan, Ok("A valid completed checkpoint".into()), &receiver).await
+    });
+    entered.notified().await;
+    assert!(!task.is_finished());
+    state.flight.as_ref().unwrap().cancel.send(true).unwrap();
+    drop(state);
+    let result = task.await.unwrap();
+    assert_eq!(result.as_ref().err().map(String::as_str), Some(inference::CANCELLED));
+    let state = entry.lock().await;
+    assert_eq!(state.stored.history, original_history);
+    assert!(state.stored.context_summary.is_none());
+    assert_eq!(state.stored.compaction_count, 0);
+    assert!(!state.stored.snapshot.compacting);
+    let persisted: StoredSession = serde_json::from_slice(&tokio::fs::read(persistence::session_path(&engine.inner.root, &state.stored.snapshot.session.id).unwrap()).await.unwrap()).unwrap();
+    assert_eq!(persisted.history, original_history);
+    assert!(persisted.context_summary.is_none());
+    drop(state);
+    engine.finish(entry, "fixture-request", result).await;
+    engine.shutdown().await.unwrap();
+}

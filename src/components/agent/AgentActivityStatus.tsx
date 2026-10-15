@@ -70,7 +70,10 @@ export function AgentActivityStatus({
     phase = "error";
     label = "执行遇到问题";
   } else if (snapshot?.status === "running") {
-    ({ phase, label } = runningPhase(snapshot.messages));
+    if (snapshot.compacting) {
+      phase = "compacting";
+      label = "正在整理上下文…";
+    } else ({ phase, label } = runningPhase(snapshot.messages));
     busy = true;
   } else if (loading && !snapshot) {
     phase = "loading";

@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 use tokio::sync::{mpsc, watch};
 
 pub(super) const CANCELLED: &str = "任务已停止";
+pub(super) const CONTEXT_EXCEEDED: &str = "[context_length_exceeded] 模型网关明确报告上下文超限";
 const LIMIT: usize = 8 * 1024 * 1024;
 #[derive(Clone)]
 pub(super) enum Delta {
@@ -22,6 +23,7 @@ pub(super) struct Turn {
     pub content: String,
     pub reasoning: String,
     pub calls: Vec<ToolCall>,
+    pub finish_reason: String,
 }
 
 pub(super) async fn cancelled(receiver: &mut watch::Receiver<bool>) {
@@ -58,13 +60,17 @@ pub(super) async fn infer(
     client: &Client,
     gateway: &NativeGateway,
     model: &str,
+    reasoning_effort: Option<&str>,
     messages: Vec<Value>,
     tools: Vec<Value>,
     tx: mpsc::UnboundedSender<Delta>,
     mut cancel: watch::Receiver<bool>,
 ) -> Result<Turn, String> {
     let endpoint = validate_gateway(gateway)?;
-    let body = json!({"model":model,"messages":messages,"tools":tools,"stream":true});
+    let mut body = json!({"model":model,"messages":messages,"tools":tools,"stream":true});
+    if let Some(effort) = reasoning_effort {
+        body["reasoning_effort"] = json!(effort);
+    }
     let request = client
         .post(endpoint)
         .bearer_auth(&gateway.bearer_token)
@@ -72,9 +78,26 @@ pub(super) async fn infer(
         .send();
     let response = tokio::select! { _ = cancelled(&mut cancel) => return Err(CANCELLED.into()), result = request => result.map_err(|_| "无法连接模型网关，请检查渠道后重试")? };
     if !response.status().is_success() {
+        let status = response.status().as_u16();
+        if matches!(status, 400 | 413 | 422) {
+            let mut body = Vec::new();
+            let mut stream = response.bytes_stream();
+            loop {
+                let chunk = tokio::select! {
+                    _ = cancelled(&mut cancel) => return Err(CANCELLED.into()),
+                    value = stream.next() => value,
+                };
+                let Some(Ok(chunk)) = chunk else { break };
+                if body.len() + chunk.len() > 8192 { break; }
+                body.extend_from_slice(&chunk);
+            }
+            if serde_json::from_slice::<Value>(&body).is_ok_and(|error| context_error(&error)) {
+                return Err(CONTEXT_EXCEEDED.into());
+            }
+        }
         return Err(format!(
             "模型请求失败（HTTP {}），请检查渠道与模型。",
-            response.status().as_u16()
+            status
         ));
     }
     let json_response = response
@@ -86,6 +109,7 @@ pub(super) async fn infer(
         content: String::new(),
         reasoning: String::new(),
         calls: Vec::new(),
+        finish_reason: String::new(),
     };
     let mut calls: BTreeMap<usize, ToolCall> = BTreeMap::new();
     let mut finish = None;
@@ -151,6 +175,7 @@ pub(super) async fn infer(
         }
         _ => return Err("模型连接未返回明确的完成状态，已收到的内容保留。".into()),
     }
+    result.finish_reason = finish.unwrap_or_default();
     for (_, call) in calls {
         if call.id.is_empty()
             || call.name.is_empty()
@@ -175,6 +200,7 @@ fn consume(
     finish: &mut Option<String>,
 ) -> Result<(), String> {
     if value.get("error").is_some() {
+        if context_error(value) { return Err(CONTEXT_EXCEEDED.into()); }
         return Err("模型网关返回错误，请检查渠道后重试".into());
     }
     let Some(choice) = value["choices"].get(0) else {
@@ -221,4 +247,10 @@ fn consume(
         *finish = Some(reason.into());
     }
     Ok(())
+}
+
+fn context_error(value: &Value) -> bool {
+    ["/error/code", "/error/type", "/code"].iter()
+        .filter_map(|pointer| value.pointer(pointer).and_then(Value::as_str))
+        .any(|code| matches!(code, "context_length_exceeded" | "max_context_length_exceeded" | "prompt_too_long" | "input_too_long"))
 }

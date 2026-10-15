@@ -25,6 +25,19 @@ pub struct AgentSession {
     pub model: Option<AgentModelRef>,
     pub created_at: u64,
     pub updated_at: u64,
+    /// Ephemeral list projection; snapshots remain the source of activity truth.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub activity: Option<AgentSessionActivity>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionActivity {
+    pub status: AgentStatus,
+    #[serde(default)]
+    pub title_pending: bool,
 }
 
 fn default_permission_mode() -> String {
@@ -84,6 +97,12 @@ pub struct AgentSnapshot {
     pub error: Option<String>,
     pub stream_connected: bool,
     pub stream_gap: bool,
+    /// True only while the engine is producing a context checkpoint.
+    #[serde(default)]
+    pub compacting: bool,
+    /// Automatic title generation can outlive the main model/tool task.
+    #[serde(default)]
+    pub title_pending: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

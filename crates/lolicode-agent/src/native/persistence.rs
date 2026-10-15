@@ -90,6 +90,12 @@ pub(super) async fn load(root: &Path) -> Result<Vec<StoredSession>, String> {
         if stored.format != 1 || session_path(root, &stored.snapshot.session.id)? != entry.path() {
             return Err("本地会话记录格式无效，原文件已保留".into());
         }
+        // Title requests are ephemeral and are never resumed after a restart.
+        let title_interrupted = stored.snapshot.title_pending;
+        let compaction_interrupted = stored.snapshot.compacting;
+        stored.snapshot.title_pending = false;
+        stored.snapshot.compacting = false;
+        stored.snapshot.session.activity = None;
         if matches!(
             stored.snapshot.status,
             AgentStatus::Running | AgentStatus::WaitingPermission | AgentStatus::WaitingQuestion
@@ -114,6 +120,8 @@ pub(super) async fn load(root: &Path) -> Result<Vec<StoredSession>, String> {
             }
             // Repair only missing protocol results; never re-execute a tool.
             repair_history(&mut stored);
+            save(root, &stored).await?;
+        } else if title_interrupted || compaction_interrupted {
             save(root, &stored).await?;
         }
         sessions.push(stored);

@@ -27,6 +27,22 @@ pub(super) struct StoredSession {
     pub commands: BTreeMap<String, CommandRecord>,
     #[serde(default)]
     pub file_changes: BTreeMap<String, FileState>,
+    #[serde(default)]
+    pub title_state: TitleState,
+    #[serde(default)]
+    pub context_summary: Option<String>,
+    #[serde(default)]
+    pub compaction_count: u64,
+}
+
+#[derive(Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(super) enum TitleState {
+    #[default]
+    Legacy,
+    Pending,
+    Generated,
+    Manual,
 }
 
 #[derive(Clone, Serialize, Deserialize)]

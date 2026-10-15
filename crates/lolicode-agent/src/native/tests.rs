@@ -37,8 +37,11 @@ fn tool(name: &str, input: Value) -> Reply {
 struct Fake {
     address: String,
     requests: Arc<StdMutex<Vec<Value>>>,
+    title_requests: Arc<StdMutex<Vec<Value>>>,
+    compaction_requests: Arc<StdMutex<Vec<Value>>>,
     task: tokio::task::JoinHandle<()>,
     children: Arc<StdMutex<Vec<tokio::task::JoinHandle<()>>>>,
+    resume: Arc<tokio::sync::Notify>,
 }
 impl Drop for Fake {
     fn drop(&mut self) {
@@ -50,17 +53,34 @@ impl Drop for Fake {
 }
 impl Fake {
     async fn start(handler: impl Fn(&Value) -> Reply + Send + Sync + 'static) -> Self {
+        Self::start_with_titles(handler, |_| text("归纳后的测试会话")).await
+    }
+    async fn start_with_titles(
+        handler: impl Fn(&Value) -> Reply + Send + Sync + 'static,
+        title_handler: impl Fn(&Value) -> Reply + Send + Sync + 'static,
+    ) -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = format!("http://{}/v1", listener.local_addr().unwrap());
         let handler = Arc::new(handler);
+        let title_handler = Arc::new(title_handler);
         let requests = Arc::new(StdMutex::new(Vec::new()));
         let children = Arc::new(StdMutex::new(Vec::new()));
         let recorded = requests.clone();
+        let title_requests = Arc::new(StdMutex::new(Vec::new()));
+        let recorded_titles = title_requests.clone();
+        let compaction_requests = Arc::new(StdMutex::new(Vec::new()));
+        let recorded_compactions = compaction_requests.clone();
         let child_list = children.clone();
+        let resume = Arc::new(tokio::sync::Notify::new());
+        let response_resume = resume.clone();
         let task = tokio::spawn(async move {
             while let Ok((mut stream, _)) = listener.accept().await {
                 let handler = handler.clone();
+                let title_handler = title_handler.clone();
                 let requests = recorded.clone();
+                let title_requests = recorded_titles.clone();
+                let compaction_requests = recorded_compactions.clone();
+                let resume = response_resume.clone();
                 let child = tokio::spawn(async move {
                     let mut input = Vec::new();
                     let header_end = loop {
@@ -98,10 +118,26 @@ impl Fake {
                     }
                     let body: Value =
                         serde_json::from_slice(&input[header_end..header_end + size]).unwrap();
-                    assert_eq!(body["model"], "channel/opaque/model");
-                    requests.lock().unwrap().push(body.clone());
-                    let reply = handler(&body);
+                    assert!(body["model"].as_str().is_some_and(|model| model.starts_with("channel/")));
+                    let is_title = body["messages"][0]["content"].as_str()
+                        .is_some_and(|prompt| prompt.starts_with("You generate a short session title"));
+                    let is_compaction = is_compaction(&body);
+                    let reply = if is_title {
+                        title_requests.lock().unwrap().push(body.clone());
+                        title_handler(&body)
+                    } else if is_compaction {
+                        compaction_requests.lock().unwrap().push(body.clone());
+                        handler(&body)
+                    } else {
+                        requests.lock().unwrap().push(body.clone());
+                        handler(&body)
+                    };
                     if reply.status != 200 {
+                        if reply.json_response {
+                            let body = serde_json::to_string(&reply.frames[0]).unwrap();
+                            let _=stream.write_all(format!("HTTP/1.1 {} Error\r\nConnection: close\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",reply.status,body.len(),body).as_bytes()).await;
+                            return;
+                        }
                         let _=stream.write_all(format!("HTTP/1.1 {} Error\r\nConnection: close\r\nContent-Length: 43\r\n\r\nupstream echoed owned-private-gateway secret",reply.status).as_bytes()).await;
                         return;
                     }
@@ -120,7 +156,7 @@ impl Fake {
                             return;
                         }
                         if reply.pause {
-                            tokio::time::sleep(Duration::from_secs(60)).await;
+                            resume.notified().await;
                         }
                     }
                     let _ = stream.write_all(b"data: [DONE]\n\n").await;
@@ -131,8 +167,11 @@ impl Fake {
         Self {
             address,
             requests,
+            title_requests,
+            compaction_requests,
             task,
             children,
+            resume,
         }
     }
     fn gateway(&self) -> NativeGateway {
@@ -207,6 +246,344 @@ fn last_tool(input: &Value) -> Option<&str> {
         .rev()
         .find(|v| v["role"] == "tool")?["tool_call_id"]
         .as_str()
+}
+fn is_compaction(input: &Value) -> bool {
+    input["messages"][0]["content"].as_str()
+        .is_some_and(|prompt| prompt.starts_with(super::context::SUMMARY_PROMPT))
+}
+
+mod context_cases;
+
+#[tokio::test]
+async fn long_tool_tasks_complete_real_edits_after_more_than_twenty_four_rounds() {
+    let fake = Fake::start(|input| {
+        let count = input["messages"].as_array().unwrap().iter()
+            .filter(|message| message["role"] == "tool").count();
+        if count < 32 {
+            tool("apply_patch", json!({"path":"counter.txt","old_text":format!("value={count}\n"),"new_text":format!("value={}\n", count+1)}))
+        } else {
+            text("ALL_32_EDITS_FINISHED")
+        }
+    }).await;
+    let (_data, project, engine, id) = setup(&fake).await;
+    tokio::fs::write(project.path().join("counter.txt"), "value=0\n").await.unwrap();
+    send(&engine, &id, "long-task", "Complete all 32 dependent edits").await;
+    let result = wait(&engine, &id, |value| matches!(value["status"].as_str(), Some("idle" | "error"))).await;
+    assert_eq!(result["status"], "idle", "{}", result["error"]);
+    assert_eq!(fake.count(), 33);
+    assert_eq!(tokio::fs::read_to_string(project.path().join("counter.txt")).await.unwrap(), "value=32\n");
+    assert!(result.to_string().contains("ALL_32_EDITS_FINISHED"));
+    assert_eq!(result["diffs"].as_array().unwrap().len(), 1);
+    engine.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn cancellation_still_stops_long_tool_tasks_without_replaying_work() {
+    let fake = Fake::start(|input| {
+        let messages = input["messages"].as_array().unwrap();
+        let user = messages.iter().rev().find(|message| message["role"] == "user").unwrap()["content"].as_str().unwrap();
+        if user == "Continue after cancellation" { return text("CONTINUED_SAFELY"); }
+        let count = messages.iter().filter(|message| message["role"] == "tool").count();
+        let mut reply = tool("read_file", json!({"path":"preserved.txt"}));
+        reply.pause = count >= 26;
+        reply
+    }).await;
+    let (_data, project, engine, id) = setup(&fake).await;
+    tokio::fs::write(project.path().join("preserved.txt"), "unchanged").await.unwrap();
+    send(&engine, &id, "long-cancel", "Inspect until I stop").await;
+    wait(&engine, &id, |_| fake.count() >= 27).await;
+    engine.call("interruptSession", json!({"sessionId":id})).await.unwrap();
+    let stopped = wait(&engine, &id, |value| value["status"] == "idle").await;
+    assert!(stopped["error"].is_null());
+    send(&engine, &id, "after-long-cancel", "Continue after cancellation").await;
+    let resumed = wait(&engine, &id, |value| value["status"] == "idle").await;
+    assert!(resumed.to_string().contains("CONTINUED_SAFELY"));
+    assert_eq!(fake.count(), 28);
+    assert_eq!(tokio::fs::read_to_string(project.path().join("preserved.txt")).await.unwrap(), "unchanged");
+    engine.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn running_session_model_and_mode_changes_apply_at_the_next_model_request() {
+    let fake = Fake::start(|input| {
+        if last_tool(input).is_none() {
+            assert_eq!(input["model"], "channel/opaque/model");
+            return tool("ask_user", json!({"questions":[{"question":"Continue?","options":[{"label":"Yes"}]}]}));
+        }
+        assert_eq!(input["model"], "channel/other/model");
+        assert!(input["messages"][0]["content"].as_str().unwrap().contains("Current mode: plan"));
+        if last_tool(input) == Some("call-ask_user") {
+            tool("write_file", json!({"path":"blocked.txt","content":"must not write","expected_content":null}))
+        } else {
+            assert!(input.to_string().contains("分析模式不能写文件"));
+            text("NEW_MODEL_AND_PLAN_APPLIED")
+        }
+    }).await;
+    let (_data, project, engine, id) = setup(&fake).await;
+    let mut models = catalog();
+    let mut other = models["models"][0].clone();
+    other["id"] = json!("lolicode/channel/other/model");
+    other["modelId"] = json!("channel/other/model");
+    models["models"].as_array_mut().unwrap().push(other);
+    engine.bind(project.path().into(), models, fake.gateway()).await.unwrap();
+    send(&engine, &id, "switch-live", "Ask me before proceeding").await;
+    let pending = wait(&engine, &id, |value| value["status"] == "waiting_question").await;
+    let updated = engine.call("updateSession", json!({"sessionId":id,"modelId":"lolicode/channel/other/model","mode":"plan","permissionMode":"ask"})).await.unwrap();
+    assert_eq!(updated["model"]["modelId"], "channel/other/model");
+    let after = snapshot(&engine, &id).await;
+    assert_eq!(after["status"], "waiting_question");
+    assert_eq!(after["messages"], pending["messages"]);
+    assert_eq!(after["questions"], pending["questions"]);
+    assert!(engine.call("sendMessage", json!({"sessionId":id,"requestId":"overlap","text":"Do not overlap"})).await.is_err());
+    engine.call("replyQuestion", json!({"sessionId":id,"requestId":pending["questions"][0]["id"],"answer":{"answer_0":"Yes"}})).await.unwrap();
+    let result = wait(&engine, &id, |value| value["status"] == "idle").await;
+    assert!(result.to_string().contains("NEW_MODEL_AND_PLAN_APPLIED"));
+    assert!(!project.path().join("blocked.txt").exists());
+    engine.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn permission_changes_apply_to_new_checks_without_bypassing_a_pending_approval() {
+    let fake = Fake::start(|input| match last_tool(input) {
+        None => tool("ask_user", json!({"questions":[{"question":"Continue?","options":[{"label":"Yes"}]}]})),
+        Some("call-ask_user") => tool("write_file", json!({"path":"denied.txt","content":"denied","expected_content":null})),
+        Some("call-write_file") => {
+            let results = input["messages"].as_array().unwrap().iter().filter(|message| message["role"] == "tool").count();
+            if results == 2 { tool("write_file", json!({"path":"allowed.txt","content":"allowed","expected_content":null})) }
+            else { text("LIVE_POLICY_APPLIED") }
+        }
+        _ => unreachable!(),
+    }).await;
+    let (_data, project, engine, id) = setup(&fake).await;
+    send(&engine, &id, "live-policy", "Check live permissions").await;
+    let question = wait(&engine, &id, |value| value["status"] == "waiting_question").await;
+    engine.call("updateSession", json!({"sessionId":id,"permissionMode":"ask"})).await.unwrap();
+    engine.call("replyQuestion", json!({"sessionId":id,"requestId":question["questions"][0]["id"],"answer":{"answer_0":"Yes"}})).await.unwrap();
+    let pending = wait(&engine, &id, |value| value["status"] == "waiting_permission").await;
+    engine.call("updateSession", json!({"sessionId":id,"permissionMode":"full_access"})).await.unwrap();
+    let still_pending = snapshot(&engine, &id).await;
+    assert_eq!(still_pending["permissions"], pending["permissions"]);
+    assert_eq!(still_pending["status"], "waiting_permission");
+    assert!(!project.path().join("denied.txt").exists());
+    engine.call("replyPermission", json!({"sessionId":id,"requestId":pending["permissions"][0]["id"],"decision":"reject"})).await.unwrap();
+    wait(&engine, &id, |value| value["status"] == "idle").await;
+    assert!(!project.path().join("denied.txt").exists());
+    assert_eq!(tokio::fs::read_to_string(project.path().join("allowed.txt")).await.unwrap(), "allowed");
+    engine.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn switching_models_rechecks_the_new_context_limit_before_the_next_request() {
+    let fake = Fake::start(|_| tool("ask_user", json!({"questions":[{"question":"Continue?","options":[{"label":"Yes"}]}]}))).await;
+    let (_data, project, engine, id) = setup(&fake).await;
+    let mut models = catalog();
+    let mut small = models["models"][0].clone();
+    small["id"] = json!("lolicode/channel/small/model");
+    small["modelId"] = json!("channel/small/model");
+    small["contextLimit"] = json!(1024);
+    models["models"].as_array_mut().unwrap().push(small);
+    engine.bind(project.path().into(), models, fake.gateway()).await.unwrap();
+    send(&engine, &id, "new-context", &"A useful long specification. ".repeat(250)).await;
+    let pending = wait(&engine, &id, |value| value["status"] == "waiting_question").await;
+    engine.call("updateSession", json!({"sessionId":id,"modelId":"lolicode/channel/small/model"})).await.unwrap();
+    engine.call("replyQuestion", json!({"sessionId":id,"requestId":pending["questions"][0]["id"],"answer":{"answer_0":"Yes"}})).await.unwrap();
+    let result = wait(&engine, &id, |value| value["status"] == "error").await;
+    assert!(result["error"].as_str().unwrap().contains("上下文预算"));
+    assert_eq!(fake.count(), 1, "the small model must not receive an over-budget request");
+    engine.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn unknown_context_metadata_does_not_invent_a_small_limit_for_skills() {
+    let skill = "COMPLETE_SKILL_BODY".repeat(2000);
+    let fake = Fake::start(|input| {
+        if last_tool(input).is_none() {
+            tool("read_skill", json!({"id":"large"}))
+        } else {
+            assert!(input.to_string().contains("COMPLETE_SKILL_BODY"));
+            text("FULL_SKILL_WAS_AVAILABLE")
+        }
+    }).await;
+    let (_data, project, engine, id) = setup(&fake).await;
+    let mut models = catalog();
+    models["models"][0].as_object_mut().unwrap().remove("contextLimit");
+    engine.bind(project.path().into(), models, fake.gateway()).await.unwrap();
+    engine.call("configureSkills", json!({"revision":1,"skills":[{"id":"large","name":"Large skill","content":skill}]})).await.unwrap();
+    send(&engine, &id, "unknown-budget", "Read the entire relevant skill").await;
+    let result = wait(&engine, &id, |value| matches!(value["status"].as_str(), Some("idle" | "error"))).await;
+    assert_eq!(result["status"], "idle", "{}", result["error"]);
+    assert!(result.to_string().contains("FULL_SKILL_WAS_AVAILABLE"));
+    assert_eq!(engine.call("loadedSkills", json!({})).await.unwrap(), json!(["large"]));
+    engine.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn generated_titles_persist_and_manual_titles_win_over_late_summaries() {
+    let fake = Fake::start_with_titles(|_| text("Implemented the requested fix"), |_| text("修复主 Agent 交互")).await;
+    let (data, project, engine, id) = setup(&fake).await;
+    send(&engine, &id, "title-success", "Please fix the Agent interaction bugs").await;
+    let result = wait(&engine, &id, |value| value["session"]["title"] == "修复主 Agent 交互").await;
+    assert_eq!(result["status"], "idle");
+    assert_eq!(result["titlePending"], false);
+    let listed = engine.call("listSessions", json!({})).await.unwrap();
+    assert_eq!(listed[0]["activity"], json!({"status":"idle","titlePending":false}));
+    assert_eq!(fake.title_requests.lock().unwrap().len(), 1);
+    assert!(fake.title_requests.lock().unwrap()[0]["tools"].as_array().unwrap().is_empty());
+    engine.shutdown().await.unwrap();
+    let reopened = NativeEngine::open(data.path().into()).await.unwrap();
+    reopened.bind(project.path().into(), catalog(), fake.gateway()).await.unwrap();
+    assert_eq!(snapshot(&reopened, &id).await["session"]["title"], "修复主 Agent 交互");
+    reopened.shutdown().await.unwrap();
+
+    let late = Fake::start_with_titles(|_| text("Done"), |_| {
+        let mut reply = text("迟到的自动标题"); reply.pause = true; reply
+    }).await;
+    let (_data, _project, engine, id) = setup(&late).await;
+    send(&engine, &id, "title-late", "Use this as a provisional title").await;
+    let provisional = wait(&engine, &id, |_| !late.title_requests.lock().unwrap().is_empty()).await;
+    assert_eq!(provisional["session"]["title"], "Use this as a provisional title");
+    assert_eq!(provisional["status"], "idle");
+    assert_eq!(provisional["titlePending"], true);
+    engine.call("renameSession", json!({"sessionId":id,"title":"我的手动标题"})).await.unwrap();
+    late.resume.notify_one();
+    tokio::time::timeout(Duration::from_secs(2), engine.settle_background_tasks()).await.unwrap();
+    assert_eq!(snapshot(&engine, &id).await["session"]["title"], "我的手动标题");
+    assert_eq!(snapshot(&engine, &id).await["titlePending"], false);
+    engine.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn title_failure_is_non_fatal_and_deleted_sessions_are_never_restored_by_a_summary() {
+    let failed = Fake::start_with_titles(|_| text("Task succeeds"), |_| Reply {
+        frames: Vec::new(), pause: false, status: 500, json_response: false,
+    }).await;
+    let (_data, _project, engine, id) = setup(&failed).await;
+    send(&engine, &id, "title-failure", "Keep my task successful").await;
+    wait(&engine, &id, |_| !failed.title_requests.lock().unwrap().is_empty()).await;
+    tokio::time::timeout(Duration::from_secs(2), engine.settle_background_tasks()).await.unwrap();
+    let result = snapshot(&engine, &id).await;
+    assert_eq!(result["status"], "idle");
+    assert!(result["error"].is_null());
+    assert_eq!(result["titlePending"], false);
+    assert_eq!(result["session"]["title"], "Keep my task successful");
+    engine.shutdown().await.unwrap();
+
+    let late = Fake::start_with_titles(|_| text("Done"), |_| {
+        let mut reply = text("Do not resurrect this session"); reply.pause = true; reply
+    }).await;
+    let (data, _project, engine, id) = setup(&late).await;
+    send(&engine, &id, "title-delete", "Delete this session when done").await;
+    wait(&engine, &id, |_| !late.title_requests.lock().unwrap().is_empty()).await;
+    engine.call("deleteSession", json!({"sessionId":id})).await.unwrap();
+    late.resume.notify_one();
+    tokio::time::timeout(Duration::from_secs(2), engine.settle_background_tasks()).await.unwrap();
+    assert!(engine.call("getSession", json!({"sessionId":id})).await.is_err());
+    assert_eq!(std::fs::read_dir(data.path().join("sessions")).unwrap().count(), 0);
+    engine.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn title_pending_is_visible_before_idle_and_is_cleared_on_shutdown_and_restart() {
+    let fake = Fake::start_with_titles(|_| text("Done"), |_| {
+        let mut reply = text("Slow title"); reply.pause = true; reply
+    }).await;
+    let (data, project, engine, id) = setup(&fake).await;
+    send(&engine, &id, "pending-title", "Summarize this task").await;
+    let pending = wait(&engine, &id, |value| value["status"] == "idle").await;
+    assert_eq!(pending["titlePending"], true, "idle must not appear before pending title metadata");
+    engine.shutdown().await.unwrap();
+    assert_eq!(snapshot(&engine, &id).await["titlePending"], false);
+
+    // Simulate a persisted title request whose process did not shut down cleanly.
+    let path = std::fs::read_dir(data.path().join("sessions")).unwrap().next().unwrap().unwrap().path();
+    let mut persisted: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    persisted["snapshot"]["titlePending"] = json!(true);
+    persisted["snapshot"]["session"]["activity"] = json!({"status":"running","titlePending":true});
+    std::fs::write(&path, serde_json::to_vec(&persisted).unwrap()).unwrap();
+    let reopened = NativeEngine::open(data.path().into()).await.unwrap();
+    reopened.bind(project.path().into(), catalog(), fake.gateway()).await.unwrap();
+    assert_eq!(snapshot(&reopened, &id).await["titlePending"], false);
+    assert!(snapshot(&reopened, &id).await["session"].get("activity").is_none());
+    let listed = reopened.call("listSessions", json!({})).await.unwrap();
+    assert_eq!(listed[0]["activity"], json!({"status":"idle","titlePending":false}));
+    reopened.shutdown().await.unwrap();
+
+    // Pre-upgrade snapshots have no titlePending field and remain readable.
+    persisted["snapshot"].as_object_mut().unwrap().remove("titlePending");
+    persisted["snapshot"]["session"].as_object_mut().unwrap().remove("activity");
+    let old: crate::AgentSnapshot = serde_json::from_value(persisted["snapshot"].clone()).unwrap();
+    assert!(!old.title_pending);
+    assert!(old.session.activity.is_none());
+}
+
+#[tokio::test]
+async fn session_lists_project_real_background_activity_without_loading_message_bodies() {
+    let fake = Fake::start_with_titles(|input| {
+        let user = input["messages"].as_array().unwrap().iter().rev()
+            .find(|message| message["role"] == "user").unwrap()["content"].as_str().unwrap();
+        match user {
+            "Wait for an answer" => tool("ask_user", json!({"questions":[{"question":"Which direction?","options":[{"label":"Continue"}]}]})),
+            "Wait for permission" => tool("write_file", json!({"path":"approval.txt","content":"needs approval","expected_content":null})),
+            "Keep running" => { let mut reply = text("STREAMED_BODY_MUST_NOT_APPEAR_IN_LIST"); reply.pause = true; reply },
+            "Generate a title" => text("Completed task with a slow title"),
+            _ => unreachable!(),
+        }
+    }, |_| { let mut reply = text("Slow automatic title"); reply.pause = true; reply }).await;
+    let (data, _project, engine, question) = setup(&fake).await;
+    let pinned = engine.call("createSession", json!({"title":"Pinned idle session"})).await.unwrap()["id"].as_str().unwrap().to_string();
+    engine.call("setSessionMetadata", json!({"sessionId":pinned,"pinned":true})).await.unwrap();
+    let running = engine.call("createSession", json!({})).await.unwrap()["id"].as_str().unwrap().to_string();
+    let permission = engine.call("createSession", json!({"permissionMode":"ask"})).await.unwrap()["id"].as_str().unwrap().to_string();
+    let title = engine.call("createSession", json!({})).await.unwrap()["id"].as_str().unwrap().to_string();
+    send(&engine, &question, "background-question", "Wait for an answer").await;
+    wait(&engine, &question, |value| value["status"] == "waiting_question").await;
+    send(&engine, &running, "background-running", "Keep running").await;
+    wait(&engine, &running, |value| value.to_string().contains("STREAMED_BODY_MUST_NOT_APPEAR_IN_LIST")).await;
+    send(&engine, &permission, "background-permission", "Wait for permission").await;
+    wait(&engine, &permission, |value| value["status"] == "waiting_permission").await;
+    send(&engine, &title, "background-title", "Generate a title").await;
+    wait(&engine, &title, |value| value["status"] == "idle").await;
+
+    let sessions = engine.call("listSessions", json!({})).await.unwrap();
+    assert_eq!(sessions[0]["id"], pinned, "active sessions must be discoverable beyond the first entry");
+    for (id, expected) in [(&question, "waiting_question"), (&running, "running"), (&permission, "waiting_permission"), (&title, "idle")] {
+        let session = sessions.as_array().unwrap().iter().find(|session| session["id"] == *id).unwrap();
+        assert_eq!(session["activity"]["status"], expected);
+        assert_eq!(session["activity"]["titlePending"], true);
+        assert!(session.get("messages").is_none());
+    }
+    assert!(!sessions.to_string().contains("STREAMED_BODY_MUST_NOT_APPEAR_IN_LIST"));
+    for record in std::fs::read_dir(data.path().join("sessions")).unwrap() {
+        let stored: Value = serde_json::from_slice(&std::fs::read(record.unwrap().path()).unwrap()).unwrap();
+        assert!(stored["snapshot"]["session"].get("activity").is_none(), "list projections must not become persisted activity truth");
+    }
+    engine.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn a_later_task_failure_does_not_hide_a_title_request_already_in_flight() {
+    let fake = Fake::start_with_titles(|input| {
+        let user = input["messages"].as_array().unwrap().iter().rev()
+            .find(|message| message["role"] == "user").unwrap()["content"].as_str().unwrap();
+        if user == "First task succeeds" { text("Done") }
+        else { Reply { frames: Vec::new(), pause: false, status: 500, json_response: false } }
+    }, |_| {
+        let mut reply = text("主任务归纳"); reply.pause = true; reply
+    }).await;
+    let (_data, _project, engine, id) = setup(&fake).await;
+    send(&engine, &id, "first-title", "First task succeeds").await;
+    wait(&engine, &id, |_| !fake.title_requests.lock().unwrap().is_empty()).await;
+    send(&engine, &id, "second-error", "Second task fails").await;
+    let failed = wait(&engine, &id, |value| value["status"] == "error").await;
+    assert_eq!(failed["titlePending"], true, "the earlier title request is still outstanding");
+    fake.resume.notify_one();
+    tokio::time::timeout(Duration::from_secs(2), engine.settle_background_tasks()).await.unwrap();
+    let result = snapshot(&engine, &id).await;
+    assert_eq!(result["session"]["title"], "主任务归纳");
+    assert_eq!(result["titlePending"], false);
+    assert_eq!(result["status"], "error");
+    assert_eq!(result["error"], failed["error"], "title writes must preserve newer task results");
+    engine.shutdown().await.unwrap();
 }
 
 #[tokio::test]
@@ -522,7 +899,7 @@ async fn cancelling_permission_repairs_tool_history_without_executing_or_replayi
 }
 
 #[tokio::test]
-async fn oversized_skill_is_not_truncated_loaded_or_sent_to_a_small_unknown_context() {
+async fn oversized_skill_is_not_truncated_loaded_or_sent_to_a_known_small_context() {
     let body = "PRIVATE_BUDGETED_BODY".repeat(2000);
     let fake = Fake::start(|input| {
         if last_tool(input).is_none() {
@@ -536,10 +913,7 @@ async fn oversized_skill_is_not_truncated_loaded_or_sent_to_a_small_unknown_cont
     .await;
     let (_data, project, engine, id) = setup(&fake).await;
     let mut small = catalog();
-    small["models"][0]
-        .as_object_mut()
-        .unwrap()
-        .remove("contextLimit");
+    small["models"][0]["contextLimit"] = json!(8192);
     engine
         .bind(project.path().into(), small, fake.gateway())
         .await

@@ -32,6 +32,18 @@ const snapshot = (
 });
 
 describe("AgentActivityStatus", () => {
+  it("shows context compaction only while the backend reports a running checkpoint", () => {
+    const value = snapshot("running");
+    value.compacting = true;
+    const props = { queued: false, stopping: false, loading: false };
+    const view = render(<AgentActivityStatus snapshot={value} {...props} />);
+    expect(screen.getByRole("status")).toHaveTextContent("正在整理上下文…");
+    view.rerender(<AgentActivityStatus snapshot={value} {...props} stopping />);
+    expect(screen.getByRole("status")).toHaveTextContent("正在停止…");
+    value.status = "idle";
+    view.rerender(<AgentActivityStatus snapshot={value} {...props} />);
+    expect(screen.getByRole("status")).toHaveTextContent("准备就绪");
+  });
   it("uses actual streamed parts for thinking, replying and tool execution", () => {
     const value = snapshot("running", [
       message([{ type: "reasoning", text: "比较两个可用方向" }]),

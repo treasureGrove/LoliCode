@@ -455,6 +455,23 @@
 .wb-tool-status {
   font-size: 11px;
 }
+.wb-disclosure > summary {
+  list-style: none;
+}
+.wb-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+.wb-disclosure > summary:focus-visible {
+  outline: 2px solid var(--wb-accent);
+  outline-offset: -2px;
+  border-radius: inherit;
+}
+.wb-disclosure-chevron {
+  transition: transform 140ms ease;
+}
+.wb-disclosure[open] > summary > .wb-disclosure-chevron {
+  transform: rotate(90deg);
+}
 .wb-tool[data-state="running"] > summary > svg,
 .wb-tool[data-state="pending"] > summary > svg {
   color: var(--wb-accent);

@@ -64,12 +64,14 @@ export const agentApi = {
     mode: AgentMode,
     title?: string,
     permissionMode?: AgentPermissionMode,
+    reasoningEffort?: string,
   ) =>
     invoke<AgentSession>("create_agent_session", {
       modelId,
       mode,
       title,
       permissionMode,
+      reasoningEffort,
     }),
   updateSession: (
     sessionId: string,
@@ -77,6 +79,7 @@ export const agentApi = {
       modelId?: string;
       mode?: AgentMode;
       permissionMode?: AgentPermissionMode;
+      reasoningEffort?: string;
     },
   ) => invoke<AgentSession>("update_agent_session", { sessionId, ...patch }),
   renameSession: (sessionId: string, title: string) =>

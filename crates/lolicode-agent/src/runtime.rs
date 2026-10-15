@@ -940,6 +940,8 @@ impl Engine {
             error: error.or(diff_error),
             stream_connected: connected,
             stream_gap: running && (!connected || gap),
+            title_pending: false,
+            compacting: false,
         };
         let mut value = serde_json::to_value(&snapshot).map_err(|_| "会话内容编码失败")?;
         self.redact_value(&mut value);

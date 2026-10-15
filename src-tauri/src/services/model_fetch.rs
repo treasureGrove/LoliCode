@@ -33,6 +33,32 @@ pub struct FetchedModelMetadata {
     pub reasoning_efforts: Option<Vec<String>>,
 }
 
+fn declared_efforts(values: &[serde_json::Value]) -> Option<Vec<String>> {
+    let mut efforts = Vec::new();
+    for value in values {
+        let Some(effort) = value.as_str().or_else(|| {
+            value
+                .get("effort")
+                .or_else(|| value.get("value"))
+                .and_then(serde_json::Value::as_str)
+        }) else {
+            continue;
+        };
+        let effort = effort.trim();
+        if !effort.is_empty()
+            && effort.len() <= 64
+            && effort
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-'))
+            && !efforts.iter().any(|saved| saved == effort)
+        {
+            efforts.push(effort.to_string());
+        }
+    }
+    // Empty is an explicit declaration; malformed nonempty input is unknown.
+    (values.is_empty() || !efforts.is_empty()).then_some(efforts)
+}
+
 pub fn declared_model_metadata(entry: &serde_json::Value) -> FetchedModelMetadata {
     let positive = |pointers: &[&str]| {
         pointers.iter().find_map(|pointer| {
@@ -53,54 +79,79 @@ pub fn declared_model_metadata(entry: &serde_json::Value) -> FetchedModelMetadat
         "/reasoning/efforts",
         "/capabilities/supports/reasoning_effort",
         "/capabilities/reasoning_effort",
+        "/capabilities/reasoning/efforts",
+        "/capabilities/reasoning/levels",
+        "/model_info/supported_reasoning_efforts",
+        "/model_info/reasoning_efforts",
+        "/supported_parameters/reasoning_effort/enum",
+        "/parameters/reasoning_effort/enum",
+        "/reasoning/effort/enum",
     ]
     .iter()
     .find_map(|pointer| {
         let values = entry.pointer(pointer)?.as_array()?;
-        // Keep an explicit empty array distinct from an absent declaration.
-        let mut efforts = Vec::new();
-        for value in values {
-            let Some(effort) = value
-                .as_str()
-                .or_else(|| value.get("effort").and_then(serde_json::Value::as_str))
-            else {
-                continue;
-            };
-            if !effort.is_empty()
-                && effort.len() <= 64
-                && effort
-                    .bytes()
-                    .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-'))
-                && !efforts.iter().any(|saved| saved == effort)
-            {
-                efforts.push(effort.to_string());
+        declared_efforts(values)
+    })
+    .or_else(|| {
+        // Public upstream registries can advertise several independent options.
+        // Only a typed effort option supplies legal effort values.
+        let options = entry.get("reasoning_options")?.as_array()?;
+        let mut values = Vec::new();
+        let mut declared = false;
+        for option in options {
+            if option.get("type").and_then(serde_json::Value::as_str) == Some("effort") {
+                if let Some(items) = option.get("values").and_then(serde_json::Value::as_array) {
+                    declared = true;
+                    values.extend(items.iter().cloned());
+                }
             }
         }
-        if !values.is_empty() && efforts.is_empty() {
-            None
-        } else {
-            Some(efforts)
-        }
+        declared.then(|| declared_efforts(&values)).flatten()
     });
     FetchedModelMetadata {
         context_limit: positive(&[
             "/context_window",
             "/contextWindow",
+            "/context_limit",
+            "/contextLimit",
             "/context_length",
+            "/contextLength",
+            "/context/length",
             "/max_context_tokens",
+            "/maxContextTokens",
+            "/maxContextLength",
+            "/maxContextWindowTokens",
+            "/max_model_len",
+            "/max_model_length",
+            "/max_sequence_length",
+            "/max_seq_len",
+            "/max_position_embeddings",
             "/inputTokenLimit",
+            "/maxInputTokens",
+            "/max_input_tokens",
             "/input_token_limit",
+            "/max_prompt_tokens",
+            "/limits/context_length",
+            "/limits/context_window",
+            "/limits/max_context_tokens",
+            "/limits/max_input_tokens",
             "/capabilities/limits/max_prompt_tokens",
+            "/capabilities/limits/max_context_tokens",
             "/capabilities/limits/max_context_window_tokens",
             "/limit/context",
         ]),
         output_limit: positive(&[
+            "/output_limit",
+            "/outputLimit",
+            "/maxOutputTokens",
             "/max_output_tokens",
             "/max_completion_tokens",
             "/top_provider/max_completion_tokens",
             "/outputTokenLimit",
             "/output_token_limit",
             "/capabilities/limits/max_output_tokens",
+            "/limits/max_output_tokens",
+            "/limits/max_completion_tokens",
             "/limit/output",
         ]),
         reasoning_efforts,
@@ -486,6 +537,27 @@ fn ends_with_version_segment(url: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn capability_enums_and_typed_upstream_options_are_read_without_guessing() {
+        for entry in [
+            serde_json::json!({"parameters":{"reasoning_effort":{"enum":[" low ",{"value":"high"},"high"]}}}),
+            serde_json::json!({"reasoning_options":[{"type":"budget","values":["1024"]},{"type":"effort","values":["low", "high"]}]}),
+            serde_json::json!({"model_info":{"supported_reasoning_efforts":["low", "high"]}}),
+        ] {
+            assert_eq!(
+                declared_model_metadata(&entry).reasoning_efforts,
+                Some(vec!["low".into(), "high".into()])
+            );
+        }
+        for entry in [
+            serde_json::json!({"supports_reasoning":true,"supported_openai_params":["reasoning_effort"]}),
+            serde_json::json!({"reasoning_options":[{"type":"budget","values":["1024"]}]}),
+            serde_json::json!({"reasoning_efforts":[null, "not an identifier"]}),
+        ] {
+            assert_eq!(declared_model_metadata(&entry).reasoning_efforts, None);
+        }
+    }
 
     #[test]
     fn channel_metadata_retains_codex_efforts_and_router_output_without_model_name_guesses() {

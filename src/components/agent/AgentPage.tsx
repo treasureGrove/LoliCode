@@ -13,7 +13,6 @@ import {
   SlidersHorizontal,
   Lightbulb,
   ChevronDown,
-  Sparkles,
   Blocks,
   Archive,
   Pin,
@@ -47,7 +46,6 @@ import type {
   AgentMode,
   AgentPermissionMode,
   AgentProject,
-  AgentModel,
   AgentSession,
   AgentSnapshot,
   AgentWorkspace,
@@ -57,6 +55,11 @@ import { AgentChanges } from "./AgentChanges";
 import { AgentPermissionCard } from "./AgentPermissionCard";
 import { AgentQuestionCard } from "./AgentQuestionCard";
 import { AgentActivityStatus } from "./AgentActivityStatus";
+import {
+  AgentModelPicker,
+  agentModelLabel as modelLabel,
+} from "./AgentModelPicker";
+import { AgentReasoningPicker } from "./AgentReasoningPicker";
 import { WindowControlsContext } from "@/components/shell/AppPageHeader";
 import LolicodeMascot from "@/components/shell/LolicodeMascot";
 import { DRAG_REGION_ATTR, DRAG_REGION_STYLE } from "@/lib/platform";
@@ -220,10 +223,6 @@ const readRecent = (): string[] => {
 };
 const activeStatus = (status?: string) =>
   Boolean(status && status !== "idle" && status !== "error");
-const modelLabel = (model: AgentModel) =>
-  !model.channelName || model.name.startsWith(`${model.channelName} · `)
-    ? model.name
-    : `${model.channelName} · ${model.name}`;
 
 export interface AgentPageProps {
   onOpenChannels?: () => void;
@@ -259,6 +258,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
   const [sessions, setSessions] = useState<AgentSession[]>([]);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [modelId, setModelId] = useState("");
+  const [reasoningEffort, setReasoningEffort] = useState("");
   const [mode, setMode] = useState<AgentMode>("build");
   const [busy, setBusy] = useState<string | null>(null);
   const [busySessionId, setBusySessionId] = useState<string | null>(null);
@@ -268,6 +268,10 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
   const [pending, setPending] = useState<Record<string, PendingSend>>({});
   const [stopping, setStopping] = useState<Record<string, boolean>>({});
   const [statuses, setStatuses] = useState<Record<string, string>>({});
+  const [pendingTitles, setPendingTitles] = useState<Record<string, boolean>>(
+    {},
+  );
+  const removedSessions = useRef(new Set<string>());
   const [refresh, setRefresh] = useState(0);
   const mounted = useRef(true);
   const generation = useRef(0);
@@ -319,6 +323,24 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
       return next;
     });
   };
+  const discoverSessionActivity = (items: AgentSession[]) => {
+    setStatuses((old) => {
+      const next = { ...old };
+      for (const item of items)
+        if (item.activity && !removedSessions.current.has(item.id))
+          next[item.id] = item.activity.status;
+      return next;
+    });
+    setPendingTitles((old) => {
+      const next = { ...old };
+      for (const item of items) {
+        if (!item.activity || removedSessions.current.has(item.id)) continue;
+        if (item.activity.titlePending) next[item.id] = true;
+        else delete next[item.id];
+      }
+      return next;
+    });
+  };
   const initialize = useCallback(async () => {
     const requestGeneration = ++generation.current;
     setInitializing(true);
@@ -343,6 +365,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
         });
         bindCatalog(nextCatalog);
         setSessions(nextSessions);
+        discoverSessionActivity(nextSessions);
         setPending(restorePending(status.projectPath, nextSessions));
         setStopping(restoreStopping(status.projectPath, nextSessions));
         setSessionId(nextSessions[0]?.id || null);
@@ -401,6 +424,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
   const onSnapshot = useCallback((next: AgentSnapshot) => {
     if (!mounted.current) return;
     const id = next.session.id;
+    if (removedSessions.current.has(id)) return;
     const confirmed = overridesRef.current[id];
     const matchesConfirmed =
       !confirmed ||
@@ -434,6 +458,13 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
     setStatuses((old) =>
       old[id] === next.status ? old : { ...old, [id]: next.status },
     );
+    setPendingTitles((old) => {
+      if (Boolean(old[id]) === Boolean(next.titlePending)) return old;
+      const current = { ...old };
+      if (next.titlePending) current[id] = true;
+      else delete current[id];
+      return current;
+    });
     const queued = pendingRef.current[id];
     const submitted = readAgentSubmission(next.session.projectPath, id);
     const candidate =
@@ -660,12 +691,20 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
     onSnapshot,
   });
 
-  // An executing session remains observable when the user reads another conversation.
-  const backgroundIds = Object.keys({ ...statuses, ...pending, ...stopping })
+  // Observe task and title jobs independently when another conversation is selected.
+  const backgroundIds = Object.keys({
+    ...statuses,
+    ...pending,
+    ...stopping,
+    ...pendingTitles,
+  })
     .filter(
       (id) =>
         id !== sessionId &&
-        (activeStatus(statuses[id]) || pending[id] || stopping[id]),
+        (activeStatus(statuses[id]) ||
+          pending[id] ||
+          stopping[id] ||
+          pendingTitles[id]),
     )
     .sort()
     .join("|");
@@ -743,6 +782,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
       setWorkspace(result.workspace);
       bindCatalog(result.catalog);
       setSessions(result.sessions);
+      discoverSessionActivity(result.sessions);
       setSessionId(result.sessions[0]?.id || null);
       setShowArchived(false);
       setPending((old) => ({
@@ -788,6 +828,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
         mode,
         undefined,
         permissionMode,
+        reasoningEffort || undefined,
       );
       if (!mounted.current || generation.current !== requestGeneration) return;
       setSessions((old) => [
@@ -1001,6 +1042,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
           : result.sessions;
         if (!mounted.current) return;
         setSessions(refreshedSessions);
+        discoverSessionActivity(refreshedSessions);
         setSessionId((current) =>
           refreshedSessions.some((session) => session.id === current)
             ? current
@@ -1075,19 +1117,20 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
     modelId?: string;
     mode?: AgentMode;
     permissionMode?: AgentPermissionMode;
+    reasoningEffort?: string;
   }) => {
     if (!sessionId) {
       if (patch.modelId) setModelId(patch.modelId);
       if (patch.mode) setMode(patch.mode);
       if (patch.permissionMode) setPermissionMode(patch.permissionMode);
+      if (patch.reasoningEffort !== undefined)
+        setReasoningEffort(patch.reasoningEffort);
       return;
     }
     if (
       isLegacySession(sessionId) ||
       mutation.current ||
-      activeStatus(statusRef.current[sessionId]) ||
-      pendingRef.current[sessionId] ||
-      stoppingRef.current[sessionId]
+      pendingRef.current[sessionId]?.uncertain
     )
       return;
     const id = sessionId;
@@ -1101,12 +1144,19 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
         throw new Error("返回的会话与当前选择不一致，请重新读取。");
       confirmSession(result, [
         ...(patch.modelId ? ["model" as const] : []),
+        ...(patch.modelId || patch.reasoningEffort !== undefined
+          ? ["reasoningEffort" as const]
+          : []),
         ...(patch.mode ? ["mode" as const] : []),
         ...(patch.permissionMode ? ["permissionMode" as const] : []),
       ]);
-      if (patch.modelId) setModelId(patch.modelId);
-      if (patch.mode) setMode(patch.mode);
-      if (patch.permissionMode) setPermissionMode(patch.permissionMode);
+      if (selectedId.current === id) {
+        if (patch.modelId) setModelId(patch.modelId);
+        if (patch.modelId || patch.reasoningEffort !== undefined)
+          setReasoningEffort(result.reasoningEffort || "");
+        if (patch.mode) setMode(patch.mode);
+        if (patch.permissionMode) setPermissionMode(patch.permissionMode);
+      }
     } catch (cause) {
       if (mounted.current && selectedId.current === id)
         setError(agentErrorMessage(cause));
@@ -1140,7 +1190,13 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
           );
       } else if (result) confirmSession(result, fields);
       if (remove && workspace) {
+        removedSessions.current.add(id);
         storePending(workspace.path, id);
+        setPendingTitles((old) => {
+          const copy = { ...old };
+          delete copy[id];
+          return copy;
+        });
         setStatuses((old) => {
           const copy = { ...old };
           delete copy[id];
@@ -1166,6 +1222,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
       const items = await agentApi.listSessions(workspace.path, true);
       if (!mounted.current) return;
       setSessions(items);
+      discoverSessionActivity(items);
       setShowArchived((value) => !value);
     } catch (cause) {
       if (mounted.current) setError(agentErrorMessage(cause));
@@ -1629,25 +1686,28 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
                   ? "选择模型并新建会话。"
                   : "先在渠道与模型中添加可用于编程的模型。"}
               </p>
-              <label className="sr-only" htmlFor="agent-new-model">
-                模型
-              </label>
-              <select
-                id="agent-new-model"
-                className="wb-empty-select"
+              <AgentModelPicker
+                className="mb-4"
+                models={catalog.models}
                 disabled={Boolean(busy) || !catalog.models.length}
                 value={modelId}
-                onChange={(event) => setModelId(event.target.value)}
-              >
-                {!catalog.models.length && (
-                  <option value="">还没有可用模型</option>
-                )}
-                {catalog.models.map((model) => (
-                  <option key={model.id} value={model.id}>
-                    {modelLabel(model)}
-                  </option>
-                ))}
-              </select>
+                onSelect={(id) => {
+                  setModelId(id);
+                  setReasoningEffort((old) =>
+                    catalog.models
+                      .find((model) => model.id === id)
+                      ?.reasoningEfforts?.includes(old)
+                      ? old
+                      : "",
+                  );
+                }}
+              />
+              <AgentReasoningPicker
+                model={catalog.models.find((model) => model.id === modelId)}
+                value={reasoningEffort}
+                disabled={Boolean(busy) || !modelId}
+                onSelect={setReasoningEffort}
+              />
               <div
                 role="group"
                 aria-label="新会话执行方式"
@@ -1824,7 +1884,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
                     ))}
               </div>
             </div>
-            <AgentChanges diffs={snapshot?.diffs || []} />
+            <AgentChanges key={sessionId} diffs={snapshot?.diffs || []} />
             <div className="wb-composer-area">
               <form
                 className="wb-composer"
@@ -1856,44 +1916,42 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
                 />
                 <div className="wb-composer-toolbar">
                   <div className="wb-composer-model">
-                    <Sparkles />
-                    <label className="sr-only" htmlFor="agent-new-model">
-                      模型
-                    </label>
-                    <select
-                      id="agent-new-model"
+                    <AgentModelPicker
+                      models={catalog.models}
                       disabled={
                         readOnlySession ||
                         Boolean(busy) ||
                         !snapshot ||
-                        Boolean(runningHere) ||
-                        queuedHere ||
                         uncertainHere ||
-                        stoppingHere ||
                         !catalog.models.length
                       }
                       value={boundModel?.id || ""}
-                      onChange={(event) =>
+                      unavailableLabel={
+                        selectedSession?.model
+                          ? `${selectedSession.model.modelId}（目录中不可用）`
+                          : undefined
+                      }
+                      onSelect={(id) =>
                         void updateSessionConfig({
-                          modelId: event.target.value,
+                          modelId: id,
                         })
                       }
-                    >
-                      {!catalog.models.length && (
-                        <option value="">还没有可用模型</option>
-                      )}
-                      {catalog.models.map((model) => (
-                        <option key={model.id} value={model.id}>
-                          {modelLabel(model)}
-                        </option>
-                      ))}
-                      {!boundModel && selectedSession?.model && (
-                        <option value="">
-                          {selectedSession.model.modelId}（目录中不可用）
-                        </option>
-                      )}
-                    </select>
+                    />
                   </div>
+                  <AgentReasoningPicker
+                    model={boundModel}
+                    value={selectedSession?.reasoningEffort || ""}
+                    disabled={
+                      readOnlySession ||
+                      Boolean(busy) ||
+                      !snapshot ||
+                      uncertainHere ||
+                      !boundModel
+                    }
+                    onSelect={(value) =>
+                      void updateSessionConfig({ reasoningEffort: value })
+                    }
+                  />
                   <div
                     role="group"
                     aria-label="会话执行方式"
@@ -1906,10 +1964,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
                         readOnlySession ||
                         Boolean(busy) ||
                         !snapshot ||
-                        Boolean(runningHere) ||
-                        queuedHere ||
-                        uncertainHere ||
-                        stoppingHere
+                        uncertainHere
                       }
                       aria-pressed={selectedSession?.mode === "plan"}
                       onClick={() =>
@@ -1929,10 +1984,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
                         readOnlySession ||
                         Boolean(busy) ||
                         !snapshot ||
-                        Boolean(runningHere) ||
-                        queuedHere ||
-                        uncertainHere ||
-                        stoppingHere
+                        uncertainHere
                       }
                       aria-pressed={selectedSession?.mode !== "plan"}
                       onClick={() =>
@@ -1952,10 +2004,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
                       readOnlySession ||
                       Boolean(busy) ||
                       !snapshot ||
-                      Boolean(runningHere) ||
-                      queuedHere ||
-                      uncertainHere ||
-                      stoppingHere
+                      uncertainHere
                     }
                     onChange={(event) => {
                       if (readOnlySession) return;
@@ -2017,6 +2066,11 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
                       : "改动文件与执行命令前先确认。"}{" "}
                 Enter 发送 · Shift + Enter 换行
               </p>
+              {runningHere && (
+                <p className="wb-compose-hint">
+                  可以切换配置或编辑草稿，任务结束后才能发送。模型与执行方式从下一次模型请求生效，权限从下一次工具检查生效；已发出的请求和待确认操作保持原状。
+                </p>
+              )}
             </div>
           </>
         )}
