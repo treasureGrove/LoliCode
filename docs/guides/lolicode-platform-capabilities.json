@@ -1,0 +1,798 @@
+{
+  "schemaVersion": 3,
+  "reviewedAt": "2026-10-15",
+  "status": "direction-aligned-application-center-iteration",
+  "supersedes": "complete-upstream-runtime-and-companion-app-first proposal",
+  "productLicensingDecision": "undecided",
+  "product": {
+    "platforms": [
+      "windows",
+      "macos",
+      "linux"
+    ],
+    "webPriority": "later",
+    "architecture": "electron-react-typescript-own-host-rust-native-core",
+    "integrationUnit": "feature-module-or-library",
+    "hostComposition": "modular-monolith",
+    "agent": "one-owned-kernel-with-domain-policies",
+    "experience": "add-application-recommended-setup-progressive-advanced-settings",
+    "applicationUnit": "entry-points-agent-profile-toolset-viewers-requirements-setup-recipe"
+  },
+  "excludedCompatibilityTargets": [
+    "DSH Cordis/Profile/plugin ecosystem",
+    "Whole upstream program or original UI as feature delivery",
+    "Universal SillyTavern DOM/plugin compatibility"
+  ],
+  "scope": "Initial capability families, not an exhaustive claim of all upstream functionality. Expand selected features into concrete operations, formats, source files and regression cases before implementation.",
+  "acceptanceRule": "Only mark a capability accepted after concrete user-visible behavior, data round-trip and recovery checks pass. A dependency or running upstream program is not feature parity.",
+  "sources": [
+    {
+      "id": "current",
+      "repository": "TAI-Switch",
+      "revision": "5de6efa7ba61e98e7f01a89526e75ac9eb337a0a",
+      "licenseObserved": "MIT",
+      "usage": "preserve-existing-services",
+      "status": "existing-not-reaudited",
+      "impact": "Preserve current notices, third-party provenance and existing data; product licensing remains undecided."
+    },
+    {
+      "id": "dsh",
+      "repository": "deepseek-ai/deepseek-harness",
+      "revision": "571902028a75c64c1d767f4ae5fd099485f0ddf0",
+      "versionObserved": "0.2.1-alpha.3",
+      "licenseObserved": "MIT",
+      "usage": "candidate-tools-context-lifecycle",
+      "status": "candidate-not-adopted",
+      "impact": "Retain applicable copyright and permission notices for copied or adapted code. No Cordis/Profile/plugin compatibility target."
+    },
+    {
+      "id": "opencode",
+      "repository": "anomalyco/opencode",
+      "revision": "3aa26f167660b46d61cbf44c52aa37c0a14bdc27",
+      "versionObserved": "2.0.29",
+      "licenseObserved": "MIT",
+      "usage": "candidate-model-protocols-coding-tools-permissions-recovery",
+      "status": "candidate-not-adopted-under-revised-plan",
+      "impact": "Retain applicable notices; audit module dependency closure before source extraction. Whole-program adapter experiment is paused."
+    },
+    {
+      "id": "zcode",
+      "repository": "zai-org/ZCode",
+      "revision": "aac4755666d09fdcd70272fcf063c077a639015f",
+      "versionObserved": "3.15.1",
+      "licenseObserved": "Apache-2.0",
+      "usage": "candidate-agent-tools-context-tasks-preview-and-process-supervision",
+      "status": "existing-runtime-subset-and-new-candidates-need-separate-records",
+      "impact": "License copy, applicable attribution/NOTICE and change notices; no new whole runtime integration."
+    },
+    {
+      "id": "uebox",
+      "repository": "ueboxai/uebox",
+      "revision": "ec65d7d1ae018944739d28cef18c78b4c53bca8f",
+      "versionObserved": "1.0.8",
+      "licenseObserved": "Apache-2.0",
+      "usage": "candidate-ue-domain-tools-locks-verification",
+      "status": "candidate-not-adopted",
+      "impact": "License copy, applicable attribution/NOTICE and change notices; inspect nested licenses and dependencies."
+    },
+    {
+      "id": "unreal-agent-link",
+      "repository": "ueboxai/uebox",
+      "revision": "ec65d7d1ae018944739d28cef18c78b4c53bca8f",
+      "path": "plugin/UnrealAgentLink",
+      "licenseObserved": "MIT",
+      "usage": "candidate-editor-bridge",
+      "status": "candidate-not-adopted",
+      "impact": "Separate subdirectory license; retain applicable notices and audit plugin dependencies."
+    },
+    {
+      "id": "sillytavern",
+      "repository": "SillyTavern/SillyTavern",
+      "revision": "06bde939fb1e9c4c8d8641d810f0a916b5bce127",
+      "licenseObserved": "AGPL-3.0",
+      "usage": "format-and-behavior-research-source-reuse-undecided",
+      "status": "license-decision-required-before-core-source-adoption",
+      "impact": "Adaptation may carry corresponding-source and other copyleft obligations depending on combination and distribution; wrappers and rewrites do not automatically remove them."
+    },
+    {
+      "id": "workbuddy",
+      "url": "https://www.workbuddy.cn/docs/workbuddy/Results",
+      "usage": "public-interaction-reference-only",
+      "status": "no-source-adoption",
+      "impact": "No open-source license assumed; no proprietary code, branding or assets selected."
+    },
+    {
+      "id": "ccswitch",
+      "repository": "farion1231/cc-switch",
+      "revision": "479964f2ef59e291f563218ac674a1fd82dcdbd3",
+      "versionObserved": "4.0.10",
+      "licenseObserved": "MIT",
+      "usage": "existing-configuration-foundation-and-setup-patterns",
+      "status": "existing-fork-baseline-new-adaptations-need-records",
+      "impact": "Retain existing MIT copyright and license, preserve configuration fields and data; new upstream files require their own provenance records."
+    }
+  ],
+  "provenance": {
+    "status": "candidate-level-ledger-only",
+    "fileLevelAuditComplete": false,
+    "requiredBeforeReuse": [
+      "repository",
+      "commit",
+      "source path",
+      "file license",
+      "usage type",
+      "local path",
+      "modification summary",
+      "dependency closure",
+      "NOTICE requirements",
+      "acceptance cases",
+      "upgrade owner"
+    ]
+  },
+  "capabilities": [
+    {
+      "id": "model-routing",
+      "title": "渠道、模型目录与代理",
+      "owner": "native-core",
+      "sourceIds": [
+        "current",
+        "ccswitch"
+      ],
+      "current": "existing-not-revalidated",
+      "target": "preserve",
+      "phase": 2,
+      "status": "proposed-or-preserve-not-accepted",
+      "accept": [
+        "provider CRUD and model catalog",
+        "routing and failover",
+        "proxy lifecycle",
+        "quota and usage",
+        "config round-trip"
+      ]
+    },
+    {
+      "id": "credentials",
+      "title": "账户、凭据与授权",
+      "owner": "native-core",
+      "sourceIds": [
+        "current",
+        "ccswitch"
+      ],
+      "current": "existing-not-revalidated",
+      "target": "preserve",
+      "phase": 2,
+      "status": "proposed-or-preserve-not-accepted",
+      "accept": [
+        "refresh and expiry",
+        "credential ownership",
+        "no upstream secrets in renderer",
+        "isolated development data"
+      ]
+    },
+    {
+      "id": "project-platform",
+      "title": "项目、文件与 Git",
+      "owner": "platform-services",
+      "sourceIds": [
+        "current",
+        "opencode"
+      ],
+      "current": "partial-existing",
+      "target": "own-module",
+      "phase": 1,
+      "status": "proposed-or-preserve-not-accepted",
+      "accept": [
+        "canonical workspace identity",
+        "filesystem and process target consistency",
+        "file operations",
+        "Git diff and worktree",
+        "cross-module resource references"
+      ]
+    },
+    {
+      "id": "agent-profiles",
+      "title": "自定义智能体与任务工作台",
+      "owner": "agent-kernel",
+      "sourceIds": [
+        "dsh",
+        "workbuddy"
+      ],
+      "current": "proposed",
+      "target": "own-module",
+      "phase": 1,
+      "status": "proposed-or-preserve-not-accepted",
+      "accept": [
+        "instructions and model preferences",
+        "tool and skill scope",
+        "workspace and permission settings",
+        "reusable profiles",
+        "conversation and artifact panels"
+      ]
+    },
+    {
+      "id": "coding-session",
+      "title": "会话、模型流与编程策略",
+      "owner": "coding",
+      "sourceIds": [
+        "current",
+        "opencode",
+        "dsh"
+      ],
+      "current": "native-engine-current-default",
+      "target": "own-kernel-and-domain-policy",
+      "phase": 1,
+      "status": "proposed-or-preserve-not-accepted",
+      "accept": [
+        "real model streaming",
+        "attachments",
+        "coding instructions",
+        "tool loop",
+        "one executor per turn",
+        "no CLI program required"
+      ]
+    },
+    {
+      "id": "model-fidelity",
+      "title": "模型原生能力与上下文保真",
+      "owner": "model-service",
+      "sourceIds": [
+        "current",
+        "opencode",
+        "dsh"
+      ],
+      "current": "requires-protocol-audit",
+      "target": "typed-provider-adapters",
+      "phase": 1,
+      "status": "proposed-or-preserve-not-accepted",
+      "accept": [
+        "native reasoning and signature round-trip",
+        "cache markers",
+        "tool IDs and schemas",
+        "multimodal content",
+        "structured output",
+        "native sampling",
+        "compression source preservation",
+        "unsupported fields visible"
+      ]
+    },
+    {
+      "id": "tools-permissions",
+      "title": "工具、提问、权限与取消",
+      "owner": "tool-runtime",
+      "sourceIds": [
+        "current",
+        "opencode",
+        "dsh"
+      ],
+      "current": "native-support-declared-not-revalidated",
+      "target": "own-module",
+      "phase": 1,
+      "status": "proposed-or-preserve-not-accepted",
+      "accept": [
+        "typed input and output",
+        "denial and question resume",
+        "cancel process tree",
+        "structured errors",
+        "resource locks",
+        "no unconfirmed effect replay"
+      ]
+    },
+    {
+      "id": "history-recovery",
+      "title": "历史、分支与恢复",
+      "owner": "task-service",
+      "sourceIds": [
+        "current",
+        "opencode",
+        "dsh"
+      ],
+      "current": "native-and-legacy-history-exist",
+      "target": "own-data-with-explicit-migration",
+      "phase": 1,
+      "status": "proposed-or-preserve-not-accepted",
+      "accept": [
+        "branch and restore",
+        "executor/version identity",
+        "interrupted turn state",
+        "snapshot and event resync",
+        "export",
+        "side-effect reconciliation"
+      ]
+    },
+    {
+      "id": "skills",
+      "title": "Skills 内容与作用域",
+      "owner": "agent-services",
+      "sourceIds": [
+        "current",
+        "dsh",
+        "ccswitch"
+      ],
+      "current": "native-support-declared-not-revalidated",
+      "target": "protocol-and-content-support",
+      "phase": 3,
+      "status": "proposed-or-preserve-not-accepted",
+      "accept": [
+        "discovery",
+        "content and referenced resources",
+        "scope and enablement",
+        "version provenance",
+        "tool availability checks"
+      ]
+    },
+    {
+      "id": "mcp",
+      "title": "MCP 工具、资源与身份验证",
+      "owner": "connectors",
+      "sourceIds": [
+        "current",
+        "opencode",
+        "uebox",
+        "ccswitch"
+      ],
+      "current": "desktop-config-exists-native-agent-execution-disabled",
+      "target": "connector-module",
+      "phase": 3,
+      "status": "proposed-or-preserve-not-accepted",
+      "accept": [
+        "transport lifecycle",
+        "authentication",
+        "tool discovery and execution",
+        "resources",
+        "elicitation",
+        "reconnect",
+        "session scopes"
+      ]
+    },
+    {
+      "id": "module-lifecycle",
+      "title": "第一方模块与扩展入口",
+      "owner": "platform-host",
+      "sourceIds": [
+        "dsh"
+      ],
+      "current": "proposed",
+      "target": "typed-service-composition",
+      "phase": 1,
+      "status": "proposed-or-preserve-not-accepted",
+      "accept": [
+        "declared dependencies",
+        "tool and viewer registration",
+        "activate and dispose",
+        "configuration changes",
+        "load failure",
+        "versioned boundary schemas"
+      ]
+    },
+    {
+      "id": "subagents",
+      "title": "多智能体与主从任务",
+      "owner": "task-service",
+      "sourceIds": [
+        "dsh",
+        "opencode"
+      ],
+      "current": "not-verified-in-native-engine",
+      "target": "own-module",
+      "phase": 3,
+      "status": "proposed-or-preserve-not-accepted",
+      "accept": [
+        "parent-child identity",
+        "delegation and result aggregation",
+        "context isolation",
+        "resource ownership",
+        "cancellation",
+        "conflict handling"
+      ]
+    },
+    {
+      "id": "automation",
+      "title": "工作流、定时与后台任务",
+      "owner": "task-service",
+      "sourceIds": [
+        "current",
+        "dsh"
+      ],
+      "current": "native-declared-disabled",
+      "target": "own-module",
+      "phase": 3,
+      "status": "proposed-or-preserve-not-accepted",
+      "accept": [
+        "durable schedules",
+        "missed run policy",
+        "locks",
+        "background execution",
+        "restart reconciliation",
+        "manual stop",
+        "update coordination"
+      ]
+    },
+    {
+      "id": "remote",
+      "title": "远程、SSH、WSL 与容器",
+      "owner": "execution-targets",
+      "sourceIds": [
+        "dsh",
+        "opencode"
+      ],
+      "current": "native-declared-disabled",
+      "target": "future-connector",
+      "phase": 4,
+      "status": "proposed-or-preserve-not-accepted",
+      "accept": [
+        "authenticated target",
+        "same execution world for files and processes",
+        "disconnect and reconnect",
+        "capability negotiation",
+        "owned helper deployment"
+      ]
+    },
+    {
+      "id": "browser-computer",
+      "title": "浏览器与电脑操作",
+      "owner": "desktop-connectors",
+      "sourceIds": [
+        "workbuddy",
+        "zcode",
+        "dsh"
+      ],
+      "current": "not-integrated-in-native-agent",
+      "target": "own-tools-and-platform-adapters",
+      "phase": 3,
+      "status": "proposed-or-preserve-not-accepted",
+      "accept": [
+        "visible browser target identity",
+        "isolated sessions",
+        "navigation and screenshots",
+        "download/upload",
+        "helper lifecycle",
+        "OS permissions and focus",
+        "per-OS validation"
+      ]
+    },
+    {
+      "id": "tavern-characters",
+      "title": "角色卡、Persona 与角色库",
+      "owner": "tavern",
+      "sourceIds": [
+        "sillytavern"
+      ],
+      "current": "not-integrated",
+      "target": "own-module-and-format-compatibility",
+      "phase": 4,
+      "status": "proposed-or-preserve-not-accepted",
+      "accept": [
+        "selected card formats and PNG metadata",
+        "unknown fields preserved",
+        "persona",
+        "import/export originals",
+        "library operations"
+      ]
+    },
+    {
+      "id": "tavern-world",
+      "title": "世界书、提示词与采样",
+      "owner": "tavern",
+      "sourceIds": [
+        "sillytavern"
+      ],
+      "current": "not-integrated",
+      "target": "own-domain-policy",
+      "phase": 4,
+      "status": "proposed-or-preserve-not-accepted",
+      "accept": [
+        "activation rules and recursion",
+        "priority and budget",
+        "insertion position",
+        "prompt ordering",
+        "provider-specific samplers"
+      ]
+    },
+    {
+      "id": "tavern-chat",
+      "title": "角色聊天、群聊与分支",
+      "owner": "tavern",
+      "sourceIds": [
+        "sillytavern"
+      ],
+      "current": "not-integrated",
+      "target": "own-module",
+      "phase": 4,
+      "status": "proposed-or-preserve-not-accepted",
+      "accept": [
+        "regeneration",
+        "message edit",
+        "branch",
+        "group turn order",
+        "history import/export",
+        "restoration"
+      ]
+    },
+    {
+      "id": "tavern-media",
+      "title": "酒馆规则、脚本能力与多媒体",
+      "owner": "tavern",
+      "sourceIds": [
+        "sillytavern"
+      ],
+      "current": "not-integrated",
+      "target": "own-features-selected-format-adapters",
+      "phase": 4,
+      "status": "proposed-or-preserve-not-accepted",
+      "accept": [
+        "regex and transform rules",
+        "selected script capability mapping",
+        "TTS/STT",
+        "image/media adapters",
+        "RAG ownership",
+        "explicit unsupported extension reporting"
+      ]
+    },
+    {
+      "id": "ue-manager",
+      "title": "UE 引擎、工程与插件管理",
+      "owner": "unreal",
+      "sourceIds": [
+        "uebox"
+      ],
+      "current": "not-integrated",
+      "target": "own-domain-services",
+      "phase": 4,
+      "status": "proposed-or-preserve-not-accepted",
+      "accept": [
+        "engine discovery",
+        "project import",
+        "version association",
+        "plugin install",
+        "launch",
+        "offline behavior",
+        "OS path and encoding checks"
+      ]
+    },
+    {
+      "id": "ue-assets",
+      "title": "UE 资源、索引、下载与迁移",
+      "owner": "unreal",
+      "sourceIds": [
+        "uebox"
+      ],
+      "current": "not-integrated",
+      "target": "own-domain-services",
+      "phase": 4,
+      "status": "proposed-or-preserve-not-accepted",
+      "accept": [
+        "background index",
+        "dependencies",
+        "resource references",
+        "resumable downloads",
+        "import/migration",
+        "binary preservation",
+        "large libraries"
+      ]
+    },
+    {
+      "id": "ue-bridge",
+      "title": "UE 编辑器连接与命令桥",
+      "owner": "unreal-connector",
+      "sourceIds": [
+        "unreal-agent-link"
+      ],
+      "current": "not-integrated",
+      "target": "editor-plugin-adaptation",
+      "phase": 4,
+      "status": "proposed-or-preserve-not-accepted",
+      "accept": [
+        "project and editor instance identity",
+        "plugin/engine versions",
+        "handshake",
+        "connection generation",
+        "correlation IDs",
+        "disconnect reconciliation"
+      ]
+    },
+    {
+      "id": "ue-editing",
+      "title": "UE 场景、蓝图、材质与 UMG",
+      "owner": "unreal",
+      "sourceIds": [
+        "uebox",
+        "unreal-agent-link"
+      ],
+      "current": "not-integrated",
+      "target": "domain-tools-on-own-agent",
+      "phase": 4,
+      "status": "proposed-or-preserve-not-accepted",
+      "accept": [
+        "actor edits",
+        "blueprints",
+        "materials",
+        "widgets",
+        "editor-thread dispatch",
+        "locks",
+        "save/compile/readback verification",
+        "operation-specific undo"
+      ]
+    },
+    {
+      "id": "ue-build",
+      "title": "UE 编译、打包与工具链",
+      "owner": "unreal",
+      "sourceIds": [
+        "uebox"
+      ],
+      "current": "not-integrated",
+      "target": "own-domain-services",
+      "phase": 4,
+      "status": "proposed-or-preserve-not-accepted",
+      "accept": [
+        "toolchain discovery",
+        "logs and exit status",
+        "process-tree cancellation",
+        "artifacts",
+        "per-engine plugin builds",
+        "restart-required changes"
+      ]
+    },
+    {
+      "id": "artifacts",
+      "title": "文档、图像、音视频与产物",
+      "owner": "artifact-service",
+      "sourceIds": [
+        "current",
+        "workbuddy"
+      ],
+      "current": "partial-existing",
+      "target": "own-service",
+      "phase": 1,
+      "status": "proposed-or-preserve-not-accepted",
+      "accept": [
+        "MIME and origin",
+        "scoped access",
+        "large binary references",
+        "preview/export",
+        "hashes",
+        "tool-created artifact links"
+      ]
+    },
+    {
+      "id": "sidebar-preview",
+      "title": "侧栏预览、文件树与变更",
+      "owner": "workbench-ui",
+      "sourceIds": [
+        "dsh",
+        "workbuddy",
+        "opencode"
+      ],
+      "current": "partial-existing",
+      "target": "own-react-viewers",
+      "phase": 1,
+      "status": "proposed-or-preserve-not-accepted",
+      "accept": [
+        "task-linked viewers",
+        "file and diff",
+        "document/image/media",
+        "visible local web app",
+        "multiple preview targets",
+        "refresh reconnects to active Host task"
+      ]
+    },
+    {
+      "id": "desktop-release",
+      "title": "三端桌面、更新与安装",
+      "owner": "desktop",
+      "sourceIds": [
+        "current",
+        "zcode"
+      ],
+      "current": "tauri-current-default",
+      "target": "electron-after-parity",
+      "phase": 2,
+      "status": "proposed-or-preserve-not-accepted",
+      "accept": [
+        "window/tray/deep link",
+        "background lifecycle",
+        "dialogs",
+        "single writer",
+        "signed update and clean install",
+        "offline launch",
+        "development isolation",
+        "backup and rollback",
+        "Windows/macOS/Linux validation"
+      ]
+    },
+    {
+      "id": "application-center",
+      "title": "应用中心、添加与启用",
+      "owner": "application-service",
+      "sourceIds": [
+        "current",
+        "workbuddy"
+      ],
+      "current": "external-tool-manager-only",
+      "target": "own-application-catalog-and-instances",
+      "phase": 1,
+      "status": "proposed",
+      "accept": [
+        "add before use",
+        "backend admission checks",
+        "added application navigation",
+        "planned features cannot be added",
+        "disable and remove lifecycle",
+        "user data preserved",
+        "shared dependency ownership"
+      ]
+    },
+    {
+      "id": "setup-recipes",
+      "title": "一键配置、检查与修复",
+      "owner": "configuration-service",
+      "sourceIds": [
+        "current",
+        "ccswitch"
+      ],
+      "current": "provider-and-external-tool-config-exist",
+      "target": "application-specific-guided-setup",
+      "phase": 1,
+      "status": "proposed",
+      "accept": [
+        "reuse existing model channels",
+        "recommended defaults",
+        "required fields only",
+        "environment checks",
+        "truthful ready/degraded status",
+        "retry without losing input",
+        "progressive advanced settings"
+      ]
+    },
+    {
+      "id": "configuration-compatibility",
+      "title": "配置继承、外部工具同步与恢复",
+      "owner": "configuration-service-and-native-core",
+      "sourceIds": [
+        "current",
+        "ccswitch"
+      ],
+      "current": "existing-config-foundation-not-reaudited",
+      "target": "preserve-and-extend",
+      "phase": 1,
+      "status": "proposed",
+      "accept": [
+        "credential references",
+        "global/app/project/turn precedence",
+        "task config snapshots",
+        "unknown field preservation",
+        "backup and file-safe writes",
+        "partial multi-file write recovery",
+        "application upgrades preserve overrides"
+      ]
+    }
+  ],
+  "applicationLifecycle": {
+    "catalog": [
+      "available",
+      "planned"
+    ],
+    "instance": [
+      "needs-setup",
+      "checking",
+      "ready",
+      "degraded",
+      "disabled"
+    ],
+    "rules": [
+      "Only added and enabled applications contribute tools and prompts",
+      "Backend enforces task admission, not navigation visibility",
+      "Check local configuration without claiming paid model connectivity was tested",
+      "Disable blocks new work; cancellation and existing results remain accessible",
+      "Removal preserves user projects, histories, roles and artifacts by default"
+    ],
+    "configurationPrecedence": [
+      "global defaults",
+      "application overrides",
+      "project overrides",
+      "explicit turn choices"
+    ],
+    "taskConfiguration": "resolved and versioned snapshot",
+    "externalTools": "Separate from internal applications; existing CLI install and visibility preferences are not enablement."
+  }
+}
