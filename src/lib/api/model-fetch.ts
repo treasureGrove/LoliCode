@@ -6,6 +6,9 @@ import { parseHeaderOverrideJson } from "@/lib/requestOverrides";
 export interface FetchedModel {
   id: string;
   ownedBy: string | null;
+  contextLimit?: number;
+  outputLimit?: number;
+  reasoningEfforts?: string[];
 }
 
 export interface ModelFetchOptions {

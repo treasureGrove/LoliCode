@@ -1,0 +1,4 @@
+# Source-manifest hashes refer to upstream Git blobs, never checkout conversion.
+upstream/** -text -whitespace
+# The preserved notice has a seven-equals Markdown license heading.
+upstream/THIRD-PARTY-NOTICES.md conflict-marker-size=32

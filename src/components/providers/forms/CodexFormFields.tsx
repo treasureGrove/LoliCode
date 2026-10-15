@@ -67,6 +67,7 @@ import {
 } from "@/lib/api/copilot";
 import {
   fetchModelsForConfig,
+  fetchCodexOauthModels,
   fetchXaiOauthModels,
   modelFetchRequestHeaders,
   showFetchModelsError,
@@ -79,7 +80,7 @@ import {
 } from "./FetchedModelPicker";
 import { LocalProxyRequestOverridesField } from "./LocalProxyRequestOverridesField";
 import { cn } from "@/lib/utils";
-import { useCommittableRef } from "@/hooks/useLatestRef";
+import { useCommittableRef, useLatestRef } from "@/hooks/useLatestRef";
 import { useModelMetadataFill } from "@/hooks/useModelMetadataFill";
 import { codexPresetModelSources } from "@/config/presetModelMetadata";
 import {
@@ -596,6 +597,21 @@ export function CodexFormFields({
 
   const [fetchedModels, setFetchedModels] = useState<FetchedModel[]>([]);
   const [isFetchingModels, setIsFetchingModels] = useState(false);
+  const metadataScope = JSON.stringify([
+    codexBaseUrl,
+    codexApiKey,
+    isFullUrl,
+    customUserAgent,
+    localProxyHeadersOverride,
+    isCopilotPreset,
+    selectedGitHubAccountId,
+    isCodexOauthPreset,
+    selectedCodexAccountId,
+    isXaiOauthPreset,
+    selectedXaiAccountId,
+  ]);
+  const metadataScopeRef = useLatestRef(metadataScope);
+  const fetchedScope = useRef<string>();
   // 拉取请求序号：请求身份（Base URL / 完整地址开关 / API Key / 自定义 UA /
   // Header 覆盖）一变即自增，清空旧列表并作废在途响应——/models 结果可能按
   // Key 的模型授权或请求头身份返回，换号/换 Header 后残留旧列表会误导选择
@@ -613,6 +629,8 @@ export function CodexFormFields({
     copilotApiFormat,
     isCopilotAuthenticated,
     selectedGitHubAccountId,
+    isCodexOauthPreset,
+    selectedCodexAccountId,
     localProxyHeadersOverride,
     isXaiOauthPreset,
     isXaiOauthAuthenticated,
@@ -757,10 +775,14 @@ export function CodexFormFields({
     [codexChatReasoning, onCodexChatReasoningChange],
   );
 
-  const receiveFetchedModels = useCallback((models: FetchedModel[]) => {
-    setFetchedModels(models);
-    return models.length;
-  }, []);
+  const receiveFetchedModels = useCallback(
+    (models: FetchedModel[]) => {
+      fetchedScope.current = metadataScopeRef.current;
+      setFetchedModels(models);
+      return models.length;
+    },
+    [metadataScopeRef],
+  );
 
   const runModelFetch = useCallback(
     <T,>(
@@ -813,7 +835,10 @@ export function CodexFormFields({
           const fetched = usableModels.map((model) => ({
             id: model.id,
             ownedBy: model.vendor || null,
+            contextLimit: model.context_window,
+            reasoningEfforts: model.reasoning_effort,
           }));
+          fetchedScope.current = metadataScopeRef.current;
           setFetchedModels(fetched);
 
           if (onCatalogModelsChange) {
@@ -927,6 +952,43 @@ export function CodexFormFields({
     baseUrl: codexBaseUrl,
     presets: codexPresetModelSources,
     prefetch: fetchedModels.length > 0,
+    catalogScope: metadataScope,
+    catalogModels:
+      fetchedScope.current === metadataScope ? fetchedModels : undefined,
+    fetchCatalog: async () => {
+      if (fetchedScope.current === metadataScope && fetchedModels.length)
+        return fetchedModels;
+      // Automatic metadata reads must preserve explicit account binding; never
+      // silently query another managed account when this row is unbound.
+      if (isCopilotPreset) {
+        if (!isCopilotAuthenticated || !selectedGitHubAccountId) return [];
+        return (await copilotGetModelsForAccount(selectedGitHubAccountId)).map(
+          (model) => ({
+            id: model.id,
+            ownedBy: model.vendor || null,
+            contextLimit: model.context_window,
+            reasoningEfforts: model.reasoning_effort,
+          }),
+        );
+      }
+      if (isCodexOauthPreset)
+        return selectedCodexAccountId
+          ? fetchCodexOauthModels(selectedCodexAccountId)
+          : [];
+      if (isXaiOauthPreset)
+        return isXaiOauthAuthenticated && selectedXaiAccountId
+          ? fetchXaiOauthModels(selectedXaiAccountId)
+          : [];
+      if (!codexBaseUrl.trim() || !codexApiKey.trim()) return [];
+      return fetchModelsForConfig(
+        codexBaseUrl,
+        codexApiKey,
+        isFullUrl,
+        undefined,
+        customUserAgent,
+        { requestHeaders: modelFetchRequestHeaders(localProxyHeadersOverride) },
+      );
+    },
   });
   // 补全要在「改模型名」提交后立刻读到那一行，所以这两处经 ref 同步提交。
   const [catalogRowsRef, commitCatalogRows] = useCommittableRef(
@@ -1576,6 +1638,12 @@ export function CodexFormFields({
                 handleUpdateCatalogRow(index, {
                   model: event.target.value,
                 })
+              }
+              onBlur={(event) =>
+                fillCatalogRowMetadata(
+                  row.rowId,
+                  event.currentTarget.value.trim(),
+                )
               }
               placeholder={t("codexConfig.catalogModelPlaceholder", {
                 defaultValue: "例如: deepseek-v4-flash",

@@ -224,7 +224,6 @@ async fn edit(
     runtime_catalog(agent, catalog).await
 }
 
-#[tauri::command]
 pub async fn get_agent_extensions(
     app: AppHandle,
     agent: State<'_, AgentState>,
@@ -232,7 +231,6 @@ pub async fn get_agent_extensions(
     edit(&app, agent.inner(), |store| store.list()).await
 }
 
-#[tauri::command]
 pub async fn set_agent_skill_enabled(
     app: AppHandle,
     agent: State<'_, AgentState>,
@@ -245,7 +243,6 @@ pub async fn set_agent_skill_enabled(
     .await
 }
 
-#[tauri::command]
 pub async fn import_agent_skill(
     app: AppHandle,
     agent: State<'_, AgentState>,
@@ -257,7 +254,6 @@ pub async fn import_agent_skill(
     .await
 }
 
-#[tauri::command]
 pub async fn remove_agent_skill(
     app: AppHandle,
     agent: State<'_, AgentState>,
@@ -266,7 +262,6 @@ pub async fn remove_agent_skill(
     edit(&app, agent.inner(), move |store| store.remove_skill(&id)).await
 }
 
-#[tauri::command]
 pub async fn install_agent_plugin(
     app: AppHandle,
     agent: State<'_, AgentState>,
@@ -278,7 +273,6 @@ pub async fn install_agent_plugin(
     .await
 }
 
-#[tauri::command]
 pub async fn set_agent_plugin_enabled(
     app: AppHandle,
     agent: State<'_, AgentState>,
@@ -291,7 +285,6 @@ pub async fn set_agent_plugin_enabled(
     .await
 }
 
-#[tauri::command]
 pub async fn uninstall_agent_plugin(
     app: AppHandle,
     agent: State<'_, AgentState>,
@@ -303,7 +296,6 @@ pub async fn uninstall_agent_plugin(
     .await
 }
 
-#[tauri::command]
 pub async fn get_agent_extension_config(
     app: AppHandle,
     agent: State<'_, AgentState>,
@@ -314,7 +306,6 @@ pub async fn get_agent_extension_config(
         .map_err(|_| "扩展配置读取失败，请重试".to_string())?
 }
 
-#[tauri::command]
 pub async fn save_agent_extension_config(
     app: AppHandle,
     agent: State<'_, AgentState>,

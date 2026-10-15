@@ -77,6 +77,8 @@ export function OpenClawFormFields({
   const [expandedModels, setExpandedModels] = useState<Set<string>>(new Set());
   const [fetchedModels, setFetchedModels] = useState<FetchedModel[]>([]);
   const [isFetchingModels, setIsFetchingModels] = useState(false);
+  const metadataScope = JSON.stringify([baseUrl, apiKey, api]);
+  const fetchedScope = useRef<string>();
 
   // Stable key tracking for models list
   const modelKeysRef = useRef<string[]>([]);
@@ -134,6 +136,7 @@ export function OpenClawFormFields({
     setIsFetchingModels(true);
     fetchModelsForConfig(baseUrl, apiKey)
       .then((models) => {
+        fetchedScope.current = metadataScope;
         setFetchedModels(models);
         if (models.length === 0) {
           toast.info(t("providerForm.fetchModelsEmpty"));
@@ -148,7 +151,7 @@ export function OpenClawFormFields({
         showFetchModelsError(err, t);
       })
       .finally(() => setIsFetchingModels(false));
-  }, [baseUrl, apiKey, t]);
+  }, [baseUrl, apiKey, metadataScope, t]);
 
   // Remove a model entry
   const handleRemoveModel = (index: number) => {
@@ -184,6 +187,15 @@ export function OpenClawFormFields({
     baseUrl,
     presets: openclawPresetModelSources,
     prefetch: fetchedModels.length > 0,
+    catalogScope: metadataScope,
+    catalogModels:
+      fetchedScope.current === metadataScope ? fetchedModels : undefined,
+    fetchCatalog: async () =>
+      fetchedScope.current === metadataScope && fetchedModels.length
+        ? fetchedModels
+        : baseUrl.trim() && apiKey.trim()
+          ? fetchModelsForConfig(baseUrl, apiKey)
+          : [],
   });
   const handleSelectFetchedModel = (index: number, id: string) => {
     commitModels(
@@ -385,6 +397,12 @@ export function OpenClawFormFields({
                         value={model.id}
                         onValueChange={(value) =>
                           handleModelChange(index, "id", value)
+                        }
+                        onBlur={(event) =>
+                          handleSelectFetchedModel(
+                            index,
+                            event.currentTarget.value.trim(),
+                          )
                         }
                         placeholder={t("openclaw.modelIdPlaceholder", {
                           defaultValue: "claude-3-sonnet",

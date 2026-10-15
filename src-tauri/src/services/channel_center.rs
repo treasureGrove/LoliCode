@@ -40,6 +40,8 @@ pub struct ChannelModel {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub output_limit: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_efforts: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub supports_tools: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub input_modalities: Option<Vec<String>>,
@@ -124,7 +126,7 @@ pub struct ChannelApplyReport {
 }
 
 /// Safe model references for the desktop renderer and the future CLI.
-#[derive(Clone, Serialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentCatalogModel {
     pub id: String,
@@ -136,9 +138,11 @@ pub struct AgentCatalogModel {
     pub context_limit: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub output_limit: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_efforts: Option<Vec<String>>,
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentCatalog {
     pub revision: u64,
@@ -491,6 +495,7 @@ fn blank_model(id: String) -> ChannelModel {
         name: None,
         context_limit: None,
         output_limit: None,
+        reasoning_efforts: None,
         supports_tools: None,
         input_modalities: None,
         protocol: None,
@@ -586,6 +591,9 @@ fn merge_discovered(existing: &[ChannelModel], discovered: Vec<ChannelModel>) ->
             model.name = model.name.or_else(|| saved.name.clone());
             model.context_limit = model.context_limit.or(saved.context_limit);
             model.output_limit = model.output_limit.or(saved.output_limit);
+            model.reasoning_efforts = model
+                .reasoning_efforts
+                .or_else(|| saved.reasoning_efforts.clone());
             model.supports_tools = model.supports_tools.or(saved.supports_tools);
             model.input_modalities = model
                 .input_modalities
@@ -779,6 +787,10 @@ fn parse_channel_catalog(raw: &Value) -> Result<Vec<ChannelModel>, AppError> {
                 "/limit/output",
             ],
         );
+        let metadata = crate::services::model_fetch::declared_model_metadata(entry);
+        model.context_limit = metadata.context_limit.or(model.context_limit);
+        model.output_limit = metadata.output_limit.or(model.output_limit);
+        model.reasoning_efforts = metadata.reasoning_efforts;
         model.supports_tools = [
             "/supports_tools",
             "/supportsTools",
@@ -979,6 +991,17 @@ pub fn merge_copilot_models(
                 name: Some(model.name),
                 context_limit: model.context_window,
                 output_limit: None,
+                reasoning_efforts: model.reasoning_effort.map(|efforts| {
+                    efforts
+                        .into_iter()
+                        .filter_map(|effort| {
+                            serde_json::to_value(effort)
+                                .ok()?
+                                .as_str()
+                                .map(str::to_string)
+                        })
+                        .collect()
+                }),
                 // Lack of parallel calls does not mean lack of ordinary tool calls.
                 supports_tools: if model.supports_parallel_tool_calls == Some(true) {
                     Some(true)
@@ -1044,6 +1067,7 @@ pub fn native_subscription_channel(tool: &str) -> Result<ChannelSource, AppError
             name: Some("原生工具默认模型（工具维护目录）".into()),
             context_limit: None,
             output_limit: None,
+            reasoning_efforts: None,
             supports_tools: None,
             input_modalities: None,
             protocol: Some(protocol.into()),
@@ -1095,8 +1119,9 @@ pub fn merge_subscription_models(
         .map(|model| ChannelModel {
             name: Some(model.id.clone()),
             id: model.id,
-            context_limit: None,
-            output_limit: None,
+            context_limit: model.metadata.context_limit,
+            output_limit: model.metadata.output_limit,
+            reasoning_efforts: model.metadata.reasoning_efforts,
             supports_tools: None,
             input_modalities: None,
             protocol: Some(protocol.into()),
@@ -1767,6 +1792,7 @@ fn agent_catalog_from_snapshot(snapshot: &ChannelCenterSnapshot) -> AgentCatalog
                         channel_name: source.name.clone(),
                         context_limit: model.context_limit,
                         output_limit: model.output_limit,
+                        reasoning_efforts: model.reasoning_efforts.clone(),
                     }
                 })
         })
@@ -3348,6 +3374,7 @@ mod tests {
                 vec![crate::services::model_fetch::FetchedModel {
                     id: selected.clone(),
                     owned_by: None,
+                    metadata: Default::default(),
                 }],
             )
             .unwrap();
@@ -3446,15 +3473,21 @@ mod tests {
     fn new_metadata_wins_but_model_selection_survives_refresh() {
         let mut old = blank_model("model".into());
         old.context_limit = Some(100);
+        old.reasoning_efforts = Some(vec!["medium".into()]);
         old.protocol = Some("openai_chat".into());
         old.supports_tools = Some(true);
         old.enabled = Some(false);
         let mut fresh = blank_model("model".into());
         fresh.context_limit = Some(200);
+        fresh.reasoning_efforts = Some(vec!["low".into(), "high".into()]);
         fresh.protocol = Some("anthropic".into());
         fresh.supports_tools = Some(false);
         let merged = merge_discovered(&[old], vec![fresh]);
         assert_eq!(merged[0].context_limit, Some(200));
+        assert_eq!(
+            merged[0].reasoning_efforts,
+            Some(vec!["low".into(), "high".into()])
+        );
         assert_eq!(merged[0].protocol.as_deref(), Some("anthropic"));
         assert_eq!(merged[0].supports_tools, Some(false));
         assert_eq!(merged[0].enabled, Some(false));
@@ -3892,7 +3925,7 @@ mod tests {
         let address = listener.local_addr().unwrap();
         let router=Router::new().route("/v1/models",get(|headers:axum::http::HeaderMap|async move{
             assert_eq!(headers.get("authorization").unwrap(),"Bearer test-fixture-key");
-            Json(json!({"data":[{"id":"catalog-code","context_window":64000,"max_output_tokens":8192,"supports_tools":true,"supported_endpoints":["/responses"]}]}))
+            Json(json!({"data":[{"id":"catalog-code","context_window":64000,"max_output_tokens":8192,"supports_tools":true,"supported_endpoints":["/responses"],"supported_reasoning_efforts":["low","high"]}]}))
         }));
         let server = tokio::spawn(async move {
             axum::serve(listener, router).await.unwrap();
@@ -3901,6 +3934,10 @@ mod tests {
         channel.base_url = format!("http://{address}");
         let discovered = discover_api_models(channel).await.unwrap();
         assert_eq!(discovered.models[0].id, "catalog-code");
+        assert_eq!(
+            discovered.models[0].reasoning_efforts,
+            Some(vec!["low".into(), "high".into()])
+        );
         assert_eq!(discovered.models[0].context_limit, Some(64000));
         assert_eq!(discovered.models[0].supports_tools, Some(true));
         assert_eq!(

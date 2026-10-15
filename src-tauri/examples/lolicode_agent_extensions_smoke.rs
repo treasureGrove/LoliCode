@@ -323,6 +323,7 @@ mod smoke {
                 channel_name: "Offline fixture".into(),
                 context_limit: Some(131072),
                 output_limit: Some(1024),
+                reasoning_efforts: None,
             }],
             default_model: Some("lolicode/extensions/probe".into()),
             excluded_sources: vec![],

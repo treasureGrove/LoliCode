@@ -104,6 +104,8 @@ export function HermesFormFields({
   );
   const [fetchedModels, setFetchedModels] = useState<FetchedModel[]>([]);
   const [isFetchingModels, setIsFetchingModels] = useState(false);
+  const metadataScope = JSON.stringify([baseUrl, apiKey, apiMode]);
+  const fetchedScope = useRef<string>();
   const [baseUrlTouched, setBaseUrlTouched] = useState(false);
 
   const baseUrlErrorCode = useMemo(() => validateBaseUrl(baseUrl), [baseUrl]);
@@ -151,6 +153,7 @@ export function HermesFormFields({
     setIsFetchingModels(true);
     fetchModelsForConfig(baseUrl, apiKey)
       .then((fetched) => {
+        fetchedScope.current = metadataScope;
         setFetchedModels(fetched);
         if (fetched.length === 0) {
           toast.info(t("providerForm.fetchModelsEmpty"));
@@ -165,7 +168,7 @@ export function HermesFormFields({
         showFetchModelsError(err, t);
       })
       .finally(() => setIsFetchingModels(false));
-  }, [baseUrl, apiKey, t]);
+  }, [baseUrl, apiKey, metadataScope, t]);
 
   const handleRemoveModel = (index: number) => {
     const removedKey = modelKeysRef.current[index];
@@ -197,6 +200,15 @@ export function HermesFormFields({
     baseUrl,
     presets: hermesPresetModelSources,
     prefetch: fetchedModels.length > 0,
+    catalogScope: metadataScope,
+    catalogModels:
+      fetchedScope.current === metadataScope ? fetchedModels : undefined,
+    fetchCatalog: async () =>
+      fetchedScope.current === metadataScope && fetchedModels.length
+        ? fetchedModels
+        : baseUrl.trim() && apiKey.trim()
+          ? fetchModelsForConfig(baseUrl, apiKey)
+          : [],
   });
   const handleSelectFetchedModel = (index: number, id: string) => {
     commitModels(
@@ -370,6 +382,12 @@ export function HermesFormFields({
                         value={model.id}
                         onValueChange={(value) =>
                           handleModelChange(index, "id", value)
+                        }
+                        onBlur={(event) =>
+                          handleSelectFetchedModel(
+                            index,
+                            event.currentTarget.value.trim(),
+                          )
                         }
                         placeholder={t("hermes.form.modelIdPlaceholder", {
                           defaultValue: "anthropic/claude-opus-5",

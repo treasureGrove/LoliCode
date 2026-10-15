@@ -16,6 +16,95 @@ use std::time::Duration;
 pub struct FetchedModel {
     pub id: String,
     pub owned_by: Option<String>,
+    #[serde(default, flatten)]
+    pub metadata: FetchedModelMetadata,
+}
+
+/// Only fields actually advertised by the returned directory. No name-based
+/// presets or inference requests are used to fill absent capabilities.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FetchedModelMetadata {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_limit: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_limit: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_efforts: Option<Vec<String>>,
+}
+
+pub fn declared_model_metadata(entry: &serde_json::Value) -> FetchedModelMetadata {
+    let positive = |pointers: &[&str]| {
+        pointers.iter().find_map(|pointer| {
+            let value = entry.pointer(pointer)?;
+            value
+                .as_u64()
+                .or_else(|| value.as_str()?.parse::<u64>().ok())
+                .filter(|value| *value > 0)
+        })
+    };
+    let reasoning_efforts = [
+        "/supported_reasoning_efforts",
+        "/supported_reasoning_levels",
+        "/supportedReasoningEfforts",
+        "/reasoning_efforts",
+        "/reasoningEfforts",
+        "/reasoning_effort",
+        "/reasoning/efforts",
+        "/capabilities/supports/reasoning_effort",
+        "/capabilities/reasoning_effort",
+    ]
+    .iter()
+    .find_map(|pointer| {
+        let values = entry.pointer(pointer)?.as_array()?;
+        // Keep an explicit empty array distinct from an absent declaration.
+        let mut efforts = Vec::new();
+        for value in values {
+            let Some(effort) = value
+                .as_str()
+                .or_else(|| value.get("effort").and_then(serde_json::Value::as_str))
+            else {
+                continue;
+            };
+            if !effort.is_empty()
+                && effort.len() <= 64
+                && effort
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-'))
+                && !efforts.iter().any(|saved| saved == effort)
+            {
+                efforts.push(effort.to_string());
+            }
+        }
+        if !values.is_empty() && efforts.is_empty() {
+            None
+        } else {
+            Some(efforts)
+        }
+    });
+    FetchedModelMetadata {
+        context_limit: positive(&[
+            "/context_window",
+            "/contextWindow",
+            "/context_length",
+            "/max_context_tokens",
+            "/inputTokenLimit",
+            "/input_token_limit",
+            "/capabilities/limits/max_prompt_tokens",
+            "/capabilities/limits/max_context_window_tokens",
+            "/limit/context",
+        ]),
+        output_limit: positive(&[
+            "/max_output_tokens",
+            "/max_completion_tokens",
+            "/top_provider/max_completion_tokens",
+            "/outputTokenLimit",
+            "/output_token_limit",
+            "/capabilities/limits/max_output_tokens",
+            "/limit/output",
+        ]),
+        reasoning_efforts,
+    }
 }
 
 /// 模型列表响应的兼容格式。
@@ -99,19 +188,50 @@ pub async fn fetch_models(
         request_headers,
     )
     .await?;
+    let raw = value.clone();
     let resp: ModelsResponse =
         serde_json::from_value(value).map_err(|e| format!("Failed to parse response: {e}"))?;
     let mut models: Vec<FetchedModel> = if let Some(data) = resp.data {
         data.into_iter()
-            .map(|m| FetchedModel {
-                id: m.id,
-                owned_by: m.owned_by,
+            .map(|m| {
+                let metadata = raw
+                    .get("data")
+                    .and_then(serde_json::Value::as_array)
+                    .and_then(|entries| {
+                        entries.iter().find(|entry| {
+                            entry.get("id").and_then(serde_json::Value::as_str)
+                                == Some(m.id.as_str())
+                        })
+                    })
+                    .map(declared_model_metadata)
+                    .unwrap_or_default();
+                FetchedModel {
+                    id: m.id,
+                    owned_by: m.owned_by,
+                    metadata,
+                }
             })
             .collect()
     } else {
         catalog_model_ids(resp.models)
             .into_iter()
-            .map(|id| FetchedModel { id, owned_by: None })
+            .map(|id| FetchedModel {
+                metadata: raw
+                    .get("models")
+                    .and_then(serde_json::Value::as_array)
+                    .and_then(|entries| {
+                        entries.iter().find(|entry| {
+                            ["slug", "id"].iter().any(|field| {
+                                entry.get(field).and_then(serde_json::Value::as_str)
+                                    == Some(id.as_str())
+                            })
+                        })
+                    })
+                    .map(declared_model_metadata)
+                    .unwrap_or_default(),
+                id,
+                owned_by: None,
+            })
             .collect()
     };
     models.sort_by(|a, b| a.id.cmp(&b.id));
@@ -366,6 +486,35 @@ fn ends_with_version_segment(url: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn channel_metadata_retains_codex_efforts_and_router_output_without_model_name_guesses() {
+        let metadata = declared_model_metadata(&serde_json::json!({
+            "slug":"future-model", "context_window":922000,
+            "supported_reasoning_levels":[{"effort":"none","description":"Off"},{"effort":"xhigh","description":"Extra"},{"effort":"xhigh"}],
+            "top_provider":{"max_completion_tokens":8192}
+        }));
+        assert_eq!(metadata.context_limit, Some(922000));
+        assert_eq!(metadata.output_limit, Some(8192));
+        assert_eq!(
+            metadata.reasoning_efforts,
+            Some(vec!["none".into(), "xhigh".into()])
+        );
+        let missing = declared_model_metadata(&serde_json::json!({"id":"gpt-5.3-reasoning"}));
+        assert_eq!(missing.context_limit, None);
+        assert_eq!(missing.reasoning_efforts, None);
+        assert_eq!(
+            declared_model_metadata(&serde_json::json!({"reasoning_efforts":[]})).reasoning_efforts,
+            Some(vec![])
+        );
+        assert_eq!(
+            declared_model_metadata(
+                &serde_json::json!({"context_length":0,"max_output_tokens":-3})
+            )
+            .output_limit,
+            None
+        );
+    }
 
     #[test]
     fn model_fetch_headers_follow_pi_api_format() {

@@ -190,7 +190,9 @@ export function AgentQuestionCard({
               )}
             </Label>
             {field.description && (
-              <p className="text-caption text-fg-3">{field.description}</p>
+              <p className="whitespace-pre-wrap break-words text-caption text-fg-3">
+                {field.description}
+              </p>
             )}
             {field.type === "external" ? (
               <div className="text-caption text-fg-2">

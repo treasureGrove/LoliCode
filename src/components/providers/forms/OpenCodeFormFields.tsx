@@ -71,8 +71,8 @@ function ModelIdInput({
       onValueChange={setLocalValue}
       onBlur={(event) => {
         const nextValue = event.currentTarget.value;
-        if (nextValue !== modelId && nextValue.trim()) {
-          onChange(nextValue);
+        if (nextValue.trim()) {
+          onChange(nextValue.trim());
         }
       }}
       placeholder={placeholder}
@@ -228,6 +228,8 @@ export function OpenCodeFormFields({
 
   const [fetchedModels, setFetchedModels] = useState<FetchedModel[]>([]);
   const [isFetchingModels, setIsFetchingModels] = useState(false);
+  const metadataScope = JSON.stringify([baseUrl, apiKey, headers]);
+  const fetchedScope = useRef<string>();
   const modelFetchGeneration = useRef(0);
 
   useEffect(() => {
@@ -269,6 +271,7 @@ export function OpenCodeFormFields({
     )
       .then((result) => {
         if (generation !== modelFetchGeneration.current) return;
+        fetchedScope.current = metadataScope;
         const models = [
           ...new Map(result.map((model) => [model.id, model])).values(),
         ];
@@ -288,7 +291,7 @@ export function OpenCodeFormFields({
           setIsFetchingModels(false);
         }
       });
-  }, [baseUrl, apiKey, headers, t]);
+  }, [baseUrl, apiKey, headers, metadataScope, t]);
 
   // Track which models have expanded options panel
   const [expandedModels, setExpandedModels] = useState<Set<string>>(new Set());
@@ -319,6 +322,24 @@ export function OpenCodeFormFields({
     baseUrl,
     presets: presetModelSources,
     prefetch: fetchedModels.length > 0,
+    catalogScope: metadataScope,
+    catalogModels:
+      fetchedScope.current === metadataScope ? fetchedModels : undefined,
+    fetchCatalog: async () => {
+      if (fetchedScope.current === metadataScope && fetchedModels.length)
+        return fetchedModels;
+      const requestHeaders = normalizeRequestHeaders(headers);
+      if (!baseUrl.trim() || (!apiKey && !Object.keys(requestHeaders).length))
+        return [];
+      return fetchModelsForConfig(
+        baseUrl,
+        apiKey,
+        undefined,
+        undefined,
+        findRequestHeaderValue(requestHeaders, "user-agent"),
+        { requestHeaders },
+      );
+    },
   });
   const fillModelMetadataFor = (id: string, silent?: boolean) =>
     fillModelMetadata(
@@ -369,7 +390,11 @@ export function OpenCodeFormFields({
 
   // Update model ID (key)
   const handleModelIdChange = (oldKey: string, newKey: string) => {
-    if (oldKey === newKey || !newKey.trim()) return;
+    if (!newKey.trim()) return;
+    if (oldKey === newKey) {
+      fillModelMetadataFor(newKey);
+      return;
+    }
     const newModels: Record<string, OpenCodeModel> = {};
     for (const [k, v] of Object.entries(models)) {
       if (k === oldKey) {
@@ -379,6 +404,7 @@ export function OpenCodeFormFields({
       }
     }
     commitModels(newModels);
+    fillModelMetadataFor(newKey);
     // Update expanded set if this model was expanded
     if (expandedModels.has(oldKey)) {
       setExpandedModels((prev) => {

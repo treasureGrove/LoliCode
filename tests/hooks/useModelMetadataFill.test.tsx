@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { useModelMetadataFill } from "@/hooks/useModelMetadataFill";
 import type { PresetModelSource } from "@/lib/modelMetadata";
-import { MODELS_DEV_API_URL } from "@/lib/modelsDev";
+import { MODELS_DEV_API_URL, modelsDevQueryOptions } from "@/lib/modelsDev";
 import { server } from "../msw/server";
 import { createTestQueryClient } from "../utils/testQueryClient";
 
@@ -40,6 +40,131 @@ const renderFill = () => {
 };
 
 describe("useModelMetadataFill", () => {
+  it("fetches a directory once for manual IDs and prefers its declared metadata without name inference", async () => {
+    const client = createTestQueryClient();
+    client.setQueryData(modelsDevQueryOptions.queryKey, {});
+    const fetchCatalog = vi
+      .fn()
+      .mockResolvedValue([
+        {
+          id: "model-x",
+          ownedBy: null,
+          contextLimit: 123456,
+          outputLimit: 8192,
+          reasoningEfforts: ["low", "high"],
+        },
+      ]);
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(
+      () =>
+        useModelMetadataFill({
+          baseUrl: "https://api.example.com/v1",
+          presets,
+          prefetch: false,
+          fetchCatalog,
+          catalogScope: "source-a-account-a",
+        }),
+      { wrapper },
+    );
+    const apply = vi.fn(() => true),
+      unknown = vi.fn(() => true);
+    result.current("model-x", apply, { silent: true });
+    result.current("other/model-x", unknown, { silent: true });
+    await waitFor(() =>
+      expect(apply).toHaveBeenCalledWith(
+        expect.objectContaining({
+          contextWindow: 123456,
+          maxOutputTokens: 8192,
+          reasoningEfforts: ["low", "high"],
+          sources: ["upstream", "preset"],
+        }),
+      ),
+    );
+    expect(fetchCatalog).toHaveBeenCalledTimes(1);
+    // Existing preset aliases remain a public fallback; the live catalog's
+    // values must only be attached to its exact ID.
+    expect(unknown).toHaveBeenCalledWith({
+      contextWindow: 500000,
+      sources: ["preset"],
+    });
+  });
+
+  it("discards late catalog metadata after an account changes or the form unmounts", async () => {
+    const client = createTestQueryClient();
+    client.setQueryData(modelsDevQueryOptions.queryKey, {});
+    let finish!: (
+      models: { id: string; ownedBy: null; contextLimit: number }[],
+    ) => void;
+    const fetchCatalog = vi.fn(
+      () =>
+        new Promise<{ id: string; ownedBy: null; contextLimit: number }[]>(
+          (resolve) => {
+            finish = resolve;
+          },
+        ),
+    );
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    const { result, rerender, unmount } = renderHook(
+      ({ scope }) =>
+        useModelMetadataFill({
+          baseUrl: "https://api.example.com/v1",
+          presets: () => [],
+          prefetch: false,
+          fetchCatalog,
+          catalogScope: scope,
+        }),
+      { initialProps: { scope: "account-a" }, wrapper },
+    );
+    const apply = vi.fn(() => true);
+    result.current("model-x", apply);
+    await waitFor(() => expect(fetchCatalog).toHaveBeenCalledTimes(1));
+    rerender({ scope: "account-b" });
+    finish([{ id: "model-x", ownedBy: null, contextLimit: 1000 }]);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(apply).not.toHaveBeenCalled();
+    result.current("model-x", apply);
+    await waitFor(() => expect(fetchCatalog).toHaveBeenCalledTimes(2));
+    unmount();
+    finish([{ id: "model-x", ownedBy: null, contextLimit: 2000 }]);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(apply).not.toHaveBeenCalled();
+  });
+
+  it("keeps manual editing usable when the upstream directory fails", async () => {
+    const client = createTestQueryClient();
+    client.setQueryData(modelsDevQueryOptions.queryKey, {});
+    const fetchCatalog = vi.fn().mockRejectedValue(new Error("offline"));
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(
+      () =>
+        useModelMetadataFill({
+          baseUrl: "https://api.example.com/v1",
+          presets,
+          prefetch: false,
+          fetchCatalog,
+          catalogScope: "account-a",
+        }),
+      { wrapper },
+    );
+    const apply = vi.fn(() => true);
+    expect(() =>
+      result.current("model-y", apply, { silent: true }),
+    ).not.toThrow();
+    await waitFor(() =>
+      expect(apply).toHaveBeenCalledWith({
+        contextWindow: 1000,
+        sources: ["preset"],
+      }),
+    );
+  });
   it("applies preset values at once and models.dev values when they arrive", async () => {
     server.use(
       http.get(MODELS_DEV_API_URL, () =>

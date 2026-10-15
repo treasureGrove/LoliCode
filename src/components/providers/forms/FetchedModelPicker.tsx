@@ -173,29 +173,54 @@ function FetchedModelPickerBody({
   const allIdsKey = allIds.join("\n");
   const summaries = useMemo(() => {
     const result = new Map<string, string>();
-    if (baseUrl === undefined) return result;
     const presetSources = presets?.();
     for (const id of allIdsKey.split("\n")) {
-      const metadata = resolveModelMetadata(id, {
-        baseUrl,
-        presets: presetSources,
-        modelsDev,
-      });
-      if (!metadata) continue;
+      const known =
+        baseUrl === undefined
+          ? null
+          : resolveModelMetadata(id, {
+              baseUrl,
+              presets: presetSources,
+              modelsDev,
+            });
+      const declared = models.find((model) => model.id === id);
+      const metadata = {
+        ...known,
+        ...(declared?.contextLimit
+          ? { contextWindow: declared.contextLimit }
+          : {}),
+        ...(declared?.outputLimit
+          ? { maxOutputTokens: declared.outputLimit }
+          : {}),
+        ...(declared?.reasoningEfforts
+          ? { reasoningEfforts: declared.reasoningEfforts }
+          : {}),
+      };
       const parts: string[] = [];
       if (metadata.contextWindow) {
         parts.push(formatContextWindow(metadata.contextWindow));
       }
-      if (metadata.reasoning || metadata.reasoningEfforts?.length) {
+      if (metadata.reasoningEfforts?.length) {
+        parts.push(
+          `${t("providerForm.modelPicker.reasoning")} ${metadata.reasoningEfforts.join("/")}`,
+        );
+      } else if (metadata.reasoning) {
         parts.push(t("providerForm.modelPicker.reasoning"));
       }
       if (metadata.inputModalities?.includes("image")) {
         parts.push(t("providerForm.modelPicker.image"));
       }
-      if (parts.length > 0) result.set(id, parts.join(" · "));
+      result.set(
+        id,
+        parts.length > 0
+          ? parts.join(" · ")
+          : t("providerForm.modelPicker.metadataUnavailable", {
+              defaultValue: "上游未提供上下文和思考参数",
+            }),
+      );
     }
     return result;
-  }, [allIdsKey, baseUrl, modelsDev, presets, t]);
+  }, [allIdsKey, baseUrl, models, modelsDev, presets, t]);
 
   const setChecked = (ids: string[], checked: boolean) =>
     setDraft((prev) => {

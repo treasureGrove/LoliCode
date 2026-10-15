@@ -1,0 +1,22 @@
+{
+  "sourceRevision": "aac4755666d09fdcd70272fcf063c077a639015f",
+  "privateTemporaryProject": true,
+  "externalNetworkBlocked": true,
+  "controlPlane": "production worker local-only transport; no fake official response",
+  "paidCalls": 0,
+  "originalWorkflowWritten": true,
+  "listed": true,
+  "startAccepted": true,
+  "terminal": true,
+  "nativeSaveFromRun": true,
+  "resavedScriptUnchanged": true,
+  "modelRequests": 0,
+  "cleanup": true,
+  "productionRunRpc": true,
+  "runId": "dwfrun-5f7fecde-2269-4f86-a402-817630ce1249",
+  "runStatus": "completed",
+  "workerExit": 0,
+  "success": true,
+  "workerSha256": "a1ce0afa3b9dc7ea805c63131be1740099050e9adad1d9fa31e32043ef243a33",
+  "command": "node scripts/tests/zcode-workflow-smoke.mjs"
+}

@@ -1,0 +1,23 @@
+{
+  "success": true,
+  "sourceRevision": "aac4755666d09fdcd70272fcf063c077a639015f",
+  "persistentPrivateRoot": true,
+  "externalNetworkBlocked": true,
+  "paidCalls": 0,
+  "coldBusyWithoutWorkspaceWake": true,
+  "historyRestored": true,
+  "preferencesRestored": true,
+  "noDuplicateInference": true,
+  "secondSessionWorked": true,
+  "eofExitCodes": [
+    0,
+    0
+  ],
+  "noOrphans": true,
+  "modelRequests": 3,
+  "ownedProcessCount": 8,
+  "blockedExternalAttempts": 0,
+  "workerSha256": "926379abfb4522eaf871fd1f2b59c610dcdaf03b06c7431a2f841c3ac8c540c9",
+  "command": "node scripts/tests/zcode-restart-smoke.mjs",
+  "evidenceKind": "actual production worker with isolated loopback model"
+}

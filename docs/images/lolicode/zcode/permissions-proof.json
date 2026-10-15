@@ -1,0 +1,118 @@
+{
+  "sourceRevision": "aac4755666d09fdcd70272fcf063c077a639015f",
+  "temporaryGitProjectsOnly": true,
+  "externalNetworkBlocked": true,
+  "controlPlane": "production worker local-only transport; no fake official response",
+  "paidCalls": 0,
+  "cases": [
+    {
+      "id": "guarded-read",
+      "nativeTool": "Bash",
+      "modelCalls": 2,
+      "titleCalls": 1,
+      "permissionSeen": false,
+      "alwaysRejected": false,
+      "questionSeen": false,
+      "terminal": "idle",
+      "continuedAfterResult": true,
+      "fixturePreserved": true,
+      "planFileAbsent": true,
+      "toolStates": [
+        "completed"
+      ]
+    },
+    {
+      "id": "guarded-danger-denied",
+      "nativeTool": "Bash",
+      "modelCalls": 2,
+      "titleCalls": 1,
+      "permissionSeen": true,
+      "alwaysRejected": true,
+      "questionSeen": false,
+      "terminal": "idle",
+      "continuedAfterResult": true,
+      "fixturePreserved": true,
+      "planFileAbsent": true,
+      "toolStates": [
+        "error"
+      ]
+    },
+    {
+      "id": "plan-write",
+      "nativeTool": "Write",
+      "modelCalls": 2,
+      "titleCalls": 1,
+      "permissionSeen": false,
+      "alwaysRejected": false,
+      "questionSeen": false,
+      "terminal": "idle",
+      "continuedAfterResult": true,
+      "fixturePreserved": true,
+      "planFileAbsent": true,
+      "toolStates": [
+        "error"
+      ]
+    },
+    {
+      "id": "full-access-clean",
+      "nativeTool": "Bash",
+      "modelCalls": 2,
+      "titleCalls": 1,
+      "permissionSeen": false,
+      "alwaysRejected": false,
+      "questionSeen": false,
+      "terminal": "idle",
+      "continuedAfterResult": true,
+      "fixturePreserved": false,
+      "planFileAbsent": true,
+      "toolStates": [
+        "completed"
+      ]
+    },
+    {
+      "id": "full-access-write",
+      "nativeTool": "Write",
+      "modelCalls": 2,
+      "titleCalls": 1,
+      "permissionSeen": false,
+      "alwaysRejected": false,
+      "questionSeen": false,
+      "terminal": "idle",
+      "continuedAfterResult": true,
+      "fixturePreserved": true,
+      "planFileAbsent": false,
+      "writtenDiff": {
+        "path": "written-by-full-access.txt",
+        "patch": "diff --git \"a/C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\lolicode-native-permissions-T3ALaH\\\\full-access-write-vceWMg\\\\written-by-full-access.txt\" \"b/C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\lolicode-native-permissions-T3ALaH\\\\full-access-write-vceWMg\\\\written-by-full-access.txt\"\n--- \"a/C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\lolicode-native-permissions-T3ALaH\\\\full-access-write-vceWMg\\\\written-by-full-access.txt\"\n+++ \"b/C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\lolicode-native-permissions-T3ALaH\\\\full-access-write-vceWMg\\\\written-by-full-access.txt\"\n@@ -1,0 +1,1 @@\n+Native FullAccess wrote this isolated fixture.\n",
+        "additions": 1,
+        "deletions": 0,
+        "status": "modified"
+      },
+      "toolStates": [
+        "completed"
+      ]
+    },
+    {
+      "id": "native-question-multi",
+      "nativeTool": "AskUserQuestion",
+      "modelCalls": 2,
+      "titleCalls": 1,
+      "permissionSeen": false,
+      "alwaysRejected": false,
+      "questionSeen": true,
+      "terminal": "idle",
+      "continuedAfterResult": true,
+      "fixturePreserved": true,
+      "planFileAbsent": true,
+      "toolStates": [
+        "completed"
+      ]
+    }
+  ],
+  "cleanup": true,
+  "modelRequests": 18,
+  "success": true,
+  "workerSha256": "f902ba48b13f694f80a481040c07857fc1b4a72ff4db1300ab84a1bffbe150b4",
+  "command": "node scripts/tests/zcode-permissions-smoke.mjs",
+  "evidenceKind": "actual production worker with isolated loopback model"
+}

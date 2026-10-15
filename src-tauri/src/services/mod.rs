@@ -43,6 +43,7 @@ pub mod usage_stats;
 pub mod webdav;
 pub mod webdav_auto_sync;
 pub mod webdav_sync;
+pub mod zcode_agent;
 pub mod zhipu_login;
 
 pub use config::ConfigService;

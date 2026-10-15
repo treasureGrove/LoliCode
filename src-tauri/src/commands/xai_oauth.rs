@@ -85,6 +85,8 @@ struct ModelEntry {
     id: String,
     #[serde(default)]
     owned_by: Option<String>,
+    #[serde(flatten)]
+    metadata: serde_json::Map<String, serde_json::Value>,
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -128,6 +130,9 @@ pub async fn get_xai_oauth_models(
         .map(|model| FetchedModel {
             id: model.id,
             owned_by: model.owned_by,
+            metadata: crate::services::model_fetch::declared_model_metadata(
+                &serde_json::Value::Object(model.metadata),
+            ),
         })
         .collect();
     models.sort_by(|a, b| a.id.cmp(&b.id));

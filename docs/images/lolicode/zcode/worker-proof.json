@@ -1,0 +1,13 @@
+{
+  "success": true,
+  "sourceRevision": "aac4755666d09fdcd70272fcf063c077a639015f",
+  "nativeVersion": "3.15.1",
+  "modelRequests": 3,
+  "paidCalls": 0,
+  "sessionPrefix": "zc:",
+  "authenticatedTransport": true,
+  "updateBarrier": true,
+  "modelHotReload": true,
+  "workerSha256": "a1ce0afa3b9dc7ea805c63131be1740099050e9adad1d9fa31e32043ef243a33",
+  "command": "node scripts/tests/zcode-worker-smoke.mjs"
+}

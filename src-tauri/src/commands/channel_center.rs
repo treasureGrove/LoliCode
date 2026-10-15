@@ -5,7 +5,7 @@ use crate::services::channel_center::{
     self, ChannelApplyReport, ChannelCenterSnapshot, ChannelSource,
 };
 use crate::store::AppState;
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
 
 #[tauri::command]
 pub fn get_channel_center(state: State<'_, AppState>) -> Result<ChannelCenterSnapshot, String> {
@@ -14,10 +14,17 @@ pub fn get_channel_center(state: State<'_, AppState>) -> Result<ChannelCenterSna
 
 #[tauri::command]
 pub fn save_channel_center(
+    app: AppHandle,
     state: State<'_, AppState>,
     snapshot: ChannelCenterSnapshot,
 ) -> Result<(), String> {
-    channel_center::save(state.db.as_ref(), snapshot).map_err(|error| error.to_string())
+    let revision = snapshot.revision.checked_add(1);
+    channel_center::save(state.db.as_ref(), snapshot).map_err(|error| error.to_string())?;
+    let _ = app.emit(
+        "channel-center-updated",
+        serde_json::json!({"revision":revision}),
+    );
+    Ok(())
 }
 
 #[tauri::command]

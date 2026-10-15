@@ -61,6 +61,38 @@ export function matchesChannelModel(
     .includes(needle);
 }
 
+export function channelModelMetadata(
+  channel: ChannelSource,
+  model: ChannelModel,
+) {
+  const native =
+    channel.authKind === "claude_subscription" ||
+    channel.authKind === "gemini_subscription";
+  if (native) return "由原生工具管理";
+  const parts = [
+    model.supportsTools === false
+      ? "上游标注不支持工具调用"
+      : model.supportsTools === true
+        ? "上游标注支持工具调用"
+        : "上游未提供工具能力",
+  ];
+  parts.push(
+    model.contextLimit
+      ? `上下文 ${model.contextLimit.toLocaleString()} tokens`
+      : "上下文：上游未提供",
+  );
+  if (model.outputLimit)
+    parts.push(`最大输出 ${model.outputLimit.toLocaleString()} tokens`);
+  parts.push(
+    model.reasoningEfforts?.length
+      ? `思考强度：${model.reasoningEfforts.join(" / ")}`
+      : model.reasoningEfforts
+        ? "思考强度不可调"
+        : "思考强度：上游未提供",
+  );
+  return parts.join(" · ");
+}
+
 /** Never show request dumps or credentials if a lower layer returns a raw error. */
 export function channelErrorMessage(error: unknown, secrets: string[] = []) {
   let message = error instanceof Error ? error.message : String(error);

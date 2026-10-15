@@ -8,7 +8,7 @@ use crate::services::{
 };
 use crate::store::AppState;
 use lolicode_agent::{AgentModelRef, AgentSession, AgentSnapshot, Engine, EngineOptions};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{BTreeSet, HashMap};
 use std::future::Future;
@@ -50,14 +50,14 @@ struct AgentConnection {
     selection_cleared: bool,
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentWorkspace {
     pub path: String,
     pub name: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentRuntimeStatus {
     pub available: bool,
@@ -66,7 +66,7 @@ pub struct AgentRuntimeStatus {
     pub project_path: Option<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentOpenProject {
     pub workspace: AgentWorkspace,
@@ -97,7 +97,7 @@ pub fn runtime_executable(app: &tauri::AppHandle) -> Option<PathBuf> {
     None
 }
 
-fn canonical_project(path: &str) -> Result<PathBuf, String> {
+pub(crate) fn canonical_project(path: &str) -> Result<PathBuf, String> {
     if path.trim().is_empty() || path.contains('\0') {
         return Err("请选择一个项目文件夹".into());
     }
@@ -133,7 +133,7 @@ fn same_project(left: &str, right: &str) -> bool {
     }
 }
 
-fn workspace(path: &Path) -> AgentWorkspace {
+pub(crate) fn workspace(path: &Path) -> AgentWorkspace {
     AgentWorkspace {
         name: path
             .file_name()
@@ -154,6 +154,25 @@ fn selected_model(catalog: &AgentCatalog, id: &str) -> Result<AgentModelRef, Str
         provider_id: model.provider_id.clone(),
         model_id: model.model_id.clone(),
     })
+}
+
+/// Shared host preparation. Neither native engine receives an upstream key.
+pub(crate) async fn prepare_catalog_for_accounts(
+    state: &AppState,
+    accounts: &[(String, String)],
+) -> Result<channel_center::PreparedAgentCatalog, String> {
+    let draft =
+        channel_center::agent_source_snapshot(state.db.as_ref()).map_err(|e| e.to_string())?;
+    channel_center::validate_managed_account_references(&draft, accounts)
+        .map_err(|e| e.to_string())?;
+    let prepared = channel_center::prepare_agent_catalog(state)
+        .await
+        .map_err(|e| e.to_string())?;
+    let published = channel_center::load_catalog(state.db.as_ref(), prepared.catalog.revision)
+        .map_err(|e| e.to_string())?;
+    channel_center::validate_managed_account_references(&published, accounts)
+        .map_err(|e| e.to_string())?;
+    Ok(prepared)
 }
 
 impl AgentState {
@@ -470,6 +489,16 @@ impl AgentState {
 
     pub async fn remove_project(&self, state: &AppState, path: &str) -> Result<(), String> {
         let _operation = self.lifecycle.lock().await;
+        self.remove_project_under_lease(state, path).await
+    }
+
+    /// Dispatch owns the legacy lifecycle lease before taking the native lease.
+    /// Keep that lock order shared with close and installation.
+    pub(crate) async fn remove_project_under_lease(
+        &self,
+        state: &AppState,
+        path: &str,
+    ) -> Result<(), String> {
         let key = preferences::path_key(path);
         let mut navigation = preferences::load(&state.db)?;
         if !navigation.projects.contains_key(&key) {
@@ -614,15 +643,7 @@ impl AgentState {
         }
         // Validate before publishing, then validate the exact immutable revision.
         // A concurrent channel editor must not replace what this engine binds.
-        channel_center::validate_managed_account_references(&draft, &accounts)
-            .map_err(|error| error.to_string())?;
-        let mut prepared = channel_center::prepare_agent_catalog(state)
-            .await
-            .map_err(|error| error.to_string())?;
-        let published = channel_center::load_catalog(state.db.as_ref(), prepared.catalog.revision)
-            .map_err(|error| error.to_string())?;
-        channel_center::validate_managed_account_references(&published, &accounts)
-            .map_err(|error| error.to_string())?;
+        let mut prepared = prepare_catalog_for_accounts(state, &accounts).await?;
         let private_root = crate::config::get_app_config_dir().join("agent/runtime");
         let extension_revision = extension_store
             .project_runtime(&private_root, &mut prepared.config)

@@ -10,11 +10,13 @@ import { AgentPage } from "@/components/agent/AgentPage";
 import { agentApi } from "@/lib/api/agent";
 import { settingsApi } from "@/lib/api";
 import type { AgentCatalog, AgentSession, AgentSnapshot } from "@/types/agent";
+import { emitTauriEvent } from "../msw/tauriMocks";
 
 vi.mock("@/lib/api/agent", () => ({
   agentApi: {
     getStatus: vi.fn(),
     getCatalog: vi.fn(),
+    getCatalogRevision: vi.fn(),
     openProject: vi.fn(),
     listSessions: vi.fn(),
     listProjects: vi.fn(),
@@ -28,6 +30,7 @@ vi.mock("@/lib/api/agent", () => ({
     getExtensions: vi.fn(),
     getSession: vi.fn(),
     sendMessage: vi.fn(),
+    queryCommand: vi.fn(),
     interruptSession: vi.fn(),
     replyPermission: vi.fn(),
     replyQuestion: vi.fn(),
@@ -98,6 +101,8 @@ function fill(text = "修复这个项目的测试") {
 beforeEach(() => {
   vi.useFakeTimers();
   sessionStorage.clear();
+  for (const key of Object.keys(localStorage))
+    if (key.startsWith("lolicode.agent.input:")) localStorage.removeItem(key);
   localStorage.removeItem("lolicode.agent.recent-projects");
   snapshot = emptySnapshot();
   vi.mocked(agentApi.getStatus).mockReset().mockResolvedValue({
@@ -109,6 +114,9 @@ beforeEach(() => {
   vi.mocked(agentApi.getCatalog)
     .mockReset()
     .mockResolvedValue(structuredClone(catalog));
+  vi.mocked(agentApi.getCatalogRevision)
+    .mockReset()
+    .mockResolvedValue(catalog.revision);
   vi.mocked(agentApi.listSessions)
     .mockReset()
     .mockResolvedValue([structuredClone(session)]);
@@ -165,6 +173,9 @@ beforeEach(() => {
       title: "新会话",
     });
   vi.mocked(agentApi.sendMessage).mockReset().mockResolvedValue();
+  vi.mocked(agentApi.queryCommand)
+    .mockReset()
+    .mockResolvedValue({ status: "unknown" });
   vi.mocked(agentApi.interruptSession).mockReset().mockResolvedValue();
   vi.mocked(agentApi.replyPermission).mockReset().mockResolvedValue();
   vi.mocked(agentApi.replyQuestion).mockReset().mockResolvedValue();
@@ -179,6 +190,148 @@ afterEach(() => {
 });
 
 describe("AgentPage", () => {
+  it("keeps an unknown native command receipt and retries its exact identity instead of creating a new task", async () => {
+    const nativeSession = { ...session, id: "zc:owned-command" };
+    snapshot.session = nativeSession;
+    vi.mocked(agentApi.listSessions).mockResolvedValue([nativeSession]);
+    vi.mocked(agentApi.sendMessage).mockRejectedValueOnce(
+      new Error("response lost"),
+    );
+    render(<AgentPage />);
+    await flush();
+    fill("恢复原输入");
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+    await flush();
+    const requestId = vi.mocked(agentApi.sendMessage).mock.calls[0][2];
+    await tick();
+    expect(agentApi.queryCommand).toHaveBeenCalledWith(
+      nativeSession.id,
+      requestId,
+    );
+    expect(screen.getByLabelText("模型", { exact: true })).toBeDisabled();
+    expect(screen.getByLabelText("执行权限")).toBeDisabled();
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
+      "恢复原输入",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+    await flush();
+    expect(agentApi.sendMessage).toHaveBeenLastCalledWith(
+      nativeSession.id,
+      "恢复原输入",
+      requestId,
+    );
+  });
+
+  it("releases a definitively rejected native input while keeping a newer draft", async () => {
+    const nativeSession = { ...session, id: "zc:rejected-command" };
+    snapshot.session = nativeSession;
+    vi.mocked(agentApi.listSessions).mockResolvedValue([nativeSession]);
+    vi.mocked(agentApi.sendMessage).mockRejectedValueOnce(
+      new Error("response lost"),
+    );
+    vi.mocked(agentApi.queryCommand).mockResolvedValue({
+      status: "rejected",
+      message: "原生引擎拒绝此输入",
+    });
+    render(<AgentPage />);
+    await flush();
+    fill("被拒绝的输入");
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+    await flush();
+    fill("之后新写的草稿");
+    await tick();
+    expect(screen.getByText("原生引擎拒绝此输入")).toBeInTheDocument();
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
+      "之后新写的草稿",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+    await flush();
+    expect(agentApi.sendMessage).toHaveBeenCalledTimes(2);
+    const calls = vi.mocked(agentApi.sendMessage).mock.calls;
+    expect(calls[1][2]).not.toBe(calls[0][2]);
+  });
+  it("reloads a changed catalog on return without losing the conversation or its draft", async () => {
+    vi.mocked(agentApi.getCatalogRevision).mockResolvedValue(4);
+    vi.mocked(agentApi.openProject).mockResolvedValue({
+      workspace: { path: project, name: "project" },
+      catalog: {
+        ...catalog,
+        revision: 4,
+        models: [
+          ...catalog.models,
+          {
+            ...catalog.models[1],
+            id: "lolicode/new/new",
+            modelId: "new/new",
+            name: "Added Model",
+          },
+        ],
+      },
+      sessions: [session],
+    });
+    render(<AgentPage />);
+    await flush();
+    fill("热刷新保留的草稿");
+    await tick(1);
+    expect(agentApi.openProject).toHaveBeenCalledWith(project, true);
+    expect(
+      screen.getByRole("option", { name: /Added Model/ }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
+      "热刷新保留的草稿",
+    );
+    expect(agentApi.updateSession).not.toHaveBeenCalled();
+  });
+
+  it("keeps a busy catalog lease then applies channel updates when the task really settles", async () => {
+    snapshot.status = "running";
+    vi.mocked(agentApi.openProject).mockResolvedValue({
+      workspace: { path: project, name: "project" },
+      catalog: { ...catalog, revision: 4 },
+      sessions: [session],
+    });
+    render(<AgentPage />);
+    await flush();
+    await act(async () =>
+      emitTauriEvent("channel-center-updated", { revision: 4 }),
+    );
+    await tick(1000);
+    expect(agentApi.openProject).not.toHaveBeenCalled();
+    expect(
+      screen.getByText(/渠道已更新，任务结束后将自动刷新/),
+    ).toBeInTheDocument();
+    snapshot.status = "idle";
+    await tick(1000);
+    await tick(1);
+    expect(agentApi.openProject).toHaveBeenCalledTimes(1);
+    expect(agentApi.interruptSession).not.toHaveBeenCalled();
+  });
+
+  it("does not turn a failed Stop and an old idle snapshot into proof an uncertain input was cancelled", async () => {
+    vi.mocked(agentApi.sendMessage).mockRejectedValueOnce(
+      new Error("response lost"),
+    );
+    vi.mocked(agentApi.interruptSession).mockRejectedValueOnce(
+      new Error("stop response lost"),
+    );
+    render(<AgentPage />);
+    await flush();
+    fill("可能晚到的输入");
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: "停止" }));
+    await flush();
+    await tick();
+    const ledger = Object.keys(localStorage).find((key) =>
+      key.startsWith("lolicode.agent.input:"),
+    );
+    expect(ledger).toBeTruthy();
+    fill("另一条任务");
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+    await flush();
+    expect(agentApi.sendMessage).toHaveBeenCalledOnce();
+    expect(screen.getByRole("button", { name: "停止" })).toBeEnabled();
+  });
   it("keeps the current model and draft when the actual model switch is rejected", async () => {
     vi.mocked(agentApi.updateSession).mockRejectedValue(
       new Error("模型切换失败，请重试。"),
@@ -625,6 +778,309 @@ describe("AgentPage", () => {
     expect(screen.getByRole("button", { name: "发送" })).toBeEnabled();
   });
 
+  it("persists the submission before IPC and reuses its request id after an uncertain transport failure", async () => {
+    vi.mocked(agentApi.sendMessage).mockImplementationOnce(
+      async (id, text, requestId) => {
+        const records = Object.keys(localStorage).filter((key) =>
+          key.startsWith("lolicode.agent.input:"),
+        );
+        expect(records).toHaveLength(1);
+        expect(JSON.parse(localStorage.getItem(records[0])!)).toMatchObject({
+          requestId,
+          text,
+          sessionId: id,
+        });
+        throw new Error("无法连接编程引擎：response lost");
+      },
+    );
+    const view = render(<AgentPage />);
+    await flush();
+    fill("需要可靠接收的任务");
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+    await flush();
+    const requestId = vi.mocked(agentApi.sendMessage).mock.calls[0][2];
+    view.unmount();
+    sessionStorage.clear(); // A renderer/app reload loses its old JS draft store.
+    render(<AgentPage />);
+    await flush();
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
+      "需要可靠接收的任务",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+    await flush();
+    expect(agentApi.sendMessage).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(agentApi.sendMessage).mock.calls[1]).toEqual([
+      session.id,
+      "需要可靠接收的任务",
+      requestId,
+    ]);
+  });
+
+  it("does not let an old ACK delete a newer draft written after the page remounts", async () => {
+    let acknowledge!: () => void;
+    vi.mocked(agentApi.sendMessage).mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        acknowledge = resolve;
+      }),
+    );
+    const first = render(<AgentPage />);
+    await flush();
+    fill("已经提交的 A");
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+    await flush();
+    first.unmount();
+    const second = render(<AgentPage />);
+    await flush();
+    fill("下一条尚未提交的 B");
+    await act(async () => {
+      acknowledge();
+    });
+    await flush();
+    second.unmount();
+    render(<AgentPage />);
+    await flush();
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
+      "下一条尚未提交的 B",
+    );
+  });
+
+  it("keeps a newly edited draft even when its text happens to equal the previous submission", async () => {
+    let acknowledge!: () => void;
+    vi.mocked(agentApi.sendMessage).mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        acknowledge = resolve;
+      }),
+    );
+    const first = render(<AgentPage />);
+    await flush();
+    fill("同样的文字");
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+    await flush();
+    first.unmount();
+    const second = render(<AgentPage />);
+    await flush();
+    fill("先修改");
+    fill("同样的文字");
+    await act(async () => {
+      acknowledge();
+    });
+    await flush();
+    second.unmount();
+    render(<AgentPage />);
+    await flush();
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
+      "同样的文字",
+    );
+  });
+
+  it("does not invoke send when its recovery ledger cannot be persisted", async () => {
+    const save = Storage.prototype.setItem;
+    const storage = vi
+      .spyOn(Storage.prototype, "setItem")
+      .mockImplementation(function (this: Storage, key, value) {
+        if (key.startsWith("lolicode.agent.input:")) throw new Error("quota");
+        save.call(this, key, value);
+      });
+    try {
+      render(<AgentPage />);
+      await flush();
+      fill("必须可恢复的输入");
+      fireEvent.click(screen.getByRole("button", { name: "发送" }));
+      await flush();
+      expect(agentApi.sendMessage).not.toHaveBeenCalled();
+      expect(screen.getByText(/无法保存发送恢复记录/)).toBeInTheDocument();
+      expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
+        "必须可恢复的输入",
+      );
+    } finally {
+      storage.mockRestore();
+    }
+  });
+
+  it("allows Stop while send is awaiting admission and stops a late accepted input again before settling", async () => {
+    let acknowledge!: () => void;
+    vi.mocked(agentApi.sendMessage).mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        acknowledge = resolve;
+      }),
+    );
+    render(<AgentPage />);
+    await flush();
+    fill("发送尚未返回");
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+    await flush();
+    const stop = screen.getByRole("button", { name: "停止" });
+    expect(stop).toBeEnabled();
+    fireEvent.click(stop);
+    fireEvent.click(stop);
+    await flush();
+    expect(agentApi.interruptSession).toHaveBeenCalledTimes(1);
+    await tick();
+    expect(screen.getByText("正在停止…")).toBeInTheDocument();
+    snapshot.status = "running";
+    await act(async () => {
+      acknowledge();
+    });
+    await flush();
+    expect(agentApi.interruptSession).toHaveBeenCalledTimes(2);
+    await tick();
+    expect(screen.getByText("正在停止…")).toBeInTheDocument();
+    snapshot.status = "idle";
+    await tick();
+    expect(screen.queryByText("正在停止…")).not.toBeInTheDocument();
+  });
+
+  it("does not put Stop behind a pending model configuration IPC", async () => {
+    let configure!: (value: AgentSession) => void;
+    vi.mocked(agentApi.updateSession).mockReturnValueOnce(
+      new Promise((resolve) => {
+        configure = resolve;
+      }),
+    );
+    render(<AgentPage />);
+    await flush();
+    fireEvent.change(screen.getByLabelText("模型", { exact: true }), {
+      target: { value: catalog.models[1].id },
+    });
+    await flush();
+    snapshot.status = "running";
+    await tick(5000);
+    const stop = screen.getByRole("button", { name: "停止" });
+    expect(stop).toBeEnabled();
+    fireEvent.click(stop);
+    await flush();
+    expect(agentApi.interruptSession).toHaveBeenCalledOnce();
+    await act(async () => {
+      configure({
+        ...session,
+        model: {
+          providerId: catalog.models[1].providerId,
+          modelId: catalog.models[1].modelId,
+        },
+      });
+    });
+  });
+
+  it("does not clear a newly accepted input on an error snapshot from the previous turn", async () => {
+    snapshot.status = "error";
+    snapshot.error = "上一轮失败";
+    render(<AgentPage />);
+    await flush();
+    fill("新的一轮");
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+    await flush();
+    await tick();
+    expect(screen.getByText("已发送，等待开始…")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "发送" })).toBeDisabled();
+  });
+
+  it("reconciles a lost ACK with the exact native user id, clears only the submitted draft, then allows a new input", async () => {
+    vi.mocked(agentApi.sendMessage).mockRejectedValueOnce(
+      new Error("response lost"),
+    );
+    render(<AgentPage />);
+    await flush();
+    fill("第一条");
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+    await flush();
+    const requestId = vi.mocked(agentApi.sendMessage).mock.calls[0][2];
+    snapshot.status = "running";
+    snapshot.messages = [
+      {
+        id: requestId,
+        role: "user",
+        createdAt: 3,
+        parts: [{ type: "text", text: "第一条" }],
+      },
+    ];
+    await tick();
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue("");
+    snapshot.status = "idle";
+    snapshot.messages.push({
+      id: "msg_done",
+      role: "assistant",
+      createdAt: 4,
+      completedAt: 5,
+      parts: [{ type: "text", text: "完成" }],
+    });
+    await tick();
+    fill("第二条");
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+    await flush();
+    expect(agentApi.sendMessage).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(agentApi.sendMessage).mock.calls[1][2]).not.toBe(
+      requestId,
+    );
+  });
+
+  it("reconciles an input observed before its IPC ACK without retaining a stale ledger that blocks the next turn", async () => {
+    let acknowledge!: () => void;
+    vi.mocked(agentApi.sendMessage).mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        acknowledge = resolve;
+      }),
+    );
+    render(<AgentPage />);
+    await flush();
+    fill("第一条");
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+    await flush();
+    const requestId = vi.mocked(agentApi.sendMessage).mock.calls[0][2];
+    snapshot.status = "running";
+    snapshot.messages = [
+      { id: requestId, role: "user", createdAt: 3, parts: [] },
+    ];
+    await tick();
+    await act(async () => {
+      acknowledge();
+    });
+    await flush();
+    snapshot.status = "idle";
+    snapshot.messages.push({
+      id: "msg_done",
+      role: "assistant",
+      createdAt: 4,
+      completedAt: 5,
+      parts: [{ type: "text", text: "完成" }],
+    });
+    await tick(5000);
+    fill("新的任务");
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+    await flush();
+    expect(agentApi.sendMessage).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not submit a different draft under an uncertain receipt and lets Stop settle before sending it", async () => {
+    vi.mocked(agentApi.sendMessage).mockRejectedValueOnce(
+      new Error("response lost"),
+    );
+    render(<AgentPage />);
+    await flush();
+    fill("第一条");
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+    await flush();
+    fill("不同的新任务");
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+    await flush();
+    expect(agentApi.sendMessage).toHaveBeenCalledOnce();
+    expect(screen.getByText(/上次发送的接收状态尚未确认/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "停止" }));
+    await flush();
+    snapshot.messages.push({
+      id: vi.mocked(agentApi.sendMessage).mock.calls[0][2],
+      role: "user",
+      createdAt: 3,
+      parts: [],
+    });
+    await tick();
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
+      "不同的新任务",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+    await flush();
+    expect(agentApi.sendMessage).toHaveBeenCalledTimes(2);
+  });
+
   it("does not treat an unrelated assistant message as this queued request's completion", async () => {
     render(<AgentPage />);
     await flush();
@@ -875,6 +1331,33 @@ describe("AgentPage", () => {
       session.id,
       "permission-1",
       "reject",
+    );
+  });
+
+  it("keeps native user-once approvals scoped to one request", async () => {
+    snapshot.status = "waiting_permission";
+    snapshot.permissions = [
+      {
+        id: "permission-native",
+        sessionId: session.id,
+        action: "shell",
+        resources: ["owned fixture"],
+        approvalMode: "user-once",
+      },
+    ];
+    render(<AgentPage />);
+    await flush();
+    expect(
+      screen.getByRole("button", { name: "此项目记住授权" }),
+    ).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "此项目记住授权" }));
+    expect(agentApi.replyPermission).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "允许一次" }));
+    await flush();
+    expect(agentApi.replyPermission).toHaveBeenCalledWith(
+      session.id,
+      "permission-native",
+      "once",
     );
   });
 

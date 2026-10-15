@@ -1,0 +1,19 @@
+{
+  "name": "@lolicode/zcode-runtime",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "build:runtime": "node ../../scripts/prepare-zcode-runtime.mjs",
+    "build:worker": "node ../../scripts/prepare-zcode-runtime.mjs --worker-only",
+    "build:remote": "node ../../scripts/prepare-zcode-remote-runtime.mjs",
+    "verify:source": "node ../../scripts/prepare-zcode-runtime.mjs --verify-only",
+    "test:build": "node --test ../../scripts/tests/prepare-zcode-runtime.test.mjs ../../scripts/tests/prepare-zcode-remote-runtime.test.mjs",
+    "test:facades": "node ../../scripts/tests/zcode-facades.mjs"
+  },
+  "engines": {
+    "node": ">=24.19.0 <25"
+  },
+  "packageManager": "pnpm@10.33.2"
+}

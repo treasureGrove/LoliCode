@@ -550,6 +550,8 @@ export function PiProviderForm({
   >(() => objectWithout(initialConfig, ROOT_CONTROLLED_KEYS));
   const [fetchedModels, setFetchedModels] = useState<FetchedModel[]>([]);
   const [isFetchingModels, setIsFetchingModels] = useState(false);
+  const metadataScope = JSON.stringify([baseUrl, apiKey, api, providerHeaders]);
+  const fetchedScope = useRef<string>();
   const modelFetchGenerationRef = useRef(0);
   const [formError, setFormError] = useState<string | null>(null);
   const initialModels = useMemo<PiModelDraft[]>(() => {
@@ -954,6 +956,24 @@ export function PiProviderForm({
     baseUrl,
     presets: piPresetModelSources,
     prefetch: fetchedModels.length > 0,
+    catalogScope: metadataScope,
+    catalogModels:
+      fetchedScope.current === metadataScope ? fetchedModels : undefined,
+    fetchCatalog: async () => {
+      if (fetchedScope.current === metadataScope && fetchedModels.length)
+        return fetchedModels;
+      const requestHeaders = normalizeRequestHeaders(providerHeaders);
+      if (!baseUrl.trim() || (!apiKey && !Object.keys(requestHeaders).length))
+        return [];
+      return fetchModelsForConfig(
+        baseUrl,
+        apiKey,
+        undefined,
+        undefined,
+        findRequestHeaderValue(requestHeaders, "user-agent"),
+        { apiFormat: api, requestHeaders },
+      );
+    },
   });
 
   // 选中拉取到的模型：改 ID，再补上它已知的窗口、输出上限、推理、图片输入和思考档位。
@@ -1085,6 +1105,7 @@ export function PiProviderForm({
     )
       .then((result) => {
         if (modelFetchGenerationRef.current !== requestGeneration) return;
+        fetchedScope.current = metadataScope;
         setFetchedModels(result);
         if (result.length === 0) {
           toast.info(t("providerForm.fetchModelsEmpty"));
@@ -1104,7 +1125,7 @@ export function PiProviderForm({
           setIsFetchingModels(false);
         }
       });
-  }, [api, apiKey, baseUrl, providerHeaders, t]);
+  }, [api, apiKey, baseUrl, providerHeaders, metadataScope, t]);
 
   const handleApiChange = useCallback(
     (value: string) => {
@@ -1688,6 +1709,12 @@ export function PiProviderForm({
                               value={model.id}
                               onChange={(event) =>
                                 changeModelId(model.key, event.target.value)
+                              }
+                              onBlur={(event) =>
+                                selectFetchedModelId(
+                                  model.key,
+                                  event.currentTarget.value.trim(),
+                                )
                               }
                               placeholder="model-id"
                               aria-label={t("pi.form.modelId")}

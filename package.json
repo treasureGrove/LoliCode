@@ -1,6 +1,6 @@
 {
   "name": "lolicode",
-  "version": "4.0.13",
+  "version": "4.0.14",
   "description": "LoliCode desktop coding agent with shared model channels",
   "type": "module",
   "scripts": {
@@ -10,6 +10,7 @@
     "dev:renderer": "vite",
     "build:renderer": "vite build",
     "prepare:agent-runtime": "node scripts/prepare-agent-runtime.mjs",
+    "prepare:zcode-runtime": "node scripts/prepare-zcode-runtime.mjs",
     "typecheck": "tsc --noEmit",
     "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx,css,json}\"",
     "format:check": "prettier --check \"src/**/*.{js,jsx,ts,tsx,css,json}\"",

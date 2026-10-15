@@ -358,6 +358,11 @@ async fn install_update_and_restart_inner(app: &AppHandle) -> Result<bool, Strin
         Some(agent) => Some(agent.acquire_idle_for_update().await?),
         None => None, // The database-recovery window has no agent carrier.
     };
+    let native_agent = app.try_state::<crate::services::zcode_agent::ZcodeAgentState>();
+    let _native_idle_lease = match native_agent.as_ref() {
+        Some(agent) => Some(agent.acquire_idle_for_update().await?),
+        None => None,
+    };
 
     log::info!("开始安装应用更新: {}", update.version);
     emit_update_phase(app, "installing", None);

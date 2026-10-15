@@ -1,0 +1,41 @@
+{
+  "version": "4.0.14",
+  "sourceRevision": "aac4755666d09fdcd70272fcf063c077a639015f",
+  "frontend": {
+    "typecheck": true,
+    "files": 240,
+    "passed": 2861
+  },
+  "rust": {
+    "passed": 3696,
+    "ignored": 10
+  },
+  "core": {
+    "passed": 34
+  },
+  "nativeFacades": {
+    "passed": 49
+  },
+  "releaseAndBuild": {
+    "passed": 23
+  },
+  "rawGitBlobs": 3145,
+  "runtimeFiles": 12271,
+  "workerSha256": "a1ce0afa3b9dc7ea805c63131be1740099050e9adad1d9fa31e32043ef243a33",
+  "proofs": [
+    "worker-proof.json",
+    "permissions-proof.json",
+    "permissions-plan-approval-proof.json",
+    "restart-proof.json",
+    "automation-proof.json",
+    "workflow-proof.json",
+    "remote-proof.json",
+    "generated-image-preview-proof.json",
+    "native-operations-ui-proof.json"
+  ],
+  "paidModelCalls": 0,
+  "realUserConfigurationModified": false,
+  "nativeInstallOrUserAppRestartPerformed": false,
+  "remoteBoundary": "Real Linux x64 SSH / glibc >= 2.34; WSL, Docker and other architectures not tested",
+  "uiBoundary": "Chromium component fixtures mock IPC, distinct from real native worker and SSH gates"
+}

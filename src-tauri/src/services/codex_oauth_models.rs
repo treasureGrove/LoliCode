@@ -85,6 +85,7 @@ fn push_model_entry(models: &mut Vec<FetchedModel>, entry: &Value, fallback_id: 
         models.push(FetchedModel {
             id: id.to_string(),
             owned_by: Some("Codex".to_string()),
+            metadata: Default::default(),
         });
         return;
     }
@@ -94,6 +95,7 @@ fn push_model_entry(models: &mut Vec<FetchedModel>, entry: &Value, fallback_id: 
             models.push(FetchedModel {
                 id: id.to_string(),
                 owned_by: Some("Codex".to_string()),
+                metadata: Default::default(),
             });
         }
         return;
@@ -115,7 +117,11 @@ fn push_model_entry(models: &mut Vec<FetchedModel>, entry: &Value, fallback_id: 
     )
     .or_else(|| Some("Codex".to_string()));
 
-    models.push(FetchedModel { id, owned_by });
+    models.push(FetchedModel {
+        id,
+        owned_by,
+        metadata: crate::services::model_fetch::declared_model_metadata(entry),
+    });
 }
 
 fn string_field(obj: &serde_json::Map<String, Value>, keys: &[&str]) -> Option<String> {
@@ -141,6 +147,18 @@ fn truncate_body(body: String) -> String {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn codex_catalog_preserves_advertised_context_and_reasoning_metadata() {
+        let models = parse_models(
+            json!({"models":[{"slug":"live-model", "context_window":400000, "supported_reasoning_levels":[{"effort":"low"},{"effort":"high"}]}]}),
+        );
+        assert_eq!(models[0].metadata.context_limit, Some(400000));
+        assert_eq!(
+            models[0].metadata.reasoning_efforts,
+            Some(vec!["low".into(), "high".into()])
+        );
+    }
 
     #[test]
     fn codex_oauth_model_discovery_uses_gpt6_compatible_identity() {

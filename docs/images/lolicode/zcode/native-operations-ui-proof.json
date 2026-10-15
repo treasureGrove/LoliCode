@@ -1,0 +1,28 @@
+{
+  "kind": "actual_components_chromium_renderer_fixture",
+  "caption": "LoliCode 4.0.14 工作流、自动化与远程面板渲染器验收；全部 IPC 模拟，无真实 SSH/WSL/原生窗口调用或模型付费请求。",
+  "nativeAppScreenshot": false,
+  "paidCalls": 0,
+  "realIpcCalls": 0,
+  "gates": {
+    "workflowNativeCommand": true,
+    "simpleScheduleAndNativeRun": true,
+    "remoteScopedPermissionsAndQuestions": true,
+    "mockWindowControls": true,
+    "closeEscFooter": true,
+    "compactViewportAndFixedControls": true,
+    "noRendererErrors": true
+  },
+  "pageErrors": [],
+  "consoleErrors": [],
+  "blockedExternal": [],
+  "screenshots": [
+    "docs/images/lolicode/zcode/native-workflow-panel.png",
+    "docs/images/lolicode/zcode/native-automation-schedule.png",
+    "docs/images/lolicode/zcode/native-automation-panel.png",
+    "docs/images/lolicode/zcode/native-remote-approval.png",
+    "docs/images/lolicode/zcode/native-remote-panel.png"
+  ],
+  "mockIpcCount": 39,
+  "success": true
+}

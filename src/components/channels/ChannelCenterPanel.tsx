@@ -37,6 +37,7 @@ import { useUnsavedChangesTracker } from "@/lib/unsavedChanges";
 import { cn } from "@/lib/utils";
 import {
   channelErrorMessage,
+  channelModelMetadata,
   matchesChannelModel,
   mergeDiscoveredChannel,
   selectedChannelModels,
@@ -581,7 +582,7 @@ export function ChannelCenterPanel({
                 2. 选择模型
               </h2>
               <p className="mt-1 text-caption text-fg-2">
-                适合工具的模型默认选中。同名模型按渠道区分；未验证表示尚未实际调用。
+                模型来自上游目录，尚未发送聊天请求测试，不代表不可用。上下文与思考强度自动读取上游返回的信息；未提供的参数会明确标注。
               </p>
             </div>
             <div className="relative w-full sm:w-64">
@@ -804,15 +805,7 @@ export function ChannelCenterPanel({
                             {model.name && model.name !== model.id
                               ? `${model.id} · `
                               : ""}
-                            {model.supportsTools === false
-                              ? "不支持工具调用"
-                              : channel.authKind === "claude_subscription" ||
-                                  channel.authKind === "gemini_subscription"
-                                ? "由原生工具管理"
-                                : "未验证"}
-                            {model.contextLimit
-                              ? ` · ${Math.round(model.contextLimit / 1000)}k 上下文`
-                              : ""}
+                            {channelModelMetadata(channel, model)}
                           </span>
                         </span>
                       </label>

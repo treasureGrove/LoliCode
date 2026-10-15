@@ -1,4 +1,5 @@
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
 import {
   FolderOpen,
   Loader2,
@@ -18,11 +19,27 @@ import {
   Archive,
   Pin,
   MoreHorizontal,
+  Workflow,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Notice } from "@/components/ui/notice";
 import { settingsApi } from "@/lib/api";
 import { agentApi } from "@/lib/api/agent";
+import {
+  agentStopInFlight,
+  agentSubmissionInFlight,
+  beginAgentSubmission,
+  captureAgentDraft,
+  clearAgentSubmission,
+  clearSubmittedAgentDraft,
+  dispatchAgentStop,
+  endAgentSubmission,
+  readAgentSubmission,
+  saveAgentDraft,
+  saveAgentSubmission,
+  updateAgentSubmission,
+  type AgentSubmission,
+} from "@/lib/agentInputLedger";
 import { agentErrorMessage, useAgentSnapshot } from "@/hooks/useAgentSnapshot";
 import type {
   AgentCatalog,
@@ -45,6 +62,7 @@ import { DRAG_REGION_ATTR, DRAG_REGION_STYLE } from "@/lib/platform";
 import "./lolicode-workbench.css";
 import { AgentSessionMenu } from "./AgentSessionMenu";
 import { AgentExtensionsPanel } from "./AgentExtensionsPanel";
+import { AgentOperationsPanel } from "./AgentOperationsPanel";
 import {
   Dialog,
   DialogContent,
@@ -59,7 +77,11 @@ const EMPTY_CATALOG: AgentCatalog = {
   models: [],
   excludedSources: [],
 };
-type PendingSend = { requestId: string; assistantIds: Set<string> };
+type PendingSend = {
+  requestId: string;
+  assistantIds: Set<string>;
+  uncertain?: boolean;
+};
 
 function WelcomeMascot({ compact = false }: { compact?: boolean }) {
   return (
@@ -108,6 +130,7 @@ const storePending = (path: string, id: string, entry?: PendingSend) => {
         JSON.stringify({
           requestId: entry.requestId,
           assistantIds: [...entry.assistantIds],
+          uncertain: entry.uncertain,
         }),
       );
     else sessionStorage.removeItem(pendingKey(path, id));
@@ -119,12 +142,31 @@ const restorePending = (
 ): Record<string, PendingSend> => {
   const entries: Record<string, PendingSend> = {};
   for (const session of items) {
+    const entry = readAgentSubmission(path, session.id);
+    if (entry) {
+      const uncertain =
+        entry.phase === "uncertain" ||
+        (entry.phase === "submitting" &&
+          !agentSubmissionInFlight(entry.requestId));
+      if (uncertain && !entry.stopRequested && !readDraft(entry.draft.key))
+        saveAgentDraft(entry.draft.key, entry.draft.text);
+      entries[session.id] = {
+        requestId: entry.requestId,
+        assistantIds: new Set(entry.assistantIds),
+        uncertain,
+      };
+      continue;
+    }
     try {
       const saved: unknown = JSON.parse(
         sessionStorage.getItem(pendingKey(path, session.id)) || "null",
       );
       if (saved && typeof saved === "object") {
-        const item = saved as { requestId?: unknown; assistantIds?: unknown };
+        const item = saved as {
+          requestId?: unknown;
+          assistantIds?: unknown;
+          uncertain?: boolean;
+        };
         if (
           typeof item.requestId === "string" &&
           Array.isArray(item.assistantIds) &&
@@ -133,12 +175,27 @@ const restorePending = (
           entries[session.id] = {
             requestId: item.requestId,
             assistantIds: new Set(item.assistantIds as string[]),
+            uncertain: item.uncertain === true,
           };
       }
     } catch {}
   }
   return entries;
 };
+const restoreStopping = (path: string, items: AgentSession[]) =>
+  Object.fromEntries(
+    items
+      .filter((session) => {
+        const entry = readAgentSubmission(path, session.id);
+        return (
+          entry?.stopRequested &&
+          (agentStopInFlight(session.id) ||
+            (entry.stopAcknowledged &&
+              (entry.phase === "accepted" || entry.observed)))
+        );
+      })
+      .map((session) => [session.id, true]),
+  );
 const readDraft = (key: string) => {
   try {
     return sessionStorage.getItem(key) || "";
@@ -175,6 +232,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sessionSearch, setSessionSearch] = useState("");
   const [extensionsOpen, setExtensionsOpen] = useState(false);
+  const [operationsOpen, setOperationsOpen] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const [projects, setProjects] = useState<AgentProject[]>([]);
   const [permissionMode, setPermissionMode] =
@@ -190,7 +248,11 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
   const [engine, setEngine] = useState<AgentEngineStatus | null>(null);
   const [initializing, setInitializing] = useState(true);
   const [workspace, setWorkspace] = useState<AgentWorkspace | null>(null);
+  const workspaceRef = useRef(workspace);
+  workspaceRef.current = workspace;
   const [catalog, setCatalog] = useState<AgentCatalog>(EMPTY_CATALOG);
+  const [catalogUpdate, setCatalogUpdate] = useState(0);
+  const catalogAttempt = useRef({ key: "", at: 0 });
   const [sessions, setSessions] = useState<AgentSession[]>([]);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [modelId, setModelId] = useState("");
@@ -207,6 +269,8 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
   const mounted = useRef(true);
   const generation = useRef(0);
   const mutation = useRef(false);
+  const receiptQueries = useRef(new Map<string, number>());
+  const receiptQueriesInFlight = useRef(new Set<string>());
   const selectedId = useRef(sessionId);
   selectedId.current = sessionId;
   const pendingRef = useRef(pending);
@@ -277,6 +341,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
         bindCatalog(nextCatalog);
         setSessions(nextSessions);
         setPending(restorePending(status.projectPath, nextSessions));
+        setStopping(restoreStopping(status.projectPath, nextSessions));
         setSessionId(nextSessions[0]?.id || null);
         rememberProject(status.projectPath);
       }
@@ -296,6 +361,35 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
       generation.current += 1;
     };
   }, [initialize]);
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    const observe = (revision: number) => {
+      if (!disposed && Number.isSafeInteger(revision) && revision >= 0)
+        setCatalogUpdate((previous) => Math.max(previous, revision));
+    };
+    // An event can occur while this page is unmounted. The revision-only read
+    // catches that case without exposing channel credentials to this page.
+    void agentApi
+      .getCatalogRevision()
+      .then(observe)
+      .catch(() => {});
+    void listen<{ revision: number }>(
+      "channel-center-updated",
+      ({ payload }) => {
+        observe(payload.revision);
+      },
+    )
+      .then((stop) => {
+        if (disposed) stop();
+        else unlisten = stop;
+      })
+      .catch(() => {});
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, []);
   useEffect(() => {
     onBusyChange?.(Boolean(busy));
     return () => onBusyChange?.(false);
@@ -338,23 +432,181 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
       old[id] === next.status ? old : { ...old, [id]: next.status },
     );
     const queued = pendingRef.current[id];
+    const submitted = readAgentSubmission(next.session.projectPath, id);
+    const candidate =
+      queued ||
+      (submitted
+        ? {
+            requestId: submitted.requestId,
+            assistantIds: new Set(submitted.assistantIds),
+          }
+        : undefined);
     const acknowledged =
-      queued &&
+      candidate &&
       next.messages.some(
-        (message) => message.role === "user" && message.id === queued.requestId,
+        (message) =>
+          message.role === "user" && message.id === candidate.requestId,
       );
     if (
-      queued &&
-      (next.status === "error" ||
-        (acknowledged &&
-          (next.status !== "idle" ||
-            next.messages.some(
-              (message) =>
-                message.role === "assistant" &&
-                !queued.assistantIds.has(message.id),
-            ))))
+      submitted &&
+      id.startsWith("zc:") &&
+      !acknowledged &&
+      !submitted.observed &&
+      !agentSubmissionInFlight(submitted.requestId) &&
+      (submitted.phase === "uncertain" ||
+        next.status === "idle" ||
+        next.status === "error")
     ) {
+      const queryKey = `${id}:${submitted.requestId}`;
+      const last = receiptQueries.current.get(queryKey);
+      if (
+        !receiptQueriesInFlight.current.has(queryKey) &&
+        (last === undefined || Date.now() - last >= 5000)
+      ) {
+        receiptQueries.current.set(queryKey, Date.now());
+        receiptQueriesInFlight.current.add(queryKey);
+        void agentApi
+          .queryCommand(id, submitted.requestId)
+          .then(async (receipt) => {
+            const current = readAgentSubmission(next.session.projectPath, id);
+            if (
+              !mounted.current ||
+              current?.requestId !== submitted.requestId ||
+              current.observed
+            )
+              return;
+            if (receipt.status === "rejected" || receipt.status === "failed") {
+              clearAgentSubmission(
+                next.session.projectPath,
+                id,
+                current.requestId,
+              );
+              storePending(next.session.projectPath, id);
+              if (!readDraft(current.draft.key))
+                saveAgentDraft(current.draft.key, current.draft.text);
+              const queued = { ...pendingRef.current };
+              delete queued[id];
+              pendingRef.current = queued;
+              setPending(queued);
+              const cancelled = { ...stoppingRef.current };
+              delete cancelled[id];
+              stoppingRef.current = cancelled;
+              setStopping(cancelled);
+              setDrafts((old) => ({
+                ...old,
+                [current.draft.key]: readDraft(current.draft.key),
+              }));
+              if (selectedId.current === id)
+                setError(receipt.message || "该次发送未被接收，请重试。");
+              return;
+            }
+            const accepted = receipt.status === "accepted";
+            updateAgentSubmission(
+              next.session.projectPath,
+              id,
+              current.requestId,
+              {
+                phase: accepted ? "accepted" : "uncertain",
+                ...(accepted && current.stopRequested
+                  ? { stopAcknowledged: false }
+                  : {}),
+              },
+            );
+            const queued = {
+              requestId: current.requestId,
+              assistantIds: new Set(current.assistantIds),
+              uncertain: !accepted,
+            };
+            pendingRef.current = { ...pendingRef.current, [id]: queued };
+            setPending(pendingRef.current);
+            storePending(next.session.projectPath, id, queued);
+            if (!accepted) {
+              // Unknown is not evidence of cancellation or rejection. Keep the
+              // original identity and let a user retry the exact same input.
+              if (!current.stopRequested && !readDraft(current.draft.key)) {
+                saveAgentDraft(current.draft.key, current.draft.text);
+                setDrafts((old) => ({
+                  ...old,
+                  [current.draft.key]: current.draft.text,
+                }));
+              }
+              if (current.stopRequested && !agentStopInFlight(id)) {
+                const stopped = { ...stoppingRef.current };
+                delete stopped[id];
+                stoppingRef.current = stopped;
+                setStopping(stopped);
+              }
+            } else if (current.stopRequested) {
+              // Admission has now been proven after the earlier Stop. Repeat it
+              // in that order before accepting an idle snapshot as settlement.
+              await dispatchAgentStop(id, agentApi.interruptSession, true);
+              updateAgentSubmission(
+                next.session.projectPath,
+                id,
+                current.requestId,
+                { stopAcknowledged: true },
+              );
+            } else if (clearSubmittedAgentDraft(current.draft)) {
+              setDrafts((old) => ({ ...old, [current.draft.key]: "" }));
+            }
+          })
+          .catch(() => {
+            /* Keep unresolved input available for exact-ID retry. */
+          })
+          .finally(() => {
+            receiptQueriesInFlight.current.delete(queryKey);
+          });
+      }
+    }
+    if (submitted && acknowledged && !submitted.observed) {
+      updateAgentSubmission(next.session.projectPath, id, submitted.requestId, {
+        observed: true,
+      });
+    }
+    if (submitted && acknowledged) {
+      if (clearSubmittedAgentDraft(submitted.draft))
+        setDrafts((old) =>
+          old[submitted.draft.key] !== undefined &&
+          old[submitted.draft.key] !== submitted.draft.text
+            ? old
+            : { ...old, [submitted.draft.key]: "" },
+        );
+      if (submitted.phase === "uncertain" && selectedId.current === id)
+        setError(null);
+    }
+    const userIndex = candidate
+      ? next.messages.findIndex(
+          (message) =>
+            message.id === candidate.requestId && message.role === "user",
+        )
+      : -1;
+    const nextUser = next.messages.findIndex(
+      (message, index) => index > userIndex && message.role === "user",
+    );
+    const hasReply =
+      userIndex >= 0 &&
+      next.messages
+        .slice(userIndex + 1, nextUser < 0 ? undefined : nextUser)
+        .some(
+          (message) =>
+            message.role === "assistant" &&
+            !candidate?.assistantIds.has(message.id),
+        );
+    const received =
+      acknowledged &&
+      ((next.status !== "idle" && next.status !== "error") || hasReply);
+    if (
+      submitted &&
+      received &&
+      !agentSubmissionInFlight(submitted.requestId) &&
+      !submitted.stopRequested
+    )
+      clearAgentSubmission(next.session.projectPath, id, submitted.requestId);
+    if (queued && received) {
       storePending(next.session.projectPath, id);
+      const updated = { ...pendingRef.current };
+      delete updated[id];
+      pendingRef.current = updated;
       setPending((old) => {
         const copy = { ...old };
         delete copy[id];
@@ -362,10 +614,24 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
       });
     }
     if (
-      stoppingRef.current[id] &&
-      (next.status === "idle" || next.status === "error")
+      (submitted
+        ? submitted.stopRequested &&
+          submitted.stopAcknowledged &&
+          (submitted.phase === "accepted" || submitted.observed || acknowledged)
+        : stoppingRef.current[id]) &&
+      (next.status === "idle" || next.status === "error") &&
+      !agentStopInFlight(id) &&
+      (!submitted || !agentSubmissionInFlight(submitted.requestId))
     ) {
       storePending(next.session.projectPath, id);
+      if (submitted)
+        clearAgentSubmission(next.session.projectPath, id, submitted.requestId);
+      const stopped = { ...stoppingRef.current };
+      delete stopped[id];
+      stoppingRef.current = stopped;
+      const updated = { ...pendingRef.current };
+      delete updated[id];
+      pendingRef.current = updated;
       setStopping((old) => {
         const copy = { ...old };
         delete copy[id];
@@ -446,10 +712,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
   const draft = key ? (drafts[key] ?? readDraft(key)) : "";
   const writeDraft = (storageKey: string, value: string) => {
     setDrafts((old) => ({ ...old, [storageKey]: value }));
-    try {
-      if (value) sessionStorage.setItem(storageKey, value);
-      else sessionStorage.removeItem(storageKey);
-    } catch {}
+    saveAgentDraft(storageKey, value);
   };
 
   const openProject = async (path?: string) => {
@@ -477,6 +740,10 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
       setPending((old) => ({
         ...old,
         ...restorePending(result.workspace.path, result.sessions),
+      }));
+      setStopping((old) => ({
+        ...old,
+        ...restoreStopping(result.workspace.path, result.sessions),
       }));
       rememberProject(result.workspace.path);
       const knownProjects = await agentApi.listProjects();
@@ -536,48 +803,121 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
       !draft.trim() ||
       !snapshot ||
       activeStatus(snapshot.status) ||
-      pendingRef.current[sessionId] ||
-      stoppingRef.current[sessionId]
+      (pendingRef.current[sessionId] &&
+        !pendingRef.current[sessionId].uncertain) ||
+      stoppingRef.current[sessionId] ||
+      agentStopInFlight(sessionId)
     )
       return;
     const id = sessionId;
     const storageKey = key;
     const text = draft.trim();
-    const requestId = `msg_${crypto.randomUUID().replace(/-/g, "")}`;
-    const queued = {
+    const projectPath = workspace!.path;
+    const previous = readAgentSubmission(projectPath, id);
+    if (previous && (previous.text !== text || previous.stopRequested)) {
+      setError(
+        "上次发送的接收状态尚未确认，请先停止该次任务，再发送新的内容。",
+      );
+      return;
+    }
+    const requestId =
+      previous?.requestId || `msg_${crypto.randomUUID().replace(/-/g, "")}`;
+    const submission: AgentSubmission = {
+      version: 1,
+      projectPath,
+      sessionId: id,
       requestId,
-      assistantIds: new Set(
+      text,
+      draft: captureAgentDraft(storageKey, draft),
+      assistantIds:
+        previous?.assistantIds ||
         snapshot.messages
           .filter((message) => message.role === "assistant")
           .map((message) => message.id),
-      ),
+      phase: "submitting",
+      observed: previous?.observed || false,
+      stopRequested: false,
     };
+    try {
+      saveAgentSubmission(submission);
+    } catch (cause) {
+      setError(agentErrorMessage(cause));
+      return;
+    }
+    const queued = {
+      requestId,
+      assistantIds: new Set(submission.assistantIds),
+    };
+    beginAgentSubmission(requestId);
     pendingRef.current = { ...pendingRef.current, [id]: queued };
-    storePending(workspace!.path, id, queued);
+    storePending(projectPath, id, queued);
     setPending(pendingRef.current);
     mutation.current = true;
     setBusy("send");
     setBusySessionId(id);
     setError(null);
+    const accepted = () => {
+      try {
+        updateAgentSubmission(projectPath, id, requestId, {
+          phase: "accepted",
+        });
+      } catch (cause) {
+        // The native ACK is still valid if browser persistence became
+        // unavailable afterwards. Retain the original identity for recovery.
+        if (mounted.current && selectedId.current === id)
+          setError(agentErrorMessage(cause));
+      }
+      const cleared = clearSubmittedAgentDraft(submission.draft);
+      if (!mounted.current) return;
+      if (cleared)
+        setDrafts((old) =>
+          old[storageKey] !== undefined &&
+          old[storageKey] !== submission.draft.text
+            ? old
+            : { ...old, [storageKey]: "" },
+        );
+      setRefresh((old) => old + 1);
+    };
     try {
       await agentApi.sendMessage(id, text, requestId);
-      try {
-        sessionStorage.removeItem(storageKey);
-      } catch {}
-      if (!mounted.current) return;
-      writeDraft(storageKey, "");
-      setRefresh((old) => old + 1);
+      accepted();
     } catch (cause) {
-      storePending(selectedSession!.projectPath, id);
-      if (mounted.current) {
-        setPending((old) => {
-          const copy = { ...old };
-          delete copy[id];
-          return copy;
-        });
-        if (selectedId.current === id) setError(agentErrorMessage(cause));
+      if (readAgentSubmission(projectPath, id)?.observed) accepted();
+      else {
+        try {
+          updateAgentSubmission(projectPath, id, requestId, {
+            phase: "uncertain",
+          });
+        } catch {
+          /* The original pre-dispatch receipt remains recoverable. */
+        }
+        const uncertain = { ...queued, uncertain: true };
+        storePending(projectPath, id, uncertain);
+        if (mounted.current) {
+          pendingRef.current = { ...pendingRef.current, [id]: uncertain };
+          setPending(pendingRef.current);
+          if (selectedId.current === id) setError(agentErrorMessage(cause));
+        }
       }
     } finally {
+      // A Stop may have reached an idle actor before this delayed prompt was
+      // admitted. Honour the saved stop intent after both success and an
+      // uncertain transport result; the first Stop ACK is not settlement.
+      if (readAgentSubmission(projectPath, id)?.stopRequested) {
+        try {
+          updateAgentSubmission(projectPath, id, requestId, {
+            stopAcknowledged: false,
+          });
+          await dispatchAgentStop(id, agentApi.interruptSession, true);
+          updateAgentSubmission(projectPath, id, requestId, {
+            stopAcknowledged: true,
+          });
+        } catch (cause) {
+          if (mounted.current && selectedId.current === id)
+            setError(agentErrorMessage(cause));
+        }
+      }
+      endAgentSubmission(requestId);
       mutation.current = false;
       if (mounted.current) {
         setBusy(null);
@@ -586,27 +926,45 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
     }
   };
   const stop = async () => {
-    if (mutation.current || !sessionId || stoppingRef.current[sessionId])
+    if (
+      !sessionId ||
+      stoppingRef.current[sessionId] ||
+      agentStopInFlight(sessionId)
+    )
       return;
     const id = sessionId;
-    mutation.current = true;
-    setBusy("stop");
-    setBusySessionId(id);
+    const projectPath = selectedSession?.projectPath || workspace?.path;
+    const submitted = projectPath && readAgentSubmission(projectPath, id);
+    try {
+      if (submitted)
+        updateAgentSubmission(projectPath!, id, submitted.requestId, {
+          stopRequested: true,
+          stopAcknowledged: false,
+        });
+    } catch (cause) {
+      setError(agentErrorMessage(cause));
+      return;
+    }
+    stoppingRef.current = { ...stoppingRef.current, [id]: true };
+    setStopping(stoppingRef.current);
     setError(null);
     try {
-      await agentApi.interruptSession(id);
+      await dispatchAgentStop(id, agentApi.interruptSession);
+      if (submitted)
+        updateAgentSubmission(projectPath!, id, submitted.requestId, {
+          stopAcknowledged: true,
+        });
       if (mounted.current) {
-        setStopping((old) => ({ ...old, [id]: true }));
         setRefresh((old) => old + 1);
       }
     } catch (cause) {
       if (mounted.current && selectedId.current === id)
         setError(agentErrorMessage(cause));
-    } finally {
-      mutation.current = false;
       if (mounted.current) {
-        setBusy(null);
-        setBusySessionId(null);
+        const current = { ...stoppingRef.current };
+        delete current[id];
+        stoppingRef.current = current;
+        setStopping(current);
       }
     }
   };
@@ -656,6 +1014,34 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
       if (mounted.current) setBusy(null);
     }
   };
+  useEffect(() => {
+    if (
+      initializing ||
+      !workspace ||
+      working ||
+      busy ||
+      catalogUpdate <= catalog.revision
+    )
+      return;
+    const key = `${workspace.path}:${catalogUpdate}`;
+    const delay =
+      catalogAttempt.current.key === key
+        ? Math.max(0, 5000 - (Date.now() - catalogAttempt.current.at))
+        : 0;
+    const timer = setTimeout(() => {
+      if (mutation.current) return;
+      catalogAttempt.current = { key, at: Date.now() };
+      void refreshCatalog();
+    }, delay);
+    return () => clearTimeout(timer);
+  }, [
+    initializing,
+    workspace?.path,
+    working,
+    busy,
+    catalogUpdate,
+    catalog.revision,
+  ]);
   const refreshAfter = async (operation: () => Promise<void>) => {
     await operation();
     if (mounted.current) setRefresh((old) => old + 1);
@@ -792,7 +1178,10 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
     }
   };
   const runningHere = snapshot && activeStatus(snapshot.status);
-  const queuedHere = Boolean(sessionId && pending[sessionId]);
+  const queuedHere = Boolean(
+    sessionId && pending[sessionId] && !pending[sessionId].uncertain,
+  );
+  const uncertainHere = Boolean(sessionId && pending[sessionId]?.uncertain);
   const stoppingHere =
     (busy === "stop" && busySessionId === sessionId) ||
     Boolean(sessionId && stopping[sessionId]);
@@ -848,6 +1237,13 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
             >
               <Blocks />
               技能与插件
+            </button>
+            <button
+              className="wb-nav-button"
+              onClick={() => setOperationsOpen(true)}
+            >
+              <Workflow />
+              工作流与自动化
             </button>
           </nav>
           <label className="wb-search">
@@ -1102,8 +1498,14 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
               <RefreshCw />
               刷新模型目录
             </button>
-            {working && (
-              <p className="wb-sidebar-note">任务结束后可刷新模型目录。</p>
+            {(working || catalogUpdate > catalog.revision) && (
+              <p className="wb-sidebar-note">
+                {catalogUpdate > catalog.revision
+                  ? working
+                    ? "渠道已更新，任务结束后将自动刷新模型目录。"
+                    : "渠道已更新，可刷新模型目录。"
+                  : "任务结束后可刷新模型目录。"}
+              </p>
             )}
             {catalog.excludedSources.length > 0 && (
               <details>
@@ -1355,6 +1757,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
               <div className="wb-chat-content">
                 {snapshot?.messages.map((message) => (
                   <AgentMessageView
+                    sessionId={snapshot?.session.id}
                     key={message.id}
                     message={message}
                     projectPath={workspace.path}
@@ -1456,6 +1859,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
                         !snapshot ||
                         Boolean(runningHere) ||
                         queuedHere ||
+                        uncertainHere ||
                         stoppingHere ||
                         !catalog.models.length
                       }
@@ -1494,6 +1898,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
                         !snapshot ||
                         Boolean(runningHere) ||
                         queuedHere ||
+                        uncertainHere ||
                         stoppingHere
                       }
                       aria-pressed={selectedSession?.mode === "plan"}
@@ -1515,6 +1920,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
                         !snapshot ||
                         Boolean(runningHere) ||
                         queuedHere ||
+                        uncertainHere ||
                         stoppingHere
                       }
                       aria-pressed={selectedSession?.mode !== "plan"}
@@ -1536,6 +1942,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
                       !snapshot ||
                       Boolean(runningHere) ||
                       queuedHere ||
+                      uncertainHere ||
                       stoppingHere
                     }
                     onChange={(event) => {
@@ -1562,11 +1969,14 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
                       )}
                   </select>
                   <span className="wb-toolbar-spacer" />
-                  {(runningHere || queuedHere || stoppingHere) && (
+                  {(runningHere ||
+                    queuedHere ||
+                    uncertainHere ||
+                    stoppingHere) && (
                     <button
                       type="button"
                       className="wb-primary wb-stop-button"
-                      disabled={Boolean(busy) || stoppingHere}
+                      disabled={stoppingHere}
                       onClick={() => void stop()}
                     >
                       <Square />
@@ -1597,6 +2007,68 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
           </>
         )}
       </main>
+      <AgentOperationsPanel
+        open={operationsOpen}
+        onOpenChange={setOperationsOpen}
+        projectPath={workspace?.path}
+        catalog={catalog}
+        working={working}
+        onSession={(session) => {
+          if (
+            !mounted.current ||
+            workspaceRef.current?.path !== session.projectPath
+          )
+            return;
+          setSessions((old) => [
+            session,
+            ...old.filter((item) => item.id !== session.id),
+          ]);
+          setSessionId(session.id);
+          setRefresh((value) => value + 1);
+        }}
+        onCompose={(text) => {
+          if (key) {
+            writeDraft(
+              key,
+              `${draft}${draft && !draft.endsWith("\n") ? "\n" : ""}${text}\n`,
+            );
+            return;
+          }
+          if (!workspace || mutation.current) return;
+          const target = workspace.path;
+          const requestGeneration = generation.current;
+          mutation.current = true;
+          setBusy("create");
+          void agentApi
+            .createSession(
+              modelId || catalog.defaultModel || catalog.models[0]?.id || "",
+              "build",
+              undefined,
+              "ask",
+            )
+            .then((session) => {
+              if (
+                !mounted.current ||
+                generation.current !== requestGeneration ||
+                workspaceRef.current?.path !== target
+              )
+                return;
+              setSessions((old) => [
+                session,
+                ...old.filter((item) => item.id !== session.id),
+              ]);
+              setSessionId(session.id);
+              writeDraft(draftKey(target, session.id), `${text}\n`);
+            })
+            .catch((cause) => {
+              if (mounted.current) setError(agentErrorMessage(cause));
+            })
+            .finally(() => {
+              mutation.current = false;
+              if (mounted.current) setBusy(null);
+            });
+        }}
+      />
       <AgentExtensionsPanel
         open={extensionsOpen}
         onOpenChange={setExtensionsOpen}

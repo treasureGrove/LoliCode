@@ -12,6 +12,8 @@ export interface ChannelModel {
   name?: string;
   contextLimit?: number;
   outputLimit?: number;
+  /** Exact effort values advertised by the upstream catalog; absent is unknown. */
+  reasoningEfforts?: string[];
   supportsTools?: boolean;
   inputModalities?: string[];
   protocol?: ChannelProtocol;

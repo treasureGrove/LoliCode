@@ -46,6 +46,8 @@ export interface SessionMarkdownProps {
   autoLoadRemoteImages?: boolean;
   /** 本地图片（`![](/abs/path.png)`）的渲染；不传时显示为路径 chip */
   renderLocalImage?: (path: string, alt: string) => ReactNode;
+  /** Agent output image links may also display their generated preview. */
+  previewLocalImageLinks?: boolean;
   className?: string;
 }
 
@@ -170,6 +172,17 @@ const resolveImageTargetValue = (value: string): ImageTarget | null => {
   return path ? { kind: "path", path } : null;
 };
 
+// The agent's local image loader resolves these against an authoritative
+// session project. Other readers retain their literal relative-link fallback.
+const relativeImagePath = (value: string) => {
+  const path = stripAngleBrackets(value);
+  return !/^(?:[a-z][a-z\d+.-]*:|\/\/|\\\\)/i.test(path) &&
+    !path.includes("\0") &&
+    /\.(?:png|jpe?g|gif|webp|bmp|avif|svg)$/i.test(path)
+    ? path
+    : null;
+};
+
 const renderText = (text: string, searchQuery?: string) =>
   searchQuery ? highlightText(text, searchQuery) : text;
 
@@ -241,7 +254,9 @@ const collectLinkReferences = (root: MarkdownNode, source: string) => {
         const target = source.slice(urlNode.from, urlNode.to);
         if (
           !references.has(label) &&
-          (resolveLinkTargetValue(target) || resolveImageTargetValue(target))
+          (resolveLinkTargetValue(target) ||
+            resolveImageTargetValue(target) ||
+            relativeImagePath(target))
         ) {
           references.set(label, target);
         }
@@ -590,6 +605,7 @@ interface MarkdownActions {
   revealPath?: (path: string) => void;
   autoLoadRemoteImages: boolean;
   renderLocalImage?: (path: string, alt: string) => ReactNode;
+  previewLocalImageLinks?: boolean;
 }
 
 const defaultOpenLink = (url: string) => {
@@ -652,8 +668,47 @@ const MarkdownPathChip = (props: {
   label?: ReactNode;
   searchQuery?: string;
 }) => {
-  const { revealPath } = useContext(MarkdownActionsContext);
+  const { revealPath, renderLocalImage, previewLocalImageLinks } = useContext(
+    MarkdownActionsContext,
+  );
+  if (
+    previewLocalImageLinks &&
+    renderLocalImage &&
+    /\.(?:png|jpe?g|gif|webp|bmp|avif|svg)$/i.test(props.path)
+  ) {
+    return (
+      <>
+        {renderLocalImage(
+          props.path,
+          typeof props.label === "string" ? props.label : "",
+        )}
+      </>
+    );
+  }
   return <PathChip {...props} onReveal={revealPath} />;
+};
+
+const RelativeLocalImage = ({
+  path,
+  alt,
+  fallback,
+  imageLink = false,
+}: {
+  path: string;
+  alt: string;
+  fallback: ReactNode;
+  imageLink?: boolean;
+}) => {
+  const { renderLocalImage, previewLocalImageLinks } = useContext(
+    MarkdownActionsContext,
+  );
+  return (
+    <>
+      {renderLocalImage && (!imageLink || previewLocalImageLinks)
+        ? renderLocalImage(path, alt)
+        : fallback}
+    </>
+  );
 };
 
 /** 本地图片：调用方提供渲染器（阅读页用 SessionImage）时显示图片，否则退回路径 chip */
@@ -827,6 +882,18 @@ const renderLink = (node: MarkdownNode, source: string, ctx: RenderContext) => {
   // 原样输出，方括号和目标一起保留；lezer 对任何 `[...]` 都会产出 Link 节点，
   // 不这样处理的话 `[0]`、`[Tool: shell]` 这类普通文本会丢掉方括号。
   if (!target || !range) {
+    const relative = relativeImagePath(
+      getTargetSource(node, source, ctx.linkReferences) ?? "",
+    );
+    if (relative && range)
+      return (
+        <RelativeLocalImage
+          path={relative}
+          alt={getLinkLabelSource(node, source)}
+          imageLink
+          fallback={renderChildren(node, source, ctx, LITERAL_LINK_OPTIONS)}
+        />
+      );
     return <>{renderChildren(node, source, ctx, LITERAL_LINK_OPTIONS)}</>;
   }
 
@@ -861,6 +928,17 @@ const renderImage = (
   const target = resolveImageTarget(node, source, ctx.linkReferences);
 
   if (!target) {
+    const relative = relativeImagePath(
+      getTargetSource(node, source, ctx.linkReferences) ?? "",
+    );
+    if (relative)
+      return (
+        <RelativeLocalImage
+          path={relative}
+          alt={getLinkLabelSource(node, source)}
+          fallback={renderChildren(node, source, ctx, LITERAL_LINK_OPTIONS)}
+        />
+      );
     return <>{renderChildren(node, source, ctx, LITERAL_LINK_OPTIONS)}</>;
   }
 
@@ -1107,6 +1185,7 @@ export const SessionMarkdown = memo(function SessionMarkdown({
   onRevealPath,
   autoLoadRemoteImages = false,
   renderLocalImage,
+  previewLocalImageLinks = false,
   className,
 }: SessionMarkdownProps) {
   const actions = useMemo<MarkdownActions>(
@@ -1115,8 +1194,15 @@ export const SessionMarkdown = memo(function SessionMarkdown({
       revealPath: onRevealPath,
       autoLoadRemoteImages,
       renderLocalImage,
+      previewLocalImageLinks,
     }),
-    [autoLoadRemoteImages, onOpenLink, onRevealPath, renderLocalImage],
+    [
+      autoLoadRemoteImages,
+      onOpenLink,
+      onRevealPath,
+      renderLocalImage,
+      previewLocalImageLinks,
+    ],
   );
 
   if (content.length > MARKDOWN_PARSE_LIMIT) {

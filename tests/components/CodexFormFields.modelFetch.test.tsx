@@ -163,6 +163,52 @@ describe("Codex model-fetch lifecycle", () => {
     vi.restoreAllMocks();
   });
 
+  it("fills advertised context and exact reasoning levels when a manual model ID loses focus", async () => {
+    vi.mocked(fetchModelsForConfig).mockResolvedValue([
+      {
+        id: "manual-id",
+        ownedBy: null,
+        contextLimit: 222222,
+        reasoningEfforts: ["low", "high"],
+      },
+    ]);
+    const props = {
+      ...makeProps("config"),
+      catalogModels: [{ model: "manual-id" }],
+    };
+    render(<Harness {...props} />);
+    fireEvent.blur(screen.getByDisplayValue("manual-id"));
+    await waitFor(() =>
+      expect(props.onCatalogModelsChange).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({
+            model: "manual-id",
+            contextWindow: "222222",
+            reasoningLevels: ["low", "high"],
+          }),
+        ]),
+      ),
+    );
+    expect(fetchModelsForConfig).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not read another Copilot account when the manually edited row is unbound", async () => {
+    const props = {
+      ...makeProps("copilot"),
+      selectedGitHubAccountId: null,
+      catalogModels: [{ model: "manual-id" }],
+    };
+    render(<Harness {...props} />);
+    fireEvent.blur(screen.getByDisplayValue("manual-id"));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(copilotGetModelsForAccount).not.toHaveBeenCalled();
+    expect(copilotGetModels).not.toHaveBeenCalled();
+    expect(fetchModelsForConfig).not.toHaveBeenCalled();
+  });
+
   it("fetches only models supporting the selected Copilot protocol", async () => {
     const responsesModel = advertisedModel("responses-model");
     const chatModel = {

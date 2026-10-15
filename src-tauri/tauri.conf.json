@@ -1,13 +1,13 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "LoliCode",
-  "version": "4.0.13",
+  "version": "4.0.14",
   "identifier": "art.treasuregrove.tai-switch",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:3000",
-    "beforeDevCommand": "pnpm run prepare:agent-runtime && pnpm run dev:renderer",
-    "beforeBuildCommand": "pnpm run prepare:agent-runtime && pnpm run build:renderer"
+    "beforeDevCommand": "pnpm run prepare:agent-runtime && pnpm run prepare:zcode-runtime && pnpm run dev:renderer",
+    "beforeBuildCommand": "pnpm run prepare:agent-runtime && pnpm run prepare:zcode-runtime --require-remote-assets && pnpm run build:renderer"
   },
   "app": {
     "windows": [
@@ -39,7 +39,8 @@
     "targets": "all",
     "createUpdaterArtifacts": true,
     "resources": {
-      "resources/agent/": "agent/"
+      "resources/agent/": "agent/",
+      "resources/zcode-runtime/": "zcode-runtime/"
     },
     "icon": [
       "icons/32x32.png",

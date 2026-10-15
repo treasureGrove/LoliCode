@@ -2,6 +2,8 @@ node_modules/
 dist/
 release/
 src-tauri/resources/agent/
+src-tauri/resources/zcode-runtime/
+packages/lolicode-zcode-runtime/.build/
 crates/lolicode-agent/target/
 crates/lolicode-agent/Cargo.lock
 .DS_Store

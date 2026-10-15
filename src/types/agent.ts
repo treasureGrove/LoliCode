@@ -23,6 +23,7 @@ export interface AgentModel {
   channelName: string;
   contextLimit?: number | null;
   outputLimit?: number | null;
+  reasoningEfforts?: string[] | null;
 }
 
 export interface AgentCatalog {
@@ -83,6 +84,7 @@ export interface AgentPermission {
   description?: string | null;
   toolName?: string | null;
   toolInput?: unknown | null;
+  approvalMode?: "user-once";
 }
 
 export type AgentAnswerValue = string | number | boolean | string[];

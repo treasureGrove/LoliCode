@@ -10,6 +10,7 @@ import {
   type ResolvedModelMetadata,
 } from "@/lib/modelMetadata";
 import { useLatestRef } from "./useLatestRef";
+import type { FetchedModel } from "@/lib/api/model-fetch";
 
 const FILLED_TOAST_ID = "model-metadata-filled";
 
@@ -30,10 +31,19 @@ export function useModelMetadataFill({
   baseUrl,
   presets,
   prefetch,
+  fetchCatalog,
+  catalogScope,
+  catalogModels,
 }: {
   baseUrl: string;
   presets: () => readonly PresetModelSource[];
   prefetch: boolean;
+  /** Read-only directory request; never an inference/paid test. */
+  fetchCatalog?: () => Promise<FetchedModel[]>;
+  /** In-memory identity includes endpoint/account/credentials; never logged or persisted. */
+  catalogScope?: string;
+  /** A directory already fetched for this exact scope, including an empty result. */
+  catalogModels?: readonly FetchedModel[];
 }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -44,6 +54,23 @@ export function useModelMetadataFill({
 
   const baseUrlRef = useLatestRef(baseUrl);
   const presetsRef = useLatestRef(presets);
+  const fetchCatalogRef = useLatestRef(fetchCatalog);
+  const catalogScopeRef = useLatestRef(catalogScope);
+  const catalogModelsRef = useLatestRef(catalogModels);
+  const alive = useRef(true);
+  const upstreamCache = useRef<{
+    scope: string | undefined;
+    endpoint: string;
+    expires: number;
+    promise: Promise<FetchedModel[]>;
+  }>();
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+      upstreamCache.current = undefined;
+    };
+  }, []);
 
   const pending = useRef<{
     models: Set<string>;
@@ -62,10 +89,14 @@ export function useModelMetadataFill({
         const models = [...batch.models];
         const fromPreset = batch.sources.has("preset");
         const fromModelsDev = batch.sources.has("models-dev");
+        const fromUpstream = batch.sources.has("upstream");
         batch.models.clear();
         batch.sources.clear();
-        const source =
-          fromPreset && fromModelsDev
+        const source = fromUpstream
+          ? t("providerForm.modelMetadataSourceUpstream", {
+              defaultValue: "上游模型目录",
+            })
+          : fromPreset && fromModelsDev
             ? t("providerForm.modelMetadataSourceBoth", {
                 defaultValue: "预设和 models.dev",
               })
@@ -105,28 +136,112 @@ export function useModelMetadataFill({
         silent?: boolean;
       },
     ): void => {
+      const id = modelId.trim();
+      if (!id) return;
+      const endpoint = baseUrlRef.current;
+      const scope = catalogScopeRef.current;
+      const stillCurrent = () =>
+        alive.current &&
+        baseUrlRef.current === endpoint &&
+        catalogScopeRef.current === scope;
+      let upstream: FetchedModel | undefined;
       const resolve = (modelsDev?: ModelsDevResponse) =>
-        resolveModelMetadata(modelId, {
+        resolveModelMetadata(id, {
           baseUrl: options?.baseUrl || baseUrlRef.current,
           presets: presetsRef.current(),
           modelsDev,
         });
       const run = (metadata: ResolvedModelMetadata | null) => {
-        if (metadata && apply(metadata) && !options?.silent) {
-          notify(modelId, metadata.sources);
+        if (!stillCurrent()) return;
+        const declared: Partial<ResolvedModelMetadata> = {};
+        if (
+          upstream?.contextLimit &&
+          Number.isSafeInteger(upstream.contextLimit) &&
+          upstream.contextLimit > 0
+        )
+          declared.contextWindow = upstream.contextLimit;
+        if (
+          upstream?.outputLimit &&
+          Number.isSafeInteger(upstream.outputLimit) &&
+          upstream.outputLimit > 0
+        )
+          declared.maxOutputTokens = upstream.outputLimit;
+        if (upstream?.reasoningEfforts)
+          declared.reasoningEfforts = [...upstream.reasoningEfforts];
+        if (upstream?.reasoningEfforts?.length) declared.reasoning = true;
+        const combined = Object.keys(declared).length
+          ? {
+              ...metadata,
+              ...declared,
+              sources: ["upstream" as const, ...(metadata?.sources ?? [])],
+            }
+          : metadata;
+        if (combined && apply(combined) && !options?.silent) {
+          notify(id, combined.sources);
         }
       };
-
-      const cached = queryClient.getQueryData(modelsDevQueryOptions.queryKey);
-      run(resolve(cached));
-      if (cached) return;
-      queryClient
-        .fetchQuery(modelsDevQueryOptions)
-        .then((data) => run(resolve(data)))
-        .catch(() => {
-          // 离线或 models.dev 不可用：保持预设值补过的样子。
-        });
+      const fillKnown = () => {
+        if (!stillCurrent()) return;
+        const cached = queryClient.getQueryData(modelsDevQueryOptions.queryKey);
+        run(resolve(cached));
+        if (!cached)
+          queryClient
+            .fetchQuery(modelsDevQueryOptions)
+            .then((data) => run(resolve(data)))
+            .catch(() => {});
+      };
+      // A row with an endpoint override must never receive another endpoint's
+      // model metadata or credentials. Its preset/public fallback stays scoped.
+      if (options?.baseUrl && options.baseUrl !== endpoint) {
+        fillKnown();
+        return;
+      }
+      if (catalogModelsRef.current) {
+        upstream = catalogModelsRef.current.find((model) => model.id === id);
+        fillKnown();
+        return;
+      }
+      if (!fetchCatalogRef.current) {
+        fillKnown();
+        return;
+      }
+      let cached = upstreamCache.current;
+      if (
+        !cached ||
+        cached.scope !== scope ||
+        cached.endpoint !== endpoint ||
+        cached.expires < Date.now()
+      ) {
+        const entry = {
+          scope,
+          endpoint,
+          expires: Date.now() + 300_000,
+          promise: Promise.resolve([] as FetchedModel[]),
+        };
+        entry.promise = Promise.resolve()
+          .then(() => (stillCurrent() ? fetchCatalogRef.current!() : []))
+          .catch(() => {
+            // Read-only catalog failure is non-blocking. Do not expose endpoint,
+            // headers or credentials through native error text or toasts.
+            entry.expires = Date.now() + 20_000;
+            return [];
+          });
+        upstreamCache.current = cached = entry;
+      }
+      cached.promise.then((models) => {
+        if (!stillCurrent()) return;
+        upstream = models.find((model) => model.id === id);
+        fillKnown();
+      });
     },
-    [baseUrlRef, notify, presetsRef, queryClient],
+    [
+      baseUrlRef,
+      catalogModelsRef,
+      catalogScopeRef,
+      fetchCatalogRef,
+      notify,
+      presetsRef,
+      queryClient,
+    ],
   );
 }

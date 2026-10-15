@@ -173,6 +173,7 @@ pub(crate) fn permission(value: &Value, messages: &[AgentMessage]) -> AgentPermi
         description: optional_string(value, "message"),
         tool_name: tool.as_ref().map(|(name, _)| name.clone()),
         tool_input: tool.map(|(_, input)| input),
+        approval_mode: None,
     }
 }
 

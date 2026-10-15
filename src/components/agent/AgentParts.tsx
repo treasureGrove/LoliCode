@@ -1,10 +1,11 @@
-import { memo } from "react";
+import { memo, useCallback } from "react";
 import { CheckCircle2, CircleAlert, Loader2, Wrench } from "lucide-react";
 import type { AgentMessage, AgentPart } from "@/types/agent";
 import { SessionMarkdown } from "@/components/sessions/reader/SessionMarkdown";
 import { SessionCodeBlock } from "@/components/sessions/reader/SessionCodeBlock";
 import { cn } from "@/lib/utils";
 import LolicodeMascot from "@/components/shell/LolicodeMascot";
+import { AgentImage } from "./AgentImage";
 
 const TOOL_NAMES: Record<string, string> = {
   read: "读取文件",
@@ -110,10 +111,23 @@ export const AgentToolPart = memo(function AgentToolPart({
 export const AgentMessageView = memo(function AgentMessageView({
   message,
   projectPath,
+  sessionId,
 }: {
   message: AgentMessage;
   projectPath: string;
+  sessionId?: string;
 }) {
+  const renderLocalImage = useCallback(
+    (path: string, alt: string) => (
+      <AgentImage
+        sessionId={sessionId}
+        path={path}
+        alt={alt}
+        projectPath={projectPath}
+      />
+    ),
+    [sessionId, projectPath],
+  );
   return (
     <article
       aria-label={
@@ -165,6 +179,8 @@ export const AgentMessageView = memo(function AgentMessageView({
             key={part.id || index}
             content={part.text}
             projectDir={projectPath}
+            renderLocalImage={renderLocalImage}
+            previewLocalImageLinks
           />
         ),
       )}

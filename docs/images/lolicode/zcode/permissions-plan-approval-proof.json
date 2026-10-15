@@ -1,0 +1,33 @@
+{
+  "sourceRevision": "aac4755666d09fdcd70272fcf063c077a639015f",
+  "temporaryGitProjectsOnly": true,
+  "externalNetworkBlocked": true,
+  "controlPlane": "production worker local-only transport; no fake official response",
+  "paidCalls": 0,
+  "cases": [
+    {
+      "id": "native-plan-approval",
+      "nativeTool": "ExitPlanMode",
+      "modelCalls": 2,
+      "titleCalls": 1,
+      "permissionSeen": false,
+      "alwaysRejected": false,
+      "questionSeen": true,
+      "planBodyVisible": true,
+      "nativePlanExited": true,
+      "terminal": "idle",
+      "continuedAfterResult": true,
+      "fixturePreserved": true,
+      "planFileAbsent": true,
+      "toolStates": [
+        "completed"
+      ]
+    }
+  ],
+  "cleanup": true,
+  "modelRequests": 3,
+  "success": true,
+  "workerSha256": "b5f6ffaec00ab5dcf97b2b9aec1202ab7a9820d197418f15c1f334d632105943",
+  "command": "node scripts/tests/zcode-permissions-smoke.mjs --case native-plan-approval",
+  "evidenceKind": "Real native runtime with an owned loopback fake model; no paid inference"
+}

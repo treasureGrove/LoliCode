@@ -1214,6 +1214,7 @@ pub fn run() {
             // 将同一个实例注入到全局状态，避免重复创建导致的不一致
             app.manage(app_state);
             app.manage(services::agent::AgentState::default());
+            app.manage(services::zcode_agent::ZcodeAgentState::default());
 
             // 初始化 SkillService
             let skill_service = SkillService::new();
@@ -1747,6 +1748,7 @@ pub fn run() {
             // Shared channels and one-click harness configuration
             commands::get_agent_status,
             commands::get_agent_catalog,
+            commands::get_agent_catalog_revision,
             commands::open_agent_project,
             commands::list_agent_sessions,
             commands::list_agent_projects,
@@ -1759,6 +1761,7 @@ pub fn run() {
             commands::delete_agent_session,
             commands::get_agent_session,
             commands::send_agent_message,
+            commands::query_agent_command,
             commands::interrupt_agent_session,
             commands::reply_agent_permission,
             commands::reply_agent_question,
@@ -1773,6 +1776,13 @@ pub fn run() {
             commands::uninstall_agent_plugin,
             commands::get_agent_extension_config,
             commands::save_agent_extension_config,
+            commands::list_agent_native_capabilities,
+            commands::run_agent_saved_workflow,
+            commands::get_agent_native_activity,
+            commands::invoke_agent_native_service,
+            commands::invoke_agent_automation,
+            commands::invoke_agent_remote,
+            commands::get_agent_image,
             commands::get_channel_center,
             commands::save_channel_center,
             commands::discover_channel_models,
@@ -1986,11 +1996,21 @@ pub fn run() {
 /// 把接上代理的客户端都指回直连（模式和代理路由保留，下次启动再接上），再停止代理。
 /// 客户端不能一直指着代理：开机自启默认关闭，LoliCode 一关客户端就连不上了。
 pub async fn cleanup_before_exit(app_handle: &tauri::AppHandle) {
-    if let Some(agent) = app_handle.try_state::<services::agent::AgentState>() {
-        if let Err(error) = agent.shutdown().await {
-            log::warn!("Agent 退出清理未完成：{}", crate::error_for_log(&error));
+    let native_cleanup = async {
+        if let Some(agent) = app_handle.try_state::<services::zcode_agent::ZcodeAgentState>() {
+            if let Err(error) = agent.shutdown().await {
+                log::warn!("ZCode 退出清理未完成：{}", crate::error_for_log(&error));
+            }
         }
-    }
+    };
+    let legacy_cleanup = async {
+        if let Some(agent) = app_handle.try_state::<services::agent::AgentState>() {
+            if let Err(error) = agent.shutdown().await {
+                log::warn!("Agent 退出清理未完成：{}", crate::error_for_log(&error));
+            }
+        }
+    };
+    tokio::join!(native_cleanup, legacy_cleanup);
     if let Some(state) = app_handle.try_state::<store::AppState>() {
         crate::mode::controller::detach_all(state.inner()).await;
         log::info!("退出清理完成：客户端已指回直连，代理已停止");

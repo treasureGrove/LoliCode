@@ -1,0 +1,72 @@
+{
+  "kind": "actual_component_chromium_renderer_fixture",
+  "caption": "LoliCode 图片预览 · 渲染器验收；图片为现有项目品牌素材，IPC全部模拟，无真实会话/账号/模型调用。",
+  "nativeAppScreenshot": false,
+  "paidCalls": 0,
+  "realIpcCalls": 0,
+  "mutations": 0,
+  "browser": "Chromium",
+  "gates": {
+    "absoluteRelativeAndFileLinkDecoded": true,
+    "projectImageMockBoundary": true,
+    "clickOpensDecodedLightbox": true,
+    "visibleCloseButton": true,
+    "escapeClosesLightbox": true,
+    "noHorizontalOverflow": true,
+    "compactLightboxFitsViewport": true,
+    "noRendererErrors": true
+  },
+  "pageErrors": [],
+  "consoleErrors": [],
+  "unexpectedIpc": [],
+  "blockedExternalRequests": [],
+  "screenshots": [
+    "docs/images/lolicode/zcode/generated-image-preview.png"
+  ],
+  "decodedImages": [
+    {
+      "alt": "绝对路径图片",
+      "naturalWidth": 1024,
+      "naturalHeight": 1536
+    },
+    {
+      "alt": "相对路径图片",
+      "naturalWidth": 1024,
+      "naturalHeight": 1536
+    },
+    {
+      "alt": "file-preview.png",
+      "naturalWidth": 1024,
+      "naturalHeight": 1536
+    }
+  ],
+  "imageReads": [
+    {
+      "sessionId": "zc:renderer-image-fixture",
+      "path": "D:/renderer-fixture/project/absolute-preview.png"
+    },
+    {
+      "sessionId": "zc:renderer-image-fixture",
+      "path": "images/relative-preview.png"
+    },
+    {
+      "sessionId": "zc:renderer-image-fixture",
+      "path": "D:/renderer-fixture/project/file-preview.png"
+    }
+  ],
+  "layouts": {
+    "wide": {
+      "viewport": 1280,
+      "width": 1280,
+      "height": 800,
+      "scrollHeight": 800
+    },
+    "compact": {
+      "viewport": 1000,
+      "width": 1000,
+      "height": 650,
+      "scrollHeight": 800
+    }
+  },
+  "success": true
+}

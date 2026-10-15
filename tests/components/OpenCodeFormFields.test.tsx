@@ -81,6 +81,42 @@ const expandFirstModel = () => {
 };
 
 describe("OpenCodeFormFields", () => {
+  it("automatically reads metadata for a manually entered model ID on blur without overwriting manual limits", async () => {
+    vi.mocked(fetchModelsForConfig).mockResolvedValue([
+      {
+        id: "manual-model",
+        ownedBy: null,
+        contextLimit: 128000,
+        outputLimit: 8192,
+        reasoningEfforts: ["low", "high"],
+      },
+    ]);
+    const { props } = renderOpenCodeForm({
+      models: {
+        "model-placeholder": { name: "Manual model", limit: { output: 2048 } },
+      },
+    });
+    const input = screen.getByDisplayValue("model-placeholder");
+    fireEvent.change(input, { target: { value: "manual-model" } });
+    fireEvent.blur(input);
+    await waitFor(() =>
+      expect(props.onModelsChange).toHaveBeenLastCalledWith({
+        "manual-model": {
+          name: "Manual model",
+          limit: { context: 128000, output: 2048 },
+          reasoning: true,
+        },
+      }),
+    );
+    expect(fetchModelsForConfig).toHaveBeenCalledWith(
+      "https://api.example.com/v1",
+      "sk-test",
+      undefined,
+      undefined,
+      undefined,
+      { requestHeaders: {} },
+    );
+  });
   it("opens the picker after fetching and adds the checked models", async () => {
     vi.mocked(fetchModelsForConfig).mockResolvedValue([
       { id: "vendor/model-a", ownedBy: "vendor" },

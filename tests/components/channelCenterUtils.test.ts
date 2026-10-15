@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   channelErrorMessage,
+  channelModelMetadata,
   mergeDiscoveredChannel,
   selectedChannelModels,
   withValidDefault,
@@ -20,6 +21,34 @@ const source: ChannelSource = {
   enabled: true,
   models: [{ id: "same/model", supportsTools: true }],
 };
+
+describe("upstream model metadata descriptions", () => {
+  it("distinguishes missing upstream metadata from a failed model test", () => {
+    const description = channelModelMetadata(source, { id: "unlisted-name" });
+    expect(description).toContain("上下文：上游未提供");
+    expect(description).toContain("思考强度：上游未提供");
+    expect(description).not.toContain("未验证");
+    expect(description).not.toContain("128");
+  });
+
+  it("shows exact fetched context and reasoning values without inventing levels", () => {
+    const description = channelModelMetadata(source, {
+      id: "model",
+      contextLimit: 922000,
+      outputLimit: 8192,
+      reasoningEfforts: ["none", "xhigh"],
+      supportsTools: true,
+    });
+    expect(description).toContain("922,000 tokens");
+    expect(description).toContain("8,192 tokens");
+    expect(description).toContain("none / xhigh");
+    expect(description).toContain("上游标注支持工具调用");
+    expect(description).not.toContain("medium");
+    expect(
+      channelModelMetadata(source, { id: "fixed", reasoningEfforts: [] }),
+    ).toContain("思考强度不可调");
+  });
+});
 
 describe("channel catalog selection", () => {
   it("keeps models with identical upstream IDs distinct and respects channel/model availability", () => {

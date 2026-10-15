@@ -128,6 +128,8 @@ pub struct AgentPermission {
     /// operators and cannot be used to auto-approve a command.
     #[serde(default)]
     pub tool_input: Option<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub approval_mode: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

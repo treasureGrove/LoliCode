@@ -37,7 +37,7 @@ export interface KnownModelMetadata {
 }
 
 /** 参数来自哪里：同地址预设，还是 models.dev。补全提示里告诉用户。 */
-export type ModelMetadataSource = "preset" | "models-dev";
+export type ModelMetadataSource = "preset" | "models-dev" | "upstream";
 
 export interface ResolvedModelMetadata extends KnownModelMetadata {
   /** 实际贡献了字段的来源，按优先级排序。 */

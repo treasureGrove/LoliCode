@@ -16,6 +16,32 @@ import type {
 
 /** Thin desktop transport. Engine state and credentials stay in the backend. */
 export const agentApi = {
+  native: <T = unknown>(
+    service: string,
+    method: string,
+    args: unknown[] = [],
+    scope?: { remoteId: string },
+  ) =>
+    invoke<T>("invoke_agent_native_service", { service, method, args, scope }),
+  automation: <T = unknown>(method: string, args: unknown[] = []) =>
+    invoke<T>("invoke_agent_automation", { method, args }),
+  remote: <T = unknown>(method: string, args: unknown[] = []) =>
+    invoke<T>("invoke_agent_remote", { method, args }),
+  runSavedWorkflow: (
+    sessionId: string,
+    name: string,
+    requestId: string,
+    scope: "project" | "global",
+    args: Record<string, unknown>,
+  ) =>
+    invoke<AgentSession>("run_agent_saved_workflow", {
+      sessionId,
+      name,
+      requestId,
+      scope,
+      args,
+    }),
+  getCatalogRevision: () => invoke<number>("get_agent_catalog_revision"),
   getStatus: () => invoke<AgentEngineStatus>("get_agent_status"),
   getCatalog: () => invoke<AgentCatalog>("get_agent_catalog"),
   openProject: (path: string, refreshModels?: boolean) =>
@@ -63,6 +89,11 @@ export const agentApi = {
     invoke<AgentSnapshot>("get_agent_session", { sessionId }),
   sendMessage: (sessionId: string, text: string, requestId: string) =>
     invoke<void>("send_agent_message", { sessionId, text, requestId }),
+  queryCommand: (sessionId: string, requestId: string) =>
+    invoke<{
+      status: "unknown" | "accepted" | "rejected" | "failed";
+      message?: string;
+    }>("query_agent_command", { sessionId, requestId }),
   interruptSession: (sessionId: string) =>
     invoke<void>("interrupt_agent_session", { sessionId }),
   replyPermission: (
