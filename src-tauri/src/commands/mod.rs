@@ -1,6 +1,7 @@
 #![allow(non_snake_case)]
 
 pub(crate) mod agent_dispatch;
+#[cfg(any(test, feature = "test-hooks"))]
 pub(crate) mod agent_extensions;
 mod agent_images;
 mod auth;

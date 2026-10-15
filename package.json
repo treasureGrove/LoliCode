@@ -1,6 +1,6 @@
 {
   "name": "lolicode",
-  "version": "4.0.14",
+  "version": "4.0.15",
   "description": "LoliCode desktop coding agent with shared model channels",
   "type": "module",
   "scripts": {
@@ -15,7 +15,8 @@
     "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx,css,json}\"",
     "format:check": "prettier --check \"src/**/*.{js,jsx,ts,tsx,css,json}\"",
     "test:unit": "vitest run",
-    "test:unit:watch": "vitest watch"
+    "test:unit:watch": "vitest watch",
+    "prepare:agent-assets": "node scripts/prepare-agent-assets.mjs"
   },
   "keywords": [],
   "author": "Jason Young",

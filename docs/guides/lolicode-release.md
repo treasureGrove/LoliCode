@@ -56,7 +56,7 @@ https://tools.treasuregrove.art/lolicode/releases/<version>/<installer>.exe
 ## 每次发布
 
 1. 选取严格递增的 SemVer，同步配置和版本文件，完成测试并构建正式 NSIS 安装器。改变 `+build` 元数据不算版本递增。构建负责人提供 `.exe` 和匹配的 `.exe.sig`，不要用便携主程序代替安装器。
-2. 先验证安装器包含正确的应用、agent 引擎、默认技能及许可证。该资源校验与本工具的更新包验签分别进行；本工具不运行安装器，也不声称覆盖安装后的功能。
+2. 先验证安装器包含正确的应用、默认技能及许可证。4.0.15 起默认 Agent 链接进主程序，不应再附带 Node / OpenCode / ZCode 引擎。提取实际主程序运行 `--check-agent-runtime`，核对资源及本体工具往返。该资源校验与本工具的更新包验签分别进行；本工具不运行安装器，也不声称覆盖安装后的功能。
 3. 用以下命令准备一个新版本目录。所有参数都明确指向本轮产物和公钥；`--notes-file` 仅接受 Markdown 文件。
 
 ```powershell

@@ -353,12 +353,7 @@ async fn install_update_and_restart_inner(app: &AppHandle) -> Result<bool, Strin
     // download() has verified the signature. Only now take the host lifecycle
     // lease: downloads may run beside tasks, but installation must not stop
     // a background project or race with a new queued send.
-    let agent = app.try_state::<crate::services::agent::AgentState>();
-    let _idle_lease = match agent.as_ref() {
-        Some(agent) => Some(agent.acquire_idle_for_update().await?),
-        None => None, // The database-recovery window has no agent carrier.
-    };
-    let native_agent = app.try_state::<crate::services::zcode_agent::ZcodeAgentState>();
+    let native_agent = app.try_state::<crate::services::inprocess_agent::InprocessAgentState>();
     let _native_idle_lease = match native_agent.as_ref() {
         Some(agent) => Some(agent.acquire_idle_for_update().await?),
         None => None,

@@ -35,6 +35,7 @@ const RUNTIME_LABELS: Record<string, string> = {
   disconnected: "未连接",
   connecting: "正在连接",
   loaded: "已载入",
+  available: "按需可用",
   active: "已载入",
   failed: "载入失败",
   needs_auth: "需要登录",
@@ -409,6 +410,11 @@ export function AgentExtensionsPanel({
                     >
                       {display?.summary || skill.description}
                     </p>
+                    {skill.error && (
+                      <p role="alert" className="text-caption text-danger-text">
+                        {skill.error}
+                      </p>
+                    )}
                     {skill.requirements.length > 0 && (
                       <p className="wb-extension-requirements">
                         运行依赖：{skill.requirements.join("、")}
@@ -427,7 +433,8 @@ export function AgentExtensionsPanel({
                         <button
                           disabled={
                             busy ||
-                            skill.loaded === false ||
+                            (skill.loaded === false &&
+                              skill.runtimeStatus !== "available") ||
                             catalog.pendingReload
                           }
                           onClick={() => onUseSkill(skill)}
@@ -470,8 +477,7 @@ export function AgentExtensionsPanel({
           {tab === "plugins" && (
             <>
               <p className="wb-extension-hint">
-                本地插件需支持当前 OpenCode v2
-                引擎。安装插件会在工作台引擎中运行其代码。
+                本地插件需要当前引擎支持。安装和启用只保存配置；实际载入后才会执行插件代码，请查看下方状态。
               </p>
               <div className="wb-extension-actions">
                 <button

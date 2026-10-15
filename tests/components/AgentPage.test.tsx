@@ -9,6 +9,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AgentPage } from "@/components/agent/AgentPage";
 import { agentApi } from "@/lib/api/agent";
 import { settingsApi } from "@/lib/api";
+import { toast } from "@/lib/toast";
+import {
+  captureAgentDraft,
+  readAgentSubmission,
+  saveAgentSubmission,
+} from "@/lib/agentInputLedger";
 import type { AgentCatalog, AgentSession, AgentSnapshot } from "@/types/agent";
 import { emitTauriEvent } from "../msw/tauriMocks";
 
@@ -65,7 +71,7 @@ const catalog: AgentCatalog = {
   ],
 };
 const session: AgentSession = {
-  id: "ses_first",
+  id: "s1",
   title: "修复测试",
   projectPath: project,
   mode: "build",
@@ -100,6 +106,7 @@ function fill(text = "修复这个项目的测试") {
 
 beforeEach(() => {
   vi.useFakeTimers();
+  vi.spyOn(toast, "warning").mockClear().mockReturnValue(0);
   sessionStorage.clear();
   for (const key of Object.keys(localStorage))
     if (key.startsWith("lolicode.agent.input:")) localStorage.removeItem(key);
@@ -169,7 +176,7 @@ beforeEach(() => {
     .mockReset()
     .mockResolvedValue({
       ...structuredClone(session),
-      id: "ses_new",
+      id: "lc:new",
       title: "新会话",
     });
   vi.mocked(agentApi.sendMessage).mockReset().mockResolvedValue();
@@ -190,8 +197,135 @@ afterEach(() => {
 });
 
 describe("AgentPage", () => {
+  it.each(["open", "refresh"])(
+    "shows nonblocking history warnings during project %s and still creates an in-process session",
+    async (action) => {
+      const warnings = [
+        "旧版历史暂时无法读取，原数据保留。",
+        "部分旧记录格式不受支持。",
+      ];
+      vi.mocked(agentApi.openProject).mockResolvedValue({
+        workspace: { path: project, name: "project" },
+        catalog: structuredClone(catalog),
+        sessions: [],
+        warnings,
+      });
+      render(<AgentPage />);
+      await flush();
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: action === "open" ? "切换项目" : "刷新可用模型",
+        }),
+      );
+      await flush();
+      for (const warning of warnings)
+        expect(toast.warning).toHaveBeenCalledWith(warning);
+      expect(
+        screen.getByRole("heading", { name: "开始新的任务" }),
+      ).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "新建会话" })).toBeEnabled();
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      snapshot.session = { ...session, id: "lc:new" };
+      fireEvent.click(screen.getByRole("button", { name: "新建会话" }));
+      await flush();
+      expect(agentApi.createSession).toHaveBeenCalledTimes(1);
+      expect(
+        screen.getByRole("heading", { name: "修复测试" }),
+      ).toBeInTheDocument();
+      expect(screen.getByLabelText("发送给 Agent 的消息")).toBeEnabled();
+    },
+  );
+
+  it.each(["ses_legacy", "zc:legacy"])(
+    "keeps %s history read-only while new in-process sessions remain usable",
+    async (id) => {
+      const legacy = { ...session, id };
+      snapshot.session = legacy;
+      snapshot.messages = [
+        {
+          id: "old-answer",
+          role: "assistant",
+          createdAt: 2,
+          parts: [{ type: "text", text: "原版历史内容仍可查看" }],
+        },
+      ];
+      vi.mocked(agentApi.listSessions).mockResolvedValue([legacy]);
+      render(<AgentPage />);
+      await flush();
+
+      expect(screen.getByText("原版历史内容仍可查看")).toBeInTheDocument();
+      expect(
+        screen.getByText("旧版会话只读，原数据保留，请新建本体会话继续"),
+      ).toBeInTheDocument();
+      const input = screen.getByLabelText("发送给 Agent 的消息");
+      expect(input).toBeDisabled();
+      expect(screen.getByRole("button", { name: "发送" })).toBeDisabled();
+      expect(screen.getByLabelText("模型", { exact: true })).toBeDisabled();
+      expect(screen.getByLabelText("执行权限")).toBeDisabled();
+      expect(screen.getByRole("button", { name: "分析" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "实现" })).toBeDisabled();
+      expect(screen.getByLabelText(`管理会话：${legacy.title}`)).toBeDisabled();
+      fireEvent.change(screen.getByLabelText("模型", { exact: true }), {
+        target: { value: catalog.models[1].id },
+      });
+      fireEvent.change(screen.getByLabelText("执行权限"), {
+        target: { value: "auto" },
+      });
+      fireEvent.submit(input.closest("form")!);
+      await flush();
+      expect(agentApi.sendMessage).not.toHaveBeenCalled();
+      expect(agentApi.updateSession).not.toHaveBeenCalled();
+
+      expect(screen.getByRole("button", { name: "切换项目" })).toBeEnabled();
+      snapshot = { ...emptySnapshot(), session: { ...session, id: "lc:new" } };
+      fireEvent.click(screen.getByRole("button", { name: "新建会话" }));
+      await flush();
+      expect(agentApi.createSession).toHaveBeenCalledTimes(1);
+      await tick();
+      expect(screen.getByLabelText("发送给 Agent 的消息")).toBeEnabled();
+      expect(screen.queryByText(/旧版会话只读/)).not.toBeInTheDocument();
+      fill("本体新会话继续任务");
+      fireEvent.click(screen.getByRole("button", { name: "发送" }));
+      await flush();
+      expect(agentApi.sendMessage).toHaveBeenCalledWith(
+        "lc:new",
+        "本体新会话继续任务",
+        expect.any(String),
+      );
+    },
+  );
+
+  it("reconciles a retired session receipt without replaying its saved stop intent", async () => {
+    const id = "zc:retired-receipt";
+    snapshot.session = { ...session, id };
+    vi.mocked(agentApi.listSessions).mockResolvedValue([snapshot.session]);
+    vi.mocked(agentApi.queryCommand).mockResolvedValue({
+      status: "rejected",
+      message: "旧版会话只读",
+    });
+    saveAgentSubmission({
+      version: 1,
+      projectPath: project,
+      sessionId: id,
+      requestId: "msg_retired",
+      text: "旧输入",
+      draft: captureAgentDraft("fixture-old-draft", "旧输入"),
+      assistantIds: [],
+      phase: "accepted",
+      observed: true,
+      stopRequested: true,
+    });
+    render(<AgentPage />);
+    await flush();
+    expect(agentApi.queryCommand).toHaveBeenCalledWith(id, "msg_retired");
+    expect(agentApi.interruptSession).not.toHaveBeenCalled();
+    expect(agentApi.sendMessage).not.toHaveBeenCalled();
+    expect(readAgentSubmission(project, id)).toBeNull();
+    expect(screen.getByRole("button", { name: "新建会话" })).toBeEnabled();
+  });
+
   it("keeps an unknown native command receipt and retries its exact identity instead of creating a new task", async () => {
-    const nativeSession = { ...session, id: "zc:owned-command" };
+    const nativeSession = { ...session, id: "lc:owned-command" };
     snapshot.session = nativeSession;
     vi.mocked(agentApi.listSessions).mockResolvedValue([nativeSession]);
     vi.mocked(agentApi.sendMessage).mockRejectedValueOnce(
@@ -223,7 +357,7 @@ describe("AgentPage", () => {
   });
 
   it("releases a definitively rejected native input while keeping a newer draft", async () => {
-    const nativeSession = { ...session, id: "zc:rejected-command" };
+    const nativeSession = { ...session, id: "lc:rejected-command" };
     snapshot.session = nativeSession;
     vi.mocked(agentApi.listSessions).mockResolvedValue([nativeSession]);
     vi.mocked(agentApi.sendMessage).mockRejectedValueOnce(
@@ -429,7 +563,7 @@ describe("AgentPage", () => {
     const otherPath = "D:/fixture/other-project";
     const otherSession = {
       ...session,
-      id: "ses_other_project",
+      id: "other_project",
       title: "另一项目",
       projectPath: otherPath,
     };
@@ -471,7 +605,7 @@ describe("AgentPage", () => {
   it("filters archived sessions from the real persisted list and can show them on demand", async () => {
     const archived = {
       ...session,
-      id: "ses_archived",
+      id: "archived",
       title: "已归档任务",
       archived: true,
     };
@@ -495,7 +629,7 @@ describe("AgentPage", () => {
   it("keeps the actual archived conversation and its draft when refreshing the engine model catalog", async () => {
     const archived = {
       ...session,
-      id: "ses_archive_refresh",
+      id: "archive_refresh",
       title: "归档后继续查看",
       archived: true,
     };
@@ -622,7 +756,7 @@ describe("AgentPage", () => {
   });
 
   it("refreshes the project's actual engine catalog and preserves the selected conversation and draft", async () => {
-    const second = { ...session, id: "ses_second", title: "正在查看的会话" };
+    const second = { ...session, id: "s2", title: "正在查看的会话" };
     vi.mocked(agentApi.listSessions).mockResolvedValue([session, second]);
     vi.mocked(agentApi.getSession).mockImplementation(async (id) => ({
       ...emptySnapshot(),
@@ -677,7 +811,7 @@ describe("AgentPage", () => {
   });
 
   it("does not refresh or replace the bound catalog while any known project session is running", async () => {
-    const second = { ...session, id: "ses_second", title: "历史会话" };
+    const second = { ...session, id: "s2", title: "历史会话" };
     snapshot.status = "running";
     vi.mocked(agentApi.listSessions).mockResolvedValue([session, second]);
     vi.mocked(agentApi.getSession).mockImplementation(async (id) =>
@@ -1181,7 +1315,7 @@ describe("AgentPage", () => {
   });
 
   it("isolates conversation drafts and ignores a late snapshot from the previous selection", async () => {
-    const second = { ...session, id: "ses_second", title: "另一段会话" };
+    const second = { ...session, id: "s2", title: "另一段会话" };
     vi.mocked(agentApi.listSessions).mockResolvedValue([session, second]);
     let finishFirst: (result: AgentSnapshot) => void = () => {};
     vi.mocked(agentApi.getSession).mockImplementation((id) =>
@@ -1223,7 +1357,7 @@ describe("AgentPage", () => {
   });
 
   it("keeps observing a running conversation while another history is selected", async () => {
-    const second = { ...session, id: "ses_second", title: "完成的会话" };
+    const second = { ...session, id: "s2", title: "完成的会话" };
     snapshot.status = "running";
     vi.mocked(agentApi.listSessions).mockResolvedValue([session, second]);
     vi.mocked(agentApi.getSession).mockImplementation(async (id) =>
@@ -1244,7 +1378,7 @@ describe("AgentPage", () => {
   });
 
   it("keeps an in-flight stop associated with its original conversation when another history is selected", async () => {
-    const second = { ...session, id: "ses_second", title: "完成的会话" };
+    const second = { ...session, id: "s2", title: "完成的会话" };
     snapshot.status = "running";
     vi.mocked(agentApi.listSessions).mockResolvedValue([session, second]);
     vi.mocked(agentApi.getSession).mockImplementation(async (id) =>

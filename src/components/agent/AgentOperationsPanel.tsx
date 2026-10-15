@@ -1,4 +1,4 @@
-import { useContext, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { X } from "lucide-react";
 import {
   Dialog,
@@ -10,7 +10,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { WindowControlsContext } from "@/components/shell/AppPageHeader";
-import type { AgentCatalog, AgentSession } from "@/types/agent";
+import type {
+  AgentCatalog,
+  AgentNativeActivity,
+  AgentSession,
+} from "@/types/agent";
+import { agentApi } from "@/lib/api/agent";
+import { agentErrorMessage } from "@/hooks/useAgentSnapshot";
 import { AgentWorkflowPanel } from "./AgentWorkflowPanel";
 import { AgentAutomationPanel } from "./AgentAutomationPanel";
 import { AgentRemotePanel } from "./AgentRemotePanel";
@@ -36,6 +42,38 @@ export function AgentOperationsPanel({
     "workflows",
   );
   const windowControls = useContext(WindowControlsContext);
+  const [activity, setActivity] = useState<AgentNativeActivity | null>(null);
+  const [capabilityError, setCapabilityError] = useState<string | null>(null);
+  const [capabilityRevision, setCapabilityRevision] = useState(0);
+  const legacyMock = typeof agentApi.getNativeActivity !== "function";
+  useEffect(() => {
+    setActivity(null);
+    setCapabilityError(null);
+    if (!open || legacyMock) return;
+    let disposed = false;
+    void agentApi
+      .getNativeActivity()
+      .then((value) => {
+        if (!disposed) setActivity(value);
+      })
+      .catch((error) => {
+        if (!disposed) setCapabilityError(agentErrorMessage(error));
+      });
+    return () => {
+      disposed = true;
+    };
+  }, [open, capabilityRevision, legacyMock]);
+  const ready = legacyMock || activity !== null;
+  const supported = (feature: "workflows" | "automation" | "remote") => {
+    if (!ready) return false;
+    if (activity?.features) return activity.features[feature] === true;
+    return activity?.inProcess !== true;
+  };
+  const unavailable =
+    ready &&
+    ["workflows", "automation", "remote"].some(
+      (feature) => !supported(feature as "workflows" | "automation" | "remote"),
+    );
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="wb-extensions">
@@ -43,7 +81,7 @@ export function AgentOperationsPanel({
           <div className="wb-extension-heading">
             <DialogTitle>工作流、自动化与远程项目</DialogTitle>
             <DialogDescription>
-              使用 ZCode 原生工作流、任务调度与远程环境。
+              管理工作流、定时任务与远程项目。可用功能由当前执行引擎决定。
             </DialogDescription>
           </div>
           <DialogClose asChild>
@@ -73,6 +111,12 @@ export function AgentOperationsPanel({
               type="button"
               role="tab"
               aria-selected={tab === value}
+              disabled={!supported(value)}
+              title={
+                ready && !supported(value)
+                  ? "此功能正在迁移至应用本体，暂不可用"
+                  : undefined
+              }
               onClick={() => setTab(value)}
             >
               {label}
@@ -80,7 +124,33 @@ export function AgentOperationsPanel({
           ))}
         </div>
         <div className="wb-extension-list" role="tabpanel">
+          {open && !ready && !capabilityError && (
+            <p role="status" className="text-caption text-fg-3">
+              正在读取当前引擎的可用功能…
+            </p>
+          )}
+          {open && capabilityError && (
+            <div className="space-y-2">
+              <p role="alert" className="text-caption text-danger-text">
+                {capabilityError}
+              </p>
+              <button
+                className="wb-mode-button"
+                onClick={() => setCapabilityRevision((value) => value + 1)}
+              >
+                重新读取可用功能
+              </button>
+            </div>
+          )}
+          {open && unavailable && (
+            <p className="wb-extension-hint">
+              部分功能正在迁移至 Rust
+              本体，暂不可用。已保存的工作流、自动化及远程数据会保留，当前不会启动旧的
+              ZCode 服务。
+            </p>
+          )}
           {open &&
+            supported(tab) &&
             (tab === "remote" ? (
               <AgentRemotePanel
                 catalog={catalog}

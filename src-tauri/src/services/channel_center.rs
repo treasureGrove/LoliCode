@@ -153,9 +153,17 @@ pub struct AgentCatalog {
 
 /// The engine-owned config contains a local gateway credential. Do not serialize
 /// or log this wrapper, or return it from a renderer-facing command.
+#[cfg(any(test, feature = "test-hooks"))]
 pub struct PreparedAgentCatalog {
     pub catalog: AgentCatalog,
     pub config: Value,
+}
+
+/// Host-local binding shared by native execution; never serialize credentials.
+pub struct AgentGatewayBinding {
+    pub catalog: AgentCatalog,
+    pub base_url: String,
+    pub bearer_token: String,
 }
 
 fn catalog_lock() -> &'static Mutex<()> {
@@ -1823,6 +1831,7 @@ pub fn agent_catalog(db: &Database) -> Result<AgentCatalog, AppError> {
     Ok(agent_catalog_from_snapshot(&agent_source_snapshot(db)?))
 }
 
+#[cfg(any(test, feature = "test-hooks"))]
 fn agent_opencode_v2_config(
     catalog: &AgentCatalog,
     base_url: &str,
@@ -1977,12 +1986,44 @@ fn prepare_agent_gateway_write<'db>(
 /// Prepare only an engine-owned profile. Callers must validate the pinned
 /// catalog's managed account references before launching the engine. This does
 /// not switch providers, write global OpenCode files, or change LAST_APPLIED.
+#[cfg(any(test, feature = "test-hooks"))]
 pub async fn prepare_agent_catalog(state: &AppState) -> Result<PreparedAgentCatalog, AppError> {
+    let binding = prepare_agent_binding_with(state, |catalog| {
+        agent_opencode_v2_config(catalog, "http://127.0.0.1/tai/v1", "validation-only").map(|_| ())
+    })
+    .await?;
+    let config =
+        agent_opencode_v2_config(&binding.catalog, &binding.base_url, &binding.bearer_token)?;
+    Ok(PreparedAgentCatalog {
+        catalog: binding.catalog,
+        config,
+    })
+}
+
+/// Native agent preparation never creates or validates an external-engine profile.
+pub async fn prepare_inprocess_agent_binding(
+    state: &AppState,
+) -> Result<AgentGatewayBinding, AppError> {
+    prepare_agent_binding_with(state, |_| Ok(())).await
+}
+
+async fn prepare_agent_binding_with(
+    state: &AppState,
+    validate_engine: impl FnOnce(&AgentCatalog) -> Result<(), AppError>,
+) -> Result<AgentGatewayBinding, AppError> {
     let _guard = apply_lock().lock().await;
     let snapshot = agent_source_snapshot(state.db.as_ref())?;
     let catalog = agent_catalog_from_snapshot(&snapshot);
-    // Validate the pure profile before publishing anything or acquiring a lease.
-    agent_opencode_v2_config(&catalog, "http://127.0.0.1/tai/v1", "validation-only")?;
+    if !catalog
+        .default_model
+        .as_ref()
+        .is_some_and(|id| catalog.models.iter().any(|model| &model.id == id))
+    {
+        return Err(AppError::InvalidInput(
+            "请先在渠道与模型中添加并启用支持工具调用的模型".into(),
+        ));
+    }
+    validate_engine(&catalog)?;
     let api_snapshot = api_catalog_snapshot(&snapshot);
     let mut preparation = prepare_agent_gateway_write(state.db.as_ref(), &api_snapshot)?;
     let info = state.proxy_service.start().await.map_err(|error| {
@@ -1996,9 +2037,13 @@ pub async fn prepare_agent_catalog(state: &AppState) -> Result<PreparedAgentCata
         info.port,
         api_snapshot.revision,
     )?;
-    let config = agent_opencode_v2_config(&catalog, &base_url, &gateway_token(state.db.as_ref())?)?;
+    let bearer_token = gateway_token(state.db.as_ref())?;
     preparation.committed = true;
-    Ok(PreparedAgentCatalog { catalog, config })
+    Ok(AgentGatewayBinding {
+        catalog,
+        base_url,
+        bearer_token,
+    })
 }
 
 fn native_selection_for<'a>(

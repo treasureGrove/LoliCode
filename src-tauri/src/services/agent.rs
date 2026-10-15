@@ -8,7 +8,6 @@ use crate::services::{
 };
 use crate::store::AppState;
 use lolicode_agent::{AgentModelRef, AgentSession, AgentSnapshot, Engine, EngineOptions};
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{BTreeSet, HashMap};
 use std::future::Future;
@@ -50,29 +49,8 @@ struct AgentConnection {
     selection_cleared: bool,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AgentWorkspace {
-    pub path: String,
-    pub name: String,
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AgentRuntimeStatus {
-    pub available: bool,
-    pub version: Option<String>,
-    pub running: bool,
-    pub project_path: Option<String>,
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AgentOpenProject {
-    pub workspace: AgentWorkspace,
-    pub catalog: AgentCatalog,
-    pub sessions: Vec<AgentSession>,
-}
+pub(crate) use super::agent_host::{canonical_project, prepare_catalog_for_accounts, workspace};
+pub use super::agent_host::{AgentOpenProject, AgentRuntimeStatus, AgentWorkspace};
 
 pub fn runtime_executable(app: &tauri::AppHandle) -> Option<PathBuf> {
     let name = if cfg!(windows) {
@@ -97,29 +75,6 @@ pub fn runtime_executable(app: &tauri::AppHandle) -> Option<PathBuf> {
     None
 }
 
-pub(crate) fn canonical_project(path: &str) -> Result<PathBuf, String> {
-    if path.trim().is_empty() || path.contains('\0') {
-        return Err("请选择一个项目文件夹".into());
-    }
-    let canonical = std::fs::canonicalize(path).map_err(|_| "项目文件夹不存在或无法访问")?;
-    if !canonical.is_dir() {
-        return Err("请选择文件夹，不能选择单个文件".into());
-    }
-    // Windows std returns verbatim paths, whereas the upstream JS runtime
-    // stores ordinary drive/UNC paths. Keep the canonical location, not its prefix.
-    #[cfg(windows)]
-    {
-        let text = canonical.to_string_lossy();
-        if let Some(rest) = text.strip_prefix("\\\\?\\UNC\\") {
-            return Ok(PathBuf::from(format!("\\\\{rest}")));
-        }
-        if let Some(rest) = text.strip_prefix("\\\\?\\") {
-            return Ok(PathBuf::from(rest));
-        }
-    }
-    Ok(canonical)
-}
-
 #[cfg(test)]
 fn same_project(left: &str, right: &str) -> bool {
     let (Ok(left), Ok(right)) = (canonical_project(left), canonical_project(right)) else {
@@ -133,17 +88,6 @@ fn same_project(left: &str, right: &str) -> bool {
     }
 }
 
-pub(crate) fn workspace(path: &Path) -> AgentWorkspace {
-    AgentWorkspace {
-        name: path
-            .file_name()
-            .and_then(|name| name.to_str())
-            .unwrap_or("项目")
-            .to_string(),
-        path: path.to_string_lossy().into_owned(),
-    }
-}
-
 fn selected_model(catalog: &AgentCatalog, id: &str) -> Result<AgentModelRef, String> {
     let model = catalog
         .models
@@ -154,25 +98,6 @@ fn selected_model(catalog: &AgentCatalog, id: &str) -> Result<AgentModelRef, Str
         provider_id: model.provider_id.clone(),
         model_id: model.model_id.clone(),
     })
-}
-
-/// Shared host preparation. Neither native engine receives an upstream key.
-pub(crate) async fn prepare_catalog_for_accounts(
-    state: &AppState,
-    accounts: &[(String, String)],
-) -> Result<channel_center::PreparedAgentCatalog, String> {
-    let draft =
-        channel_center::agent_source_snapshot(state.db.as_ref()).map_err(|e| e.to_string())?;
-    channel_center::validate_managed_account_references(&draft, accounts)
-        .map_err(|e| e.to_string())?;
-    let prepared = channel_center::prepare_agent_catalog(state)
-        .await
-        .map_err(|e| e.to_string())?;
-    let published = channel_center::load_catalog(state.db.as_ref(), prepared.catalog.revision)
-        .map_err(|e| e.to_string())?;
-    channel_center::validate_managed_account_references(&published, accounts)
-        .map_err(|e| e.to_string())?;
-    Ok(prepared)
 }
 
 impl AgentState {
@@ -634,6 +559,7 @@ impl AgentState {
                         workspace: workspace.clone(),
                         catalog: catalog.clone(),
                         sessions,
+                        warnings: Vec::new(),
                     });
                 }
                 if active {
@@ -689,6 +615,7 @@ impl AgentState {
             workspace,
             catalog,
             sessions,
+            warnings: Vec::new(),
         })
     }
 

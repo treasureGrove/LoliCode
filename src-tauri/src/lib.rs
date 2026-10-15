@@ -40,6 +40,11 @@ mod session_manager;
 mod settings;
 mod store;
 
+/// Isolated, opt-in check in the same executable; does not initialize the desktop.
+pub fn check_builtin_agent_runtime() -> i32 {
+    services::inprocess_diagnostics::run()
+}
+
 mod tray;
 mod usage_events;
 mod usage_script;
@@ -1213,8 +1218,7 @@ pub fn run() {
             );
             // 将同一个实例注入到全局状态，避免重复创建导致的不一致
             app.manage(app_state);
-            app.manage(services::agent::AgentState::default());
-            app.manage(services::zcode_agent::ZcodeAgentState::default());
+            app.manage(services::inprocess_agent::InprocessAgentState::default());
 
             // 初始化 SkillService
             let skill_service = SkillService::new();
@@ -1997,20 +2001,18 @@ pub fn run() {
 /// 客户端不能一直指着代理：开机自启默认关闭，LoliCode 一关客户端就连不上了。
 pub async fn cleanup_before_exit(app_handle: &tauri::AppHandle) {
     let native_cleanup = async {
-        if let Some(agent) = app_handle.try_state::<services::zcode_agent::ZcodeAgentState>() {
+        if let Some(agent) =
+            app_handle.try_state::<services::inprocess_agent::InprocessAgentState>()
+        {
             if let Err(error) = agent.shutdown().await {
-                log::warn!("ZCode 退出清理未完成：{}", crate::error_for_log(&error));
+                log::warn!(
+                    "本体 Agent 退出清理未完成：{}",
+                    crate::error_for_log(&error)
+                );
             }
         }
     };
-    let legacy_cleanup = async {
-        if let Some(agent) = app_handle.try_state::<services::agent::AgentState>() {
-            if let Err(error) = agent.shutdown().await {
-                log::warn!("Agent 退出清理未完成：{}", crate::error_for_log(&error));
-            }
-        }
-    };
-    tokio::join!(native_cleanup, legacy_cleanup);
+    native_cleanup.await;
     if let Some(state) = app_handle.try_state::<store::AppState>() {
         crate::mode::controller::detach_all(state.inner()).await;
         log::info!("退出清理完成：客户端已指回直连，代理已停止");

@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Notice } from "@/components/ui/notice";
 import { settingsApi } from "@/lib/api";
 import { agentApi } from "@/lib/api/agent";
+import { toast } from "@/lib/toast";
 import {
   agentStopInFlight,
   agentSubmissionInFlight,
@@ -118,6 +119,8 @@ const nameOf = (path: string) =>
     .replace(/[\\/]+$/, "")
     .split(/[\\/]/)
     .pop() || path;
+const isLegacySession = (id: string) =>
+  id.startsWith("ses_") || id.startsWith("zc:");
 const draftKey = (path: string, id: string) =>
   `lolicode.agent.draft:${encodeURIComponent(path)}:${encodeURIComponent(id)}`;
 const pendingKey = (path: string, id: string) =>
@@ -449,9 +452,8 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
       );
     if (
       submitted &&
-      id.startsWith("zc:") &&
-      !acknowledged &&
-      !submitted.observed &&
+      (isLegacySession(id) || id.startsWith("lc:")) &&
+      (isLegacySession(id) || (!acknowledged && !submitted.observed)) &&
       !agentSubmissionInFlight(submitted.requestId) &&
       (submitted.phase === "uncertain" ||
         next.status === "idle" ||
@@ -472,7 +474,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
             if (
               !mounted.current ||
               current?.requestId !== submitted.requestId ||
-              current.observed
+              (current.observed && !isLegacySession(id))
             )
               return;
             if (receipt.status === "rejected" || receipt.status === "failed") {
@@ -500,6 +502,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
                 setError(receipt.message || "该次发送未被接收，请重试。");
               return;
             }
+            if (isLegacySession(id)) return;
             const accepted = receipt.status === "accepted";
             updateAgentSubmission(
               next.session.projectPath,
@@ -558,6 +561,9 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
           });
       }
     }
+    // The preserved history is not a live actor. Reconcile old receipts only;
+    // never replay their saved Stop intent against a retired engine.
+    if (isLegacySession(id)) return;
     if (submitted && acknowledged && !submitted.observed) {
       updateAgentSubmission(next.session.projectPath, id, submitted.requestId, {
         observed: true,
@@ -703,6 +709,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
     (sessionId && sessionOverrides[sessionId]) ||
     snapshot?.session ||
     sessions.find((session) => session.id === sessionId);
+  const readOnlySession = Boolean(sessionId && isLegacySession(sessionId));
   const boundModel = catalog.models.find(
     (model) =>
       model.providerId === selectedSession?.model?.providerId &&
@@ -732,6 +739,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
         return;
       const result = await agentApi.openProject(selectedPath);
       if (!mounted.current || generation.current !== requestGeneration) return;
+      result.warnings?.forEach((warning) => toast.warning(warning));
       setWorkspace(result.workspace);
       bindCatalog(result.catalog);
       setSessions(result.sessions);
@@ -799,6 +807,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
     if (
       mutation.current ||
       !sessionId ||
+      isLegacySession(sessionId) ||
       !key ||
       !draft.trim() ||
       !snapshot ||
@@ -928,6 +937,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
   const stop = async () => {
     if (
       !sessionId ||
+      isLegacySession(sessionId) ||
       stoppingRef.current[sessionId] ||
       agentStopInFlight(sessionId)
     )
@@ -983,6 +993,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
       if (workspace) {
         const result = await agentApi.openProject(workspace.path, true);
         if (!mounted.current) return;
+        result.warnings?.forEach((warning) => toast.warning(warning));
         setWorkspace(result.workspace);
         bindCatalog(result.catalog);
         const refreshedSessions = showArchived
@@ -1072,6 +1083,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
       return;
     }
     if (
+      isLegacySession(sessionId) ||
       mutation.current ||
       activeStatus(statusRef.current[sessionId]) ||
       pendingRef.current[sessionId] ||
@@ -1109,6 +1121,8 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
     remove = false,
     fields: (keyof AgentSession)[] = [],
   ) => {
+    if (isLegacySession(id))
+      throw new Error("旧版会话只读，原数据保留，请新建本体会话继续");
     if (mutation.current) throw new Error("请等待当前操作完成。");
     mutation.current = true;
     setBusy("metadata");
@@ -1187,6 +1201,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
     Boolean(sessionId && stopping[sessionId]);
   const sendingHere = busy === "send" && busySessionId === sessionId;
   const sendDisabled =
+    readOnlySession ||
     Boolean(busy) ||
     !snapshot ||
     !draft.trim() ||
@@ -1360,7 +1375,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
                       </button>
                       <AgentSessionMenu
                         session={session}
-                        disabled={Boolean(busy)}
+                        disabled={Boolean(busy) || isLegacySession(session.id)}
                         active={
                           activeStatus(statuses[session.id]) ||
                           Boolean(pending[session.id]) ||
@@ -1689,6 +1704,11 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
           </div>
         ) : (
           <>
+            {readOnlySession && (
+              <p role="status" className="wb-notice">
+                旧版会话只读，原数据保留，请新建本体会话继续
+              </p>
+            )}
             <div className="wb-context-line">
               <span>
                 {boundModel
@@ -1772,48 +1792,50 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
                     </div>
                   </div>
                 )}
-                {snapshot?.permissions
-                  .filter((request) => request.sessionId === sessionId)
-                  .map((request) => (
-                    <AgentPermissionCard
-                      key={request.id}
-                      request={request}
-                      onReply={(decision) =>
-                        refreshAfter(() =>
-                          agentApi.replyPermission(
-                            request.sessionId,
-                            request.id,
-                            decision,
-                          ),
-                        )
-                      }
-                    />
-                  ))}
-                {snapshot?.questions
-                  .filter((request) => request.sessionId === sessionId)
-                  .map((request) => (
-                    <AgentQuestionCard
-                      key={request.id}
-                      question={request}
-                      onReply={(answer) =>
-                        refreshAfter(() =>
-                          agentApi.replyQuestion(
-                            request.sessionId,
-                            request.id,
-                            answer,
-                          ),
-                        )
-                      }
-                      onReject={() =>
-                        refreshAfter(() =>
-                          agentApi.rejectQuestion(
-                            request.sessionId,
-                            request.id,
-                          ),
-                        )
-                      }
-                    />
-                  ))}
+                {!readOnlySession &&
+                  snapshot?.permissions
+                    .filter((request) => request.sessionId === sessionId)
+                    .map((request) => (
+                      <AgentPermissionCard
+                        key={request.id}
+                        request={request}
+                        onReply={(decision) =>
+                          refreshAfter(() =>
+                            agentApi.replyPermission(
+                              request.sessionId,
+                              request.id,
+                              decision,
+                            ),
+                          )
+                        }
+                      />
+                    ))}
+                {!readOnlySession &&
+                  snapshot?.questions
+                    .filter((request) => request.sessionId === sessionId)
+                    .map((request) => (
+                      <AgentQuestionCard
+                        key={request.id}
+                        question={request}
+                        onReply={(answer) =>
+                          refreshAfter(() =>
+                            agentApi.replyQuestion(
+                              request.sessionId,
+                              request.id,
+                              answer,
+                            ),
+                          )
+                        }
+                        onReject={() =>
+                          refreshAfter(() =>
+                            agentApi.rejectQuestion(
+                              request.sessionId,
+                              request.id,
+                            ),
+                          )
+                        }
+                      />
+                    ))}
               </div>
             </div>
             <AgentChanges diffs={snapshot?.diffs || []} />
@@ -1833,7 +1855,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
                   rows={3}
                   placeholder="描述任务，或继续追问…"
                   value={draft}
-                  disabled={sendingHere}
+                  disabled={readOnlySession || sendingHere}
                   onChange={(event) => writeDraft(key, event.target.value)}
                   onKeyDown={(event) => {
                     if (
@@ -1855,6 +1877,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
                     <select
                       id="agent-new-model"
                       disabled={
+                        readOnlySession ||
                         Boolean(busy) ||
                         !snapshot ||
                         Boolean(runningHere) ||
@@ -1894,6 +1917,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
                       type="button"
                       className="wb-mode-button"
                       disabled={
+                        readOnlySession ||
                         Boolean(busy) ||
                         !snapshot ||
                         Boolean(runningHere) ||
@@ -1916,6 +1940,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
                       type="button"
                       className="wb-mode-button"
                       disabled={
+                        readOnlySession ||
                         Boolean(busy) ||
                         !snapshot ||
                         Boolean(runningHere) ||
@@ -1938,6 +1963,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
                     id="agent-permission-mode"
                     value={selectedSession?.permissionMode || "ask"}
                     disabled={
+                      readOnlySession ||
                       Boolean(busy) ||
                       !snapshot ||
                       Boolean(runningHere) ||
@@ -1946,6 +1972,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
                       stoppingHere
                     }
                     onChange={(event) => {
+                      if (readOnlySession) return;
                       if (event.target.value === "full_access") {
                         fullAccessTarget.current = sessionId;
                         setConfirmFullAccess(true);
@@ -1969,20 +1996,21 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
                       )}
                   </select>
                   <span className="wb-toolbar-spacer" />
-                  {(runningHere ||
-                    queuedHere ||
-                    uncertainHere ||
-                    stoppingHere) && (
-                    <button
-                      type="button"
-                      className="wb-primary wb-stop-button"
-                      disabled={stoppingHere}
-                      onClick={() => void stop()}
-                    >
-                      <Square />
-                      {stoppingHere ? "停止中…" : "停止"}
-                    </button>
-                  )}
+                  {!readOnlySession &&
+                    (runningHere ||
+                      queuedHere ||
+                      uncertainHere ||
+                      stoppingHere) && (
+                      <button
+                        type="button"
+                        className="wb-primary wb-stop-button"
+                        disabled={stoppingHere}
+                        onClick={() => void stop()}
+                      >
+                        <Square />
+                        {stoppingHere ? "停止中…" : "停止"}
+                      </button>
+                    )}
                   <button
                     type="submit"
                     className="wb-primary"
@@ -2027,7 +2055,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
           setRefresh((value) => value + 1);
         }}
         onCompose={(text) => {
-          if (key) {
+          if (key && !readOnlySession) {
             writeDraft(
               key,
               `${draft}${draft && !draft.endsWith("\n") ? "\n" : ""}${text}\n`,
@@ -2078,7 +2106,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
           await refreshCatalog(true);
         }}
         onUseSkill={
-          key
+          key && !readOnlySession
             ? (skill) => {
                 writeDraft(
                   key,

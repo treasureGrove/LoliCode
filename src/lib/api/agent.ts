@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   AgentCatalog,
   AgentEngineStatus,
+  AgentNativeActivity,
   AgentMode,
   AgentPermissionMode,
   AgentProject,
@@ -16,6 +17,8 @@ import type {
 
 /** Thin desktop transport. Engine state and credentials stay in the backend. */
 export const agentApi = {
+  getNativeActivity: () =>
+    invoke<AgentNativeActivity>("get_agent_native_activity"),
   native: <T = unknown>(
     service: string,
     method: string,

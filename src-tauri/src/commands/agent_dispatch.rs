@@ -1,11 +1,12 @@
-//! Stable renderer IPC, native ZCode by default and explicit old-session routing.
+//! Stable renderer IPC for the in-process Rust agent and read-only history.
 use crate::{
     commands::{CodexOAuthState, CopilotAuthState, XaiOAuthState},
     services::{
-        agent::{AgentOpenProject, AgentRuntimeStatus, AgentState},
+        agent_history,
+        agent_host::{AgentOpenProject, AgentRuntimeStatus},
         agent_preferences::{self as preferences, AgentProject},
         channel_center::AgentCatalog,
-        zcode_agent::{self, ZcodeAgentState},
+        inprocess_agent::InprocessAgentState,
     },
     store::AppState,
 };
@@ -14,16 +15,11 @@ use serde::de::DeserializeOwned;
 use serde_json::{json, Value};
 use tauri::{AppHandle, Manager};
 
-fn native_default(app: &AppHandle) -> bool {
-    // A packaged app must report a broken native installation; only development
-    // checkouts may explicitly fall back while preparing their owned resources.
-    zcode_agent::runtime_files(app).is_some() || !cfg!(debug_assertions)
-}
 fn legacy_id(id: &str) -> Result<bool, String> {
-    if id.starts_with("ses_") && id.len() <= 512 && !id.contains('\0') {
+    if (id.starts_with("ses_") || id.starts_with("zc:")) && id.len() <= 512 && !id.contains('\0') {
         return Ok(true);
     }
-    if id.starts_with("zc:") && id.len() > 3 && id.len() <= 512 && !id.contains('\0') {
+    if id.starts_with("lc:") && id.len() > 3 && id.len() <= 512 && !id.contains('\0') {
         return Ok(false);
     }
     Err("无法识别此会话的引擎，请重新读取会话列表".into())
@@ -54,7 +50,7 @@ async fn native<T: DeserializeOwned>(
     args: Value,
     mutation: bool,
 ) -> Result<T, String> {
-    let carrier = app.state::<ZcodeAgentState>();
+    let carrier = app.state::<InprocessAgentState>();
     carrier.ensure_started(app).await?;
     carrier.call(method, args, mutation).await
 }
@@ -63,33 +59,15 @@ fn old_root() -> std::path::PathBuf {
 }
 async fn old_sessions(project: Option<String>) -> Result<Vec<AgentSession>, String> {
     tokio::task::spawn_blocking(move || {
-        zcode_agent::legacy_sessions(&old_root(), project.as_deref())
+        agent_history::legacy_sessions(&old_root(), project.as_deref())
     })
     .await
     .map_err(|_| "旧会话记录读取未完成")?
 }
-async fn ensure_legacy(app: &AppHandle, id: &str) -> Result<(), String> {
-    let legacy = app.state::<AgentState>();
-    if legacy.status(app).await.running {
-        return Ok(());
-    }
-    let session = old_sessions(None)
-        .await?
-        .into_iter()
-        .find(|session| session.id == id)
-        .ok_or("旧会话记录不存在，原数据未改动")?;
-    check_project(app, &session.project_path)?;
-    legacy
-        .open_project(
-            app,
-            app.state::<AppState>().inner(),
-            session.project_path,
-            accounts(app).await?,
-            false,
-        )
-        .await?;
-    Ok(())
+fn historical_read_only<T>() -> Result<T, String> {
+    Err("旧引擎会话保持只读，原数据已保留；请新建本体会话继续，不会启动旧引擎。".into())
 }
+
 fn check_project(app: &AppHandle, path: &str) -> Result<(), String> {
     let state = app.state::<AppState>();
     if !preferences::load(&state.db)?
@@ -122,23 +100,13 @@ pub(crate) async fn session_project(app: &AppHandle, session_id: &str) -> Result
 
 #[tauri::command]
 pub async fn get_agent_status(app: AppHandle) -> Result<AgentRuntimeStatus, String> {
-    if native_default(&app) {
-        app.state::<ZcodeAgentState>().status(&app).await
-    } else {
-        Ok(app.state::<AgentState>().status(&app).await)
-    }
+    app.state::<InprocessAgentState>().status(&app).await
 }
 #[tauri::command]
 pub async fn get_agent_catalog(app: AppHandle) -> Result<AgentCatalog, String> {
-    if native_default(&app) {
-        app.state::<ZcodeAgentState>()
-            .catalog(app.state::<AppState>().inner())
-            .await
-    } else {
-        app.state::<AgentState>()
-            .catalog(app.state::<AppState>().inner())
-            .await
-    }
+    app.state::<InprocessAgentState>()
+        .catalog(app.state::<AppState>().inner())
+        .await
 }
 #[tauri::command]
 pub async fn get_agent_catalog_revision(app: AppHandle) -> Result<u64, String> {
@@ -153,20 +121,9 @@ pub async fn open_agent_project(
     refresh_models: Option<bool>,
 ) -> Result<AgentOpenProject, String> {
     let accounts = accounts(&app).await?;
-    if !native_default(&app) {
-        return app
-            .state::<AgentState>()
-            .open_project(
-                &app,
-                app.state::<AppState>().inner(),
-                path,
-                accounts,
-                refresh_models.unwrap_or(false),
-            )
-            .await;
-    }
+
     let mut opened = app
-        .state::<ZcodeAgentState>()
+        .state::<InprocessAgentState>()
         .open_project(
             &app,
             app.state::<AppState>().inner(),
@@ -175,7 +132,17 @@ pub async fn open_agent_project(
             refresh_models.unwrap_or(false),
         )
         .await?;
-    for mut session in old_sessions(Some(opened.workspace.path.clone())).await? {
+    let history = match old_sessions(Some(opened.workspace.path.clone())).await {
+        Ok(sessions) => sessions,
+        Err(error) => {
+            log::warn!("旧会话暂无法读取：{error}");
+            opened
+                .warnings
+                .push("本体项目已打开。旧会话暂无法读取，原始数据已保留；请新建会话继续。".into());
+            Vec::new()
+        }
+    };
+    for mut session in history {
         decorate(&app, &mut session)?;
         if !session.archived
             && !opened
@@ -195,15 +162,9 @@ pub async fn list_agent_sessions(
     project_path: Option<String>,
     include_archived: Option<bool>,
 ) -> Result<Vec<AgentSession>, String> {
-    if !native_default(&app) {
-        return app
-            .state::<AgentState>()
-            .list_sessions(project_path.as_deref(), include_archived.unwrap_or(false))
-            .await;
-    }
     let selected = match project_path {
         Some(path) => Some(path),
-        None => app.state::<ZcodeAgentState>().workspace_path().await,
+        None => app.state::<InprocessAgentState>().workspace_path().await,
     };
     if let Some(path) = &selected {
         check_project(&app, path)?;
@@ -216,8 +177,17 @@ pub async fn list_agent_sessions(
     )
     .await?;
     if let Some(path) = selected {
-        result.extend(old_sessions(Some(path)).await?);
+        match old_sessions(Some(path)).await {
+            Ok(sessions) => result.extend(sessions),
+            Err(error) => log::warn!("旧会话列表暂不可用：{error}"),
+        }
     }
+    let registered = preferences::load(&app.state::<AppState>().db)?;
+    result.retain(|session| {
+        registered
+            .projects
+            .contains_key(&preferences::path_key(&session.project_path))
+    });
     for session in &mut result {
         decorate(&app, session)?;
     }
@@ -238,22 +208,14 @@ pub async fn set_agent_project_metadata(
     path: String,
     pinned: bool,
 ) -> Result<AgentProject, String> {
-    app.state::<AgentState>()
+    app.state::<InprocessAgentState>()
         .project_metadata(app.state::<AppState>().inner(), &path, pinned)
         .await
 }
 #[tauri::command]
 pub async fn remove_agent_project(app: AppHandle, path: String) -> Result<(), String> {
-    let legacy = app.state::<AgentState>();
-    let _legacy_lease = legacy.acquire_idle_for_update().await?;
-    let carrier = app.state::<ZcodeAgentState>();
-    let _lease = if native_default(&app) {
-        Some(carrier.acquire_idle_for_navigation().await?)
-    } else {
-        None
-    };
-    legacy
-        .remove_project_under_lease(app.state::<AppState>().inner(), &path)
+    app.state::<InprocessAgentState>()
+        .remove_project(app.state::<AppState>().inner(), &path)
         .await
 }
 #[tauri::command(rename_all = "camelCase")]
@@ -264,17 +226,6 @@ pub async fn create_agent_session(
     title: Option<String>,
     permission_mode: Option<String>,
 ) -> Result<AgentSession, String> {
-    if !native_default(&app) {
-        return app
-            .state::<AgentState>()
-            .create_session(
-                &model_id,
-                &mode,
-                title.as_deref(),
-                permission_mode.as_deref().unwrap_or("ask"),
-            )
-            .await;
-    }
     let mut session: AgentSession = native(&app, "createSession", json!({"modelId":model_id,"mode":mode,"title":title,"permissionMode":permission_mode.unwrap_or_else(|| "ask".into())}), true).await?;
     decorate(&app, &mut session)?;
     Ok(session)
@@ -288,16 +239,7 @@ pub async fn update_agent_session(
     permission_mode: Option<String>,
 ) -> Result<AgentSession, String> {
     if legacy_id(&session_id)? {
-        ensure_legacy(&app, &session_id).await?;
-        return app
-            .state::<AgentState>()
-            .update_session(
-                &session_id,
-                model_id.as_deref(),
-                mode.as_deref(),
-                permission_mode.as_deref(),
-            )
-            .await;
+        return historical_read_only();
     }
     let mut result: AgentSession = native(&app, "updateSession", json!({"sessionId":session_id,"modelId":model_id,"mode":mode,"permissionMode":permission_mode}), true).await?;
     if result.id != session_id {
@@ -313,11 +255,7 @@ pub async fn rename_agent_session(
     title: String,
 ) -> Result<AgentSession, String> {
     if legacy_id(&session_id)? {
-        ensure_legacy(&app, &session_id).await?;
-        return app
-            .state::<AgentState>()
-            .rename_session(&session_id, &title)
-            .await;
+        return historical_read_only();
     }
     let mut session: AgentSession = native(
         &app,
@@ -337,11 +275,7 @@ pub async fn set_agent_session_metadata(
     archived: Option<bool>,
 ) -> Result<AgentSession, String> {
     if legacy_id(&session_id)? {
-        ensure_legacy(&app, &session_id).await?;
-        return app
-            .state::<AgentState>()
-            .session_metadata(&session_id, pinned, archived)
-            .await;
+        return historical_read_only();
     }
     let mut session: AgentSession = native(
         &app,
@@ -367,8 +301,7 @@ pub async fn set_agent_session_metadata(
 #[tauri::command(rename_all = "camelCase")]
 pub async fn delete_agent_session(app: AppHandle, session_id: String) -> Result<(), String> {
     if legacy_id(&session_id)? {
-        ensure_legacy(&app, &session_id).await?;
-        return app.state::<AgentState>().delete_session(&session_id).await;
+        return historical_read_only();
     }
     native(&app, "deleteSession", json!({"sessionId":session_id}), true).await
 }
@@ -378,8 +311,18 @@ pub async fn get_agent_session(
     session_id: String,
 ) -> Result<AgentSnapshot, String> {
     if legacy_id(&session_id)? {
-        ensure_legacy(&app, &session_id).await?;
-        return app.state::<AgentState>().snapshot(&session_id).await;
+        if session_id.starts_with("zc:") {
+            return Err(
+                "旧 ZCode 会话数据已保留，历史读取尚未迁入本体；请新建本体会话继续。".into(),
+            );
+        }
+        let id = session_id.clone();
+        let mut snapshot =
+            tokio::task::spawn_blocking(move || agent_history::legacy_snapshot(&old_root(), &id))
+                .await
+                .map_err(|_| "旧会话只读加载未完成")??;
+        decorate(&app, &mut snapshot.session)?;
+        return Ok(snapshot);
     }
     let mut snapshot: AgentSnapshot =
         native(&app, "getSession", json!({"sessionId":session_id}), false).await?;
@@ -400,11 +343,7 @@ pub async fn send_agent_message(
         return Err("请输入不超过 1MiB 的任务内容".into());
     }
     if legacy_id(&session_id)? {
-        ensure_legacy(&app, &session_id).await?;
-        return app
-            .state::<AgentState>()
-            .send(&session_id, &text, &request_id)
-            .await;
+        return historical_read_only();
     }
     native(
         &app,
@@ -415,7 +354,10 @@ pub async fn send_agent_message(
     .await
 }
 fn command_receipt(value: &Value, session_id: &str, request_id: &str) -> Value {
-    let native_id = session_id.strip_prefix("zc:").unwrap_or(session_id);
+    let native_id = session_id
+        .strip_prefix("lc:")
+        .or_else(|| session_id.strip_prefix("zc:"))
+        .unwrap_or(session_id);
     let item = value["results"].as_array().and_then(|items| {
         items.iter().find(|item| {
             item["key"]["commandId"].as_str() == Some(request_id)
@@ -448,7 +390,7 @@ pub async fn query_agent_command(
     request_id: String,
 ) -> Result<Value, String> {
     if legacy_id(&session_id)? {
-        return Ok(json!({"status":"unknown"}));
+        return Ok(json!({"status":"rejected","message":"旧会话只读，请新建本体会话继续"}));
     }
     let result: Value = native(
         &app,
@@ -462,8 +404,7 @@ pub async fn query_agent_command(
 #[tauri::command(rename_all = "camelCase")]
 pub async fn interrupt_agent_session(app: AppHandle, session_id: String) -> Result<(), String> {
     if legacy_id(&session_id)? {
-        ensure_legacy(&app, &session_id).await?;
-        return app.state::<AgentState>().interrupt(&session_id).await;
+        return historical_read_only();
     }
     native(
         &app,
@@ -481,11 +422,7 @@ pub async fn reply_agent_permission(
     decision: String,
 ) -> Result<(), String> {
     if legacy_id(&session_id)? {
-        ensure_legacy(&app, &session_id).await?;
-        return app
-            .state::<AgentState>()
-            .permission(&session_id, &request_id, &decision)
-            .await;
+        return historical_read_only();
     }
     native(
         &app,
@@ -503,11 +440,7 @@ pub async fn reply_agent_question(
     answer: Value,
 ) -> Result<(), String> {
     if legacy_id(&session_id)? {
-        ensure_legacy(&app, &session_id).await?;
-        return app
-            .state::<AgentState>()
-            .question(&session_id, &request_id, &answer)
-            .await;
+        return historical_read_only();
     }
     native(
         &app,
@@ -524,11 +457,7 @@ pub async fn reject_agent_question(
     request_id: String,
 ) -> Result<(), String> {
     if legacy_id(&session_id)? {
-        ensure_legacy(&app, &session_id).await?;
-        return app
-            .state::<AgentState>()
-            .reject_question(&session_id, &request_id)
-            .await;
+        return historical_read_only();
     }
     native(
         &app,
@@ -540,12 +469,7 @@ pub async fn reject_agent_question(
 }
 #[tauri::command]
 pub async fn close_agent_project(app: AppHandle) -> Result<(), String> {
-    let legacy = app.state::<AgentState>();
-    let _legacy_lease = legacy.acquire_idle_for_update().await?;
-    if native_default(&app) {
-        app.state::<ZcodeAgentState>().close_project().await?;
-    }
-    legacy.shutdown().await
+    app.state::<InprocessAgentState>().close_project().await
 }
 
 #[tauri::command]
@@ -562,7 +486,7 @@ pub async fn run_agent_saved_workflow(
     args: Value,
 ) -> Result<AgentSession, String> {
     if legacy_id(&session_id)? {
-        return Err("工作流需要新的 ZCode 会话，请新建会话后运行".into());
+        return Err("工作流需要本体会话，请新建会话后运行".into());
     }
     if !matches!(scope.as_str(), "project" | "global")
         || name.trim().is_empty()
@@ -630,11 +554,7 @@ pub async fn invoke_agent_remote(
 
 #[tauri::command]
 pub async fn get_agent_extensions(app: AppHandle) -> Result<Value, String> {
-    if native_default(&app) {
-        native(&app, "getExtensions", json!({}), false).await
-    } else {
-        super::agent_extensions::get_agent_extensions(app.clone(), app.state::<AgentState>()).await
-    }
+    native(&app, "getExtensions", json!({}), false).await
 }
 #[tauri::command]
 pub async fn set_agent_skill_enabled(
@@ -642,50 +562,25 @@ pub async fn set_agent_skill_enabled(
     id: String,
     enabled: bool,
 ) -> Result<Value, String> {
-    if native_default(&app) {
-        native(
-            &app,
-            "setSkillEnabled",
-            json!({"id":id,"enabled":enabled}),
-            true,
-        )
-        .await
-    } else {
-        super::agent_extensions::set_agent_skill_enabled(
-            app.clone(),
-            app.state::<AgentState>(),
-            id,
-            enabled,
-        )
-        .await
-    }
+    native(
+        &app,
+        "setSkillEnabled",
+        json!({"id":id,"enabled":enabled}),
+        true,
+    )
+    .await
 }
 #[tauri::command]
 pub async fn import_agent_skill(app: AppHandle, path: String) -> Result<Value, String> {
-    if native_default(&app) {
-        native(&app, "importSkill", json!({"path":path}), true).await
-    } else {
-        super::agent_extensions::import_agent_skill(app.clone(), app.state::<AgentState>(), path)
-            .await
-    }
+    native(&app, "importSkill", json!({"path":path}), true).await
 }
 #[tauri::command]
 pub async fn remove_agent_skill(app: AppHandle, id: String) -> Result<Value, String> {
-    if native_default(&app) {
-        native(&app, "removeSkill", json!({"id":id}), true).await
-    } else {
-        super::agent_extensions::remove_agent_skill(app.clone(), app.state::<AgentState>(), id)
-            .await
-    }
+    native(&app, "removeSkill", json!({"id":id}), true).await
 }
 #[tauri::command]
 pub async fn install_agent_plugin(app: AppHandle, path: String) -> Result<Value, String> {
-    if native_default(&app) {
-        native(&app, "installPlugin", json!({"path":path}), true).await
-    } else {
-        super::agent_extensions::install_agent_plugin(app.clone(), app.state::<AgentState>(), path)
-            .await
-    }
+    native(&app, "installPlugin", json!({"path":path}), true).await
 }
 #[tauri::command]
 pub async fn set_agent_plugin_enabled(
@@ -693,60 +588,25 @@ pub async fn set_agent_plugin_enabled(
     id: String,
     enabled: bool,
 ) -> Result<Value, String> {
-    if native_default(&app) {
-        native(
-            &app,
-            "setPluginEnabled",
-            json!({"id":id,"enabled":enabled}),
-            true,
-        )
-        .await
-    } else {
-        super::agent_extensions::set_agent_plugin_enabled(
-            app.clone(),
-            app.state::<AgentState>(),
-            id,
-            enabled,
-        )
-        .await
-    }
+    native(
+        &app,
+        "setPluginEnabled",
+        json!({"id":id,"enabled":enabled}),
+        true,
+    )
+    .await
 }
 #[tauri::command]
 pub async fn uninstall_agent_plugin(app: AppHandle, id: String) -> Result<Value, String> {
-    if native_default(&app) {
-        native(&app, "uninstallPlugin", json!({"id":id}), true).await
-    } else {
-        super::agent_extensions::uninstall_agent_plugin(app.clone(), app.state::<AgentState>(), id)
-            .await
-    }
+    native(&app, "uninstallPlugin", json!({"id":id}), true).await
 }
 #[tauri::command]
 pub async fn get_agent_extension_config(app: AppHandle) -> Result<Value, String> {
-    if native_default(&app) {
-        native(&app, "getExtensionConfig", json!({}), false).await
-    } else {
-        serde_json::to_value(
-            super::agent_extensions::get_agent_extension_config(
-                app.clone(),
-                app.state::<AgentState>(),
-            )
-            .await?,
-        )
-        .map_err(|_| "扩展配置无法编码".into())
-    }
+    native(&app, "getExtensionConfig", json!({}), false).await
 }
 #[tauri::command]
 pub async fn save_agent_extension_config(app: AppHandle, config: Value) -> Result<Value, String> {
-    if native_default(&app) {
-        native(&app, "saveExtensionConfig", json!({"config":config}), true).await
-    } else {
-        super::agent_extensions::save_agent_extension_config(
-            app.clone(),
-            app.state::<AgentState>(),
-            serde_json::from_value(config).map_err(|_| "旧引擎扩展配置格式不兼容")?,
-        )
-        .await
-    }
+    native(&app, "saveExtensionConfig", json!({"config":config}), true).await
 }
 
 #[cfg(test)]
@@ -776,7 +636,12 @@ mod tests {
             "unknown"
         );
         assert!(legacy_id("ses_old").unwrap());
-        assert!(!legacy_id("zc:owned").unwrap());
+        assert!(legacy_id("zc:owned").unwrap());
+        assert!(!legacy_id("lc:owned").unwrap());
+        assert_eq!(
+            command_receipt(&receipt, "lc:owned", "msg_exact")["status"],
+            "rejected"
+        );
         assert!(legacy_id("unknown").is_err());
     }
 }

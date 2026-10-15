@@ -637,6 +637,58 @@ describe("AgentExtensionsPanel", () => {
     expect(useSkill).toHaveBeenCalledWith(catalog.skills[0]);
     expect(agentApi.setSkillEnabled).not.toHaveBeenCalled();
   });
+  it("offers verified on-demand skills without claiming their bodies are already loaded", async () => {
+    const useSkill = vi.fn();
+    vi.mocked(agentApi.getExtensions).mockResolvedValue({
+      ...catalog,
+      skills: [
+        { ...catalog.skills[0], loaded: false, runtimeStatus: "available" },
+      ],
+    });
+    render(
+      <AgentExtensionsPanel
+        open
+        working={false}
+        onOpenChange={changeOpen}
+        onReload={reload}
+        onUseSkill={useSkill}
+      />,
+    );
+    await flush();
+    expect(screen.getByText(/按需可用/)).toBeInTheDocument();
+    expect(screen.queryByText(/已载入/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "在会话中使用" }));
+    expect(useSkill).toHaveBeenCalledWith(
+      expect.objectContaining({ loaded: false, runtimeStatus: "available" }),
+    );
+  });
+  it("shows the real reason a bounded skill could not be made available", async () => {
+    vi.mocked(agentApi.getExtensions).mockResolvedValue({
+      ...catalog,
+      skills: [
+        {
+          ...catalog.skills[0],
+          loaded: false,
+          runtimeStatus: "failed",
+          error: "技能正文超过单文件读取上限",
+        },
+      ],
+    });
+    render(
+      <AgentExtensionsPanel
+        open
+        working={false}
+        onOpenChange={changeOpen}
+        onReload={reload}
+        onUseSkill={vi.fn()}
+      />,
+    );
+    await flush();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "技能正文超过单文件读取上限",
+    );
+    expect(screen.getByRole("button", { name: "在会话中使用" })).toBeDisabled();
+  });
   it("installs an actual native-selected plugin path and does not invent marketplace entries", async () => {
     render(
       <AgentExtensionsPanel

@@ -18,6 +18,7 @@ const OWNER: &str = "LoliCode agent extensions v1\n";
 const HIDDEN: &str = "[hidden]";
 const MAX_FILES: usize = 512;
 const MAX_BYTES: u64 = 16 * 1024 * 1024;
+#[cfg(any(test, feature = "test-hooks"))]
 const PROJECTION_VERSION: &[u8] = b"LoliCode extension projection 2: directory plugin wrappers";
 
 #[derive(Clone, Debug, Serialize)]
@@ -831,6 +832,7 @@ impl AgentExtensionStore {
     }
     /// Build an immutable, engine-owned mount. Caller restarts only its idle
     /// private engine; active sessions keep their already-mounted revision.
+    #[cfg(any(test, feature = "test-hooks"))]
     pub fn project_runtime(
         &self,
         private_root: &Path,

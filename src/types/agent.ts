@@ -13,6 +13,11 @@ export interface AgentEngineStatus {
   running: boolean;
   projectPath?: string | null;
 }
+export interface AgentNativeActivity {
+  engine?: string;
+  inProcess?: boolean;
+  features?: { workflows?: boolean; automation?: boolean; remote?: boolean };
+}
 
 export interface AgentModel {
   /** Opaque engine model identity. Do not split it into route segments. */
@@ -149,6 +154,7 @@ export interface AgentProjectResult {
   workspace: AgentWorkspace;
   catalog: AgentCatalog;
   sessions: AgentSession[];
+  warnings?: string[];
 }
 
 export type AgentPermissionDecision = "once" | "always" | "reject";
@@ -166,6 +172,7 @@ export interface AgentSkill {
   loaded?: boolean | null;
   runtimeStatus?: string;
   runtimeId?: string | null;
+  error?: string | null;
 }
 
 export interface AgentPlugin {

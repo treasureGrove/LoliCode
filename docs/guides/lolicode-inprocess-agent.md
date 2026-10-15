@@ -1,0 +1,22 @@
+# LoliCode 本体 Agent
+
+从 4.0.15 起，桌面默认入口使用 `crates/lolicode-agent/src/native` 的 `NativeEngine`。它是链接进主程序的 Rust 库，通过 Tokio 任务运行；没有独立 Agent 可执行文件、标准输出握手或 Node 载体。
+
+桌面职责分布：
+
+- `agent_dispatch` 保持渲染层 IPC 合同，并拒绝修改退役引擎会话。
+- `inprocess_agent` 管理应用生命周期、项目切换、更新时的空闲锁及技能同步。
+- `agent_host` 提供共享桌面数据合同和账户验证；`channel_center` 生成固定版本模型目录与私有网关绑定。
+- `native/engine` 管理任务、权限、问答、请求回执、取消和累计差异；`inference` 消费兼容 Chat Completions 的 JSON / SSE 回复。
+- `native/tools` 在项目边界内执行文件操作；只有终端工具启动系统命令。Windows 命令及后代进入独立 Job Object，取消或超时后回收；无法确认回收时停止接收新任务和更新。
+- `native/persistence` 原子保存本体会话。重启修复中断的消息协议，但绝不自动重放工具。
+- `inprocess_extensions` 校验和准备内容技能，正文由 `read_skill` 按需读取；JS 插件与 MCP 尚不执行。
+- `agent_history` 从只读副本读取旧 OpenCode 数据，保留源数据库及其 WAL / SHM；旧 ZCode 数据尚未接入历史读取。
+
+新会话 ID 为 `lc:<UUID>`。公共快照保留现有 `AgentSnapshot` 结构；完整文件基线、模型网关令牌与内部模型历史不通过公共 IPC 暴露。网关绑定仅允许应用内 `127.0.0.1` HTTP 地址，并禁用重定向和系统代理。上游 Key 留在渠道中心。
+
+后续工作流、调度器、远程项目和扩展执行应直接接入这套核心及现有权限、取消、回执和更新空闲检查。当前能力以核心 `capabilities` / `activity.features` 返回值为准；未迁入功能不会回退启动旧引擎。
+
+默认构建只执行 `prepare:agent-assets` 并打包校验后的技能及许可证内容。保留的旧引擎源码和手动准备脚本用于历史参考与专门测试，不是默认发行版的运行依赖。
+
+主程序提供隔离自检 `--check-agent-runtime`：在包含中文和空格的临时项目中走本机模型夹具、真实文件读写、工具续接和重启恢复，验证默认内容资源。该路径在桌面初始化之前执行，不读取用户设置、不启动引擎进程、也不消费上游额度。

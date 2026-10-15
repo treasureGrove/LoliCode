@@ -588,6 +588,90 @@ pub fn legacy_sessions(root: &Path, project: Option<&str>) -> Result<Vec<AgentSe
     Ok(sessions)
 }
 
+/// Explicit, isolated packaging gate. Credentials are input-only and no arbitrary
+/// RPC or native authentication storage is exposed through this test-only API.
+#[cfg(feature = "test-hooks")]
+pub struct CarrierProbeProject {
+    pub path: PathBuf,
+    pub catalog: AgentCatalog,
+    pub gateway_base_url: String,
+    pub gateway_token: String,
+}
+
+#[cfg(feature = "test-hooks")]
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CarrierProbeReport {
+    pub available: bool,
+    pub version: Option<String>,
+    pub startup_authenticated: bool,
+    pub project_opened: bool,
+    pub project_path: Option<String>,
+    pub catalog_revision: Option<u64>,
+    pub worker_pid: Option<u32>,
+    pub shutdown_completed: bool,
+}
+
+#[cfg(feature = "test-hooks")]
+pub async fn probe_native_carrier(
+    runtime_dir: &Path,
+    private_root: &Path,
+    project: Option<CarrierProbeProject>,
+) -> Result<CarrierProbeReport, String> {
+    let executable = if cfg!(windows) { "node.exe" } else { "node" };
+    let worker = NativeWorker::spawn(
+        &runtime_dir.join(executable),
+        &runtime_dir.join("worker.cjs"),
+        private_root,
+    )
+    .await?;
+    let pid = worker.child.lock().await.as_ref().and_then(Child::id);
+    let result = async {
+        let status: AgentRuntimeStatus = worker.call("status", json!({})).await?;
+        let mut report = CarrierProbeReport {
+            available: status.available,
+            version: status.version,
+            startup_authenticated: true,
+            project_opened: false,
+            project_path: None,
+            catalog_revision: None,
+            worker_pid: pid,
+            shutdown_completed: false,
+        };
+        if let Some(project) = project {
+            let canonical = canonical_project(&project.path.to_string_lossy())?;
+            worker.secrets.lock().await.extend([
+                project.gateway_base_url.clone(),
+                project.gateway_token.clone(),
+            ]);
+            let opened: AgentOpenProject = worker
+                .call(
+                    "openProject",
+                    json!({"path":canonical,"catalog":project.catalog,"gateway":{"baseUrl":project.gateway_base_url,"bearerToken":project.gateway_token}}),
+                )
+                .await?;
+            if preferences::path_key(&opened.workspace.path)
+                != preferences::path_key(&canonical.to_string_lossy())
+            {
+                return Err("ZCode 测试返回的项目与指定临时目录不一致".into());
+            }
+            report.project_opened = true;
+            report.project_path = Some(opened.workspace.path);
+            report.catalog_revision = Some(opened.catalog.revision);
+        }
+        Ok(report)
+    }
+    .await;
+    let cleanup = worker.shutdown().await;
+    match (result, cleanup) {
+        (Ok(mut report), Ok(())) => {
+            report.shutdown_completed = true;
+            Ok(report)
+        }
+        (Err(error), _) | (_, Err(error)) => Err(error),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

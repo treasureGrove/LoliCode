@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 rust-version = "1.85"
 license = "MIT"
-description = "UI-independent Lolicode session adapter for a pinned OpenCode engine"
+description = "In-process LoliCode Rust coding core and legacy session DTO adapters"
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }

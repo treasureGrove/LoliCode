@@ -1,5 +1,9 @@
+#[cfg(any(test, feature = "test-hooks"))]
 pub mod agent;
 pub mod agent_extensions;
+pub mod agent_history;
+pub mod agent_host;
+#[cfg(any(test, feature = "test-hooks"))]
 pub mod agent_policy;
 pub mod agent_preferences;
 pub mod backup_storage;
@@ -12,6 +16,11 @@ pub mod coding_plan;
 pub mod config;
 pub mod env_checker;
 pub mod env_manager;
+pub mod inprocess_agent;
+#[cfg(test)]
+mod inprocess_binding_tests;
+pub mod inprocess_diagnostics;
+pub mod inprocess_extensions;
 pub mod mcp;
 pub mod model_fetch;
 pub mod model_pricing;
@@ -43,6 +52,7 @@ pub mod usage_stats;
 pub mod webdav;
 pub mod webdav_auto_sync;
 pub mod webdav_sync;
+#[cfg(any(test, feature = "test-hooks"))]
 pub mod zcode_agent;
 pub mod zhipu_login;
 

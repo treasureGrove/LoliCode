@@ -14,6 +14,7 @@ import { WindowControlsContext } from "@/components/shell/AppPageHeader";
 
 vi.mock("@/lib/api/agent", () => ({
   agentApi: {
+    getNativeActivity: vi.fn(),
     native: vi.fn(),
     automation: vi.fn(),
     remote: vi.fn(),
@@ -84,6 +85,7 @@ beforeEach(() => {
   sessionStorage.clear();
   onSession.mockReset();
   onCompose.mockReset();
+  vi.mocked(agentApi.getNativeActivity).mockReset().mockResolvedValue({});
   vi.mocked(agentApi.native)
     .mockReset()
     .mockImplementation(async (_service, method) => {
@@ -131,6 +133,81 @@ afterEach(() => {
 });
 
 describe("native workflow / automation / remote entry", () => {
+  it("does not contact unavailable migrated services while reading or after receiving in-process features", async () => {
+    let finish!: (value: {
+      inProcess: boolean;
+      features: { workflows: boolean; automation: boolean; remote: boolean };
+    }) => void;
+    vi.mocked(agentApi.getNativeActivity).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    render(<AgentOperationsPanel {...props()} />);
+    await flush();
+    expect(screen.getByText(/正在读取当前引擎/)).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "工作流" })).toBeDisabled();
+    expect(agentApi.native).not.toHaveBeenCalled();
+    expect(agentApi.automation).not.toHaveBeenCalled();
+    expect(agentApi.remote).not.toHaveBeenCalled();
+    await act(async () =>
+      finish({
+        inProcess: true,
+        features: { workflows: false, automation: false, remote: false },
+      }),
+    );
+    await flush();
+    expect(screen.getByText(/当前不会启动旧的 ZCode 服务/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: "SSH / WSL" }));
+    expect(agentApi.native).not.toHaveBeenCalled();
+    expect(agentApi.automation).not.toHaveBeenCalled();
+    expect(agentApi.remote).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "返回工作台" })).toBeEnabled();
+  });
+  it("fails closed for unknown in-process features and ignores a prior dialog capability reply", async () => {
+    let old!: (value: {}) => void;
+    vi.mocked(agentApi.getNativeActivity)
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            old = resolve;
+          }),
+      )
+      .mockResolvedValueOnce({ inProcess: true });
+    const options = props();
+    const view = render(<AgentOperationsPanel {...options} />);
+    await flush();
+    view.rerender(<AgentOperationsPanel {...options} open={false} />);
+    await flush();
+    view.rerender(<AgentOperationsPanel {...options} open />);
+    await flush();
+    await act(async () => old({}));
+    await flush();
+    expect(screen.getByRole("tab", { name: "工作流" })).toBeDisabled();
+    expect(agentApi.native).not.toHaveBeenCalled();
+  });
+  it("retries capability failures and requests only explicitly supported advanced features", async () => {
+    vi.mocked(agentApi.getNativeActivity)
+      .mockRejectedValueOnce(new Error("状态暂时不可读"))
+      .mockResolvedValueOnce({
+        inProcess: true,
+        features: { workflows: false, automation: true, remote: false },
+      });
+    render(<AgentOperationsPanel {...props()} />);
+    await flush();
+    expect(screen.getByRole("alert")).toHaveTextContent("状态暂时不可读");
+    expect(agentApi.native).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "重新读取可用功能" }));
+    await flush();
+    fireEvent.click(screen.getByRole("tab", { name: "自动化" }));
+    await flush();
+    expect(agentApi.automation).toHaveBeenCalledWith("list", [
+      { workspacePath: project },
+    ]);
+    expect(agentApi.native).not.toHaveBeenCalled();
+    expect(agentApi.remote).not.toHaveBeenCalled();
+  });
   it("loads real workflow catalog and hands creation intent back to the existing composer", async () => {
     render(<AgentOperationsPanel {...props()} />);
     await flush();
