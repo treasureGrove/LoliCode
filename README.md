@@ -2,7 +2,9 @@
 
 [简体中文](README_ZH.md) · [日本語](README_JA.md) · [Deutsch](README_DE.md)
 
-LoliCode is a desktop agent workspace with shared model channels and visual configuration. Use one place to manage model access, work on local projects, review tool activity, and inspect generated files and code changes.
+**A simple, extensible anime-girl Agent for work, creation, and companionship.**
+
+LoliCode combines a capable desktop Agent, shared model configuration, and an expanding set of business tools. Our product vision includes a distinctive anime character, persistent memory, Pet, voice, and expressive interaction; the current implementation and planned capabilities are listed separately below.
 
 This repository is maintained independently from CC Switch. Its configuration foundation originates from CC Switch; attribution and license notices are preserved.
 
@@ -22,20 +24,26 @@ These are implementation areas, not a claim that every feature has been validate
 
 ## Product direction
 
-The next architecture is **Electron + React + an owned TypeScript Host and agent kernel + the existing Rust native services**, with Windows, macOS, and Linux as desktop targets.
+**Simple to use. Highly extensible. An anime-girl Agent for work, creation, and companionship.**
 
-The intended experience is an application center:
+LoliCode centers on one capable Agent with a distinctive anime, moe, and petite character identity. The long-term experience brings together a coherent personality, persistent memory, an anime-inspired interface, a desktop Pet, voice, and character interaction. These are product goals, not a claim that all of them ship today.
 
-1. Add an application such as a coding assistant, general work assistant, Tavern, or UE workspace.
-2. Reuse an existing model channel and complete a short setup check.
-3. Start working with recommended defaults.
-4. Explore advanced model parameters, tools, Skills, MCP, and workflows when needed.
+The main Agent chat is always available. Applications do not create additional Agent chat windows. Users can add built-in business applications to a workspace, similar to adding applications in Feishu or DingTalk, then either open their business pages or let the shared Agent use their exposed tools. Third-party applications come later.
 
-Applications share agent and platform services while retaining their own domain rules. DSH, OpenCode, and ZCode inform agent capabilities; CC Switch informs configuration; selected UE Box and Tavern capabilities become functional modules.
+Getting started should take a few necessary choices: reuse a model account, choose a workspace, and start a conversation. Recommended defaults come first; native model options, tools, Skills, MCP, memory policies, and diagnostics remain available through advanced settings.
 
-This is an ongoing migration. The application-center workflow, new Host, Electron shell, Tavern, and UE capabilities must not be treated as shipped features. Whole upstream applications and DSH's plugin ecosystem are not the integration target.
+Agent capabilities draw on DSH, OpenCode, ZCode, and other mature implementations. Configuration builds on CC Switch. Hermes memory mechanisms, selected UE Box tools, and open-source Tavern implementations are integration candidates, adopted as capabilities and components rather than complete upstream programs.
 
-Read the [architecture and migration plan](docs/guides/lolicode-platform-architecture.md) and [capability/source ledger](docs/guides/lolicode-platform-capabilities.json).
+Implementation order:
+
+1. Prioritize the main Agent and its interactions: questions, direction choices, thinking state, tool progress, cancellation, and recovery.
+2. Integrate UE and Tavern as two built-in business applications.
+3. Complete the first acceptance milestone against real behavior and recovery cases.
+4. Unify the broader frontend visual system later; expand memory, Pet, voice, and character interactions through subsequent iterations.
+
+The target architecture remains **Electron + React + an owned TypeScript Host/Agent Kernel + existing Rust native services**, targeting Windows, macOS, and Linux. The current default is still Tauri with the native Rust Agent.
+
+Read the [product vision](docs/guides/lolicode-product-vision.md), [architecture and migration plan](docs/guides/lolicode-platform-architecture.md), and [capability/source ledger](docs/guides/lolicode-platform-capabilities.json). Proposed applications, memory providers, Pet, voice, and the new shell must not be presented as shipped features.
 
 ## Download
 
@@ -52,8 +60,8 @@ Requirements:
 - Rust and the platform build tools required by Tauri 2; see [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/).
 
 ~~~sh
-git clone https://github.com/treasureGrove/TAI-Switch.git
-cd TAI-Switch
+git clone https://github.com/treasureGrove/LoliCode.git
+cd LoliCode
 pnpm install --frozen-lockfile
 pnpm dev
 ~~~
@@ -93,11 +101,11 @@ The built desktop executable also supports --check-agent-runtime, an isolated lo
 - docs/guides/ — architecture, development, release notes, and delivery evidence.
 - third-party/ — retained upstream provenance and reference material.
 
-The repository directory keeps the historical TAI-Switch name. Default application data uses ~/.tai-switch; a portable build has its own documented data behavior. Do not point development or parallel application instances at the same production data directory.
+Existing local workspaces may retain the historical TAI-Switch directory name. Default application data uses ~/.tai-switch; a portable build has its own documented data behavior. Do not point development or parallel application instances at the same production data directory.
 
 ## Contributing
 
-Open an issue or pull request in [this repository](https://github.com/treasureGrove/TAI-Switch). Keep existing configuration fields and data compatible, describe the actual behavior change, and include relevant validation.
+Open an issue or pull request in [this repository](https://github.com/treasureGrove/LoliCode). Keep existing configuration fields and data compatible, describe the actual behavior change, and include relevant validation.
 
 New integrations should identify the capability, owning module, execution target, source revision, and license impact. Preserve provider-specific model capabilities rather than flattening every model into a text-only interface.
 
@@ -105,6 +113,6 @@ New integrations should identify the capability, owning module, execution target
 
 The repository retains the [MIT license](LICENSE). Its CC Switch baseline is pinned to farion1231/cc-switch at 479964f2ef59e291f563218ac674a1fd82dcdbd3; see [FORK_BASELINE.md](FORK_BASELINE.md).
 
-Research and selected integration candidates include [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness), [OpenCode](https://github.com/anomalyco/opencode), [ZCode](https://github.com/zai-org/ZCode), [UE Box](https://github.com/ueboxai/uebox), and [SillyTavern](https://github.com/SillyTavern/SillyTavern). Mentioning a project does not mean its code or complete application is included.
+Research and selected integration candidates include [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness), [OpenCode](https://github.com/anomalyco/opencode), [ZCode](https://github.com/zai-org/ZCode), [UE Box](https://github.com/ueboxai/uebox), [Hermes Agent](https://github.com/NousResearch/hermes-agent), and [SillyTavern](https://github.com/SillyTavern/SillyTavern). Mentioning a project does not mean its code or complete application is included.
 
 Reused code retains its applicable notices and license obligations. Future source adoption and the product's licensing decision are tracked separately in the capability/source ledger.

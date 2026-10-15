@@ -2,7 +2,9 @@
 
 [English](README.md) · [日本語](README_JA.md) · [Deutsch](README_DE.md)
 
-LoliCode 是一个共享模型渠道的桌面智能体工作台。它把模型接入、可视化配置、本地项目任务、工具执行和结果检查放在同一个应用中。
+**简单易用，扩展性强的二次元美少女多功能 Agent。**
+
+LoliCode 希望让一位有鲜明人设的美少女 Agent，陪你交流、工作与创作。产品将逐步结合强大的工具能力、持久记忆、二次元界面、Pet、语音和角色互动；下文分别列出当前实现与后续目标。
 
 本仓库独立维护，配置底座源自 CC Switch，保留原项目来源与许可声明。
 
@@ -20,22 +22,28 @@ LoliCode 是一个共享模型渠道的桌面智能体工作台。它把模型�
 
 以上描述实现范围，不代表所有功能都已在所有操作系统、模型上完成验收。当前行为见[本体 Agent 说明](docs/guides/lolicode-inprocess-agent.md)，已发布版本的证据见[4.0.15 交付记录](docs/guides/lolicode-4.0.15-delivery.md)。
 
-## 我们要做成什么
+## 产品方向
 
-目标架构是 **Electron＋React＋自有 TypeScript 后台与 Agent 内核＋保留现有 Rust 原生服务**，面向 Windows、macOS、Linux 桌面。
+**简单易用，扩展性强的二次元美少女多功能 Agent。**
 
-产品入口采用应用中心：
+LoliCode 的主角是一位能工作、能创作、能交流陪伴的 Agent，以鲜明的二次元、萌系美少女与萝莉风形象为特色。长期方向包含稳定人设、持久记忆、二次元 UI、桌面 Pet、语音和角色互动。这些属于产品目标，不代表已经全部实现。
 
-1. 添加需要的应用，例如编程助手、通用工作助手、酒馆或 UE 工作台。
-2. 复用已有模型渠道，完成简短的配置检查。
-3. 使用推荐默认值开始任务。
-4. 有需要时，再展开模型参数、工具、Skills、MCP 和工作流等高级能力。
+主 Agent 对话入口始终只有一个，直接可用。业务应用像飞书、钉钉中的应用一样按需添加到“我的应用”，可以打开各自工作区，也可以由主 Agent 调用其工具；添加应用不会增加另一套 Agent 聊天窗口。先做内置应用，第三方接入后置。
 
-Agent 综合参考 DSH、OpenCode、ZCode；配置延续 CC Switch 的成熟方案；UE Box、酒馆及后续项目按具体功能接入自有模块。应用共用底层服务，各自保留领域规则。
+简单易用意味着少量必要配置即可开始：复用模型账户、选择工作位置、直接对话。默认提供推荐配置；模型原生参数、工具、Skills、MCP、记忆策略和诊断等高级能力保留，按需探索。
 
-**这部分正在迁移规划中。应用中心的新使用流程、TypeScript Host、Electron 桌面壳、酒馆和 UE 能力尚不能作为已交付功能。** 接入单位是功能和组件，不是整套上游程序，也不追求兼容 DSH 插件生态。
+扩展性强意味着持续吸收其他 Agent 的成熟功能：Agent 综合参考 DSH、OpenCode、ZCode，配置延续 CC Switch；Hermes 的记忆机制、UE Box 的工具和开源酒馆实现按能力与组件逐步接入，不捆绑整套上游程序。
 
-详细范围见[架构与迁移方案](docs/guides/lolicode-platform-architecture.md)和[功能、来源与许可清单](docs/guides/lolicode-platform-capabilities.json)。
+当前迭代顺序：
+
+1. 优先主线 Agent 及其交互：回答问题、方向选择、思考状态、工具进度、取消与恢复。
+2. 接入 UE 与酒馆两个内置业务应用。
+3. 按真实任务、交互行为和恢复用例完成第一期验收。
+4. 全局前端视觉后续统一处理；记忆、Pet、语音与角色互动持续迭代。
+
+目标架构仍为 **Electron＋React＋自有 TypeScript 后台与 Agent 内核＋保留现有 Rust 原生服务**，面向 Windows、macOS、Linux。当前默认发行仍使用 Tauri 与原生 Rust Agent。
+
+详细范围见[产品方向](docs/guides/lolicode-product-vision.md)、[架构与迁移方案](docs/guides/lolicode-platform-architecture.md)和[功能、来源与许可清单](docs/guides/lolicode-platform-capabilities.json)。规划中的应用、记忆提供者、Pet、语音和新桌面壳不作为当前已交付功能宣传。
 
 ## 下载
 
@@ -52,8 +60,8 @@ CC Switch 上游的发布链接与安装包属于原项目，不是 LoliCode 下
 - Rust 及对应平台的 Tauri 2 构建工具，见 [Tauri 环境要求](https://v2.tauri.app/start/prerequisites/)。
 
 ~~~sh
-git clone https://github.com/treasureGrove/TAI-Switch.git
-cd TAI-Switch
+git clone https://github.com/treasureGrove/LoliCode.git
+cd LoliCode
 pnpm install --frozen-lockfile
 pnpm dev
 ~~~
@@ -93,11 +101,11 @@ cargo test --manifest-path src-tauri/Cargo.toml --lib
 - docs/guides/：架构、开发、发布和交付证据。
 - third-party/：保留的上游来源及参考资料。
 
-仓库目录沿用历史名称 TAI-Switch。默认应用数据目录为 ~/.tai-switch，便携版按对应说明保存数据。开发实例和并行应用实例不要共用生产数据目录。
+已有本地工作区可能仍沿用历史目录名 TAI-Switch。默认应用数据目录为 ~/.tai-switch，便携版按对应说明保存数据。开发实例和并行应用实例不要共用生产数据目录。
 
 ## 参与开发
 
-问题与改进建议请提交到[本仓库](https://github.com/treasureGrove/TAI-Switch)。改动需保留已有配置字段和数据兼容性，说明实际行为变化，并提供对应验证。
+问题与改进建议请提交到[本仓库](https://github.com/treasureGrove/LoliCode)。改动需保留已有配置字段和数据兼容性，说明实际行为变化，并提供对应验证。
 
 新增接入需写清功能、所属模块、执行目标、源码版本与许可影响。模型原生参数、多模态和工具调用语义应保留，不为统一界面削减能力。
 
@@ -105,6 +113,6 @@ cargo test --manifest-path src-tauri/Cargo.toml --lib
 
 仓库保留 [MIT 许可证](LICENSE)。配置底座来自 farion1231/cc-switch 的 479964f2ef59e291f563218ac674a1fd82dcdbd3 快照，详细来源见 [FORK_BASELINE.md](FORK_BASELINE.md)。
 
-研究与候选接入项目包括 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)、[OpenCode](https://github.com/anomalyco/opencode)、[ZCode](https://github.com/zai-org/ZCode)、[UE Box](https://github.com/ueboxai/uebox) 和 [SillyTavern](https://github.com/SillyTavern/SillyTavern)。提及某个项目不代表已经包含其源码或完整程序。
+研究与候选接入项目包括 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)、[OpenCode](https://github.com/anomalyco/opencode)、[ZCode](https://github.com/zai-org/ZCode)、[UE Box](https://github.com/ueboxai/uebox)、[Hermes Agent](https://github.com/NousResearch/hermes-agent) 和 [SillyTavern](https://github.com/SillyTavern/SillyTavern)。提及某个项目不代表已经包含其源码或完整程序。
 
 复用代码保留适用的版权、许可与 NOTICE。后续采用哪些源码以及产品许可如何安排，分别记录在功能与来源清单中。
