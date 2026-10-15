@@ -20,6 +20,149 @@ async function flush() {
 }
 
 describe("AgentQuestionCard", () => {
+  it("shows direction descriptions before selection and does not submit a default by itself", async () => {
+    const reply = vi.fn().mockResolvedValue(undefined);
+    render(
+      <AgentQuestionCard
+        question={question([
+          {
+            key: "direction",
+            type: "string",
+            title: "实现方向",
+            required: true,
+            default: "small",
+            options: [
+              {
+                value: "small",
+                label: "逐步迁移",
+                description: "保留现有功能，每步都能验证。",
+              },
+            ],
+          },
+        ])}
+        onReply={reply}
+        onReject={vi.fn()}
+      />,
+    );
+    const option = screen.getByRole("button", { name: "逐步迁移" });
+    expect(screen.getByText("保留现有功能，每步都能验证。")).toBeVisible();
+    expect(option).toHaveAccessibleDescription("保留现有功能，每步都能验证。");
+    expect(option).toHaveAttribute("aria-pressed", "true");
+    await flush();
+    expect(reply).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "提交答案" }));
+    await flush();
+    expect(reply).toHaveBeenCalledWith({ direction: "small" });
+  });
+
+  it("does not send another answer or rejection after acknowledgement while a stale question is still displayed", async () => {
+    const reply = vi.fn().mockResolvedValue(undefined);
+    const reject = vi.fn().mockResolvedValue(undefined);
+    render(
+      <AgentQuestionCard
+        question={question([
+          {
+            key: "answer",
+            type: "string",
+            title: "你的回答",
+            default: "继续",
+          },
+        ])}
+        onReply={reply}
+        onReject={reject}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "提交答案" }));
+    await flush();
+    expect(screen.getByText("答案已提交，等待 Agent 继续。")).toBeVisible();
+    expect(screen.getByLabelText("你的回答")).toBeDisabled();
+    fireEvent.submit(screen.getByRole("form", { name: "选择实现方式" }));
+    fireEvent.click(screen.getByRole("button", { name: "取消这次问题" }));
+    await flush();
+    expect(reply).toHaveBeenCalledTimes(1);
+    expect(reject).not.toHaveBeenCalled();
+  });
+
+  it("scopes drafts and in-flight acknowledgements to both the session and question identity", async () => {
+    let acknowledge: () => void = () => {};
+    const firstReply = vi.fn().mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          acknowledge = resolve;
+        }),
+    );
+    const nextReply = vi.fn().mockResolvedValue(undefined);
+    const first = question([
+      { key: "answer", type: "string", title: "你的回答", default: "旧答案" },
+    ]);
+    const view = render(
+      <AgentQuestionCard
+        question={first}
+        onReply={firstReply}
+        onReject={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "提交答案" }));
+    view.rerender(
+      <AgentQuestionCard
+        question={{
+          ...first,
+          sessionId: "another-session",
+          fields: [
+            {
+              key: "answer",
+              type: "string",
+              title: "你的回答",
+              default: "新答案",
+            },
+          ],
+        }}
+        onReply={nextReply}
+        onReject={vi.fn()}
+      />,
+    );
+    expect(screen.getByLabelText("你的回答")).toHaveValue("新答案");
+    await act(async () => acknowledge());
+    expect(screen.getByRole("button", { name: "提交答案" })).toBeEnabled();
+    expect(
+      screen.queryByText("答案已提交，等待 Agent 继续。"),
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "提交答案" }));
+    await flush();
+    expect(nextReply).toHaveBeenCalledWith({ answer: "新答案" });
+  });
+
+  it("requires meaningful text and keeps a cancelled question locked after acknowledgement", async () => {
+    const reply = vi.fn().mockResolvedValue(undefined);
+    const reject = vi.fn().mockResolvedValue(undefined);
+    render(
+      <AgentQuestionCard
+        question={question([
+          {
+            key: "answer",
+            type: "string",
+            title: "你的回答",
+            required: true,
+          },
+        ])}
+        onReply={reply}
+        onReject={reject}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText("你的回答", { exact: false }), {
+      target: { value: "   " },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "提交答案" }));
+    expect(reply).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toHaveTextContent("请填写你的回答。");
+    fireEvent.click(screen.getByRole("button", { name: "取消这次问题" }));
+    await flush();
+    expect(screen.getByText("已取消这次问题，等待 Agent 继续。")).toBeVisible();
+    fireEvent.submit(screen.getByRole("form", { name: "选择实现方式" }));
+    expect(reply).not.toHaveBeenCalled();
+    expect(reject).toHaveBeenCalledTimes(1);
+  });
+
   it("sends selected options, custom answers and multiselect values as real structured answers", async () => {
     const reply = vi.fn().mockResolvedValue(undefined);
     render(

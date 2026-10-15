@@ -16,6 +16,47 @@ const permission = (
 });
 
 describe("AgentPermissionCard native previews", () => {
+  it("does not allow another decision after the backend acknowledges it", async () => {
+    const reply = vi.fn().mockResolvedValue(undefined);
+    render(<AgentPermissionCard request={permission()} onReply={reply} />);
+    await act(async () =>
+      fireEvent.click(screen.getByRole("button", { name: "允许一次" })),
+    );
+    expect(screen.getByText("已提交处理结果，等待 Agent 继续。")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "拒绝" }));
+    fireEvent.click(screen.getByRole("button", { name: "允许一次" }));
+    expect(reply).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "拒绝" })).toBeDisabled();
+  });
+
+  it("can retry a failed decision and resets for a different request", async () => {
+    const reply = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("暂时无法提交"))
+      .mockResolvedValue(undefined);
+    const view = render(
+      <AgentPermissionCard request={permission()} onReply={reply} />,
+    );
+    await act(async () =>
+      fireEvent.click(screen.getByRole("button", { name: "允许一次" })),
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent("暂时无法提交");
+    expect(screen.getByRole("button", { name: "允许一次" })).toBeEnabled();
+    await act(async () =>
+      fireEvent.click(screen.getByRole("button", { name: "允许一次" })),
+    );
+    view.rerender(
+      <AgentPermissionCard
+        request={permission({ id: "next-permission" })}
+        onReply={reply}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "允许一次" })).toBeEnabled();
+    expect(
+      screen.queryByText("已提交处理结果，等待 Agent 继续。"),
+    ).not.toBeInTheDocument();
+  });
+
   it("shows the real dangerous command and directory while preserving native single-use approval", async () => {
     const reply = vi.fn().mockResolvedValue(undefined);
     render(

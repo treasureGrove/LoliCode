@@ -2,7 +2,6 @@ import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import {
   FolderOpen,
-  Loader2,
   MessageSquarePlus,
   RefreshCw,
   Send,
@@ -57,6 +56,7 @@ import { AgentMessageView } from "./AgentParts";
 import { AgentChanges } from "./AgentChanges";
 import { AgentPermissionCard } from "./AgentPermissionCard";
 import { AgentQuestionCard } from "./AgentQuestionCard";
+import { AgentActivityStatus } from "./AgentActivityStatus";
 import { WindowControlsContext } from "@/components/shell/AppPageHeader";
 import LolicodeMascot from "@/components/shell/LolicodeMascot";
 import { DRAG_REGION_ATTR, DRAG_REGION_STYLE } from "@/lib/platform";
@@ -1716,26 +1716,12 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
                   : selectedSession?.model?.modelId || "会话绑定的模型"}{" "}
                 · {selectedSession?.mode === "plan" ? "分析" : "实现"}
               </span>
-              <span role="status" className="wb-status">
-                {(runningHere || queuedHere || stoppingHere) && (
-                  <Loader2 className="animate-spin" />
-                )}
-                {stoppingHere
-                  ? "正在停止…"
-                  : queuedHere
-                    ? "已发送，等待开始…"
-                    : snapshot?.status === "running"
-                      ? "正在执行…"
-                      : snapshot?.status === "waiting_permission"
-                        ? "等待你的许可"
-                        : snapshot?.status === "waiting_question"
-                          ? "等待你的回答"
-                          : snapshot?.status === "error"
-                            ? "执行遇到问题"
-                            : snapshotLoading && !snapshot
-                              ? "正在加载会话…"
-                              : "准备就绪"}
-              </span>
+              <AgentActivityStatus
+                snapshot={snapshot}
+                queued={queuedHere}
+                stopping={stoppingHere}
+                loading={snapshotLoading}
+              />
             </div>
             {snapshotError && (
               <div role="alert" className="wb-notice">

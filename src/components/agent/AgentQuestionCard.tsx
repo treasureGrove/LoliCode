@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input, fieldClass } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -48,15 +48,22 @@ function isVisible(
   });
 }
 
-export function AgentQuestionCard({
-  question,
-  onReply,
-  onReject,
-}: {
+interface QuestionProps {
   question: AgentQuestion;
   onReply: (answer: AgentQuestionAnswer) => Promise<void>;
   onReject: () => Promise<void>;
-}) {
+}
+
+export function AgentQuestionCard(props: QuestionProps) {
+  return (
+    <QuestionForm
+      key={JSON.stringify([props.question.sessionId, props.question.id])}
+      {...props}
+    />
+  );
+}
+
+function QuestionForm({ question, onReply, onReject }: QuestionProps) {
   const [values, setValues] = useState<Record<string, unknown>>(() =>
     Object.fromEntries(
       question.fields
@@ -65,8 +72,13 @@ export function AgentQuestionCard({
     ),
   );
   const [busy, setBusy] = useState(false);
+  const [resolution, setResolution] = useState<"answered" | "rejected" | null>(
+    null,
+  );
   const [error, setError] = useState<string | null>(null);
   const pending = useRef(false);
+  const descriptionsId = useId();
+  const locked = busy || resolution !== null;
   const visible = question.fields.filter((field) =>
     isVisible(field, values, question.fields),
   );
@@ -129,7 +141,7 @@ export function AgentQuestionCard({
         if (
           field.required &&
           (value === undefined ||
-            value === "" ||
+            (typeof value === "string" && !value.trim()) ||
             (Array.isArray(value) && value.length === 0))
         ) {
           setError(`请填写${title}。`);
@@ -159,16 +171,18 @@ export function AgentQuestionCard({
     try {
       if (reject) await onReject();
       else await onReply(answer);
+      setResolution(reject ? "rejected" : "answered");
     } catch (cause) {
+      pending.current = false;
       setError(agentErrorMessage(cause));
     } finally {
-      pending.current = false;
       setBusy(false);
     }
   };
   return (
     <form
       aria-label={question.title}
+      aria-busy={busy}
       noValidate
       onSubmit={(event) => {
         event.preventDefault();
@@ -202,6 +216,7 @@ export function AgentQuestionCard({
                     type="button"
                     variant="quiet"
                     size="compact"
+                    disabled={locked}
                     onClick={() =>
                       void settingsApi
                         .openExternal(field.url!)
@@ -217,7 +232,7 @@ export function AgentQuestionCard({
                 id={id}
                 value={typeof value === "boolean" ? String(value) : ""}
                 className={fieldClass}
-                disabled={busy}
+                disabled={locked}
                 onChange={(event) =>
                   setValue(
                     field.key,
@@ -240,7 +255,7 @@ export function AgentQuestionCard({
                   >
                     <Checkbox
                       aria-label={`${title}：${option.label}`}
-                      disabled={busy}
+                      disabled={locked}
                       checked={
                         Array.isArray(value) && value.includes(option.value)
                       }
@@ -272,7 +287,7 @@ export function AgentQuestionCard({
                 {field.custom && (
                   <Input
                     aria-label={`${title}：其他选择`}
-                    disabled={busy}
+                    disabled={locked}
                     placeholder="其他选择"
                     value={
                       Array.isArray(value)
@@ -302,18 +317,38 @@ export function AgentQuestionCard({
             ) : (
               <>
                 {field.options?.length ? (
-                  <div className="flex flex-wrap gap-2">
-                    {field.options.map((option) => (
+                  <div
+                    role="group"
+                    aria-label={`${title}选项`}
+                    className="grid gap-2 sm:grid-cols-2"
+                  >
+                    {field.options.map((option, optionIndex) => (
                       <Button
                         type="button"
                         key={option.value}
                         variant={value === option.value ? "solid" : "neutral"}
-                        disabled={busy}
+                        disabled={locked}
                         aria-pressed={value === option.value}
-                        title={option.description || undefined}
+                        aria-label={option.label}
+                        aria-describedby={
+                          option.description
+                            ? `${descriptionsId}-${field.key}-${optionIndex}`
+                            : undefined
+                        }
+                        className="h-auto min-h-8 items-start justify-start whitespace-normal py-2 text-left"
                         onClick={() => setValue(field.key, option.value)}
                       >
-                        {option.label}
+                        <span className="min-w-0">
+                          <span className="block">{option.label}</span>
+                          {option.description && (
+                            <span
+                              id={`${descriptionsId}-${field.key}-${optionIndex}`}
+                              className="mt-1 block text-caption font-normal text-fg-3"
+                            >
+                              {option.description}
+                            </span>
+                          )}
+                        </span>
                       </Button>
                     ))}
                   </div>
@@ -322,7 +357,7 @@ export function AgentQuestionCard({
                   <Input
                     id={id}
                     aria-label={title}
-                    disabled={busy}
+                    disabled={locked}
                     type={
                       field.type === "number" || field.type === "integer"
                         ? "number"
@@ -364,18 +399,25 @@ export function AgentQuestionCard({
         </p>
       )}
       <div className="flex gap-2">
-        <Button type="submit" disabled={busy || external || unsupported}>
-          {busy ? "正在提交…" : "提交答案"}
+        <Button type="submit" disabled={locked || external || unsupported}>
+          {busy ? "正在提交…" : resolution ? "已处理" : "提交答案"}
         </Button>
         <Button
           type="button"
           variant="quiet"
-          disabled={busy}
+          disabled={locked}
           onClick={() => void submit(true)}
         >
           取消这次问题
         </Button>
       </div>
+      {resolution && (
+        <p role="status" className="text-caption text-fg-2">
+          {resolution === "answered"
+            ? "答案已提交，等待 Agent 继续。"
+            : "已取消这次问题，等待 Agent 继续。"}
+        </p>
+      )}
       {error && (
         <p role="alert" className="text-caption text-danger-text">
           {error}

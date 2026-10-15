@@ -33,14 +33,23 @@ function permissionPreview(input: unknown) {
   return fields;
 }
 
-export function AgentPermissionCard({
-  request,
-  onReply,
-}: {
+interface PermissionProps {
   request: AgentPermission;
   onReply: (decision: AgentPermissionDecision) => Promise<void>;
-}) {
+}
+
+export function AgentPermissionCard(props: PermissionProps) {
+  return (
+    <PermissionForm
+      key={JSON.stringify([props.request.sessionId, props.request.id])}
+      {...props}
+    />
+  );
+}
+
+function PermissionForm({ request, onReply }: PermissionProps) {
   const [busy, setBusy] = useState(false);
+  const [resolved, setResolved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const pending = useRef(false);
   const preview = permissionPreview(request.toolInput);
@@ -59,15 +68,20 @@ export function AgentPermissionCard({
     setError(null);
     try {
       await onReply(decision);
+      setResolved(true);
     } catch (cause) {
+      pending.current = false;
       setError(agentErrorMessage(cause));
     } finally {
-      pending.current = false;
       setBusy(false);
     }
   };
   return (
-    <section aria-label="需要你的许可" className="wb-permission border p-4">
+    <section
+      aria-label="需要你的许可"
+      aria-busy={busy}
+      className="wb-permission border p-4"
+    >
       <h3 className="wb-permission-heading flex items-center gap-2 text-body font-medium">
         <ShieldCheck className="h-4 w-4" />
         需要你的许可
@@ -101,14 +115,14 @@ export function AgentPermissionCard({
       <div className="mt-3 flex flex-wrap gap-2">
         <Button
           className="wb-permission-allow"
-          disabled={busy}
+          disabled={busy || resolved}
           onClick={() => void reply("once")}
         >
           允许一次
         </Button>
         <Button
           variant="neutral"
-          disabled={busy || request.approvalMode === "user-once"}
+          disabled={busy || resolved || request.approvalMode === "user-once"}
           title={
             request.approvalMode === "user-once"
               ? "此请求只支持允许一次"
@@ -120,12 +134,17 @@ export function AgentPermissionCard({
         </Button>
         <Button
           variant="quiet"
-          disabled={busy}
+          disabled={busy || resolved}
           onClick={() => void reply("reject")}
         >
           拒绝
         </Button>
       </div>
+      {resolved && (
+        <p role="status" className="mt-2 text-caption text-fg-2">
+          已提交处理结果，等待 Agent 继续。
+        </p>
+      )}
       <p className="mt-2 text-caption text-fg-3">
         {request.approvalMode === "user-once"
           ? "此请求由原生引擎管理，仅支持本次授权。"

@@ -98,6 +98,13 @@ async function flush() {
 async function tick(ms = 800) {
   await act(async () => vi.advanceTimersByTimeAsync(ms));
 }
+function sessionCreationButton() {
+  const existing = screen.queryAllByRole("button", {
+    name: /^(?:新建|开始)会话$/,
+  });
+  if (existing.length) return existing[existing.length - 1];
+  return screen.getByRole("button", { name: "新建任务" });
+}
 function fill(text = "修复这个项目的测试") {
   fireEvent.change(screen.getByLabelText("发送给 Agent 的消息"), {
     target: { value: text },
@@ -221,12 +228,12 @@ describe("AgentPage", () => {
       for (const warning of warnings)
         expect(toast.warning).toHaveBeenCalledWith(warning);
       expect(
-        screen.getByRole("heading", { name: "开始新的任务" }),
+        screen.getByRole("heading", { name: /^开始新(?:的)?任务$/ }),
       ).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "新建会话" })).toBeEnabled();
+      expect(sessionCreationButton()).toBeEnabled();
       expect(screen.queryByRole("alert")).not.toBeInTheDocument();
       snapshot.session = { ...session, id: "lc:new" };
-      fireEvent.click(screen.getByRole("button", { name: "新建会话" }));
+      fireEvent.click(sessionCreationButton());
       await flush();
       expect(agentApi.createSession).toHaveBeenCalledTimes(1);
       expect(
@@ -278,7 +285,7 @@ describe("AgentPage", () => {
 
       expect(screen.getByRole("button", { name: "切换项目" })).toBeEnabled();
       snapshot = { ...emptySnapshot(), session: { ...session, id: "lc:new" } };
-      fireEvent.click(screen.getByRole("button", { name: "新建会话" }));
+      fireEvent.click(sessionCreationButton());
       await flush();
       expect(agentApi.createSession).toHaveBeenCalledTimes(1);
       await tick();
@@ -321,7 +328,7 @@ describe("AgentPage", () => {
     expect(agentApi.interruptSession).not.toHaveBeenCalled();
     expect(agentApi.sendMessage).not.toHaveBeenCalled();
     expect(readAgentSubmission(project, id)).toBeNull();
-    expect(screen.getByRole("button", { name: "新建会话" })).toBeEnabled();
+    expect(sessionCreationButton()).toBeEnabled();
   });
 
   it("keeps an unknown native command receipt and retries its exact identity instead of creating a new task", async () => {
@@ -691,7 +698,7 @@ describe("AgentPage", () => {
     expect(screen.getByText("Copilot · Model B · 实现")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "分析" }));
     await flush();
-    fireEvent.click(screen.getByRole("button", { name: "新建会话" }));
+    fireEvent.click(sessionCreationButton());
     await flush();
     expect(agentApi.createSession).toHaveBeenCalledWith(
       catalog.models[1].id,
@@ -727,7 +734,7 @@ describe("AgentPage", () => {
     const channels = vi.fn();
     render(<AgentPage onOpenChannels={channels} />);
     await flush();
-    expect(screen.getByRole("button", { name: "新建会话" })).toBeDisabled();
+    expect(sessionCreationButton()).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "渠道与模型" }));
     expect(channels).toHaveBeenCalledTimes(1);
     expect(agentApi.createSession).not.toHaveBeenCalled();
@@ -800,7 +807,7 @@ describe("AgentPage", () => {
       target: { value: "lolicode/new-channel/new-model" },
     });
     await flush();
-    fireEvent.click(screen.getByRole("button", { name: "新建会话" }));
+    fireEvent.click(sessionCreationButton());
     await flush();
     expect(agentApi.createSession).toHaveBeenCalledWith(
       "lolicode/new-channel/new-model",
@@ -886,7 +893,7 @@ describe("AgentPage", () => {
       parts: [{ type: "text", text: "开始检查测试" }],
     });
     await tick();
-    expect(screen.getByText("正在执行…")).toBeInTheDocument();
+    expect(screen.getByText("正在回复…")).toBeInTheDocument();
     expect(screen.getByText("开始检查测试")).toBeInTheDocument();
     snapshot.messages[1].parts = [
       { type: "text", text: "开始检查测试，找到了原因" },
@@ -1428,7 +1435,7 @@ describe("AgentPage", () => {
     expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
       "后续补充内容",
     );
-    expect(screen.getByText("正在执行…")).toBeInTheDocument();
+    expect(screen.getByText("正在回复…")).toBeInTheDocument();
     await tick(2000);
     expect(
       screen.queryByText("暂时无法读取会话，请重试。"),
