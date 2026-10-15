@@ -27,6 +27,10 @@ import {
   remoteCommand,
   REMOTE_NAMESPACE,
   PUBLIC_NAMESPACE,
+  DEFAULT_DOWNLOAD_TIMEOUT_SECONDS,
+  openSSHTransport,
+  parseDownloadTimeoutSeconds,
+  parsePublishOptions,
 } from "./lolicode-publish.mjs";
 
 const wrap = (value) => Buffer.from(value).toString("base64");
@@ -124,13 +128,121 @@ function transport(f, failure) {
   };
 }
 
+test("publication download timeout accepts only a bounded positive integer and defaults to two hours", () => {
+  const args = [
+    "--release-dir",
+    "owned-prepared",
+    "--public-key-file",
+    "owned.pub",
+  ];
+  assert.equal(DEFAULT_DOWNLOAD_TIMEOUT_SECONDS, 7200);
+  assert.equal(parsePublishOptions(args)["download-timeout-seconds"], 7200);
+  for (const seconds of ["60", "120", "7200"]) {
+    assert.equal(
+      parsePublishOptions([...args, "--download-timeout-seconds", seconds])[
+        "download-timeout-seconds"
+      ],
+      Number(seconds),
+    );
+    assert.equal(parseDownloadTimeoutSeconds(Number(seconds)), Number(seconds));
+  }
+  for (const value of [
+    "0",
+    "59",
+    "7201",
+    "-1",
+    "60.5",
+    "1e3",
+    "NaN",
+    "Infinity",
+    " 60",
+    "+60",
+    "0060",
+  ]) {
+    assert.throws(
+      () => parsePublishOptions([...args, "--download-timeout-seconds", value]),
+      /integer from 60 to 7200/,
+    );
+  }
+  for (const value of [null, true, {}, 60.1, NaN, Infinity]) {
+    assert.throws(
+      () => openSSHTransport({ downloadTimeoutSeconds: value }),
+      /integer from 60 to 7200/,
+    );
+  }
+  assert.throws(
+    () => parsePublishOptions([...args, "--download-timeout-seconds"]),
+    /Incomplete/,
+  );
+  assert.throws(
+    () =>
+      parsePublishOptions([
+        ...args,
+        "--download-timeout-seconds",
+        "60",
+        "--download-timeout-seconds",
+        "120",
+      ]),
+    /duplicate/,
+  );
+});
+
+test("HTTPS transport uses the selected seconds as its body download deadline and retains byte/hash verification", async (t) => {
+  const f = await fixture();
+  try {
+    const timeouts = [];
+    const data = Buffer.from("Owned offline HTTPS transport response");
+    const expected = {
+      bytes: data.length,
+      sha256: createHash("sha256").update(data).digest("hex"),
+    };
+    t.mock.method(AbortSignal, "timeout", (milliseconds) => {
+      timeouts.push(milliseconds);
+      return new AbortController().signal;
+    });
+    t.mock.method(globalThis, "fetch", async (_url, options) => {
+      assert.equal(options.redirect, "error");
+      assert.equal(options.headers["Accept-Encoding"], "identity");
+      assert.ok(options.signal instanceof AbortSignal);
+      return new Response(data);
+    });
+    const url = `${PUBLIC_NAMESPACE}/releases/4.0.13/offline-only-fixture.exe`;
+    await openSSHTransport().download(
+      url,
+      path.join(f.root, "default-download"),
+      expected,
+    );
+    await openSSHTransport({ downloadTimeoutSeconds: 60 }).download(
+      url,
+      path.join(f.root, "custom-download"),
+      expected,
+    );
+    await assert.rejects(
+      openSSHTransport({ downloadTimeoutSeconds: "7200" }).download(
+        url,
+        path.join(f.root, "wrong-hash-download"),
+        { ...expected, sha256: "0".repeat(64) },
+      ),
+      /bytes\/SHA256 mismatch/,
+    );
+    assert.deepEqual(timeouts, [7200000, 60000, 7200000]);
+    assert.deepEqual(readFileSync(path.join(f.root, "custom-download")), data);
+  } finally {
+    f.clean();
+  }
+});
+
 test("dry-run verifies local release without executing SSH/SCP or making a network request", async () => {
   const f = await fixture();
   try {
     const t = transport(f);
-    const result = await publishRelease({ ...f.options, "dry-run": true }, t);
+    const result = await publishRelease(
+      { ...f.options, "dry-run": true, "download-timeout-seconds": "120" },
+      t,
+    );
     assert.equal(result.uploaded, false);
     assert.equal(result.namespace, REMOTE_NAMESPACE);
+    assert.equal(result.downloadTimeoutSeconds, 120);
     assert.deepEqual(t.events, []);
     assert.ok(result.files.every((file) => file.source === undefined));
   } finally {
@@ -143,6 +255,7 @@ test("publication orders remote validation and real local signature verification
   try {
     const t = transport(f);
     const result = await publishRelease(f.options, t);
+    assert.equal(result.downloadTimeoutSeconds, 7200);
     assert.equal(result.publicSignatureAndHashesVerified, true);
     assert.equal(t.events.at(-1), "finalize");
     assert.ok(

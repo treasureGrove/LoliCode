@@ -23,6 +23,7 @@ import { verifySignatureFile } from "./lolicode-updater-signature.mjs";
 
 export const REMOTE_NAMESPACE = "/www/wwwroot/tools.treasuregrove.art/lolicode";
 export const PUBLIC_NAMESPACE = "https://tools.treasuregrove.art/lolicode";
+export const DEFAULT_DOWNLOAD_TIMEOUT_SECONDS = 7200;
 const SITE_FILES = [
   "index.html",
   "assets/site.css",
@@ -148,7 +149,24 @@ export function remoteCommand(phase, spec) {
   return `python3 - ${quotePosix(phase)} ${quotePosix(encoded)}`;
 }
 
-export function openSSHTransport() {
+export function parseDownloadTimeoutSeconds(value) {
+  if (value === undefined) return DEFAULT_DOWNLOAD_TIMEOUT_SECONDS;
+  if (
+    (typeof value !== "string" && typeof value !== "number") ||
+    (typeof value === "string" && !/^[1-9][0-9]*$/.test(value)) ||
+    !Number.isSafeInteger(Number(value)) ||
+    Number(value) < 60 ||
+    Number(value) > 7200
+  )
+    throw new Error(
+      "download-timeout-seconds must be an integer from 60 to 7200.",
+    );
+  return Number(value);
+}
+
+export function openSSHTransport(options = {}) {
+  const downloadTimeoutMs =
+    parseDownloadTimeoutSeconds(options.downloadTimeoutSeconds) * 1000;
   return {
     async remote(phase, spec) {
       const child = execFile(
@@ -223,7 +241,7 @@ export function openSSHTransport() {
     async download(url, destination, expected) {
       const response = await fetch(url, {
         redirect: "error",
-        signal: AbortSignal.timeout(600000),
+        signal: AbortSignal.timeout(downloadTimeoutMs),
         headers: {
           "Accept-Encoding": "identity",
           "User-Agent": "LoliCode-release-verifier",
@@ -255,7 +273,10 @@ export function openSSHTransport() {
   };
 }
 
-export async function publishRelease(options, transport = openSSHTransport()) {
+export async function publishRelease(options, transport) {
+  const downloadTimeoutSeconds = parseDownloadTimeoutSeconds(
+    options["download-timeout-seconds"],
+  );
   const plan = await preparePublishPlan(options);
   const summary = {
     version: plan.spec.version,
@@ -264,8 +285,10 @@ export async function publishRelease(options, transport = openSSHTransport()) {
     stageId: plan.spec.stageId,
     files: plan.spec.files,
     publishLatestLast: true,
+    downloadTimeoutSeconds,
   };
   if (options["dry-run"]) return { ...summary, dryRun: true, uploaded: false };
+  transport ??= openSSHTransport({ downloadTimeoutSeconds });
   let begun = false;
   try {
     begun = true; // Also attempt owned-lock release if begin fails after locking.
@@ -351,10 +374,15 @@ export async function publishRelease(options, transport = openSSHTransport()) {
 export async function runPublishCLI(argv) {
   if (!argv.length || argv[0] === "--help") {
     console.log(
-      "node scripts/lolicode-publish.mjs --release-dir <prepared/version> --public-key-file <key.pub> [--tauri-config <config.json>] [--site-dir <TAWEBTOOL/lolicode>] [--dry-run] [--resume-stage <retained-UUID>]",
+      "node scripts/lolicode-publish.mjs --release-dir <prepared/version> --public-key-file <key.pub> [--tauri-config <config.json>] [--site-dir <TAWEBTOOL/lolicode>] [--dry-run] [--resume-stage <retained-UUID>] [--download-timeout-seconds <60..7200; default 7200>]",
     );
     return;
   }
+  const values = parsePublishOptions(argv);
+  console.log(JSON.stringify(await publishRelease(values), null, 2));
+}
+
+export function parsePublishOptions(argv) {
   const values = {};
   for (let i = 0; i < argv.length; i++) {
     const key = argv[i].slice(2);
@@ -367,6 +395,7 @@ export async function runPublishCLI(argv) {
         "site-dir",
         "dry-run",
         "resume-stage",
+        "download-timeout-seconds",
       ].includes(key) ||
       values[key] !== undefined
     )
@@ -381,7 +410,10 @@ export async function runPublishCLI(argv) {
   }
   if (!values["release-dir"] || !values["public-key-file"])
     throw new Error("release-dir and public-key-file are required.");
-  console.log(JSON.stringify(await publishRelease(values), null, 2));
+  values["download-timeout-seconds"] = parseDownloadTimeoutSeconds(
+    values["download-timeout-seconds"],
+  );
+  return values;
 }
 
 if (
