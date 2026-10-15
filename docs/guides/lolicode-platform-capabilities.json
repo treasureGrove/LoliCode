@@ -5,11 +5,7 @@
   "supersedes": "complete-upstream-runtime-and-companion-app-first proposal",
   "productLicensingDecision": "undecided",
   "product": {
-    "platforms": [
-      "windows",
-      "macos",
-      "linux"
-    ],
+    "platforms": ["windows", "macos", "linux"],
     "webPriority": "later",
     "architecture": "electron-react-typescript-own-host-rust-native-core",
     "integrationUnit": "feature-module-or-library",
@@ -21,11 +17,7 @@
     "mainAgent": {
       "chatEntryPoints": 1,
       "requiresApplicationInstallation": false,
-      "sharedSurfaces": [
-        "main workspace",
-        "future Pet",
-        "future voice"
-      ],
+      "sharedSurfaces": ["main workspace", "future Pet", "future voice"],
       "backgroundSubagents": "allowed without additional primary chat windows"
     },
     "integrationPriority": [
@@ -114,9 +106,18 @@
       "repository": "SillyTavern/SillyTavern",
       "revision": "06bde939fb1e9c4c8d8641d810f0a916b5bce127",
       "licenseObserved": "AGPL-3.0",
-      "usage": "format-and-behavior-research-source-reuse-undecided",
+      "usage": "selected-primary-tavern-functional-reference-source-reuse-undecided",
       "status": "license-decision-required-before-core-source-adoption",
       "impact": "Adaptation may carry corresponding-source and other copyleft obligations depending on combination and distribution; wrappers and rewrites do not automatically remove them."
+    },
+    {
+      "id": "risuai",
+      "repository": "kwaroran/RisuAI",
+      "revision": "454e5e207747399f43a4788f5f08ecd5aa291550",
+      "licenseObserved": "GPL-3.0",
+      "usage": "secondary-tavern-character-presentation-and-long-conversation-memory-reference",
+      "status": "research-only-not-source-adopted",
+      "impact": "Selected files and dependency closure require their own review. GPL source adaptation may affect corresponding-source and distribution obligations; no complete runtime or UI integration selected."
     },
     {
       "id": "workbuddy",
@@ -167,10 +168,7 @@
       "id": "model-routing",
       "title": "渠道、模型目录与代理",
       "owner": "native-core",
-      "sourceIds": [
-        "current",
-        "ccswitch"
-      ],
+      "sourceIds": ["current", "ccswitch"],
       "current": "existing-not-revalidated",
       "target": "preserve",
       "phase": 1,
@@ -187,10 +185,7 @@
       "id": "credentials",
       "title": "账户、凭据与授权",
       "owner": "native-core",
-      "sourceIds": [
-        "current",
-        "ccswitch"
-      ],
+      "sourceIds": ["current", "ccswitch"],
       "current": "existing-not-revalidated",
       "target": "preserve",
       "phase": 1,
@@ -206,10 +201,7 @@
       "id": "project-platform",
       "title": "项目、文件与 Git",
       "owner": "platform-services",
-      "sourceIds": [
-        "current",
-        "opencode"
-      ],
+      "sourceIds": ["current", "opencode"],
       "current": "partial-existing",
       "target": "own-module",
       "phase": 1,
@@ -226,10 +218,7 @@
       "id": "agent-profiles",
       "title": "唯一主 Agent、人设与工作策略",
       "owner": "agent-kernel",
-      "sourceIds": [
-        "dsh",
-        "workbuddy"
-      ],
+      "sourceIds": ["dsh", "workbuddy"],
       "current": "proposed",
       "target": "own-module",
       "phase": 1,
@@ -246,11 +235,7 @@
       "id": "coding-session",
       "title": "会话、模型流与编程策略",
       "owner": "coding",
-      "sourceIds": [
-        "current",
-        "opencode",
-        "dsh"
-      ],
+      "sourceIds": ["current", "opencode", "dsh"],
       "current": "native-engine-current-default",
       "target": "own-kernel-and-domain-policy",
       "phase": 1,
@@ -268,11 +253,7 @@
       "id": "model-fidelity",
       "title": "模型原生能力与上下文保真",
       "owner": "model-service",
-      "sourceIds": [
-        "current",
-        "opencode",
-        "dsh"
-      ],
+      "sourceIds": ["current", "opencode", "dsh"],
       "current": "requires-protocol-audit",
       "target": "typed-provider-adapters",
       "phase": 1,
@@ -292,11 +273,7 @@
       "id": "tools-permissions",
       "title": "工具、提问、权限与取消",
       "owner": "tool-runtime",
-      "sourceIds": [
-        "current",
-        "opencode",
-        "dsh"
-      ],
+      "sourceIds": ["current", "opencode", "dsh"],
       "current": "native-support-declared-not-revalidated",
       "target": "own-module",
       "phase": 1,
@@ -314,11 +291,7 @@
       "id": "history-recovery",
       "title": "历史、分支与恢复",
       "owner": "task-service",
-      "sourceIds": [
-        "current",
-        "opencode",
-        "dsh"
-      ],
+      "sourceIds": ["current", "opencode", "dsh"],
       "current": "native-and-legacy-history-exist",
       "target": "own-data-with-explicit-migration",
       "phase": 1,
@@ -336,11 +309,7 @@
       "id": "skills",
       "title": "Skills 内容与作用域",
       "owner": "agent-services",
-      "sourceIds": [
-        "current",
-        "dsh",
-        "ccswitch"
-      ],
+      "sourceIds": ["current", "dsh", "ccswitch"],
       "current": "native-support-declared-not-revalidated",
       "target": "protocol-and-content-support",
       "phase": 4,
@@ -357,12 +326,7 @@
       "id": "mcp",
       "title": "MCP 工具、资源与身份验证",
       "owner": "connectors",
-      "sourceIds": [
-        "current",
-        "opencode",
-        "uebox",
-        "ccswitch"
-      ],
+      "sourceIds": ["current", "opencode", "uebox", "ccswitch"],
       "current": "desktop-config-exists-native-agent-execution-disabled",
       "target": "connector-module",
       "phase": 4,
@@ -381,9 +345,7 @@
       "id": "module-lifecycle",
       "title": "第一方模块与扩展入口",
       "owner": "platform-host",
-      "sourceIds": [
-        "dsh"
-      ],
+      "sourceIds": ["dsh"],
       "current": "proposed",
       "target": "typed-service-composition",
       "phase": 1,
@@ -401,10 +363,7 @@
       "id": "subagents",
       "title": "多智能体与主从任务",
       "owner": "task-service",
-      "sourceIds": [
-        "dsh",
-        "opencode"
-      ],
+      "sourceIds": ["dsh", "opencode"],
       "current": "not-verified-in-native-engine",
       "target": "own-module",
       "phase": 4,
@@ -422,10 +381,7 @@
       "id": "automation",
       "title": "工作流、定时与后台任务",
       "owner": "task-service",
-      "sourceIds": [
-        "current",
-        "dsh"
-      ],
+      "sourceIds": ["current", "dsh"],
       "current": "native-declared-disabled",
       "target": "own-module",
       "phase": 4,
@@ -444,10 +400,7 @@
       "id": "remote",
       "title": "远程、SSH、WSL 与容器",
       "owner": "execution-targets",
-      "sourceIds": [
-        "dsh",
-        "opencode"
-      ],
+      "sourceIds": ["dsh", "opencode"],
       "current": "native-declared-disabled",
       "target": "future-connector",
       "phase": 4,
@@ -464,11 +417,7 @@
       "id": "browser-computer",
       "title": "浏览器与电脑操作",
       "owner": "desktop-connectors",
-      "sourceIds": [
-        "workbuddy",
-        "zcode",
-        "dsh"
-      ],
+      "sourceIds": ["workbuddy", "zcode", "dsh"],
       "current": "not-integrated-in-native-agent",
       "target": "own-tools-and-platform-adapters",
       "phase": 4,
@@ -487,9 +436,7 @@
       "id": "tavern-characters",
       "title": "角色卡、Persona 与角色库",
       "owner": "tavern",
-      "sourceIds": [
-        "sillytavern"
-      ],
+      "sourceIds": ["sillytavern"],
       "current": "not-integrated",
       "target": "own-module-and-format-compatibility",
       "phase": 2,
@@ -506,9 +453,7 @@
       "id": "tavern-world",
       "title": "世界书、提示词与采样",
       "owner": "tavern",
-      "sourceIds": [
-        "sillytavern"
-      ],
+      "sourceIds": ["sillytavern"],
       "current": "not-integrated",
       "target": "own-domain-policy",
       "phase": 2,
@@ -525,9 +470,7 @@
       "id": "tavern-chat",
       "title": "角色聊天、群聊与分支",
       "owner": "tavern",
-      "sourceIds": [
-        "sillytavern"
-      ],
+      "sourceIds": ["sillytavern", "risuai"],
       "current": "not-integrated",
       "target": "own-module",
       "phase": 2,
@@ -538,16 +481,16 @@
         "branch",
         "group turn order",
         "history import/export",
-        "restoration"
+        "restoration",
+        "long-conversation context with preserved source history",
+        "character story and branch memory isolation"
       ]
     },
     {
       "id": "tavern-media",
       "title": "酒馆规则、脚本能力与多媒体",
       "owner": "tavern",
-      "sourceIds": [
-        "sillytavern"
-      ],
+      "sourceIds": ["sillytavern", "risuai"],
       "current": "not-integrated",
       "target": "own-features-selected-format-adapters",
       "phase": 2,
@@ -565,9 +508,7 @@
       "id": "ue-manager",
       "title": "UE 引擎、工程与插件管理",
       "owner": "unreal",
-      "sourceIds": [
-        "uebox"
-      ],
+      "sourceIds": ["uebox"],
       "current": "not-integrated",
       "target": "own-domain-services",
       "phase": 2,
@@ -586,9 +527,7 @@
       "id": "ue-assets",
       "title": "UE 资源、索引、下载与迁移",
       "owner": "unreal",
-      "sourceIds": [
-        "uebox"
-      ],
+      "sourceIds": ["uebox"],
       "current": "not-integrated",
       "target": "own-domain-services",
       "phase": 2,
@@ -607,9 +546,7 @@
       "id": "ue-bridge",
       "title": "UE 编辑器连接与命令桥",
       "owner": "unreal-connector",
-      "sourceIds": [
-        "unreal-agent-link"
-      ],
+      "sourceIds": ["unreal-agent-link"],
       "current": "not-integrated",
       "target": "editor-plugin-adaptation",
       "phase": 2,
@@ -627,10 +564,7 @@
       "id": "ue-editing",
       "title": "UE 场景、蓝图、材质与 UMG",
       "owner": "unreal",
-      "sourceIds": [
-        "uebox",
-        "unreal-agent-link"
-      ],
+      "sourceIds": ["uebox", "unreal-agent-link"],
       "current": "not-integrated",
       "target": "domain-tools-on-own-agent",
       "phase": 2,
@@ -650,9 +584,7 @@
       "id": "ue-build",
       "title": "UE 编译、打包与工具链",
       "owner": "unreal",
-      "sourceIds": [
-        "uebox"
-      ],
+      "sourceIds": ["uebox"],
       "current": "not-integrated",
       "target": "own-domain-services",
       "phase": 2,
@@ -670,10 +602,7 @@
       "id": "artifacts",
       "title": "文档、图像、音视频与产物",
       "owner": "artifact-service",
-      "sourceIds": [
-        "current",
-        "workbuddy"
-      ],
+      "sourceIds": ["current", "workbuddy"],
       "current": "partial-existing",
       "target": "own-service",
       "phase": 1,
@@ -691,11 +620,7 @@
       "id": "sidebar-preview",
       "title": "侧栏预览、文件树与变更",
       "owner": "workbench-ui",
-      "sourceIds": [
-        "dsh",
-        "workbuddy",
-        "opencode"
-      ],
+      "sourceIds": ["dsh", "workbuddy", "opencode"],
       "current": "partial-existing",
       "target": "own-react-viewers",
       "phase": 1,
@@ -713,10 +638,7 @@
       "id": "desktop-release",
       "title": "三端桌面、更新与安装",
       "owner": "desktop",
-      "sourceIds": [
-        "current",
-        "zcode"
-      ],
+      "sourceIds": ["current", "zcode"],
       "current": "tauri-current-default",
       "target": "electron-after-parity",
       "phase": 4,
@@ -737,10 +659,7 @@
       "id": "application-center",
       "title": "应用中心、添加与启用",
       "owner": "application-service",
-      "sourceIds": [
-        "current",
-        "workbuddy"
-      ],
+      "sourceIds": ["current", "workbuddy"],
       "current": "external-tool-manager-only",
       "target": "feishu-like-built-in-business-applications",
       "phase": 2,
@@ -759,10 +678,7 @@
       "id": "setup-recipes",
       "title": "一键配置、检查与修复",
       "owner": "configuration-service",
-      "sourceIds": [
-        "current",
-        "ccswitch"
-      ],
+      "sourceIds": ["current", "ccswitch"],
       "current": "provider-and-external-tool-config-exist",
       "target": "application-specific-guided-setup",
       "phase": 1,
@@ -781,10 +697,7 @@
       "id": "configuration-compatibility",
       "title": "配置继承、外部工具同步与恢复",
       "owner": "configuration-service-and-native-core",
-      "sourceIds": [
-        "current",
-        "ccswitch"
-      ],
+      "sourceIds": ["current", "ccswitch"],
       "current": "existing-config-foundation-not-reaudited",
       "target": "preserve-and-extend",
       "phase": 1,
@@ -803,9 +716,7 @@
       "id": "persistent-memory",
       "title": "持久记忆、用户偏好与提供者",
       "owner": "memory-service",
-      "sourceIds": [
-        "hermes"
-      ],
+      "sourceIds": ["hermes"],
       "current": "not-accepted-as-shipped-feature",
       "target": "local-first-owned-memory-service",
       "phase": 4,
@@ -823,9 +734,7 @@
       "id": "anime-persona",
       "title": "二次元美少女人设与角色资源",
       "owner": "persona-service",
-      "sourceIds": [
-        "current"
-      ],
+      "sourceIds": ["current"],
       "current": "not-accepted-as-shipped-feature",
       "target": "shared-persona-and-presentation-contract",
       "phase": 4,
@@ -841,9 +750,7 @@
       "id": "desktop-pet",
       "title": "桌面 Pet 与角色状态",
       "owner": "presentation",
-      "sourceIds": [
-        "current"
-      ],
+      "sourceIds": ["current"],
       "current": "not-accepted-as-shipped-feature",
       "target": "shared-agent-pet-surface",
       "phase": 4,
@@ -894,12 +801,7 @@
       "id": "agent-interactions",
       "title": "主 Agent 提问、方向选择与思考交互",
       "owner": "agent-workbench",
-      "sourceIds": [
-        "current",
-        "dsh",
-        "opencode",
-        "zcode"
-      ],
+      "sourceIds": ["current", "dsh", "opencode", "zcode"],
       "current": "existing-question-and-stream-components-require-behavior-audit",
       "target": "complete-question-choice-thinking-tool-status-loop",
       "phase": 1,
@@ -917,17 +819,8 @@
     }
   ],
   "applicationLifecycle": {
-    "catalog": [
-      "available",
-      "planned"
-    ],
-    "instance": [
-      "needs-setup",
-      "checking",
-      "ready",
-      "degraded",
-      "disabled"
-    ],
+    "catalog": ["available", "planned"],
+    "instance": ["needs-setup", "checking", "ready", "degraded", "disabled"],
     "rules": [
       "Main Agent is always available and is not installed from the app catalog",
       "Add built-in business applications before exposing their specific tools and workspace",

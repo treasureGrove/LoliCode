@@ -34,6 +34,8 @@ LoliCode 的主角是一位能工作、能创作、能交流陪伴的 Agent，�
 
 扩展性强意味着持续吸收其他 Agent 的成熟功能：Agent 综合参考 DSH、OpenCode、ZCode，配置延续 CC Switch；Hermes 的记忆机制、UE Box 的工具和开源酒馆实现按能力与组件逐步接入，不捆绑整套上游程序。
 
+酒馆已选定 **SillyTavern 为主参考**，RisuAI 补充参考角色表现与长对话记忆。具体功能、源码入口和许可记录见[酒馆接入方案](docs/guides/lolicode-tavern-reference.md)，这些应用能力尚未交付。
+
 当前迭代顺序：
 
 1. 优先主线 Agent 及其交互：回答问题、方向选择、思考状态、工具进度、取消与恢复。
@@ -59,24 +61,24 @@ CC Switch 上游的发布链接与安装包属于原项目，不是 LoliCode 下
 - pnpm 10.12.3，与 package.json 的 packageManager 保持一致。
 - Rust 及对应平台的 Tauri 2 构建工具，见 [Tauri 环境要求](https://v2.tauri.app/start/prerequisites/)。
 
-~~~sh
+```sh
 git clone https://github.com/treasureGrove/LoliCode.git
 cd LoliCode
 pnpm install --frozen-lockfile
 pnpm dev
-~~~
+```
 
 日常前端修改由 Vite 热更新；Rust 修改通过增量编译重启开发进程，不需要每次打包安装。额外监听 src-tauri 目录外的 Agent crate：
 
-~~~sh
+```sh
 pnpm dev --additional-watch-folders ../crates/lolicode-agent
-~~~
+```
 
 只有制作发行包时才运行：
 
-~~~sh
+```sh
 pnpm build
-~~~
+```
 
 目标 Electron/Host 的自动重载流程见架构文档，目前默认开发入口仍是 Tauri。
 
@@ -84,12 +86,12 @@ pnpm build
 
 根据修改范围运行相应检查：
 
-~~~sh
+```sh
 pnpm typecheck
 pnpm test:unit
 cargo test --manifest-path crates/lolicode-agent/Cargo.toml
 cargo test --manifest-path src-tauri/Cargo.toml --lib
-~~~
+```
 
 编译后的桌面主程序支持 --check-agent-runtime，用隔离临时项目和本机模型夹具检查原生 Agent，无需真实模型 Key。历史验收记录不能代替当前代码验证。
 

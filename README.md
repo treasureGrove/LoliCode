@@ -34,6 +34,8 @@ Getting started should take a few necessary choices: reuse a model account, choo
 
 Agent capabilities draw on DSH, OpenCode, ZCode, and other mature implementations. Configuration builds on CC Switch. Hermes memory mechanisms, selected UE Box tools, and open-source Tavern implementations are integration candidates, adopted as capabilities and components rather than complete upstream programs.
 
+**SillyTavern is the primary Tavern reference**, with RisuAI as a secondary reference for character presentation and long-conversation memory. The [Tavern integration plan](docs/guides/lolicode-tavern-reference.md) records feature boundaries, source entry points, and licensing considerations. These application features have not shipped yet.
+
 Implementation order:
 
 1. Prioritize the main Agent and its interactions: questions, direction choices, thinking state, tool progress, cancellation, and recovery.
@@ -59,24 +61,24 @@ Requirements:
 - pnpm 10.12.3, as recorded in package.json.
 - Rust and the platform build tools required by Tauri 2; see [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/).
 
-~~~sh
+```sh
 git clone https://github.com/treasureGrove/LoliCode.git
 cd LoliCode
 pnpm install --frozen-lockfile
 pnpm dev
-~~~
+```
 
 Vite updates the frontend during development. Rust changes require incremental compilation and a development-process restart, rather than an installer rebuild. To also watch the agent crate outside src-tauri:
 
-~~~sh
+```sh
 pnpm dev --additional-watch-folders ../crates/lolicode-agent
-~~~
+```
 
 Production packaging:
 
-~~~sh
+```sh
 pnpm build
-~~~
+```
 
 The proposed Electron/Host development workflow is documented in the architecture plan; it is not the current default entry point.
 
@@ -84,12 +86,12 @@ The proposed Electron/Host development workflow is documented in the architectur
 
 Run checks appropriate to the change:
 
-~~~sh
+```sh
 pnpm typecheck
 pnpm test:unit
 cargo test --manifest-path crates/lolicode-agent/Cargo.toml
 cargo test --manifest-path src-tauri/Cargo.toml --lib
-~~~
+```
 
 The built desktop executable also supports --check-agent-runtime, an isolated local-fixture check of the native agent. It does not require a real model key. Historical test results are not a substitute for validating the current checkout.
 
