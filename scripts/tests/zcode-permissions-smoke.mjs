@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { spawn, execFileSync } from "node:child_process";
 import { createServer } from "node:http";
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import {
   mkdtemp,
   mkdir,
@@ -54,6 +54,9 @@ let rpc;
 let stderr = "";
 const proof = {
   sourceRevision: "aac4755666d09fdcd70272fcf063c077a639015f",
+  workerSha256: createHash("sha256")
+    .update(await readFile(path.join(runtime, "worker.cjs")))
+    .digest("hex"),
   temporaryGitProjectsOnly: true,
   externalNetworkBlocked: true,
   controlPlane:
@@ -359,6 +362,10 @@ try {
       issued: false,
       modelCalls: 0,
       permissionSeen: false,
+      permissionReplies: 0,
+      stalePermissionSnapshots: 0,
+      respondedPermissionIds: new Set(),
+      clearedPermissionIds: new Set(),
       alwaysRejected: false,
       questionSeen: false,
     };
@@ -393,31 +400,52 @@ try {
           `${current.id}: unexpected permission request`,
         );
         assert.equal(
-          current.permissionSeen,
-          false,
-          "A resolved permission unexpectedly reappeared",
+          snapshot.permissions.length,
+          1,
+          "Unexpected additional permission request",
         );
-        current.permissionSeen = true;
         const permission = snapshot.permissions[0];
         assert.equal(permission.approvalMode, "user-once");
-        await assert.rejects(
-          rpc("replyPermission", {
+        if (current.respondedPermissionIds.has(permission.id)) {
+          // A successful v4 ACK admits the response; the broker's subsequent
+          // interaction delta need not have reached this read projection yet.
+          assert.equal(
+            current.clearedPermissionIds.has(permission.id),
+            false,
+            "A permission reappeared after its removal was observed",
+          );
+          current.stalePermissionSnapshots++;
+        } else {
+          assert.equal(
+            current.respondedPermissionIds.size,
+            0,
+            "A different permission appeared after the fixture was answered",
+          );
+          current.permissionSeen = true;
+          await assert.rejects(
+            rpc("replyPermission", {
+              sessionId: session.id,
+              requestId: permission.id,
+              decision: "always",
+            }),
+            /单次|记住/,
+          );
+          current.alwaysRejected = true;
+          assert.equal(
+            await readFile(fixtureFile, "utf8"),
+            "Preserve unless this exact fixture grants full access.",
+          );
+          current.respondedPermissionIds.add(permission.id);
+          current.permissionReplies++;
+          await rpc("replyPermission", {
             sessionId: session.id,
             requestId: permission.id,
-            decision: "always",
-          }),
-          /单次|记住/,
-        );
-        current.alwaysRejected = true;
-        assert.equal(
-          await readFile(fixtureFile, "utf8"),
-          "Preserve unless this exact fixture grants full access.",
-        );
-        await rpc("replyPermission", {
-          sessionId: session.id,
-          requestId: permission.id,
-          decision: current.decision,
-        });
+            decision: current.decision,
+          });
+        }
+      } else {
+        for (const id of current.respondedPermissionIds)
+          current.clearedPermissionIds.add(id);
       }
       if (snapshot.questions.length && !current.questionSeen) {
         const question = snapshot.questions[0];
@@ -463,7 +491,8 @@ try {
             part.text.includes(`PERMISSION_FIXTURE_DONE_${current.id}`),
         ),
       );
-      if (snapshot.status === "idle" && done) break;
+      if (snapshot.status === "idle" && done && !snapshot.permissions.length)
+        break;
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
     assert.equal(
@@ -472,6 +501,21 @@ try {
       `${current.id}: did not reach a real terminal state`,
     );
     assert.equal(current.permissionSeen, current.expectPermission);
+    assert.equal(
+      snapshot.permissions.length,
+      0,
+      "Terminal snapshot retained a pending permission",
+    );
+    assert.equal(
+      current.permissionReplies,
+      current.expectPermission ? 1 : 0,
+      "The fixture permission must be answered exactly once",
+    );
+    assert.equal(
+      current.modelCalls,
+      2,
+      "The fixture unexpectedly repeated a model/tool turn",
+    );
     assert.ok(
       snapshot.messages.some((message) =>
         message.parts.some((part) =>
@@ -495,6 +539,12 @@ try {
         "Full access did not execute our isolated clean",
       );
     else assert.equal(exists, true, "Read/denied/Plan case removed a fixture");
+    if (exists)
+      assert.equal(
+        await readFile(fixtureFile, "utf8"),
+        "Preserve unless this exact fixture grants full access.",
+        "Fixture contents changed unexpectedly",
+      );
     let writtenDiff;
     if (current.id === "full-access-write") {
       assert.equal(writeExists, true, "Full access did not write our fixture");
@@ -524,6 +574,11 @@ try {
     const toolParts = snapshot.messages
       .flatMap((message) => message.parts)
       .filter((part) => part.type === "tool");
+    assert.equal(
+      toolParts.filter((part) => part.name === current.toolName).length,
+      1,
+      "The native fixture tool call must occur exactly once",
+    );
     if (current.id === "guarded-read")
       assert.match(JSON.stringify(toolParts), /git version/i);
     if (current.id === "plan-write")
@@ -556,6 +611,9 @@ try {
       modelCalls: current.modelCalls,
       titleCalls: current.titleCalls ?? 0,
       permissionSeen: current.permissionSeen,
+      permissionReplies: current.permissionReplies,
+      stalePermissionSnapshots: current.stalePermissionSnapshots,
+      terminalPermissions: snapshot.permissions.length,
       alwaysRejected: current.alwaysRejected,
       questionSeen: current.questionSeen,
       ...(current.kind === "plan_approval"
