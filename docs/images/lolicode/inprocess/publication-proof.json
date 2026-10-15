@@ -1,0 +1,79 @@
+{
+  "version": "4.0.15",
+  "sshAlias": "tools",
+  "namespace": "/www/wwwroot/tools.treasuregrove.art/lolicode",
+  "stageId": "d6ef76ef-86c2-48e9-bc80-7d650c8e30b0",
+  "files": [
+    {
+      "role": "release",
+      "name": "LoliCode-4.0.15-Windows-x64-Setup.exe",
+      "bytes": 15476097,
+      "sha256": "4a5d78f7c349e4d4f4d3687bf481d5f692e579cdae9512cd651b4d2d99b08c9f"
+    },
+    {
+      "role": "release",
+      "name": "LoliCode-4.0.15-Windows-x64-Setup.exe.sig",
+      "bytes": 420,
+      "sha256": "080a5693f27904c331f3942a51ce65cf0cb2c82de5fc5e1f5f621094fd914fad"
+    },
+    {
+      "role": "release",
+      "name": "LoliCode-Portable.zip",
+      "bytes": 20048991,
+      "sha256": "f4d93da6e23ec0f9a38c2676501a85fc4a7b47c16c7b9cdef26d7e465f795f33"
+    },
+    {
+      "role": "release",
+      "name": "latest.json",
+      "bytes": 2890,
+      "sha256": "f71508e526bb96cec66c9794daee3c856b14397fe3003a337bdcef45597f8cc0"
+    },
+    {
+      "role": "release",
+      "name": "release-manifest.json",
+      "bytes": 1118,
+      "sha256": "fdb06b9ef0cf4dc572defc31ed6ffc61e78fbcef50489ea686d8acd9ef04e819"
+    },
+    {
+      "role": "release",
+      "name": "upload-plan.json",
+      "bytes": 1600,
+      "sha256": "3e33c7d67f17bc3c34d7996e7356c36ded226129b42878dbf38b4a70481683c4"
+    },
+    {
+      "role": "site",
+      "name": "assets/downloads.js",
+      "bytes": 2727,
+      "sha256": "da276784e5c4f62403673e0600b92271f4748a666050c6fc973b734cedff989c"
+    },
+    {
+      "role": "site",
+      "name": "assets/logo.svg",
+      "bytes": 2713,
+      "sha256": "35bf715b8d27a30734adf1d361c50b31d7c83020842bd14561d16a181eb284ad"
+    },
+    {
+      "role": "site",
+      "name": "assets/maid.png",
+      "bytes": 1889567,
+      "sha256": "4fb84ad2a46ea2803d9aea7dcd260a2b783c5dc9d18cdea49d69e69f96e63ceb"
+    },
+    {
+      "role": "site",
+      "name": "assets/site.css",
+      "bytes": 3615,
+      "sha256": "cc034bf5bd5eebee83867ceedd74a5b1b95fde5564faa19564149223b15eb7c9"
+    },
+    {
+      "role": "site",
+      "name": "index.html",
+      "bytes": 2933,
+      "sha256": "9263801da0ec4af4289a26af516ad7786ebacc56d75e1a1b1659a6270cdf145f"
+    }
+  ],
+  "publishLatestLast": true,
+  "downloadTimeoutSeconds": 7200,
+  "published": true,
+  "publicSignatureAndHashesVerified": true,
+  "stagingRetained": true
+}

@@ -1,0 +1,127 @@
+{
+  "kind": "live_public_site_chromium_check",
+  "expectedVersion": "4.0.15",
+  "url": "https://tools.treasuregrove.art/lolicode/",
+  "startedAt": "2026-10-15T05:32:52.585Z",
+  "browser": "Chromium",
+  "gates": {
+    "realHtmlAndDynamicJavaScriptLoaded": true,
+    "publicVersionDisplayed": true,
+    "latestIs4015": true,
+    "immutableInstallerAndPortableLinks": true,
+    "packageHeadRequestsSucceed": true,
+    "rustCoreAndUnmigratedFeaturesDisclosed": true,
+    "currentReleaseNotesVisible": true,
+    "pageImagesDecoded": true,
+    "noHorizontalOverflow": true,
+    "resourcesAndConsoleClean": true
+  },
+  "pageErrors": [],
+  "consoleErrors": [],
+  "httpErrors": [],
+  "failedRequests": [],
+  "preventedWrites": [],
+  "preventedLargeDownloads": [],
+  "assetResponses": [
+    {
+      "url": "https://tools.treasuregrove.art/lolicode/",
+      "status": 200,
+      "type": "document"
+    },
+    {
+      "url": "https://tools.treasuregrove.art/lolicode/assets/site.css?v=4.0.15",
+      "status": 200,
+      "type": "stylesheet"
+    },
+    {
+      "url": "https://tools.treasuregrove.art/lolicode/assets/maid.png",
+      "status": 200,
+      "type": "image"
+    },
+    {
+      "url": "https://tools.treasuregrove.art/lolicode/assets/downloads.js?v=4.0.15",
+      "status": 200,
+      "type": "script"
+    },
+    {
+      "url": "https://tools.treasuregrove.art/lolicode/assets/logo.svg",
+      "status": 200,
+      "type": "image"
+    },
+    {
+      "url": "https://tools.treasuregrove.art/lolicode/updates/latest.json",
+      "status": 200,
+      "type": "fetch"
+    }
+  ],
+  "downloadHeads": [
+    {
+      "url": "https://tools.treasuregrove.art/lolicode/releases/4.0.15/LoliCode-4.0.15-Windows-x64-Setup.exe",
+      "status": 200,
+      "bytes": 15476097,
+      "contentType": "application/octet-stream"
+    },
+    {
+      "url": "https://tools.treasuregrove.art/lolicode/releases/4.0.15/LoliCode-Portable.zip",
+      "status": 200,
+      "bytes": 20048991,
+      "contentType": "application/zip"
+    }
+  ],
+  "largePackagesDownloaded": 0,
+  "paidCalls": 0,
+  "nativeAppOrUserConfigurationChanged": false,
+  "documentStatus": 200,
+  "html": {
+    "bytes": 2933,
+    "containsScripts": true
+  },
+  "scriptUrls": [
+    "https://tools.treasuregrove.art/lolicode/assets/downloads.js?v=4.0.15"
+  ],
+  "documentTitle": "LoliCode · 下载与更新",
+  "headings": [
+    "从一个项目开始，让想法变成代码。",
+    "这次更新了什么"
+  ],
+  "latest": {
+    "version": "4.0.15",
+    "pubDate": "2026-10-15T05:29:16.088Z"
+  },
+  "downloadLinks": {
+    "installer": {
+      "text": "下载安装版",
+      "href": "https://tools.treasuregrove.art/lolicode/releases/4.0.15/LoliCode-4.0.15-Windows-x64-Setup.exe"
+    },
+    "portable": {
+      "text": "下载便携版",
+      "href": "https://tools.treasuregrove.art/lolicode/releases/4.0.15/LoliCode-Portable.zip"
+    }
+  },
+  "releaseNotesExcerpt": "4.0.15\nWindows · x64\n\n正式版已发布，可以下载。\n\n下载安装版\n下载便携版\n\n推荐安装版，后续可在应用内更新。首次从旧版升级时，请先从托盘退出旧版。\n\n软件更新\n\n这次更新了什么\n\n# LoliCode 4.0.15\n\n- 编程 Agent 改为 LoliCode 主程序内的 Rust 核心，模型请求、任务循环、权限、问答和会话保存不再依赖 Node / ZCode / OpenCode 引擎进程及启动握手。\n- 支持流式回复、项目文件读取与检索、写入与补丁、终端工具、Plan / Auto / 完整访问、任务取消和重启后恢复历史。终端命令仍按需启动工具进程，Windows 使用 Job Object 管理其子进程。\n- 连续修改同一文件显示从初始内容到最新内容的累计差异；恢复原文后清空差异，新建后继续修改仍标记为新增。\n- 默认技能作为内容资源直接随包提供，经过校验后按需读取；基础编程不再需要引擎安装。渠道与模型继续复用统一配置中心及应用内认证网关。\n- 保留旧引擎的原始数据。旧 OpenCode 会话可只读查看；旧 ZCode 会话文件保留，历史读取尚未迁移。请新建本体会话继续编程，不会为旧会话启动退役引擎。\n- 工作流、自动化、SSH / WSL 远程项目、JavaScript 插件和 MCP 执行尚未迁入本体，当前明确显示未支持，避免入口可点但无法运行。",
+  "images": [
+    {
+      "src": "https://tools.treasuregrove.art/lolicode/assets/logo.svg",
+      "width": 256,
+      "height": 256,
+      "complete": true
+    },
+    {
+      "src": "https://tools.treasuregrove.art/lolicode/assets/maid.png",
+      "width": 1024,
+      "height": 1536,
+      "complete": true
+    }
+  ],
+  "desktopLayout": {
+    "viewport": 1280,
+    "scrollWidth": 1280
+  },
+  "screenshot": "D:\\projectGithub\\TAI-Switch\\release\\LoliCode-4.0.15-native-20261015\\public-download-page.png",
+  "mobileLayout": {
+    "viewport": 390,
+    "scrollWidth": 390
+  },
+  "completedAt": "2026-10-15T05:33:01.183Z",
+  "success": true
+}

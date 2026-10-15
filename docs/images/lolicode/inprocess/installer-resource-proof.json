@@ -1,0 +1,552 @@
+{
+  "format": 1,
+  "version": "4.0.15",
+  "verifiedAt": "2026-10-15T05:29:07.985Z",
+  "extractionDirectory": "C:\\Users\\admin\\AppData\\Local\\Temp\\lolicode-4.0.15-installer-qa-UD632W\\extracted",
+  "retainedTemporaryDirectory": "C:\\Users\\admin\\AppData\\Local\\Temp\\lolicode-4.0.15-installer-qa-UD632W",
+  "installerExecuted": false,
+  "applicationDesktopLaunched": false,
+  "userConfigurationRead": false,
+  "installed": false,
+  "restarted": false,
+  "success": true,
+  "sourceCommit": "32d85b8282107f1c4507667ce247572cd2ba568a",
+  "installer": {
+    "path": "D:\\projectGithub\\TAI-Switch\\release\\LoliCode-4.0.15-native-20261015\\LoliCode-Setup.exe",
+    "bytes": 15476097,
+    "sha256": "4a5d78f7c349e4d4f4d3687bf481d5f692e579cdae9512cd651b4d2d99b08c9f",
+    "integrityPassed": true
+  },
+  "application": {
+    "path": "C:\\Users\\admin\\AppData\\Local\\Temp\\lolicode-4.0.15-installer-qa-UD632W\\extracted\\tai-switch.exe",
+    "bytes": 50637824,
+    "sha256": "85b59bfff67823c65f5436c81db8966436d05dc1d1aa07d7ef5fce545572f47c",
+    "fileVersion": "4.0.15",
+    "productVersion": "4.0.15",
+    "extractedPath": "tai-switch.exe",
+    "portableComparison": {
+      "path": "D:\\projectGithub\\TAI-Switch\\release\\LoliCode-4.0.15-native-20261015\\LoliCode.exe",
+      "bytes": 50637824,
+      "sha256": "d2221d1087ebaeb3a3c7a912bc8337587e9d6def1af14c61ace417124ce17054",
+      "identical": false,
+      "differingBytes": 3,
+      "onlyTauriBundleMarkerDiffers": true,
+      "marker": {
+        "offset": 40365696,
+        "installed": "NSS",
+        "other": "UNK"
+      }
+    },
+    "builtComparison": {
+      "path": "D:\\projectGithub\\TAI-Switch\\src-tauri\\target\\release\\tai-switch.exe",
+      "bytes": 50637824,
+      "sha256": "d2221d1087ebaeb3a3c7a912bc8337587e9d6def1af14c61ace417124ce17054",
+      "identical": false,
+      "differingBytes": 3,
+      "onlyTauriBundleMarkerDiffers": true,
+      "marker": {
+        "offset": 40365696,
+        "installed": "NSS",
+        "other": "UNK"
+      }
+    }
+  },
+  "resources": {
+    "directory": "agent/extensions",
+    "fileCount": 114,
+    "defaultSkills": [
+      "zcode-skill-creator",
+      "zcode-docx",
+      "zcode-pdf",
+      "zcode-pptx",
+      "zcode-xlsx"
+    ],
+    "skillFileCount": 110,
+    "everyOriginalSha256Verified": true,
+    "exactInventoryVerified": true,
+    "noExternalExecutionEngine": true,
+    "inventorySha256": "dee4c76a93c1a104cd57084caf3230323ce12824d68cb0fb68ec6cc54c694185",
+    "files": [
+      {
+        "path": "skills/skill-creator/SKILL.md",
+        "sha256": "ff88909f5cda2cf4d16fc7622a74a2678e09ef350721d5e22fdeb23e17a13458"
+      },
+      {
+        "path": "skills/docx/env_setup/env_check.sh",
+        "sha256": "41c99b416ac569381f5e91752dfd7c6f788d13dc3d6b9fddf8d660757a824543"
+      },
+      {
+        "path": "skills/docx/env_setup/font_list.txt",
+        "sha256": "7ed6413cf9a17f739fd98776858e4b467301d9cc863097e4e681eb9ffaaa6906"
+      },
+      {
+        "path": "skills/docx/env_setup/setup_mac_linux.sh",
+        "sha256": "0c27b0c38634d78dda4d73a6f499542bdfee6aedabb7d124db9b1fab99db5ce1"
+      },
+      {
+        "path": "skills/docx/env_setup/setup_windows.ps1",
+        "sha256": "5f03e53b0e4f1414f0d6156f92c0adc1bf0f531cd8013bd405ca718baa527ccc"
+      },
+      {
+        "path": "skills/docx/env_setup/setup.md",
+        "sha256": "8b799410084c6e8c47935ab1b1e8966556e94e4f267c52302e7cd0d6b1813b89"
+      },
+      {
+        "path": "skills/docx/LICENSE.txt",
+        "sha256": "ea44298d818719ddb3da9b8d56a0cc507e5dab0f4afea57a2da619cd0644d0c5"
+      },
+      {
+        "path": "skills/docx/references/chart-templates.md",
+        "sha256": "38abaf161f0cf9033212680bbdf634d169d490536ecbc166f31022b99ee450ba"
+      },
+      {
+        "path": "skills/docx/references/common-rules.md",
+        "sha256": "6f59abd233ec73aca8fc1404ed53c7a24ad04e731db5eb45bb4f17cbb5831f44"
+      },
+      {
+        "path": "skills/docx/references/decorations.md",
+        "sha256": "73176f05ea0fa003ee712646f5c76cf063bf3fc6ab3533c619082df8a94b66c7"
+      },
+      {
+        "path": "skills/docx/references/design-system.md",
+        "sha256": "52a476d7bf94ba8f1f77574cd60876393cac76a32069c5df625d230c6cc7c738"
+      },
+      {
+        "path": "skills/docx/references/docx-js-advanced.md",
+        "sha256": "894df6903e7bb51fe1e13096d8053d303f0fe6440eb4890032c51e00435f07c0"
+      },
+      {
+        "path": "skills/docx/references/docx-js-core.md",
+        "sha256": "5d064f57f65d4bd93777890c82f8581f51907c79f57e993452355c69fcdc5474"
+      },
+      {
+        "path": "skills/docx/references/faq.md",
+        "sha256": "4d3d0ff068b525500c0152c3ad2d2f5d509f00efd01996dde71500602c0790ac"
+      },
+      {
+        "path": "skills/docx/references/math-formulas.md",
+        "sha256": "82caec1fc7d98fb421be56ef30910af7d01ecd39334fd13aa2a02abbcba86f5c"
+      },
+      {
+        "path": "skills/docx/references/ooxml.md",
+        "sha256": "b88b0d4a3934a6b8a7a427d14044c5fad3de578d5d2885656a109f08399ef49e"
+      },
+      {
+        "path": "skills/docx/references/toc.md",
+        "sha256": "9faa92483107ce1bcd8dd9c6abc9631d382463630324b0979f1d78a4d69f54fb"
+      },
+      {
+        "path": "skills/docx/routes/comment.md",
+        "sha256": "f5909d5ff2ee1716d4eb7a9af0be35bb2d5595c745a10da26613c32f23217f3f"
+      },
+      {
+        "path": "skills/docx/routes/create.md",
+        "sha256": "e6b41c02e0b788723e6c8529d37c34f3f51a1759ab3ad989c0d4cf4bf52b9dc0"
+      },
+      {
+        "path": "skills/docx/routes/edit.md",
+        "sha256": "bd60ea401a9d886a3863c5ca259e6cd4e17c7dd460c1853d9f00cd3c51109f76"
+      },
+      {
+        "path": "skills/docx/routes/format.md",
+        "sha256": "e73ca9e0eda9fabfd15561d1391e3a197e75d5c3a69b38dcda00d7293bc47beb"
+      },
+      {
+        "path": "skills/docx/routes/read.md",
+        "sha256": "77e5e0cdef83831ebb6a4913cf7f2cdc191b0b71057729210e9657035db25a9e"
+      },
+      {
+        "path": "skills/docx/scenes/academic.md",
+        "sha256": "9e4685e7c0679c8872ce46d4e5d853bd766f0d38be2d02088eeed69beae82d41"
+      },
+      {
+        "path": "skills/docx/scenes/contract.md",
+        "sha256": "d654599c0bebfa595f64e185f753fed4d8a0ecd03aeb0eedad793c36a2c84262"
+      },
+      {
+        "path": "skills/docx/scenes/copywriting.md",
+        "sha256": "0cad3fcb0cbf4ee6701c3abcb74c630155837e78d5b52addfe3e3564dbc2dafa"
+      },
+      {
+        "path": "skills/docx/scenes/exam.md",
+        "sha256": "fba41f30631965e6ceb0d0454b913d128a71e52c96bcf75ed66aa1b3f08b4085"
+      },
+      {
+        "path": "skills/docx/scenes/official-doc.md",
+        "sha256": "e7c2702b26c6d869cf7fe5c42d3cf4fdf8f702940448e71922c5483890c2cf46"
+      },
+      {
+        "path": "skills/docx/scenes/report.md",
+        "sha256": "93306045fff076387e39919612b6580267996bed9862de1b9b81d846b05db31a"
+      },
+      {
+        "path": "skills/docx/scenes/resume.md",
+        "sha256": "1ac3669d0b2ce017cf368bc5932b3e3da37dc4deb1c10d4e2c0748319af51e8d"
+      },
+      {
+        "path": "skills/docx/scripts/__init__.py",
+        "sha256": "83e262a425814b72add701272b99ddcf9635251c5d4672bf9fc38d2b03f00d85"
+      },
+      {
+        "path": "skills/docx/scripts/add_toc_placeholders.py",
+        "sha256": "329dff233d5ce06749facd0dda9af92a7b74febd804117d5e9532e5fcc5405e0"
+      },
+      {
+        "path": "skills/docx/scripts/document.py",
+        "sha256": "0daeed76c27f961fde591d0411dcaeb8ca2b0dd30e79dfced796838af52c9f7b"
+      },
+      {
+        "path": "skills/docx/scripts/fix_footer_fields.py",
+        "sha256": "67b6e7f44c5dae9ad3a5687e1276619efc3283e7eb94ecd7427f6a17f2ae1095"
+      },
+      {
+        "path": "skills/docx/scripts/postcheck.py",
+        "sha256": "5fe34427fd2d790e09ecf58e5fb6c22482fbc8ddf47c9fb86027649fda65fbce"
+      },
+      {
+        "path": "skills/docx/scripts/templates/comments.xml",
+        "sha256": "87e218a3a295016ec855f2cd74495c416072f29c4846e86b527aec0a4d93ba21"
+      },
+      {
+        "path": "skills/docx/scripts/templates/commentsExtended.xml",
+        "sha256": "86bf401354c111102033ed147763faccb82479598f17777a3384c2f3e9fa0014"
+      },
+      {
+        "path": "skills/docx/scripts/templates/commentsExtensible.xml",
+        "sha256": "af5d057e16462ca172cea845e502bafb4f3e1b474a8d5848ffe92214853a4935"
+      },
+      {
+        "path": "skills/docx/scripts/templates/commentsIds.xml",
+        "sha256": "20168f7b237af091332f8348c548eb7f755f583185bb198359c5978155099d67"
+      },
+      {
+        "path": "skills/docx/scripts/templates/people.xml",
+        "sha256": "61db9900b579acd4c4f84ff7f40df47e77e9e780c40d5f5ef6a7beba41d62ec5"
+      },
+      {
+        "path": "skills/docx/scripts/utilities.py",
+        "sha256": "d87a5a2d1cd0859d554c832613b7b19e2bb6cd1987411c405d24429ef4ae49e7"
+      },
+      {
+        "path": "skills/docx/setup.sh",
+        "sha256": "64b769645c2ed7f280f10dd315d759eda1fbfb15e77be5609c15a25b62d1a1e3"
+      },
+      {
+        "path": "skills/docx/SKILL.md",
+        "sha256": "48b5737f2ffd30fdec1332f1b7183161d09a70ff0b19ba524356edaf78bd13c5"
+      },
+      {
+        "path": "skills/pdf/briefs/academic.md",
+        "sha256": "3dd2bf8c3d04b0fc80d77f6a95a40e0e3f70fa3328a0e7d117c24b88cbd5039c"
+      },
+      {
+        "path": "skills/pdf/briefs/creative-fixed-canvas.md",
+        "sha256": "c654699b0538479c7339d23ef0e9b4a11de5ac06e266b166975f8a3f29892654"
+      },
+      {
+        "path": "skills/pdf/briefs/creative-flow.md",
+        "sha256": "abd8e583f2d0000090d581bb94ef2dd94a694874ae1af8559f51a8491c934970"
+      },
+      {
+        "path": "skills/pdf/briefs/creative.md",
+        "sha256": "ae8f7dfc4a9971970e814e3aeb51548c4c46bfb3b4dc3bdd83d60cdae800eb47"
+      },
+      {
+        "path": "skills/pdf/briefs/poster.md",
+        "sha256": "a5d717ace4badc3c01a00aefc33ac09ab897b41ecbaef5962ba15125de72d49f"
+      },
+      {
+        "path": "skills/pdf/briefs/process-advanced.md",
+        "sha256": "03caa89500f5099929d5dfea4f5b8ed077697639c896bc4e32b838cc7509ad19"
+      },
+      {
+        "path": "skills/pdf/briefs/process.md",
+        "sha256": "cbc8c4f2794d5bd6a92f9fa7524e5aa313e578289d985fe73c2e4fd82bad8941"
+      },
+      {
+        "path": "skills/pdf/briefs/report.md",
+        "sha256": "4260a9fcceeecfb65d6f416cb2f7f021f5e3664202db53393cb3600fe39074af"
+      },
+      {
+        "path": "skills/pdf/briefs/resume.md",
+        "sha256": "d747f5ed351856b6b8cf1c0f16f562c999de2430a9ad054544ad753ab439475b"
+      },
+      {
+        "path": "skills/pdf/configs/components.md",
+        "sha256": "efae6b5ac32fd2fa9bd567df474bdb20bc9c8b8c3e8b51e5b7aa596220cbef7f"
+      },
+      {
+        "path": "skills/pdf/configs/fonts.md",
+        "sha256": "35f42fb706c347960b1d1e4b84d6b389e32cd7a6e466614f599f0d8ec5477690"
+      },
+      {
+        "path": "skills/pdf/configs/visual_framework.md",
+        "sha256": "a5771a77feb28e99bca5f2e5651a47d3588098672a7636c16889e830fd40c13f"
+      },
+      {
+        "path": "skills/pdf/env_setup/env_check.sh",
+        "sha256": "08454b18d14ff2f0e1e1159f788f79d9ae9e1f7ee3245c63fcc78737b2ee53a9"
+      },
+      {
+        "path": "skills/pdf/env_setup/font_list.txt",
+        "sha256": "bb83907b4495b46c9dafc5db72e3d585c8eb1f76a4f804cc58ce9ca1b8b6dc51"
+      },
+      {
+        "path": "skills/pdf/env_setup/setup_mac_linux.sh",
+        "sha256": "16486f0949c37c32f3a75ddbb3f96d130e05408b66d298a6fad504e001518a92"
+      },
+      {
+        "path": "skills/pdf/env_setup/setup_windows.ps1",
+        "sha256": "801ff0bbad5693bb6bec5f62c29715da9940ede499f66cd873de9e1bc37f3aca"
+      },
+      {
+        "path": "skills/pdf/env_setup/setup.md",
+        "sha256": "a9acdf4824a097097b3c33100dcd0b3a50b3f6701b57844a89c3238301be92db"
+      },
+      {
+        "path": "skills/pdf/LICENSE.txt",
+        "sha256": "ea44298d818719ddb3da9b8d56a0cc507e5dab0f4afea57a2da619cd0644d0c5"
+      },
+      {
+        "path": "skills/pdf/references/resume-academic.tex",
+        "sha256": "004fb82e7720d6a116f5a56a063981584e5da731dfe804d8a3f8c1d8a44f112a"
+      },
+      {
+        "path": "skills/pdf/references/resume-altacv.tex",
+        "sha256": "1e41b45b8778482e5208b8216d092fa0968507919d31bd97cf683a5d890f28ef"
+      },
+      {
+        "path": "skills/pdf/scripts/cover_render.py",
+        "sha256": "30d90b4f8d6c209700c2d9d91d76c8af6eb9354db20fca256614aa30738af209"
+      },
+      {
+        "path": "skills/pdf/scripts/cover_validate.js",
+        "sha256": "519d5fadb0d918f3455f58f4b742814475e3b4a25f8a60026b82aeeb171a8f94"
+      },
+      {
+        "path": "skills/pdf/scripts/design_engine.py",
+        "sha256": "08a71da2be73f15231fcf4a49af990c0a288ca7297bc896a7b68ddcd9a224ea2"
+      },
+      {
+        "path": "skills/pdf/scripts/html2pdf-next.js",
+        "sha256": "6c4f4666bd3797e1a0b7c3c02782af33230671d52a70241765376a71d1743462"
+      },
+      {
+        "path": "skills/pdf/scripts/html2poster.js",
+        "sha256": "791fe68470762d97fd22fc185a875e3d480d73e107328fd1f75bedc10b8934b6"
+      },
+      {
+        "path": "skills/pdf/scripts/pdf_qa.py",
+        "sha256": "207a4a09eb72f1d3c4a4b3e74f3ca42e0717807048cbe4ff44b4998bdd881a36"
+      },
+      {
+        "path": "skills/pdf/scripts/pdf.py",
+        "sha256": "92136d47b5ab7d636bd95d67704991cb1cd6038f240d7c59058782919808f0a7"
+      },
+      {
+        "path": "skills/pdf/scripts/poster_validate.py",
+        "sha256": "bd87e6a213c57c512ddffccfba6d417b39080e8745806e3282e5ec6d5b164290"
+      },
+      {
+        "path": "skills/pdf/scripts/setup.sh",
+        "sha256": "4293ba1ae3e881bddf2af62e15082a205a3e0ccd8260042467baaae5954329ab"
+      },
+      {
+        "path": "skills/pdf/scripts/toc_validate.py",
+        "sha256": "2fe96a4ca6620830e395dcd69fcaa43c2068992d5ab44b610b22a8f92e0ec628"
+      },
+      {
+        "path": "skills/pdf/SKILL.md",
+        "sha256": "4419d2ea33e7627f04f6defde3a83fa6664c886f6a5d1d7ea3fb70bba1ef8317"
+      },
+      {
+        "path": "skills/pdf/typesetting/charts.md",
+        "sha256": "3d0488f65bdd3d03afac2ff72bc36126829b0cf9da4cf78b84507bf93d263688"
+      },
+      {
+        "path": "skills/pdf/typesetting/cover-backgrounds.md",
+        "sha256": "344dc880dd50aac4ae250f4f5f396c3435672fbd7ce58079fb6f95b1c3e7af33"
+      },
+      {
+        "path": "skills/pdf/typesetting/cover.md",
+        "sha256": "36d7f8d71ede9682c78c1a3f0b787eb7a5e2fb449fcd96dfbb7c7f26ee664572"
+      },
+      {
+        "path": "skills/pdf/typesetting/fill-engine.md",
+        "sha256": "e3078ebe11fe0d853e26d356c5c8ea93acc84786a07c67aa721bff0fb5ecc794"
+      },
+      {
+        "path": "skills/pdf/typesetting/geometry.md",
+        "sha256": "5159bb842397dbc88a55eb687276e424b7858c065b5672ca9ffc47a4f8262a8d"
+      },
+      {
+        "path": "skills/pdf/typesetting/overflow.md",
+        "sha256": "144efd3c9ea99dbe64eed8a84b223d58f429c69f9f3c235b2ae881eca4fe6024"
+      },
+      {
+        "path": "skills/pdf/typesetting/pagination.md",
+        "sha256": "f9f4b2116d2348221920d58526899bb80a75d0d5ff407ab75d3516289a7be120"
+      },
+      {
+        "path": "skills/pdf/typesetting/palette.md",
+        "sha256": "176e8e112fab42b9019283f011f789f7fa63e4a4b82a6a24f37ba700bcd8a156"
+      },
+      {
+        "path": "skills/pdf/typesetting/typography.md",
+        "sha256": "03f6101f53128b13a19acac521ffe6cb00a3cd6f2becee85b75dedb863ab5519"
+      },
+      {
+        "path": "skills/pptx/LICENSE.txt",
+        "sha256": "ea44298d818719ddb3da9b8d56a0cc507e5dab0f4afea57a2da619cd0644d0c5"
+      },
+      {
+        "path": "skills/pptx/SKILL.md",
+        "sha256": "2413861abb79f6d30f03de24417af0ddcdadab024dfdb192352033111e17e6df"
+      },
+      {
+        "path": "skills/xlsx/engines/chart-templates.md",
+        "sha256": "8db3418424205eb5fec7d0826a18ceac6354c6765f3011000f5b5f74348bd538"
+      },
+      {
+        "path": "skills/xlsx/engines/chart.md",
+        "sha256": "e213750aa568e3fb52dc220c25d347e280b9ca5ab8071f957aeba5e74b96ad0e"
+      },
+      {
+        "path": "skills/xlsx/engines/design.md",
+        "sha256": "f060c1c5dd20ab1e7001af58488d685b95443d6b7c2f602c81af709b43a770a2"
+      },
+      {
+        "path": "skills/xlsx/engines/vba-templates.md",
+        "sha256": "d6cbf6c9f9657ef8cc4f503c7520678f6bccc862f3b9a3912b47e73db1803fba"
+      },
+      {
+        "path": "skills/xlsx/env_setup/env_check.sh",
+        "sha256": "903a785d085dca4277e7d6121af174eb4d5c9223319d11f4e461e424c9251c0b"
+      },
+      {
+        "path": "skills/xlsx/env_setup/font_list.txt",
+        "sha256": "7ed6413cf9a17f739fd98776858e4b467301d9cc863097e4e681eb9ffaaa6906"
+      },
+      {
+        "path": "skills/xlsx/env_setup/setup_mac_linux.sh",
+        "sha256": "64bdea1798fa5b2d5237f6ad0d7d72740eb249fb0e825545b89d362cc9d6dbcd"
+      },
+      {
+        "path": "skills/xlsx/env_setup/setup_windows.ps1",
+        "sha256": "3dfbe89f62915c7fd5825a95656da0087c6aed445e78bee394f24ac7c6a1596a"
+      },
+      {
+        "path": "skills/xlsx/env_setup/setup.md",
+        "sha256": "a01c684df1f1af00dc8dcb8b5762e27a94ad6bdd015f7a64f03d4ad7ecb51e8e"
+      },
+      {
+        "path": "skills/xlsx/LICENSE.txt",
+        "sha256": "ea44298d818719ddb3da9b8d56a0cc507e5dab0f4afea57a2da619cd0644d0c5"
+      },
+      {
+        "path": "skills/xlsx/quality/pipeline.md",
+        "sha256": "517986581d1765d553e37e6253646a121a99e566055b4fb724d1ab6ed71f0a85"
+      },
+      {
+        "path": "skills/xlsx/scenes/advanced.md",
+        "sha256": "567e113d678e4dec1794d85dd643f6180b3ad49f170790976c5629747937919c"
+      },
+      {
+        "path": "skills/xlsx/scenes/analyze-recipes.md",
+        "sha256": "e6d745a27f2cbe4b5d4cf2227abe0e9b63e63cb7610593cdb9750e07a52e07ce"
+      },
+      {
+        "path": "skills/xlsx/scenes/analyze.md",
+        "sha256": "26bad213514b18c7e973bda9237d6c29dfd90236a26a44cc3d32a229a3207f3d"
+      },
+      {
+        "path": "skills/xlsx/scenes/convert.md",
+        "sha256": "74103abb3fd192de1442e62dd87d5c34d4e52e0877688104e0c507eeaf18081c"
+      },
+      {
+        "path": "skills/xlsx/scenes/create.md",
+        "sha256": "2609cdecbeeca271836a040fde1903ceb34ced7f5485b1a7a7ed27629535dc68"
+      },
+      {
+        "path": "skills/xlsx/scenes/edit-patterns.md",
+        "sha256": "7da8e329c76a81eabc6f8086a92fa984811445a2e871a6dfafcfff25e0bbab26"
+      },
+      {
+        "path": "skills/xlsx/scenes/edit.md",
+        "sha256": "6545ecd4e8bf1d3a57b69dfa030f1d00846a16e1a0138c638172e0fafef53dc6"
+      },
+      {
+        "path": "skills/xlsx/scenes/finance_lite.md",
+        "sha256": "4b34bbcde90e49ca06254cd78450e2f0475ed820354ddaec63ecf8ee33030f14"
+      },
+      {
+        "path": "skills/xlsx/scenes/finance.md",
+        "sha256": "22502aff110524eb5e16ff86aa9895628abf92f5b48a96b94b6c4e97af08fb02"
+      },
+      {
+        "path": "skills/xlsx/scenes/vba.md",
+        "sha256": "949fde2bb874fbdc6251c98358885df3cd1301035992ccf5932d167a0de245ef"
+      },
+      {
+        "path": "skills/xlsx/setup.sh",
+        "sha256": "02419bee2d5f8dbcf21da2903a68cc1c648a8e3f2594a4d81ed9d5dc24ab510f"
+      },
+      {
+        "path": "skills/xlsx/SKILL.md",
+        "sha256": "1b21b9071a436151fdb3917ba7be900decc6443f3d86ef48301f2e442eabbaf8"
+      },
+      {
+        "path": "skills/xlsx/templates/base.py",
+        "sha256": "91383a2079f173ec0100b14d80804185d175932f6686d3f0811c1af7492b3170"
+      },
+      {
+        "path": "skills/xlsx/templates/palettes.py",
+        "sha256": "88323f71eaf603ecaa37bf39f31f6e30645ebb1b5bc392ae8f31b21f4ee5d9a9"
+      },
+      {
+        "path": "skills/xlsx/xlsx.py",
+        "sha256": "30a077cd57678f729d870a747a0b16f4bb58fb412a4b54b3fb91fd174051d5c6"
+      },
+      {
+        "path": "LICENSE",
+        "sha256": "606c36baf38b973227273df12a74930e4b4137280eea835c5cd623aa4553c13b"
+      },
+      {
+        "path": "manifest.json",
+        "sha256": "b57e8660843962d2a1b2eef42665b1a517c42f8b6b67ec5338d926fc910d130b"
+      },
+      {
+        "path": "NOTICE.md",
+        "sha256": "94a13c83282a9f98ba749ac49190fd71e3a8fefe417f8fed6c1434fd73bcff5d"
+      },
+      {
+        "path": "UPSTREAM_NOTICE.md",
+        "sha256": "6bd5e85b48a192ce100a9e5e0636e3a90d3f6e1ac1c4fe74369e13bd79bb4c45"
+      }
+    ]
+  },
+  "runtimeCheck": {
+    "executedMainOnly": true,
+    "argument": "--check-agent-runtime",
+    "exitCode": 0,
+    "timedOut": false,
+    "stdoutBytes": 336,
+    "stderrBytes": 0,
+    "isolatedProfile": true,
+    "result": {
+      "product": "LoliCode",
+      "version": "4.0.15",
+      "engine": "rust-in-process",
+      "passed": true,
+      "nativeEngineProcessSpawned": false,
+      "defaultSkillsVerified": 5,
+      "modelRequests": 3,
+      "paidCalls": 0,
+      "realReadWriteAndContinuation": true,
+      "sessionRestartVerified": true,
+      "gatewayCredentialPersisted": false,
+      "userConfigurationRead": false,
+      "temporaryProjectsOnly": true
+    }
+  }
+}

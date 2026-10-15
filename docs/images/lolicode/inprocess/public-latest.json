@@ -1,0 +1,19 @@
+{
+  "version": "4.0.15",
+  "notes": "# LoliCode 4.0.15\n\n- 编程 Agent 改为 LoliCode 主程序内的 Rust 核心，模型请求、任务循环、权限、问答和会话保存不再依赖 Node / ZCode / OpenCode 引擎进程及启动握手。\n- 支持流式回复、项目文件读取与检索、写入与补丁、终端工具、Plan / Auto / 完整访问、任务取消和重启后恢复历史。终端命令仍按需启动工具进程，Windows 使用 Job Object 管理其子进程。\n- 连续修改同一文件显示从初始内容到最新内容的累计差异；恢复原文后清空差异，新建后继续修改仍标记为新增。\n- 默认技能作为内容资源直接随包提供，经过校验后按需读取；基础编程不再需要引擎安装。渠道与模型继续复用统一配置中心及应用内认证网关。\n- 保留旧引擎的原始数据。旧 OpenCode 会话可只读查看；旧 ZCode 会话文件保留，历史读取尚未迁移。请新建本体会话继续编程，不会为旧会话启动退役引擎。\n- 工作流、自动化、SSH / WSL 远程项目、JavaScript 插件和 MCP 执行尚未迁入本体，当前明确显示未支持，避免入口可点但无法运行。技能不冒充插件或 MCP 已加载。\n- 保持当前界面样式，应用内签名更新入口继续可用。\n\n安装版可通过“软件更新”升级。便携版需要完整保留同级 `agent/extensions/` 和 `portable.ini`；请解压到新目录后运行。此版本无需复制旧版 `zcode-runtime/` 或 OpenCode 可执行文件。用户项目、渠道及原始会话数据不会被打包程序清理。\n\n本次自动验证使用隔离临时项目和本机模型夹具，未调用付费上游，也未读取用户 API Key。内置主程序自检可通过 `LoliCode.exe --check-agent-runtime` 运行，验证真实文件工具往返、默认技能资源和会话恢复，不会打开用户配置。\n",
+  "pub_date": "2026-10-15T05:29:16.088Z",
+  "platforms": {
+    "windows-x86_64": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSdk9nM3czaVBGcU11Zm1DNlBicFZIR2tTSUhPSlZPOTBjVDVCZTFyam1la1VuN2UwU2U5bGJHdVRMVkdqTU1kMzNXQkxhaEVaRVR4M0tBV1VaRXd5aTlCRUtqYlRpWGc4PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyMDQyMTAzCWZpbGU6TG9saUNvZGVfNC4wLjE1X3g2NC1zZXR1cC5leGUKVkJtcVM5djUyaGZJZW9PRCt1R281WDlYY2g2SVk2dUUzUDRjRW9zSlptQ1lrdHp2UkRDRlZwUlEzWFV5NW0vTTBNb3J2QmJuWEFYSmR3N21NV3FoQkE9PQo=",
+      "url": "https://tools.treasuregrove.art/lolicode/releases/4.0.15/LoliCode-4.0.15-Windows-x64-Setup.exe"
+    }
+  },
+  "downloads": {
+    "windows-x86_64-portable": {
+      "name": "LoliCode-Portable.zip",
+      "bytes": 20048991,
+      "sha256": "f4d93da6e23ec0f9a38c2676501a85fc4a7b47c16c7b9cdef26d7e465f795f33",
+      "url": "https://tools.treasuregrove.art/lolicode/releases/4.0.15/LoliCode-Portable.zip"
+    }
+  }
+}

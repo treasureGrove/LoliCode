@@ -1,0 +1,54 @@
+{
+  "version": "4.0.15",
+  "sourceCommit": "32d85b8282107f1c4507667ce247572cd2ba568a",
+  "zipIntegrityPassed": true,
+  "portableMainMatchesCompletedBuild": true,
+  "nativeRuntimeCheckPassed": true,
+  "renderer": {
+    "version": "4.0.15",
+    "sourceCommit": "32d85b8282107f1c4507667ce247572cd2ba568a",
+    "exeSha256": "d2221d1087ebaeb3a3c7a912bc8337587e9d6def1af14c61ace417124ce17054",
+    "bytes": 50637824,
+    "assetKeys": [
+      {
+        "name": "lolicode-4ZAyB5Mh.svg",
+        "embedded": true
+      },
+      {
+        "name": "index-jaoGFQ-E.js",
+        "embedded": true
+      },
+      {
+        "name": "index-CMO7uKiN.css",
+        "embedded": true
+      },
+      {
+        "name": "lolicode-maid-BIsWmGLa.png",
+        "embedded": true
+      }
+    ],
+    "nativeInstallPerformed": false
+  },
+  "files": [
+    {
+      "name": "LoliCode.exe",
+      "bytes": 50637824,
+      "sha256": "d2221d1087ebaeb3a3c7a912bc8337587e9d6def1af14c61ace417124ce17054"
+    },
+    {
+      "name": "LoliCode-Setup.exe",
+      "bytes": 15476097,
+      "sha256": "4a5d78f7c349e4d4f4d3687bf481d5f692e579cdae9512cd651b4d2d99b08c9f"
+    },
+    {
+      "name": "LoliCode-Setup.exe.sig",
+      "bytes": 420,
+      "sha256": "080a5693f27904c331f3942a51ce65cf0cb2c82de5fc5e1f5f621094fd914fad"
+    },
+    {
+      "name": "LoliCode-Portable.zip",
+      "bytes": 20048991,
+      "sha256": "f4d93da6e23ec0f9a38c2676501a85fc4a7b47c16c7b9cdef26d7e465f795f33"
+    }
+  ]
+}

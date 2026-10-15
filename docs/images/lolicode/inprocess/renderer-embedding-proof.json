@@ -1,0 +1,25 @@
+{
+  "version": "4.0.15",
+  "sourceCommit": "32d85b8282107f1c4507667ce247572cd2ba568a",
+  "exeSha256": "d2221d1087ebaeb3a3c7a912bc8337587e9d6def1af14c61ace417124ce17054",
+  "bytes": 50637824,
+  "assetKeys": [
+    {
+      "name": "lolicode-4ZAyB5Mh.svg",
+      "embedded": true
+    },
+    {
+      "name": "index-jaoGFQ-E.js",
+      "embedded": true
+    },
+    {
+      "name": "index-CMO7uKiN.css",
+      "embedded": true
+    },
+    {
+      "name": "lolicode-maid-BIsWmGLa.png",
+      "embedded": true
+    }
+  ],
+  "nativeInstallPerformed": false
+}

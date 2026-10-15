@@ -1,0 +1,15 @@
+{
+  "product": "LoliCode",
+  "version": "4.0.15",
+  "engine": "rust-in-process",
+  "passed": true,
+  "nativeEngineProcessSpawned": false,
+  "defaultSkillsVerified": 5,
+  "modelRequests": 3,
+  "paidCalls": 0,
+  "realReadWriteAndContinuation": true,
+  "sessionRestartVerified": true,
+  "gatewayCredentialPersisted": false,
+  "userConfigurationRead": false,
+  "temporaryProjectsOnly": true
+}

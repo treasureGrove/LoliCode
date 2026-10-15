@@ -1,0 +1,69 @@
+{
+  "product": "LoliCode",
+  "version": "4.0.15",
+  "applicationCompiledCommit": "32d85b8282107f1c4507667ce247572cd2ba568a",
+  "engine": "rust-in-process",
+  "testValidation": {
+    "frontendFullSuitePassed": 2869,
+    "frontendFullSuiteFiles": 240,
+    "postSuiteHistoryWarningCasesPassed": 2,
+    "latestAgentPageSuitePassed": 52,
+    "typecheckPassed": true,
+    "rendererBuildPassed": true,
+    "desktopRustPassed": 3711,
+    "desktopRustIgnored": 10,
+    "nativeCorePassed": 25,
+    "assetBuildPassed": 3,
+    "releaseAndPublisherPassed": 15,
+    "desktopProductionGatewayBindingPassed": true,
+    "paidCalls": 0,
+    "userConfigurationRead": false
+  },
+  "packageValidation": {
+    "installerBytes": 15476097,
+    "portableBytes": 20048991,
+    "defaultSkillCount": 5,
+    "originalSkillFiles": 110,
+    "allAgentResourceFiles": 114,
+    "externalEngineResourcesPresent": false,
+    "portableMainSelfCheckPassed": true,
+    "extractedInstallerMainSelfCheckPassed": true,
+    "realFileReadWriteAndContinuation": true,
+    "sessionRestartVerified": true,
+    "nativeInstallPerformed": false,
+    "userApplicationRestarted": false
+  },
+  "migration": {
+    "oldOpenCodeHistory": "read-only",
+    "oldZCodeFiles": "preserved, history reader pending",
+    "workflows": "pending",
+    "automation": "pending",
+    "remoteProjects": "pending",
+    "javascriptPlugins": "pending",
+    "mcpExecution": "pending"
+  },
+  "publication": {
+    "published": true,
+    "publicInstallerAndPortableFullyDownloaded": true,
+    "publicSignatureAndHashesVerified": true,
+    "latestBytesEqualCandidate": true,
+    "realChromiumChecksPassed": 10,
+    "updaterSdk": {
+      "runtime": "tauri_mockruntime",
+      "currentVersion": "4.0.14",
+      "target": "windows-x86_64",
+      "latestVersion": "4.0.15",
+      "downloadAttempted": true,
+      "downloadedBytes": 15476097,
+      "sha256": "4a5d78f7c349e4d4f4d3687bf481d5f692e579cdae9512cd651b4d2d99b08c9f",
+      "signatureVerified": true,
+      "installerExitHookInvoked": false,
+      "installationSupported": false,
+      "userConfigurationRead": false,
+      "webviewCreated": false,
+      "result": "signature_verified",
+      "endpointKind": "https_release",
+      "stage": "verified"
+    }
+  }
+}
