@@ -1223,3 +1223,241 @@
     transform: none;
   }
 }
+
+/* Agent layout refinement: independent overrides, preserving existing themes. */
+.wb-resizable-layout > .wb-sidebar {
+  flex: 0 0 auto;
+  min-width: 0;
+  border-right: 0;
+}
+.wb-resizable-layout > .wb-main {
+  flex: 1 1 0;
+  min-width: 0;
+  container-type: inline-size;
+}
+.wb-resizable-layout > .wb-preview-panel {
+  position: relative;
+  inset: auto;
+  z-index: auto;
+  min-width: 0;
+  max-width: none;
+  flex: 0 0 auto;
+  border-left: 0;
+}
+.wb-pane-resizer {
+  position: relative;
+  width: 8px;
+  flex: 0 0 8px;
+  z-index: 2;
+  cursor: col-resize;
+  touch-action: none;
+  user-select: none;
+  outline: none;
+}
+.wb-pane-resizer::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 3px;
+  width: 1px;
+  background: var(--wb-border);
+}
+.wb-pane-resizer::after {
+  content: "";
+  position: absolute;
+  inset: 8px auto 8px 2px;
+  width: 3px;
+  border-radius: 2px;
+  background: transparent;
+}
+.wb-pane-resizer:hover::after,
+.wb-pane-resizer:focus-visible::after,
+.wb-pane-resizer[data-dragging]::after {
+  background: var(--wb-accent);
+}
+.wb-pane-resizer:focus-visible {
+  outline: 2px solid var(--wb-accent);
+  outline-offset: -2px;
+}
+.wb-pane-resizer[aria-disabled="true"] {
+  cursor: default;
+}
+.wb-chat-content {
+  gap: 12px;
+}
+.wb-message-assistant + .wb-message-assistant {
+  margin-top: -4px;
+}
+.wb-tool,
+.wb-tool-step {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  margin: 2px 0;
+}
+.wb-tool > summary,
+.wb-tool-step > summary {
+  padding: 4px 0;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--wb-muted);
+}
+.wb-tool > div,
+.wb-tool-step > div {
+  border: 0;
+  border-left: 1px solid var(--wb-border);
+  border-radius: 0;
+  margin: 3px 0 7px 6px;
+  padding: 4px 0 4px 12px;
+  background: transparent;
+}
+.wb-tool-status {
+  font-size: 10px;
+}
+.wb-reasoning > summary {
+  padding: 3px 0;
+}
+.wb-execution-group {
+  margin: 3px 0;
+  border: 0;
+  background: transparent;
+}
+.wb-execution-summary {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 28px;
+  padding: 3px 0;
+  color: var(--wb-muted);
+  font-size: 12px;
+}
+.wb-execution-detail {
+  border-left: 1px solid var(--wb-border);
+  margin-left: 6px;
+  padding: 2px 0 3px 12px;
+}
+.wb-execution-error {
+  color: var(--danger-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wb-run-error {
+  margin: 8px 0 0;
+  padding: 9px 0 0;
+  border: 0;
+  border-top: 1px solid var(--wb-border);
+  background: transparent;
+  font-size: 12px;
+}
+.wb-run-error-heading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--danger-text);
+  font-weight: 500;
+}
+.wb-run-error-dot {
+  width: 5px;
+  height: 5px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: currentColor;
+}
+.wb-run-error-reason {
+  margin: 4px 0 0 11px;
+  color: var(--wb-muted);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-weight: 400;
+}
+.wb-run-cancelled .wb-run-error-heading,
+.wb-run-cancelled .wb-run-error-dot {
+  color: var(--wb-muted);
+}
+.wb-composer-area {
+  padding: 8px clamp(12px, 2vw, 28px) 10px;
+}
+.wb-composer {
+  border-radius: 9px;
+  box-shadow: none;
+}
+.wb-composer textarea {
+  height: 36px;
+  min-height: 36px;
+  max-height: 150px;
+  padding: 8px 11px 4px;
+  resize: none;
+  overflow-y: hidden;
+  font-size: 13px;
+  line-height: 22px;
+}
+.wb-composer-toolbar {
+  flex-wrap: nowrap;
+  gap: 4px;
+  padding: 3px 6px 6px;
+}
+.wb-composer-model {
+  flex: 1 1 150px;
+  max-width: 280px;
+}
+.wb-composer-model > button {
+  width: 100%;
+  max-width: 100%;
+}
+.wb-composer-toolbar button[aria-label="模型"],
+.wb-composer-toolbar button[aria-label="思考档位"],
+.wb-composer-toolbar select {
+  font-size: 11px;
+  line-height: 1.4;
+  min-height: 28px;
+  padding: 4px 6px;
+}
+.wb-composer-toolbar > button[aria-label="思考档位"] {
+  max-width: 145px;
+  flex: 0 1 auto;
+}
+.wb-composer-toolbar select {
+  max-width: 115px;
+}
+.wb-composer-toolbar > .wb-primary {
+  min-height: 28px;
+  flex-shrink: 0;
+  padding: 5px 9px;
+  border-radius: 6px;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.wb-toolbar-spacer {
+  min-width: 0;
+}
+.wb-usage-footer {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 7px;
+  margin: 5px auto 0;
+  padding-bottom: 2px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+  scrollbar-width: thin;
+  font-size: 10px;
+}
+.wb-usage-footer > span {
+  flex-shrink: 0;
+}
+@container (max-width: 540px) {
+  .wb-composer-toolbar {
+    flex-wrap: wrap;
+  }
+  .wb-composer-model {
+    flex: 1 1 120px;
+    max-width: none;
+  }
+  .wb-composer-toolbar > button[aria-label="思考档位"] {
+    max-width: 125px;
+  }
+  .wb-toolbar-spacer {
+    flex: 1 1 0;
+  }
+}

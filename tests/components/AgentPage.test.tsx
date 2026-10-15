@@ -226,6 +226,236 @@ afterEach(() => {
 });
 
 describe("AgentPage", () => {
+  it("interrupts once, waits for actual tool settlement, and sends only the captured draft while preserving newer edits", async () => {
+    snapshot.status = "running";
+    snapshot.messages = [
+      {
+        id: "old-user",
+        role: "user",
+        createdAt: 3,
+        parts: [{ type: "text", text: "旧任务" }],
+      },
+      {
+        id: "old-assistant",
+        role: "assistant",
+        createdAt: 4,
+        parts: [
+          { type: "text", text: "原任务的部分结果" },
+          {
+            type: "tool",
+            id: "old-tool",
+            name: "shell",
+            state: "running",
+            input: { command: "owned fixture" },
+          },
+        ],
+      },
+    ];
+    render(<AgentPage />);
+    await flush();
+    const input = screen.getByLabelText("发送给 Agent 的消息");
+    expect(input).toHaveAttribute("rows", "1");
+    fill("现在改为检查文件");
+    fireEvent.click(screen.getByRole("button", { name: "打断并发送" }));
+    fireEvent.submit(input.closest("form")!);
+    await flush();
+    expect(agentApi.interruptSession).toHaveBeenCalledOnce();
+    expect(agentApi.sendMessage).not.toHaveBeenCalled();
+    expect(input).toBeEnabled();
+    fill("等待时新写的下一条草稿");
+    snapshot.status = "idle";
+    await tick(250);
+    expect(agentApi.sendMessage).not.toHaveBeenCalled();
+    snapshot.messages[1].completedAt = 5;
+    snapshot.messages[1].parts[1] = {
+      type: "tool",
+      id: "old-tool",
+      name: "shell",
+      state: "error",
+      input: { command: "owned fixture" },
+      error: "任务已停止",
+    };
+    await tick(250);
+    expect(agentApi.sendMessage).toHaveBeenCalledOnce();
+    expect(agentApi.sendMessage).toHaveBeenCalledWith(
+      session.id,
+      "现在改为检查文件",
+      expect.any(String),
+    );
+    expect(vi.mocked(agentApi.sendMessage).mock.calls[0][2]).not.toBe(
+      "old-user",
+    );
+    expect(input).toHaveValue("等待时新写的下一条草稿");
+    expect(screen.getByText("原任务的部分结果")).toBeInTheDocument();
+  });
+
+  it("keeps the replacement draft and original results when Stop fails, then allows an explicit retry", async () => {
+    snapshot.status = "running";
+    snapshot.messages = [
+      {
+        id: "partial",
+        role: "assistant",
+        createdAt: 3,
+        parts: [{ type: "text", text: "已完成的旧步骤" }],
+      },
+    ];
+    vi.mocked(agentApi.interruptSession).mockRejectedValueOnce(
+      new Error("无法确认停止"),
+    );
+    render(<AgentPage />);
+    await flush();
+    fill("改做新的任务");
+    fireEvent.click(screen.getByRole("button", { name: "打断并发送" }));
+    await flush();
+    expect(agentApi.sendMessage).not.toHaveBeenCalled();
+    expect(screen.getByText("无法确认停止")).toBeInTheDocument();
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
+      "改做新的任务",
+    );
+    expect(screen.getByText("已完成的旧步骤")).toBeInTheDocument();
+    vi.mocked(agentApi.interruptSession).mockImplementation(async () => {
+      snapshot.status = "idle";
+    });
+    fireEvent.click(screen.getByRole("button", { name: "打断并发送" }));
+    await flush();
+    expect(agentApi.interruptSession).toHaveBeenCalledTimes(2);
+    expect(agentApi.sendMessage).toHaveBeenCalledOnce();
+  });
+
+  it("never sends a replacement after cancellation times out or an unknown input is admitted later", async () => {
+    snapshot.session.id = "lc:unknown-replacement";
+    snapshot.status = "running";
+    vi.mocked(agentApi.listSessions).mockResolvedValue([snapshot.session]);
+    const key = `lolicode.agent.draft:${encodeURIComponent(project)}:${encodeURIComponent(snapshot.session.id)}`;
+    saveAgentSubmission({
+      version: 1,
+      projectPath: project,
+      sessionId: snapshot.session.id,
+      requestId: "unconfirmed-original",
+      text: "原输入",
+      draft: captureAgentDraft(key, "原输入"),
+      assistantIds: [],
+      phase: "uncertain",
+      observed: false,
+      stopRequested: false,
+    });
+    render(<AgentPage />);
+    await flush();
+    fill("保留这个新草稿");
+    fireEvent.click(screen.getByRole("button", { name: "打断并发送" }));
+    await flush();
+    await tick(30_000);
+    expect(screen.getByText(/停止确认超时/)).toBeInTheDocument();
+    expect(agentApi.sendMessage).not.toHaveBeenCalled();
+    expect(readAgentSubmission(project, snapshot.session.id)?.requestId).toBe(
+      "unconfirmed-original",
+    );
+    snapshot.status = "idle";
+    snapshot.messages = [
+      {
+        id: "unconfirmed-original",
+        role: "user",
+        createdAt: 3,
+        parts: [{ type: "text", text: "原输入" }],
+      },
+    ];
+    vi.mocked(agentApi.queryCommand).mockResolvedValue({ status: "accepted" });
+    await tick(6000);
+    expect(agentApi.interruptSession).toHaveBeenCalledTimes(2);
+    expect(agentApi.sendMessage).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
+      "保留这个新草稿",
+    );
+  });
+
+  it("abandons a replacement when switching away and back before a late Stop ACK", async () => {
+    const second = { ...session, id: "second", title: "另一段任务" };
+    snapshot.status = "running";
+    vi.mocked(agentApi.listSessions).mockResolvedValue([session, second]);
+    vi.mocked(agentApi.getSession).mockImplementation(async (id) =>
+      id === session.id
+        ? structuredClone(snapshot)
+        : { ...emptySnapshot(), session: second },
+    );
+    let finishStop!: () => void;
+    vi.mocked(agentApi.interruptSession).mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishStop = resolve;
+      }),
+    );
+    render(<AgentPage />);
+    await flush();
+    fill("原会话未发送的草稿");
+    fireEvent.click(screen.getByRole("button", { name: "打断并发送" }));
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: /^另一段任务/ }));
+    await flush();
+    fill("另一会话草稿");
+    fireEvent.click(screen.getByRole("button", { name: /^修复测试/ }));
+    await flush();
+    await tick(100);
+    await act(async () => finishStop());
+    snapshot.status = "idle";
+    await tick(1500);
+    expect(agentApi.sendMessage).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
+      "原会话未发送的草稿",
+    );
+    fireEvent.click(screen.getByRole("button", { name: /^另一段任务/ }));
+    await flush();
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
+      "另一会话草稿",
+    );
+  });
+
+  it("abandons a replacement when the project changes during cancellation", async () => {
+    snapshot.status = "running";
+    const otherProject = "D:/fixture/other";
+    const otherSession = {
+      ...session,
+      id: "other-project-session",
+      projectPath: otherProject,
+      title: "其他项目任务",
+    };
+    vi.mocked(agentApi.openProject).mockResolvedValue({
+      workspace: { path: otherProject, name: "other" },
+      catalog,
+      sessions: [otherSession],
+    });
+    vi.mocked(agentApi.getSession).mockImplementation(async (id) =>
+      id === session.id
+        ? structuredClone(snapshot)
+        : { ...emptySnapshot(), session: otherSession },
+    );
+    let finishStop!: () => void;
+    vi.mocked(agentApi.interruptSession).mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishStop = resolve;
+      }),
+    );
+    render(<AgentPage />);
+    await flush();
+    fill("原项目草稿");
+    fireEvent.click(screen.getByRole("button", { name: "打断并发送" }));
+    await flush();
+    expect(screen.getByRole("button", { name: "切换项目" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "切换项目" }));
+    await flush();
+    fill("新项目草稿");
+    await tick(100);
+    await act(async () => finishStop());
+    await tick(1000);
+    expect(agentApi.sendMessage).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
+      "新项目草稿",
+    );
+    expect(
+      sessionStorage.getItem(
+        `lolicode.agent.draft:${encodeURIComponent(project)}:${encodeURIComponent(session.id)}`,
+      ),
+    ).toBe("原项目草稿");
+  });
+
   it("converts an idle historical plan session only after a user send and waits for acknowledgement", async () => {
     snapshot.session.mode = "plan";
     let acknowledge!: (value: AgentSession) => void;
@@ -598,9 +828,13 @@ describe("AgentPage", () => {
     expect(agentApi.updateSession).toHaveBeenLastCalledWith(session.id, {
       permissionMode: "auto",
     });
+    expect(screen.getByLabelText("执行权限")).toHaveAttribute(
+      "title",
+      expect.stringContaining("常规编辑和安全命令自动允许"),
+    );
     expect(
-      screen.getByText(/常规编辑与已识别的安全命令自动允许/),
-    ).toBeInTheDocument();
+      screen.queryByText(/常规编辑与已识别的安全命令自动允许/),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "分析" }),
     ).not.toBeInTheDocument();
@@ -628,7 +862,7 @@ describe("AgentPage", () => {
     expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
       "保留待发送的要求",
     );
-    expect(screen.getByRole("button", { name: "发送" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "打断并发送" })).toBeEnabled();
     expect(agentApi.sendMessage).not.toHaveBeenCalled();
   });
 
@@ -689,7 +923,7 @@ describe("AgentPage", () => {
   });
 
   it.each(["running", "waiting_permission", "waiting_question"] as const)(
-    "changes model and permissions during %s while retaining the draft and blocking another send",
+    "changes model and permissions during %s while a replacement waits for cancellation",
     async (status) => {
       snapshot.status = status;
       render(<AgentPage />);
@@ -718,14 +952,18 @@ describe("AgentPage", () => {
       const input = screen.getByLabelText("发送给 Agent 的消息");
       expect(input).toHaveValue("任务结束后再发送的草稿");
       expect(input).toBeEnabled();
-      expect(screen.getByRole("button", { name: "发送" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "打断并发送" })).toBeEnabled();
       fireEvent.keyDown(input, { key: "Enter" });
       fireEvent.submit(input.closest("form")!);
       await flush();
       expect(agentApi.sendMessage).not.toHaveBeenCalled();
+      expect(agentApi.interruptSession).toHaveBeenCalledOnce();
       expect(
-        screen.getByText(/模型与思考档位从下一次模型请求生效/),
-      ).toBeInTheDocument();
+        screen.queryByText(/模型与思考档位从下一次模型请求生效/),
+      ).not.toBeInTheDocument();
+      snapshot.status = "idle";
+      await tick(250);
+      expect(agentApi.sendMessage).toHaveBeenCalledOnce();
     },
   );
 
@@ -1791,6 +2029,11 @@ describe("AgentPage", () => {
     ];
     render(<AgentPage />);
     await flush();
+    const activity = screen.getByText("正在处理 1 个步骤").closest("details")!;
+    expect(activity).not.toHaveAttribute("open");
+    expect(screen.queryByText("运行命令")).not.toBeInTheDocument();
+    fireEvent.click(activity.querySelector("summary")!);
+    await tick(1);
     expect(screen.getByText("运行命令")).toBeInTheDocument();
     expect(screen.getByText("执行中")).toBeInTheDocument();
     expect(screen.queryByText(/not-for-display/)).not.toBeInTheDocument();

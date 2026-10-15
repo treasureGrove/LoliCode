@@ -1,69 +1,46 @@
-import type { AgentTokenUsage, AgentUsage } from "@/types/agent";
+import type { AgentUsage } from "@/types/agent";
 
-const count = (value?: number) =>
-  value !== undefined && Number.isFinite(value) && value >= 0
-    ? value.toLocaleString("zh-CN")
+const validCount = (value?: number): value is number =>
+  value !== undefined && Number.isSafeInteger(value) && value >= 0;
+const formatCount = (value?: number) =>
+  validCount(value) ? value.toLocaleString("zh-CN") : "—";
+const compact = (value?: number) =>
+  validCount(value)
+    ? new Intl.NumberFormat("en", {
+        notation: "compact",
+        maximumFractionDigits: 1,
+      }).format(value)
     : "—";
 
-function Counters({ usage }: { usage?: AgentTokenUsage }) {
+export function AgentUsageFooter({ usage }: { usage?: AgentUsage }) {
+  const session = usage?.session;
+  const total =
+    validCount(session?.inputTokens) && validCount(session?.outputTokens)
+      ? session.inputTokens + session.outputTokens
+      : undefined;
+  const hit = session?.cacheHitRate;
+  const title = [
+    `输入 ${formatCount(session?.inputTokens)} · 输出 ${formatCount(session?.outputTokens)}`,
+    `缓存读 ${formatCount(session?.cacheReadTokens)} · 缓存写 ${formatCount(session?.cacheWriteTokens)}`,
+    session?.complete === false
+      ? "仅包含此会话开始记录后的请求，较早历史未计入。"
+      : undefined,
+    "数据来自模型服务回传，缺失项显示 —。",
+  ]
+    .filter(Boolean)
+    .join("\n");
   return (
-    <>
-      <span>输入 {count(usage?.inputTokens)}</span>
-      <span>输出 {count(usage?.outputTokens)}</span>
-      <span>缓存读 {count(usage?.cacheReadTokens)}</span>
-      <span>缓存写 {count(usage?.cacheWriteTokens)}</span>
+    <div className="wb-usage-footer" aria-label="本会话用量" title={title}>
+      <span>会话用量 {compact(total)} tokens</span>
+      <span aria-hidden="true">·</span>
       <span>
         缓存命中{" "}
-        {usage?.cacheHitRate !== undefined &&
-        usage.cacheHitRate >= 0 &&
-        usage.cacheHitRate <= 1
-          ? `${(usage.cacheHitRate * 100).toFixed(1)}%`
+        {typeof hit === "number" && Number.isFinite(hit) && hit >= 0 && hit <= 1
+          ? `${(hit * 100).toFixed(1)}%`
           : "—"}
       </span>
-      <span>模型请求 {count(usage?.modelRequests)} 轮</span>
-      {usage && (
-        <span>
-          用量回报 {count(usage.reportedRequests)}/{count(usage.modelRequests)}
-        </span>
-      )}
-    </>
-  );
-}
-
-export function AgentUsageFooter({ usage }: { usage?: AgentUsage }) {
-  return (
-    <div
-      className="wb-usage-footer"
-      aria-label="实际模型用量"
-      title="Token 与缓存计数来自模型服务回传，未回传的项目显示 —。"
-    >
-      <div>
-        <strong>本次任务</strong>
-        <Counters usage={usage?.task} />
-        <span>
-          耗时{" "}
-          {usage?.task && Number.isFinite(usage.task.elapsedMs)
-            ? `${(usage.task.elapsedMs / 1000).toFixed(1)} 秒`
-            : "—"}
-        </span>
-        <span>
-          生成速度{" "}
-          {usage?.task?.generationMs &&
-          usage.task.outputTokens !== undefined &&
-          usage.task.reportedRequests === usage.task.modelRequests
-            ? `${((usage.task.outputTokens * 1000) / usage.task.generationMs).toFixed(1)} tokens/秒`
-            : "—"}
-        </span>
-      </div>
-      <div>
-        <strong>
-          {usage?.session?.complete === false ? "已记录用量" : "会话累计"}
-        </strong>
-        <Counters usage={usage?.session} />
-        {usage?.session?.complete === false && (
-          <span>从 {new Date(usage.session.since).toLocaleString()} 起计</span>
-        )}
-      </div>
+      <span aria-hidden="true">·</span>
+      <span>{formatCount(session?.modelRequests)} 轮</span>
     </div>
   );
 }

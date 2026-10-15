@@ -11,7 +11,8 @@ import { SessionMarkdown } from "@/components/sessions/reader/SessionMarkdown";
 import { SessionCodeBlock } from "@/components/sessions/reader/SessionCodeBlock";
 import { cn } from "@/lib/utils";
 import { AgentFilePath } from "./AgentFilePath";
-import { AgentDisclosure } from "./AgentDisclosure";
+import { AgentDisclosure, type AgentDisclosureState } from "./AgentDisclosure";
+import { isAgentCancellation } from "./AgentRunError";
 
 const TOOL_NAMES: Record<string, string> = {
   read: "读取文件",
@@ -61,10 +62,15 @@ function toolTarget(part: Extract<AgentPart, { type: "tool" }>) {
 
 export const AgentToolPart = memo(function AgentToolPart({
   part,
+  grouped = false,
+  disclosureState,
 }: {
   part: Extract<AgentPart, { type: "tool" }>;
+  grouped?: boolean;
+  disclosureState?: AgentDisclosureState;
 }) {
   const active = part.state === "pending" || part.state === "running";
+  const cancelled = part.state === "error" && isAgentCancellation(part.error);
   const label = TOOL_NAMES[part.name] || part.name;
   const target = toolTarget(part);
   const filePath =
@@ -75,7 +81,8 @@ export const AgentToolPart = memo(function AgentToolPart({
       : undefined;
   return (
     <AgentDisclosure
-      className="wb-tool wb-disclosure my-2"
+      className={cn("wb-tool wb-disclosure my-2", grouped && "wb-tool-step")}
+      state={disclosureState}
       data-state={part.state}
       summaryClassName="flex cursor-pointer items-start gap-2 px-3 py-2 text-caption"
       bodyClassName="max-h-80 overflow-y-auto border-t border-border px-3 py-2"
@@ -90,7 +97,7 @@ export const AgentToolPart = memo(function AgentToolPart({
               className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin"
               aria-hidden="true"
             />
-          ) : part.state === "error" ? (
+          ) : part.state === "error" && !cancelled ? (
             <CircleAlert
               className="mt-0.5 h-3.5 w-3.5 shrink-0 text-danger-text"
               aria-hidden="true"
@@ -111,7 +118,12 @@ export const AgentToolPart = memo(function AgentToolPart({
               </span>
             )}
             {part.state === "error" && part.error && (
-              <span className="wb-tool-error-summary block truncate text-danger-text">
+              <span
+                className={cn(
+                  "wb-tool-error-summary block truncate",
+                  !cancelled && "text-danger-text",
+                )}
+              >
                 {part.error.slice(0, 160)}
               </span>
             )}
@@ -122,7 +134,9 @@ export const AgentToolPart = memo(function AgentToolPart({
               : part.state === "running"
                 ? "执行中"
                 : part.state === "error"
-                  ? "失败"
+                  ? cancelled
+                    ? "已停止"
+                    : "失败"
                   : "已完成"}
           </span>
         </>
@@ -132,8 +146,11 @@ export const AgentToolPart = memo(function AgentToolPart({
         <>
           {part.error && (
             <p
-              role="alert"
-              className="whitespace-pre-wrap text-caption text-danger-text"
+              role={cancelled ? "status" : "alert"}
+              className={cn(
+                "whitespace-pre-wrap text-caption",
+                !cancelled && "text-danger-text",
+              )}
             >
               {part.error}
             </p>
@@ -159,12 +176,12 @@ export const AgentToolPart = memo(function AgentToolPart({
   );
 });
 
-export const AgentMessageView = memo(function AgentMessageView({
-  message,
+export const AgentTextPart = memo(function AgentTextPart({
+  text,
   projectPath,
   sessionId,
 }: {
-  message: AgentMessage;
+  text: string;
   projectPath: string;
   sessionId?: string;
 }) {
@@ -180,6 +197,77 @@ export const AgentMessageView = memo(function AgentMessageView({
     ),
     [],
   );
+  return (
+    <SessionMarkdown
+      content={text}
+      projectDir={projectPath}
+      renderLocalImage={renderLocalImage}
+      renderLocalPath={renderLocalPath}
+      previewLocalImageLinks
+    />
+  );
+});
+
+export const AgentReasoningPart = memo(function AgentReasoningPart({
+  part,
+  projectPath,
+  disclosureState,
+}: {
+  part: { text: string };
+  projectPath: string;
+  disclosureState?: AgentDisclosureState;
+}) {
+  const renderLocalPath = useCallback(
+    (path: string, label?: React.ReactNode) => (
+      <AgentFilePath path={path} label={label} />
+    ),
+    [],
+  );
+  return (
+    <AgentDisclosure
+      className="wb-reasoning wb-disclosure my-2 text-caption"
+      state={disclosureState}
+      summaryClassName="flex cursor-pointer items-center gap-2"
+      summary={
+        <>
+          <ChevronRight
+            className="wb-disclosure-chevron h-3.5 w-3.5 shrink-0"
+            aria-hidden="true"
+          />
+          思考过程
+        </>
+      }
+    >
+      {() => (
+        <SessionMarkdown
+          content={part.text}
+          projectDir={projectPath}
+          variant="note"
+          renderLocalPath={renderLocalPath}
+        />
+      )}
+    </AgentDisclosure>
+  );
+});
+
+/** A part key does not depend on the arrival/removal of another part type. */
+export function agentMessageParts(message: AgentMessage) {
+  const ordinals = { text: 0, reasoning: 0, tool: 0 };
+  return message.parts.map((part) => {
+    const ordinal = ordinals[part.type]++;
+    return { part, key: `${message.id}:${part.type}:${part.id || ordinal}` };
+  });
+}
+
+export const AgentMessageView = memo(function AgentMessageView({
+  message,
+  projectPath,
+  sessionId,
+}: {
+  message: AgentMessage;
+  projectPath: string;
+  sessionId?: string;
+}) {
   return (
     <article
       aria-label={
@@ -200,41 +288,17 @@ export const AgentMessageView = memo(function AgentMessageView({
           {message.role === "user" ? "你" : "系统"}
         </p>
       )}
-      {message.parts.map((part, index) =>
+      {agentMessageParts(message).map(({ part, key }) =>
         part.type === "tool" ? (
-          <AgentToolPart key={part.id} part={part} />
+          <AgentToolPart key={key} part={part} />
         ) : part.type === "reasoning" ? (
-          <AgentDisclosure
-            key={part.id || index}
-            className="wb-reasoning wb-disclosure my-2 text-caption"
-            summaryClassName="flex cursor-pointer items-center gap-2"
-            summary={
-              <>
-                <ChevronRight
-                  className="wb-disclosure-chevron h-3.5 w-3.5 shrink-0"
-                  aria-hidden="true"
-                />
-                思考过程
-              </>
-            }
-          >
-            {() => (
-              <SessionMarkdown
-                content={part.text}
-                projectDir={projectPath}
-                variant="note"
-                renderLocalPath={renderLocalPath}
-              />
-            )}
-          </AgentDisclosure>
+          <AgentReasoningPart key={key} part={part} projectPath={projectPath} />
         ) : (
-          <SessionMarkdown
-            key={part.id || index}
-            content={part.text}
-            projectDir={projectPath}
-            renderLocalImage={renderLocalImage}
-            renderLocalPath={renderLocalPath}
-            previewLocalImageLinks
+          <AgentTextPart
+            key={key}
+            text={part.text}
+            projectPath={projectPath}
+            sessionId={sessionId}
           />
         ),
       )}

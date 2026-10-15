@@ -81,10 +81,12 @@ export function AgentPreviewPanel({
   sessionId,
   path,
   onClose,
+  width,
 }: {
   sessionId: string;
   path: string;
   onClose: () => void;
+  width?: number;
 }) {
   const [preview, setPreview] = useState<AgentFilePreview | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -133,7 +135,11 @@ export function AgentPreviewPanel({
     }
   };
   return (
-    <aside className="wb-preview-panel" aria-label="文件预览">
+    <aside
+      className="wb-preview-panel"
+      aria-label="文件预览"
+      style={width === undefined ? undefined : { width, flexBasis: width }}
+    >
       <header>
         <span className="min-w-0 flex-1 truncate" title={requestedPath}>
           {preview?.name ||

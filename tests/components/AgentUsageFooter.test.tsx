@@ -3,63 +3,91 @@ import { describe, expect, it } from "vitest";
 import { AgentUsageFooter } from "@/components/agent/AgentUsageFooter";
 
 describe("AgentUsageFooter", () => {
-  it("keeps missing usage unknown instead of estimating tokens from content", () => {
-    const view = render(<AgentUsageFooter />);
-    expect(view.container).toHaveTextContent("输入 —");
-    expect(view.container).toHaveTextContent("缓存读 —");
-    expect(view.container).toHaveTextContent("模型请求 — 轮");
-    expect(view.container).toHaveTextContent("生成速度 —");
-    expect(view.container).toHaveTextContent("缓存命中 —");
+  it("shows one compact session line with unknown missing counters", () => {
+    render(<AgentUsageFooter />);
+    const footer = screen.getByLabelText("本会话用量");
+    expect(footer).toHaveTextContent("会话用量 — tokens");
+    expect(footer).toHaveTextContent("缓存命中 —");
+    expect(footer).not.toHaveTextContent(
+      /本次任务|耗时|生成速度|用量回报|起计/,
+    );
+    expect(footer.querySelector("div")).toBeNull();
   });
-  it("shows actual counters and generation speed without including tool or approval wait time", () => {
-    const view = render(
+
+  it("uses only session counters and keeps exact breakdown in the tooltip", () => {
+    render(
       <AgentUsageFooter
         usage={{
           task: {
-            inputTokens: 1234,
-            outputTokens: 200,
-            cacheReadTokens: 0,
-            cacheHitRate: 0.25,
-            modelRequests: 3,
-            reportedRequests: 3,
+            inputTokens: 999,
+            outputTokens: 123,
+            modelRequests: 1,
+            reportedRequests: 1,
             startedAt: 1,
-            elapsedMs: 100000,
-            generationMs: 4000,
+            elapsedMs: 1000,
           },
           session: {
-            inputTokens: 3456,
-            modelRequests: 4,
-            reportedRequests: 2,
-            since: 1000,
+            inputTokens: 1000000,
+            outputTokens: 200000,
+            cacheReadTokens: 900000,
+            cacheWriteTokens: 0,
+            cacheHitRate: 0.9,
+            modelRequests: 32,
+            reportedRequests: 32,
+            since: 1,
             complete: false,
           },
         }}
       />,
     );
-    expect(view.container).toHaveTextContent("输入 1,234");
-    expect(view.container).toHaveTextContent("缓存读 0");
-    expect(view.container).toHaveTextContent("缓存写 —");
-    expect(view.container).toHaveTextContent("耗时 100.0 秒");
-    expect(view.container).toHaveTextContent("生成速度 50.0 tokens/秒");
-    expect(view.container).toHaveTextContent("缓存命中 25.0%");
-    expect(screen.getByText("已记录用量")).toBeVisible();
-    expect(view.container).toHaveTextContent("用量回报 2/4");
+    const footer = screen.getByLabelText("本会话用量");
+    expect(footer).toHaveTextContent("会话用量 1.2M tokens");
+    expect(footer).toHaveTextContent("缓存命中 90.0%");
+    expect(footer).toHaveTextContent("32 轮");
+    expect(footer).not.toHaveTextContent(/999|123|本次任务|用量回报|起计/);
+    expect(footer.title).toContain("缓存读 900,000");
+    expect(footer.title).toContain("较早历史未计入");
   });
-  it("does not claim complete generation speed when not every request reported usage", () => {
-    const view = render(
+
+  it("does not invent a total or accept an invalid cache hit rate", () => {
+    render(
       <AgentUsageFooter
         usage={{
-          task: {
-            outputTokens: 200,
-            modelRequests: 3,
-            reportedRequests: 2,
-            startedAt: 1,
-            elapsedMs: 5000,
-            generationMs: 4000,
+          session: {
+            inputTokens: 1000,
+            cacheHitRate: 1.5,
+            modelRequests: 2,
+            reportedRequests: 1,
+            since: 1,
+            complete: true,
           },
         }}
       />,
     );
-    expect(view.container).toHaveTextContent("生成速度 —");
+    const footer = screen.getByLabelText("本会话用量");
+    expect(footer).toHaveTextContent("会话用量 — tokens");
+    expect(footer).toHaveTextContent("缓存命中 —");
+  });
+
+  it("preserves reported zero values", () => {
+    render(
+      <AgentUsageFooter
+        usage={{
+          session: {
+            inputTokens: 0,
+            outputTokens: 0,
+            cacheHitRate: 0,
+            modelRequests: 0,
+            reportedRequests: 0,
+            since: 1,
+            complete: true,
+          },
+        }}
+      />,
+    );
+    const footer = screen.getByLabelText("本会话用量");
+    expect(footer).toHaveTextContent("会话用量 0 tokens");
+    expect(footer).toHaveTextContent("缓存命中 0.0%");
+    expect(footer).toHaveTextContent("0 轮");
   });
 });
