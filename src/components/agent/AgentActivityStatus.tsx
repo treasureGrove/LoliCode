@@ -73,6 +73,12 @@ export function AgentActivityStatus({
     if (snapshot.compacting) {
       phase = "compacting";
       label = "正在整理上下文…";
+    } else if (snapshot.modelPhase === "waiting") {
+      phase = "waiting_model";
+      label = "正在等待模型响应…";
+    } else if (snapshot.modelPhase === "finishing") {
+      phase = "finishing";
+      label = "正在收尾统计…";
     } else ({ phase, label } = runningPhase(snapshot.messages));
     busy = true;
   } else if (loading && !snapshot) {

@@ -86,6 +86,14 @@ pub enum AgentStatus {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentModelPhase {
+    Waiting,
+    Streaming,
+    Finishing,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentSnapshot {
     pub session: AgentSession,
@@ -103,6 +111,86 @@ pub struct AgentSnapshot {
     /// Automatic title generation can outlive the main model/tool task.
     #[serde(default)]
     pub title_pending: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub usage: Option<AgentUsage>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_phase: Option<AgentModelPhase>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentTokenUsage {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_tokens: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_tokens: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_read_tokens: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_write_tokens: Option<u64>,
+    /// Known inclusive prompt-token denominator; absent for ambiguous schemas.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_input_tokens: Option<u64>,
+}
+impl AgentTokenUsage {
+    pub fn reported(&self) -> bool {
+        self.input_tokens.is_some()
+            || self.output_tokens.is_some()
+            || self.cache_read_tokens.is_some()
+            || self.cache_write_tokens.is_some()
+    }
+    pub fn merge(&mut self, other: &Self) {
+        if other.input_tokens.is_some() {
+            self.input_tokens = other.input_tokens;
+        }
+        if other.output_tokens.is_some() {
+            self.output_tokens = other.output_tokens;
+        }
+        if other.cache_read_tokens.is_some() {
+            self.cache_read_tokens = other.cache_read_tokens;
+        }
+        if other.cache_write_tokens.is_some() {
+            self.cache_write_tokens = other.cache_write_tokens;
+        }
+        if other.cache_input_tokens.is_some() {
+            self.cache_input_tokens = other.cache_input_tokens;
+        }
+    }
+}
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentUsageTotals {
+    #[serde(flatten)]
+    pub tokens: AgentTokenUsage,
+    pub model_requests: u64,
+    pub reported_requests: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_hit_rate: Option<f64>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentTaskUsage {
+    #[serde(flatten)]
+    pub totals: AgentUsageTotals,
+    pub started_at: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub completed_at: Option<u64>,
+    pub elapsed_ms: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub generation_ms: Option<u64>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionUsage {
+    #[serde(flatten)]
+    pub totals: AgentUsageTotals,
+    pub since: u64,
+    pub complete: bool,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct AgentUsage {
+    pub task: Option<AgentTaskUsage>,
+    pub session: AgentSessionUsage,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

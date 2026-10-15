@@ -10,8 +10,7 @@ import type { AgentMessage, AgentPart } from "@/types/agent";
 import { SessionMarkdown } from "@/components/sessions/reader/SessionMarkdown";
 import { SessionCodeBlock } from "@/components/sessions/reader/SessionCodeBlock";
 import { cn } from "@/lib/utils";
-import LolicodeMascot from "@/components/shell/LolicodeMascot";
-import { AgentImage } from "./AgentImage";
+import { AgentFilePath } from "./AgentFilePath";
 import { AgentDisclosure } from "./AgentDisclosure";
 
 const TOOL_NAMES: Record<string, string> = {
@@ -68,6 +67,12 @@ export const AgentToolPart = memo(function AgentToolPart({
   const active = part.state === "pending" || part.state === "running";
   const label = TOOL_NAMES[part.name] || part.name;
   const target = toolTarget(part);
+  const filePath =
+    part.input && typeof part.input === "object"
+      ? ["filePath", "file_path", "path"]
+          .map((key) => (part.input as Record<string, unknown>)[key])
+          .find((value): value is string => typeof value === "string")
+      : undefined;
   return (
     <AgentDisclosure
       className="wb-tool wb-disclosure my-2"
@@ -101,8 +106,8 @@ export const AgentToolPart = memo(function AgentToolPart({
           <span className="min-w-0 flex-1">
             <span className="font-medium">{label}</span>
             {target && (
-              <span className="wb-tool-target ml-2 break-all" title={target}>
-                {target}
+              <span className="wb-tool-target ml-2 break-all">
+                {filePath ? <AgentFilePath path={filePath} /> : target}
               </span>
             )}
             {part.state === "error" && part.error && (
@@ -165,14 +170,15 @@ export const AgentMessageView = memo(function AgentMessageView({
 }) {
   const renderLocalImage = useCallback(
     (path: string, alt: string) => (
-      <AgentImage
-        sessionId={sessionId}
-        path={path}
-        alt={alt}
-        projectPath={projectPath}
-      />
+      <AgentFilePath path={path} label={alt || undefined} />
     ),
     [sessionId, projectPath],
+  );
+  const renderLocalPath = useCallback(
+    (path: string, label?: React.ReactNode) => (
+      <AgentFilePath path={path} label={label} />
+    ),
+    [],
   );
   return (
     <article
@@ -189,22 +195,11 @@ export const AgentMessageView = memo(function AgentMessageView({
         message.role === "assistant" && "wb-message-assistant",
       )}
     >
-      <p className="wb-message-meta">
-        {message.role === "assistant" && (
-          <LolicodeMascot
-            className="wb-assistant-avatar"
-            variant="portrait"
-            decorative
-          />
-        )}
-        <span>
-          {message.role === "user"
-            ? "你"
-            : message.role === "assistant"
-              ? "LoliCode"
-              : "系统"}
-        </span>
-      </p>
+      {message.role !== "assistant" && (
+        <p className="wb-message-meta">
+          {message.role === "user" ? "你" : "系统"}
+        </p>
+      )}
       {message.parts.map((part, index) =>
         part.type === "tool" ? (
           <AgentToolPart key={part.id} part={part} />
@@ -228,6 +223,7 @@ export const AgentMessageView = memo(function AgentMessageView({
                 content={part.text}
                 projectDir={projectPath}
                 variant="note"
+                renderLocalPath={renderLocalPath}
               />
             )}
           </AgentDisclosure>
@@ -237,6 +233,7 @@ export const AgentMessageView = memo(function AgentMessageView({
             content={part.text}
             projectDir={projectPath}
             renderLocalImage={renderLocalImage}
+            renderLocalPath={renderLocalPath}
             previewLocalImageLinks
           />
         ),

@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import i18n from "@/i18n";
 import type {
   AgentCatalog,
   AgentEngineStatus,
@@ -94,7 +95,14 @@ export const agentApi = {
   getSession: (sessionId: string) =>
     invoke<AgentSnapshot>("get_agent_session", { sessionId }),
   sendMessage: (sessionId: string, text: string, requestId: string) =>
-    invoke<void>("send_agent_message", { sessionId, text, requestId }),
+    invoke<void>("send_agent_message", {
+      sessionId,
+      text,
+      requestId,
+      locale: ["zh", "zh-TW", "en", "ja"].includes(i18n.resolvedLanguage || i18n.language)
+        ? i18n.resolvedLanguage || i18n.language
+        : undefined,
+    }),
   queryCommand: (sessionId: string, requestId: string) =>
     invoke<{
       status: "unknown" | "accepted" | "rejected" | "failed";

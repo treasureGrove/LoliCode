@@ -340,6 +340,7 @@ pub async fn send_agent_message(
     session_id: String,
     text: String,
     request_id: String,
+    locale: Option<String>,
 ) -> Result<(), String> {
     if text.trim().is_empty() || text.len() > 1024 * 1024 {
         return Err("请输入不超过 1MiB 的任务内容".into());
@@ -350,7 +351,7 @@ pub async fn send_agent_message(
     native(
         &app,
         "sendMessage",
-        json!({"sessionId":session_id,"text":text,"requestId":request_id}),
+        json!({"sessionId":session_id,"text":text,"requestId":request_id,"locale":locale}),
         true,
     )
     .await

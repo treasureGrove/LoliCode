@@ -211,6 +211,28 @@ describe("AppsPage concurrent CLI upgrades", () => {
       });
   });
 
+  it("embeds local tool management without a second application header or sidebar switches", async () => {
+    const { AppsPage } = await import("@/components/apps/AppsPage");
+    const view = mountApps(() => <AppsPage embedded simpleMode />);
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "appsPage.checkUpdates" }),
+      ).toBeEnabled(),
+    );
+    expect(
+      screen.getByText("Claude Code", { selector: "span" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Claude Desktop", { selector: "span" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "nav.apps" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+    expect(view.container.querySelector("#main-content")).toBeNull();
+    expect(mocks.runToolLifecycleAction).not.toHaveBeenCalled();
+  });
+
   it("copies only the selected application's manual command and switches installation methods", async () => {
     const getVersions = mocks.getToolVersions.getMockImplementation()!;
     mocks.getToolVersions.mockImplementation(async (tools: string[]) =>

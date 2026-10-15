@@ -16,6 +16,8 @@ export interface ChannelModel {
   reasoningEfforts?: string[];
   reasoningEffortSource?: string;
   reasoningEffortTransport?: "declared" | "unconfirmed" | "mixed";
+  /** User choice, not a claim that the route has verified this parameter. */
+  defaultReasoningEffort?: string;
   supportsTools?: boolean;
   inputModalities?: string[];
   protocol?: ChannelProtocol;

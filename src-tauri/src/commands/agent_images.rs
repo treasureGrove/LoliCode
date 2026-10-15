@@ -69,7 +69,7 @@ fn load_project_image(project: &Path, value: &str) -> Result<AgentImage, String>
     })
 }
 
-fn image_media_type(bytes: &[u8]) -> Option<&'static str> {
+pub(super) fn image_media_type(bytes: &[u8]) -> Option<&'static str> {
     if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
         return Some("image/png");
     }

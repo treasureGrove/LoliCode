@@ -1,5 +1,12 @@
 import { useEffect, useId, useState } from "react";
-import { Check, ChevronDown, Search, Sparkles } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  Search,
+  Settings2,
+  Sparkles,
+  RefreshCw,
+} from "lucide-react";
 import {
   Popover,
   PopoverContent,
@@ -7,10 +14,22 @@ import {
 } from "@/components/ui/popover";
 import type { AgentModel } from "@/types/agent";
 
-export const agentModelLabel = (model: AgentModel) =>
-  !model.channelName || model.name.startsWith(`${model.channelName} · `)
-    ? model.name
-    : `${model.channelName} · ${model.name}`;
+const humanLabel = (value: string) =>
+  value
+    .replace(
+      /\b(?:[a-f\d]{8}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{12}|[a-f\d]{24,})\b/gi,
+      "",
+    )
+    .replace(/^[\s·:/_-]+|[\s·:/_-]+$/g, "")
+    .trim();
+const modelName = (model: AgentModel) => humanLabel(model.name) || "未命名模型";
+export const agentModelLabel = (model: AgentModel) => {
+  const channel = humanLabel(model.channelName);
+  const name = modelName(model);
+  return channel && !name.startsWith(`${channel} · `)
+    ? `${channel} · ${name}`
+    : name;
+};
 
 export function AgentModelPicker({
   models,
@@ -19,6 +38,11 @@ export function AgentModelPicker({
   disabled = false,
   unavailableLabel,
   className = "",
+  onOpenChannels,
+  onRefresh,
+  refreshDisabled = false,
+  notice,
+  excludedSources = [],
 }: {
   models: AgentModel[];
   value: string;
@@ -26,14 +50,19 @@ export function AgentModelPicker({
   disabled?: boolean;
   unavailableLabel?: string;
   className?: string;
+  onOpenChannels?: () => void;
+  onRefresh?: () => void;
+  refreshDisabled?: boolean;
+  notice?: string;
+  excludedSources?: string[];
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const contentId = useId();
   useEffect(() => {
-    if (disabled || !models.length) setOpen(false);
-  }, [disabled, models.length]);
+    if (disabled) setOpen(false);
+  }, [disabled]);
   const selected = models.find((model) => model.id === value);
   const groupKey = (model: AgentModel) =>
     JSON.stringify([model.providerId, model.channelName]);
@@ -42,14 +71,14 @@ export function AgentModelPicker({
   for (const model of models) {
     if (
       needle &&
-      ![model.name, model.modelId, model.channelName, model.providerId].some(
+      ![modelName(model), humanLabel(model.channelName), model.modelId].some(
         (text) => text.toLocaleLowerCase().includes(needle),
       )
     )
       continue;
     const key = groupKey(model);
     const group = groups.get(key) || {
-      label: model.channelName || model.providerId,
+      label: humanLabel(model.channelName) || "模型渠道",
       models: [],
     };
     group.models.push(model);
@@ -72,7 +101,7 @@ export function AgentModelPicker({
           type="button"
           aria-label="模型"
           aria-controls={contentId}
-          disabled={disabled || !models.length}
+          disabled={disabled}
           title={selected ? agentModelLabel(selected) : unavailableLabel}
           className={`inline-flex max-w-[280px] items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-xs hover:bg-black/5 dark:hover:bg-white/5 ${className}`}
         >
@@ -155,12 +184,9 @@ export function AgentModelPicker({
                         }}
                       >
                         <span className="min-w-0 flex-1">
-                          <span className="block truncate">{model.name}</span>
-                          {model.name !== model.modelId && (
-                            <span className="block truncate text-xs text-fg-2">
-                              {model.modelId}
-                            </span>
-                          )}
+                          <span className="block truncate">
+                            {modelName(model)}
+                          </span>
                         </span>
                         {model.id === value && (
                           <Check
@@ -175,6 +201,44 @@ export function AgentModelPicker({
               </div>
             );
           })}
+        </div>
+        <div className="space-y-1 border-t p-1.5">
+          {notice && <p className="px-2 py-1 text-xs text-fg-2">{notice}</p>}
+          {onRefresh && (
+            <button
+              type="button"
+              aria-label="刷新可用模型"
+              disabled={refreshDisabled}
+              className="flex w-full items-center gap-2 rounded px-2 py-2 text-left text-sm disabled:opacity-50"
+              onClick={() => onRefresh()}
+            >
+              <RefreshCw size={14} />
+              刷新模型目录
+            </button>
+          )}
+          {onOpenChannels && (
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 rounded px-2 py-2 text-left text-sm hover:bg-black/5 dark:hover:bg-white/5"
+              onClick={() => {
+                setOpen(false);
+                onOpenChannels();
+              }}
+            >
+              <Settings2 size={14} />
+              管理和添加模型与渠道
+            </button>
+          )}
+          {excludedSources.length > 0 && (
+            <details className="px-2 text-xs text-fg-2">
+              <summary>部分渠道在工作台中不可用</summary>
+              <ul>
+                {excludedSources.map((reason, index) => (
+                  <li key={index}>{humanLabel(reason)}</li>
+                ))}
+              </ul>
+            </details>
+          )}
         </div>
       </PopoverContent>
     </Popover>

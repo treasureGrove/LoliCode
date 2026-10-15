@@ -46,6 +46,8 @@ export interface SessionMarkdownProps {
   autoLoadRemoteImages?: boolean;
   /** 本地图片（`![](/abs/path.png)`）的渲染；不传时显示为路径 chip */
   renderLocalImage?: (path: string, alt: string) => ReactNode;
+  /** Agent workspace actions; ordinary readers keep their existing PathChip. */
+  renderLocalPath?: (path: string, label?: ReactNode) => ReactNode;
   /** Agent output image links may also display their generated preview. */
   previewLocalImageLinks?: boolean;
   className?: string;
@@ -605,6 +607,7 @@ interface MarkdownActions {
   revealPath?: (path: string) => void;
   autoLoadRemoteImages: boolean;
   renderLocalImage?: (path: string, alt: string) => ReactNode;
+  renderLocalPath?: (path: string, label?: ReactNode) => ReactNode;
   previewLocalImageLinks?: boolean;
 }
 
@@ -668,9 +671,12 @@ const MarkdownPathChip = (props: {
   label?: ReactNode;
   searchQuery?: string;
 }) => {
-  const { revealPath, renderLocalImage, previewLocalImageLinks } = useContext(
-    MarkdownActionsContext,
-  );
+  const {
+    revealPath,
+    renderLocalImage,
+    renderLocalPath,
+    previewLocalImageLinks,
+  } = useContext(MarkdownActionsContext);
   if (
     previewLocalImageLinks &&
     renderLocalImage &&
@@ -685,7 +691,11 @@ const MarkdownPathChip = (props: {
       </>
     );
   }
-  return <PathChip {...props} onReveal={revealPath} />;
+  return renderLocalPath ? (
+    <>{renderLocalPath(props.path, props.label)}</>
+  ) : (
+    <PathChip {...props} onReveal={revealPath} />
+  );
 };
 
 const RelativeLocalImage = ({
@@ -1185,6 +1195,7 @@ export const SessionMarkdown = memo(function SessionMarkdown({
   onRevealPath,
   autoLoadRemoteImages = false,
   renderLocalImage,
+  renderLocalPath,
   previewLocalImageLinks = false,
   className,
 }: SessionMarkdownProps) {
@@ -1194,6 +1205,7 @@ export const SessionMarkdown = memo(function SessionMarkdown({
       revealPath: onRevealPath,
       autoLoadRemoteImages,
       renderLocalImage,
+      renderLocalPath,
       previewLocalImageLinks,
     }),
     [
@@ -1201,6 +1213,7 @@ export const SessionMarkdown = memo(function SessionMarkdown({
       onOpenLink,
       onRevealPath,
       renderLocalImage,
+      renderLocalPath,
       previewLocalImageLinks,
     ],
   );

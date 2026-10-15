@@ -942,6 +942,8 @@ impl Engine {
             stream_gap: running && (!connected || gap),
             title_pending: false,
             compacting: false,
+            usage: None,
+            model_phase: None,
         };
         let mut value = serde_json::to_value(&snapshot).map_err(|_| "会话内容编码失败")?;
         self.redact_value(&mut value);

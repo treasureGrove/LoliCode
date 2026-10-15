@@ -15,7 +15,18 @@ vi.mock("@/components/agent/AgentPage", () => ({
   ),
 }));
 vi.mock("@/components/channels/ChannelCenterPanel", () => ({
-  ChannelCenterPanel: () => <div data-testid="channel-center">Channels</div>,
+  ChannelCenterPanel: ({
+    initialToolsOpen,
+  }: {
+    initialToolsOpen?: boolean;
+  }) => (
+    <div
+      data-testid="channel-center"
+      data-tools-open={Boolean(initialToolsOpen)}
+    >
+      Channels
+    </div>
+  ),
 }));
 
 beforeEach(() => {
@@ -45,6 +56,9 @@ describe("LoliCode desktop entry", () => {
       "page",
     );
     expect(screen.getByText("LoliCode")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /^应用(?: ·|$)/ }),
+    ).not.toBeInTheDocument();
     expect(screen.getByRole("navigation")).toHaveAttribute(
       "data-collapsed",
       "true",
@@ -61,5 +75,25 @@ describe("LoliCode desktop entry", () => {
     expect(
       screen.queryByRole("button", { name: "授权中心" }),
     ).not.toBeInTheDocument();
+  });
+  it("opens the local Agent tools card within channels for the old apps route", async () => {
+    localStorage.setItem("cc-switch-last-view", "apps");
+    render(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <App />
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByTestId("channel-center")).toHaveAttribute(
+      "data-tools-open",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "渠道与模型" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
   });
 });

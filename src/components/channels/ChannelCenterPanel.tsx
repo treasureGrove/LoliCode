@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   CheckCircle2,
   CircleAlert,
+  Eye,
+  EyeOff,
   Loader2,
   Plus,
   RefreshCw,
@@ -37,7 +39,6 @@ import { useUnsavedChangesTracker } from "@/lib/unsavedChanges";
 import { cn } from "@/lib/utils";
 import {
   channelErrorMessage,
-  channelModelMetadata,
   matchesChannelModel,
   mergeDiscoveredChannel,
   selectedChannelModels,
@@ -53,6 +54,8 @@ import {
 } from "./channelPresets";
 import { ManagedChannelLoginPanel } from "./ManagedChannelLoginPanel";
 import { NativeSubscriptionLoginPanel } from "./NativeSubscriptionLoginPanel";
+import { ChannelModelList } from "./ChannelModelList";
+import { AppsPage } from "@/components/apps/AppsPage";
 
 const EMPTY_SNAPSHOT: ChannelCenterSnapshot = {
   channels: [],
@@ -63,12 +66,14 @@ const CARD = "rounded-panel border border-border bg-surface p-5";
 export interface ChannelCenterPanelProps {
   onNavigationBlockedChange?: (blocked: boolean) => void;
   initialAccountManagerOpen?: boolean;
+  initialToolsOpen?: boolean;
 }
 
 /** One catalog of upstream channels; target writers stay behind the backend API. */
 export function ChannelCenterPanel({
   onNavigationBlockedChange,
   initialAccountManagerOpen = false,
+  initialToolsOpen = false,
 }: ChannelCenterPanelProps = {}) {
   const [snapshot, setSnapshot] =
     useState<ChannelCenterSnapshot>(EMPTY_SNAPSHOT);
@@ -78,6 +83,11 @@ export function ChannelCenterPanel({
   const [reloadRequested, setReloadRequested] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
+  const [showKey, setShowKey] = useState(false);
+  const [toolsOpen, setToolsOpen] = useState(initialToolsOpen);
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [response, setResponse] = useState<ChannelApplyResponse | null>(null);
@@ -101,22 +111,36 @@ export function ChannelCenterPanel({
   const mounted = useRef(true);
   const loadGeneration = useRef(0);
   const busyRef = useRef(false);
+  const snapshotRef = useRef(snapshot);
+  const editVersion = useRef(0);
+  const formVersion = useRef(0);
+  const cleanVersion = useRef(0);
+  const saveInFlight = useRef<Promise<ChannelCenterSnapshot> | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
-  const blocked = dirty || formTouched || Boolean(busy) || accountBusy;
+  const blocked =
+    dirty || formTouched || Boolean(busy) || accountBusy || saving;
   const tracker = useUnsavedChangesTracker();
 
   useEffect(() => {
     if (initialAccountManagerOpen) setAccountManagerOpen(true);
   }, [initialAccountManagerOpen]);
+  useEffect(() => {
+    if (initialToolsOpen) setToolsOpen(true);
+  }, [initialToolsOpen]);
+
+  const replaceSnapshot = (next: ChannelCenterSnapshot) => {
+    snapshotRef.current = next;
+    setSnapshot(next);
+  };
 
   useEffect(() => {
     if (dirty || formTouched) tracker.markDirty();
     else tracker.markClean();
   }, [dirty, formTouched, tracker.markDirty, tracker.markClean]);
   useEffect(() => {
-    onNavigationBlockedChange?.(Boolean(busy) || accountBusy);
+    onNavigationBlockedChange?.(Boolean(busy) || accountBusy || saving);
     return () => onNavigationBlockedChange?.(false);
-  }, [busy, accountBusy, onNavigationBlockedChange]);
+  }, [busy, accountBusy, saving, onNavigationBlockedChange]);
   useEffect(() => {
     if (!blocked) return;
     const warnBeforeUnload = (event: BeforeUnloadEvent) => {
@@ -136,8 +160,10 @@ export function ChannelCenterPanel({
     try {
       const saved = await channelCenterApi.get();
       if (!mounted.current || generation !== loadGeneration.current) return;
-      setSnapshot(withValidDefault(saved));
+      replaceSnapshot(withValidDefault(saved));
+      cleanVersion.current = editVersion.current;
       setDirty(false);
+      setSaveFailed(false);
       setResponse(null);
     } catch (cause) {
       if (!mounted.current || generation !== loadGeneration.current) return;
@@ -159,9 +185,11 @@ export function ChannelCenterPanel({
   }, [load]);
 
   const resetForm = () => {
+    formVersion.current += 1;
     setName("");
     setBaseUrl(CHANNEL_PRESET_MAP.deepseek.baseUrl);
     setApiKey("");
+    setShowKey(false);
     setPreset("deepseek");
     setSourceProtocol(CHANNEL_PRESET_MAP.deepseek.protocol);
     setEditingId(null);
@@ -171,7 +199,9 @@ export function ChannelCenterPanel({
 
   const selectPreset = (value: string) => {
     if (value === preset) return;
+    formVersion.current += 1;
     setApiKey("");
+    setShowKey(false);
     setPreset(value);
     const accountPreset = ACCOUNT_CHANNEL_PRESET_MAP[value];
     const apiPreset = CHANNEL_PRESET_MAP[value];
@@ -183,9 +213,10 @@ export function ChannelCenterPanel({
   };
 
   const updateSnapshot = (next: ChannelCenterSnapshot) => {
-    setSnapshot(withValidDefault(next));
+    editVersion.current += 1;
+    replaceSnapshot(withValidDefault(next));
     setDirty(true);
-    setResponse(null);
+    setSaveFailed(false);
     setNotice(null);
   };
 
@@ -212,6 +243,7 @@ export function ChannelCenterPanel({
       ]);
       if (mounted.current) {
         setConflict(String(cause).includes("另一处修改"));
+        if (label === "save" || label === "apply") setSaveFailed(true);
         setError(message);
       }
       if (propagate) throw new Error(message);
@@ -221,60 +253,213 @@ export function ChannelCenterPanel({
     }
   };
 
-  // A successful save consumes this revision. Get the authoritative revision
-  // before further writes; if refreshing fails, stop instead of applying stale data.
-  const persist = async (next: ChannelCenterSnapshot, onSaved?: () => void) => {
-    const normalized = withValidDefault(next);
-    await channelCenterApi.save(normalized);
-    if (mounted.current) {
-      setSnapshot({ ...normalized, revision: (next.revision ?? 0) + 1 });
-      setDirty(false);
-      setResponse(null);
-      onSaved?.();
-    }
-    let saved: ChannelCenterSnapshot;
-    try {
-      saved = await channelCenterApi.get();
-    } catch {
-      if (mounted.current) setLoadFailed(true);
-      throw new Error("选择已保存，但无法刷新渠道。请点击重新加载后继续。");
-    }
-    if (saved.revision !== (next.revision ?? 0) + 1) {
-      if (mounted.current) setDirty(true);
-      throw new Error(
-        "渠道列表已被另一处修改。请重新加载后再配置；本页的选择已保留。",
+  // Serialize writes and rebase only the revision when users edit during I/O.
+  // An older save/get response must never replace a newer local selection.
+  const persist = async (
+    proposal?: ChannelCenterSnapshot,
+    onSaved?: () => void,
+  ): Promise<ChannelCenterSnapshot> => {
+    while (saveInFlight.current)
+      await saveInFlight.current.catch(() => undefined);
+    if (!proposal && cleanVersion.current === editVersion.current)
+      return snapshotRef.current;
+    const version = editVersion.current;
+    const normalized = withValidDefault({
+      ...(proposal ?? snapshotRef.current),
+      revision: snapshotRef.current.revision,
+    });
+    const expectedRevision = (normalized.revision ?? 0) + 1;
+    setSaving(true);
+    setSaveFailed(false);
+    const operation = (async () => {
+      await channelCenterApi.save(normalized);
+      if (!mounted.current) return normalized;
+      cleanVersion.current = version;
+      replaceSnapshot(
+        editVersion.current === version
+          ? { ...normalized, revision: expectedRevision }
+          : { ...snapshotRef.current, revision: expectedRevision },
       );
+      setDirty(editVersion.current !== version);
+      onSaved?.();
+      let saved: ChannelCenterSnapshot;
+      try {
+        saved = await channelCenterApi.get();
+      } catch {
+        if (mounted.current) setLoadFailed(true);
+        throw new Error("选择已保存，但无法刷新渠道。请点击重新加载后继续。");
+      }
+      if (!mounted.current) return saved;
+      if (saved.revision !== expectedRevision) {
+        setConflict(true);
+        setDirty(true);
+        throw new Error(
+          "渠道列表已被另一处修改。请重新加载后再配置；本页的选择已保留。",
+        );
+      }
+      replaceSnapshot(
+        editVersion.current === version
+          ? withValidDefault(saved)
+          : { ...snapshotRef.current, revision: saved.revision },
+      );
+      setError(null);
+      return saved;
+    })();
+    saveInFlight.current = operation;
+    try {
+      return await operation;
+    } finally {
+      if (saveInFlight.current === operation) saveInFlight.current = null;
+      if (mounted.current) setSaving(false);
     }
-    if (mounted.current) setSnapshot(withValidDefault(saved));
-    return saved;
   };
+
+  useEffect(() => {
+    if (
+      !dirty ||
+      loading ||
+      loadFailed ||
+      conflict ||
+      busy ||
+      accountBusy ||
+      saving ||
+      saveFailed
+    )
+      return;
+    const timer = window.setTimeout(() => {
+      void persist().catch((cause) => {
+        if (!mounted.current) return;
+        setSaveFailed(true);
+        setConflict(String(cause).includes("另一处修改"));
+        setError(
+          channelErrorMessage(
+            cause,
+            snapshotRef.current.channels.map((channel) => channel.apiKey),
+          ),
+        );
+      });
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [
+    snapshot,
+    dirty,
+    loading,
+    loadFailed,
+    conflict,
+    busy,
+    accountBusy,
+    saving,
+    saveFailed,
+  ]);
+
+  // Editing a saved source changes only the local catalog. Catalog discovery is
+  // an explicit action, so incomplete URLs never trigger network requests.
+  useEffect(() => {
+    if (
+      !editingId ||
+      !formTouched ||
+      loading ||
+      loadFailed ||
+      conflict ||
+      busy ||
+      resetRequested ||
+      !apiKey.trim()
+    )
+      return;
+    let url: URL;
+    try {
+      url = new URL(baseUrl.trim());
+    } catch {
+      return;
+    }
+    if (
+      !["http:", "https:"].includes(url.protocol) ||
+      url.username ||
+      url.password ||
+      url.search ||
+      url.hash
+    )
+      return;
+    const version = formVersion.current;
+    const timer = window.setTimeout(() => {
+      if (version !== formVersion.current) return;
+      const current = snapshotRef.current;
+      const previous = current.channels.find(
+        (channel) => channel.id === editingId,
+      );
+      if (!previous || previous.authKind !== "api_key") return;
+      const nextName =
+        name.trim() || CHANNEL_PRESET_MAP[preset]?.name || url.hostname;
+      const connectionChanged =
+        previous.baseUrl !== baseUrl.trim() ||
+        previous.apiKey !== apiKey.trim() ||
+        previous.protocol !== sourceProtocol;
+      if (connectionChanged || previous.name !== nextName) {
+        updateSnapshot({
+          ...current,
+          channels: current.channels.map((channel) =>
+            channel.id === editingId
+              ? {
+                  ...channel,
+                  name: nextName,
+                  baseUrl: baseUrl.trim(),
+                  apiKey: apiKey.trim(),
+                  protocol: sourceProtocol,
+                }
+              : channel,
+          ),
+        });
+        setNotice(
+          connectionChanged
+            ? "连接信息将自动保存。地址或密钥已变更，请点击该渠道的“刷新模型”更新目录。"
+            : "渠道名称将自动保存。",
+        );
+      }
+      setFormTouched(false);
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [
+    editingId,
+    formTouched,
+    name,
+    baseUrl,
+    apiKey,
+    preset,
+    sourceProtocol,
+    loading,
+    loadFailed,
+    conflict,
+    busy,
+    resetRequested,
+  ]);
 
   const upsertDiscovered = async (
     channel: ChannelSource,
     onSaved?: () => void,
     alreadyDiscovered = false,
   ) => {
-    const previous = snapshot.channels.find((item) => item.id === channel.id);
-    const discovered = mergeDiscoveredChannel(
-      alreadyDiscovered ? channel : await channelCenterApi.discover(channel),
-      previous,
-    );
-    const exists = snapshot.channels.some((item) => item.id === discovered.id);
+    const fetched = alreadyDiscovered
+      ? channel
+      : await channelCenterApi.discover(channel);
+    const current = snapshotRef.current;
+    const previous = current.channels.find((item) => item.id === channel.id);
+    const discovered = mergeDiscoveredChannel(fetched, previous);
+    const exists = current.channels.some((item) => item.id === discovered.id);
     const next = {
-      ...snapshot,
+      ...current,
       targets:
         discovered.authKind === "claude_subscription" &&
-        !snapshot.targets.includes("claude")
-          ? [...snapshot.targets, "claude" as const]
+        !current.targets.includes("claude")
+          ? [...current.targets, "claude" as const]
           : discovered.authKind === "gemini_subscription" &&
-              !snapshot.targets.includes("gemini")
-            ? [...snapshot.targets, "gemini" as const]
-            : snapshot.targets,
+              !current.targets.includes("gemini")
+            ? [...current.targets, "gemini" as const]
+            : current.targets,
       channels: exists
-        ? snapshot.channels.map((item) =>
+        ? current.channels.map((item) =>
             item.id === discovered.id ? discovered : item,
           )
-        : [...snapshot.channels, discovered],
+        : [...current.channels, discovered],
     };
     await persist(next, onSaved);
     return discovered;
@@ -361,13 +546,28 @@ export function ChannelCenterPanel({
       <div className="mx-auto max-w-6xl space-y-5 px-6 py-6 sm:px-8">
         <header className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h1 className="text-xl font-semibold text-fg-1">渠道中心</h1>
+            <h1 className="text-xl font-semibold text-fg-1">模型与渠道</h1>
             <p className="mt-1 text-body text-fg-2">
-              添加一次 API 或登录账号，把可用模型同步到你选择的 AI 工具。
+              配置模型与思考强度，自动保存。需要时再把渠道应用到本地 AI 工具。
             </p>
           </div>
           <span className="rounded-full bg-subtle px-3 py-1.5 text-caption text-fg-2">
             {snapshot.channels.length} 个渠道 · {selected.length} 个已选模型
+          </span>
+          <span role="status" className="text-caption text-fg-3">
+            {saving
+              ? "正在自动保存…"
+              : loadFailed
+                ? "暂时无法确认已保存配置"
+                : saveFailed
+                  ? "自动保存失败，修改仍保留"
+                  : dirty
+                    ? "等待自动保存…"
+                    : formTouched
+                      ? "输入草稿尚未保存"
+                      : !loading
+                        ? "配置已自动保存"
+                        : ""}
           </span>
         </header>
 
@@ -387,6 +587,18 @@ export function ChannelCenterPanel({
                     }}
                   >
                     重新加载
+                  </Button>
+                ) : saveFailed ? (
+                  <Button
+                    variant="neutral"
+                    size="compact"
+                    onClick={() =>
+                      void run("save", async () => {
+                        await persist();
+                      })
+                    }
+                  >
+                    重试保存
                   </Button>
                 ) : undefined
               }
@@ -450,7 +662,7 @@ export function ChannelCenterPanel({
                 className="space-y-3"
                 onSubmit={(event) => {
                   event.preventDefault();
-                  addApiChannel();
+                  if (!editingId) addApiChannel();
                 }}
               >
                 <fieldset disabled={disabled} className="space-y-3">
@@ -479,12 +691,13 @@ export function ChannelCenterPanel({
                       value={name}
                       placeholder="例如：工作账号"
                       onChange={(event) => {
+                        formVersion.current += 1;
                         setName(event.target.value);
                         setFormTouched(true);
                       }}
                     />
                   </div>
-                  {preset === "custom" && (
+                  {(preset === "custom" || editingId) && (
                     <div className="space-y-1.5">
                       <Label htmlFor="channel-url">API 地址</Label>
                       <Input
@@ -494,6 +707,7 @@ export function ChannelCenterPanel({
                         value={baseUrl}
                         placeholder="粘贴服务商提供的 API 地址"
                         onChange={(event) => {
+                          formVersion.current += 1;
                           setBaseUrl(event.target.value);
                           setFormTouched(true);
                         }}
@@ -502,46 +716,71 @@ export function ChannelCenterPanel({
                   )}
                   <div className="space-y-1.5">
                     <Label htmlFor="channel-key">API Key</Label>
-                    <Input
-                      id="channel-key"
-                      type="password"
-                      required
-                      value={apiKey}
-                      placeholder="粘贴密钥"
-                      autoComplete="new-password"
-                      onChange={(event) => {
-                        setApiKey(event.target.value);
-                        setFormTouched(true);
-                      }}
-                    />
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                      type="submit"
-                      variant="neutral"
-                      disabled={!baseUrl.trim() || !apiKey.trim()}
-                    >
-                      {busy === "discover-api" ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Plus className="h-4 w-4" />
-                      )}
-                      {editingId ? "保存修改并刷新模型" : "添加并查找模型"}
-                    </Button>
-                    {formTouched && (
+                    <div className="relative">
+                      <Input
+                        id="channel-key"
+                        type={showKey ? "text" : "password"}
+                        className="pr-10"
+                        required
+                        value={apiKey}
+                        placeholder="粘贴密钥"
+                        autoComplete="new-password"
+                        onChange={(event) => {
+                          formVersion.current += 1;
+                          setApiKey(event.target.value);
+                          setFormTouched(true);
+                        }}
+                      />
                       <Button
                         type="button"
                         variant="quiet"
-                        onClick={() => setResetRequested(true)}
+                        size="icon-compact"
+                        className="absolute right-1 top-1/2 -translate-y-1/2"
+                        aria-label={showKey ? "隐藏 API Key" : "显示 API Key"}
+                        aria-pressed={showKey}
+                        onClick={() => setShowKey((value) => !value)}
                       >
-                        {editingId ? "取消修改" : "清空输入"}
+                        {showKey ? (
+                          <EyeOff className="h-4 w-4" />
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {!editingId && (
+                      <Button
+                        type="submit"
+                        variant="neutral"
+                        disabled={!baseUrl.trim() || !apiKey.trim()}
+                      >
+                        {busy === "discover-api" ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Plus className="h-4 w-4" />
+                        )}
+                        添加并查找模型
+                      </Button>
+                    )}
+                    {(formTouched || editingId) && (
+                      <Button
+                        type="button"
+                        variant="quiet"
+                        onClick={() =>
+                          formTouched ? setResetRequested(true) : resetForm()
+                        }
+                      >
+                        {editingId ? "结束编辑" : "清空输入"}
                       </Button>
                     )}
                   </div>
                   <p className="text-caption text-fg-3">
-                    {preset === "custom"
-                      ? "填入服务商的地址和密钥，自动获取模型。"
-                      : "自动获取此账号的模型列表；不同服务可以逐个加入。"}
+                    {editingId
+                      ? "完整有效的修改会自动保存；不会自动请求模型目录。修改连接信息后，请单独刷新模型。"
+                      : preset === "custom"
+                        ? "填入服务商的地址和密钥，自动获取模型。"
+                        : "自动获取此账号的模型列表；不同服务可以逐个加入。"}
                   </p>
                 </fieldset>
               </form>
@@ -684,15 +923,17 @@ export function ChannelCenterPanel({
                         size="compact"
                         disabled={disabled || formTouched}
                         onClick={() => {
+                          formVersion.current += 1;
                           setEditingId(channel.id);
                           setName(channel.name);
                           setBaseUrl(channel.baseUrl);
                           setApiKey(channel.apiKey);
+                          setShowKey(false);
                           setPreset(
                             matchChannelPreset(channel)?.id ?? "custom",
                           );
                           setSourceProtocol(channel.protocol);
-                          setFormTouched(true);
+                          setFormTouched(false);
                           formRef.current?.scrollIntoView?.({
                             behavior: "smooth",
                             block: "center",
@@ -705,7 +946,9 @@ export function ChannelCenterPanel({
                     <Button
                       variant="quiet"
                       size="compact"
-                      disabled={disabled}
+                      disabled={
+                        disabled || (editingId === channel.id && formTouched)
+                      }
                       onClick={() =>
                         void run(`refresh-${channel.id}`, async () => {
                           await upsertDiscovered(channel);
@@ -726,92 +969,28 @@ export function ChannelCenterPanel({
                         ? "检测订阅"
                         : "刷新模型"}
                     </Button>
-                    <Button
-                      variant="quiet"
-                      size="compact"
-                      disabled={disabled || !channel.enabled}
-                      onClick={() =>
-                        updateSnapshot({
-                          ...snapshot,
-                          channels: snapshot.channels.map((item) =>
-                            item.id === channel.id
-                              ? {
-                                  ...item,
-                                  models: item.models.map((model) => ({
-                                    ...model,
-                                    enabled: model.supportsTools !== false,
-                                  })),
-                                }
-                              : item,
-                          ),
-                        })
-                      }
-                    >
-                      全选适合模型
-                    </Button>
                   </div>
                 </div>
-                {models.length === 0 ? (
-                  <p className="px-3 py-4 text-caption text-fg-3">
-                    {channel.models.length === 0
-                      ? "没有可用模型，请检查账号权限或刷新重试。"
-                      : "没有匹配的模型。"}
-                  </p>
-                ) : (
-                  <div className="grid gap-px sm:grid-cols-2 xl:grid-cols-3">
-                    {models.map((model) => (
-                      <label
-                        key={model.id}
-                        className={cn(
-                          "flex items-start gap-2.5 px-3 py-3 text-body",
-                          !channel.enabled && "opacity-50",
-                        )}
-                      >
-                        <Checkbox
-                          className="mt-0.5"
-                          aria-label={`${channel.name} · ${model.name || model.id}`}
-                          checked={
-                            model.enabled !== false &&
-                            model.supportsTools !== false
-                          }
-                          disabled={
-                            disabled ||
-                            !channel.enabled ||
-                            model.supportsTools === false
-                          }
-                          onCheckedChange={(enabled) =>
-                            updateSnapshot({
-                              ...snapshot,
-                              channels: snapshot.channels.map((item) =>
-                                item.id === channel.id
-                                  ? {
-                                      ...item,
-                                      models: item.models.map((entry) =>
-                                        entry.id === model.id
-                                          ? { ...entry, enabled }
-                                          : entry,
-                                      ),
-                                    }
-                                  : item,
-                              ),
-                            })
-                          }
-                        />
-                        <span className="min-w-0">
-                          <span className="block break-words text-fg-1">
-                            {model.name || model.id}
-                          </span>
-                          <span className="mt-0.5 block text-caption text-fg-3">
-                            {model.name && model.name !== model.id
-                              ? `${model.id} · `
-                              : ""}
-                            {channelModelMetadata(channel, model)}
-                          </span>
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                )}
+                <ChannelModelList
+                  channel={channel}
+                  models={models}
+                  disabled={disabled}
+                  collapsed={Boolean(collapsed[channel.id])}
+                  onToggle={() =>
+                    setCollapsed((value) => ({
+                      ...value,
+                      [channel.id]: !value[channel.id],
+                    }))
+                  }
+                  onModelsChange={(models) =>
+                    updateSnapshot({
+                      ...snapshotRef.current,
+                      channels: snapshotRef.current.channels.map((item) =>
+                        item.id === channel.id ? { ...item, models } : item,
+                      ),
+                    })
+                  }
+                />
               </article>
             ))}
           </div>
@@ -839,15 +1018,40 @@ export function ChannelCenterPanel({
           </div>
         </section>
 
+        <section className={CARD} aria-labelledby="channel-tools-heading">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2
+                id="channel-tools-heading"
+                className="text-base font-semibold text-fg-1"
+              >
+                本地 Agent 工具
+              </h2>
+              <p className="mt-1 text-caption text-fg-2">
+                查看本机安装状态，安装、升级或诊断需要使用的工具。
+              </p>
+            </div>
+            <Button
+              variant="neutral"
+              size="compact"
+              aria-expanded={toolsOpen}
+              onClick={() => setToolsOpen((value) => !value)}
+            >
+              {toolsOpen ? "收起工具管理" : "展开工具管理"}
+            </Button>
+          </div>
+          {toolsOpen && <AppsPage embedded simpleMode />}
+        </section>
+
         <section className={CARD} aria-labelledby="channel-target-heading">
           <h2
             id="channel-target-heading"
             className="text-base font-semibold text-fg-1"
           >
-            3. 选择工具并配置
+            应用渠道到本地 Agent 工具
           </h2>
           <p className="mt-1 text-caption text-fg-2">
-            各工具使用兼容的模型。部分工具只能设置一个当前默认模型，实际结果会逐项显示。
+            选择明确的目标后，点击下方按钮才会写入这些工具的本地配置。各工具使用兼容模型，结果逐项保留；失败可重试。
           </p>
           <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
             {APP_IDS.map((app) => (
@@ -884,13 +1088,15 @@ export function ChannelCenterPanel({
               size="lg"
               disabled={
                 disabled ||
+                conflict ||
+                Boolean(editingId && formTouched) ||
                 selected.length === 0 ||
                 snapshot.targets.length === 0
               }
               onClick={() =>
                 void run("apply", async () => {
                   setResponse(null);
-                  const saved = await persist(snapshot);
+                  const saved = await persist();
                   const result = await channelCenterApi.apply(saved.revision);
                   if (mounted.current) setResponse(result);
                 })
@@ -905,23 +1111,13 @@ export function ChannelCenterPanel({
                 ? "正在配置…"
                 : `一键配置 ${snapshot.targets.length} 个工具`}
             </Button>
-            <Button
-              variant="neutral"
-              disabled={disabled || !dirty}
-              onClick={() =>
-                void run("save", async () => {
-                  await persist(snapshot);
-                  if (mounted.current)
-                    setNotice("选择已保存。点击一键配置后会同步到工具。");
-                })
-              }
-            >
-              {busy === "save" && <Loader2 className="h-4 w-4 animate-spin" />}
-              保存选择
-            </Button>
-            {dirty && (
-              <span className="text-caption text-fg-3">有未保存的选择</span>
-            )}
+            <span className="text-caption text-fg-3">
+              配置目标：
+              {snapshot.targets
+                .map((app) => APP_DISPLAY_NAME[app])
+                .join("、") || "尚未选择"}
+              。模型选择会自动保存，外部工具仅在点击时更新。
+            </span>
           </div>
           {response && (
             <div className="mt-5 space-y-2" aria-live="polite">

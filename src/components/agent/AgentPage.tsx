@@ -3,15 +3,13 @@ import { listen } from "@tauri-apps/api/event";
 import {
   FolderOpen,
   MessageSquarePlus,
-  RefreshCw,
   Send,
   Square,
   Folder,
   PanelLeftClose,
   PanelLeftOpen,
   Search,
-  SlidersHorizontal,
-  Lightbulb,
+  PanelRightOpen,
   ChevronDown,
   Blocks,
   Archive,
@@ -43,7 +41,6 @@ import { agentErrorMessage, useAgentSnapshot } from "@/hooks/useAgentSnapshot";
 import type {
   AgentCatalog,
   AgentEngineStatus,
-  AgentMode,
   AgentPermissionMode,
   AgentProject,
   AgentSession,
@@ -60,6 +57,9 @@ import {
   agentModelLabel as modelLabel,
 } from "./AgentModelPicker";
 import { AgentReasoningPicker } from "./AgentReasoningPicker";
+import { AgentFileActionsContext } from "./AgentFilePath";
+import { AgentPreviewPanel } from "./AgentPreviewPanel";
+import { AgentUsageFooter } from "./AgentUsageFooter";
 import { WindowControlsContext } from "@/components/shell/AppPageHeader";
 import LolicodeMascot from "@/components/shell/LolicodeMascot";
 import { DRAG_REGION_ATTR, DRAG_REGION_STYLE } from "@/lib/platform";
@@ -259,7 +259,15 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [modelId, setModelId] = useState("");
   const [reasoningEffort, setReasoningEffort] = useState("");
-  const [mode, setMode] = useState<AgentMode>("build");
+  const [previewPath, setPreviewPath] = useState<string | null>(null);
+  const [previewSession, setPreviewSession] = useState<string | null>(null);
+  const openPreview = useCallback(
+    (path: string) => {
+      setPreviewSession(sessionId);
+      setPreviewPath(path);
+    },
+    [sessionId],
+  );
   const [busy, setBusy] = useState<string | null>(null);
   const [busySessionId, setBusySessionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -288,6 +296,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
   statusRef.current = statuses;
   const scrollRef = useRef<HTMLDivElement>(null);
   const atBottom = useRef(true);
+  useEffect(() => setPreviewPath(null), [sessionId]);
 
   useEffect(() => {
     const toggleSidebar = (event: KeyboardEvent) => {
@@ -825,7 +834,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
     try {
       const session = await agentApi.createSession(
         modelId,
-        mode,
+        "build",
         undefined,
         permissionMode,
         reasoningEffort || undefined,
@@ -863,6 +872,27 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
     const storageKey = key;
     const text = draft.trim();
     const projectPath = workspace!.path;
+    // Historical plan sessions remain readable. A new user send deliberately
+    // moves an idle session to build before recording or dispatching input.
+    if (selectedSession?.mode === "plan") {
+      mutation.current = true;
+      setBusy("config");
+      setError(null);
+      try {
+        const result = await agentApi.updateSession(id, { mode: "build" });
+        if (result.id !== id)
+          throw new Error("返回的会话与当前选择不一致，请重新读取。");
+        if (!mounted.current) return;
+        confirmSession(result, ["mode"]);
+      } catch (cause) {
+        if (mounted.current && selectedId.current === id)
+          setError(agentErrorMessage(cause));
+        return;
+      } finally {
+        mutation.current = false;
+        if (mounted.current) setBusy(null);
+      }
+    }
     const previous = readAgentSubmission(projectPath, id);
     if (previous && (previous.text !== text || previous.stopRequested)) {
       setError(
@@ -1115,13 +1145,11 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
   };
   const updateSessionConfig = async (patch: {
     modelId?: string;
-    mode?: AgentMode;
     permissionMode?: AgentPermissionMode;
     reasoningEffort?: string;
   }) => {
     if (!sessionId) {
       if (patch.modelId) setModelId(patch.modelId);
-      if (patch.mode) setMode(patch.mode);
       if (patch.permissionMode) setPermissionMode(patch.permissionMode);
       if (patch.reasoningEffort !== undefined)
         setReasoningEffort(patch.reasoningEffort);
@@ -1147,14 +1175,12 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
         ...(patch.modelId || patch.reasoningEffort !== undefined
           ? ["reasoningEffort" as const]
           : []),
-        ...(patch.mode ? ["mode" as const] : []),
         ...(patch.permissionMode ? ["permissionMode" as const] : []),
       ]);
       if (selectedId.current === id) {
         if (patch.modelId) setModelId(patch.modelId);
         if (patch.modelId || patch.reasoningEffort !== undefined)
           setReasoningEffort(result.reasoningEffort || "");
-        if (patch.mode) setMode(patch.mode);
         if (patch.permissionMode) setPermissionMode(patch.permissionMode);
       }
     } catch (cause) {
@@ -1426,9 +1452,6 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
                           pending[session.id]) && (
                           <i className="wb-session-dot" aria-label="进行中" />
                         )}
-                        <small>
-                          {session.mode === "plan" ? "分析" : "实现"}
-                        </small>
                       </button>
                       <AgentSessionMenu
                         session={session}
@@ -1551,45 +1574,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
               </>
             )}
           </div>
-          <div className="wb-sidebar-footer">
-            {onOpenChannels && (
-              <button className="wb-nav-button" onClick={onOpenChannels}>
-                <SlidersHorizontal />
-                渠道与模型
-              </button>
-            )}
-            <button
-              className="wb-nav-button"
-              disabled={Boolean(busy) || working}
-              aria-label="刷新可用模型"
-              title={
-                working ? "请等项目中的任务完成后刷新模型" : "刷新可用模型"
-              }
-              onClick={() => void refreshCatalog()}
-            >
-              <RefreshCw />
-              刷新模型目录
-            </button>
-            {(working || catalogUpdate > catalog.revision) && (
-              <p className="wb-sidebar-note">
-                {catalogUpdate > catalog.revision
-                  ? working
-                    ? "渠道已更新，任务结束后将自动刷新模型目录。"
-                    : "渠道已更新，可刷新模型目录。"
-                  : "任务结束后可刷新模型目录。"}
-              </p>
-            )}
-            {catalog.excludedSources.length > 0 && (
-              <details>
-                <summary>部分渠道在工作台中不可用</summary>
-                <ul>
-                  {catalog.excludedSources.map((reason, index) => (
-                    <li key={index}>{reason}</li>
-                  ))}
-                </ul>
-              </details>
-            )}
-          </div>
+          <div className="wb-sidebar-footer"></div>
         </aside>
       )}
       <main className="wb-main">
@@ -1689,8 +1674,12 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
               <AgentModelPicker
                 className="mb-4"
                 models={catalog.models}
-                disabled={Boolean(busy) || !catalog.models.length}
+                disabled={Boolean(busy)}
                 value={modelId}
+                onOpenChannels={onOpenChannels}
+                onRefresh={() => void refreshCatalog()}
+                refreshDisabled={Boolean(busy) || working}
+                excludedSources={catalog.excludedSources}
                 onSelect={(id) => {
                   setModelId(id);
                   setReasoningEffort((old) =>
@@ -1708,29 +1697,6 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
                 disabled={Boolean(busy) || !modelId}
                 onSelect={setReasoningEffort}
               />
-              <div
-                role="group"
-                aria-label="新会话执行方式"
-                className="mb-4 flex justify-center gap-2"
-              >
-                <button
-                  className="wb-mode-button"
-                  disabled={Boolean(busy)}
-                  aria-pressed={mode === "plan"}
-                  onClick={() => void updateSessionConfig({ mode: "plan" })}
-                >
-                  <Lightbulb size={14} />
-                  分析
-                </button>
-                <button
-                  className="wb-mode-button"
-                  disabled={Boolean(busy)}
-                  aria-pressed={mode === "build"}
-                  onClick={() => void updateSessionConfig({ mode: "build" })}
-                >
-                  实现
-                </button>
-              </div>
               <label className="sr-only" htmlFor="agent-new-permission">
                 执行权限
               </label>
@@ -1771,11 +1737,16 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
             )}
             <div className="wb-context-line">
               <span>
-                {boundModel
-                  ? modelLabel(boundModel)
-                  : selectedSession?.model?.modelId || "会话绑定的模型"}{" "}
-                · {selectedSession?.mode === "plan" ? "分析" : "实现"}
+                {boundModel ? modelLabel(boundModel) : "会话绑定的模型"}
               </span>
+              <button
+                type="button"
+                className="wb-icon-button"
+                aria-label="预览项目文件"
+                onClick={() => openPreview("")}
+              >
+                <PanelRightOpen />
+              </button>
               <AgentActivityStatus
                 snapshot={snapshot}
                 queued={queuedHere}
@@ -1810,81 +1781,89 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
                 正在恢复连接，已有内容会保留。
               </p>
             )}
-            <div
-              ref={scrollRef}
-              onScroll={() => {
-                const el = scrollRef.current;
-                if (el)
-                  atBottom.current =
-                    el.scrollTop + el.clientHeight >= el.scrollHeight - 40;
+            <AgentFileActionsContext.Provider
+              value={{
+                sessionId: sessionId || undefined,
+                projectPath: workspace?.path,
+                onPreview: openPreview,
               }}
-              className="wb-chat"
             >
-              <div className="wb-chat-content">
-                {snapshot?.messages.map((message) => (
-                  <AgentMessageView
-                    sessionId={snapshot?.session.id}
-                    key={message.id}
-                    message={message}
-                    projectPath={workspace.path}
-                  />
-                ))}
-                {snapshot && !snapshot.messages.length && (
-                  <div className="wb-empty">
-                    <div className="wb-empty-content">
-                      <WelcomeMascot compact />
-                      <h2>今天想完成什么？</h2>
-                      <p>说说你想完成的任务。</p>
+              <div
+                ref={scrollRef}
+                onScroll={() => {
+                  const el = scrollRef.current;
+                  if (el)
+                    atBottom.current =
+                      el.scrollTop + el.clientHeight >= el.scrollHeight - 40;
+                }}
+                className="wb-chat"
+              >
+                <div className="wb-chat-content">
+                  {snapshot?.messages.map((message) => (
+                    <AgentMessageView
+                      sessionId={snapshot?.session.id}
+                      key={message.id}
+                      message={message}
+                      projectPath={workspace.path}
+                    />
+                  ))}
+                  {snapshot && !snapshot.messages.length && (
+                    <div className="wb-empty">
+                      <div className="wb-empty-content">
+                        <WelcomeMascot compact />
+                        <h2>今天想完成什么？</h2>
+                        <p>说说你想完成的任务。</p>
+                      </div>
                     </div>
-                  </div>
-                )}
-                {!readOnlySession &&
-                  snapshot?.permissions
-                    .filter((request) => request.sessionId === sessionId)
-                    .map((request) => (
-                      <AgentPermissionCard
-                        key={request.id}
-                        request={request}
-                        onReply={(decision) =>
-                          refreshAfter(() =>
-                            agentApi.replyPermission(
-                              request.sessionId,
-                              request.id,
-                              decision,
-                            ),
-                          )
-                        }
-                      />
-                    ))}
-                {!readOnlySession &&
-                  snapshot?.questions
-                    .filter((request) => request.sessionId === sessionId)
-                    .map((request) => (
-                      <AgentQuestionCard
-                        key={request.id}
-                        question={request}
-                        onReply={(answer) =>
-                          refreshAfter(() =>
-                            agentApi.replyQuestion(
-                              request.sessionId,
-                              request.id,
-                              answer,
-                            ),
-                          )
-                        }
-                        onReject={() =>
-                          refreshAfter(() =>
-                            agentApi.rejectQuestion(
-                              request.sessionId,
-                              request.id,
-                            ),
-                          )
-                        }
-                      />
-                    ))}
+                  )}
+                  {!readOnlySession &&
+                    snapshot?.permissions
+                      .filter((request) => request.sessionId === sessionId)
+                      .map((request) => (
+                        <AgentPermissionCard
+                          key={request.id}
+                          request={request}
+                          onReply={(decision) =>
+                            refreshAfter(() =>
+                              agentApi.replyPermission(
+                                request.sessionId,
+                                request.id,
+                                decision,
+                              ),
+                            )
+                          }
+                        />
+                      ))}
+                  {!readOnlySession &&
+                    snapshot?.questions
+                      .filter((request) => request.sessionId === sessionId)
+                      .map((request) => (
+                        <AgentQuestionCard
+                          key={request.id}
+                          question={request}
+                          onReply={(answer) =>
+                            refreshAfter(() =>
+                              agentApi.replyQuestion(
+                                request.sessionId,
+                                request.id,
+                                answer,
+                              ),
+                            )
+                          }
+                          onReject={() =>
+                            refreshAfter(() =>
+                              agentApi.rejectQuestion(
+                                request.sessionId,
+                                request.id,
+                              ),
+                            )
+                          }
+                        />
+                      ))}
+                </div>
               </div>
-            </div>
-            <AgentChanges key={sessionId} diffs={snapshot?.diffs || []} />
+              <AgentChanges key={sessionId} diffs={snapshot?.diffs || []} />
+            </AgentFileActionsContext.Provider>
             <div className="wb-composer-area">
               <form
                 className="wb-composer"
@@ -1922,13 +1901,25 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
                         readOnlySession ||
                         Boolean(busy) ||
                         !snapshot ||
-                        uncertainHere ||
-                        !catalog.models.length
+                        uncertainHere
                       }
                       value={boundModel?.id || ""}
+                      onOpenChannels={onOpenChannels}
+                      onRefresh={() => void refreshCatalog()}
+                      refreshDisabled={Boolean(busy) || working}
+                      excludedSources={catalog.excludedSources}
+                      notice={
+                        catalogUpdate > catalog.revision
+                          ? working
+                            ? "渠道已更新，任务结束后将自动刷新模型目录。"
+                            : "渠道已更新，可刷新模型目录。"
+                          : working
+                            ? "任务结束后可刷新模型目录。"
+                            : undefined
+                      }
                       unavailableLabel={
                         selectedSession?.model
-                          ? `${selectedSession.model.modelId}（目录中不可用）`
+                          ? "会话模型（目录中不可用）"
                           : undefined
                       }
                       onSelect={(id) =>
@@ -1952,48 +1943,6 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
                       void updateSessionConfig({ reasoningEffort: value })
                     }
                   />
-                  <div
-                    role="group"
-                    aria-label="会话执行方式"
-                    className="flex gap-1"
-                  >
-                    <button
-                      type="button"
-                      className="wb-mode-button"
-                      disabled={
-                        readOnlySession ||
-                        Boolean(busy) ||
-                        !snapshot ||
-                        uncertainHere
-                      }
-                      aria-pressed={selectedSession?.mode === "plan"}
-                      onClick={() =>
-                        void updateSessionConfig({
-                          mode:
-                            selectedSession?.mode === "plan" ? "build" : "plan",
-                        })
-                      }
-                    >
-                      <Lightbulb size={13} />
-                      分析
-                    </button>
-                    <button
-                      type="button"
-                      className="wb-mode-button"
-                      disabled={
-                        readOnlySession ||
-                        Boolean(busy) ||
-                        !snapshot ||
-                        uncertainHere
-                      }
-                      aria-pressed={selectedSession?.mode !== "plan"}
-                      onClick={() =>
-                        void updateSessionConfig({ mode: "build" })
-                      }
-                    >
-                      实现
-                    </button>
-                  </div>
                   <label className="sr-only" htmlFor="agent-permission-mode">
                     执行权限
                   </label>
@@ -2057,24 +2006,31 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
                 </div>
               </form>
               <p className="wb-compose-hint">
-                {selectedSession?.mode === "plan"
-                  ? "分析模式只读取文件，不改动项目。"
-                  : selectedSession?.permissionMode === "auto"
-                    ? "常规编辑与已识别的安全命令自动允许，其余操作先询问。"
-                    : selectedSession?.permissionMode === "full_access"
-                      ? "允许执行项目内工具；项目外的访问仍需确认。"
-                      : "改动文件与执行命令前先确认。"}{" "}
+                {selectedSession?.permissionMode === "auto"
+                  ? "常规编辑与已识别的安全命令自动允许，其余操作先询问。"
+                  : selectedSession?.permissionMode === "full_access"
+                    ? "允许执行项目内工具；项目外的访问仍需确认。"
+                    : "改动文件与执行命令前先确认。"}{" "}
                 Enter 发送 · Shift + Enter 换行
               </p>
               {runningHere && (
                 <p className="wb-compose-hint">
-                  可以切换配置或编辑草稿，任务结束后才能发送。模型与执行方式从下一次模型请求生效，权限从下一次工具检查生效；已发出的请求和待确认操作保持原状。
+                  可以切换配置或编辑草稿，任务结束后才能发送。模型与思考档位从下一次模型请求生效，权限从下一次工具检查生效；已发出的请求和待确认操作保持原状。
                 </p>
               )}
+              <AgentUsageFooter usage={snapshot?.usage} />
             </div>
           </>
         )}
       </main>
+      {sessionId && previewSession === sessionId && previewPath !== null && (
+        <AgentPreviewPanel
+          key={`${sessionId}:${previewPath}`}
+          sessionId={sessionId}
+          path={previewPath}
+          onClose={() => setPreviewPath(null)}
+        />
+      )}
       <AgentOperationsPanel
         open={operationsOpen}
         onOpenChange={setOperationsOpen}
@@ -2163,7 +2119,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
             <DialogTitle>为此会话启用完整权限？</DialogTitle>
             <DialogDescription>
               允许 LoliCode
-              在项目内改动文件、执行命令和运行工具。分析模式仍保持只读，项目外访问仍需确认。
+              在项目内改动文件、执行命令和运行工具，项目外访问仍需确认。
             </DialogDescription>
           </DialogHeader>
           <div className="mt-4 flex justify-end gap-2">

@@ -18,6 +18,23 @@ const open = () =>
   fireEvent.click(screen.getByRole("button", { name: "思考档位" }));
 
 describe("AgentReasoningPicker", () => {
+  it("inherits the current model default without copying it into the session override", () => {
+    const select = vi.fn();
+    render(
+      <AgentReasoningPicker
+        model={{ ...model, defaultReasoningEffort: "high" }}
+        value=""
+        onSelect={select}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "思考档位" })).toHaveTextContent(
+      "模型默认 · high",
+    );
+    expect(select).not.toHaveBeenCalled();
+    open();
+    fireEvent.click(screen.getByRole("button", { name: "使用模型默认" }));
+    expect(select).toHaveBeenCalledWith("");
+  });
   it("uses declared effort IDs and exact catalog limits without inventing choices or submitting the parent form", () => {
     const select = vi.fn(),
       submit = vi.fn();

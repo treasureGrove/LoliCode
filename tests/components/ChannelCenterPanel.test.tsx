@@ -33,6 +33,13 @@ vi.mock("@/lib/api/channel-center", () => ({
 }));
 vi.mock("@/lib/api", () => ({ settingsApi: { openExternal: vi.fn() } }));
 const authCenterProps = vi.hoisted(() => vi.fn());
+const embeddedToolsProps = vi.hoisted(() => vi.fn());
+vi.mock("@/components/apps/AppsPage", () => ({
+  AppsPage: (props: unknown) => {
+    embeddedToolsProps(props);
+    return <div>本地工具安装与诊断</div>;
+  },
+}));
 vi.mock("@/components/settings/AuthCenterPanel", () => ({
   AuthCenterPanel: (props: unknown) => {
     authCenterProps(props);
@@ -110,6 +117,7 @@ beforeEach(() => {
   copilot.error = null;
   managedAuthHook.mockClear();
   authCenterProps.mockClear();
+  embeddedToolsProps.mockClear();
   vi.mocked(settingsApi.openExternal).mockReset().mockResolvedValue();
   vi.mocked(channelCenterApi.startZhipuLogin).mockReset().mockResolvedValue({
     flowId: "fixture-zhipu",
@@ -179,6 +187,244 @@ function fillApi() {
 }
 
 describe("ChannelCenterPanel", () => {
+  it("reveals a key only after the eye action and hides it when switching channels", async () => {
+    render(<ChannelCenterPanel />);
+    await ready();
+    fillApi();
+    expect(screen.getByLabelText("API Key")).toHaveAttribute(
+      "type",
+      "password",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "显示 API Key" }));
+    expect(screen.getByLabelText("API Key")).toHaveAttribute("type", "text");
+    fireEvent.click(screen.getByRole("button", { name: "OpenAI" }));
+    expect(screen.getByLabelText("API Key")).toHaveAttribute(
+      "type",
+      "password",
+    );
+    expect(screen.getByLabelText("API Key")).toHaveValue("");
+    expect(channelCenterApi.save).not.toHaveBeenCalled();
+    expect(screen.queryByText("test-secret-key")).not.toBeInTheDocument();
+  });
+
+  it("automatically saves a manual model default, shows provenance, and retries a failed save", async () => {
+    saved = structuredClone(populated);
+    saved.channels[0].models[0].reasoningEfforts = ["low"];
+    saved.channels[0].models[0].reasoningEffortSource = "litellm:model-info";
+    saved.channels[0].models[0].reasoningEffortTransport = "unconfirmed";
+    vi.mocked(channelCenterApi.save).mockRejectedValueOnce(
+      new Error("network failed"),
+    );
+    render(<ChannelCenterPanel />);
+    await ready();
+    const picker = screen.getByRole("combobox", {
+      name: "DeepSeek · DeepSeek Chat 默认思考强度",
+    });
+    expect(
+      within(picker).getByRole("option", { name: "xhigh · 手动 / 未验证" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("LiteLLM 部署声明 · 当前路由参数未确认"),
+    ).toBeInTheDocument();
+    fireEvent.change(picker, { target: { value: "xhigh" } });
+    await screen.findByRole("button", { name: "重试保存" });
+    expect(picker).toHaveValue("xhigh");
+    expect(hasUnsavedChanges()).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "重试保存" }));
+    await waitFor(() =>
+      expect(saved.channels[0].models[0].defaultReasoningEffort).toBe("xhigh"),
+    );
+    expect(saved.channels[0].models[0].reasoningEfforts).toEqual(["low"]);
+    expect(saved.channels[0].models[0].reasoningEffortTransport).toBe(
+      "unconfirmed",
+    );
+    await waitFor(() => expect(hasUnsavedChanges()).toBe(false));
+    expect(channelCenterApi.save).toHaveBeenCalledTimes(2);
+    expect(channelCenterApi.apply).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole("button", { name: "保存选择" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it.each(["write", "refresh"])(
+    "keeps newer edits while an older automatic %s is pending",
+    async (phase) => {
+      saved = structuredClone(populated);
+      let finish: () => void = () => {};
+      if (phase === "write") {
+        vi.mocked(channelCenterApi.save).mockImplementationOnce(
+          (snapshot) =>
+            new Promise<void>((resolve) => {
+              finish = () => {
+                saved = structuredClone({
+                  ...snapshot,
+                  revision: (snapshot.revision ?? 0) + 1,
+                });
+                resolve();
+              };
+            }),
+        );
+      }
+      render(<ChannelCenterPanel />);
+      await ready();
+      if (phase === "refresh")
+        vi.mocked(channelCenterApi.get).mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              finish = () => resolve(structuredClone(saved));
+            }),
+        );
+      const picker = screen.getByRole("combobox", {
+        name: "DeepSeek · DeepSeek Chat 默认思考强度",
+      });
+      fireEvent.change(picker, { target: { value: "high" } });
+      await waitFor(() =>
+        expect(channelCenterApi.save).toHaveBeenCalledTimes(1),
+      );
+      if (phase === "refresh")
+        await waitFor(() =>
+          expect(channelCenterApi.get).toHaveBeenCalledTimes(2),
+        );
+      expect(picker).toBeEnabled();
+      fireEvent.change(picker, { target: { value: "max" } });
+      await act(async () => finish());
+      expect(picker).toHaveValue("max");
+      await waitFor(() =>
+        expect(saved.channels[0].models[0].defaultReasoningEffort).toBe("max"),
+      );
+      expect(vi.mocked(channelCenterApi.save).mock.calls[1][0].revision).toBe(
+        1,
+      );
+      await waitFor(() => expect(hasUnsavedChanges()).toBe(false));
+      expect(channelCenterApi.apply).not.toHaveBeenCalled();
+    },
+  );
+
+  it("searches and folds a large catalog and applies explicit per-channel bulk choices", async () => {
+    saved = structuredClone(populated);
+    saved.channels[0].models.push(
+      ...Array.from({ length: 90 }, (_, i) => ({ id: `extra-model-${i}` })),
+    );
+    render(<ChannelCenterPanel />);
+    await ready();
+    const list = screen.getByRole("group", { name: "DeepSeek 模型列表" });
+    expect(list).toHaveClass("max-h-96", "overflow-y-auto");
+    fireEvent.change(screen.getByRole("textbox", { name: "搜索渠道或模型" }), {
+      target: { value: "extra-model-89" },
+    });
+    expect(within(list).getAllByRole("checkbox")).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "收起 DeepSeek 模型" }));
+    expect(
+      screen.queryByRole("group", { name: "DeepSeek 模型列表" }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "展开 DeepSeek 模型" }));
+    fireEvent.click(screen.getByRole("button", { name: "全不选" }));
+    await waitFor(() =>
+      expect(
+        saved.channels[0].models.every((model) => model.enabled === false),
+      ).toBe(true),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "全选" }));
+    await waitFor(() =>
+      expect(
+        saved.channels[0].models.filter((model) => model.enabled).length,
+      ).toBe(92),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "适合 Agent" }));
+    await waitFor(() =>
+      expect(
+        saved.channels[0].models
+          .filter((model) => model.enabled)
+          .map((model) => model.id),
+      ).toEqual(["deepseek-chat", "deepseek-reasoner"]),
+    );
+    expect(channelCenterApi.apply).not.toHaveBeenCalled();
+  });
+
+  it("opens embedded local tools from the legacy route and keeps external writes explicit", async () => {
+    render(<ChannelCenterPanel initialToolsOpen />);
+    await ready();
+    expect(screen.getByText("本地工具安装与诊断")).toBeInTheDocument();
+    expect(embeddedToolsProps).toHaveBeenCalledWith(
+      expect.objectContaining({ embedded: true, simpleMode: true }),
+    );
+    expect(
+      screen.getByRole("heading", { name: "应用渠道到本地 Agent 工具" }),
+    ).toBeInTheDocument();
+    expect(channelCenterApi.apply).not.toHaveBeenCalled();
+  });
+
+  it("autosaves complete edits to an existing source without fetching an incomplete address", async () => {
+    saved = structuredClone(populated);
+    render(<ChannelCenterPanel />);
+    await ready();
+    fireEvent.click(screen.getByRole("button", { name: "修改" }));
+    expect(screen.getByLabelText("API Key")).toHaveAttribute(
+      "type",
+      "password",
+    );
+    expect(
+      screen.queryByRole("button", { name: "保存修改并刷新模型" }),
+    ).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("API 地址"), {
+      target: { value: "https://" },
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 650));
+    });
+    expect(channelCenterApi.save).not.toHaveBeenCalled();
+    expect(channelCenterApi.discover).not.toHaveBeenCalled();
+    expect(hasUnsavedChanges()).toBe(true);
+    fireEvent.change(screen.getByLabelText("API 地址"), {
+      target: { value: "https://new.example.test/v1" },
+    });
+    fireEvent.change(screen.getByLabelText("API Key"), {
+      target: { value: "new-private-fixture-key" },
+    });
+    await waitFor(
+      () =>
+        expect(saved.channels[0].baseUrl).toBe("https://new.example.test/v1"),
+      { timeout: 2000 },
+    );
+    expect(saved.channels[0].apiKey).toBe("new-private-fixture-key");
+    expect(saved.channels[0].models).toEqual(populated.channels[0].models);
+    expect(screen.getByText(/地址或密钥已变更/)).toBeInTheDocument();
+    expect(
+      screen.queryByText("new-private-fixture-key"),
+    ).not.toBeInTheDocument();
+    expect(channelCenterApi.discover).not.toHaveBeenCalled();
+    expect(channelCenterApi.apply).not.toHaveBeenCalled();
+    await waitFor(() => expect(hasUnsavedChanges()).toBe(false));
+  });
+
+  it("stops automatic retries on a revision conflict and preserves local edits for reload", async () => {
+    saved = structuredClone(populated);
+    vi.mocked(channelCenterApi.save).mockRejectedValue(
+      new Error("渠道列表已被另一处修改。请重新加载后再保存"),
+    );
+    render(<ChannelCenterPanel />);
+    await ready();
+    fireEvent.change(
+      screen.getByRole("combobox", {
+        name: "DeepSeek · DeepSeek Chat 默认思考强度",
+      }),
+      { target: { value: "max" } },
+    );
+    await screen.findByRole("button", { name: "重新加载" });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 450));
+    });
+    expect(channelCenterApi.save).toHaveBeenCalledTimes(1);
+    expect(
+      screen.getByRole("combobox", {
+        name: "DeepSeek · DeepSeek Chat 默认思考强度",
+      }),
+    ).toHaveValue("max");
+    expect(
+      screen.getByRole("button", { name: "一键配置 3 个工具" }),
+    ).toBeDisabled();
+    expect(channelCenterApi.apply).not.toHaveBeenCalled();
+  });
   it("places subscription and API choices in one picker and reuses the same form area", async () => {
     const { container } = render(<ChannelCenterPanel />);
     await ready();
@@ -603,7 +849,7 @@ describe("ChannelCenterPanel", () => {
     view.rerender(<ChannelCenterPanel initialAccountManagerOpen />);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "渠道中心" }),
+      screen.getByRole("heading", { name: "模型与渠道" }),
     ).toBeInTheDocument();
   });
 
@@ -693,14 +939,16 @@ describe("ChannelCenterPanel", () => {
     fireEvent.change(screen.getByLabelText("API Key"), {
       target: { value: "updated-key" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "保存修改并刷新模型" }));
-    await waitFor(() => expect(channelCenterApi.save).toHaveBeenCalled());
-    expect(channelCenterApi.discover).toHaveBeenCalledWith(
+    await waitFor(() => expect(channelCenterApi.save).toHaveBeenCalled(), {
+      timeout: 2000,
+    });
+    expect(saved.channels[0]).toEqual(
       expect.objectContaining({
         baseUrl: "https://proxy.example.test/region-hk/special/v1",
         protocol: "anthropic",
       }),
     );
+    expect(channelCenterApi.discover).not.toHaveBeenCalled();
   });
 
   it("clears the old service key when changing hosts and preserves the key on a repeated preset click", async () => {
@@ -712,22 +960,24 @@ describe("ChannelCenterPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "OpenAI" }));
     expect(screen.getByLabelText("API Key")).toHaveValue("");
     expect(
-      screen.getByRole("button", { name: "保存修改并刷新模型" }),
-    ).toBeDisabled();
+      screen.queryByRole("button", { name: "保存修改并刷新模型" }),
+    ).not.toBeInTheDocument();
     expect(channelCenterApi.discover).not.toHaveBeenCalled();
     fireEvent.change(screen.getByLabelText("API Key"), {
       target: { value: "new-openai-key" },
     });
     fireEvent.click(screen.getByRole("button", { name: "OpenAI" }));
     expect(screen.getByLabelText("API Key")).toHaveValue("new-openai-key");
-    fireEvent.click(screen.getByRole("button", { name: "保存修改并刷新模型" }));
-    await waitFor(() => expect(channelCenterApi.discover).toHaveBeenCalled());
-    expect(channelCenterApi.discover).toHaveBeenCalledWith(
+    await waitFor(() => expect(channelCenterApi.save).toHaveBeenCalled(), {
+      timeout: 2000,
+    });
+    expect(saved.channels[0]).toEqual(
       expect.objectContaining({
         baseUrl: "https://api.openai.com/v1",
         apiKey: "new-openai-key",
       }),
     );
+    expect(channelCenterApi.discover).not.toHaveBeenCalled();
   });
 
   it("matches an existing regional preset without changing its saved endpoint or protocol", async () => {
@@ -737,20 +987,24 @@ describe("ChannelCenterPanel", () => {
     render(<ChannelCenterPanel />);
     await ready();
     fireEvent.click(screen.getByRole("button", { name: "修改" }));
-    expect(screen.queryByLabelText("API 地址")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("API 地址")).toHaveValue(
+      "https://api.moonshot.ai/v1/",
+    );
     expect(screen.getByText("Kimi Global")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("API Key"), {
       target: { value: "updated-key" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "保存修改并刷新模型" }));
-    await waitFor(() => expect(channelCenterApi.save).toHaveBeenCalled());
-    expect(channelCenterApi.discover).toHaveBeenCalledWith(
+    await waitFor(() => expect(channelCenterApi.save).toHaveBeenCalled(), {
+      timeout: 2000,
+    });
+    expect(saved.channels[0]).toEqual(
       expect.objectContaining({
         baseUrl: "https://api.moonshot.ai/v1/",
         protocol: "openai_responses",
         name: "DeepSeek",
       }),
     );
+    expect(channelCenterApi.discover).not.toHaveBeenCalled();
   });
 
   it("lets a user search more existing services and pick a regional endpoint", async () => {
@@ -879,7 +1133,7 @@ describe("ChannelCenterPanel", () => {
     await waitFor(() =>
       expect(channelCenterApi.apply).toHaveBeenCalledTimes(1),
     );
-    expect(channelCenterApi.apply).toHaveBeenCalledWith(1);
+    expect(channelCenterApi.apply).toHaveBeenCalledWith(0);
     expect(button).toBeDisabled();
     expect(navigation).toHaveBeenLastCalledWith(true);
     await act(async () =>

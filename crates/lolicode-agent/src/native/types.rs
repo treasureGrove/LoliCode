@@ -33,6 +33,10 @@ pub(super) struct StoredSession {
     pub context_summary: Option<String>,
     #[serde(default)]
     pub compaction_count: u64,
+    #[serde(default)]
+    pub response_locale: Option<String>,
+    #[serde(default)]
+    pub usage_ledger: Option<super::usage::Ledger>,
 }
 
 #[derive(Clone, Default, Serialize, Deserialize, PartialEq, Eq)]

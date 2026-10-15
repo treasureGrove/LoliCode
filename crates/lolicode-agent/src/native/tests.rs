@@ -253,6 +253,7 @@ fn is_compaction(input: &Value) -> bool {
 }
 
 mod context_cases;
+mod stream_usage_cases;
 
 #[tokio::test]
 async fn long_tool_tasks_complete_real_edits_after_more_than_twenty_four_rounds() {

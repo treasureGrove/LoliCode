@@ -411,6 +411,8 @@ pub fn legacy_snapshot(root: &Path, session_id: &str) -> Result<AgentSnapshot, S
         stream_gap: false,
         title_pending: false,
         compacting: false,
+        usage: None,
+        model_phase: None,
     })
 }
 fn notice(id: &str, text: &str) -> AgentMessage {

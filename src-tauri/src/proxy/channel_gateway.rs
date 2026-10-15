@@ -1024,6 +1024,22 @@ fn prompt_tokens(usage: Option<&Value>) -> u64 {
     })
 }
 
+fn reported_chat_usage(usage: &Value) -> Value {
+    let mut result=serde_json::Map::new();
+    let input=usage.get("input_tokens").and_then(Value::as_u64).map(|_|prompt_tokens(Some(usage)));
+    let output=usage.get("output_tokens").and_then(Value::as_u64);
+    if let Some(value)=input {result.insert("prompt_tokens".into(),json!(value));}
+    if let Some(value)=output {result.insert("completion_tokens".into(),json!(value));}
+    if let (Some(input),Some(output))=(input,output) {result.insert("total_tokens".into(),json!(input.saturating_add(output)));}
+    if let Some(value)=usage.get("cache_read_input_tokens").and_then(Value::as_u64) {
+        result.insert("prompt_tokens_details".into(),json!({"cached_tokens":value}));
+    }
+    if let Some(value)=usage.get("cache_creation_input_tokens").and_then(Value::as_u64) {
+        result.insert("cache_creation_input_tokens".into(),json!(value));
+    }
+    Value::Object(result)
+}
+
 fn messages_json_to_chat(body: Value, model: &str) -> Value {
     let content = body.get("content").and_then(Value::as_array);
     let mut text = String::new();
@@ -1047,16 +1063,12 @@ fn messages_json_to_chat(body: Value, model: &str) -> Value {
     if !reasoning.is_empty() {
         message["reasoning_content"] = json!(reasoning);
     }
-    let input = prompt_tokens(body.get("usage"));
-    let output = body
-        .pointer("/usage/output_tokens")
-        .and_then(Value::as_u64)
-        .unwrap_or(0);
+    let usage=reported_chat_usage(body.get("usage").unwrap_or(&Value::Null));
     json!({
         "id":body.get("id"), "object":"chat.completion", "created":chrono::Utc::now().timestamp(),
         "model":model,"choices":[{"index":0,"message":message,
             "finish_reason":finish_reason(body.get("stop_reason").and_then(Value::as_str))}],
-        "usage":{"prompt_tokens":input,"completion_tokens":output,"total_tokens":input.saturating_add(output)}
+        "usage":usage
     })
 }
 
@@ -1238,8 +1250,7 @@ where
         let mut utf8 = Vec::new();
         let mut id = format!("chatcmpl-{}", uuid::Uuid::new_v4());
         let mut tools = std::collections::HashMap::new();
-        let mut input_tokens = 0u64;
-        let mut output_tokens = 0u64;
+        let mut reported_usage = json!({});
         let mut finished = false;
         while let Some(chunk) = input.next().await {
             let chunk = match chunk {
@@ -1266,7 +1277,9 @@ where
                 match event.get("type").and_then(Value::as_str) {
                     Some("message_start") => {
                         if let Some(value) = event.pointer("/message/id").and_then(Value::as_str) { id = value.to_string(); }
-                        input_tokens = prompt_tokens(event.pointer("/message/usage"));
+                        if let Some(usage)=event.pointer("/message/usage").and_then(Value::as_object) {
+                            reported_usage.as_object_mut().expect("usage object").extend(usage.clone());
+                        }
                         yield Ok(chat_chunk(&id,&model,json!({"role":"assistant","content":""}),Value::Null));
                     }
                     Some("content_block_start") => {
@@ -1308,7 +1321,9 @@ where
                         }
                     }
                     Some("message_delta") => {
-                        output_tokens = event.pointer("/usage/output_tokens").and_then(Value::as_u64).unwrap_or(output_tokens);
+                        if let Some(usage)=event.get("usage").and_then(Value::as_object) {
+                            reported_usage.as_object_mut().expect("usage object").extend(usage.clone());
+                        }
                         if let Some(reason) = event.pointer("/delta/stop_reason").and_then(Value::as_str) {
                             yield Ok(chat_chunk(&id,&model,json!({}),json!(finish_reason(Some(reason)))));
                         }
@@ -1317,7 +1332,7 @@ where
                         yield Ok(Bytes::from(format!("data: {}\n\n",json!({
                             "id":id,"object":"chat.completion.chunk","created":chrono::Utc::now().timestamp(),
                             "model":model,"choices":[],
-                            "usage":{"prompt_tokens":input_tokens,"completion_tokens":output_tokens,"total_tokens":input_tokens.saturating_add(output_tokens)}
+                            "usage":reported_chat_usage(&reported_usage)
                         }))));
                         yield Ok(Bytes::from_static(b"data: [DONE]\n\n"));
                         finished = true;
@@ -2061,5 +2076,18 @@ mod tests {
         }
         proxy.stop().await.unwrap();
         upstream_task.abort();
+    }
+
+    #[test]
+    fn chat_usage_projection_preserves_cache_counts_and_does_not_invent_missing_usage() {
+        let reported=reported_chat_usage(&json!({"input_tokens":20,"output_tokens":10,"cache_read_input_tokens":60,"cache_creation_input_tokens":20}));
+        assert_eq!(reported["prompt_tokens"],100);
+        assert_eq!(reported["completion_tokens"],10);
+        assert_eq!(reported["prompt_tokens_details"]["cached_tokens"],60);
+        assert_eq!(reported["cache_creation_input_tokens"],20);
+        assert_eq!(reported_chat_usage(&json!({})),json!({}));
+        let ordinary=reported_chat_usage(&json!({"input_tokens":3,"output_tokens":4}));
+        assert!(ordinary.get("prompt_tokens_details").is_none());
+        assert!(ordinary.get("cache_creation_input_tokens").is_none());
     }
 }

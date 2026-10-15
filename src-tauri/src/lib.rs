@@ -1787,6 +1787,8 @@ pub fn run() {
             commands::invoke_agent_automation,
             commands::invoke_agent_remote,
             commands::get_agent_image,
+            commands::preview_agent_file,
+            commands::open_agent_path,
             commands::get_channel_center,
             commands::save_channel_center,
             commands::discover_channel_models,

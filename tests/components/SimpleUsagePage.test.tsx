@@ -1,5 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SimpleUsagePage } from "@/components/usage/SimpleUsagePage";
@@ -7,23 +13,32 @@ import { usageApi } from "@/lib/api/usage";
 import { channelCenterApi } from "@/lib/api/channel-center";
 
 vi.mock("@/lib/api/usage", () => ({
-  usageApi: { getUsageSummary: vi.fn(), getProviderStats: vi.fn() },
+  usageApi: {
+    getUsageSummary: vi.fn(),
+    getProviderStats: vi.fn(),
+    getUsageFirstDate: vi.fn(),
+    getUsageTrends: vi.fn(),
+  },
 }));
 vi.mock("@/lib/api/channel-center", () => ({
   channelCenterApi: { get: vi.fn() },
 }));
 function mount() {
-  return render(
-    <QueryClientProvider
-      client={
-        new QueryClient({ defaultOptions: { queries: { retry: false } } })
-      }
-    >
-      <SimpleUsagePage />
-    </QueryClientProvider>,
-  );
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return {
+    client,
+    ...render(
+      <QueryClientProvider client={client}>
+        <SimpleUsagePage />
+      </QueryClientProvider>,
+    ),
+  };
 }
 beforeEach(() => {
+  vi.mocked(usageApi.getUsageFirstDate).mockResolvedValue(null);
+  vi.mocked(usageApi.getUsageTrends).mockResolvedValue([]);
   vi.mocked(usageApi.getUsageSummary).mockResolvedValue({
     totalRequests: 4,
     totalCost: "0.1234",
@@ -42,6 +57,72 @@ beforeEach(() => {
   });
 });
 describe("basic usage", () => {
+  it("keeps recorded daily data if the first-date background refresh fails", async () => {
+    vi.mocked(usageApi.getUsageFirstDate).mockResolvedValue("2024-01-01");
+    const { client } = mount();
+    expect(
+      await screen.findAllByRole("button", { name: /0 Tokens · 0 次请求/ }),
+    ).not.toHaveLength(0);
+    vi.mocked(usageApi.getUsageFirstDate).mockRejectedValue(
+      new Error("refresh failed"),
+    );
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: ["usage", "first-date"] });
+    });
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "正在显示上次记录",
+    );
+    expect(
+      screen.getAllByRole("button", { name: /0 Tokens · 0 次请求/ }),
+    ).not.toHaveLength(0);
+  });
+  it("renders daily usage squares with real totals and keyboard-accessible details", async () => {
+    const today = new Date();
+    const day = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    vi.mocked(usageApi.getUsageFirstDate).mockResolvedValue(day);
+    vi.mocked(usageApi.getUsageTrends).mockResolvedValue([
+      {
+        date: day,
+        requestCount: 7,
+        totalCost: "0.15",
+        totalTokens: 2500,
+        totalInputTokens: 500,
+        totalOutputTokens: 600,
+        totalCacheReadTokens: 1300,
+        totalCacheCreationTokens: 100,
+      },
+    ]);
+    mount();
+    const cell = await screen.findByRole("button", {
+      name: /2,500 Tokens · 7 次请求/,
+    });
+    expect(cell).toHaveStyle({ backgroundColor: "var(--heat-1)" });
+    fireEvent.focus(cell);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("2,500");
+    expect(usageApi.getUsageTrends).toHaveBeenCalled();
+  });
+  it("shows a daily-data failure instead of an empty fabricated heatmap and can retry", async () => {
+    vi.mocked(usageApi.getUsageFirstDate).mockRejectedValue(
+      new Error("daily read failed"),
+    );
+    mount();
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "每日用量暂时加载失败",
+    );
+    expect(
+      screen.queryByRole("button", { name: /Tokens · .*次请求/ }),
+    ).not.toBeInTheDocument();
+    vi.mocked(usageApi.getUsageFirstDate).mockResolvedValue(null);
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "重试每日用量" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument(),
+    );
+    expect(
+      await screen.findAllByRole("button", { name: /0 Tokens · 0 次请求/ }),
+    ).not.toHaveLength(0);
+  });
   it("labels recorded gateway usage with its shared source name", async () => {
     vi.mocked(channelCenterApi.get).mockResolvedValue({
       channels: [

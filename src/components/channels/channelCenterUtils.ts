@@ -35,17 +35,20 @@ export function mergeDiscoveredChannel(
   discovered: ChannelSource,
   previous?: ChannelSource,
 ): ChannelSource {
-  const previousSelections = new Map(
-    previous?.models.map((model) => [model.id, model.enabled !== false]),
+  const previousModels = new Map(
+    previous?.models.map((model) => [model.id, model]),
   );
   return {
     ...discovered,
     enabled: previous?.enabled ?? discovered.enabled,
     models: discovered.models.map((model) => ({
       ...model,
-      enabled:
-        previousSelections.get(model.id) ??
-        (model.enabled !== false && model.supportsTools !== false),
+      enabled: previousModels.has(model.id)
+        ? previousModels.get(model.id)!.enabled !== false
+        : model.enabled !== false && model.supportsTools !== false,
+      defaultReasoningEffort: previousModels.has(model.id)
+        ? previousModels.get(model.id)!.defaultReasoningEffort
+        : model.defaultReasoningEffort,
     })),
   };
 }

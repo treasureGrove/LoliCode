@@ -2,6 +2,7 @@ import { useRef } from "react";
 import { ChevronRight, FileDiff } from "lucide-react";
 import type { AgentDiff } from "@/types/agent";
 import { SessionDiff } from "@/components/sessions/reader/SessionDiff";
+import { AgentFilePath } from "./AgentFilePath";
 import {
   AgentDisclosure,
   createAgentDisclosureState,
@@ -56,8 +57,8 @@ export function AgentChanges({ diffs }: { diffs: AgentDiff[] }) {
                     className="wb-disclosure-chevron h-3.5 w-3.5 shrink-0"
                     aria-hidden="true"
                   />
-                  <span className="min-w-0 flex-1 truncate" title={diff.path}>
-                    {diff.path}
+                  <span className="min-w-0 flex-1 truncate">
+                    <AgentFilePath path={diff.path} />
                   </span>
                   <span className="shrink-0 text-fg-3">
                     {diff.status === "added"

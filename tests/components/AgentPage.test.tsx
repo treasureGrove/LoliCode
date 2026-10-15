@@ -110,6 +110,11 @@ function fill(text = "修复这个项目的测试") {
     target: { value: text },
   });
 }
+function modelRefreshButton() {
+  const picker = screen.getByRole("button", { name: "模型" });
+  if (picker.getAttribute("aria-expanded") !== "true") fireEvent.click(picker);
+  return screen.getByRole("button", { name: "刷新可用模型" });
+}
 function selectModel(name: string) {
   fireEvent.click(screen.getByRole("button", { name: "模型" }));
   fireEvent.change(screen.getByRole("searchbox", { name: "搜索模型或渠道" }), {
@@ -221,6 +226,47 @@ afterEach(() => {
 });
 
 describe("AgentPage", () => {
+  it("converts an idle historical plan session only after a user send and waits for acknowledgement", async () => {
+    snapshot.session.mode = "plan";
+    let acknowledge!: (value: AgentSession) => void;
+    vi.mocked(agentApi.updateSession).mockReturnValueOnce(
+      new Promise((resolve) => {
+        acknowledge = resolve;
+      }),
+    );
+    render(<AgentPage />);
+    await flush();
+    expect(agentApi.updateSession).not.toHaveBeenCalled();
+    fill("继续实现");
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+    await flush();
+    expect(agentApi.updateSession).toHaveBeenCalledWith(session.id, {
+      mode: "build",
+    });
+    expect(agentApi.sendMessage).not.toHaveBeenCalled();
+    expect(readAgentSubmission(project, session.id)).toBeNull();
+    await act(async () => acknowledge({ ...session, mode: "build" }));
+    await flush();
+    expect(agentApi.sendMessage).toHaveBeenCalledOnce();
+  });
+
+  it("preserves the draft and does not dispatch when converting an old plan session fails", async () => {
+    snapshot.session.mode = "plan";
+    vi.mocked(agentApi.updateSession).mockRejectedValueOnce(
+      new Error("配置保存失败"),
+    );
+    render(<AgentPage />);
+    await flush();
+    fill("保留实现草稿");
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+    await flush();
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
+      "保留实现草稿",
+    );
+    expect(screen.getByText("配置保存失败")).toBeInTheDocument();
+    expect(agentApi.sendMessage).not.toHaveBeenCalled();
+    expect(readAgentSubmission(project, session.id)).toBeNull();
+  });
   it.each(["open", "refresh"])(
     "shows nonblocking history warnings during project %s and still creates an in-process session",
     async (action) => {
@@ -237,9 +283,9 @@ describe("AgentPage", () => {
       render(<AgentPage />);
       await flush();
       fireEvent.click(
-        screen.getByRole("button", {
-          name: action === "open" ? "切换项目" : "刷新可用模型",
-        }),
+        action === "open"
+          ? screen.getByRole("button", { name: "切换项目" })
+          : modelRefreshButton(),
       );
       await flush();
       for (const warning of warnings)
@@ -286,8 +332,12 @@ describe("AgentPage", () => {
       expect(screen.getByRole("button", { name: "发送" })).toBeDisabled();
       expect(screen.getByLabelText("模型", { exact: true })).toBeDisabled();
       expect(screen.getByLabelText("执行权限")).toBeDisabled();
-      expect(screen.getByRole("button", { name: "分析" })).toBeDisabled();
-      expect(screen.getByRole("button", { name: "实现" })).toBeDisabled();
+      expect(
+        screen.queryByRole("button", { name: "分析" }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "实现" }),
+      ).not.toBeInTheDocument();
       expect(screen.getByLabelText(`管理会话：${legacy.title}`)).toBeDisabled();
       fireEvent.click(screen.getByLabelText("模型", { exact: true }));
       fireEvent.change(screen.getByLabelText("执行权限"), {
@@ -460,6 +510,7 @@ describe("AgentPage", () => {
     );
     await tick(1000);
     expect(agentApi.openProject).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "模型" }));
     expect(
       screen.getByText(/渠道已更新，任务结束后将自动刷新/),
     ).toBeInTheDocument();
@@ -534,10 +585,10 @@ describe("AgentPage", () => {
       modelId: catalog.models[1].modelId,
     };
     await tick(5000);
-    expect(screen.getByText("Copilot · Model B · 实现")).toBeInTheDocument();
+    expect(screen.getAllByText("Copilot · Model B")[0]).toBeInTheDocument();
   });
 
-  it("changes Auto Mode in the real session and treats analysis as an independent read-only mode", async () => {
+  it("changes Auto Mode without exposing obsolete analysis/build mode controls", async () => {
     render(<AgentPage />);
     await flush();
     fireEvent.change(screen.getByLabelText("执行权限"), {
@@ -550,13 +601,11 @@ describe("AgentPage", () => {
     expect(
       screen.getByText(/常规编辑与已识别的安全命令自动允许/),
     ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "分析" }));
-    await flush();
-    expect(agentApi.updateSession).toHaveBeenLastCalledWith(session.id, {
-      mode: "plan",
-    });
+    expect(
+      screen.queryByRole("button", { name: "分析" }),
+    ).not.toBeInTheDocument();
     expect(screen.getByLabelText("执行权限")).toHaveValue("auto");
-    expect(screen.getByText(/分析模式只读取文件/)).toBeInTheDocument();
+    expect(screen.queryByText(/分析模式只读取文件/)).not.toBeInTheDocument();
   });
 
   it("saves a declared reasoning effort during a running task without sending another prompt", async () => {
@@ -663,11 +712,9 @@ describe("AgentPage", () => {
       expect(agentApi.updateSession).toHaveBeenLastCalledWith(session.id, {
         permissionMode: "auto",
       });
-      fireEvent.click(screen.getByRole("button", { name: "分析" }));
-      await flush();
-      expect(agentApi.updateSession).toHaveBeenLastCalledWith(session.id, {
-        mode: "plan",
-      });
+      expect(
+        screen.queryByRole("button", { name: "分析" }),
+      ).not.toBeInTheDocument();
       const input = screen.getByLabelText("发送给 Agent 的消息");
       expect(input).toHaveValue("任务结束后再发送的草稿");
       expect(input).toBeEnabled();
@@ -677,7 +724,7 @@ describe("AgentPage", () => {
       await flush();
       expect(agentApi.sendMessage).not.toHaveBeenCalled();
       expect(
-        screen.getByText(/模型与执行方式从下一次模型请求生效/),
+        screen.getByText(/模型与思考档位从下一次模型请求生效/),
       ).toBeInTheDocument();
     },
   );
@@ -731,7 +778,7 @@ describe("AgentPage", () => {
     await flush();
     expect(agentApi.openProject).toHaveBeenCalledWith(otherPath);
     expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue("");
-    expect(screen.getByRole("button", { name: "刷新可用模型" })).toBeDisabled();
+    expect(modelRefreshButton()).toBeDisabled();
     await tick(1500);
     expect(agentApi.getSession).toHaveBeenCalledWith(session.id);
     expect(agentApi.interruptSession).not.toHaveBeenCalled();
@@ -742,7 +789,7 @@ describe("AgentPage", () => {
     ).toBe("原项目后续输入");
     snapshot.status = "idle";
     await tick(1500);
-    expect(screen.getByRole("button", { name: "刷新可用模型" })).toBeEnabled();
+    expect(modelRefreshButton()).toBeEnabled();
   });
 
   it("filters archived sessions from the real persisted list and can show them on demand", async () => {
@@ -788,7 +835,7 @@ describe("AgentPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /^归档后继续查看/ }));
     await flush();
     fill("归档会话里的草稿");
-    fireEvent.click(screen.getByRole("button", { name: "刷新可用模型" }));
+    fireEvent.click(modelRefreshButton());
     await flush();
     expect(agentApi.openProject).toHaveBeenCalledWith(project, true);
     expect(agentApi.listSessions).toHaveBeenLastCalledWith(project, true);
@@ -829,14 +876,12 @@ describe("AgentPage", () => {
     expect(agentApi.updateSession).toHaveBeenCalledWith(session.id, {
       modelId: catalog.models[1].id,
     });
-    expect(screen.getByText("Copilot · Model B · 实现")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "分析" }));
-    await flush();
+    expect(screen.getAllByText("Copilot · Model B")[0]).toBeInTheDocument();
     fireEvent.click(sessionCreationButton());
     await flush();
     expect(agentApi.createSession).toHaveBeenCalledWith(
       catalog.models[1].id,
-      "plan",
+      "build",
       undefined,
       "ask",
       undefined,
@@ -870,7 +915,10 @@ describe("AgentPage", () => {
     render(<AgentPage onOpenChannels={channels} />);
     await flush();
     expect(sessionCreationButton()).toBeDisabled();
-    fireEvent.click(screen.getByRole("button", { name: "渠道与模型" }));
+    fireEvent.click(screen.getByRole("button", { name: "模型" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "管理和添加模型与渠道" }),
+    );
     expect(channels).toHaveBeenCalledTimes(1);
     expect(agentApi.createSession).not.toHaveBeenCalled();
     expect(agentApi.interruptSession).not.toHaveBeenCalled();
@@ -890,6 +938,7 @@ describe("AgentPage", () => {
     expect(screen.getByRole("button", { name: "模型" })).not.toHaveTextContent(
       "DeepSeek · DeepSeek · Code Model",
     );
+    fireEvent.click(screen.getByRole("button", { name: "模型" }));
     expect(
       screen.getByText("Claude 订阅仅可用于 Claude Code"),
     ).toBeInTheDocument();
@@ -926,7 +975,7 @@ describe("AgentPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /^正在查看的会话/ }));
     await flush();
     fill("刷新后继续的草稿");
-    fireEvent.click(screen.getByRole("button", { name: "刷新可用模型" }));
+    fireEvent.click(modelRefreshButton());
     await flush();
     expect(agentApi.openProject).toHaveBeenCalledWith(project, true);
     expect(agentApi.getCatalog).toHaveBeenCalledTimes(1);
@@ -962,7 +1011,7 @@ describe("AgentPage", () => {
     await flush();
     fireEvent.click(screen.getByRole("button", { name: /^历史会话/ }));
     await flush();
-    const refresh = screen.getByRole("button", { name: "刷新可用模型" });
+    const refresh = modelRefreshButton();
     expect(refresh).toBeDisabled();
     expect(screen.getByText("任务结束后可刷新模型目录。")).toBeInTheDocument();
     fireEvent.click(refresh);
@@ -977,7 +1026,7 @@ describe("AgentPage", () => {
     render(<AgentPage />);
     await flush();
     fill("保留这段输入");
-    fireEvent.click(screen.getByRole("button", { name: "刷新可用模型" }));
+    fireEvent.click(modelRefreshButton());
     await flush();
     expect(
       screen.getByText("当前项目还有任务在执行，请等待完成。"),
@@ -1507,7 +1556,7 @@ describe("AgentPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /^完成的会话/ }));
     await flush();
     expect(screen.getByRole("button", { name: "切换项目" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "刷新可用模型" })).toBeDisabled();
+    expect(modelRefreshButton()).toBeDisabled();
     snapshot.status = "idle";
     await tick(1500);
     expect(screen.getByRole("button", { name: "切换项目" })).toBeEnabled();
@@ -1572,7 +1621,7 @@ describe("AgentPage", () => {
     fill("另一会话中未发送的草稿");
     snapshot.status = "idle";
     await tick(1500);
-    expect(screen.getByRole("button", { name: "刷新可用模型" })).toBeEnabled();
+    expect(modelRefreshButton()).toBeEnabled();
     snapshot.session.title = "自动归纳的任务标题";
     snapshot.titlePending = false;
     await tick(1500);

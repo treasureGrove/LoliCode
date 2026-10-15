@@ -226,6 +226,7 @@ mod tests {
             reasoning: String::new(),
             calls: Vec::new(),
             finish_reason: finish.into(),
+            usage: crate::AgentTokenUsage::default(),
         };
         assert!(validate(&plan, turn("incomplete", "length"), "system", &[]).is_err());
         assert!(validate(&plan, turn("", "stop"), "system", &[]).is_err());

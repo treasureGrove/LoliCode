@@ -6,6 +6,7 @@ mod inference;
 mod persistence;
 pub(crate) mod tools;
 mod types;
+mod usage;
 
 pub use engine::NativeEngine;
 pub use types::NativeGateway;

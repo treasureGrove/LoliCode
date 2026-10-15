@@ -29,6 +29,7 @@ export interface AgentModel {
   contextLimit?: number | null;
   outputLimit?: number | null;
   reasoningEfforts?: string[] | null;
+  defaultReasoningEffort?: string | null;
   reasoningEffortSource?: string | null;
   reasoningEffortTransport?: "declared" | "unconfirmed" | "mixed" | null;
 }
@@ -143,6 +144,26 @@ export interface AgentDiff {
   status: "added" | "deleted" | "modified";
 }
 
+export interface AgentTokenUsage {
+  inputTokens?: number;
+  outputTokens?: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
+  cacheHitRate?: number;
+  modelRequests: number;
+  reportedRequests: number;
+}
+
+export interface AgentUsage {
+  task?: AgentTokenUsage & {
+    startedAt: number;
+    completedAt?: number;
+    elapsedMs: number;
+    generationMs?: number;
+  };
+  session?: AgentTokenUsage & { since: number; complete: boolean };
+}
+
 export interface AgentSnapshot {
   session: AgentSession;
   status: AgentStatus;
@@ -157,6 +178,9 @@ export interface AgentSnapshot {
   titlePending?: boolean;
   /** True only while the engine is building an automatic context checkpoint. */
   compacting?: boolean;
+  modelPhase?: "waiting" | "streaming" | "finishing";
+  /** Actual upstream usage; missing counters remain unknown. */
+  usage?: AgentUsage;
 }
 
 export interface AgentProjectResult {

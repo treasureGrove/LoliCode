@@ -32,6 +32,43 @@ const snapshot = (
 });
 
 describe("AgentActivityStatus", () => {
+  it("shows waiting for the first model token only for the current unfinished placeholder", () => {
+    const value = snapshot("running", [
+      message([{ type: "text", text: "上一请求已完成" }], 3),
+      {
+        id: "user",
+        role: "user",
+        createdAt: 4,
+        parts: [{ type: "text", text: "继续" }],
+      },
+      { ...message([]), id: "placeholder", createdAt: 5 },
+    ]);
+    value.modelPhase = "waiting";
+    const props = { queued: false, stopping: false, loading: false };
+    const view = render(<AgentActivityStatus snapshot={value} {...props} />);
+    expect(screen.getByRole("status")).toHaveTextContent("正在等待模型响应…");
+    expect(screen.getByRole("status")).toHaveAttribute(
+      "data-phase",
+      "waiting_model",
+    );
+    value.messages[value.messages.length - 1].completedAt = 6;
+    value.modelPhase = undefined;
+    view.rerender(<AgentActivityStatus snapshot={value} {...props} />);
+    expect(screen.getByRole("status")).toHaveTextContent("正在执行…");
+  });
+  it("uses the real finishing phase and clears it on completion rather than showing a stale reply", () => {
+    const value = snapshot("running", [
+      message([{ type: "text", text: "已生成回复" }]),
+    ]);
+    value.modelPhase = "finishing";
+    const props = { queued: false, stopping: false, loading: false };
+    const view = render(<AgentActivityStatus snapshot={value} {...props} />);
+    expect(screen.getByRole("status")).toHaveTextContent("正在收尾统计…");
+    value.status = "idle";
+    value.modelPhase = undefined;
+    view.rerender(<AgentActivityStatus snapshot={value} {...props} />);
+    expect(screen.getByRole("status")).toHaveTextContent("准备就绪");
+  });
   it("shows context compaction only while the backend reports a running checkpoint", () => {
     const value = snapshot("running");
     value.compacting = true;

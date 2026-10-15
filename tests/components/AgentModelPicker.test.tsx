@@ -21,6 +21,52 @@ const models: AgentModel[] = [
 ];
 
 describe("AgentModelPicker", () => {
+  it("does not render opaque internal IDs and keeps exact identity when selecting", () => {
+    const uuid = "12345678-1234-1234-1234-123456789abc";
+    const select = vi.fn();
+    const view = render(
+      <AgentModelPicker
+        models={[
+          {
+            ...models[0],
+            id: `engine/${uuid}`,
+            providerId: uuid,
+            channelName: uuid,
+            modelId: uuid,
+            name: `${uuid} · Friendly Model`,
+          },
+        ]}
+        value={`engine/${uuid}`}
+        onSelect={select}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "模型" }));
+    expect(view.baseElement.textContent).not.toContain(uuid);
+    expect(screen.getByRole("button", { name: "模型渠道 模型" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Friendly Model" }));
+    expect(select).toHaveBeenCalledWith(`engine/${uuid}`);
+  });
+
+  it("opens model management from an empty catalog without sending the parent form", () => {
+    const manage = vi.fn(),
+      submit = vi.fn();
+    render(
+      <form onSubmit={submit}>
+        <AgentModelPicker
+          models={[]}
+          value=""
+          onSelect={vi.fn()}
+          onOpenChannels={manage}
+        />
+      </form>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "模型" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "管理和添加模型与渠道" }),
+    );
+    expect(manage).toHaveBeenCalledOnce();
+    expect(submit).not.toHaveBeenCalled();
+  });
   it("opens the selected channel and lets each channel collapse independently", () => {
     render(
       <AgentModelPicker

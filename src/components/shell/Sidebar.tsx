@@ -11,7 +11,6 @@ import {
   Folder,
   Globe,
   Info,
-  LayoutGrid,
   PanelsTopLeft,
   Download,
   Settings,
@@ -96,19 +95,6 @@ export function Sidebar(props: SidebarProps) {
           />
           <NavItem
             collapsed={collapsed}
-            selected={props.view === "apps"}
-            icon={LayoutGrid}
-            label={t("nav.apps")}
-            title={
-              props.appsUpdateAvailable
-                ? t("nav.appsHasUpdate")
-                : t("nav.appsTitle")
-            }
-            dot={props.appsUpdateAvailable}
-            onClick={() => props.onSelectPage("apps")}
-          />
-          <NavItem
-            collapsed={collapsed}
             selected={props.view === "settings"}
             icon={Settings}
             label={t("nav.settings")}
@@ -162,7 +148,12 @@ function MainDirectory({
         />
         <NavItem
           collapsed={collapsed}
-          selected={view === "channels" || view === "auth" || isAppPage(view)}
+          selected={
+            view === "channels" ||
+            view === "auth" ||
+            view === "apps" ||
+            isAppPage(view)
+          }
           icon={PanelsTopLeft}
           label={workbench}
           alert={authNeedsAttention ? t("nav.authNeedsReauth") : undefined}

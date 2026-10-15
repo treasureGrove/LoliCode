@@ -106,7 +106,8 @@ function formatCheckedAt(timestamp: number, locale: string): string {
  */
 export function AppsPage({
   simpleMode = false,
-}: { simpleMode?: boolean } = {}) {
+  embedded = false,
+}: { simpleMode?: boolean; embedded?: boolean } = {}) {
   const { t, i18n } = useTranslation();
   const tools = useToolManagement();
   const { settings, updateSettings, autoSaveSettings } = useSettings();
@@ -171,116 +172,142 @@ export function AppsPage({
 
   return (
     <>
-      <AppPageHeader
-        icon={<LayoutGrid className="h-5 w-5" strokeWidth={1.5} />}
-        title={t("nav.apps")}
-        titleExtra={
-          !simpleMode && (
-            <HelpTip title={t("appsPage.helpTitle")}>
-              {t("appsPage.helpBody")}
-            </HelpTip>
-          )
-        }
-        actions={
-          <>
-            <span className="whitespace-nowrap text-caption text-fg-3">
-              {lastChecked}
-            </span>
-            {(tools.updatableToolNames.length > 0 || tools.batchAction) && (
+      {!embedded && (
+        <AppPageHeader
+          icon={<LayoutGrid className="h-5 w-5" strokeWidth={1.5} />}
+          title={t("nav.apps")}
+          titleExtra={
+            !simpleMode && (
+              <HelpTip title={t("appsPage.helpTitle")}>
+                {t("appsPage.helpBody")}
+              </HelpTip>
+            )
+          }
+          actions={
+            <>
+              <span className="whitespace-nowrap text-caption text-fg-3">
+                {lastChecked}
+              </span>
+              {(tools.updatableToolNames.length > 0 || tools.batchAction) && (
+                <Button
+                  variant="neutral"
+                  size="regular"
+                  disabled={tools.isLoadingTools || Boolean(tools.batchAction)}
+                  aria-busy={Boolean(tools.batchAction)}
+                  onClick={() =>
+                    void tools.handleRunToolAction(
+                      tools.updatableToolNames,
+                      "update",
+                      { fromBatchEntry: true },
+                    )
+                  }
+                >
+                  {tools.batchAction === "update" ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <ArrowUpCircle className="h-3.5 w-3.5" />
+                  )}
+                  {t("settings.updateAllTools", {
+                    count: tools.updatableToolNames.length,
+                  })}
+                </Button>
+              )}
               <Button
                 variant="neutral"
                 size="regular"
-                disabled={tools.isLoadingTools || Boolean(tools.batchAction)}
-                aria-busy={Boolean(tools.batchAction)}
-                onClick={() =>
-                  void tools.handleRunToolAction(
-                    tools.updatableToolNames,
-                    "update",
-                    { fromBatchEntry: true },
-                  )
-                }
+                disabled={tools.isLoadingTools || tools.isAnyBusy}
+                onClick={() => void tools.checkForUpdates()}
               >
-                {tools.batchAction === "update" ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <ArrowUpCircle className="h-3.5 w-3.5" />
-                )}
-                {t("settings.updateAllTools", {
-                  count: tools.updatableToolNames.length,
-                })}
+                <RefreshCw
+                  className={cn(
+                    "h-3.5 w-3.5",
+                    tools.isLoadingTools && "animate-spin",
+                  )}
+                />
+                {tools.isLoadingTools
+                  ? t("appsPage.checking")
+                  : t("appsPage.checkUpdates")}
               </Button>
-            )}
-            <Button
-              variant="neutral"
-              size="regular"
-              disabled={tools.isLoadingTools || tools.isAnyBusy}
-              onClick={() => void tools.checkForUpdates()}
-            >
-              <RefreshCw
-                className={cn(
-                  "h-3.5 w-3.5",
-                  tools.isLoadingTools && "animate-spin",
-                )}
-              />
-              {tools.isLoadingTools
-                ? t("appsPage.checking")
-                : t("appsPage.checkUpdates")}
-            </Button>
-            <DropdownMenu>
-              <HoverTip content={t("common.more")}>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="quiet"
-                    size="icon-compact"
-                    className="h-8 w-8"
-                    aria-label={t("appsPage.moreActions")}
-                  >
-                    <MoreHorizontal className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-              </HoverTip>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  disabled={
-                    tools.isLoadingTools ||
-                    tools.isAnyBusy ||
-                    tools.isDiagnosingAll
-                  }
-                  onSelect={() => void tools.handleDiagnoseAll()}
-                >
-                  {t("settings.toolDiagnose")}
-                </DropdownMenuItem>
-                {!simpleMode && (
-                  <DropdownMenuItem onSelect={() => setShowCommands(true)}>
-                    {t("appsPage.manualCommands")}
-                  </DropdownMenuItem>
-                )}
-                {!simpleMode && (
+              <DropdownMenu>
+                <HoverTip content={t("common.more")}>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="quiet"
+                      size="icon-compact"
+                      className="h-8 w-8"
+                      aria-label={t("appsPage.moreActions")}
+                    >
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                </HoverTip>
+                <DropdownMenuContent align="end">
                   <DropdownMenuItem
-                    className="text-red-500 focus:text-red-500 dark:text-red-400 dark:focus:text-red-400"
-                    onSelect={() => setShowUninstallCommands(true)}
+                    disabled={
+                      tools.isLoadingTools ||
+                      tools.isAnyBusy ||
+                      tools.isDiagnosingAll
+                    }
+                    onSelect={() => void tools.handleDiagnoseAll()}
                   >
-                    {t("settings.manualUninstallCommands")}
+                    {t("settings.toolDiagnose")}
                   </DropdownMenuItem>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </>
-        }
-      />
+                  {!simpleMode && (
+                    <DropdownMenuItem onSelect={() => setShowCommands(true)}>
+                      {t("appsPage.manualCommands")}
+                    </DropdownMenuItem>
+                  )}
+                  {!simpleMode && (
+                    <DropdownMenuItem
+                      className="text-red-500 focus:text-red-500 dark:text-red-400 dark:focus:text-red-400"
+                      onSelect={() => setShowUninstallCommands(true)}
+                    >
+                      {t("settings.manualUninstallCommands")}
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </>
+          }
+        />
+      )}
+      {embedded && (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+          <span className="text-caption text-fg-3">{lastChecked}</span>
+          <Button
+            variant="neutral"
+            size="compact"
+            disabled={tools.isLoadingTools || tools.isAnyBusy}
+            onClick={() => void tools.checkForUpdates()}
+          >
+            <RefreshCw
+              className={cn(
+                "h-3.5 w-3.5",
+                tools.isLoadingTools && "animate-spin",
+              )}
+            />
+            {tools.isLoadingTools
+              ? t("appsPage.checking")
+              : t("appsPage.checkUpdates")}
+          </Button>
+        </div>
+      )}
 
       <div
-        id="main-content"
-        className="min-h-0 flex-1 overflow-y-auto scroll-stable"
+        id={embedded ? undefined : "main-content"}
+        className={cn(
+          "min-h-0 flex-1 overflow-y-auto scroll-stable",
+          embedded && "mt-3 max-h-[32rem]",
+        )}
       >
-        <div className="px-6 pb-10 pt-4">
+        <div className={embedded ? "pb-2" : "px-6 pb-10 pt-4"}>
           <div className="flex h-8 items-center px-4 text-caption font-medium text-fg-2">
             <span className="flex-1">{t("appsPage.columnApp")}</span>
             <span className="w-[168px] text-end">
               {t("appsPage.columnVersion")}
             </span>
             <span className="w-[200px]" />
-            {!simpleMode && (
+            {!simpleMode && !embedded && (
               <span className="flex w-[56px] items-center justify-end gap-0.5">
                 {t("appsPage.columnVisible")}
                 <HelpTip title={t("appsPage.columnVisible")} align="end">
@@ -291,50 +318,55 @@ export function AppsPage({
           </div>
 
           <div className="divide-y divide-border overflow-hidden rounded-panel border border-border bg-surface">
-            {ROWS.map((row) =>
-              row.kind === "desktop" ? (
-                <AppRow
-                  key="claude-desktop"
-                  app="claude-desktop"
-                  name={
-                    <span className="flex items-center gap-1">
-                      {APP_DISPLAY_NAME["claude-desktop"]}
-                      <HelpTip title={APP_DISPLAY_NAME["claude-desktop"]}>
-                        {t("appsPage.desktopHelp")}
-                      </HelpTip>
-                    </span>
-                  }
-                  version={
-                    <span className="text-caption text-fg-2">
-                      {desktopStatus?.supported === false
-                        ? t("appsPage.desktopUnsupported")
-                        : desktopStatus?.configured
-                          ? t("appsPage.desktopConnected")
-                          : t("appsPage.desktopNotConnected")}
-                    </span>
-                  }
-                  visibility={
-                    simpleMode ? null : visibilitySwitch("claude-desktop")
-                  }
-                />
-              ) : (
-                <ToolRow
-                  key={row.tool}
-                  tool={row.tool}
-                  tools={tools}
-                  onUninstall={() => setPendingUninstall(row.tool)}
-                  expanded={expanded[row.tool] ?? false}
-                  onToggleExpanded={() =>
-                    setExpanded((prev) => ({
-                      ...prev,
-                      [row.tool]: !prev[row.tool],
-                    }))
-                  }
-                  visibility={
-                    simpleMode ? null : visibilitySwitch(TOOL_APP_IDS[row.tool])
-                  }
-                />
-              ),
+            {ROWS.filter((row) => !embedded || row.kind === "tool").map(
+              (row) =>
+                row.kind === "desktop" ? (
+                  <AppRow
+                    key="claude-desktop"
+                    app="claude-desktop"
+                    name={
+                      <span className="flex items-center gap-1">
+                        {APP_DISPLAY_NAME["claude-desktop"]}
+                        <HelpTip title={APP_DISPLAY_NAME["claude-desktop"]}>
+                          {t("appsPage.desktopHelp")}
+                        </HelpTip>
+                      </span>
+                    }
+                    version={
+                      <span className="text-caption text-fg-2">
+                        {desktopStatus?.supported === false
+                          ? t("appsPage.desktopUnsupported")
+                          : desktopStatus?.configured
+                            ? t("appsPage.desktopConnected")
+                            : t("appsPage.desktopNotConnected")}
+                      </span>
+                    }
+                    visibility={
+                      simpleMode || embedded
+                        ? null
+                        : visibilitySwitch("claude-desktop")
+                    }
+                  />
+                ) : (
+                  <ToolRow
+                    key={row.tool}
+                    tool={row.tool}
+                    tools={tools}
+                    onUninstall={() => setPendingUninstall(row.tool)}
+                    expanded={expanded[row.tool] ?? false}
+                    onToggleExpanded={() =>
+                      setExpanded((prev) => ({
+                        ...prev,
+                        [row.tool]: !prev[row.tool],
+                      }))
+                    }
+                    visibility={
+                      simpleMode || embedded
+                        ? null
+                        : visibilitySwitch(TOOL_APP_IDS[row.tool])
+                    }
+                  />
+                ),
             )}
           </div>
         </div>

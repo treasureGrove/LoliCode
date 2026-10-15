@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import type { UsageRangeSelection } from "@/types/usage";
 import {
   fmtUsd,
+  fmtInt,
   formatTokensShort,
   getLocaleFromLanguage,
   parseFiniteNumber,
@@ -154,9 +155,10 @@ function useAllSpansDailyTrends(
   const refetchInterval = refreshIntervalMs > 0 ? refreshIntervalMs : false;
   const firstDateQuery = useUsageFirstDate(filters, { refetchInterval });
   const today = startOfDay(new Date());
-  const spanCount = firstDateQuery.isSuccess
-    ? spanCountFor(firstDateQuery.data, today)
-    : null;
+  const spanCount =
+    firstDateQuery.data !== undefined
+      ? spanCountFor(firstDateQuery.data, today)
+      : null;
   const startKey = dayKey(spanStart(today, (spanCount ?? 1) - 1));
   const selection = useMemo<UsageRangeSelection>(
     () => ({
@@ -178,6 +180,12 @@ function useAllSpansDailyTrends(
     spanCount: spanCount ?? 1,
     trends: trendsQuery.data,
     isLoading: firstDateQuery.isPending || trendsQuery.isLoading,
+    isError: firstDateQuery.isError || trendsQuery.isError,
+    hasData: firstDateQuery.data !== undefined && trendsQuery.data != null,
+    retry: () => {
+      void firstDateQuery.refetch();
+      if (spanCount != null) void trendsQuery.refetch();
+    },
   };
 }
 
@@ -251,10 +259,8 @@ export function UsageHeatmap({
   const language = i18n.resolvedLanguage || i18n.language || "en";
   const locale = getLocaleFromLanguage(language);
 
-  const { spanCount, trends, isLoading } = useAllSpansDailyTrends(
-    { appType, providerName, model },
-    refreshIntervalMs,
-  );
+  const { spanCount, trends, isLoading, isError, hasData, retry } =
+    useAllSpansDailyTrends({ appType, providerName, model }, refreshIntervalMs);
 
   const heat = useMemo(() => {
     const byDay = new Map<string, UsageTrendStatLike>();
@@ -325,7 +331,18 @@ export function UsageHeatmap({
         />
       </div>
 
-      {isLoading ? (
+      {isError && (
+        <div
+          role="alert"
+          className="mt-3 flex items-center gap-3 text-sm text-fg-2"
+        >
+          每日用量暂时加载失败{hasData ? "，正在显示上次记录。" : "。"}
+          <Button type="button" variant="quiet" size="compact" onClick={retry}>
+            重试每日用量
+          </Button>
+        </div>
+      )}
+      {isError && !hasData ? null : isLoading ? (
         <div className="flex h-[150px] items-center justify-center">
           <Loader2 className="h-5 w-5 animate-spin text-fg-3" />
         </div>
@@ -377,8 +394,15 @@ export function UsageHeatmap({
                     const cell = column[d];
                     const level = levelOf(cell.value, heat.thresholds);
                     return (
-                      <div
+                      <button
+                        type="button"
                         key={cell.key}
+                        disabled={cell.future}
+                        aria-label={`${formatDay(cell.date)} · ${fmtInt(cell.tokens)} Tokens · ${fmtInt(cell.requests)} 次请求 · ${fmtUsd(cell.cost, 4)}`}
+                        onFocus={(event) =>
+                          showTooltip(cell, event.currentTarget)
+                        }
+                        onBlur={() => setHover(null)}
                         onMouseEnter={
                           cell.future
                             ? undefined
@@ -386,7 +410,7 @@ export function UsageHeatmap({
                         }
                         onMouseLeave={() => setHover(null)}
                         className={cn(
-                          "aspect-square w-full rounded-[3px]",
+                          "aspect-square w-full rounded-[3px] outline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-action",
                           !cell.future && level === 0 && "bg-subtle",
                         )}
                         style={cell.future ? undefined : cellStyle(level)}

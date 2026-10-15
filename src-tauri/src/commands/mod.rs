@@ -4,6 +4,7 @@ pub(crate) mod agent_dispatch;
 #[cfg(any(test, feature = "test-hooks"))]
 pub(crate) mod agent_extensions;
 mod agent_images;
+mod agent_files;
 mod auth;
 mod balance;
 mod channel_center;
@@ -46,6 +47,7 @@ mod workspace;
 
 pub use agent_dispatch::*;
 pub use agent_images::*;
+pub use agent_files::*;
 pub use auth::*;
 pub use balance::*;
 pub use channel_center::*;

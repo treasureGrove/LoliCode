@@ -93,6 +93,7 @@ pub(super) async fn load(root: &Path) -> Result<Vec<StoredSession>, String> {
         // Title requests are ephemeral and are never resumed after a restart.
         let title_interrupted = stored.snapshot.title_pending;
         let compaction_interrupted = stored.snapshot.compacting;
+        let model_interrupted=stored.snapshot.model_phase.take().is_some();
         stored.snapshot.title_pending = false;
         stored.snapshot.compacting = false;
         stored.snapshot.session.activity = None;
@@ -103,6 +104,13 @@ pub(super) async fn load(root: &Path) -> Result<Vec<StoredSession>, String> {
             stored.snapshot.status = AgentStatus::Error;
             stored.snapshot.error =
                 Some("上次任务随应用关闭而中断；工具不会自动重放，请确认文件状态后继续。".into());
+            if let Some(ledger)=stored.usage_ledger.as_mut() {
+                for request in &mut ledger.requests {
+                    if request.completed_at.is_none() {request.completed_at=Some(super::engine::now());request.duration_unknown=true;}
+                }
+                if let Some(task)=ledger.task.as_mut().filter(|task|task.completed_at.is_none()) {task.completed_at=Some(super::engine::now());}
+                stored.snapshot.usage=Some(super::usage::snapshot(ledger,super::engine::now()));
+            }
             stored.snapshot.permissions.clear();
             stored.snapshot.questions.clear();
             for message in &mut stored.snapshot.messages {
@@ -121,7 +129,7 @@ pub(super) async fn load(root: &Path) -> Result<Vec<StoredSession>, String> {
             // Repair only missing protocol results; never re-execute a tool.
             repair_history(&mut stored);
             save(root, &stored).await?;
-        } else if title_interrupted || compaction_interrupted {
+        } else if title_interrupted || compaction_interrupted || model_interrupted {
             save(root, &stored).await?;
         }
         sessions.push(stored);

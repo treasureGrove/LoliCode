@@ -1,6 +1,6 @@
 use super::{
     inference::{self, Delta},
-    context, persistence, tools,
+    context, persistence, tools, usage,
     types::*,
 };
 use crate::*;
@@ -323,7 +323,9 @@ impl NativeEngine {
             "getSession" => {
                 let entry = self.entry(arg(&args, "sessionId")?).await?;
                 let state = entry.lock().await;
-                encode(&state.stored.snapshot)
+                let mut snapshot=state.stored.snapshot.clone();
+                snapshot.usage=state.stored.usage_ledger.as_ref().map(|ledger|usage::snapshot(ledger,now()));
+                encode(&snapshot)
             }
             "createSession" => self.create(&args).await,
             "updateSession" | "renameSession" | "setSessionMetadata" => {
@@ -471,6 +473,8 @@ impl NativeEngine {
                 stream_gap: false,
                 title_pending: false,
                 compacting: false,
+                usage: None,
+                model_phase: None,
             },
             history: Vec::new(),
             commands: BTreeMap::new(),
@@ -485,6 +489,8 @@ impl NativeEngine {
             },
             context_summary: None,
             compaction_count: 0,
+            response_locale: None,
+            usage_ledger: Some(usage::Ledger::new(time,true)),
         };
         persistence::save(&self.inner.root, &stored).await?;
         self.inner.sessions.write().await.insert(
@@ -595,6 +601,13 @@ impl NativeEngine {
         let (cancel, receiver) = watch::channel(false);
         let skills = self.inner.skills.read().await.clone();
         let mut stored = state.stored.clone();
+        if let Some(locale)=args.get("locale").filter(|value|!value.is_null()) {
+            let locale=locale.as_str().filter(|locale|matches!(*locale,"zh"|"zh-TW"|"en"|"ja")).ok_or("不支持的界面语言")?;
+            stored.response_locale=Some(locale.into());
+        }
+        let ledger=stored.usage_ledger.get_or_insert_with(||usage::Ledger::new(now(),false));
+        ledger.task=Some(usage::Task{id:request_id.into(),started_at:now(),completed_at:None});
+        stored.snapshot.usage=Some(usage::snapshot(ledger,now()));
         stored.snapshot.status = AgentStatus::Running;
         stored.snapshot.error = None;
         stored.snapshot.permissions.clear();
@@ -671,6 +684,7 @@ impl NativeEngine {
         let mut schemas = tools::schemas();
         schemas.extend(internal_schemas());
         let mut reactive_retry = false;
+        let mut needs_final_answer = false;
         // Continue until the model finishes, the user stops, or a real transport,
         // context, permission or persistence error occurs. Useful long tasks do
         // not become failures merely because they need another tool round.
@@ -685,8 +699,9 @@ impl NativeEngine {
                 let mode = session.mode.clone();
                 let model = session.model.clone().ok_or("此会话没有可用模型")?;
                 let context = model_context(&catalog, &model)?;
-                let effort = session.reasoning_effort.clone();
-                let system = system_prompt(&project, &mode, &skills);
+                let effort = effective_effort(&catalog,&model,session.reasoning_effort.as_deref());
+                let mut system = system_prompt(&project, &mode, &skills, state.stored.response_locale.as_deref());
+                if needs_final_answer { system.push_str("The previous response ended without a user-facing answer. Now provide the actual final answer to the user in the requested language; do not return only reasoning. Do not repeat completed tools.\n"); }
                 (state.stored.history.clone(), state.stored.context_summary.clone(),
                     project, mode, model, context, effort, system)
             };
@@ -708,6 +723,7 @@ impl NativeEngine {
                 persistence::save(&self.inner.root, &state.stored).await?;
             }
             let (tx, mut rx) = mpsc::unbounded_channel();
+            self.begin_model_usage(&entry,&assistant_id).await?;
             let inference = inference::infer(
                 &self.inner.client,
                 &gateway,
@@ -725,6 +741,7 @@ impl NativeEngine {
             while let Ok(delta) = rx.try_recv() {
                 self.delta(&entry, &assistant_id, delta).await;
             }
+            self.complete_model_usage(&entry,&assistant_id).await?;
             let turn = match result {
                 Err(error) if error == inference::CONTEXT_EXCEEDED && !reactive_retry => {
                     {
@@ -794,8 +811,16 @@ impl NativeEngine {
                 persistence::save(&self.inner.root, &state.stored).await?;
             }
             if turn.calls.is_empty() {
+                if turn.content.trim().is_empty() {
+                    if !turn.reasoning.is_empty() && !needs_final_answer {
+                        needs_final_answer = true;
+                        continue;
+                    }
+                    return Err("模型没有返回最终答复；已收到的思考和工具结果保留，请重试或更换模型。".into());
+                }
                 return Ok(());
             }
+            needs_final_answer = false;
             for call in turn.calls {
                 if *cancel.borrow() {
                     return Err(inference::CANCELLED.into());
@@ -1018,6 +1043,27 @@ impl NativeEngine {
 
     async fn delta(&self, entry: &Entry, id: &str, delta: Delta) {
         let mut state = entry.lock().await;
+        if let Delta::Usage(tokens)=delta {
+            if let Some(ledger)=state.stored.usage_ledger.as_mut() {
+                if let Some(request)=ledger.requests.iter_mut().find(|request|request.message_id==id) {
+                    request.tokens.merge(&tokens);
+                }
+                state.stored.snapshot.usage=Some(usage::snapshot(ledger,now()));
+            }
+            return;
+        }
+        if matches!(delta,Delta::Finished) {
+            state.stored.snapshot.model_phase=Some(AgentModelPhase::Finishing);
+            if let Some(ledger)=state.stored.usage_ledger.as_mut() {
+                if let Some(request)=ledger.requests.iter_mut().find(|request|request.message_id==id) {request.generated_at=Some(now());}
+                state.stored.snapshot.usage=Some(usage::snapshot(ledger,now()));
+            }
+            return;
+        }
+        if matches!(delta,Delta::ToolInputProgress) {
+            if state.stored.snapshot.model_phase!=Some(AgentModelPhase::Finishing) {state.stored.snapshot.model_phase=Some(AgentModelPhase::Streaming);}
+            return;
+        }
         if let Some(message) = state
             .stored
             .snapshot
@@ -1048,8 +1094,28 @@ impl NativeEngine {
                         message.parts.push(AgentPart::Reasoning { text: value });
                     }
                 }
+                Delta::Usage(_)|Delta::Finished|Delta::ToolInputProgress=>unreachable!(),
             }
         }
+        if state.stored.snapshot.model_phase!=Some(AgentModelPhase::Finishing) {state.stored.snapshot.model_phase=Some(AgentModelPhase::Streaming);}
+    }
+    async fn begin_model_usage(&self,entry:&Entry,message_id:&str)->Result<(),String> {
+        let mut state=entry.lock().await;
+        let task_id=state.flight.as_ref().ok_or("任务已结束")?.request_id.clone();
+        state.stored.snapshot.model_phase=Some(AgentModelPhase::Waiting);
+        let ledger=state.stored.usage_ledger.get_or_insert_with(||usage::Ledger::new(now(),false));
+        ledger.requests.push(usage::Request{message_id:message_id.into(),task_id,started_at:now(),completed_at:None,tokens:AgentTokenUsage::default(),generated_at:None,duration_unknown:false});
+        state.stored.snapshot.usage=Some(usage::snapshot(ledger,now()));
+        persistence::save(&self.inner.root,&state.stored).await
+    }
+    async fn complete_model_usage(&self,entry:&Entry,message_id:&str)->Result<(),String> {
+        let mut state=entry.lock().await;
+        state.stored.snapshot.model_phase=None;
+        if let Some(ledger)=state.stored.usage_ledger.as_mut() {
+            if let Some(request)=ledger.requests.iter_mut().find(|request|request.message_id==message_id) {request.completed_at=Some(now());}
+            state.stored.snapshot.usage=Some(usage::snapshot(ledger,now()));
+        }
+        persistence::save(&self.inner.root,&state.stored).await
     }
     async fn record_tool_outcome(
         &self,
@@ -1486,10 +1552,15 @@ impl NativeEngine {
             .as_ref()
             .err()
             .is_some_and(|e| e == inference::CANCELLED);
+        if let Some(ledger)=state.stored.usage_ledger.as_mut() {
+            if let Some(task)=ledger.task.as_mut().filter(|task|task.id==request) {task.completed_at=Some(now());}
+            state.stored.snapshot.usage=Some(usage::snapshot(ledger,now()));
+        }
         state.stored.snapshot.title_pending =
             state.stored.title_state == TitleState::Pending
                 && (result.is_ok() || state.title_in_flight);
         state.stored.snapshot.compacting = false;
+        state.stored.snapshot.model_phase = None;
         state.stored.snapshot.status = if result.is_ok() || cancelled {
             AgentStatus::Idle
         } else {
@@ -1657,6 +1728,7 @@ fn catalog_value(value: Value) -> Result<Value, String> {
             "reasoningEfforts",
             "reasoningEffortSource",
             "reasoningEffortTransport",
+            "defaultReasoningEffort",
         ] {
             if let Some(value) = model.get(key) {
                 object.insert(key.into(), value.clone());
@@ -1707,6 +1779,11 @@ fn declared_effort(catalog: &Value, model: &AgentModelRef, effort: &str) -> bool
     model_metadata(catalog, model)
         .and_then(|metadata| metadata["reasoningEfforts"].as_array())
         .is_some_and(|efforts| efforts.iter().any(|item| item.as_str() == Some(effort)))
+}
+fn effective_effort(catalog:&Value,model:&AgentModelRef,manual:Option<&str>)->Option<String> {
+    manual.or_else(||model_metadata(catalog,model)?.get("defaultReasoningEffort")?.as_str())
+        .filter(|value|!value.is_empty()&&value.len()<=64&&value.chars().all(|c|c.is_ascii_alphanumeric()||matches!(c,'_'|'-')))
+        .map(str::to_owned)
 }
 fn reasoning_effort(
     catalog: &Value,
@@ -1783,8 +1860,11 @@ fn field(
         url: None,
     }
 }
-fn system_prompt(project: &Path, mode: &str, skills: &Skills) -> String {
+fn system_prompt(project: &Path, mode: &str, skills: &Skills, locale: Option<&str>) -> String {
     let mut prompt=format!("You are LoliCode, an in-process coding agent. Work only inside this selected project: {}. Use the provided tools to inspect real files before changing them. Tool results and user permission decisions are authoritative. Do not claim a file was changed unless a tool succeeded. Current mode: {}. In plan mode, inspect and propose a plan; use exit_plan_mode to request approval before implementation. Ask for missing decisions with ask_user.\n",project.display(),mode);
+    if let Some(language)=match locale {Some("zh")=>Some("Simplified Chinese"),Some("zh-TW")=>Some("Traditional Chinese"),Some("en")=>Some("English"),Some("ja")=>Some("Japanese"),_=>None} {
+        prompt.push_str(&format!("Reply to the user in {language} by default, following any explicit request for another language. Keep code, paths and API identifiers unchanged. Internal reasoning is not a final answer; provide an actual user-facing response when the task is complete.\n"));
+    }
     prompt.push_str(&format!("Enabled skills revision {} (use read_skill to read complete instructions only when relevant):\n",skills.revision));
     for skill in &skills.items {
         let line = format!(

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { RefreshCw } from "lucide-react";
 import { usageApi } from "@/lib/api/usage";
 import { channelCenterApi } from "@/lib/api/channel-center";
@@ -8,10 +8,13 @@ import { AppPageHeader } from "@/components/shell/AppPageHeader";
 import { APP_DISPLAY_NAME } from "@/components/shell/AppGlyph";
 import type { AppId } from "@/lib/api";
 import { fmtInt, fmtUsd } from "./format";
+import { UsageHeatmap } from "./UsageHeatmap";
+import { usageKeys } from "@/lib/query/usage";
 
 type Period = "today" | "week" | "all";
 
 export function SimpleUsagePage() {
+  const queryClient = useQueryClient();
   const [period, setPeriod] = useState<Period>("today");
   const usage = useQuery({
     queryKey: ["channel-center-usage", period],
@@ -50,7 +53,10 @@ export function SimpleUsagePage() {
             variant="neutral"
             size="compact"
             disabled={usage.isFetching}
-            onClick={() => void usage.refetch()}
+            onClick={() => {
+              void usage.refetch();
+              void queryClient.invalidateQueries({ queryKey: usageKeys.all });
+            }}
           >
             <RefreshCw
               className={usage.isFetching ? "h-4 w-4 animate-spin" : "h-4 w-4"}
@@ -111,6 +117,9 @@ export function SimpleUsagePage() {
                 </div>
               ))}
             </dl>
+            <div className="mb-8">
+              <UsageHeatmap refreshIntervalMs={60_000} />
+            </div>
             {providers.length > 0 ? (
               <section aria-label="各渠道用量">
                 <h2 className="mb-3 text-base font-semibold">各渠道用量</h2>

@@ -42,6 +42,7 @@ static CACHE: OnceLock<Mutex<Cache>> = OnceLock::new();
 
 /// Only explicitly identified LiteLLM channels receive this optional request.
 pub(super) async fn enrich(channel: &ChannelSource, models: &mut [ChannelModel]) {
+    enrich_official(channel, models);
     if channel.auth_kind != "api_key"
         || channel.protocol != "openai_chat"
         || !channel.name.trim().eq_ignore_ascii_case("litellm")
@@ -95,6 +96,50 @@ pub(super) async fn enrich(channel: &ChannelSource, models: &mut [ChannelModel])
     };
     if let Some(catalog) = catalog {
         apply(models, &catalog);
+    }
+}
+
+/// Public, pinned model facts for exact official origins and canonical IDs.
+/// This is a local lookup: credentials never go to a public registry, and no
+/// thinking/effort option-map is inferred from the upstream model's enum.
+fn enrich_official(channel: &ChannelSource, models: &mut [ChannelModel]) {
+    let Ok(url) = Url::parse(&channel.base_url) else {
+        return;
+    };
+    if url.scheme() != "https"
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.query().is_some()
+        || url.fragment().is_some()
+        || url.port().is_some()
+    {
+        return;
+    }
+    let path = url.path().trim_end_matches('/');
+    let provider = match (url.host_str(), path) {
+        (Some("api.deepseek.com"), "" | "/v1" | "/anthropic") => "deepseek",
+        (Some("api.openai.com"), "" | "/v1") => "openai",
+        (Some("api.anthropic.com"), "" | "/v1") => "anthropic",
+        (Some("api.moonshot.cn" | "api.moonshot.ai"), "" | "/v1" | "/anthropic") => "moonshot",
+        (
+            Some("api.z.ai" | "open.bigmodel.cn"),
+            "/api/paas/v4" | "/api/anthropic" | "/api/coding/paas/v4",
+        ) => "zai",
+        _ => return,
+    };
+    for model in models {
+        if model.reasoning_efforts.is_some() {
+            continue;
+        }
+        // A canonical unprefixed ID is required on official endpoints too.
+        if model.id.contains('/') {
+            continue;
+        }
+        if let Some(efforts) = registry_efforts(&model.id, Some(provider)) {
+            model.reasoning_efforts = Some(efforts.iter().map(|value| (*value).into()).collect());
+            model.reasoning_effort_source = Some(REGISTRY_SOURCE.into());
+            model.reasoning_effort_transport = Some("unconfirmed".into());
+        }
     }
 }
 
@@ -299,7 +344,14 @@ fn registry_efforts(model: &str, provider: Option<&str>) -> Option<&'static [&'s
         }
         ("zai", "glm-5.1") => Some(&["disabled", "enabled"]),
         ("zai", "glm-5.3-flash") | ("moonshot", "kimi-k3") => Some(&["low", "high", "max"]),
-        ("deepseek", "deepseek-flash") => Some(&["disabled", "low", "high", "max"]),
+        (
+            "deepseek",
+            "deepseek-flash"
+            | "deepseek-v4-pro"
+            | "deepseek-v4-flash"
+            | "deepseek-v4.1-flash"
+            | "deepseek-v4-1-flash",
+        ) => Some(&["disabled", "low", "high", "max"]),
         _ => None,
     }
 }
@@ -426,6 +478,51 @@ mod tests {
         assert_eq!(models[0].context_limit, Some(32000));
         assert_eq!(models[0].reasoning_efforts, Some(Vec::new()));
         assert!(models[0].reasoning_effort_source.is_none());
+    }
+
+    #[tokio::test]
+    async fn official_origins_enrich_exact_canonical_ids_without_requests_or_alias_guesses() {
+        let mut source = channel("https://api.deepseek.com/v1".into());
+        source.name = "My DeepSeek account".into();
+        let mut models = vec![
+            model("deepseek-flash"),
+            model("deepseek-v4-pro"),
+            model("claude-deepseek-flash"),
+            model("deepseek-chat"),
+        ];
+        enrich(&source, &mut models).await;
+        assert_eq!(
+            models[0].reasoning_efforts.as_deref(),
+            Some(&["disabled".into(), "low".into(), "high".into(), "max".into()][..])
+        );
+        assert_eq!(
+            models[1].reasoning_effort_source.as_deref(),
+            Some(REGISTRY_SOURCE)
+        );
+        assert_eq!(
+            models[1].reasoning_effort_transport.as_deref(),
+            Some("unconfirmed")
+        );
+        assert!(models[2].reasoning_efforts.is_none());
+        assert!(models[3].reasoning_efforts.is_none());
+        for base in [
+            "https://api.deepseek.com.evil.test/v1",
+            "https://company.test/v1",
+            "https://api.deepseek.com/tenant/v1",
+        ] {
+            source.base_url = base.into();
+            let mut models = vec![model("deepseek-flash")];
+            enrich(&source, &mut models).await;
+            assert!(models[0].reasoning_efforts.is_none());
+        }
+        source.base_url = "https://api.deepseek.com/v1".into();
+        let mut models = vec![model("deepseek-flash")];
+        models[0].reasoning_efforts = Some(vec!["relay-specific".into()]);
+        enrich(&source, &mut models).await;
+        assert_eq!(
+            models[0].reasoning_efforts,
+            Some(vec!["relay-specific".into()])
+        );
     }
 
     #[test]

@@ -85,7 +85,6 @@ import { EditProviderDialog } from "@/components/providers/EditProviderDialog";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { discardUnsavedChanges, hasUnsavedChanges } from "@/lib/unsavedChanges";
 import { SettingsPage } from "@/components/settings/SettingsPage";
-import { AppsPage } from "@/components/apps/AppsPage";
 import {
   checkToolUpdatesInBackground,
   useToolUpdatesAvailable,
@@ -1444,6 +1443,7 @@ function App() {
         );
       case "channels":
       case "auth":
+      case "apps":
         return (
           <>
             <AppPageHeader
@@ -1462,6 +1462,7 @@ function App() {
                 <ChannelCenterPanel
                   onNavigationBlockedChange={setChannelNavigationBusy}
                   initialAccountManagerOpen={currentView === "auth"}
+                  initialToolsOpen={currentView === "apps"}
                 />
               </div>
             </div>
@@ -1510,8 +1511,6 @@ function App() {
             onOpenTerminalSettings={() => openSettings("general")}
           />
         );
-      case "apps":
-        return <AppsPage simpleMode />;
       default:
         return null;
     }
