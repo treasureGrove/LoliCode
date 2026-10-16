@@ -21,6 +21,7 @@ LoliCode is a simple, extensible desktop Agent with an anime-inspired identity. 
 - [本机记忆](architecture/agent-memory.md)、[外部模型接入](architecture/external-model-config.md)与[本机用量](guides/local-agent-usage.md)。
 - [工作流、闲时任务与 CLI 市场](guides/agent-workflows-cli-adapter.md)。
 - [原生 Agent 的实际 GLM 验收](architecture/native-agent-live-acceptance.md)。
+- [4.0.18 交付记录](guides/lolicode-4.0.18-delivery.md)：当前 Windows 下载、签名更新、功能验收与已知边界。
 - [Cherry Atelier 界面与装饰资源](guides/cherry-atelier-ui.md)。
 - [4.0.15 交付记录](guides/lolicode-4.0.15-delivery.md)：该版本的历史验证证据，不替代当前版本验收。
 

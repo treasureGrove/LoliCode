@@ -1,6 +1,18 @@
 # LoliCode 4.0.18 验收与发布记录
 
-2026-10-17，Windows x64。源码验收已完成；发布产物和线上更新结果在完成后补入本记录，不能把候选构建视为已经发布。
+2026-10-17，Windows x64 已发布。应用源码提交为 `c911478572c2fb0ae0172ef66e62f849595c6991`，本记录后续更新不改变该构建归属。
+
+## 下载与更新
+
+- [官网](https://lolicode.com/)／[社区](https://lolicode.com/all)／[公开发布页](https://github.com/treasureGrove/LoliCode-Releases/releases/tag/lolicode-v4.0.18)。
+- [Windows x64 安装器](https://github.com/treasureGrove/LoliCode-Releases/releases/download/lolicode-v4.0.18/LoliCode-4.0.18-Windows-x64-Setup.exe)：23,101,750 字节，SHA256 `26aac293c2187c7b626b0a2a97b6d539d129123e65abfa1efb4997224864775b`。
+- [Windows x64 便携 ZIP](https://github.com/treasureGrove/LoliCode-Releases/releases/download/lolicode-v4.0.18/LoliCode-Portable.zip)：27,834,620 字节，SHA256 `83f408ddab40382d7333ba18a976a65bce256cdc9a931b1b9d6615f3232e6554`。完整解压后启动 `LoliCode.exe`，保留随包资源与 `portable.ini`。
+
+保留 4.0.16 已使用的更新公钥，指纹 `6e5f32bd5f6dd5c1d6257dd65678288769aec4c729a86b7cf497b29668db0b51`。通过 GitHub 公开附件分发二进制，官网仅提供页面与小型更新清单。
+
+先发布附件和不可变候选清单，再用正式 Tauri updater 模拟已安装 4.0.16：完整下载以上安装器、字节数与 SHA256 相同、Minisign 验签通过。便携包与签名附件另外匿名完整下载并核对哈希，之后才原子切换原有 `updates/latest.json`，SHA256 为 `d5cbb1a497a9008bdb361458a53046d30840ba2d4a1373b6a7a6ecc243636ff7`。
+
+最终公开更新源再次通过 4.0.16 → 4.0.18 完整下载与验签；模拟当前 4.0.18 返回 `up_to_date`，不下载或运行安装器。根域兼容更新入口亦返回 4.0.18。以上自检使用 MockRuntime，没有创建 WebView、读取用户配置、执行安装或关闭用户程序。安装器及便携包已完成内置 Agent 离线自检、渲染资源嵌入检查与 ZIP 完整性检查。
 
 ## 本轮交付
 
@@ -29,4 +41,4 @@
 
 第三方配置 writer 使用隔离 fixture，没有覆盖用户真实客户端配置；真实软件重新打开后的端到端体验仍需跨机验收。费用缺少官方账单或价格时只展示可取得的用量或明确估算，不能保证读取所有应用的所有调用。
 
-本轮发布 Windows x64；macOS／Linux 的安装包和系统闲时行为尚未完成真机验收。自动更新的下载与签名应使用最终公开产物再验收；真实 Windows 全量覆盖安装尚无独立 VM／Sandbox 证据，不以签名验证代替这一结论。
+本轮发布 Windows x64；macOS／Linux 的安装包和系统闲时行为尚未完成真机验收。真实 Windows 全量覆盖安装尚无独立 VM／Sandbox 证据，不以下载和签名验证代替这一结论。

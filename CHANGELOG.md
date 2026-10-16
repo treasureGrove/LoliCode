@@ -11,7 +11,7 @@ LoliCode release information is maintained independently in this repository. Pub
 - Preserve reported session totals during pending or interrupted requests and calculate cache hits only from paired measurements. Prefer supported medium/high automatic reasoning and apply model/reasoning changes at the next request during active tasks.
 - Retire inherited configuration-page navigation and obsolete setup prompts while retaining client writers, user data, migration and license records.
 
-Windows x64 release candidate. Native core, multimodal GLM, workflow/CLI, configuration and usage acceptance details are recorded under `docs/architecture/` and `docs/guides/`. macOS/Linux packages and OS-specific idle detection still need platform acceptance.
+Windows x64 published with signed GitHub downloads and verified 4.0.16 → 4.0.18 update detection, full download and signature checks. See the [delivery record](docs/guides/lolicode-4.0.18-delivery.md) for evidence and limits. macOS/Linux packages and OS-specific idle detection still need platform acceptance.
 
 ## [4.0.16] — 2026-10-16
 

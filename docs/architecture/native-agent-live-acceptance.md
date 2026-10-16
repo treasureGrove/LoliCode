@@ -40,6 +40,6 @@ C:/Users/admin/.cargo/bin/cargo.exe run --manifest-path src-tauri/Cargo.toml --f
 
 ## 离线回归
 
-同批次 `lolicode-agent` 全部 100 个测试通过；内置记忆 8 个 Rust 测试、外部模型配置 writer 6 个 fixture 测试通过。前端 `AgentPage` 73、`AgentImage` 8、`AgentPreviewPanel` 7 个测试通过，类型检查通过。前端覆盖运行中切模型/权限、配置请求等待时仍可停止、打断发送及未知接收状态沿用原 requestId 重试。
+同批次 `lolicode-agent` 全部 100 个测试通过；内置记忆 8 个 Rust 测试、外部模型配置 writer 最终 11 个 fixture 测试通过。全量前端最终 3,072 项、桌面 Rust 3,795 项通过，类型检查通过。前端覆盖运行中切模型/权限、配置请求等待时仍可停止、打断发送及未知接收状态沿用原 requestId 重试。
 
 这些结果验证了上述有界任务和交互，不代表已验证每个第三方客户端的 live 写入、所有 GLM 模型或发布更新链路；外部客户端 writer 只对隔离 fixture 写入。
