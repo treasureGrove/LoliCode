@@ -6,7 +6,7 @@
 
 LoliCode 把桌面编程 Agent、统一模型渠道和二次元工作空间放在一起。选好模型、打开文件夹就能开始；需要更多能力时，再探索高级配置。
 
-[下载官网](https://tools.treasuregrove.art/lolicode/) · [社区与账户](https://lolicode.com) · [源码仓库](https://github.com/treasureGrove/LoliCode) · [文档](docs/README.md) · [更新记录](CHANGELOG.md)
+[下载官网](https://lolicode.com/) · [社区与账户](https://lolicode.com/all) · [源码仓库](https://github.com/treasureGrove/LoliCode) · [文档](docs/README.md) · [更新记录](CHANGELOG.md)
 
 ## 现在可以做什么
 
@@ -22,7 +22,7 @@ Windows、macOS、Linux 都是产品目标。目前公开提供 **Windows x64 NS
 
 ## 安装与开始使用
 
-1. 从 [LoliCode 下载官网](https://tools.treasuregrove.art/lolicode/)获取对应系统的安装包。
+1. 从 [LoliCode 下载官网](https://lolicode.com/)获取对应系统的安装包。
 2. 在「渠道与模型」添加渠道并选择模型。
 3. 在「工作台」打开项目文件夹，描述任务，按需查看权限和文件变更。
 

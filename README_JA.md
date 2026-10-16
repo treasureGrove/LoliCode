@@ -6,7 +6,7 @@
 
 LoliCode はデスクトップのコーディング Agent、共通のモデル設定、アニメ調のワークスペースを一つにまとめます。モデルを選び、フォルダーを開けば作業を始められます。高度な設定は必要になったときに利用できます。
 
-[ダウンロード](https://tools.treasuregrove.art/lolicode/) · [コミュニティ・アカウント](https://lolicode.com) · [ソース](https://github.com/treasureGrove/LoliCode) · [ドキュメント](docs/README.md) · [更新履歴](CHANGELOG.md)
+[ダウンロード](https://lolicode.com/) · [コミュニティ・アカウント](https://lolicode.com/all) · [ソース](https://github.com/treasureGrove/LoliCode) · [ドキュメント](docs/README.md) · [更新履歴](CHANGELOG.md)
 
 ## 現在使える機能
 
@@ -22,7 +22,7 @@ Windows、macOS、Linux を対象としています。現在の公開パッケ�
 
 ## インストールと使い始め方
 
-1. [LoliCode ダウンロードページ](https://tools.treasuregrove.art/lolicode/)から環境に合うパッケージを取得します。
+1. [LoliCode ダウンロードページ](https://lolicode.com/)から環境に合うパッケージを取得します。
 2. 接続先・モデル管理で接続先を追加し、モデルを選びます。
 3. ワークベンチでプロジェクトフォルダーを開き、依頼を入力して権限や変更内容を確認します。
 

@@ -90,14 +90,17 @@ jobs:
         if: inputs.publish_github
         shell: pwsh
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # The source repository is private. Distribution is a separate public
+          # repository; its scoped write credential must be configured explicitly.
+          GH_TOKEN: ${{ secrets.LOLICODE_RELEASES_TOKEN }}
         run: |
-          $installer = "src-tauri/target/release/bundle/nsis/LoliCode_$($env:RELEASE_VERSION)_x64-setup.exe"
+          if (-not $env:GH_TOKEN) { throw 'Configure LOLICODE_RELEASES_TOKEN for treasureGrove/LoliCode-Releases in the release environment.' }
+          $installer = "$env:RUNNER_TEMP/lolicode-release/$($env:RELEASE_VERSION)/LoliCode-$($env:RELEASE_VERSION)-Windows-x64-Setup.exe"
           $summary = Get-Content -Raw "src/whats-new/$env:RELEASE_VERSION.json" | ConvertFrom-Json
-          $notes = @('LoliCode desktop update', '', 'Download website: https://tools.treasuregrove.art/lolicode/', '')
+          $notes = @('LoliCode desktop update', '', 'Download website: https://lolicode.com/', "Build source commit: $env:GITHUB_SHA", '')
           $notes += $summary.items | ForEach-Object { '- ' + $_.en }
           $notes | Set-Content -Encoding utf8 "$env:RUNNER_TEMP/lolicode-release-notes.md"
-          gh release create "lolicode-v$env:RELEASE_VERSION" $installer "$installer.sig" --repo "$env:GITHUB_REPOSITORY" --target "$env:GITHUB_SHA" --title "LoliCode $env:RELEASE_VERSION" --notes-file "$env:RUNNER_TEMP/lolicode-release-notes.md"
+          gh release create "lolicode-v$env:RELEASE_VERSION" $installer "$installer.sig" --repo treasureGrove/LoliCode-Releases --target main --title "LoliCode $env:RELEASE_VERSION" --notes-file "$env:RUNNER_TEMP/lolicode-release-notes.md"
           exit $LASTEXITCODE
 
 # The signed website feed is published separately with scripts/lolicode-publish.mjs.

@@ -6,7 +6,7 @@
 
 LoliCode brings a desktop coding Agent, shared model channels, and an anime-inspired workspace together. Start with a model and a folder; explore advanced configuration when you need it.
 
-[Download](https://tools.treasuregrove.art/lolicode/) · [Community and account](https://lolicode.com) · [Source](https://github.com/treasureGrove/LoliCode) · [Documentation](docs/README.md) · [Release notes](CHANGELOG.md)
+[Download](https://lolicode.com/) · [Community and account](https://lolicode.com/all) · [Source](https://github.com/treasureGrove/LoliCode) · [Documentation](docs/README.md) · [Release notes](CHANGELOG.md)
 
 ## What you can use today
 
@@ -22,7 +22,7 @@ Windows, macOS, and Linux are product targets. Current public packages are **Win
 
 ## Install and get started
 
-1. Download a matching package from the [LoliCode download page](https://tools.treasuregrove.art/lolicode/).
+1. Download a matching package from the [LoliCode download page](https://lolicode.com/).
 2. Add a channel and select a model in **Channels and models**.
 3. Open a project folder in **Workbench**, describe a task, and review requested permissions and changes.
 

@@ -1,0 +1,131 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-16T14:54:56Z",
+  "product": "LoliCode",
+  "version": "4.0.16",
+  "distributionRepository": {
+    "fullName": "treasureGrove/LoliCode-Releases",
+    "url": "https://github.com/treasureGrove/LoliCode-Releases",
+    "visibility": "public",
+    "purpose": "Public binary distribution and existing copyright/source notices only",
+    "applicationSourcePublished": false,
+    "originalSourceRepositoryVisibility": "private",
+    "originalSourceRepositoryVisibilityChanged": false
+  },
+  "release": {
+    "id": 415059953,
+    "tag": "lolicode-v4.0.16",
+    "url": "https://github.com/treasureGrove/LoliCode-Releases/releases/tag/lolicode-v4.0.16",
+    "draft": false,
+    "prerelease": false
+  },
+  "artifacts": [
+    {
+      "name": "LoliCode-4.0.16-Windows-x64-Setup.exe",
+      "assetId": 647605883,
+      "size": 21746554,
+      "sha256": "18b9388d68e12e281d465215738a108b84c791984f60a5abe45017e76c284ba0",
+      "url": "https://github.com/treasureGrove/LoliCode-Releases/releases/download/lolicode-v4.0.16/LoliCode-4.0.16-Windows-x64-Setup.exe",
+      "state": "uploaded",
+      "githubDigest": "sha256:18b9388d68e12e281d465215738a108b84c791984f60a5abe45017e76c284ba0",
+      "localSha256Matched": true,
+      "publishedToolsFileSha256Matched": true,
+      "githubRestDigestMatched": true,
+      "anonymousHeadFinalStatus": 200
+    },
+    {
+      "name": "LoliCode-4.0.16-Windows-x64-Setup.exe.sig",
+      "assetId": 647605751,
+      "size": 420,
+      "sha256": "8d90937027353ce4269fd62ac533e956d260b2f497acb148c301f1a41a5d8454",
+      "url": "https://github.com/treasureGrove/LoliCode-Releases/releases/download/lolicode-v4.0.16/LoliCode-4.0.16-Windows-x64-Setup.exe.sig",
+      "state": "uploaded",
+      "githubDigest": "sha256:8d90937027353ce4269fd62ac533e956d260b2f497acb148c301f1a41a5d8454",
+      "localSha256Matched": true,
+      "publishedToolsFileSha256Matched": true,
+      "githubRestDigestMatched": true,
+      "anonymousHeadFinalStatus": 200
+    },
+    {
+      "name": "LoliCode-Portable.zip",
+      "assetId": 647608809,
+      "size": 26186973,
+      "sha256": "1abc2bf82e9295e270486d200d64408ac102ad7468a8484ed2c1c48b3dec3e45",
+      "url": "https://github.com/treasureGrove/LoliCode-Releases/releases/download/lolicode-v4.0.16/LoliCode-Portable.zip",
+      "state": "uploaded",
+      "githubDigest": "sha256:1abc2bf82e9295e270486d200d64408ac102ad7468a8484ed2c1c48b3dec3e45",
+      "localSha256Matched": true,
+      "publishedToolsFileSha256Matched": true,
+      "githubRestDigestMatched": true,
+      "anonymousHeadFinalStatus": 200
+    }
+  ],
+  "anonymousVerification": {
+    "releaseApi": {
+      "url": "https://api.github.com/repos/treasureGrove/LoliCode-Releases/releases/tags/lolicode-v4.0.16",
+      "status": 200,
+      "authorizationProvided": false,
+      "allAssetSizesAndDigestsMatched": true
+    },
+    "publicDownloads": {
+      "method": "HEAD with redirects",
+      "authorizationProvided": false,
+      "allFinalStatuses": 200
+    },
+    "signatureGet": {
+      "method": "GET with redirects; streamed in memory without writing the body to disk",
+      "authorizationProvided": false,
+      "status": 200,
+      "size": 420,
+      "sha256": "8d90937027353ce4269fd62ac533e956d260b2f497acb148c301f1a41a5d8454",
+      "matched": true
+    },
+    "additionalFullInstallerAndPortableDownloadRehash": {
+      "status": "stopped_as_redundant",
+      "completeBinaryDownloadRehashClaimed": false,
+      "reason": "Large-file anonymous re-downloads were slow. Upload-time, local/server and GitHub API digests already matched, and all public final download endpoints returned HTTP 200. The native Tauri SDK download/signature verification is recorded separately by the release owner."
+    }
+  },
+  "publicNotices": {
+    "commit": "376206590643df3f593acb3303bd0226022e39fd",
+    "url": "https://github.com/treasureGrove/LoliCode-Releases/commit/376206590643df3f593acb3303bd0226022e39fd",
+    "files": [
+      {
+        "name": "README.md",
+        "size": 1383,
+        "sha256": "b42b5cc7b73d739ed136967745d30f21d3cce1a6352af45f16c6f2e0a92cc986",
+        "url": "https://github.com/treasureGrove/LoliCode-Releases/blob/main/README.md"
+      },
+      {
+        "name": "LICENSE",
+        "size": 1067,
+        "sha256": "912b6a597d10c43b40a0909349ed95b052b17efb6502b4898e1b35dafb896755",
+        "originalSourceBytesPreserved": true,
+        "url": "https://github.com/treasureGrove/LoliCode-Releases/blob/main/LICENSE"
+      },
+      {
+        "name": "THIRD_PARTY_NOTICES.md",
+        "size": 1992,
+        "sha256": "f5defb9bf8f4481de9209467d9d739d1d5c7b76d972d6e502c4e3dbcf05a5b36",
+        "originalSourceBytesPreserved": true,
+        "url": "https://github.com/treasureGrove/LoliCode-Releases/blob/main/THIRD_PARTY_NOTICES.md"
+      }
+    ],
+    "scope": "README links both original notice files and states that components and artwork retain their own license/authorization scopes; the distribution repository does not separately relicense the entire product under MIT."
+  },
+  "cleanup": {
+    "ownedLocalVerifierProcessTreeStopped": true,
+    "remoteHostAlias": "tools",
+    "terminatedOwnedRemoteVerifierPids": [
+      388210
+    ],
+    "remainingOwnedRemoteVerifiers": [],
+    "verificationSessionsClosed": true
+  },
+  "credentialHandling": {
+    "credentialValuesRecorded": false,
+    "authorizationHeadersRecorded": false,
+    "credentialsWrittenToDisk": false,
+    "uploadCredentialTransport": "Existing GitHub CLI token read in process memory and passed only via SSH stdin to the server upload process"
+  }
+}

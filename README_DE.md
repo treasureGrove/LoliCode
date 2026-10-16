@@ -6,7 +6,7 @@
 
 LoliCode verbindet einen Desktop-Agenten für Programmierung, gemeinsame Modellzugänge und eine Arbeitsumgebung im Anime-Stil. Modell auswählen, Projektordner öffnen und loslegen; erweiterte Einstellungen stehen bei Bedarf bereit.
 
-[Download](https://tools.treasuregrove.art/lolicode/) · [Community und Konto](https://lolicode.com) · [Quellcode](https://github.com/treasureGrove/LoliCode) · [Dokumentation](docs/README.md) · [Änderungen](CHANGELOG.md)
+[Download](https://lolicode.com/) · [Community und Konto](https://lolicode.com/all) · [Quellcode](https://github.com/treasureGrove/LoliCode) · [Dokumentation](docs/README.md) · [Änderungen](CHANGELOG.md)
 
 ## Bereits verfügbar
 
@@ -22,7 +22,7 @@ Windows, macOS und Linux sind Zielplattformen. Derzeit sind **Windows-x64-NSIS-I
 
 ## Installation und erster Start
 
-1. Ein passendes Paket von der [LoliCode-Downloadseite](https://tools.treasuregrove.art/lolicode/) herunterladen.
+1. Ein passendes Paket von der [LoliCode-Downloadseite](https://lolicode.com/) herunterladen.
 2. In der Modell- und Zugangsverwaltung einen Zugang hinzufügen und ein Modell auswählen.
 3. Im Arbeitsbereich einen Projektordner öffnen, eine Aufgabe beschreiben und Berechtigungen sowie Änderungen prüfen.
 

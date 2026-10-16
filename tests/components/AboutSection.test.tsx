@@ -151,7 +151,7 @@ describe("software updates in About", () => {
     );
     expect(mocks.open).toHaveBeenCalledWith(APP_CHANGELOG);
     expect(APP_CHANGELOG).toBe(
-      "https://github.com/treasureGrove/LoliCode/blob/TG/freehub-m0/CHANGELOG.md",
+      "https://github.com/treasureGrove/LoliCode-Releases/releases",
     );
   });
 

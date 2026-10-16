@@ -1,0 +1,17 @@
+{
+  "runtime": "tauri_mockruntime",
+  "currentVersion": "4.0.15",
+  "target": "windows-x86_64",
+  "latestVersion": "4.0.16",
+  "downloadAttempted": true,
+  "downloadedBytes": 21746554,
+  "sha256": "18b9388d68e12e281d465215738a108b84c791984f60a5abe45017e76c284ba0",
+  "signatureVerified": true,
+  "installerExitHookInvoked": false,
+  "installationSupported": false,
+  "userConfigurationRead": false,
+  "webviewCreated": false,
+  "result": "signature_verified",
+  "endpointKind": "https_release",
+  "stage": "verified"
+}

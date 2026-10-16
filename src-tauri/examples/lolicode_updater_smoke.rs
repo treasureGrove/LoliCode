@@ -223,10 +223,20 @@ mod smoke {
             proof["stage"] = json!("checked");
             return;
         }
-        // Keep local fixtures local, and never follow metadata to an unrelated
-        // host or credential-bearing URL. No package is persisted or executed.
+        // Keep fixtures local. The two owned HTTPS feeds may also use the
+        // exact, version-bound public distribution attachment on GitHub.
+        // No package is persisted or executed.
+        let official_github_asset = matches!(
+            endpoint.host_str(),
+            Some("lolicode.com" | "tools.treasuregrove.art")
+        ) && endpoint.scheme() == "https"
+            && update.download_url.as_str()
+                == format!(
+                    "https://github.com/treasureGrove/LoliCode-Releases/releases/download/lolicode-v{0}/LoliCode-{0}-Windows-x64-Setup.exe",
+                    update.version
+                );
         if !clean_transport(&update.download_url)
-            || update.download_url.origin() != endpoint.origin()
+            || (update.download_url.origin() != endpoint.origin() && !official_github_asset)
         {
             reject(proof, "downloading", "unsafe_package_url");
             return;

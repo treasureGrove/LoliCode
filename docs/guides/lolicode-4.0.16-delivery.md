@@ -2,11 +2,15 @@
 
 2026-10-16 已发布 Windows x64 安装版、便携包与独立签名更新，并上线新版下载官网。
 
-- [官网](https://tools.treasuregrove.art/lolicode/)
-- [安装版 EXE](https://tools.treasuregrove.art/lolicode/releases/4.0.16/LoliCode-4.0.16-Windows-x64-Setup.exe)
-- [便携 ZIP](https://tools.treasuregrove.art/lolicode/releases/4.0.16/LoliCode-Portable.zip)
-- [GitHub 发布记录](https://github.com/treasureGrove/LoliCode/releases/tag/lolicode-v4.0.16)
+- [官网](https://lolicode.com/)
+- [安装版 EXE](https://github.com/treasureGrove/LoliCode-Releases/releases/download/lolicode-v4.0.16/LoliCode-4.0.16-Windows-x64-Setup.exe)
+- [便携 ZIP](https://github.com/treasureGrove/LoliCode-Releases/releases/download/lolicode-v4.0.16/LoliCode-Portable.zip)
+- [GitHub 发布记录](https://github.com/treasureGrove/LoliCode-Releases/releases/tag/lolicode-v4.0.16)
 - [应用内更新清单](https://tools.treasuregrove.art/lolicode/updates/latest.json)
+
+同日已将软件官网迁至 lolicode.com 首页，社区入口为 `/all`，安装包改由公开的
+LoliCode-Releases 分发仓库托管。源码仓库保持私有，现有更新清单地址继续兼容；
+详见[官网与 GitHub 下载交付](lolicode-home-github-delivery.md)。
 
 ## 源码与范围
 
