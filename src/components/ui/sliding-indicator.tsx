@@ -82,7 +82,7 @@ export function SegmentThumb({
     <motion.span
       aria-hidden="true"
       className={cn(
-        "pointer-events-none absolute left-0 top-0 bg-surface shadow-v7-sm",
+        "tai-segment-thumb pointer-events-none absolute left-0 top-0 bg-surface shadow-v7-sm",
         className,
       )}
       initial={false}

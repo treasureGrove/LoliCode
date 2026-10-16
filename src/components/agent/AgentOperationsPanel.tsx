@@ -182,6 +182,10 @@ export function AgentOperationsPanel({
                   onSession(session);
                   onOpenChange(false);
                 }}
+                onCompose={(text) => {
+                  onCompose(text);
+                  onOpenChange(false);
+                }}
               />
             ))}
         </div>

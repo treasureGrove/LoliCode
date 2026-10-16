@@ -226,6 +226,78 @@ afterEach(() => {
 });
 
 describe("AgentPage", () => {
+  it("preserves a composing session search and restores focus after clearing", async () => {
+    render(<AgentPage />);
+    await flush();
+    const search = screen.getByLabelText("搜索会话");
+    fireEvent.change(search, { target: { value: "修复" } });
+    fireEvent.keyDown(search, { key: "Escape", isComposing: true });
+    expect(search).toHaveValue("修复");
+    fireEvent.keyDown(search, { key: "Escape", keyCode: 229 });
+    expect(search).toHaveValue("修复");
+    fireEvent.keyDown(search, { key: "Escape" });
+    expect(search).toHaveValue("");
+
+    fireEvent.change(search, { target: { value: "修复" } });
+    const clear = screen.getByRole("button", { name: "清空会话搜索" });
+    clear.focus();
+    fireEvent.click(clear);
+    expect(search).toHaveValue("");
+    expect(search).toHaveFocus();
+  });
+
+  it.each([true, false])(
+    "returns to the latest message with reduced motion set to %s",
+    async (reducedMotion) => {
+      const matchMedia = vi.fn().mockReturnValue({ matches: reducedMotion });
+      vi.stubGlobal("matchMedia", matchMedia);
+      try {
+        const view = render(<AgentPage />);
+        await flush();
+        const chat = view.container.querySelector<HTMLDivElement>(".wb-chat")!;
+        const scrollTo = vi.fn();
+        chat.scrollTo = scrollTo;
+        Object.defineProperties(chat, {
+          scrollHeight: { configurable: true, value: 1600 },
+          clientHeight: { configurable: true, value: 400 },
+        });
+        chat.scrollTop = 0;
+        fireEvent.scroll(chat);
+        fireEvent.click(screen.getByRole("button", { name: "回到最新" }));
+        expect(matchMedia).toHaveBeenCalledWith(
+          "(prefers-reduced-motion: reduce)",
+        );
+        expect(scrollTo).toHaveBeenCalledWith({
+          top: 1600,
+          behavior: reducedMotion ? "instant" : "smooth",
+        });
+        expect(
+          screen.queryByRole("button", { name: "回到最新" }),
+        ).not.toBeInTheDocument();
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    },
+  );
+
+  it("adds a task starter to the current draft without submitting or discarding existing text", async () => {
+    render(<AgentPage />);
+    await flush();
+    fill("保留这段需求");
+    fireEvent.click(screen.getByRole("button", { name: /读懂项目/ }));
+    const input = screen.getByLabelText("发送给 Agent 的消息");
+    expect(input).toHaveValue(
+      "保留这段需求\n\n帮我梳理这个项目的结构，介绍核心模块和主要运行流程。",
+    );
+    expect(input).toHaveFocus();
+    expect(agentApi.sendMessage).not.toHaveBeenCalled();
+    expect(
+      sessionStorage.getItem(
+        `lolicode.agent.draft:${encodeURIComponent(project)}:${session.id}`,
+      ),
+    ).toContain("保留这段需求");
+  });
+
   it("interrupts once, waits for actual tool settlement, and sends only the captured draft while preserving newer edits", async () => {
     snapshot.status = "running";
     snapshot.messages = [
@@ -1030,6 +1102,71 @@ describe("AgentPage", () => {
     snapshot.status = "idle";
     await tick(1500);
     expect(modelRefreshButton()).toBeEnabled();
+  });
+
+  it("expands a workspace to show its tasks and opens the selected task", async () => {
+    const otherPath = "D:/fixture/other-project";
+    const otherSession: AgentSession = {
+      ...session,
+      id: "other_project_task",
+      title: "其他工作区的任务",
+      projectPath: otherPath,
+    };
+    vi.mocked(agentApi.listProjects).mockResolvedValue([
+      {
+        path: otherPath,
+        name: "other-project",
+        pinned: false,
+        lastOpenedAt: 3,
+      },
+    ]);
+    vi.mocked(agentApi.listSessions).mockImplementation(async (path) =>
+      path === otherPath ? [otherSession] : [session],
+    );
+    vi.mocked(agentApi.openProject).mockResolvedValue({
+      workspace: { path: otherPath, name: "other-project" },
+      catalog,
+      sessions: [otherSession],
+    });
+    vi.mocked(agentApi.getSession).mockImplementation(async (id) => {
+      const next = emptySnapshot();
+      next.session = id === otherSession.id ? otherSession : session;
+      return next;
+    });
+
+    render(<AgentPage />);
+    await flush();
+
+    expect(screen.queryByText("最近的工作区")).not.toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "收起 project 的任务" }),
+    );
+    expect(
+      screen.queryByRole("button", { name: /^修复测试/ }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "展开 project 的任务" }),
+    );
+    expect(
+      screen.getByRole("button", { name: /^修复测试/ }),
+    ).toBeInTheDocument();
+
+    expect(
+      screen.queryByRole("button", { name: /^其他工作区的任务/ }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "展开 other-project 的任务" }),
+    );
+    await flush();
+
+    expect(agentApi.listSessions).toHaveBeenCalledWith(otherPath);
+    expect(agentApi.openProject).not.toHaveBeenCalled();
+    const task = screen.getByRole("button", { name: /^其他工作区的任务/ });
+    fireEvent.click(task);
+    await flush();
+
+    expect(agentApi.openProject).toHaveBeenCalledWith(otherPath);
+    expect(agentApi.getSession).toHaveBeenCalledWith(otherSession.id);
   });
 
   it("filters archived sessions from the real persisted list and can show them on demand", async () => {

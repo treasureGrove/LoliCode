@@ -185,6 +185,14 @@ await compat.start();
 const extensions = createNativeExtensionAdapter({ services, privateRoot, homeDirectory: privateHome, workspace: () => compat.workspace(), isBusy: () => compat.cachedBusy() || facade.busy() });
 const extensionMethods: Record<string, (args: any) => Promise<unknown>> = {
   getExtensions: () => extensions.getExtensions(),
+  getPluginStore: () => extensions.getPluginStore(),
+  addPluginMarketplace: (args) => extensions.addPluginMarketplace(args.source),
+  updatePluginMarketplace: (args) => extensions.updatePluginMarketplace(args.marketplace),
+  removePluginMarketplace: (args) => extensions.removePluginMarketplace(args.marketplace),
+  installMarketplacePlugin: (args) => extensions.installMarketplacePlugin(args.marketplace, args.pluginName),
+  restoreBuiltinPlugin: (args) => extensions.restoreBuiltinPlugin(args.pluginId),
+  updateMarketplacePlugin: (args) => extensions.updateMarketplacePlugin(args.pluginId),
+  uninstallMarketplacePlugin: (args) => extensions.uninstallMarketplacePlugin(args.pluginId),
   getExtensionConfig: () => extensions.getExtensionConfig(),
   setSkillEnabled: (args) => extensions.setSkillEnabled(args.id, args.enabled),
   importSkill: (args) => extensions.importSkill(args.path),

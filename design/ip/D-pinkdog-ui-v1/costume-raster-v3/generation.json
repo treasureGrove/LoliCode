@@ -1,0 +1,18 @@
+{
+  "version": 3,
+  "date": "2026-10-16",
+  "tool": "built-in image_gen",
+  "scope": "侧栏视觉精修；背景和输入框沿用已认可的 costume-raster-v2 方案。",
+  "direction": "提取角色服装配饰，不使用身体或兽耳等形体；缩小底部褶边，缩短上部缎带，平衡画框比例与可用空间。",
+  "assets": [
+    {
+      "file": "ribbon-sidebar-refined.png",
+      "width": 724,
+      "height": 2172,
+      "transparentExterior": true,
+      "input": "../costume-raster-v2/ribbon-sidebar.png",
+      "source": "C:\\Users\\admin\\.codex\\generated_images\\01a13e2f-391e-7d31-8c1a-025182c039a5\\exec-c8355b92-b31b-4603-9436-86a788224fd9.png",
+      "prompt": "Use case: precise-object-edit. Asset type: one refined premium anime-app navigation panel skin, tall 1:3 transparent PNG, front-on. Image 1 is the EXISTING UI PANEL to redesign; the user's main complaint is the ugly bottom dress-like white frill and unbalanced decoration. KEEP the original identity vocabulary: black-cherry velvet, antique champagne metal, wine satin, one oval teal brooch, tiny gold diamonds. Recompose this as a professionally art-directed, cohesive JEWELLED BOOKBINDING / couture stationery border, not a skirt pasted onto a rectangle. IMPORTANT SPECIFIC CHANGES: 1) Frame takes approximately 90% of canvas width with only 5% clear outer margin, almost full canvas height with comfortable top/bottom transparent margin; slender subtly rounded RECTANGULAR silhouette, squared-off balanced bottom, NO sloping droopy bottom. 2) Delete the huge asymmetric white skirt/ruffle at bottom ENTIRELY. Replace with a small integrated wine-red satin band hugging the inside bottom edge, understated restrained micro-pleated ivory inset occupying ONLY the central 30% of bottom border width and no more than 2% of total panel height. It is an inset trim, not hanging fabric. A tiny diamond charm may terminate in the center within the frame. 3) Upper left SMALL structured double-loop wine satin bow with a beautifully faceted OVAL TEAL brooch and short neat cut ribbon tips, TOP DECORATION no more than 7% of total panel height; the previous long descending ribbon is gone. 4) Frame outline is thin matte champagne metal with charcoal enamel inset, delicate bevel, precise softly curved corner plates; delete the bulky four giant protruding diamond spikes midway down the sides. Replace with almost invisible fine gold stitched/engraved star lines at corners, very restrained. 5) Interior occupies at least 85% of usable panel, stays uniformly extremely DARK plum-black velvet, luxurious subtle texture, NO spotlight gradient or text or false menu shapes. Overall visual weight balanced at upper left and lower center, crisp professionally rendered anime game UI asset; real satin folds and fine metal, soft low-glare highlights. All decoration visibly mounted to frame and designed as one object, not cluttered costume fragments. Warm low-saturation cherry, cocoa charcoal, champagne, ivory and single teal accent. GENUINELY TRANSPARENT exterior outside panel, preserve solid dark inner surface. Entire asset visible, no clipping. No white background, no checkered backdrop, no typography, no UI content, no buttons or icons, no logos. No people, faces, skin, hair, ears, tail, fur, paw or animal body motifs. No generic rococo chandelier/crown motifs. Aim beautiful polished physical materials that remain elegant when shrunk to actual sidebar width 230 px, clean silhouette and careful scale hierarchy."
+    }
+  ]
+}

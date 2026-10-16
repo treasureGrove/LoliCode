@@ -2971,6 +2971,7 @@ dependencies = [
 name = "lolicode-agent"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "futures",
  "reqwest 0.12.28",
  "serde",
@@ -4784,7 +4785,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.4.15",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -5620,7 +5621,7 @@ dependencies = [
 
 [[package]]
 name = "tai-switch"
-version = "4.0.16"
+version = "4.0.17"
 dependencies = [
  "anyhow",
  "arboard",

@@ -1,4 +1,8 @@
 node_modules/
+packages/contracts/dist/
+packages/platform-client/dist/
+packages/platform-host/dist/
+packages/adapters/opencode/dist/
 dist/
 release/
 src-tauri/resources/agent/

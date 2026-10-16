@@ -1,0 +1,33 @@
+{
+  "version": "4.0.17",
+  "items": [
+    {
+      "type": "new",
+      "zh": "对话可粘贴图片、拖入文档，也能预览并放大图片",
+      "zh-TW": "對話可貼上圖片、拖入文件，也能預覽並放大圖片",
+      "en": "Paste images, drop documents, and open image previews in chat",
+      "ja": "画像の貼り付けと文書のドロップに対応し、画像を拡大表示"
+    },
+    {
+      "type": "new",
+      "zh": "加入自动化、工作流和插件市场，支持管理与安装",
+      "zh-TW": "新增自動化、工作流和外掛市集，支援管理與安裝",
+      "en": "Add automation, workflows, and an extension marketplace with installation",
+      "ja": "自動化・ワークフロー・拡張機能マーケットを追加"
+    },
+    {
+      "type": "improve",
+      "zh": "项目任务各自展开，切换模型不打断正在处理的请求",
+      "zh-TW": "專案任務各自展開，切換模型不會中斷處理中的請求",
+      "en": "Keep project task lists open independently; model changes no longer interrupt active requests",
+      "ja": "プロジェクトごとにタスク一覧を展開。モデル変更で実行中の応答を中断しません"
+    },
+    {
+      "type": "fix",
+      "zh": "失败消息支持重试，并统一应用图标与 Windows 产品名",
+      "zh-TW": "失敗訊息支援重試，並統一應用圖示與 Windows 產品名稱",
+      "en": "Retry failed messages and unify the app icon and Windows product name as LoliCode",
+      "ja": "失敗したメッセージを再試行でき、アイコンとWindows名をLoliCodeに統一"
+    }
+  ]
+}

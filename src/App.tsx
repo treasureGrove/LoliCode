@@ -151,7 +151,7 @@ const getInitialApp = (): AppId => {
 function App() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const { hasUpdate } = useUpdate();
+  const { hasUpdate, checkUpdate } = useUpdate();
 
   const [activeApp, setActiveApp] = useState<AppId>(getInitialApp);
   const sharedFeatureApp = sharedFeatureAppOf(activeApp);
@@ -1437,7 +1437,23 @@ function App() {
         return (
           <>
             <div id="main-content" className="min-h-0 flex-1 overflow-hidden">
-              <AgentPage onOpenChannels={() => openPage("channels")} />
+              <AgentPage
+                onOpenChannels={() => openPage("channels")}
+                onOpenAbout={() => openSettings("about")}
+                onCheckUpdate={() => {
+                  void checkUpdate()
+                    .then((available) => {
+                      if (available) openSettings("about");
+                      else toast.success(t("settings.upToDate"));
+                    })
+                    .catch((error: unknown) => {
+                      toast.error(t("settings.checkUpdateFailed"), {
+                        description:
+                          error instanceof Error ? error.message : String(error),
+                      });
+                    });
+                }}
+              />
             </div>
           </>
         );

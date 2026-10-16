@@ -73,7 +73,7 @@ export const SessionImageLightbox = memo(function SessionImageLightbox({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         zIndex="top"
-        className="w-auto max-w-[min(92vw,1280px)] gap-0 overflow-hidden p-0"
+        className="w-[min(92vw,1280px)] max-w-none gap-0 overflow-hidden p-0"
         onInteractOutside={() => onOpenChange(false)}
       >
         <div className="flex h-10 shrink-0 items-center gap-1 border-b border-border pe-1.5 ps-4">
@@ -122,7 +122,7 @@ export const SessionImageLightbox = memo(function SessionImageLightbox({
         </div>
         <div
           className={cn(
-            "flex max-h-[80vh] min-h-[160px] min-w-[240px] bg-subtle",
+            "flex h-[calc(90dvh-2.5rem)] max-h-[900px] min-h-[180px] w-full bg-subtle",
             actualSize
               ? "items-start justify-start overflow-auto"
               : "items-center justify-center overflow-hidden",
@@ -134,8 +134,8 @@ export const SessionImageLightbox = memo(function SessionImageLightbox({
             className={cn(
               "block",
               actualSize
-                ? "max-w-none"
-                : "max-h-[80vh] max-w-full object-contain",
+                ? "h-auto w-auto max-h-none max-w-none shrink-0"
+                : "h-full w-full object-contain",
             )}
           />
         </div>

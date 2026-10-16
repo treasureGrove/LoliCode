@@ -1,39 +1,82 @@
 :root {
-  --motion-fast: 140ms;
+  --motion-fast: 160ms;
   --motion-normal: 240ms;
   --motion-panel: 320ms;
   --motion-ease: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .tai-button {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
   transition:
-    background-color var(--motion-fast),
-    color var(--motion-fast),
-    border-color var(--motion-fast),
-    scale 180ms var(--motion-ease);
+    background-color var(--motion-fast) ease,
+    color var(--motion-fast) ease,
+    border-color var(--motion-fast) ease,
+    box-shadow var(--motion-fast) ease,
+    filter var(--motion-fast) ease,
+    scale var(--motion-normal) var(--motion-ease);
 }
 .tai-button:active:not(:disabled):not([aria-disabled="true"]) {
-  scale: 0.98;
-  transition-duration: 70ms;
+  scale: 0.97;
+  transition-duration: 90ms;
 }
-.tai-button:disabled {
+.tai-button[aria-haspopup]:active,
+.tai-button:disabled,
+.tai-button[aria-disabled="true"] {
   scale: 1;
 }
+.tai-segmented-control {
+  box-shadow: inset 0 1px 2px rgb(24 16 48 / 3%);
+}
+.tai-segment-thumb {
+  box-shadow:
+    var(--shadow-sm),
+    inset 0 0 0 1px hsl(var(--border) / 45%);
+}
+.tai-segment-button,
+.tai-menu-item {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  transition:
+    color var(--motion-fast) ease,
+    background-color var(--motion-fast) ease,
+    opacity var(--motion-fast) ease,
+    box-shadow var(--motion-fast) ease;
+}
 .tai-segment-button:active:not(:disabled) {
-  opacity: 0.72;
+  opacity: 0.65;
+  transition-duration: 70ms;
+}
+.tai-menu-item[data-highlighted] {
+  transition-duration: 70ms;
+}
+.tai-switch {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  transition:
+    background-color var(--motion-normal) var(--motion-ease),
+    box-shadow var(--motion-fast) ease;
 }
 .tai-switch-thumb {
   transition:
     transform var(--motion-normal) var(--motion-ease),
-    background-color var(--motion-fast);
+    scale var(--motion-fast) var(--motion-ease),
+    box-shadow var(--motion-fast) ease;
+}
+.tai-switch:active:not(:disabled) .tai-switch-thumb {
+  scale: 1.08 0.94;
 }
 .tai-field {
   transition:
-    border-color var(--motion-fast),
-    box-shadow var(--motion-fast);
+    background-color var(--motion-fast) ease,
+    border-color var(--motion-fast) ease,
+    box-shadow var(--motion-fast) ease;
+}
+.tai-select-chevron {
+  transition: transform var(--motion-normal) var(--motion-ease);
 }
 .tai-editor-panel {
-  box-shadow: -12px 0 44px rgb(0 0 0 / 6%);
+  box-shadow: -12px 0 44px rgb(24 16 48 / 6%);
 }
 .tai-editor-form {
   max-width: 1120px;
@@ -47,6 +90,9 @@
 .tai-dialog-overlay[data-state="closed"] {
   animation: tai-overlay-out var(--motion-fast) ease-in;
 }
+.tai-dialog-overlay[data-state="closed"] {
+  pointer-events: none;
+}
 .tai-dialog-surface[data-state="open"] {
   animation: tai-dialog-in var(--motion-panel) var(--motion-ease);
 }
@@ -59,32 +105,68 @@
 .tai-sheet-surface[data-state="closed"] {
   animation: tai-sheet-out 180ms var(--motion-ease);
 }
+.tai-sheet-surface {
+  --tai-sheet-shift: 24px;
+}
+.tai-sheet-surface:dir(rtl) {
+  --tai-sheet-shift: -24px;
+}
+.tai-page-surface[data-state="open"] {
+  animation: tai-page-in var(--motion-panel) var(--motion-ease);
+}
+.tai-page-surface[data-state="closed"] {
+  animation: tai-overlay-out var(--motion-fast) ease-in;
+}
 .tai-floating-surface {
-  animation-duration: 180ms;
-  animation-timing-function: var(--motion-ease);
+  --tai-floating-x: 0px;
+  --tai-floating-y: -5px;
   transform-origin: var(
     --radix-popover-content-transform-origin,
-    var(--radix-dropdown-menu-content-transform-origin, center top)
+    var(
+      --radix-dropdown-menu-content-transform-origin,
+      var(--radix-select-content-transform-origin, center top)
+    )
   );
 }
+.tai-floating-surface[data-side="top"] {
+  --tai-floating-y: 5px;
+}
+.tai-floating-surface[data-side="left"] {
+  --tai-floating-x: 5px;
+  --tai-floating-y: 0px;
+}
+.tai-floating-surface[data-side="right"] {
+  --tai-floating-x: -5px;
+  --tai-floating-y: 0px;
+}
 .tai-floating-surface[data-state="open"] {
-  animation: tai-floating-in 180ms var(--motion-ease);
+  animation: tai-floating-in 200ms var(--motion-ease);
 }
 .tai-floating-surface[data-state="closed"] {
-  animation: tai-overlay-out var(--motion-fast) ease-in;
+  animation: tai-floating-out 120ms ease-in;
 }
 .tai-dialog-surface[data-state="closed"],
 .tai-sheet-surface[data-state="closed"],
+.tai-page-surface[data-state="closed"],
 .tai-floating-surface[data-state="closed"] {
   pointer-events: none;
 }
-.tai-collapsible {
+.tai-collapsible,
+.tai-accordion-content {
   overflow: hidden;
 }
-.tai-collapsible[data-state="open"] {
+.tai-collapsible {
+  --tai-content-height: var(--radix-collapsible-content-height);
+}
+.tai-accordion-content {
+  --tai-content-height: var(--radix-accordion-content-height);
+}
+.tai-collapsible[data-state="open"],
+.tai-accordion-content[data-state="open"] {
   animation: tai-expand var(--motion-normal) var(--motion-ease);
 }
-.tai-collapsible[data-state="closed"] {
+.tai-collapsible[data-state="closed"],
+.tai-accordion-content[data-state="closed"] {
   animation: tai-collapse 180ms var(--motion-ease);
 }
 
@@ -99,11 +181,19 @@
 @keyframes tai-floating-in {
   from {
     opacity: 0;
-    transform: translateY(-4px) scale(0.98);
+    transform: translate(var(--tai-floating-x), var(--tai-floating-y))
+      scale(0.97);
   }
   to {
     opacity: 1;
     transform: none;
+  }
+}
+@keyframes tai-floating-out {
+  to {
+    opacity: 0;
+    transform: translate(var(--tai-floating-x), var(--tai-floating-y))
+      scale(0.98);
   }
 }
 @keyframes tai-overlay-out {
@@ -130,7 +220,7 @@
 @keyframes tai-sheet-in {
   from {
     opacity: 0;
-    transform: translateX(24px);
+    transform: translateX(var(--tai-sheet-shift));
   }
   to {
     opacity: 1;
@@ -140,7 +230,17 @@
 @keyframes tai-sheet-out {
   to {
     opacity: 0;
-    transform: translateX(20px);
+    transform: translateX(var(--tai-sheet-shift));
+  }
+}
+@keyframes tai-page-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
   }
 }
 @keyframes tai-expand {
@@ -149,13 +249,13 @@
     opacity: 0;
   }
   to {
-    height: var(--radix-collapsible-content-height);
+    height: var(--tai-content-height);
     opacity: 1;
   }
 }
 @keyframes tai-collapse {
   from {
-    height: var(--radix-collapsible-content-height);
+    height: var(--tai-content-height);
     opacity: 1;
   }
   to {
@@ -183,11 +283,13 @@
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
-  .tai-button:active:not(:disabled) {
+  .tai-button:active:not(:disabled),
+  .tai-switch:active:not(:disabled) .tai-switch-thumb {
     scale: 1;
   }
   .tai-dialog-surface,
   .tai-sheet-surface,
+  .tai-page-surface,
   .tai-floating-surface {
     animation: none !important;
   }

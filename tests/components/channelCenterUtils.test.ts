@@ -51,18 +51,21 @@ describe("upstream model metadata descriptions", () => {
 });
 
 describe("channel catalog selection", () => {
-  it("preserves a newly cleared model default when a stale discovery response returns", () => {
+  it("keeps model selection while refreshed upstream metadata replaces old values", () => {
     const refreshed = mergeDiscoveredChannel(
       {
         ...source,
-        models: [{ id: "same/model", defaultReasoningEffort: "high" }],
+        models: [{ id: "same/model", reasoningEfforts: ["low"] }],
       },
       {
         ...source,
-        models: [{ id: "same/model", defaultReasoningEffort: undefined }],
+        models: [
+          { id: "same/model", enabled: false, reasoningEfforts: ["max"] },
+        ],
       },
     );
-    expect(refreshed.models[0].defaultReasoningEffort).toBeUndefined();
+    expect(refreshed.models[0].enabled).toBe(false);
+    expect(refreshed.models[0].reasoningEfforts).toEqual(["low"]);
   });
   it("keeps models with identical upstream IDs distinct and respects channel/model availability", () => {
     const snapshot: ChannelCenterSnapshot = {

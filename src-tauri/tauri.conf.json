@@ -1,7 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "LoliCode",
-  "version": "4.0.16",
+  "mainBinaryName": "LoliCode",
+  "version": "4.0.17",
   "identifier": "art.treasuregrove.tai-switch",
   "build": {
     "frontendDist": "../dist",

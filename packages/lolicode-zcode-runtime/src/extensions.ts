@@ -16,6 +16,7 @@ import type { NativeServiceAccess } from "./automation.js";
 import type {
   AgentExtensionConfig,
   AgentExtensions,
+  AgentPluginStore,
 } from "../../../src/types/agent.js";
 
 type Workspace = { path: string; identity?: string; sessionId?: string };
@@ -229,6 +230,11 @@ export function createNativeExtensionAdapter(options: NativeExtensionOptions) {
     };
   }
 
+  async function getPluginStore(): Promise<AgentPluginStore> {
+    const overview = await plugins().getPluginsOverview(await target());
+    return overview as AgentPluginStore;
+  }
+
   async function findSkill(id: string) {
     const scope = await target();
     const skill = (await skills().list(scope)).skills.find(
@@ -240,6 +246,7 @@ export function createNativeExtensionAdapter(options: NativeExtensionOptions) {
 
   return {
     getExtensions,
+    getPluginStore,
     getExtensionConfig,
     async setSkillEnabled(id: string, enabled: boolean) {
       return mutate(async () => {
@@ -357,6 +364,101 @@ export function createNativeExtensionAdapter(options: NativeExtensionOptions) {
         )
           throw new Error("原生插件安装未完成，请检查插件声明后重试");
         return getExtensions();
+      });
+    },
+    async addPluginMarketplace(source: string) {
+      return mutate(async () => {
+        const result = await plugins().addPluginMarketplace({
+          ...(await target()),
+          source: source.trim(),
+        });
+        assertNativeDiagnostics(result);
+        return getPluginStore();
+      });
+    },
+    async updatePluginMarketplace(marketplace?: string) {
+      return mutate(async () => {
+        const result = await plugins().updatePluginMarketplace({
+          ...(await target()),
+          ...(marketplace ? { marketplace } : {}),
+        });
+        assertNativeDiagnostics(result);
+        return getPluginStore();
+      });
+    },
+    async removePluginMarketplace(marketplace: string) {
+      return mutate(async () => {
+        const overview = await getPluginStore();
+        const source = overview.marketplaces.find((item) => item.id === marketplace);
+        if (!source) throw new Error("找不到这个插件市场，请刷新后重试");
+        if (source.isOfficial || marketplace === "zcode-plugins-official")
+          throw new Error("官方插件市场不能移除");
+        assertNativeDiagnostics(
+          await plugins().removePluginMarketplace({
+            ...(await target()),
+            marketplace,
+          }),
+        );
+        return getPluginStore();
+      });
+    },
+    async installMarketplacePlugin(marketplace: string, pluginName: string) {
+      return mutate(async () => {
+        const overview = await getPluginStore();
+        const candidate = overview.availablePlugins.find(
+          (item) => item.marketplace === marketplace && item.name === pluginName,
+        );
+        if (!candidate)
+          throw new Error("插件不在当前市场目录中，请先刷新并重新选择");
+        if (candidate?.listing?.requiresPaidPlan)
+          throw new Error("这个插件需要付费套餐，当前市场不会安装此类插件");
+        assertNativeDiagnostics(
+          await plugins().installPlugin({
+            ...(await target()),
+            marketplace,
+            pluginName,
+            scope: "user",
+          }),
+        );
+        return getPluginStore();
+      });
+    },
+    async restoreBuiltinPlugin(pluginId: string) {
+      return mutate(async () => {
+        const overview = await getPluginStore();
+        const candidate = overview.restorableBuiltins.find((item) => item.id === pluginId);
+        if (!candidate) throw new Error("找不到可恢复的内置插件，请刷新市场后重试");
+        if (candidate?.listing?.requiresPaidPlan)
+          throw new Error("这个插件需要付费套餐，当前市场不会安装此类插件");
+        assertNativeDiagnostics(
+          await plugins().restoreBuiltinPlugin({
+            ...(await target()),
+            pluginId,
+          }),
+        );
+        return getPluginStore();
+      });
+    },
+    async updateMarketplacePlugin(pluginId: string) {
+      return mutate(async () => {
+        assertNativeDiagnostics(
+          await plugins().updatePlugin({
+            ...(await target()),
+            pluginId,
+          }),
+        );
+        return getPluginStore();
+      });
+    },
+    async uninstallMarketplacePlugin(pluginId: string) {
+      return mutate(async () => {
+        assertNativeDiagnostics(
+          await plugins().uninstallPlugin({
+            ...(await target()),
+            pluginId,
+          }),
+        );
+        return getPluginStore();
       });
     },
     async setPluginEnabled(id: string, enabled: boolean) {

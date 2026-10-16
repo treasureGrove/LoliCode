@@ -11,7 +11,8 @@ use crate::{
     store::AppState,
 };
 use lolicode_agent::{AgentSession, AgentSnapshot};
-use serde::de::DeserializeOwned;
+use base64::{engine::general_purpose::STANDARD, Engine as _};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::{json, Value};
 use tauri::{AppHandle, Manager};
 
@@ -24,7 +25,7 @@ fn legacy_id(id: &str) -> Result<bool, String> {
     }
     Err("无法识别此会话的引擎，请重新读取会话列表".into())
 }
-async fn accounts(app: &AppHandle) -> Result<Vec<(String, String)>, String> {
+pub(crate) async fn accounts(app: &AppHandle) -> Result<Vec<(String, String)>, String> {
     let copilot = app
         .try_state::<CopilotAuthState>()
         .ok_or("账户服务尚未就绪")?;
@@ -44,7 +45,7 @@ async fn accounts(app: &AppHandle) -> Result<Vec<(String, String)>, String> {
     }
     Ok(accounts)
 }
-async fn native<T: DeserializeOwned>(
+pub(crate) async fn native<T: DeserializeOwned>(
     app: &AppHandle,
     method: &str,
     args: Value,
@@ -341,20 +342,277 @@ pub async fn send_agent_message(
     text: String,
     request_id: String,
     locale: Option<String>,
+    attachments: Option<Vec<AgentAttachmentInput>>,
 ) -> Result<(), String> {
-    if text.trim().is_empty() || text.len() > 1024 * 1024 {
-        return Err("请输入不超过 1MiB 的任务内容".into());
+    let attachments = attachments.unwrap_or_default();
+    if (text.trim().is_empty() && attachments.is_empty()) || text.len() > 1024 * 1024 {
+        return Err("请输入任务内容或添加附件；文本不能超过 1MiB".into());
+    }
+    if attachments.len() > 8 {
+        return Err("一次最多发送 4 张图片和 4 个文档".into());
+    }
+    let mut image_count = 0usize;
+    let mut document_count = 0usize;
+    let mut image_total_bytes = 0u64;
+    let mut document_total_bytes = 0u64;
+    let mut attachment_values = Vec::with_capacity(attachments.len());
+    for attachment in attachments {
+        if let Some(reference) = attachment.reference {
+            const MAX_IMAGE_BYTES: u64 = 5 * 1024 * 1024;
+            let allowed_mime = matches!(
+                attachment.mime.as_str(),
+                "image/png"
+                    | "image/jpeg"
+                    | "image/webp"
+                    | "image/gif"
+                    | "image/bmp"
+                    | "image/avif"
+            );
+            let prefix = format!("data:{};base64,", attachment.mime);
+            let Some(encoded) = reference.strip_prefix(&prefix) else {
+                return Err("图片数据格式无效，请重新添加图片".into());
+            };
+            if attachment.data_base64.is_some()
+                || attachment.local_path.is_some()
+                || !allowed_mime
+                || attachment.bytes == 0
+                || attachment.bytes > MAX_IMAGE_BYTES
+            {
+                return Err("图片格式不受支持或单张图片超过 5 MB".into());
+            }
+            image_count += 1;
+            image_total_bytes = image_total_bytes.saturating_add(attachment.bytes);
+            if image_count > 4 || image_total_bytes > 10 * 1024 * 1024 {
+                return Err("最多发送 4 张图片，图片总大小不能超过 10 MB".into());
+            }
+            let decoded = STANDARD
+                .decode(encoded)
+                .map_err(|_| "图片数据编码无效，请重新添加图片".to_string())?;
+            if decoded.len() as u64 != attachment.bytes
+                || super::agent_images::image_media_type(&decoded)
+                    != Some(attachment.mime.as_str())
+            {
+                return Err("图片内容与格式不匹配，请重新添加图片".into());
+            }
+            attachment_values.push(json!({
+                "ref": reference,
+                "fileName": attachment.file_name,
+                "mime": attachment.mime,
+                "bytes": attachment.bytes,
+            }));
+        } else if let Some(local_path) = attachment.local_path {
+            if attachment.data_base64.is_some() {
+                return Err("附件数据无效，请重新添加文件".into());
+            }
+            let path = std::path::Path::new(&local_path);
+            if !path.is_absolute() {
+                return Err("只能添加从本机拖入的文档文件".into());
+            }
+            let metadata = tokio::fs::metadata(path)
+                .await
+                .map_err(|_| "无法读取拖入的文档，请确认文件仍然存在".to_string())?;
+            if !metadata.is_file() || metadata.len() == 0 || metadata.len() > 20 * 1024 * 1024 {
+                return Err("文档格式不受支持或单个文档超过 20 MB".into());
+            }
+            validate_document_metadata(
+                &attachment.file_name,
+                &attachment.mime,
+                metadata.len(),
+                &mut document_count,
+                &mut document_total_bytes,
+            )?;
+            let decoded = tokio::fs::read(path)
+                .await
+                .map_err(|_| "无法读取拖入的文档，请确认文件仍然存在".to_string())?;
+            if decoded.len() as u64 != metadata.len()
+                || !valid_document_signature(&attachment.file_name, &decoded)
+            {
+                return Err("文档内容与文件格式不匹配，请重新拖入文件".into());
+            }
+            attachment_values.push(json!({
+                "localPath": local_path,
+                "fileName": attachment.file_name,
+                "mime": attachment.mime,
+                "bytes": metadata.len(),
+            }));
+        } else if let Some(data_base64) = attachment.data_base64 {
+            validate_document_metadata(
+                &attachment.file_name,
+                &attachment.mime,
+                attachment.bytes,
+                &mut document_count,
+                &mut document_total_bytes,
+            )?;
+            let decoded = STANDARD
+                .decode(&data_base64)
+                .map_err(|_| "文档数据编码无效，请重新添加文件".to_string())?;
+            if decoded.len() as u64 != attachment.bytes
+                || !valid_document_signature(&attachment.file_name, &decoded)
+            {
+                return Err("文档内容与文件格式不匹配，请重新添加文件".into());
+            }
+            attachment_values.push(json!({
+                "dataBase64": data_base64,
+                "fileName": attachment.file_name,
+                "mime": attachment.mime,
+                "bytes": attachment.bytes,
+            }));
+        } else {
+            return Err("附件数据无效，请重新添加文件".into());
+        }
     }
     if legacy_id(&session_id)? {
         return historical_read_only();
     }
+    let mut args = json!({
+        "sessionId": session_id,
+        "text": text,
+        "requestId": request_id,
+        "locale": locale,
+    });
+    if !attachment_values.is_empty() {
+        args["attachments"] = Value::Array(attachment_values);
+    }
     native(
         &app,
         "sendMessage",
-        json!({"sessionId":session_id,"text":text,"requestId":request_id,"locale":locale}),
+        args,
         true,
     )
     .await
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentAttachmentInput {
+    #[serde(rename = "ref")]
+    reference: Option<String>,
+    file_name: String,
+    mime: String,
+    bytes: u64,
+    data_base64: Option<String>,
+    local_path: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentDocumentInfo {
+    file_name: String,
+    mime: String,
+    bytes: u64,
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub async fn inspect_agent_document(path: String) -> Result<AgentDocumentInfo, String> {
+    let path = std::path::PathBuf::from(path);
+    if !path.is_absolute() {
+        return Err("只能添加本机上的文档文件".into());
+    }
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.trim().is_empty() && name.len() <= 255)
+        .ok_or("文档文件名无效")?
+        .to_string();
+    let mime = path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .map(|extension| extension.to_ascii_lowercase())
+        .and_then(|extension| document_mime_for_extension(&extension))
+        .ok_or("支持 PDF、Word、PowerPoint、Excel 和常见文本文件")?;
+    let metadata = tokio::fs::metadata(&path)
+        .await
+        .map_err(|_| "无法读取文档，请确认文件仍然存在".to_string())?;
+    if !metadata.is_file() || metadata.len() == 0 || metadata.len() > 20 * 1024 * 1024 {
+        return Err("单个文档不能超过 20 MB，且文件不能为空".into());
+    }
+    let contents = tokio::fs::read(&path)
+        .await
+        .map_err(|_| "无法读取文档，请确认文件仍然存在".to_string())?;
+    if contents.len() as u64 != metadata.len()
+        || !valid_document_signature(&file_name, &contents)
+    {
+        return Err("文件内容与扩展名不匹配".into());
+    }
+    Ok(AgentDocumentInfo {
+        file_name,
+        mime: mime.into(),
+        bytes: metadata.len(),
+    })
+}
+
+fn validate_document_metadata(
+    file_name: &str,
+    mime: &str,
+    bytes: u64,
+    document_count: &mut usize,
+    document_total_bytes: &mut u64,
+) -> Result<(), String> {
+    const MAX_DOCUMENT_BYTES: u64 = 20 * 1024 * 1024;
+    if file_name.trim().is_empty()
+        || file_name.len() > 255
+        || !supported_document_mime(file_name, mime)
+        || bytes == 0
+        || bytes > MAX_DOCUMENT_BYTES
+    {
+        return Err("文档格式不受支持或单个文档超过 20 MB".into());
+    }
+    *document_count += 1;
+    *document_total_bytes = document_total_bytes.saturating_add(bytes);
+    if *document_count > 4 || *document_total_bytes > 40 * 1024 * 1024 {
+        return Err("最多发送 4 个文档，文档总大小不能超过 40 MB".into());
+    }
+    Ok(())
+}
+
+fn supported_document_mime(file_name: &str, mime: &str) -> bool {
+    let extension = file_name.rsplit_once('.').map(|(_, extension)| extension.to_ascii_lowercase());
+    extension
+        .as_deref()
+        .and_then(document_mime_for_extension)
+        .is_some_and(|expected| mime == expected)
+}
+
+fn document_mime_for_extension(extension: &str) -> Option<&'static str> {
+    Some(match extension {
+        "doc" => "application/msword",
+        "docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "docm" => "application/vnd.ms-word.document.macroEnabled.12",
+        "ppt" => "application/vnd.ms-powerpoint",
+        "pptx" => "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "pptm" => "application/vnd.ms-powerpoint.presentation.macroEnabled.12",
+        "xls" => "application/vnd.ms-excel",
+        "xlsx" => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "xlsm" => "application/vnd.ms-excel.sheet.macroEnabled.12",
+        "pdf" => "application/pdf",
+        "txt" => "text/plain",
+        "md" | "markdown" => "text/markdown",
+        "csv" => "text/csv",
+        "rtf" => "application/rtf",
+        "odt" => "application/vnd.oasis.opendocument.text",
+        "ods" => "application/vnd.oasis.opendocument.spreadsheet",
+        "odp" => "application/vnd.oasis.opendocument.presentation",
+        "json" => "application/json",
+        _ => return None,
+    })
+}
+
+fn valid_document_signature(file_name: &str, bytes: &[u8]) -> bool {
+    let extension = file_name.rsplit_once('.').map(|(_, extension)| extension.to_ascii_lowercase());
+    match extension.as_deref() {
+        Some("docx" | "docm" | "pptx" | "pptm" | "xlsx" | "xlsm" | "odt" | "ods" | "odp") => {
+            bytes.starts_with(b"PK\x03\x04")
+        }
+        Some("doc" | "ppt" | "xls") => {
+            bytes.starts_with(b"\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1")
+        }
+        Some("pdf") => bytes.starts_with(b"%PDF-"),
+        Some("rtf") => bytes.starts_with(b"{\\rtf"),
+        Some("txt" | "md" | "markdown" | "csv" | "json") => {
+            std::str::from_utf8(bytes).is_ok()
+        }
+        _ => false,
+    }
 }
 fn command_receipt(value: &Value, session_id: &str, request_id: &str) -> Value {
     let native_id = session_id
@@ -498,12 +756,41 @@ pub async fn run_agent_saved_workflow(
     {
         return Err("工作流名称、参数或运行编号无效".into());
     }
-    let mut session: AgentSession = native(&app, "runSavedWorkflow", json!({"sessionId":session_id,"name":name,"requestId":request_id,"scope":scope,"args":args}), true).await?;
-    if session.id != session_id {
+    let snapshot: AgentSnapshot = native(
+        &app,
+        "getSession",
+        json!({"sessionId":session_id}),
+        false,
+    )
+    .await?;
+    if snapshot.session.id != session_id {
         return Err("返回的工作流会话不一致，请重新读取".into());
     }
-    decorate(&app, &mut session)?;
-    Ok(session)
+    let project_path = snapshot.session.project_path.clone();
+    check_project(&app, &project_path)?;
+    let prompt = crate::services::agent_workflows::workflow_prompt(
+        &project_path,
+        &name,
+        &scope,
+        &args,
+    )
+    .await?;
+    let _: Value = native(
+        &app,
+        "sendMessage",
+        json!({"sessionId":session_id,"requestId":request_id,"text":prompt,"locale":"zh"}),
+        true,
+    )
+    .await?;
+    let mut result: AgentSnapshot = native(
+        &app,
+        "getSession",
+        json!({"sessionId":session_id}),
+        false,
+    )
+    .await?;
+    decorate(&app, &mut result.session)?;
+    Ok(result.session)
 }
 #[tauri::command]
 pub async fn get_agent_native_activity(app: AppHandle) -> Result<Value, String> {
@@ -517,6 +804,22 @@ pub async fn invoke_agent_native_service(
     args: Option<Vec<Value>>,
     scope: Option<Value>,
 ) -> Result<Value, String> {
+    if service == "IZCodeAgentService"
+        && matches!(
+            method.as_str(),
+            "listSavedWorkflows"
+                | "getSavedWorkflow"
+                | "deleteSavedWorkflow"
+                | "listSavedWorkflowRuns"
+        )
+    {
+        return crate::services::agent_workflows::invoke_service(
+            &app,
+            &method,
+            args.unwrap_or_default(),
+        )
+        .await;
+    }
     let mutation = !(service == "IZCodeTaskService" && method == "stopGeneration");
     native(
         &app,
@@ -532,13 +835,7 @@ pub async fn invoke_agent_automation(
     method: String,
     args: Option<Vec<Value>>,
 ) -> Result<Value, String> {
-    native(
-        &app,
-        "automation",
-        json!({"method":method,"args":args.unwrap_or_default()}),
-        true,
-    )
-    .await
+    crate::services::agent_automation::invoke(&app, &method, args.unwrap_or_default()).await
 }
 #[tauri::command]
 pub async fn invoke_agent_remote(
@@ -558,6 +855,96 @@ pub async fn invoke_agent_remote(
 #[tauri::command]
 pub async fn get_agent_extensions(app: AppHandle) -> Result<Value, String> {
     native(&app, "getExtensions", json!({}), false).await
+}
+#[tauri::command]
+pub async fn get_agent_plugin_store(app: AppHandle) -> Result<Value, String> {
+    native(&app, "getPluginStore", json!({}), false).await
+}
+#[tauri::command]
+pub async fn add_agent_plugin_marketplace(
+    app: AppHandle,
+    source: String,
+) -> Result<Value, String> {
+    native(&app, "addPluginMarketplace", json!({"source":source}), true).await
+}
+#[tauri::command]
+pub async fn update_agent_plugin_marketplace(
+    app: AppHandle,
+    marketplace: Option<String>,
+) -> Result<Value, String> {
+    native(
+        &app,
+        "updatePluginMarketplace",
+        json!({"marketplace":marketplace}),
+        true,
+    )
+    .await
+}
+#[tauri::command]
+pub async fn remove_agent_plugin_marketplace(
+    app: AppHandle,
+    marketplace: String,
+) -> Result<Value, String> {
+    native(
+        &app,
+        "removePluginMarketplace",
+        json!({"marketplace":marketplace}),
+        true,
+    )
+    .await
+}
+#[tauri::command]
+pub async fn install_agent_marketplace_plugin(
+    app: AppHandle,
+    marketplace: String,
+    plugin_name: String,
+) -> Result<Value, String> {
+    native(
+        &app,
+        "installMarketplacePlugin",
+        json!({"marketplace":marketplace,"pluginName":plugin_name}),
+        true,
+    )
+    .await
+}
+#[tauri::command]
+pub async fn restore_agent_builtin_plugin(
+    app: AppHandle,
+    plugin_id: String,
+) -> Result<Value, String> {
+    native(
+        &app,
+        "restoreBuiltinPlugin",
+        json!({"pluginId":plugin_id}),
+        true,
+    )
+    .await
+}
+#[tauri::command]
+pub async fn update_agent_marketplace_plugin(
+    app: AppHandle,
+    plugin_id: String,
+) -> Result<Value, String> {
+    native(
+        &app,
+        "updateMarketplacePlugin",
+        json!({"pluginId":plugin_id}),
+        true,
+    )
+    .await
+}
+#[tauri::command]
+pub async fn uninstall_agent_marketplace_plugin(
+    app: AppHandle,
+    plugin_id: String,
+) -> Result<Value, String> {
+    native(
+        &app,
+        "uninstallMarketplacePlugin",
+        json!({"pluginId":plugin_id}),
+        true,
+    )
+    .await
 }
 #[tauri::command]
 pub async fn set_agent_skill_enabled(

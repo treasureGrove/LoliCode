@@ -1,0 +1,18 @@
+{
+  "version": "D-pinkdog-q-v1",
+  "createdOn": "2026-10-16",
+  "status": "concept-for-review",
+  "mode": "built-in image_gen",
+  "identityReference": "../head-studies-01/D-dog-pink-longhair.png",
+  "costumeReference": "../D-outfit-selection-01/08-cherry-stage-cocoa-ears.png",
+  "designIntent": "主形象D的呆萌Q版分身，适合作为主Agent陪伴角色与状态反馈形象。",
+  "features": [
+    "大头短身的Q版比例",
+    "粉色长发、侧辫与呆毛",
+    "青蓝眼睛与一颗小虎牙",
+    "原设可可棕外侧、奶油白耳尖的折耳犬耳",
+    "复用08樱桃黑舞台服的颜色与结构",
+    "透明背景全身立绘"
+  ],
+  "prompt": "Create the official Q-version companion of the same original D puppy-girl. Preserve pink flowing hair, side braid, bent ahoge, teal-blue eyes, goofy smile with one tiny fang, square hairclip, folded dog ears with original cocoa-brown outer fur and cream tips/inner fur. Reinterpret selected cherry-black stage costume faithfully at chibi scale: charcoal cropped jacket, cherry satin details, cream ruffled blouse, layered skirt, waist ribbon and boots. 2.5-head-tall proportions, full body, transparent background, polished dimensional anime mascot illustration. No text, logo, frame, props, extra characters or added animal features."
+}

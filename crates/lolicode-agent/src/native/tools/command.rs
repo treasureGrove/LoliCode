@@ -359,6 +359,7 @@ pub(super) async fn execute(
                         .unwrap_or_else(|| "signal".into()),
                     output
                 )),
+                image_data_url: None,
                 diffs: vec![],
                 file_changes: vec![],
             })

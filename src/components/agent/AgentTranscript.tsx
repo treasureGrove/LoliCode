@@ -1,6 +1,12 @@
 import { memo, useMemo, useRef } from "react";
 import { ChevronRight, CircleAlert, Loader2, Wrench } from "lucide-react";
-import type { AgentMessage, AgentPart, AgentStatus } from "@/types/agent";
+import type {
+  AgentDocumentAttachment,
+  AgentImageAttachment,
+  AgentMessage,
+  AgentPart,
+  AgentStatus,
+} from "@/types/agent";
 import {
   AgentDisclosure,
   createAgentDisclosureState,
@@ -223,11 +229,15 @@ export function AgentTranscript({
   projectPath,
   sessionId,
   status = "idle",
+  imageAttachmentsByMessage = {},
+  documentAttachmentsByMessage = {},
 }: {
   messages: AgentMessage[];
   projectPath: string;
   sessionId?: string;
   status?: AgentStatus;
+  imageAttachmentsByMessage?: Record<string, AgentImageAttachment[]>;
+  documentAttachmentsByMessage?: Record<string, AgentDocumentAttachment[]>;
 }) {
   const blocks = useMemo(() => groupAgentTranscript(messages), [messages]);
   const active =
@@ -243,6 +253,8 @@ export function AgentTranscript({
             message={block.message}
             projectPath={projectPath}
             sessionId={sessionId}
+            imageAttachments={imageAttachmentsByMessage[block.message.id]}
+            documentAttachments={documentAttachmentsByMessage[block.message.id]}
           />
         ) : block.kind === "text" ? (
           <article

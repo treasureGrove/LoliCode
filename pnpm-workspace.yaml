@@ -1,4 +1,8 @@
-packages: []
+packages:
+  - packages/contracts
+  - packages/platform-client
+  - packages/platform-host
+  - packages/adapters/opencode
 
 onlyBuiltDependencies:
   - '@tailwindcss/oxide'

@@ -46,9 +46,6 @@ export function mergeDiscoveredChannel(
       enabled: previousModels.has(model.id)
         ? previousModels.get(model.id)!.enabled !== false
         : model.enabled !== false && model.supportsTools !== false,
-      defaultReasoningEffort: previousModels.has(model.id)
-        ? previousModels.get(model.id)!.defaultReasoningEffort
-        : model.defaultReasoningEffort,
     })),
   };
 }
@@ -86,13 +83,8 @@ export function channelModelMetadata(
   );
   if (model.outputLimit)
     parts.push(`最大输出 ${model.outputLimit.toLocaleString()} tokens`);
-  parts.push(
-    model.reasoningEfforts?.length
-      ? `思考强度：${model.reasoningEfforts.join(" / ")}`
-      : model.reasoningEfforts
-        ? "思考强度不可调"
-        : "思考强度：上游未提供",
-  );
+  if (model.reasoningEfforts?.length)
+    parts.push(`思考强度：${model.reasoningEfforts.join(" / ")}`);
   return parts.join(" · ");
 }
 

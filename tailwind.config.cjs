@@ -172,9 +172,10 @@ module.exports = {
         md: "0.5rem",
         lg: "0.75rem",
         xl: "0.875rem",
-        // v7：按钮、小控件、侧栏行 / 卡片、分段控件、输入框、弹层、通知条 / 对话框、抽屉
+        // Shared silhouettes: controls, grouped cards, menus and foreground panels.
         control: "8px",
         panel: "14px",
+        menu: "12px",
         dialog: "20px",
       },
       fontSize: {

@@ -35,6 +35,8 @@ export function AgentReasoningPicker({
   const helpId = useId();
   const declared = Array.isArray(model?.reasoningEfforts);
   const efforts = [...new Set(model?.reasoningEfforts || [])].filter(Boolean);
+  const configuredDefault = model?.defaultReasoningEffort;
+  const defaultEffort = configuredDefault || efforts[0];
   const validDraft = !draft || /^[A-Za-z0-9_-]{1,64}$/.test(draft);
   const supportedValue = !value || efforts.includes(value);
 
@@ -67,9 +69,11 @@ export function AgentReasoningPicker({
           title={
             value
               ? `思考档位：${value}`
-              : model?.defaultReasoningEffort
-                ? `模型默认：${model.defaultReasoningEffort}，未设置会话覆盖`
-                : "上游默认：使用模型服务的默认设置"
+              : configuredDefault
+                ? `模型默认：${defaultEffort}，未设置会话覆盖`
+                : defaultEffort
+                  ? `自动档位：${defaultEffort}（支持列表首项）`
+                  : "上游默认：使用模型服务的默认设置"
           }
           className="wb-picker-trigger inline-flex max-w-[180px] items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-xs hover:bg-black/5 dark:hover:bg-white/5"
         >
@@ -79,9 +83,11 @@ export function AgentReasoningPicker({
               ? declared
                 ? value
                 : `${value}（手动）`
-              : model?.defaultReasoningEffort
-                ? `模型默认 · ${model.defaultReasoningEffort}`
-                : "上游默认"}
+              : configuredDefault
+                ? `模型默认 · ${defaultEffort}`
+                : defaultEffort
+                  ? `自动档位 · ${defaultEffort}`
+                  : "上游默认"}
           </span>
           <ChevronDown size={13} className="shrink-0" aria-hidden="true" />
         </button>
@@ -118,16 +124,22 @@ export function AgentReasoningPicker({
           <button
             type="button"
             aria-label={
-              model?.defaultReasoningEffort ? "使用模型默认" : "使用上游默认"
+              configuredDefault
+                ? "使用模型默认"
+                : defaultEffort
+                  ? "使用自动档位"
+                  : "使用上游默认"
             }
             aria-pressed={!value}
             className="wb-picker-option flex w-full items-center justify-between gap-2 rounded px-2 py-2 text-left text-sm hover:bg-black/5 dark:hover:bg-white/5"
             onClick={() => select("")}
           >
             <span>
-              {model?.defaultReasoningEffort
-                ? `模型默认（${model.defaultReasoningEffort}）`
-                : "上游默认"}
+              {configuredDefault
+                ? `模型默认（${defaultEffort}）`
+                : defaultEffort
+                  ? `自动档位（${defaultEffort}）`
+                  : "上游默认"}
             </span>
             {!value && <Check size={14} aria-hidden="true" />}
           </button>
@@ -176,9 +188,11 @@ export function AgentReasoningPicker({
             <p id={helpId} className="text-xs text-fg-2">
               渠道未声明可用档位。请按中转服务文档填写，手动值未经验证；允许
               1–64 位英文字母、数字、下划线或连字符。
-              {model?.defaultReasoningEffort
-                ? `留空继承模型默认（${model.defaultReasoningEffort}）。`
-                : "留空使用上游默认。"}
+              {configuredDefault
+                ? `留空继承模型默认（${defaultEffort}）。`
+                : defaultEffort
+                  ? `留空使用自动档位（${defaultEffort}）。`
+                  : "留空使用上游默认。"}
             </p>
             <button
               type="button"

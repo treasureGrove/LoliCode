@@ -21,6 +21,7 @@ import {
   SESSION_INLINE_CODE_CLASS,
   SessionCodeBlock,
 } from "./SessionCodeBlock";
+import { SessionImageLightbox } from "./SessionImageLightbox";
 
 // 底本：farion1231/cc-switch#6332 的 src/components/sessions/SessionMarkdown.tsx。
 // 迁入阅读页后改为 v7 token、链接走 open_external、本地路径渲染为 PathChip，
@@ -750,6 +751,7 @@ const RemoteImage = ({ src, alt, searchQuery }: RemoteImageProps) => {
   const { autoLoadRemoteImages } = useContext(MarkdownActionsContext);
   const [loadedSrc, setLoadedSrc] = useState<string | null>(null);
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   const label =
     alt ||
@@ -766,16 +768,33 @@ const RemoteImage = ({ src, alt, searchQuery }: RemoteImageProps) => {
 
   if (autoLoadRemoteImages || loadedSrc === src) {
     return (
-      <img
-        src={src}
-        alt={alt}
-        title={src}
-        loading="lazy"
-        decoding="async"
-        referrerPolicy="no-referrer"
-        onError={() => setFailedSrc(src)}
-        className="my-2 block max-h-80 max-w-full rounded-[8px] border border-border object-contain"
-      />
+      <>
+        <button
+          type="button"
+          aria-label={`放大查看图片：${label}`}
+          title={src}
+          onClick={() => setPreviewOpen(true)}
+          className="my-2 block max-w-full cursor-zoom-in rounded-[8px] border border-border bg-transparent p-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <img
+            src={src}
+            alt={alt}
+            loading="lazy"
+            decoding="async"
+            referrerPolicy="no-referrer"
+            onError={() => setFailedSrc(src)}
+            className="block max-h-80 max-w-full rounded-[8px] object-contain"
+          />
+        </button>
+        {previewOpen && (
+          <SessionImageLightbox
+            open={previewOpen}
+            onOpenChange={setPreviewOpen}
+            url={src}
+            alt={label}
+          />
+        )}
+      </>
     );
   }
 

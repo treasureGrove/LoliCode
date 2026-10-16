@@ -1,6 +1,6 @@
 {
   "name": "lolicode",
-  "version": "4.0.16",
+  "version": "4.0.17",
   "description": "LoliCode desktop coding agent with shared model channels",
   "type": "module",
   "scripts": {
@@ -8,6 +8,11 @@
     "build": "pnpm tauri build",
     "tauri": "tauri",
     "dev:renderer": "vite",
+    "dev:platform": "pnpm build:platform && node scripts/dev-platform.mjs",
+    "build:platform": "tsc -b tsconfig.platform.json",
+    "check:contracts": "pnpm build:platform",
+    "test:platform": "pnpm build:platform && vitest run --config vitest.platform.config.ts",
+    "test:platform:smoke": "pnpm build:platform && node scripts/tests/platform-opencode-smoke.mjs",
     "build:renderer": "vite build",
     "prepare:agent-runtime": "node scripts/prepare-agent-runtime.mjs",
     "prepare:zcode-runtime": "node scripts/prepare-zcode-runtime.mjs",
@@ -46,6 +51,7 @@
     "vitest": "^2.0.5"
   },
   "dependencies": {
+    "@lolicode/platform-client": "workspace:*",
     "@codemirror/lang-javascript": "^6.2.4",
     "@codemirror/lang-json": "^6.0.2",
     "@codemirror/lang-markdown": "^6.5.0",

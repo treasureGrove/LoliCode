@@ -1,0 +1,8 @@
+{
+  "date": "2026-10-16",
+  "tool": "built-in image_gen",
+  "asset": "brooch-accent.png",
+  "prompt": "Use case: stylized-concept. Asset type: ONE small transparent PNG couture brooch ornament to reuse on an anime desktop app's composer corner, panel headings and menu headers. Input image is ONLY a garment/jewelry material reference. Create a refined COMPACT horizontal wine-red satin double-loop ribbon bow with a single OVAL teal faceted gemstone in an antique champagne-gold setting at its knot. One very short fine chain with a small gold diamond hangs below; a tiny sliver of ivory folded fabric peeks from the base at one side. Balanced sculptural silk loops, understated hand-embroidered gold line on ribbon ends, clean purposeful elegant silhouette. Short ribbon tips, not long trailing scarves. Highest quality detailed anime game UI asset rendering, convincing silk, gem and brushed metal with restrained low-glare lighting. Wide composition approximately 3:2 with generous transparent padding, entire ornament fits canvas. One cohesive object only, not a collage or full UI frame. It must read clearly when reduced to 50–80 px wide and must not be noisy. Genuine alpha transparent background outside the object, no white or black backdrop, no checkerboard. No characters, no faces, skin, hair, ears, tails, fur, animal shapes, paws, text, logos or watermarks. The artwork itself must consist exclusively of ribbon, jewelry and fabric ornaments. Match the cherry, charcoal, champagne, ivory and teal vocabulary of the reference; not a pink glow or generic royal crown.",
+  "reference": "D-outfit-selection-01/08-cherry-stage-cocoa-ears.png",
+  "purpose": "真实应用输入区、品牌徽记与面板的服饰装饰；保持原比例，图片不承载任何交互。"
+}

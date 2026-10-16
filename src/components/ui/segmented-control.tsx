@@ -49,15 +49,15 @@ export function SegmentedControl<T extends string>({
       role="group"
       aria-label={rest["aria-label"]}
       className={cn(
-        "relative inline-flex items-stretch bg-subtle p-[3px]",
-        size === "md" ? "h-9 rounded-[10px]" : "h-7 rounded-[8px]",
+        "tai-segmented-control relative inline-flex items-stretch bg-subtle p-[3px]",
+        size === "md" ? "h-9 rounded-[12px]" : "h-7 rounded-[10px]",
         className,
       )}
     >
       <SegmentThumb
         rect={indicator.rect}
         animate={indicator.animate}
-        className={size === "md" ? "rounded-[7px]" : "rounded-[5px]"}
+        className={size === "md" ? "rounded-[9px]" : "rounded-[7px]"}
       />
       {items.map((item) => {
         const pressed = item.value === value;
@@ -70,10 +70,10 @@ export function SegmentedControl<T extends string>({
             disabled={item.disabled}
             onClick={() => onValueChange(item.value)}
             className={cn(
-              "tai-segment-button relative inline-flex items-center justify-center gap-1.5 whitespace-nowrap font-medium text-fg-2 transition-colors duration-150 hover:text-fg-1 disabled:cursor-not-allowed disabled:opacity-45",
+              "tai-segment-button relative inline-flex items-center justify-center gap-1.5 whitespace-nowrap font-medium text-fg-2 hover:text-fg-1 focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-45",
               size === "md"
-                ? "rounded-[7px] px-3.5 text-body"
-                : "rounded-[5px] px-2.5 text-caption",
+                ? "rounded-[9px] px-3.5 text-body"
+                : "rounded-[7px] px-2.5 text-caption",
               item.className,
               pressed && "text-fg-1",
             )}

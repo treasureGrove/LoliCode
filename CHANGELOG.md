@@ -13,6 +13,13 @@ Published Windows x64 downloads and signed updates are available from the [LoliC
 
 **4.0.16 已于 2026-10-16 发布**：改进工作台导航与头像设置菜单，接入独立的 LoliCode 网站账户，并重写项目介绍、下载、反馈及更新入口。Windows x64 安装版、便携 ZIP 与签名更新已上线；跨机和真实账户验收由用户继续进行。
 
+## [4.0.17] — 2026-10-16
+
+- Add image paste and document drag-and-drop to chat, with image previews and a larger image viewer.
+- Bring automation, workflows, and extension discovery and installation into the LoliCode workspace.
+- Keep project task lists independently expanded and let model selection change without interrupting active requests.
+- Add retry for failed messages, a simplified pink-dog app icon, and the LoliCode Windows window title.
+
 ## Earlier LoliCode releases
 
 - [4.0.15 release notes](docs/guides/lolicode-4.0.15.md) and [delivery evidence](docs/guides/lolicode-4.0.15-delivery.md): the in-process native Agent.

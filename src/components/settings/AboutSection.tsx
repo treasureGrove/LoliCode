@@ -20,7 +20,7 @@ import { useUpdate } from "@/contexts/UpdateContext";
 import { Badge } from "@/components/ui/badge";
 import { WhatsNewDialog } from "@/components/WhatsNewDialog";
 import { WHATS_NEW_ENTRIES, entriesUpTo } from "@/lib/whatsNew";
-import appIcon from "@/assets/brand/lolicode.svg";
+  import appIcon from "@/assets/brand/lolicode-icon.png";
 import { extractErrorMessage } from "@/utils/errorUtils";
 import {
   APP_CHANGELOG,

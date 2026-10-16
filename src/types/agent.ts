@@ -87,6 +87,23 @@ export interface AgentMessage {
   parts: AgentPart[];
 }
 
+export interface AgentImageAttachment {
+  id: string;
+  fileName: string;
+  mime: string;
+  bytes: number;
+  dataUrl: string;
+}
+
+export interface AgentDocumentAttachment {
+  id: string;
+  fileName: string;
+  mime: string;
+  bytes: number;
+  dataBase64?: string;
+  localPath?: string;
+}
+
 export interface AgentPermission {
   id: string;
   sessionId: string;
@@ -254,6 +271,68 @@ export interface AgentExtensions {
     error?: string | null;
   }[];
   loadedMcpServers?: { name: string; status: string; error?: string | null }[];
+}
+
+export interface AgentPluginStoreListing {
+  displayName?: string;
+  displayNameI18n?: Record<string, string>;
+  descriptionI18n?: Record<string, string>;
+  icon?: string;
+  category?: string;
+  author?: string;
+  authorUrl?: string;
+  homepage?: string;
+  privacyPolicy?: string;
+  termsOfService?: string;
+  heroImage?: string;
+  examplePrompts?: string[];
+  requiresPaidPlan?: boolean;
+}
+
+export interface AgentPluginMarketplace {
+  id: string;
+  name: string;
+  description?: string;
+  lastUpdated?: string;
+  pluginCount: number;
+  isOfficial?: boolean;
+  featured?: string[];
+  source?: Record<string, unknown>;
+}
+
+export interface AgentAvailablePlugin {
+  id: string;
+  name: string;
+  marketplace: string;
+  description?: string;
+  version?: string;
+  installed: boolean;
+  componentTypes?: string[];
+  listing?: AgentPluginStoreListing;
+}
+
+export interface AgentInstalledPlugin {
+  id: string;
+  name: string;
+  marketplace: string;
+  description?: string;
+  version?: string;
+  enabled: boolean;
+  scope?: "user" | "workspace";
+  installedAt?: string;
+  componentTypes?: string[];
+  updateStatus?: "none" | "update-available" | "version-changed";
+  latestVersion?: string;
+  listing?: AgentPluginStoreListing;
+}
+
+export interface AgentPluginStore {
+  marketplaces: AgentPluginMarketplace[];
+  availablePlugins: AgentAvailablePlugin[];
+  installedPlugins: AgentInstalledPlugin[];
+  restorableBuiltins: AgentAvailablePlugin[];
+  diagnostics: { severity?: string; message?: string; pluginId?: string }[];
+  capability: { supported: boolean; reason?: string };
 }
 
 export interface AgentExtensionConfig {

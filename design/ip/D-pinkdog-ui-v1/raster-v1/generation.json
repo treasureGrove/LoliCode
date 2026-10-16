@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "date": "2026-10-16",
+  "tool": "built-in image_gen",
+  "purpose": "D 樱桃舞台 · PNG 背景与透明界面装饰素材",
+  "references": [
+    {
+      "role": "用户提供的氛围和材质参考，未直接截取素材",
+      "path": "C:/Users/admin/AppData/Local/Temp/codex-clipboard-ece67a5d-9945-4f16-b939-fc0f3e8f0d51.png"
+    },
+    {
+      "role": "已选定角色服装的配色与材质参考",
+      "path": "../D-outfit-selection-01/08-cherry-stage-cocoa-ears.png"
+    }
+  ],
+  "assets": [
+    {
+      "file": "moonlit-cherry-atelier.png",
+      "transparent": false,
+      "source": "C:\\Users\\admin\\.codex\\generated_images\\01a13e2f-391e-7d31-8c1a-025182c039a5\\exec-2dae5175-9c0c-4d3a-a866-9dd2251b2578.png",
+      "prompt": "Use case: stylized-concept. Asset type: polished raster wallpaper for an anime desktop Agent workspace, landscape 16:9, high resolution. Primary request: create an original, exquisitely painted MOONLIT CHERRY ATELIER interior background inspired by the atmosphere of the supplied reference, ready to place actual UI on top. Input image 1 is a mood/composition reference ONLY: borrow the layered nighttime room, gentle candlelight and rich physical materials, but do not reproduce its exact room or any interface. Input image 2 is a PALETTE/MATERIAL reference ONLY: cherry wine velvet, charcoal dress, warm cream lace, aged champagne metal, tiny teal jewels. Scene: elegant anime European manor study at midnight; tall mullioned windows at the far outer sides with muted blue moonlight, charcoal plum walls, wine velvet curtains, fine champagne-gold architectural trim, tiny restrained wall lamps near the upper outer corners, a subdued reflective dark floor along the bottom. Premium anime visual-novel background painting, strong dimensional form and delicate realistic material rendering, not simplistic flat vector art. Composition: front-facing spacious room, edges hold the architecture and texture; the MIDDLE 60 percent must be a quiet, continuous very dark plum/charcoal soft-focus wall/room volume, low detail and low contrast so long conversations remain readable. More understated than the reference. Blue night outside balances restrained burgundy inside; no saturated magenta, no harsh gold shine. The interior fills the entire canvas; no border, no lettering, no UI panels, no buttons, no people, no mascots, no logos or watermarks. Designed for comfortable all-day viewing, airy rather than crowded."
+    },
+    {
+      "file": "cherry-lace-composer.png",
+      "transparent": true,
+      "source": "C:\\Users\\admin\\.codex\\generated_images\\01a13e2f-391e-7d31-8c1a-025182c039a5\\exec-bc1db0ec-24f2-49ba-91c9-443e4357a15a.png",
+      "prompt": "Use case: stylized-concept. Asset type: a production-ready transparent PNG ornamental frame overlay for an anime app message composer. Make one SINGLE wide horizontal rounded rectangular hollow frame, approximately 3:1 aspect ratio, fully visible with generous clear padding, perfectly front-on with no perspective. Input image 1 is a material/detail reference for the physical cream lace message-box frame only, not a target to copy or recreate; image 2 provides the original chosen character costume palette: deep cherry red satin, charcoal fabric, cream-white ruffles, antique champagne gold metal, one tiny muted teal jewel. Original design: refined double fine rounded gold piping around the rectangle; restrained scalloped cream lace follows the upper INSIDE edge and only small sections of the two lower corners; centered at the upper edge a sculptural dark cherry satin bow, a small oval teal gemstone in a delicate champagne-gold setting, very short ribbon tails; graceful minute gold corner engravings. The center opening MUST BE genuinely fully transparent and completely empty, as must the exterior. No solid card filling, no colored background, no checkered pattern, no shadows filling the center, no text, no symbols, no buttons, no character, no mockup page, no extra assets. Painterly high-end anime game UI asset with physically dimensional silk, lace and metal, clean edge alpha. Elegant and ornate upon close inspection but slim border occupying less than 10 percent of the height, long edges mostly plain so the UI is not visually oppressive. No bright glow, no visual noise, no watermark."
+    },
+    {
+      "file": "cherry-velvet-sidebar.png",
+      "transparent": false,
+      "source": "C:\\Users\\admin\\.codex\\generated_images\\01a13e2f-391e-7d31-8c1a-025182c039a5\\exec-833dfef8-bf21-4e59-9fad-958273ee2fd2.png",
+      "prompt": "Use case: stylized-concept. Asset type: tall portrait 1:3 raster background skin for an anime desktop app navigation sidebar, a decorative empty panel, no actual interface. Input 1 is a reference ONLY for an ornate tall sidebar with long central plain region; input 2 is a material palette reference ONLY, chosen original cherry-black outfit with cream lace and warm antique gold. Design one SINGLE perfectly front-on tall narrow charcoal/plum velvet panel, slightly rounded corners, entire panel visible. Borders with two extremely slender champagne-gold metal pinstripes and tasteful symmetrical vine/filigree corner flourishes; deep wine red satin folding subtly at the very top and bottom. Very small dark cherry satin bow with one tiny teal jewel and cream lace drape at bottom. CENTRAL 85 PERCENT must remain near-black and completely empty, low contrast fine brushed velvet texture only, no shapes or fake content. Gentle dim burgundy edge-light, dusty antique gold, cozy premium gothic anime game UI skin, detailed physically dimensional materials. No text, no letters, no logos, no icons, no buttons, no rows, no people, no mascot, no watermark. No distracting full-panel patterns, no high contrast flower border, no harsh neon. This is an original blank raster UI surface to place navigation elements on."
+    }
+  ]
+}

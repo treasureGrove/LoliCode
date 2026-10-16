@@ -27,7 +27,7 @@ const DialogOverlay = React.forwardRef<
     <DialogPrimitive.Overlay
       ref={ref}
       className={cn(
-        "tai-dialog-overlay fixed inset-0 bg-overlay",
+        "tai-dialog-overlay fixed inset-0 bg-overlay backdrop-blur-sm",
         zIndexMap[zIndex],
         className,
       )}
@@ -52,6 +52,7 @@ const DialogContent = React.forwardRef<
       zIndex = "base",
       variant = "default",
       overlayClassName,
+      onEscapeKeyDown,
       ...props
     },
     ref,
@@ -65,9 +66,9 @@ const DialogContent = React.forwardRef<
 
     const variantClass = {
       default:
-        "tai-dialog-surface fixed left-1/2 top-1/2 flex flex-col w-full max-w-lg max-h-[90vh] translate-x-[-50%] translate-y-[-50%] border border-border bg-surface text-fg-1 shadow-v7-lg rounded-dialog",
+        "tai-dialog-surface fixed left-1/2 top-1/2 flex flex-col w-[calc(100%-2rem)] max-w-lg max-h-[90dvh] translate-x-[-50%] translate-y-[-50%] border border-border bg-surface text-fg-1 shadow-v7-lg rounded-dialog outline-none",
       fullscreen:
-        "fixed inset-0 flex flex-col w-screen h-screen translate-x-0 translate-y-0 bg-surface text-fg-1 p-0 sm:rounded-none shadow-none",
+        "tai-page-surface fixed inset-0 flex flex-col w-screen h-screen translate-x-0 translate-y-0 bg-surface text-fg-1 p-0 sm:rounded-none shadow-none outline-none",
     }[variant];
 
     return (
@@ -79,6 +80,13 @@ const DialogContent = React.forwardRef<
           onInteractOutside={(e) => {
             // 防止点击遮罩层关闭对话框
             e.preventDefault();
+          }}
+          onEscapeKeyDown={(event) => {
+            if (event.isComposing || event.keyCode === 229) {
+              event.preventDefault();
+              return;
+            }
+            onEscapeKeyDown?.(event);
           }}
           {...props}
         >
@@ -96,7 +104,7 @@ const DialogHeader = ({
 }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
     className={cn(
-      "tai-dialog-header flex flex-shrink-0 flex-col gap-1 px-6 pb-3 pt-5 text-start",
+      "tai-dialog-header flex flex-shrink-0 flex-col gap-1.5 px-6 pb-4 pt-6 text-start",
       className,
     )}
     {...props}
@@ -110,7 +118,7 @@ const DialogFooter = ({
 }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
     className={cn(
-      "tai-dialog-footer flex flex-shrink-0 flex-row items-center justify-end gap-2 px-6 pb-5 pt-3",
+      "tai-dialog-footer flex flex-shrink-0 flex-row items-center justify-end gap-2 px-6 pb-6 pt-4",
       className,
     )}
     {...props}

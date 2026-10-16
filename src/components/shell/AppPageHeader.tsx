@@ -36,6 +36,7 @@ export function AppPageHeader({
   return (
     <header
       className={cn("tai-shell-page-header", className)}
+      data-variant={variant}
       {...DRAG_REGION_ATTR}
       style={DRAG_REGION_STYLE as React.CSSProperties}
     >

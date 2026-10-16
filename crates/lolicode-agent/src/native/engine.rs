@@ -55,7 +55,8 @@ struct Binding {
 struct Inner {
     root: PathBuf,
     client: reqwest::Client,
-    binding: RwLock<Option<Binding>>,
+    bindings: RwLock<HashMap<String, Binding>>,
+    selected_project: RwLock<Option<String>>,
     sessions: RwLock<HashMap<String, Entry>>,
     grants: Mutex<Vec<Grant>>,
     skills: RwLock<Arc<Skills>>,
@@ -87,7 +88,24 @@ impl NativeEngine {
             .await
             .map_err(|_| "无法访问编程数据目录")?;
         let mut sessions = HashMap::new();
-        for stored in persistence::load(&root).await? {
+        for mut stored in persistence::load(&root).await? {
+            if matches!(
+                &stored.snapshot.status,
+                AgentStatus::Running | AgentStatus::WaitingPermission | AgentStatus::WaitingQuestion
+            ) {
+                stored.snapshot.status = AgentStatus::Error;
+                stored.snapshot.error = Some("应用关闭前任务尚未完成".into());
+                stored.snapshot.session.updated_at = now();
+                stored.snapshot.stream_connected = false;
+                stored.snapshot.stream_gap = false;
+                stored.snapshot.compacting = false;
+                stored.snapshot.model_phase = None;
+                if stored.title_state == TitleState::Pending {
+                    stored.title_state = TitleState::Manual;
+                    stored.snapshot.title_pending = false;
+                }
+                persistence::save(&root, &stored).await?;
+            }
             sessions.insert(
                 stored.snapshot.session.id.clone(),
                 Arc::new(Mutex::new(SessionState {
@@ -112,7 +130,8 @@ impl NativeEngine {
             inner: Arc::new(Inner {
                 root,
                 client,
-                binding: RwLock::new(None),
+                bindings: RwLock::new(HashMap::new()),
+                selected_project: RwLock::new(None),
                 sessions: RwLock::new(sessions),
                 grants: Mutex::new(grants),
                 skills: RwLock::new(Arc::new(Skills::default())),
@@ -133,27 +152,52 @@ impl NativeEngine {
         catalog: Value,
         gateway: NativeGateway,
     ) -> Result<Value, String> {
+        self.bind_inner(project, catalog, gateway, true).await
+    }
+
+    pub async fn bind_background(
+        &self,
+        project: PathBuf,
+        catalog: Value,
+        gateway: NativeGateway,
+    ) -> Result<Value, String> {
+        self.bind_inner(project, catalog, gateway, false).await
+    }
+
+    async fn bind_inner(
+        &self,
+        project: PathBuf,
+        catalog: Value,
+        gateway: NativeGateway,
+        select: bool,
+    ) -> Result<Value, String> {
         let _gate = self.inner.gate.lock().await;
         self.mutable()?;
         inference::validate_gateway(&gateway)?;
         let project = canonical_project(&project).await?;
         let catalog = catalog_value(catalog)?;
-        let mut binding = self.inner.binding.write().await;
-        if self.busy().await? {
-            if binding.as_ref().is_none_or(|old| {
-                old.catalog != catalog
-                    || old.gateway.base_url != gateway.base_url
-                    || old.gateway.bearer_token != gateway.bearer_token
-            }) {
-                return Err("仍有编程任务执行中，请结束后刷新模型渠道".into());
-            }
-        }
-        *binding = Some(Binding {
+        let project_key = project_key(&project);
+        let requested = Binding {
             project: project.clone(),
-            catalog: catalog.clone(),
+            catalog,
             gateway,
-        });
-        drop(binding);
+        };
+        let preserve_active_binding = self.has_active_session_for_project(&project).await;
+        let existing = self.inner.bindings.read().await.get(&project_key).cloned();
+        let binding = if preserve_active_binding {
+            existing.unwrap_or_else(|| requested.clone())
+        } else {
+            requested
+        };
+        self.inner
+            .bindings
+            .write()
+            .await
+            .insert(project_key.clone(), binding.clone());
+        if select {
+            *self.inner.selected_project.write().await = Some(project_key);
+        }
+        let catalog = binding.catalog;
         Ok(
             json!({"workspace":{"path":project.to_string_lossy(),"name":project.file_name().map(|v|v.to_string_lossy().into_owned()).unwrap_or_else(||"项目".into())},"catalog":catalog,"sessions":self.list(Some(&project), false).await}),
         )
@@ -181,12 +225,40 @@ impl NativeEngine {
             .ok_or_else(|| "本地会话不存在，请重新读取会话列表".into())
     }
     async fn bound(&self) -> Result<Binding, String> {
+        let selected = self.inner.selected_project.read().await.clone();
+        let Some(selected) = selected else {
+            return Err("请先选择项目文件夹".into());
+        };
         self.inner
-            .binding
+            .bindings
             .read()
             .await
-            .clone()
+            .get(&selected)
+            .cloned()
             .ok_or_else(|| "请先选择项目文件夹".into())
+    }
+    async fn bound_for(&self, project: &Path) -> Result<Binding, String> {
+        self.inner
+            .bindings
+            .read()
+            .await
+            .get(&project_key(project))
+            .cloned()
+            .ok_or_else(|| "请重新打开此会话所属项目".into())
+    }
+    async fn has_active_session_for_project(&self, project: &Path) -> bool {
+        let key = project_key(project);
+        let entries: Vec<_> = self.inner.sessions.read().await.values().cloned().collect();
+        for entry in entries {
+            let state = entry.lock().await;
+            if state.flight.is_some()
+                && project_key(Path::new(&state.stored.snapshot.session.project_path))
+                    == key
+            {
+                return true;
+            }
+        }
+        false
     }
     pub async fn busy(&self) -> Result<bool, String> {
         if self.inner.cleanup_uncertain.load(Ordering::Acquire) {
@@ -253,30 +325,23 @@ impl NativeEngine {
         }
         match method {
             "status" => {
-                let bound = self.inner.binding.read().await;
+                let bound = self.bound().await.ok();
                 Ok(
                     json!({"available":true,"version":"rust-native-1","running":!self.inner.closed.load(Ordering::Acquire),"projectPath":bound.as_ref().map(|b|b.project.to_string_lossy().into_owned())}),
                 )
             }
-            "catalog" => Ok(self
-                .inner
-                .binding
-                .read()
-                .await
-                .as_ref()
-                .map(|b| b.catalog.clone())
-                .unwrap_or_else(|| json!({"revision":0,"models":[],"excludedSources":[]}))),
+            "catalog" => Ok(self.bound().await.map(|b| b.catalog).unwrap_or_else(|_| json!({"revision":0,"models":[],"excludedSources":[]}))),
             "busy" => Ok(json!(self.busy().await?)),
             "activity" => {
                 let result = self.busy().await;
                 let unknown = result.is_err();
                 let busy = result.unwrap_or(true);
                 Ok(
-                    json!({"engine":"lolicode-native","inProcess":true,"features":{"workflows":false,"automation":false,"remote":false},"busy":busy,"active":busy,"unknown":unknown,"source":"rust-in-process"}),
+                    json!({"engine":"lolicode-native","inProcess":true,"features":{"workflows":true,"automation":true,"remote":false},"busy":busy,"active":busy,"unknown":unknown,"source":"rust-in-process"}),
                 )
             }
             "capabilities" => Ok(
-                json!({"engine":"lolicode-native","inProcess":true,"features":{"chat":true,"streaming":true,"tools":true,"permissions":true,"questions":true,"skills":true,"workflows":false,"automation":false,"remote":false,"mcp":false,"plugins":false}}),
+                json!({"engine":"lolicode-native","inProcess":true,"features":{"chat":true,"streaming":true,"tools":true,"permissions":true,"questions":true,"skills":true,"workflows":true,"automation":true,"remote":false,"mcp":false,"plugins":false}}),
             ),
             "beginUpdate" => {
                 self.mutable()?;
@@ -299,14 +364,11 @@ impl NativeEngine {
                 Ok(Value::Null)
             }
             "closeProject" => {
-                if self.busy().await? {
-                    return Err("仍有编程任务执行中，请先停止任务".into());
-                }
-                *self.inner.binding.write().await = None;
+                *self.inner.selected_project.write().await = None;
                 Ok(Value::Null)
             }
             "listSessions" => {
-                let bound = self.inner.binding.read().await.clone();
+                let bound = self.bound().await.ok();
                 let project = args["projectPath"]
                     .as_str()
                     .map(PathBuf::from)
@@ -429,7 +491,11 @@ impl NativeEngine {
     }
 
     async fn create(&self, args: &Value) -> Result<Value, String> {
-        let binding = self.bound().await?;
+        let binding = if let Some(project_path) = args["projectPath"].as_str() {
+            self.bound_for(Path::new(project_path)).await?
+        } else {
+            self.bound().await?
+        };
         let id = args["modelId"]
             .as_str()
             .or_else(|| binding.catalog["defaultModel"].as_str())
@@ -538,7 +604,7 @@ impl NativeEngine {
             session.mode = mode;
             session.permission_mode = permission;
             if let Some(id) = args["modelId"].as_str() {
-                let catalog = self.bound().await?.catalog;
+                let catalog = self.bound_for(Path::new(&session.project_path)).await?.catalog;
                 let model = selection(&catalog, id)?.0;
                 if session.model.as_ref() != Some(&model) {
                     if let Some(effort) = session.reasoning_effort.as_ref() {
@@ -551,7 +617,7 @@ impl NativeEngine {
             }
             if args["reasoningEffort"].is_string() {
                 session.reasoning_effort = reasoning_effort(
-                    &self.bound().await?.catalog,
+                    &self.bound_for(Path::new(&session.project_path)).await?.catalog,
                     session.model.as_ref().ok_or("此会话没有可用模型")?,
                     args.get("reasoningEffort"),
                 )?;
@@ -569,17 +635,23 @@ impl NativeEngine {
         let id = arg(args, "sessionId")?;
         let text = arg(args, "text")?;
         let request_id = arg(args, "requestId")?;
+        let attachments = args["attachments"]
+            .as_array()
+            .map(Vec::as_slice)
+            .unwrap_or_default();
+        let image_parts = image_message_parts(attachments)?;
         if request_id.trim().is_empty()
-            || text.trim().is_empty()
+            || (text.trim().is_empty() && image_parts.is_empty())
             || text.len() > 1024 * 1024
             || request_id.len() > 256
             || request_id.contains('\0')
         {
             return Err("消息或请求标识无效".into());
         }
-        let binding = self.bound().await?;
         let entry = self.entry(id).await?;
         let mut state = entry.lock().await;
+        let project_path = state.stored.snapshot.session.project_path.clone();
+        let binding = self.bound_for(Path::new(&project_path)).await?;
         if let Some(previous) = state.stored.commands.get(request_id) {
             return if previous.text == text {
                 Ok(())
@@ -623,8 +695,17 @@ impl NativeEngine {
                 TitleState::Manual
             };
         }
+        let user_text = if text.trim().is_empty() {
+            "请查看我发送的图片，并根据图片内容帮助我。"
+        } else {
+            text
+        };
         if stored.title_state == TitleState::Pending && stored.history.is_empty() {
-            stored.snapshot.session.title = provisional_title(text);
+            stored.snapshot.session.title = provisional_title(if text.trim().is_empty() {
+                "图片消息"
+            } else {
+                text
+            });
         }
         stored.snapshot.title_pending = stored.title_state == TitleState::Pending;
         stored.snapshot.messages.push(AgentMessage {
@@ -634,7 +715,15 @@ impl NativeEngine {
             completed_at: Some(now()),
             parts: vec![AgentPart::Text { text: text.into() }],
         });
-        stored.history.push(json!({"role":"user","content":text}));
+        let content = if image_parts.is_empty() {
+            json!(user_text)
+        } else {
+            let mut parts = Vec::with_capacity(image_parts.len() + 1);
+            parts.push(json!({"type":"text","text":user_text}));
+            parts.extend(image_parts.iter().cloned());
+            Value::Array(parts)
+        };
+        stored.history.push(json!({"role":"user","content":content}));
         stored.commands.insert(
             request_id.into(),
             CommandRecord {
@@ -821,6 +910,7 @@ impl NativeEngine {
                 return Ok(());
             }
             needs_final_answer = false;
+            let mut returned_images = Vec::new();
             for call in turn.calls {
                 if *cancel.borrow() {
                     return Err(inference::CANCELLED.into());
@@ -832,6 +922,7 @@ impl NativeEngine {
                         .await
                         .map(|text| tools::ToolOutput {
                             text,
+                            image_data_url: None,
                             diffs: Vec::new(),
                             file_changes: Vec::new(),
                         })
@@ -840,6 +931,7 @@ impl NativeEngine {
                         .await
                         .map(|text| tools::ToolOutput {
                             text,
+                            image_data_url: None,
                             diffs: Vec::new(),
                             file_changes: Vec::new(),
                         })
@@ -872,6 +964,10 @@ impl NativeEngine {
                     }
                 };
                 let cancelled = *cancel.borrow();
+                let image_data_url = output
+                    .as_ref()
+                    .ok()
+                    .and_then(|output| output.image_data_url.clone());
                 self.record_tool_outcome(
                     &entry,
                     &assistant_id,
@@ -881,6 +977,21 @@ impl NativeEngine {
                     &gateway.bearer_token,
                 )
                 .await?;
+                if let Some(image_data_url) = image_data_url {
+                    returned_images.push(image_data_url);
+                }
+            }
+            if !returned_images.is_empty() {
+                let mut content = vec![json!({
+                    "type": "text",
+                    "text": "A project image requested through the read-only view_image tool follows. Inspect its visual content as part of the user's request."
+                })];
+                content.extend(returned_images.into_iter().map(|image| {
+                    json!({"type":"image_url","image_url":{"url":image}})
+                }));
+                let mut state = entry.lock().await;
+                state.stored.history.push(json!({"role":"user","content":content}));
+                persistence::save(&self.inner.root, &state.stored).await?;
             }
         }
     }
@@ -1645,7 +1756,8 @@ impl NativeEngine {
                 .map_err(|_| "编程任务停止超时，仍需等待工具清理")?
                 .map_err(|_| "编程任务清理未完成")?;
         }
-        *self.inner.binding.write().await = None;
+        self.inner.bindings.write().await.clear();
+        *self.inner.selected_project.write().await = None;
         if self.inner.cleanup_uncertain.load(Ordering::Acquire) {
             return Err("无法确认所有命令进程均已回收".into());
         }
@@ -1667,6 +1779,17 @@ fn arg<'a>(args: &'a Value, key: &str) -> Result<&'a str, String> {
         .as_str()
         .filter(|v| !v.contains('\0'))
         .ok_or_else(|| format!("缺少有效参数：{key}"))
+}
+fn project_key(project: &Path) -> String {
+    let value = project.to_string_lossy().into_owned();
+    #[cfg(windows)]
+    {
+        value.to_lowercase()
+    }
+    #[cfg(not(windows))]
+    {
+        value
+    }
 }
 fn encode<T: serde::Serialize + ?Sized>(value: &T) -> Result<Value, String> {
     serde_json::to_value(value).map_err(|_| "无法编码编程状态".into())
@@ -1780,9 +1903,28 @@ fn declared_effort(catalog: &Value, model: &AgentModelRef, effort: &str) -> bool
         .and_then(|metadata| metadata["reasoningEfforts"].as_array())
         .is_some_and(|efforts| efforts.iter().any(|item| item.as_str() == Some(effort)))
 }
-fn effective_effort(catalog:&Value,model:&AgentModelRef,manual:Option<&str>)->Option<String> {
-    manual.or_else(||model_metadata(catalog,model)?.get("defaultReasoningEffort")?.as_str())
-        .filter(|value|!value.is_empty()&&value.len()<=64&&value.chars().all(|c|c.is_ascii_alphanumeric()||matches!(c,'_'|'-')))
+fn valid_effort(value: Option<&str>) -> Option<&str> {
+    value.filter(|value| {
+        !value.is_empty()
+            && value.len() <= 64
+            && value.chars().all(|character| {
+                character.is_ascii_alphanumeric() || matches!(character, '_' | '-')
+            })
+    })
+}
+fn effective_effort(
+    catalog: &Value,
+    model: &AgentModelRef,
+    manual: Option<&str>,
+) -> Option<String> {
+    let metadata = model_metadata(catalog, model)?;
+    let configured_default = metadata["defaultReasoningEffort"].as_str();
+    let first_supported = metadata["reasoningEfforts"]
+        .as_array()
+        .and_then(|efforts| efforts.iter().find_map(Value::as_str));
+    valid_effort(manual)
+        .or_else(|| valid_effort(configured_default))
+        .or_else(|| valid_effort(first_supported))
         .map(str::to_owned)
 }
 fn reasoning_effort(
@@ -1811,6 +1953,58 @@ fn reasoning_effort(
     }
     Ok(Some(effort.into()))
 }
+fn image_message_parts(attachments: &[Value]) -> Result<Vec<Value>, String> {
+    const MAX_IMAGE_BYTES: u64 = 5 * 1024 * 1024;
+    const MAX_TOTAL_IMAGE_BYTES: u64 = 10 * 1024 * 1024;
+    let mut parts = Vec::new();
+    let mut total_bytes = 0u64;
+    for attachment in attachments {
+        let Some(reference) = attachment.get("ref").and_then(Value::as_str) else {
+            // Document descriptors are not image parts and must not be sent
+            // as malformed image URLs.
+            continue;
+        };
+        let mime = attachment
+            .get("mime")
+            .and_then(Value::as_str)
+            .ok_or("图片格式无效，请重新添加图片")?;
+        if !matches!(
+            mime,
+            "image/png"
+                | "image/jpeg"
+                | "image/webp"
+                | "image/gif"
+                | "image/bmp"
+                | "image/avif"
+        ) {
+            return Err("图片格式不受支持，请重新添加图片".into());
+        }
+        let prefix = format!("data:{mime};base64,");
+        let Some(encoded) = reference.strip_prefix(&prefix) else {
+            return Err("图片数据格式无效，请重新添加图片".into());
+        };
+        let bytes = attachment
+            .get("bytes")
+            .and_then(Value::as_u64)
+            .filter(|bytes| *bytes > 0 && *bytes <= MAX_IMAGE_BYTES)
+            .ok_or("单张图片不能超过 5 MB")?;
+        total_bytes = total_bytes.saturating_add(bytes);
+        if parts.len() >= 4 || total_bytes > MAX_TOTAL_IMAGE_BYTES {
+            return Err("最多发送 4 张图片，图片总大小不能超过 10 MB".into());
+        }
+        // Guard the native runtime too; the desktop command has already
+        // checked the actual base64 bytes against the declared file size.
+        if encoded.is_empty() || encoded.len() > 7 * 1024 * 1024 {
+            return Err("图片数据无效，请重新添加图片".into());
+        }
+        parts.push(json!({
+            "type": "image_url",
+            "image_url": { "url": reference }
+        }));
+    }
+    Ok(parts)
+}
+
 fn provisional_title(text: &str) -> String {
     let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
     let mut title = text.chars().take(48).collect::<String>();
@@ -1862,6 +2056,7 @@ fn field(
 }
 fn system_prompt(project: &Path, mode: &str, skills: &Skills, locale: Option<&str>) -> String {
     let mut prompt=format!("You are LoliCode, an in-process coding agent. Work only inside this selected project: {}. Use the provided tools to inspect real files before changing them. Tool results and user permission decisions are authoritative. Do not claim a file was changed unless a tool succeeded. Current mode: {}. In plan mode, inspect and propose a plan; use exit_plan_mode to request approval before implementation. Ask for missing decisions with ask_user.\n",project.display(),mode);
+    prompt.push_str("Image handling: User image attachments are provided as visual input. For raster images in the project, use the read-only view_image tool instead of read_file. Do not claim you cannot see an image when its visual input is present; if the selected model or provider rejects image input, report that actual limitation.\n");
     if let Some(language)=match locale {Some("zh")=>Some("Simplified Chinese"),Some("zh-TW")=>Some("Traditional Chinese"),Some("en")=>Some("English"),Some("ja")=>Some("Japanese"),_=>None} {
         prompt.push_str(&format!("Reply to the user in {language} by default, following any explicit request for another language. Keep code, paths and API identifiers unchanged. Internal reasoning is not a final answer; provide an actual user-facing response when the task is complete.\n"));
     }

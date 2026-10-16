@@ -45,9 +45,6 @@ pub struct ChannelModel {
     pub reasoning_effort_source: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reasoning_effort_transport: Option<String>,
-    /// User-selected default. This does not change advertised capabilities.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub default_reasoning_effort: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub supports_tools: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -151,8 +148,6 @@ pub struct AgentCatalogModel {
     pub reasoning_effort_source: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reasoning_effort_transport: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub default_reasoning_effort: Option<String>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -421,13 +416,6 @@ fn validate_channel(channel: &ChannelSource) -> Result<(), AppError> {
     }
     let mut ids = HashSet::new();
     for model in &channel.models {
-        if model.default_reasoning_effort.as_deref().is_some_and(|effort| {
-            effort.is_empty() || effort.len() > 64 || !effort.chars().all(|character| {
-                character.is_ascii_alphanumeric() || matches!(character, '_' | '-')
-            })
-        }) {
-            return Err(AppError::InvalidInput("默认思考强度标识无效".into()));
-        }
         if model.id.trim().is_empty()
             || model.id.chars().any(char::is_control)
             || !ids.insert(&model.id)
@@ -526,7 +514,6 @@ fn blank_model(id: String) -> ChannelModel {
         reasoning_efforts: None,
         reasoning_effort_source: None,
         reasoning_effort_transport: None,
-        default_reasoning_effort: None,
         supports_tools: None,
         input_modalities: None,
         protocol: None,
@@ -623,7 +610,6 @@ fn merge_discovered(existing: &[ChannelModel], discovered: Vec<ChannelModel>) ->
             model.name = model.name.or_else(|| saved.name.clone());
             model.context_limit = model.context_limit.or(saved.context_limit);
             model.output_limit = model.output_limit.or(saved.output_limit);
-            model.default_reasoning_effort = saved.default_reasoning_effort.clone();
             // Keep capability provenance attached to the exact enum it describes.
             // Saved values without provenance can be user-provided; a registry
             // suggestion must not silently overwrite that explicit choice.
@@ -1059,7 +1045,6 @@ pub fn merge_copilot_models(
                 }),
                 reasoning_effort_source: None,
                 reasoning_effort_transport: None,
-                default_reasoning_effort: None,
                 // Lack of parallel calls does not mean lack of ordinary tool calls.
                 supports_tools: if model.supports_parallel_tool_calls == Some(true) {
                     Some(true)
@@ -1128,7 +1113,6 @@ pub fn native_subscription_channel(tool: &str) -> Result<ChannelSource, AppError
             reasoning_efforts: None,
             reasoning_effort_source: None,
             reasoning_effort_transport: None,
-            default_reasoning_effort: None,
             supports_tools: None,
             input_modalities: None,
             protocol: Some(protocol.into()),
@@ -1185,7 +1169,6 @@ pub fn merge_subscription_models(
             reasoning_efforts: model.metadata.reasoning_efforts,
             reasoning_effort_source: None,
             reasoning_effort_transport: None,
-            default_reasoning_effort: None,
             supports_tools: None,
             input_modalities: None,
             protocol: Some(protocol.into()),
@@ -1859,7 +1842,6 @@ fn agent_catalog_from_snapshot(snapshot: &ChannelCenterSnapshot) -> AgentCatalog
                         reasoning_efforts: model.reasoning_efforts.clone(),
                         reasoning_effort_source: model.reasoning_effort_source.clone(),
                         reasoning_effort_transport: model.reasoning_effort_transport.clone(),
-                        default_reasoning_effort: model.default_reasoning_effort.clone(),
                     }
                 })
         })
@@ -3033,27 +3015,20 @@ mod tests {
     }
 
     #[test]
-    fn model_reasoning_defaults_save_project_and_refresh_without_claiming_support() {
+    fn model_reasoning_capabilities_save_project_and_refresh_without_claiming_support() {
         let db = Database::memory().unwrap();
         let mut configured = snapshot();
         configured.channels[0].models[0].reasoning_efforts = Some(vec!["low".into()]);
         configured.channels[0].models[0].reasoning_effort_source = Some("relay:model-directory".into());
-        configured.channels[0].models[0].default_reasoning_effort = Some("xhigh".into());
         save(&db, configured).unwrap();
         let saved = load(&db).unwrap();
         let catalog = agent_catalog(&db).unwrap();
         let model = catalog.models.iter().find(|model| model.model_id == "one/model-a").unwrap();
-        assert_eq!(model.default_reasoning_effort.as_deref(), Some("xhigh"));
         assert_eq!(model.reasoning_efforts, Some(vec!["low".into()]));
         assert_eq!(model.reasoning_effort_source.as_deref(), Some("relay:model-directory"));
         let refreshed = merge_discovered(&saved.channels[0].models, vec![blank_model("model-a".into())]);
-        assert_eq!(refreshed[0].default_reasoning_effort.as_deref(), Some("xhigh"));
-        for invalid in ["", "high\n", "high value", "秘密"] {
-            let mut next = saved.clone();
-            next.channels[0].models[0].default_reasoning_effort = Some(invalid.into());
-            assert!(save(&db, next).is_err());
-        }
-        assert!(db.get_setting(APPLIED_KEY).unwrap().is_none(), "saving Agent defaults must not write external tool configuration");
+        assert_eq!(refreshed[0].reasoning_efforts, Some(vec!["low".into()]));
+        assert!(db.get_setting(APPLIED_KEY).unwrap().is_none(), "saving channel capabilities must not write external tool configuration");
     }
 
     #[test]

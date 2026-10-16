@@ -207,7 +207,7 @@ describe("ChannelCenterPanel", () => {
     expect(screen.queryByText("test-secret-key")).not.toBeInTheDocument();
   });
 
-  it("automatically saves a manual model default, shows provenance, and retries a failed save", async () => {
+  it("shows upstream reasoning metadata and retries a failed model-selection save", async () => {
     saved = structuredClone(populated);
     saved.channels[0].models[0].reasoningEfforts = ["low"];
     saved.channels[0].models[0].reasoningEffortSource = "litellm:model-info";
@@ -217,22 +217,23 @@ describe("ChannelCenterPanel", () => {
     );
     render(<ChannelCenterPanel />);
     await ready();
-    const picker = screen.getByRole("combobox", {
-      name: "DeepSeek · DeepSeek Chat 默认思考强度",
+    const list = screen.getByRole("group", { name: "DeepSeek 模型列表" });
+    expect(
+      within(list).getByText(/思考强度：low/),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("combobox", { name: /默认思考强度/ }),
+    ).not.toBeInTheDocument();
+    const model = within(list).getByRole("checkbox", {
+      name: "DeepSeek · DeepSeek Chat",
     });
-    expect(
-      within(picker).getByRole("option", { name: "xhigh · 手动 / 未验证" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText("LiteLLM 部署声明 · 当前路由参数未确认"),
-    ).toBeInTheDocument();
-    fireEvent.change(picker, { target: { value: "xhigh" } });
+    fireEvent.click(model);
     await screen.findByRole("button", { name: "重试保存" });
-    expect(picker).toHaveValue("xhigh");
+    expect(model).not.toBeChecked();
     expect(hasUnsavedChanges()).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "重试保存" }));
     await waitFor(() =>
-      expect(saved.channels[0].models[0].defaultReasoningEffort).toBe("xhigh"),
+      expect(saved.channels[0].models[0].enabled).toBe(false),
     );
     expect(saved.channels[0].models[0].reasoningEfforts).toEqual(["low"]);
     expect(saved.channels[0].models[0].reasoningEffortTransport).toBe(
@@ -274,10 +275,14 @@ describe("ChannelCenterPanel", () => {
               finish = () => resolve(structuredClone(saved));
             }),
         );
-      const picker = screen.getByRole("combobox", {
-        name: "DeepSeek · DeepSeek Chat 默认思考强度",
+      const list = screen.getByRole("group", { name: "DeepSeek 模型列表" });
+      const firstModel = within(list).getByRole("checkbox", {
+        name: "DeepSeek · DeepSeek Chat",
       });
-      fireEvent.change(picker, { target: { value: "high" } });
+      const secondModel = within(list).getByRole("checkbox", {
+        name: "DeepSeek · DeepSeek Reasoner",
+      });
+      fireEvent.click(firstModel);
       await waitFor(() =>
         expect(channelCenterApi.save).toHaveBeenCalledTimes(1),
       );
@@ -285,12 +290,13 @@ describe("ChannelCenterPanel", () => {
         await waitFor(() =>
           expect(channelCenterApi.get).toHaveBeenCalledTimes(2),
         );
-      expect(picker).toBeEnabled();
-      fireEvent.change(picker, { target: { value: "max" } });
+      expect(firstModel).toBeEnabled();
+      fireEvent.click(secondModel);
       await act(async () => finish());
-      expect(picker).toHaveValue("max");
+      expect(firstModel).not.toBeChecked();
+      expect(secondModel).not.toBeChecked();
       await waitFor(() =>
-        expect(saved.channels[0].models[0].defaultReasoningEffort).toBe("max"),
+        expect(saved.channels[0].models[1].enabled).toBe(false),
       );
       expect(vi.mocked(channelCenterApi.save).mock.calls[1][0].revision).toBe(
         1,
@@ -404,22 +410,17 @@ describe("ChannelCenterPanel", () => {
     );
     render(<ChannelCenterPanel />);
     await ready();
-    fireEvent.change(
-      screen.getByRole("combobox", {
-        name: "DeepSeek · DeepSeek Chat 默认思考强度",
-      }),
-      { target: { value: "max" } },
-    );
+    const list = screen.getByRole("group", { name: "DeepSeek 模型列表" });
+    const model = within(list).getByRole("checkbox", {
+      name: "DeepSeek · DeepSeek Chat",
+    });
+    fireEvent.click(model);
     await screen.findByRole("button", { name: "重新加载" });
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 450));
     });
     expect(channelCenterApi.save).toHaveBeenCalledTimes(1);
-    expect(
-      screen.getByRole("combobox", {
-        name: "DeepSeek · DeepSeek Chat 默认思考强度",
-      }),
-    ).toHaveValue("max");
+    expect(model).not.toBeChecked();
     expect(
       screen.getByRole("button", { name: "一键配置 3 个工具" }),
     ).toBeDisabled();

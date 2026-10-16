@@ -1,4 +1,4 @@
-import brandMark from "@/assets/brand/lolicode.svg";
+import brandMark from "@/assets/brand/lolicode-icon.png";
 import { cn } from "@/lib/utils";
 
 export function LolicodeMark({ className }: { className?: string }) {

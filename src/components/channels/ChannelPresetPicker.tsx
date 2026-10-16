@@ -1,8 +1,10 @@
 import { useState } from "react";
-import { ChevronDown, Search } from "lucide-react";
+import { Check, ChevronDown, Search } from "lucide-react";
+import { motion, useReducedMotion } from "framer-motion";
+import { motionTokens } from "@/lib/motion";
 import { ProviderIconBox } from "@/components/ProviderIconBox";
 import { Button } from "@/components/ui/button";
-import { Input, fieldClass } from "@/components/ui/input";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import {
   ACCOUNT_CHANNEL_PRESETS,
@@ -21,44 +23,60 @@ export function ChannelPresetPicker({
   disabled,
   onValueChange,
 }: ChannelPresetPickerProps) {
+  const reducedMotion = useReducedMotion();
   const [more, setMore] = useState(false);
   const [search, setSearch] = useState("");
-  const filtered = [...ACCOUNT_CHANNEL_PRESETS, ...CHANNEL_PRESETS].filter(
-    (preset) =>
-      `${preset.name} ${"baseUrl" in preset ? preset.baseUrl : ""}`
-        .toLowerCase()
-        .includes(search.trim().toLowerCase()),
+  const primaryPresets = COMMON_CHANNEL_PRESETS.slice(0, 4);
+  const primaryPresetIds = new Set(primaryPresets.map((preset) => preset.id));
+  const additionalPresets = CHANNEL_PRESETS.filter(
+    (preset) => !primaryPresetIds.has(preset.id),
+  ).filter((preset) =>
+    `${preset.name} ${"baseUrl" in preset ? preset.baseUrl : ""}`
+      .toLowerCase()
+      .includes(search.trim().toLowerCase()),
   );
+  const visiblePresets = [...ACCOUNT_CHANNEL_PRESETS, ...primaryPresets];
   return (
-    <div className="mt-4 space-y-3">
-      <p className="text-caption text-fg-2">
-        选择服务，地址已配置好；只需填写密钥或登录账号。
-      </p>
+    <div className="lolicode-channel-picker space-y-3">
       <div
         role="group"
         aria-label="添加渠道方式"
-        className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
+        className="lolicode-channel-preset-grid"
       >
-        {[...ACCOUNT_CHANNEL_PRESETS, ...COMMON_CHANNEL_PRESETS].map(
-          (preset) => (
-            <button
-              key={preset.id}
-              type="button"
-              aria-pressed={value === preset.id}
-              disabled={disabled}
-              onClick={() => onValueChange(preset.id)}
-              className={cn(
-                "lolicode-channel-card flex min-w-0 items-center gap-2.5 rounded-control border px-3 py-2.5 text-left text-body text-fg-1 transition-colors hover:bg-subtle disabled:opacity-50",
-                value === preset.id
-                  ? "border-ring bg-subtle"
-                  : "border-border bg-surface",
+        {visiblePresets.map((preset) => (
+          <button
+            key={preset.id}
+            type="button"
+            aria-pressed={value === preset.id}
+            aria-label={preset.name}
+            disabled={disabled}
+            onClick={() => onValueChange(preset.id)}
+            className={cn(
+              "lolicode-channel-card flex min-w-0 items-center gap-2.5 border text-left text-body text-fg-1 disabled:opacity-50",
+              value === preset.id
+                ? "border-ring bg-subtle"
+                : "border-border bg-surface",
+            )}
+          >
+            <ProviderIconBox icon={preset.icon} name={preset.name} />
+            <span className="min-w-0 leading-snug">
+              <span className="block font-medium">
+                {preset.name.split(" · ")[0]}
+              </span>
+              {preset.name.includes(" · ") && (
+                <span className="mt-0.5 block text-[10px] text-fg-3">
+                  {preset.name.split(" · ").slice(1).join(" · ")}
+                </span>
               )}
-            >
-              <ProviderIconBox icon={preset.icon} name={preset.name} />
-              <span className="min-w-0 leading-snug">{preset.name}</span>
-            </button>
-          ),
-        )}
+            </span>
+            {value === preset.id && (
+              <Check
+                className="lolicode-channel-preset-check"
+                aria-hidden="true"
+              />
+            )}
+          </button>
+        ))}
       </div>
       <div className="flex flex-wrap gap-2">
         <Button
@@ -68,9 +86,17 @@ export function ChannelPresetPicker({
           disabled={disabled}
           onClick={() => setMore(!more)}
           aria-expanded={more}
+          aria-controls="channel-additional-presets"
         >
-          <ChevronDown className={cn("h-3.5 w-3.5", more && "rotate-180")} />
-          更多服务
+          <ChevronDown
+            className={cn(
+              "lolicode-channel-chevron h-3.5 w-3.5",
+              more && "rotate-180",
+            )}
+          />
+          {more
+            ? "收起更多服务"
+            : `展开更多服务（${CHANNEL_PRESETS.length - primaryPresets.length}）`}
         </Button>
         <Button
           type="button"
@@ -84,38 +110,60 @@ export function ChannelPresetPicker({
         </Button>
       </div>
       {more && (
-        <div className="grid gap-2 rounded-control bg-subtle p-3 sm:grid-cols-2">
+        <motion.div
+          initial={reducedMotion ? false : { opacity: 0, y: -5 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{
+            duration: motionTokens.duration.feedback,
+            ease: motionTokens.ease,
+          }}
+          id="channel-additional-presets"
+          className="lolicode-channel-more space-y-3 bg-subtle p-3"
+        >
           <div className="relative">
-            <Search className="absolute left-2.5 top-2 h-4 w-4 text-fg-3" />
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-3" />
             <Input
               aria-label="搜索服务"
-              className="pl-8"
-              placeholder="搜索服务名称"
+              className="pl-9"
+              placeholder="搜索更多服务名称"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
             />
           </div>
-          <select
-            aria-label="更多渠道服务"
-            className={cn(fieldClass, "h-8")}
-            value={filtered.some((preset) => preset.id === value) ? value : ""}
-            disabled={disabled}
-            onChange={(event) => {
-              if (event.target.value) onValueChange(event.target.value);
-            }}
-          >
-            <option value="">
-              {filtered.length
-                ? `选择服务（${filtered.length} 个）`
-                : "没有匹配服务"}
-            </option>
-            {filtered.map((preset) => (
-              <option key={preset.id} value={preset.id}>
-                {preset.name}
-              </option>
-            ))}
-          </select>
-        </div>
+          <div className="lolicode-channel-additional-grid lolicode-channel-preset-grid">
+            {additionalPresets.length ? (
+              additionalPresets.map((preset) => (
+                <button
+                  key={preset.id}
+                  type="button"
+                  aria-pressed={value === preset.id}
+                  aria-label={preset.name}
+                  disabled={disabled}
+                  onClick={() => onValueChange(preset.id)}
+                  className={cn(
+                    "lolicode-channel-card flex min-w-0 items-center gap-2.5 border text-left text-body text-fg-1 disabled:opacity-50",
+                    value === preset.id
+                      ? "border-ring bg-subtle"
+                      : "border-border bg-surface",
+                  )}
+                >
+                  <ProviderIconBox icon={preset.icon} name={preset.name} />
+                  <span className="min-w-0 leading-snug">
+                    <span className="block font-medium">{preset.name}</span>
+                  </span>
+                  {value === preset.id && (
+                    <Check
+                      className="lolicode-channel-preset-check"
+                      aria-hidden="true"
+                    />
+                  )}
+                </button>
+              ))
+            ) : (
+              <p className="py-2 text-caption text-fg-3">没有匹配的服务</p>
+            )}
+          </div>
+        </motion.div>
       )}
     </div>
   );

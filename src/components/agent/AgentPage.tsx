@@ -1,9 +1,19 @@
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import {
   FolderOpen,
   MessageSquarePlus,
-  Send,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpRight,
+  Bug,
+  Code2,
+  Compass,
+  LoaderCircle,
+  Sparkles,
+  X,
   Square,
   Folder,
   PanelLeftClose,
@@ -11,15 +21,33 @@ import {
   Search,
   PanelRightOpen,
   ChevronDown,
+  ChevronRight,
   Blocks,
   Archive,
   Pin,
   Workflow,
+  ImagePlus,
+  FileText,
+  CircleHelp,
+  BookOpen,
+  UsersRound,
+  MessageSquare,
+  ShieldAlert,
+  Lightbulb,
+  ScrollText,
+  RefreshCw,
+  Info,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Notice } from "@/components/ui/notice";
 import { settingsApi } from "@/lib/api";
 import { agentApi } from "@/lib/api/agent";
+import {
+  readAgentDocumentAttachments,
+  readAgentImageAttachments,
+  saveAgentDocumentAttachments,
+  saveAgentImageAttachments,
+} from "@/lib/agentImageStore";
 import { toast } from "@/lib/toast";
 import {
   agentStopInFlight,
@@ -43,7 +71,9 @@ import {
 } from "@/lib/agentInterruptSend";
 import type {
   AgentCatalog,
+  AgentDocumentAttachment,
   AgentEngineStatus,
+  AgentImageAttachment,
   AgentPermissionMode,
   AgentProject,
   AgentSession,
@@ -72,6 +102,7 @@ import "./lolicode-workbench.css";
 import { AgentSessionMenu } from "./AgentSessionMenu";
 import { AgentProjectMenu } from "./AgentProjectMenu";
 import { AgentCompanion } from "./AgentCompanion";
+import { AgentAttachmentImage } from "./AgentAttachmentImage";
 import { AgentExtensionsPanel } from "./AgentExtensionsPanel";
 import { AgentOperationsPanel } from "./AgentOperationsPanel";
 import {
@@ -81,8 +112,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const RECENT_KEY = "lolicode.agent.recent-projects";
+const WORKSPACE_ORDER_KEY = "lolicode.agent.workspace-order.v1";
 const EMPTY_CATALOG: AgentCatalog = {
   revision: 0,
   models: [],
@@ -93,6 +132,70 @@ type PendingSend = {
   assistantIds: Set<string>;
   uncertain?: boolean;
 };
+type AgentRetryInput = {
+  requestId: string;
+  text: string;
+  images: AgentImageAttachment[];
+  documents: AgentDocumentAttachment[];
+};
+const IMAGE_MIME_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/gif",
+  "image/bmp",
+  "image/avif",
+]);
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const MAX_COMPOSER_IMAGES = 4;
+const MAX_COMPOSER_IMAGE_BYTES = 10 * 1024 * 1024;
+const DOCUMENT_MIME_BY_EXTENSION: Record<string, string> = {
+  doc: "application/msword",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  docm: "application/vnd.ms-word.document.macroEnabled.12",
+  ppt: "application/vnd.ms-powerpoint",
+  pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  pptm: "application/vnd.ms-powerpoint.presentation.macroEnabled.12",
+  xls: "application/vnd.ms-excel",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  xlsm: "application/vnd.ms-excel.sheet.macroEnabled.12",
+  pdf: "application/pdf",
+  txt: "text/plain",
+  md: "text/markdown",
+  markdown: "text/markdown",
+  csv: "text/csv",
+  rtf: "application/rtf",
+  odt: "application/vnd.oasis.opendocument.text",
+  ods: "application/vnd.oasis.opendocument.spreadsheet",
+  odp: "application/vnd.oasis.opendocument.presentation",
+  json: "application/json",
+};
+const MAX_DOCUMENT_BYTES = 20 * 1024 * 1024;
+const MAX_COMPOSER_DOCUMENTS = 4;
+const MAX_COMPOSER_DOCUMENT_BYTES = 40 * 1024 * 1024;
+const documentMimeOf = (file: File) => {
+  const extension = file.name.split(".").pop()?.toLowerCase();
+  return extension ? DOCUMENT_MIME_BY_EXTENSION[extension] : undefined;
+};
+const readFileBase64 = async (file: File) => {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
+  }
+  return btoa(binary);
+};
+const readImageDataUrl = (file: File) =>
+  new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () =>
+      typeof reader.result === "string"
+        ? resolve(reader.result)
+        : reject(new Error("无法读取图片"));
+    reader.onerror = () => reject(new Error("无法读取图片"));
+    reader.readAsDataURL(file);
+  });
 
 function WelcomeMark({ compact = false }: { compact?: boolean }) {
   return (
@@ -100,7 +203,7 @@ function WelcomeMark({ compact = false }: { compact?: boolean }) {
       className={`wb-welcome-mark${compact ? " wb-welcome-mark-compact" : ""}`}
       aria-hidden="true"
     >
-      <Blocks />
+      <Sparkles />
     </div>
   );
 }
@@ -208,18 +311,138 @@ const readRecent = (): string[] => {
     return [];
   }
 };
+const preserveWorkspaceOrder = (items: AgentProject[]): AgentProject[] => {
+  let savedOrder: string[] = [];
+  try {
+    const saved: unknown = JSON.parse(
+      localStorage.getItem(WORKSPACE_ORDER_KEY) || "[]",
+    );
+    if (Array.isArray(saved))
+      savedOrder = saved.filter(
+        (path): path is string => typeof path === "string",
+      );
+  } catch {}
+
+  const paths = new Set(items.map((item) => item.path));
+  const order = savedOrder.filter((path) => paths.has(path));
+  for (const item of items)
+    if (!order.includes(item.path)) order.push(item.path);
+  try {
+    localStorage.setItem(WORKSPACE_ORDER_KEY, JSON.stringify(order));
+  } catch {}
+
+  const rank = new Map<string, number>(
+    order.map((path, index) => [path, index]),
+  );
+  return [...items].sort(
+    (a, b) =>
+      Number(b.pinned) - Number(a.pinned) ||
+      (rank.get(a.path) ?? Number.MAX_SAFE_INTEGER) -
+        (rank.get(b.path) ?? Number.MAX_SAFE_INTEGER),
+  );
+};
 const activeStatus = (status?: string) =>
   Boolean(status && status !== "idle" && status !== "error");
 
 export interface AgentPageProps {
   onOpenChannels?: () => void;
+  onOpenAbout?: () => void;
+  onCheckUpdate?: () => void;
   onBusyChange?: (busy: boolean) => void;
 }
 
-export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
+const LoliCodeRepository = "https://github.com/treasureGrove/LoliCode";
+
+function AgentHelpMenu({
+  onOpenAbout,
+  onCheckUpdate,
+}: {
+  onOpenAbout?: () => void;
+  onCheckUpdate?: () => void;
+}) {
+  const openExternal = (url: string) => {
+    void settingsApi.openExternal(url).catch((error) => {
+      toast.error(agentErrorMessage(error));
+    });
+  };
+  const openLogs = () => {
+    void settingsApi.revealAppLogFile().catch((error) => {
+      toast.error(agentErrorMessage(error));
+    });
+  };
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className="wb-icon-button wb-titlebar-help"
+          aria-label="帮助和支持"
+          title="帮助和支持"
+        >
+          <CircleHelp aria-hidden="true" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" sideOffset={8} className="w-56">
+        <DropdownMenuItem
+          onSelect={() =>
+            openExternal("https://tools.treasuregrove.art/lolicode/")
+          }
+        >
+          <BookOpen aria-hidden="true" /> 产品文档
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onSelect={() => openExternal(`${LoliCodeRepository}/discussions`)}
+        >
+          <UsersRound aria-hidden="true" /> 用户社群
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onSelect={() =>
+            openExternal(`${LoliCodeRepository}/issues/new/choose`)
+          }
+        >
+          <MessageSquare aria-hidden="true" /> 问题上报
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onSelect={() =>
+            openExternal(`${LoliCodeRepository}/security/advisories/new`)
+          }
+        >
+          <ShieldAlert aria-hidden="true" /> 报告安全漏洞
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onSelect={() =>
+            openExternal(
+              `${LoliCodeRepository}/issues/new?template=feature_request.yml`,
+            )
+          }
+        >
+          <Lightbulb aria-hidden="true" /> 提出产品需求
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={openLogs}>
+          <ScrollText aria-hidden="true" /> 查看应用日志
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={onCheckUpdate}>
+          <RefreshCw aria-hidden="true" /> 检查更新
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={onOpenAbout}>
+          <Info aria-hidden="true" /> 关于 LoliCode
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+export function AgentPage({
+  onOpenChannels,
+  onOpenAbout,
+  onCheckUpdate,
+  onBusyChange,
+}: AgentPageProps) {
   const windowControls = useContext(WindowControlsContext);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sessionSearch, setSessionSearch] = useState("");
+  const sessionSearchRef = useRef<HTMLInputElement>(null);
   const [extensionsOpen, setExtensionsOpen] = useState(false);
   const [operationsOpen, setOperationsOpen] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
@@ -246,6 +469,19 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [modelId, setModelId] = useState("");
   const [reasoningEffort, setReasoningEffort] = useState("");
+  const [deferredSessionConfig, setDeferredSessionConfig] = useState<
+    Record<
+      string,
+      {
+        modelId?: string;
+        reasoningEffort?: string;
+        permissionMode?: AgentPermissionMode;
+      }
+    >
+  >({});
+  const deferredSessionConfigRef = useRef(deferredSessionConfig);
+  deferredSessionConfigRef.current = deferredSessionConfig;
+  const deferredConfigApplyInFlight = useRef(new Set<string>());
   const [previewPath, setPreviewPath] = useState<string | null>(null);
   const [previewSession, setPreviewSession] = useState<string | null>(null);
   const openPreview = useCallback(
@@ -257,9 +493,35 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
   );
   const [busy, setBusy] = useState<string | null>(null);
   const [busySessionId, setBusySessionId] = useState<string | null>(null);
+  const [retryLoading, setRetryLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [recent, setRecent] = useState(readRecent);
+  const [expandedWorkspaces, setExpandedWorkspaces] = useState<
+    Record<string, boolean>
+  >({});
+  const [workspaceSessions, setWorkspaceSessions] = useState<
+    Record<string, AgentSession[]>
+  >({});
+  const [loadingWorkspaceSessions, setLoadingWorkspaceSessions] = useState<
+    Record<string, boolean>
+  >({});
+  const [workspaceSessionErrors, setWorkspaceSessionErrors] = useState<
+    Record<string, boolean>
+  >({});
+  const workspaceSessionLoads = useRef(new Set<string>());
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [composerImagesBySession, setComposerImagesBySession] = useState<
+    Record<string, AgentImageAttachment[]>
+  >({});
+  const [composerDocumentsBySession, setComposerDocumentsBySession] = useState<
+    Record<string, AgentDocumentAttachment[]>
+  >({});
+  const [sentImageAttachments, setSentImageAttachments] = useState<
+    Record<string, AgentImageAttachment[]>
+  >({});
+  const [sentDocumentAttachments, setSentDocumentAttachments] = useState<
+    Record<string, AgentDocumentAttachment[]>
+  >({});
   const [pending, setPending] = useState<Record<string, PendingSend>>({});
   const [stopping, setStopping] = useState<Record<string, boolean>>({});
   const [replacementSession, setReplacementSession] = useState<string | null>(
@@ -285,11 +547,27 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
   selectedId.current = sessionId;
   const pendingRef = useRef(pending);
   pendingRef.current = pending;
+  const composerImagesRef = useRef(composerImagesBySession);
+  composerImagesRef.current = composerImagesBySession;
+  const composerDocumentsRef = useRef(composerDocumentsBySession);
+  composerDocumentsRef.current = composerDocumentsBySession;
   const stoppingRef = useRef(stopping);
   stoppingRef.current = stopping;
   const statusRef = useRef(statuses);
   statusRef.current = statuses;
   const scrollRef = useRef<HTMLDivElement>(null);
+  const composerInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
+  const composerFormRef = useRef<HTMLFormElement | null>(null);
+  const nativeDropSupport = useRef(false);
+  const addLocalDocumentsRef = useRef<(paths: string[]) => Promise<void>>(
+    async () => {},
+  );
+  const imageLoadAttempts = useRef(new Set<string>());
+  const documentLoadAttempts = useRef(new Set<string>());
+  const pendingImageRestoreAttempts = useRef(new Set<string>());
+  const pendingDocumentRestoreAttempts = useRef(new Set<string>());
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const atBottom = useRef(true);
   useEffect(() => setPreviewPath(null), [sessionId]);
 
@@ -355,7 +633,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
       setEngine(status);
       const knownProjects = await agentApi.listProjects();
       if (!mounted.current || generation.current !== requestGeneration) return;
-      setProjects(knownProjects);
+      setProjects(preserveWorkspaceOrder(knownProjects));
       if (status.running && status.projectPath) {
         const [nextCatalog, nextSessions] = await Promise.all([
           agentApi.getCatalog(),
@@ -700,6 +978,91 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
     refresh,
     onSnapshot,
   });
+  useEffect(() => {
+    for (const message of snapshot?.messages || []) {
+      if (message.role !== "user") continue;
+      if (
+        !sentImageAttachments[message.id] &&
+        !imageLoadAttempts.current.has(message.id)
+      ) {
+        imageLoadAttempts.current.add(message.id);
+        void readAgentImageAttachments(message.id)
+          .then((images) => {
+            if (mounted.current && images?.length)
+              setSentImageAttachments((old) => ({
+                ...old,
+                [message.id]: images,
+              }));
+          })
+          .catch(() => {});
+      }
+      if (
+        !sentDocumentAttachments[message.id] &&
+        !documentLoadAttempts.current.has(message.id)
+      ) {
+        documentLoadAttempts.current.add(message.id);
+        void readAgentDocumentAttachments(message.id)
+          .then((documents) => {
+            if (mounted.current && documents?.length)
+              setSentDocumentAttachments((old) => ({
+                ...old,
+                [message.id]: documents,
+              }));
+          })
+          .catch(() => {});
+      }
+    }
+  }, [sentDocumentAttachments, sentImageAttachments, snapshot?.messages]);
+  useEffect(() => {
+    const id = sessionId;
+    const unresolved = id ? pending[id] : undefined;
+    const restoreKey = unresolved ? `${id}:${unresolved.requestId}` : "";
+    if (
+      !id ||
+      !unresolved?.uncertain ||
+      pendingImageRestoreAttempts.current.has(restoreKey)
+    )
+      return;
+    pendingImageRestoreAttempts.current.add(restoreKey);
+    void readAgentImageAttachments(unresolved.requestId)
+      .then((images) => {
+        if (!mounted.current || selectedId.current !== id || !images?.length)
+          return;
+        if (composerImagesRef.current[id]?.length) return;
+        const next = {
+          ...composerImagesRef.current,
+          [id]: images,
+        };
+        composerImagesRef.current = next;
+        setComposerImagesBySession(next);
+      })
+      .catch(() => {});
+  }, [pending, sessionId]);
+  useEffect(() => {
+    const id = sessionId;
+    const unresolved = id ? pending[id] : undefined;
+    const restoreKey = unresolved ? `${id}:${unresolved.requestId}` : "";
+    if (
+      !id ||
+      !unresolved?.uncertain ||
+      pendingDocumentRestoreAttempts.current.has(restoreKey)
+    )
+      return;
+    pendingDocumentRestoreAttempts.current.add(restoreKey);
+    void readAgentDocumentAttachments(unresolved.requestId)
+      .then((documents) => {
+        if (!mounted.current || selectedId.current !== id || !documents?.length)
+          return;
+        if (composerDocumentsRef.current[id]?.length) return;
+        const next = {
+          ...composerDocumentsRef.current,
+          [id]: documents,
+        };
+        composerDocumentsRef.current = next;
+        setComposerDocumentsBySession(next);
+      })
+      .catch(() => {});
+  }, [pending, sessionId]);
 
   // Observe task and title jobs independently when another conversation is selected.
   const backgroundIds = Object.keys({
@@ -744,10 +1107,12 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
   }, [backgroundIds, onSnapshot]);
   useEffect(() => {
     const scroll = scrollRef.current;
-    if (scroll && atBottom.current) scroll.scrollTop = scroll.scrollHeight;
+    if (scroll && atBottom.current)
+      scroll.scrollTop = snapshot?.messages.length ? scroll.scrollHeight : 0;
   }, [snapshot]);
   useEffect(() => {
     atBottom.current = true;
+    setShowScrollToBottom(false);
   }, [sessionId]);
 
   const working =
@@ -764,9 +1129,39 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
       model.providerId === selectedSession?.model?.providerId &&
       model.modelId === selectedSession?.model?.modelId,
   );
+  const selectedDeferredConfig = sessionId
+    ? deferredSessionConfig[sessionId]
+    : undefined;
+  const displayedModel = selectedDeferredConfig?.modelId
+    ? catalog.models.find(
+        (model) => model.id === selectedDeferredConfig.modelId,
+      )
+    : boundModel;
+  const displayedModelId =
+    selectedDeferredConfig?.modelId || boundModel?.id || "";
+  const currentReasoningEffort = selectedSession?.reasoningEffort || "";
+  const displayedReasoningEffort =
+    selectedDeferredConfig?.reasoningEffort ??
+    (selectedDeferredConfig?.modelId &&
+    !displayedModel?.reasoningEfforts?.includes(currentReasoningEffort)
+      ? ""
+      : currentReasoningEffort);
   const key = workspace && sessionId ? draftKey(workspace.path, sessionId) : "";
   const draft = key ? (drafts[key] ?? readDraft(key)) : "";
+  const composerImages = sessionId
+    ? composerImagesBySession[sessionId] || []
+    : [];
+  const composerDocuments = sessionId
+    ? composerDocumentsBySession[sessionId] || []
+    : [];
   const textareaRef = useAgentAutoSizeTextarea(draft);
+  const composerRef = useCallback(
+    (node: HTMLTextAreaElement | null) => {
+      composerInputRef.current = node;
+      textareaRef(node);
+    },
+    [textareaRef],
+  );
   const paneLayout = useAgentPaneLayout({
     sidebarVisible: !sidebarCollapsed,
     previewVisible:
@@ -778,8 +1173,283 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
     setDrafts((old) => ({ ...old, [storageKey]: value }));
     saveAgentDraft(storageKey, value);
   };
+  const insertStarter = (text: string) => {
+    if (!key || readOnlySession) return;
+    writeDraft(key, draft.trim() ? `${draft}\n\n${text}` : text);
+    composerInputRef.current?.focus();
+  };
+  const addComposerImages = async (files: File[]) => {
+    const id = sessionId;
+    if (!id || readOnlySession || pending[id]?.uncertain || !files.length)
+      return;
+    const current = composerImagesRef.current[id] || [];
+    let totalBytes = current.reduce((sum, image) => sum + image.bytes, 0);
+    const additions: AgentImageAttachment[] = [];
+    for (const file of files) {
+      const mime = file.type.toLowerCase().split(";", 1)[0];
+      if (!IMAGE_MIME_TYPES.has(mime)) {
+        toast.error("仅支持 PNG、JPEG、WebP、GIF、BMP 和 AVIF 图片。");
+        continue;
+      }
+      if (!file.size || file.size > MAX_IMAGE_BYTES) {
+        toast.error("单张图片不能超过 5 MB。");
+        continue;
+      }
+      if (
+        current.length + additions.length >= MAX_COMPOSER_IMAGES ||
+        totalBytes + file.size > MAX_COMPOSER_IMAGE_BYTES
+      ) {
+        toast.error("最多添加 4 张图片，图片总大小不能超过 10 MB。");
+        break;
+      }
+      try {
+        const dataUrl = await readImageDataUrl(file);
+        additions.push({
+          id: crypto.randomUUID(),
+          fileName:
+            file.name ||
+            `screenshot-${new Date().toISOString().replace(/[:.]/g, "-")}.png`,
+          mime,
+          bytes: file.size,
+          dataUrl,
+        });
+        totalBytes += file.size;
+      } catch (cause) {
+        toast.error(agentErrorMessage(cause));
+      }
+    }
+    if (!additions.length) return;
+    const next = {
+      ...composerImagesRef.current,
+      [id]: [...(composerImagesRef.current[id] || []), ...additions],
+    };
+    composerImagesRef.current = next;
+    setComposerImagesBySession(next);
+  };
+  const addComposerDocuments = async (files: File[]) => {
+    const id = sessionId;
+    if (!id || readOnlySession || pending[id]?.uncertain || !files.length)
+      return;
+    const current = composerDocumentsRef.current[id] || [];
+    let totalBytes = current.reduce((sum, document) => sum + document.bytes, 0);
+    const additions: AgentDocumentAttachment[] = [];
+    for (const file of files) {
+      const mime = documentMimeOf(file);
+      if (!mime) {
+        toast.error("支持 PDF、Word、PowerPoint、Excel 和常见文本文件。");
+        continue;
+      }
+      if (!file.size || file.size > MAX_DOCUMENT_BYTES) {
+        toast.error("单个文档不能超过 20 MB。");
+        continue;
+      }
+      if (
+        current.length + additions.length >= MAX_COMPOSER_DOCUMENTS ||
+        totalBytes + file.size > MAX_COMPOSER_DOCUMENT_BYTES
+      ) {
+        toast.error("最多添加 4 个文档，文档总大小不能超过 40 MB。");
+        break;
+      }
+      try {
+        additions.push({
+          id: crypto.randomUUID(),
+          fileName: file.name,
+          mime,
+          bytes: file.size,
+          dataBase64: await readFileBase64(file),
+        });
+        totalBytes += file.size;
+      } catch (cause) {
+        toast.error(agentErrorMessage(cause));
+      }
+    }
+    if (!additions.length) return;
+    const next = {
+      ...composerDocumentsRef.current,
+      [id]: [...(composerDocumentsRef.current[id] || []), ...additions],
+    };
+    composerDocumentsRef.current = next;
+    setComposerDocumentsBySession(next);
+  };
+  const addComposerFiles = async (files: File[]) => {
+    const images = files.filter((file) =>
+      file.type.toLowerCase().startsWith("image/"),
+    );
+    const documents = files.filter(
+      (file) => !file.type.toLowerCase().startsWith("image/"),
+    );
+    if (images.length) await addComposerImages(images);
+    if (documents.length) await addComposerDocuments(documents);
+  };
+  const addComposerLocalDocuments = async (paths: string[]) => {
+    const id = sessionId;
+    if (!id || readOnlySession || pending[id]?.uncertain) return;
+    const current = composerDocumentsRef.current[id] || [];
+    const additions: AgentDocumentAttachment[] = [];
+    let totalBytes = current.reduce((sum, document) => sum + document.bytes, 0);
+    for (const localPath of paths) {
+      if (
+        current.some((document) => document.localPath === localPath) ||
+        additions.some((document) => document.localPath === localPath)
+      )
+        continue;
+      if (current.length + additions.length >= MAX_COMPOSER_DOCUMENTS) {
+        toast.error("最多添加 4 个文档。");
+        break;
+      }
+      try {
+        const info = await agentApi.inspectDocument(localPath);
+        if (totalBytes + info.bytes > MAX_COMPOSER_DOCUMENT_BYTES) {
+          toast.error("文档总大小不能超过 40 MB。");
+          break;
+        }
+        additions.push({
+          id: crypto.randomUUID(),
+          fileName: info.fileName,
+          mime: info.mime,
+          bytes: info.bytes,
+          localPath,
+        });
+        totalBytes += info.bytes;
+      } catch (cause) {
+        toast.error(agentErrorMessage(cause));
+      }
+    }
+    if (!additions.length) return;
+    const next = {
+      ...composerDocumentsRef.current,
+      [id]: [...(composerDocumentsRef.current[id] || []), ...additions],
+    };
+    composerDocumentsRef.current = next;
+    setComposerDocumentsBySession(next);
+  };
+  const chooseComposerDocuments = async () => {
+    try {
+      const selected = await openFileDialog({
+        title: "添加文档",
+        multiple: true,
+        directory: false,
+        filters: [
+          {
+            name: "文档",
+            extensions: Object.keys(DOCUMENT_MIME_BY_EXTENSION),
+          },
+        ],
+      });
+      if (selected)
+        await addComposerLocalDocuments(
+          Array.isArray(selected) ? selected : [selected],
+        );
+    } catch (cause) {
+      toast.error(agentErrorMessage(cause));
+    }
+  };
+  addLocalDocumentsRef.current = addComposerLocalDocuments;
+  useEffect(() => {
+    if (
+      !(window as Window & { __TAURI_INTERNALS__?: unknown })
+        .__TAURI_INTERNALS__
+    )
+      return;
+    let active = true;
+    let unlisten: (() => void) | undefined;
+    const appWindow = getCurrentWindow();
+    void appWindow
+      .onDragDropEvent(async (event) => {
+        if (event.payload.type !== "drop") return;
+        const form = composerFormRef.current;
+        if (!form) return;
+        const scale = await appWindow
+          .scaleFactor()
+          .catch(() => window.devicePixelRatio || 1);
+        if (!active) return;
+        const bounds = form.getBoundingClientRect();
+        const x = event.payload.position.x / scale;
+        const y = event.payload.position.y / scale;
+        if (
+          x < bounds.left ||
+          x > bounds.right ||
+          y < bounds.top ||
+          y > bounds.bottom
+        )
+          return;
+        const paths = event.payload.paths.filter((path) =>
+          Boolean(
+            DOCUMENT_MIME_BY_EXTENSION[
+              path.split(".").pop()?.toLowerCase() || ""
+            ],
+          ),
+        );
+        void addLocalDocumentsRef.current(paths);
+      })
+      .then((stop) => {
+        if (!active) stop();
+        else {
+          unlisten = stop;
+          nativeDropSupport.current = true;
+        }
+      })
+      .catch(() => {
+        nativeDropSupport.current = false;
+      });
+    return () => {
+      active = false;
+      nativeDropSupport.current = false;
+      unlisten?.();
+    };
+  }, []);
+  const removeComposerImage = (imageId: string) => {
+    if (!sessionId || pending[sessionId]?.uncertain) return;
+    const next = { ...composerImagesRef.current };
+    const remaining = (next[sessionId] || []).filter(
+      (image) => image.id !== imageId,
+    );
+    if (remaining.length) next[sessionId] = remaining;
+    else delete next[sessionId];
+    composerImagesRef.current = next;
+    setComposerImagesBySession(next);
+  };
+  const removeComposerDocument = (documentId: string) => {
+    if (!sessionId || pending[sessionId]?.uncertain) return;
+    const next = { ...composerDocumentsRef.current };
+    const remaining = (next[sessionId] || []).filter(
+      (document) => document.id !== documentId,
+    );
+    if (remaining.length) next[sessionId] = remaining;
+    else delete next[sessionId];
+    composerDocumentsRef.current = next;
+    setComposerDocumentsBySession(next);
+  };
+  const clearSentComposerImages = (
+    id: string,
+    images: AgentImageAttachment[],
+  ) => {
+    if (!images.length) return;
+    const next = { ...composerImagesRef.current };
+    const remaining = (next[id] || []).filter(
+      (image) => !images.some((sent) => sent.id === image.id),
+    );
+    if (remaining.length) next[id] = remaining;
+    else delete next[id];
+    composerImagesRef.current = next;
+    setComposerImagesBySession(next);
+  };
+  const clearSentComposerDocuments = (
+    id: string,
+    documents: AgentDocumentAttachment[],
+  ) => {
+    if (!documents.length) return;
+    const next = { ...composerDocumentsRef.current };
+    const remaining = (next[id] || []).filter(
+      (document) => !documents.some((sent) => sent.id === document.id),
+    );
+    if (remaining.length) next[id] = remaining;
+    else delete next[id];
+    composerDocumentsRef.current = next;
+    setComposerDocumentsBySession(next);
+  };
 
-  const openProject = async (path?: string) => {
+  const openProject = async (path?: string, preferredSessionId?: string) => {
     if (mutation.current || initializing) return;
     mutation.current = true;
     setBusy("project");
@@ -797,11 +1467,25 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
       const result = await agentApi.openProject(selectedPath);
       if (!mounted.current || generation.current !== requestGeneration) return;
       result.warnings?.forEach((warning) => toast.warning(warning));
+      if (workspace?.path !== result.workspace.path) {
+        setExpandedWorkspaces((old) => ({
+          ...old,
+          ...(workspace
+            ? { [workspace.path]: old[workspace.path] ?? true }
+            : {}),
+          [result.workspace.path]: old[result.workspace.path] ?? true,
+        }));
+      }
       setWorkspace(result.workspace);
       bindCatalog(result.catalog);
       setSessions(result.sessions);
       discoverSessionActivity(result.sessions);
-      setSessionId(result.sessions[0]?.id || null);
+      setSessionId(
+        result.sessions.find((session) => session.id === preferredSessionId)
+          ?.id ||
+          result.sessions[0]?.id ||
+          null,
+      );
       setShowArchived(false);
       setPending((old) => ({
         ...old,
@@ -814,7 +1498,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
       rememberProject(result.workspace.path);
       const knownProjects = await agentApi.listProjects();
       if (!mounted.current || generation.current !== requestGeneration) return;
-      setProjects(knownProjects);
+      setProjects(preserveWorkspaceOrder(knownProjects));
       setEngine((old) => ({
         ...old,
         available: true,
@@ -862,27 +1546,45 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
       if (mounted.current) setBusy(null);
     }
   };
-  const send = async () => {
+  const send = async (retry?: AgentRetryInput) => {
+    const outgoingImages =
+      retry?.images ??
+      (sessionId ? composerImagesRef.current[sessionId] || [] : []);
+    const outgoingDocuments =
+      retry?.documents ??
+      (sessionId ? composerDocumentsRef.current[sessionId] || [] : []);
+    const text = retry?.text.trim() ?? draft.trim();
+    const retryingSamePending = Boolean(
+      retry &&
+        pendingRef.current[sessionId || ""]?.requestId === retry.requestId,
+    );
     if (
       mutation.current ||
       replacement.current ||
+      (retryLoading && !retry) ||
       !sessionId ||
       isLegacySession(sessionId) ||
       !key ||
-      !draft.trim() ||
+      (!text && !outgoingImages.length && !outgoingDocuments.length) ||
       !snapshot ||
       (pendingRef.current[sessionId] &&
         !pendingRef.current[sessionId].uncertain &&
-        !activeStatus(snapshot.status)) ||
+        !activeStatus(snapshot.status) &&
+        !retryingSamePending) ||
       stoppingRef.current[sessionId] ||
       agentStopInFlight(sessionId)
     )
       return;
     const id = sessionId;
     const storageKey = key;
-    const text = draft.trim();
     const projectPath = workspace!.path;
-    const sourceDraft = captureAgentDraft(storageKey, draft);
+    const sourceDraft = retry
+      ? {
+          key: `${storageKey}:retry:${retry.requestId}`,
+          revision: crypto.randomUUID(),
+          text: "",
+        }
+      : captureAgentDraft(storageKey, draft);
     const targetRevision = selection.current.revision;
     const requestGeneration = generation.current;
     const stillCurrent = () =>
@@ -964,14 +1666,21 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
       }
       if (!stillCurrent()) return;
       const previous = readAgentSubmission(projectPath, id);
-      if (previous && (previous.text !== text || previous.stopRequested)) {
+      if (
+        previous &&
+        (previous.text !== text ||
+          previous.stopRequested ||
+          (retry && previous.requestId !== retry.requestId))
+      ) {
         setError(
           "上次发送的接收状态尚未确认，请先停止该次任务，再发送新的内容。",
         );
         return;
       }
       const requestId =
-        previous?.requestId || `msg_${crypto.randomUUID().replace(/-/g, "")}`;
+        retry?.requestId ||
+        previous?.requestId ||
+        `msg_${crypto.randomUUID().replace(/-/g, "")}`;
       const submission: AgentSubmission = {
         version: 1,
         projectPath,
@@ -1026,10 +1735,39 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
               ? old
               : { ...old, [storageKey]: "" },
           );
+        if (outgoingImages.length) {
+          setSentImageAttachments((old) => ({
+            ...old,
+            [requestId]: outgoingImages,
+          }));
+          clearSentComposerImages(id, outgoingImages);
+        }
+        if (outgoingDocuments.length) {
+          setSentDocumentAttachments((old) => ({
+            ...old,
+            [requestId]: outgoingDocuments,
+          }));
+          clearSentComposerDocuments(id, outgoingDocuments);
+        }
         setRefresh((old) => old + 1);
       };
       try {
-        await agentApi.sendMessage(id, text, requestId);
+        if (outgoingImages.length)
+          await saveAgentImageAttachments(requestId, outgoingImages).catch(
+            () => {},
+          );
+        if (outgoingDocuments.length)
+          await saveAgentDocumentAttachments(
+            requestId,
+            outgoingDocuments,
+          ).catch(() => {});
+        await agentApi.sendMessage(
+          id,
+          text,
+          requestId,
+          outgoingImages,
+          outgoingDocuments,
+        );
         accepted();
       } catch (cause) {
         if (readAgentSubmission(projectPath, id)?.observed) accepted();
@@ -1079,6 +1817,36 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
         replacement.current = null;
         if (mounted.current) setReplacementSession(null);
       }
+    }
+  };
+  const retryLastMessage = async () => {
+    if (!snapshot || snapshot.status !== "error" || !sessionId) return;
+    const message = [...snapshot.messages]
+      .reverse()
+      .find((item) => item.role === "user");
+    if (!message) return;
+    const text = message.parts
+      .filter((part) => part.type === "text")
+      .map((part) => (part.type === "text" ? part.text : ""))
+      .join("");
+    setRetryLoading(true);
+    try {
+      const [images, documents] = await Promise.all([
+        sentImageAttachments[message.id] ||
+          readAgentImageAttachments(message.id).then((value) => value || []),
+        sentDocumentAttachments[message.id] ||
+          readAgentDocumentAttachments(message.id).then((value) => value || []),
+      ]);
+      await send({
+        requestId: message.id,
+        text,
+        images,
+        documents,
+      });
+    } catch (cause) {
+      toast.error(agentErrorMessage(cause));
+    } finally {
+      if (mounted.current) setRetryLoading(false);
     }
   };
   const stop = async () => {
@@ -1205,20 +1973,20 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
     await operation();
     if (mounted.current) setRefresh((old) => old + 1);
   };
-  const confirmSession = (
-    session: AgentSession,
-    fields: (keyof AgentSession)[],
-  ) => {
-    setSessions((old) =>
-      old.map((item) => (item.id === session.id ? session : item)),
-    );
-    overrideFields.current[session.id] = [
-      ...new Set([...(overrideFields.current[session.id] || []), ...fields]),
-    ];
-    overridesRef.current = { ...overridesRef.current, [session.id]: session };
-    setSessionOverrides(overridesRef.current);
-    setRefresh((old) => old + 1);
-  };
+  const confirmSession = useCallback(
+    (session: AgentSession, fields: (keyof AgentSession)[]) => {
+      setSessions((old) =>
+        old.map((item) => (item.id === session.id ? session : item)),
+      );
+      overrideFields.current[session.id] = [
+        ...new Set([...(overrideFields.current[session.id] || []), ...fields]),
+      ];
+      overridesRef.current = { ...overridesRef.current, [session.id]: session };
+      setSessionOverrides(overridesRef.current);
+      setRefresh((old) => old + 1);
+    },
+    [],
+  );
   const updateSessionConfig = async (patch: {
     modelId?: string;
     permissionMode?: AgentPermissionMode;
@@ -1238,6 +2006,55 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
     )
       return;
     const id = sessionId;
+    const sessionHasActiveRequest =
+      activeStatus(statuses[id]) ||
+      (snapshot?.session.id === id && activeStatus(snapshot.status)) ||
+      Boolean(pendingRef.current[id]);
+    if (
+      sessionHasActiveRequest &&
+      (patch.modelId || patch.reasoningEffort !== undefined)
+    ) {
+      const queuedConfig = {
+        ...deferredSessionConfigRef.current[id],
+        ...patch,
+      };
+      if (patch.modelId && queuedConfig.reasoningEffort) {
+        const nextModel = catalog.models.find(
+          (model) => model.id === patch.modelId,
+        );
+        if (
+          !nextModel?.reasoningEfforts?.includes(queuedConfig.reasoningEffort)
+        )
+          delete queuedConfig.reasoningEffort;
+      }
+      const queued = {
+        ...deferredSessionConfigRef.current,
+        [id]: queuedConfig,
+      };
+      deferredSessionConfigRef.current = queued;
+      setDeferredSessionConfig(queued);
+      if (snapshot?.session.id === id && activeStatus(snapshot.status)) {
+        const observedStatus = snapshot.status;
+        setStatuses((old) =>
+          old[id] === observedStatus ? old : { ...old, [id]: observedStatus },
+        );
+      }
+      if (patch.modelId) {
+        setModelId(patch.modelId);
+        toast.info("当前请求会继续使用原模型，新模型将在本轮结束后应用。");
+        const nextModel = catalog.models.find(
+          (model) => model.id === patch.modelId,
+        );
+        setReasoningEffort((current) =>
+          nextModel?.reasoningEfforts?.includes(current) ? current : "",
+        );
+      }
+      if (patch.reasoningEffort !== undefined)
+        setReasoningEffort(patch.reasoningEffort);
+      if (patch.permissionMode) setPermissionMode(patch.permissionMode);
+      setError(null);
+      return;
+    }
     mutation.current = true;
     setBusy("config");
     setError(null);
@@ -1267,6 +2084,115 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
       if (mounted.current) setBusy(null);
     }
   };
+  useEffect(() => {
+    for (const [id, patch] of Object.entries(deferredSessionConfig)) {
+      const currentSnapshotStatus =
+        snapshot?.session.id === id ? snapshot.status : undefined;
+      const observedStatuses = [currentSnapshotStatus, statuses[id]];
+      if (
+        observedStatuses.some(activeStatus) ||
+        !observedStatuses.some(
+          (status) => status === "idle" || status === "error",
+        ) ||
+        pending[id] ||
+        pendingRef.current[id] ||
+        stopping[id] ||
+        stoppingRef.current[id] ||
+        agentStopInFlight(id) ||
+        replacement.current ||
+        replacementSession === id ||
+        busy ||
+        mutation.current ||
+        deferredConfigApplyInFlight.current.has(id)
+      )
+        continue;
+
+      deferredConfigApplyInFlight.current.add(id);
+      mutation.current = true;
+      setBusy("config");
+      setError(null);
+      void agentApi
+        .updateSession(id, patch)
+        .then((result) => {
+          if (!mounted.current) return;
+          if (result.id !== id)
+            throw new Error("返回的会话与当前选择不一致，请重新读取。");
+          confirmSession(result, [
+            ...(patch.modelId ? ["model" as const] : []),
+            ...(patch.modelId || patch.reasoningEffort !== undefined
+              ? ["reasoningEffort" as const]
+              : []),
+            ...(patch.permissionMode ? ["permissionMode" as const] : []),
+          ]);
+          const currentConfig = deferredSessionConfigRef.current[id];
+          if (currentConfig === patch) {
+            const next = { ...deferredSessionConfigRef.current };
+            delete next[id];
+            deferredSessionConfigRef.current = next;
+            setDeferredSessionConfig(next);
+          }
+          if (selectedId.current === id) {
+            const nextModel = result.model
+              ? catalog.models.find(
+                  (model) =>
+                    model.providerId === result.model?.providerId &&
+                    model.modelId === result.model?.modelId,
+                )
+              : undefined;
+            if (nextModel) setModelId(nextModel.id);
+            setReasoningEffort(result.reasoningEffort || "");
+            if (patch.permissionMode)
+              setPermissionMode(result.permissionMode as AgentPermissionMode);
+          }
+        })
+        .catch((cause) => {
+          if (!mounted.current) return;
+          if (selectedId.current === id) {
+            setError(agentErrorMessage(cause));
+            const currentSession =
+              sessionOverrides[id] ||
+              sessions.find((session) => session.id === id) ||
+              selectedSession;
+            const currentModel = currentSession?.model
+              ? catalog.models.find(
+                  (model) =>
+                    model.providerId === currentSession.model?.providerId &&
+                    model.modelId === currentSession.model?.modelId,
+                )
+              : undefined;
+            if (currentModel) setModelId(currentModel.id);
+            setReasoningEffort(currentSession?.reasoningEffort || "");
+          } else toast.error(agentErrorMessage(cause));
+          const currentConfig = deferredSessionConfigRef.current[id];
+          if (currentConfig === patch) {
+            const next = { ...deferredSessionConfigRef.current };
+            delete next[id];
+            deferredSessionConfigRef.current = next;
+            setDeferredSessionConfig(next);
+          }
+        })
+        .finally(() => {
+          deferredConfigApplyInFlight.current.delete(id);
+          mutation.current = false;
+          if (mounted.current) setBusy(null);
+        });
+    }
+  }, [
+    busy,
+    catalog.models,
+    confirmSession,
+    deferredSessionConfig,
+    pending,
+    replacementSession,
+    selectedSession,
+    sessionOverrides,
+    sessions,
+    sessionId,
+    stopping,
+    snapshot?.session.id,
+    snapshot?.status,
+    statuses,
+  ]);
   const mutateSession = async (
     id: string,
     operation: () => Promise<AgentSession | void>,
@@ -1333,6 +2259,33 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
       if (mounted.current) setBusy(null);
     }
   };
+  const loadWorkspaceSessions = async (path: string) => {
+    if (workspaceSessionLoads.current.has(path)) return;
+    workspaceSessionLoads.current.add(path);
+    setLoadingWorkspaceSessions((old) => ({ ...old, [path]: true }));
+    setWorkspaceSessionErrors((old) => {
+      const next = { ...old };
+      delete next[path];
+      return next;
+    });
+    try {
+      const items = await agentApi.listSessions(path);
+      if (!mounted.current) return;
+      setWorkspaceSessions((old) => ({ ...old, [path]: items }));
+      discoverSessionActivity(items);
+    } catch {
+      if (mounted.current)
+        setWorkspaceSessionErrors((old) => ({ ...old, [path]: true }));
+    } finally {
+      workspaceSessionLoads.current.delete(path);
+      if (mounted.current)
+        setLoadingWorkspaceSessions((old) => ({ ...old, [path]: false }));
+    }
+  };
+  const toggleWorkspace = (path: string, expanded: boolean) => {
+    setExpandedWorkspaces((old) => ({ ...old, [path]: !expanded }));
+    if (!expanded && path !== workspace?.path) void loadWorkspaceSessions(path);
+  };
   const updateProject = async (project: AgentProject, remove = false) => {
     if (mutation.current) return;
     mutation.current = true;
@@ -1342,7 +2295,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
       if (remove) await agentApi.removeProject(project.path);
       else await agentApi.setProjectMetadata(project.path, !project.pinned);
       const next = await agentApi.listProjects();
-      if (mounted.current) setProjects(next);
+      if (mounted.current) setProjects(preserveWorkspaceOrder(next));
     } catch (cause) {
       if (mounted.current) setError(agentErrorMessage(cause));
     } finally {
@@ -1362,12 +2315,48 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
   const replacingHere = replacementSession === sessionId;
   const sendDisabled =
     readOnlySession ||
+    retryLoading ||
     Boolean(busy) ||
     Boolean(replacementSession) ||
     !snapshot ||
-    !draft.trim() ||
+    (!draft.trim() && !composerImages.length && !composerDocuments.length) ||
     (queuedHere && !runningHere) ||
     stoppingHere;
+  const visibleWorkspaceSessions = sessions
+    .filter(
+      (session) =>
+        Boolean(session.archived) === showArchived &&
+        (!sessionSearch.trim() ||
+          session.title
+            .toLocaleLowerCase()
+            .includes(sessionSearch.toLocaleLowerCase())),
+    )
+    .sort(
+      (a, b) =>
+        Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) ||
+        b.updatedAt - a.updatedAt,
+    );
+  const workspaceExpanded = workspace
+    ? (expandedWorkspaces[workspace.path] ?? true)
+    : false;
+  const sidebarProjects: AgentProject[] = projects.length
+    ? [...projects]
+    : recent.map((path) => ({
+        path,
+        name: nameOf(path),
+        pinned: false,
+        lastOpenedAt: 0,
+      }));
+  if (
+    workspace &&
+    !sidebarProjects.some((item) => item.path === workspace.path)
+  )
+    sidebarProjects.push({
+      ...workspace,
+      pinned: false,
+      lastOpenedAt: 0,
+    });
+  sidebarProjects.sort((a, b) => Number(b.pinned) - Number(a.pinned));
 
   return (
     <div
@@ -1389,7 +2378,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
             style={DRAG_REGION_STYLE as React.CSSProperties}
           >
             <span className="wb-brand-mark" aria-hidden="true">
-              <Blocks />
+              <Sparkles />
             </span>
             <div className="wb-brand-label">
               LoliCode <span>工作台</span>
@@ -1397,7 +2386,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
           </div>
           <nav className="wb-nav" aria-label="工作台操作">
             <button
-              className="wb-nav-button"
+              className="wb-nav-button wb-nav-create"
               disabled={!workspace || Boolean(busy) || !modelId}
               onClick={() => void createSession()}
             >
@@ -1429,15 +2418,41 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
               工作流与自动化
             </button>
           </nav>
-          <label className="wb-search">
-            <Search />
+          <div className="wb-search" role="search">
+            <Search aria-hidden="true" />
             <input
+              ref={sessionSearchRef}
               aria-label="搜索会话"
               placeholder="搜索会话"
               value={sessionSearch}
               onChange={(event) => setSessionSearch(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key !== "Escape") return;
+                if (event.nativeEvent.isComposing || event.keyCode === 229) {
+                  event.stopPropagation();
+                  return;
+                }
+                if (sessionSearch) {
+                  event.stopPropagation();
+                  event.preventDefault();
+                  setSessionSearch("");
+                }
+              }}
             />
-          </label>
+            {sessionSearch && (
+              <button
+                type="button"
+                className="wb-search-clear"
+                aria-label="清空会话搜索"
+                onClick={() => {
+                  setSessionSearch("");
+                  sessionSearchRef.current?.focus();
+                }}
+              >
+                <X aria-hidden="true" />
+              </button>
+            )}
+          </div>
           <div className="wb-projects">
             <div className="wb-section-label">
               <span>{showArchived ? "归档任务" : "工作区与任务"}</span>
@@ -1451,164 +2466,62 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
                 <Archive />
               </button>
             </div>
-            {workspace && (
-              <>
-                <div className="wb-project-row" title={workspace.path}>
-                  <ChevronDown />
-                  <Folder />
-                  <span>{workspace.name}</span>
-                  {projects.find((item) => item.path === workspace.path)
-                    ?.pinned && <Pin size={11} />}
-                  <AgentProjectMenu
-                    name={workspace.name}
-                    pinned={Boolean(
-                      projects.find((item) => item.path === workspace.path)
-                        ?.pinned,
-                    )}
-                    disabled={Boolean(busy)}
-                    onTogglePin={() =>
-                      void updateProject(
-                        projects.find(
-                          (item) => item.path === workspace.path,
-                        ) || {
-                          ...workspace,
-                          pinned: false,
-                          lastOpenedAt: 0,
-                        },
-                      )
-                    }
-                    onRemove={() =>
-                      void updateProject(
-                        projects.find(
-                          (item) => item.path === workspace.path,
-                        ) || {
-                          ...workspace,
-                          pinned: false,
-                          lastOpenedAt: 0,
-                        },
-                        true,
-                      )
-                    }
-                  />
-                </div>
-                {sessions
-                  .filter(
-                    (session) =>
-                      Boolean(session.archived) === showArchived &&
-                      (!sessionSearch.trim() ||
-                        session.title
-                          .toLocaleLowerCase()
-                          .includes(sessionSearch.toLocaleLowerCase())),
-                  )
-                  .sort(
-                    (a, b) =>
-                      Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) ||
-                      b.updatedAt - a.updatedAt,
-                  )
-                  .map((session) => (
-                    <div className="wb-session-container" key={session.id}>
-                      <button
-                        className="wb-session-row"
-                        disabled={busy === "project" || busy === "create"}
-                        aria-pressed={session.id === sessionId}
-                        onClick={() => {
-                          setError(null);
-                          setSessionId(session.id);
-                        }}
-                      >
-                        <span>{session.title || "新会话"}</span>
-                        {session.pinned && (
-                          <Pin size={11} aria-label="已置顶" />
-                        )}
-                        {(activeStatus(statuses[session.id]) ||
-                          pending[session.id]) && (
-                          <i className="wb-session-dot" aria-label="进行中" />
-                        )}
-                      </button>
-                      <AgentSessionMenu
-                        session={session}
-                        disabled={Boolean(busy) || isLegacySession(session.id)}
-                        active={
-                          activeStatus(statuses[session.id]) ||
-                          Boolean(pending[session.id]) ||
-                          Boolean(stopping[session.id])
-                        }
-                        onRename={(title) =>
-                          mutateSession(
-                            session.id,
-                            () => agentApi.renameSession(session.id, title),
-                            false,
-                            ["title"],
-                          )
-                        }
-                        onPin={() =>
-                          mutateSession(
-                            session.id,
-                            () =>
-                              agentApi.setSessionMetadata(session.id, {
-                                pinned: !session.pinned,
-                              }),
-                            false,
-                            ["pinned"],
-                          )
-                        }
-                        onArchive={() =>
-                          mutateSession(
-                            session.id,
-                            () =>
-                              agentApi.setSessionMetadata(session.id, {
-                                archived: !session.archived,
-                              }),
-                            false,
-                            ["archived"],
-                          )
-                        }
-                        onDelete={() =>
-                          mutateSession(
-                            session.id,
-                            () => agentApi.deleteSession(session.id),
-                            true,
-                          )
-                        }
-                      />
-                    </div>
-                  ))}
-                {!sessions.length && (
-                  <p className="wb-sidebar-note">当前项目还没有任务。</p>
-                )}
-                {sessionSearch &&
-                  !sessions.some((session) =>
+            {sidebarProjects.map((project) => {
+              const isCurrentWorkspace = project.path === workspace?.path;
+              const expanded = isCurrentWorkspace
+                ? workspaceExpanded
+                : Boolean(expandedWorkspaces[project.path]);
+              const taskListId = `workspace-tasks-${encodeURIComponent(
+                project.path,
+              )}`;
+              const matchingTasks = (
+                isCurrentWorkspace
+                  ? visibleWorkspaceSessions
+                  : workspaceSessions[project.path] || []
+              )
+                .filter(
+                  (session) =>
+                    isCurrentWorkspace ||
+                    !sessionSearch.trim() ||
                     session.title
                       .toLocaleLowerCase()
                       .includes(sessionSearch.toLocaleLowerCase()),
-                  ) && <p className="wb-sidebar-note">没有匹配的会话。</p>}
-              </>
-            )}
-            {(projects.length
-              ? projects.map((item) => item.path)
-              : recent
-            ).filter((path) => path !== workspace?.path).length > 0 && (
-              <>
-                <div className="wb-section-label">最近的工作区</div>
-                {(projects.length
-                  ? projects
-                  : recent.map((path) => ({
-                      path,
-                      name: nameOf(path),
-                      pinned: false,
-                      lastOpenedAt: 0,
-                    }))
                 )
-                  .filter((item) => item.path !== workspace?.path)
-                  .sort(
-                    (a, b) =>
-                      Number(b.pinned) - Number(a.pinned) ||
-                      b.lastOpenedAt - a.lastOpenedAt,
-                  )
-                  .map((project) => (
-                    <div className="wb-project-list-row" key={project.path}>
+                .sort(
+                  (a, b) =>
+                    Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) ||
+                    b.updatedAt - a.updatedAt,
+                );
+              return (
+                <div className="wb-workspace-group" key={project.path}>
+                  <div
+                    className={
+                      isCurrentWorkspace
+                        ? "wb-project-row"
+                        : "wb-project-list-row"
+                    }
+                    title={project.path}
+                  >
+                    <button
+                      type="button"
+                      className={`wb-workspace-toggle${isCurrentWorkspace ? " wb-current-workspace-toggle" : ""}`}
+                      aria-label={`${expanded ? "收起" : "展开"} ${project.name} 的任务`}
+                      aria-expanded={expanded}
+                      aria-controls={taskListId}
+                      disabled={initializing || Boolean(busy)}
+                      onClick={() => toggleWorkspace(project.path, expanded)}
+                    >
+                      {expanded ? <ChevronDown /> : <ChevronRight />}
+                    </button>
+                    {isCurrentWorkspace ? (
+                      <>
+                        <Folder />
+                        <span>{project.name}</span>
+                        {project.pinned && <Pin size={11} />}
+                      </>
+                    ) : (
                       <button
-                        className="wb-nav-button wb-recent-project"
+                        className="wb-nav-button wb-workspace-project"
                         title={project.path}
                         disabled={
                           initializing ||
@@ -1621,18 +2534,171 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
                         <span className="truncate">{project.name}</span>
                         {project.pinned && <Pin size={11} />}
                       </button>
-                      <AgentProjectMenu
-                        name={project.name}
-                        pinned={Boolean(project.pinned)}
-                        disabled={Boolean(busy)}
-                        recent
-                        onTogglePin={() => void updateProject(project)}
-                        onRemove={() => void updateProject(project, true)}
-                      />
+                    )}
+                    <AgentProjectMenu
+                      name={project.name}
+                      pinned={Boolean(project.pinned)}
+                      disabled={Boolean(busy)}
+                      inProjectList={!isCurrentWorkspace}
+                      onCreateTask={
+                        isCurrentWorkspace
+                          ? () => void createSession()
+                          : undefined
+                      }
+                      onTogglePin={() => void updateProject(project)}
+                      onRemove={() => void updateProject(project, true)}
+                    />
+                  </div>
+                  {expanded && (
+                    <div
+                      className={`wb-workspace-sessions${
+                        isCurrentWorkspace
+                          ? " wb-current-workspace-sessions"
+                          : ""
+                      }`}
+                      id={taskListId}
+                      role="group"
+                      aria-label={`${project.name} 的任务`}
+                    >
+                      {isCurrentWorkspace ? (
+                        matchingTasks.length ? (
+                          matchingTasks.map((session) => (
+                            <div
+                              className="wb-session-container"
+                              key={session.id}
+                            >
+                              <button
+                                className="wb-session-row"
+                                disabled={
+                                  busy === "project" || busy === "create"
+                                }
+                                aria-pressed={session.id === sessionId}
+                                onClick={() => {
+                                  setError(null);
+                                  setSessionId(session.id);
+                                }}
+                              >
+                                <span>{session.title || "新会话"}</span>
+                                {session.pinned && (
+                                  <Pin size={11} aria-label="已置顶" />
+                                )}
+                                {(activeStatus(statuses[session.id]) ||
+                                  pending[session.id]) && (
+                                  <i
+                                    className="wb-session-dot"
+                                    aria-label="进行中"
+                                  />
+                                )}
+                              </button>
+                              <AgentSessionMenu
+                                session={session}
+                                disabled={
+                                  Boolean(busy) || isLegacySession(session.id)
+                                }
+                                active={
+                                  activeStatus(statuses[session.id]) ||
+                                  Boolean(pending[session.id]) ||
+                                  Boolean(stopping[session.id])
+                                }
+                                onRename={(title) =>
+                                  mutateSession(
+                                    session.id,
+                                    () =>
+                                      agentApi.renameSession(session.id, title),
+                                    false,
+                                    ["title"],
+                                  )
+                                }
+                                onPin={() =>
+                                  mutateSession(
+                                    session.id,
+                                    () =>
+                                      agentApi.setSessionMetadata(session.id, {
+                                        pinned: !session.pinned,
+                                      }),
+                                    false,
+                                    ["pinned"],
+                                  )
+                                }
+                                onArchive={() =>
+                                  mutateSession(
+                                    session.id,
+                                    () =>
+                                      agentApi.setSessionMetadata(session.id, {
+                                        archived: !session.archived,
+                                      }),
+                                    false,
+                                    ["archived"],
+                                  )
+                                }
+                                onDelete={() =>
+                                  mutateSession(
+                                    session.id,
+                                    () => agentApi.deleteSession(session.id),
+                                    true,
+                                  )
+                                }
+                              />
+                            </div>
+                          ))
+                        ) : (
+                          <p className="wb-sidebar-note">
+                            {sessionSearch.trim()
+                              ? "没有匹配的会话。"
+                              : showArchived
+                                ? "当前项目没有归档任务。"
+                                : "当前项目还没有任务。"}
+                          </p>
+                        )
+                      ) : loadingWorkspaceSessions[project.path] ? (
+                        <p className="wb-sidebar-note" role="status">
+                          正在加载任务…
+                        </p>
+                      ) : workspaceSessionErrors[project.path] ? (
+                        <button
+                          type="button"
+                          className="wb-workspace-note"
+                          onClick={() =>
+                            void loadWorkspaceSessions(project.path)
+                          }
+                        >
+                          加载失败，点击重试
+                        </button>
+                      ) : matchingTasks.length ? (
+                        matchingTasks.map((session) => (
+                          <button
+                            type="button"
+                            className="wb-session-row wb-workspace-task-row"
+                            key={session.id}
+                            title={session.title || "新会话"}
+                            disabled={Boolean(busy)}
+                            onClick={() =>
+                              void openProject(project.path, session.id)
+                            }
+                          >
+                            <span>{session.title || "新会话"}</span>
+                            {activeStatus(
+                              statuses[session.id] || session.activity?.status,
+                            ) && (
+                              <i
+                                className="wb-session-dot"
+                                aria-label="进行中"
+                              />
+                            )}
+                          </button>
+                        ))
+                      ) : (
+                        <p className="wb-sidebar-note">
+                          {sessionSearch.trim()
+                            ? "没有匹配的任务。"
+                            : "此工作区还没有任务。"}
+                        </p>
+                      )}
                     </div>
-                  ))}
-              </>
-            )}
+                  )}
+                </div>
+              );
+            })}
           </div>
           <div className="wb-sidebar-footer">
             <AgentCompanion />
@@ -1664,11 +2730,33 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
             </h1>
           </div>
           {workspace && (
-            <span className="wb-titlebar-project" title={workspace.path}>
+            <button
+              type="button"
+              className="wb-titlebar-project"
+              title={`打开项目文件夹：${workspace.path}`}
+              aria-label={`打开项目文件夹：${workspace.path}`}
+              onClick={(event) => {
+                event.stopPropagation();
+                void agentApi
+                  .openProjectDirectory(workspace.path)
+                  .catch((cause) =>
+                    toast.error(
+                      cause instanceof Error
+                        ? cause.message
+                        : "无法打开项目文件夹",
+                    ),
+                  );
+              }}
+              style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+            >
               <Folder />
               {workspace.name}
-            </span>
+            </button>
           )}
+          <AgentHelpMenu
+            onOpenAbout={onOpenAbout}
+            onCheckUpdate={onCheckUpdate}
+          />
           <div
             className="wb-native-controls"
             style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
@@ -1705,10 +2793,11 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
           <div className="wb-empty">
             <div className="wb-empty-content">
               <WelcomeMark />
+              <span className="wb-welcome-eyebrow">YOUR CREATIVE SPACE</span>
               <h2>从一个项目开始</h2>
-              <p>选择项目，与 LoliCode 一起分析和实现代码。</p>
+              <p>把灵感变成作品。与 LoliCode 一起，让每一步都更轻松。</p>
               <button
-                className="wb-primary"
+                className="wb-primary wb-welcome-action"
                 aria-label="打开项目文件夹"
                 disabled={
                   initializing || Boolean(busy) || engine?.available === false
@@ -1717,7 +2806,11 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
               >
                 <FolderOpen />
                 打开项目
+                <ArrowUpRight aria-hidden="true" />
               </button>
+              <span className="wb-welcome-note">
+                选择本地文件夹，开始你的创作
+              </span>
               {error && (
                 <button
                   className="wb-nav-button justify-center"
@@ -1732,66 +2825,70 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
           <div className="wb-empty">
             <div className="wb-empty-content">
               <WelcomeMark compact />
+              <span className="wb-welcome-eyebrow">READY WHEN YOU ARE</span>
               <h2>开始新任务</h2>
               <p>
                 {catalog.models.length
                   ? "选择模型，然后描述你想完成的工作。"
                   : "先在渠道与模型中添加可用于编程的模型。"}
               </p>
-              <AgentModelPicker
-                className="mb-4"
-                models={catalog.models}
-                disabled={Boolean(busy)}
-                value={modelId}
-                onOpenChannels={onOpenChannels}
-                onRefresh={() => void refreshCatalog()}
-                refreshDisabled={Boolean(busy) || working}
-                excludedSources={catalog.excludedSources}
-                onSelect={(id) => {
-                  setModelId(id);
-                  setReasoningEffort((old) =>
-                    catalog.models
-                      .find((model) => model.id === id)
-                      ?.reasoningEfforts?.includes(old)
-                      ? old
-                      : "",
-                  );
-                }}
-              />
-              <AgentReasoningPicker
-                model={catalog.models.find((model) => model.id === modelId)}
-                value={reasoningEffort}
-                disabled={Boolean(busy) || !modelId}
-                onSelect={setReasoningEffort}
-              />
-              <label className="sr-only" htmlFor="agent-new-permission">
-                执行权限
-              </label>
-              <select
-                id="agent-new-permission"
-                className="wb-empty-select"
-                value={permissionMode}
-                disabled={Boolean(busy)}
-                onChange={(event) => {
-                  if (event.target.value === "full_access") {
-                    fullAccessTarget.current = null;
-                    setConfirmFullAccess(true);
-                  } else
-                    setPermissionMode(
-                      event.target.value as AgentPermissionMode,
+              <div className="wb-startup-controls">
+                <AgentModelPicker
+                  className="wb-startup-model"
+                  models={catalog.models}
+                  disabled={Boolean(busy)}
+                  value={modelId}
+                  onOpenChannels={onOpenChannels}
+                  onRefresh={() => void refreshCatalog()}
+                  refreshDisabled={Boolean(busy) || working}
+                  excludedSources={catalog.excludedSources}
+                  onSelect={(id) => {
+                    setModelId(id);
+                    setReasoningEffort((old) =>
+                      catalog.models
+                        .find((model) => model.id === id)
+                        ?.reasoningEfforts?.includes(old)
+                        ? old
+                        : "",
                     );
-                }}
-              >
-                <option value="ask">逐次确认</option>
-                <option value="auto">Auto Mode</option>
-                <option value="full_access">完整权限</option>
-              </select>
+                  }}
+                />
+                <AgentReasoningPicker
+                  model={catalog.models.find((model) => model.id === modelId)}
+                  value={reasoningEffort}
+                  disabled={Boolean(busy) || !modelId}
+                  onSelect={setReasoningEffort}
+                />
+                <label className="sr-only" htmlFor="agent-new-permission">
+                  执行权限
+                </label>
+                <select
+                  id="agent-new-permission"
+                  className="wb-empty-select"
+                  value={permissionMode}
+                  disabled={Boolean(busy)}
+                  onChange={(event) => {
+                    if (event.target.value === "full_access") {
+                      fullAccessTarget.current = null;
+                      setConfirmFullAccess(true);
+                    } else
+                      setPermissionMode(
+                        event.target.value as AgentPermissionMode,
+                      );
+                  }}
+                >
+                  <option value="ask">逐次确认</option>
+                  <option value="auto">Auto Mode</option>
+                  <option value="full_access">完整权限</option>
+                </select>
+              </div>
               <button
-                className="wb-primary"
+                className="wb-primary wb-welcome-action"
                 disabled={Boolean(busy) || !modelId}
                 onClick={() => void createSession()}
               >
                 开始会话
+                <ArrowUpRight aria-hidden="true" />
               </button>
             </div>
           </div>
@@ -1856,9 +2953,11 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
                 ref={scrollRef}
                 onScroll={() => {
                   const el = scrollRef.current;
-                  if (el)
+                  if (el) {
                     atBottom.current =
                       el.scrollTop + el.clientHeight >= el.scrollHeight - 40;
+                    setShowScrollToBottom(!atBottom.current);
+                  }
                 }}
                 className="wb-chat"
               >
@@ -1868,13 +2967,63 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
                     sessionId={snapshot?.session.id}
                     projectPath={workspace.path}
                     status={snapshot?.status}
+                    imageAttachmentsByMessage={sentImageAttachments}
+                    documentAttachmentsByMessage={sentDocumentAttachments}
                   />
                   {snapshot && !snapshot.messages.length && (
                     <div className="wb-empty">
                       <div className="wb-empty-content">
                         <WelcomeMark compact />
+                        <span className="wb-welcome-eyebrow">
+                          LET’S MAKE SOMETHING
+                        </span>
                         <h2>今天想完成什么？</h2>
-                        <p>说说你想完成的任务。</p>
+                        <p>一个想法、一处优化，都可以从这里开始。</p>
+                        {!readOnlySession && (
+                          <div
+                            className="wb-task-starters"
+                            aria-label="任务灵感"
+                          >
+                            {[
+                              {
+                                icon: Compass,
+                                title: "读懂项目",
+                                detail: "梳理结构与核心流程",
+                                prompt:
+                                  "帮我梳理这个项目的结构，介绍核心模块和主要运行流程。",
+                              },
+                              {
+                                icon: Code2,
+                                title: "实现想法",
+                                detail: "把灵感变成可用功能",
+                                prompt: "我想为这个项目实现一个新功能：",
+                              },
+                              {
+                                icon: Bug,
+                                title: "排查问题",
+                                detail: "找到原因，稳妥修复",
+                                prompt: "帮我排查并修复这个项目中的问题：",
+                              },
+                            ].map(({ icon: Icon, title, detail, prompt }) => (
+                              <button
+                                type="button"
+                                className="wb-task-starter"
+                                key={title}
+                                onClick={() => insertStarter(prompt)}
+                              >
+                                <span className="wb-task-starter-icon">
+                                  <Icon aria-hidden="true" />
+                                </span>
+                                <strong>{title}</strong>
+                                <span>{detail}</span>
+                                <ArrowUpRight
+                                  className="wb-task-starter-arrow"
+                                  aria-hidden="true"
+                                />
+                              </button>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
@@ -1937,6 +3086,8 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
                       currentTurnId={
                         sessionId ? pending[sessionId]?.requestId : undefined
                       }
+                      onRetry={readOnlySession ? undefined : retryLastMessage}
+                      retrying={retryLoading || sendingHere}
                     />
                   )}
                 </div>
@@ -1944,18 +3095,108 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
               <AgentChanges key={sessionId} diffs={snapshot?.diffs || []} />
             </AgentFileActionsContext.Provider>
             <div className="wb-composer-area">
+              {showScrollToBottom && (
+                <button
+                  type="button"
+                  className="wb-scroll-latest"
+                  onClick={() => {
+                    const scroll = scrollRef.current;
+                    if (!scroll) return;
+                    atBottom.current = true;
+                    setShowScrollToBottom(false);
+                    scroll.scrollTo({
+                      top: scroll.scrollHeight,
+                      behavior: window.matchMedia(
+                        "(prefers-reduced-motion: reduce)",
+                      ).matches
+                        ? "instant"
+                        : "smooth",
+                    });
+                  }}
+                >
+                  <ArrowDown aria-hidden="true" />
+                  回到最新
+                </button>
+              )}
               <form
+                ref={composerFormRef}
                 className="wb-composer"
+                onDragOver={(event) => {
+                  if (
+                    Array.from(event.dataTransfer.items).some(
+                      (item) => item.kind === "file",
+                    )
+                  )
+                    event.preventDefault();
+                }}
+                onDrop={(event) => {
+                  const files = Array.from(event.dataTransfer.files);
+                  if (!files.length) return;
+                  event.preventDefault();
+                  if (nativeDropSupport.current)
+                    void addComposerImages(
+                      files.filter((file) =>
+                        file.type.toLowerCase().startsWith("image/"),
+                      ),
+                    );
+                  else void addComposerFiles(files);
+                }}
                 onSubmit={(event) => {
                   event.preventDefault();
                   void send();
                 }}
               >
+                {(composerImages.length > 0 ||
+                  composerDocuments.length > 0) && (
+                  <div
+                    className="wb-composer-attachments"
+                    aria-label="待发送附件"
+                  >
+                    {composerImages.map((image) => (
+                      <div className="wb-composer-image" key={image.id}>
+                        <AgentAttachmentImage
+                          image={image}
+                          buttonClassName="wb-composer-image-preview"
+                          imageClassName="wb-composer-image-preview__image"
+                        />
+                        <button
+                          type="button"
+                          aria-label={`移除图片：${image.fileName}`}
+                          title="移除图片"
+                          onClick={() => removeComposerImage(image.id)}
+                        >
+                          <X aria-hidden="true" />
+                        </button>
+                      </div>
+                    ))}
+                    {composerDocuments.map((document) => (
+                      <div className="wb-composer-document" key={document.id}>
+                        <FileText aria-hidden="true" />
+                        <span title={document.fileName}>
+                          {document.fileName}
+                        </span>
+                        <small>
+                          {document.bytes
+                            ? `${(document.bytes / (1024 * 1024)).toFixed(1)} MB`
+                            : "本地文件"}
+                        </small>
+                        <button
+                          type="button"
+                          aria-label={`移除文档：${document.fileName}`}
+                          title="移除文档"
+                          onClick={() => removeComposerDocument(document.id)}
+                        >
+                          <X aria-hidden="true" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <label htmlFor="agent-message" className="sr-only">
                   发送给 Agent 的消息
                 </label>
                 <textarea
-                  ref={textareaRef}
+                  ref={composerRef}
                   id="agent-message"
                   rows={1}
                   placeholder="描述任务，或继续追问…"
@@ -1963,6 +3204,19 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
                   value={draft}
                   disabled={readOnlySession}
                   onChange={(event) => writeDraft(key, event.target.value)}
+                  onPaste={(event) => {
+                    const files = Array.from(event.clipboardData.items)
+                      .filter(
+                        (item) =>
+                          item.kind === "file" &&
+                          item.type.startsWith("image/"),
+                      )
+                      .map((item) => item.getAsFile())
+                      .filter((file): file is File => file !== null);
+                    if (!files.length) return;
+                    event.preventDefault();
+                    void addComposerImages(files);
+                  }}
                   onKeyDown={(event) => {
                     if (
                       event.key === "Enter" &&
@@ -1974,7 +3228,40 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
                     }
                   }}
                 />
+                <input
+                  ref={imageInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif,image/bmp,image/avif"
+                  multiple
+                  hidden
+                  onChange={(event) => {
+                    void addComposerFiles(
+                      Array.from(event.currentTarget.files || []),
+                    );
+                    event.currentTarget.value = "";
+                  }}
+                />
                 <div className="wb-composer-toolbar">
+                  <button
+                    type="button"
+                    className="wb-attach-image-button"
+                    aria-label="添加图片"
+                    title="添加图片；也可以粘贴截图或拖入图片"
+                    disabled={readOnlySession || uncertainHere || !sessionId}
+                    onClick={() => imageInputRef.current?.click()}
+                  >
+                    <ImagePlus aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    className="wb-attach-image-button"
+                    aria-label="添加文档"
+                    title="添加 Word、PowerPoint、Excel、PDF 或文本文件；也可以直接拖入"
+                    disabled={readOnlySession || uncertainHere || !sessionId}
+                    onClick={() => void chooseComposerDocuments()}
+                  >
+                    <FileText aria-hidden="true" />
+                  </button>
                   <div className="wb-composer-model">
                     <AgentModelPicker
                       models={catalog.models}
@@ -1984,19 +3271,21 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
                         !snapshot ||
                         uncertainHere
                       }
-                      value={boundModel?.id || ""}
+                      value={displayedModelId}
                       onOpenChannels={onOpenChannels}
                       onRefresh={() => void refreshCatalog()}
                       refreshDisabled={Boolean(busy) || working}
                       excludedSources={catalog.excludedSources}
                       notice={
-                        catalogUpdate > catalog.revision
-                          ? working
-                            ? "渠道已更新，任务结束后将自动刷新模型目录。"
-                            : "渠道已更新，可刷新模型目录。"
-                          : working
-                            ? "任务结束后可刷新模型目录。"
-                            : undefined
+                        selectedDeferredConfig
+                          ? "当前请求会继续使用原模型，新设置将在本轮结束后应用。"
+                          : catalogUpdate > catalog.revision
+                            ? working
+                              ? "渠道已更新，任务结束后将自动刷新模型目录。"
+                              : "渠道已更新，可刷新模型目录。"
+                            : working
+                              ? "任务结束后可刷新模型目录。"
+                              : undefined
                       }
                       unavailableLabel={
                         selectedSession?.model
@@ -2011,14 +3300,14 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
                     />
                   </div>
                   <AgentReasoningPicker
-                    model={boundModel}
-                    value={selectedSession?.reasoningEffort || ""}
+                    model={displayedModel}
+                    value={displayedReasoningEffort}
                     disabled={
                       readOnlySession ||
                       Boolean(busy) ||
                       !snapshot ||
                       uncertainHere ||
-                      !boundModel
+                      !displayedModel
                     }
                     onSelect={(value) =>
                       void updateSessionConfig({ reasoningEffort: value })
@@ -2030,7 +3319,11 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
                   <select
                     id="agent-permission-mode"
                     title="逐次确认：改动和命令先询问；Auto Mode：常规编辑和安全命令自动允许；完整权限：允许项目内工具，项目外仍需确认。配置从下一次请求或工具检查生效。"
-                    value={selectedSession?.permissionMode || "ask"}
+                    value={
+                      selectedDeferredConfig?.permissionMode ||
+                      selectedSession?.permissionMode ||
+                      "ask"
+                    }
                     disabled={
                       readOnlySession ||
                       Boolean(busy) ||
@@ -2079,7 +3372,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
                     )}
                   <button
                     type="submit"
-                    className="wb-primary"
+                    className={`wb-primary wb-send-button${sendingHere || replacingHere ? " wb-send-pending" : ""}`}
                     disabled={sendDisabled}
                     title={
                       runningHere
@@ -2087,7 +3380,14 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
                         : "Enter 发送 · Shift + Enter 换行"
                     }
                   >
-                    <Send />
+                    {sendingHere || replacingHere ? (
+                      <LoaderCircle
+                        className="wb-send-spinner"
+                        aria-hidden="true"
+                      />
+                    ) : (
+                      <ArrowUp aria-hidden="true" />
+                    )}
                     {replacingHere
                       ? "正在打断…"
                       : sendingHere
@@ -2098,6 +3398,13 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
                   </button>
                 </div>
               </form>
+              <div className="wb-composer-meta" aria-hidden="true">
+                <span>灵感，就从这一句开始</span>
+                <span>
+                  <kbd>↵</kbd> 发送 <span className="wb-hint-divider">·</span>{" "}
+                  <kbd>Shift ↵</kbd> 换行
+                </span>
+              </div>
               <AgentUsageFooter usage={snapshot?.usage} />
             </div>
           </>

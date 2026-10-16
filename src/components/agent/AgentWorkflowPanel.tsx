@@ -34,7 +34,8 @@ const receiptKey = (path: string) =>
 const readReceipt = (path: string): Receipt | null => {
   try {
     const value = JSON.parse(localStorage.getItem(receiptKey(path)) || "null");
-    return value?.sessionId?.startsWith("zc:") &&
+    return (value?.sessionId?.startsWith("zc:") ||
+      value?.sessionId?.startsWith("lc:")) &&
       typeof value.requestId === "string" &&
       typeof value.key === "string" &&
       value.args &&

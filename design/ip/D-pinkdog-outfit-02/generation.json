@@ -1,0 +1,63 @@
+{
+  "version": "D-pinkdog-outfit-02",
+  "createdOn": "2026-10-15",
+  "status": "clothing-concept-for-review",
+  "mode": "built-in image_gen",
+  "identitySource": "../head-studies-01/D-dog-pink-longhair.png",
+  "userDirection": "保留D的粉毛长发犬娘头部；参考ZipZipPipe的原图，服装更华丽，明暗塑造更明确，避免太素的日常感。",
+  "identityFeatures": [
+    "樱粉长发与侧辫",
+    "可可奶白折耳",
+    "蓝绿色眼睛",
+    "一颗小虎牙",
+    "亲近呆萌的表情",
+    "小方框发夹"
+  ],
+  "outfitFeatures": [
+    "莓黑与奶油白的结构配色",
+    "玫瑰色缎带",
+    "蓬袖与喇叭形袖口",
+    "收腰剪裁",
+    "错层裙装与浅色内裙",
+    "成套方框扣饰、细链与流苏",
+    "少量金色刺绣边饰"
+  ],
+  "reviewNotes": [
+    "服装方向稿，尚未锁定最终设定。",
+    "正式三视图与建模前仍需统一结构细节。"
+  ],
+  "references": [
+    {
+      "title": "ZipZipPipe《所有的AI们，和OpenCode》",
+      "url": "https://www.bilibili.com/opus/1233069202138464289",
+      "role": "角色服装设计语言与完成度参考；本轮使用Grok、Claude与DeepSeek角色图作为服装和渲染参考"
+    },
+    {
+      "title": "ZipZipPipe《加班到现在，发点近期做的三视图》",
+      "url": "https://www.bilibili.com/opus/1238267551429951496",
+      "role": "此前研究的服装与三视图来源记录"
+    }
+  ],
+  "inputRoles": [
+    {
+      "file": "../head-studies-01/D-dog-pink-longhair.png",
+      "role": "角色头部身份目标"
+    },
+    {
+      "file": "grok.jpg",
+      "role": "外部服装及渲染参考，未复制入仓库"
+    },
+    {
+      "file": "claude.jpg",
+      "role": "外部服装及渲染参考，未复制入仓库"
+    },
+    {
+      "file": "deepseek.png",
+      "role": "外部服装及渲染参考，未复制入仓库"
+    }
+  ],
+  "asset": {
+    "file": "standing.png",
+    "prompt": "Use case: identity-preserve.\nAsset type: ONE polished full-body anime mascot costume illustration, D outfit exploration 02.\nThe previous casual gray-green pinafore design is REJECTED. Start the CLOTHING afresh from the actual illustrated costume references, not from that casual design.\nINPUT ROLES:\nImage 1: D pink long-haired dog girl's HEAD IDENTITY — keep her face geometry, rounded teal-blue eyes, warm guileless smile with ONE tiny fang, broad cocoa-and-cream folded puppy ears, pink flowing long hair, little side braid, ahoge and small open-square hairclip. Only its head DESIGN is binding. Its pale sketch rendering and plain T-shirt are NOT the desired finished style.\nImages 2, 3 and 4: PRIMARY RENDERING and costume-design-language references by the user's chosen illustrator: confident clean dark outlines, clear dimensional cel-shaded forms, saturated local colors, sharply designed fabric folds, controlled glossy highlights, ornate coherent character costumes with a strong silhouette. Treat these as the rendering quality benchmark. Do not copy any character, logo, symbol or exact dress.\nVERY IMPORTANT RENDERING CHANGE: make a properly finished substantial anime character illustration like the three costume references. Rich clear shadows under sleeves and skirt folds, strong value hierarchy, colored hair shadows, dimensional satin and structured fabric. NO faded beige wash, NO watercolor concept sketch, NO low-contrast cottagecore look, NO flat cut-paper clothes. Face remains D, but rendered with the crisp dimensional technique of the full-body reference illustrations.\nCHARACTER: retain D's adorable friendly puppy-girl personality and head design exactly; slight curious head tilt and small happy open smile showing one tiny upper canine. Pink hair loose to the waist with one narrow side braid, not twin tails. Dog ears keep their broad soft forward folds and cream tips, never cat ears or giant long drooping rabbit ears. No crown, horns, headwear or extra hair bows.\nORIGINAL CLOTHING DIRECTION: ornate sweet-gothic fantasy dress, visually distinctive and richly constructed, balanced rather than cluttered.\n- Main clothing dark berry-black with plum undertones, warm ivory structural contrasts, antique champagne-gold fine trim, dusty-rose satin accents, a LITTLE deep teal enamel to echo her eyes. Pink HAIR stays the warm focal point. Do not make the dress gray-green, brown overalls or navy maid wear.\n- Small high ivory stand collar, a three-dimensional dusty-rose ribbon at the throat held by a delicate gold emblem of two OFFSET OPEN ROUNDED SQUARES (an original little window-like mark, not a gem-shaped prism or borrowed AI logo). Two short ribbon tails. This mark reappears only in waist ornaments and shoe buckles.\n- Properly tailored closed-front berry-black bodice with curved ivory inset panels and thin gold piping; well-defined waist and sculpted seam lines, modest and fully covered. No cleavage or bare midriff. Decorative small round buttons down a short center placket, rather than many square hardware straps.\n- Proud rounded puff shoulders, tapered dark upper sleeves and dramatically shaped but manageable flared cuffs. Ivory folded inner cuff ruffles and dusty-rose satin lining visible at the edges. Sleeves feel volumetric, with decisive rich cel-shaded folds. Cuffs and collar share the same trim language. NO cape or shoulder mantle.\n- The SKIRT is the main silhouette feature: a beautifully flared layered bell shape, closed front, around knee length in the center and with two distinct asymmetric berry-black outer side panels falling to mid-calf. Broad petal-like folded satin panels reveal a cream pleated inner skirt and a single rose underskirt tier. The visible layered edges have fine lace/scallops and controlled gold linear embroidery, not a plain simple skirt. Side panels have rich curved drape and a few large purposeful folds with bright edge highlights; not dozens of random frills.\n- One elegant waist-side ribbon rosette with the matching small open-frame emblem, a short fine gold chain and TWO controlled slender tassels, forming one focal cluster. No giant bags or casual cross-body straps. No giant prop, no weapon, no sketchbook.\n- Opaque ivory tights, refined berry-black round-toe ankle boots with low heels, dusty-rose ribbon laces, ivory folded cuffs and tiny matching frame buckles. Both shoes fully shown.\n- ONE modest plush puppy tail, cocoa with cream tip, curved upward behind a side skirt panel, distinct from her pink hair, never a giant fox plume.\nDesign the clothing as a coherent original costume that a character designer actually authored: repeated shape language, purposeful placements, rich negative spaces, outfit architecture readable in silhouette, concentrated accents at collar/waist/cuffs. Do not paste decorative elements everywhere. Do NOT copy the blue whale maid's white apron, the orange scholar's sun emblems, Grok's X weapon/crown, or any reference's logos.\nPOSE AND FRAMING: a single FULL-BODY girl in a gentle animated standing pose, one hand lightly held near the chest with a curious small gesture, the other open in friendly greeting; modest, relaxed and endearing. Cute normal anime proportions rather than chibi, no exaggerated bust or pin-up posture. Entire ahoge, ears, hair, hands, tail, ornate skirt hems and shoes inside the canvas with generous blank margin.\nBACKGROUND: pure clean white. One full character ONLY; NO concept-sheet insets, palette swatches, text, title, labels, border, signatures, logos, watermarks or scenery. Make this feel like a polished substantial character standing illustration, with the same clear powerful modeling and detail finish as the provided full-body costume references."
+  }
+}

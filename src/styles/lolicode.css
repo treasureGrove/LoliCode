@@ -72,15 +72,25 @@
   --atelier-champagne: #d8c5a9;
   --atelier-rule: rgb(143 119 101 / 22%);
   --atelier-toolbar: #f3eee8;
-  --atelier-reading: rgb(252 250 247 / 97%);
-  --atelier-header: #f8f5f0;
-  --atelier-edge-wash: rgb(252 250 247 / 40%);
-  --atelier-sheet-wash: rgb(252 250 247 / 97%);
-  --atelier-scene-opacity: calc(var(--atelier-intensity, 0.48) * 0.24);
+  --atelier-reading: color-mix(
+    in srgb,
+    #fcfaf7 var(--atelier-sheet-opacity, 97%),
+    transparent
+  );
+  --atelier-header: rgb(248 245 240 / 68%);
+  --atelier-edge-wash: rgb(252 250 247 / 24%);
+  --atelier-sheet-wash: color-mix(
+    in srgb,
+    #fcfaf7 var(--atelier-sheet-opacity, 75%),
+    transparent
+  );
+  --atelier-scene-opacity: calc(var(--atelier-intensity, 0.48) * 0.55);
   --atelier-scene-filter: saturate(0.65) brightness(1.15);
   --atelier-scene: url("../assets/atelier/ribbon-atelier.png");
   --atelier-sidebar: url("../assets/atelier/sidebar-frame.png");
   --atelier-brooch: url("../assets/atelier/brooch-accent.png");
+  --surface-glass: rgb(252 250 247 / 90%);
+  --surface-highlight: rgb(255 248 242 / 70%);
   --shadow-sm: 0 2px 5px rgb(69 32 50 / 5%);
   --shadow-md: 0 8px 26px rgb(69 32 50 / 10%);
   --shadow-lg: 0 22px 70px rgb(41 18 37 / 24%), 0 4px 12px rgb(41 18 37 / 8%);
@@ -164,12 +174,22 @@
   --atelier-champagne: #9f8263;
   --atelier-rule: rgb(196 168 136 / 21%);
   --atelier-toolbar: #2a212c;
-  --atelier-reading: rgb(33 26 35 / 97%);
+  --atelier-reading: color-mix(
+    in srgb,
+    #211a23 var(--atelier-sheet-opacity, 97%),
+    transparent
+  );
   --atelier-header: #211a23;
   --atelier-edge-wash: rgb(30 23 33 / 45%);
-  --atelier-sheet-wash: rgb(30 23 33 / 95%);
+  --atelier-sheet-wash: color-mix(
+    in srgb,
+    #1e1721 var(--atelier-sheet-opacity, 95%),
+    transparent
+  );
   --atelier-scene-opacity: calc(var(--atelier-intensity, 0.48) * 0.8);
   --atelier-scene-filter: saturate(0.75);
+  --surface-glass: rgb(33 26 35 / 92%);
+  --surface-highlight: rgb(255 237 219 / 6%);
   --shadow-sm: 0 2px 5px rgb(10 5 15 / 20%);
   --shadow-md: 0 8px 28px rgb(10 5 15 / 35%);
   --shadow-lg: 0 22px 75px rgb(5 2 10 / 55%), 0 4px 14px rgb(5 2 10 / 25%);
@@ -253,11 +273,13 @@
   gap: 9px;
 }
 .lolicode-global-rail[data-collapsed="true"] .tai-shell-nav-item {
-  width: 40px;
-  min-height: 40px;
+  width: 48px;
+  min-height: 58px;
   margin-inline: auto;
   padding: 0;
   justify-content: center;
+  flex-direction: column;
+  gap: 5px;
   border: 1px solid transparent;
   border-radius: 12px;
 }
@@ -394,9 +416,7 @@
   border-radius: 16px;
   background: var(--bg-card);
   color: var(--text-1);
-  box-shadow:
-    var(--shadow-lg),
-    inset 0 0 0 3px var(--atelier-line-soft);
+  box-shadow: var(--shadow-lg);
 }
 .tai-dialog-header {
   border-bottom: 1px solid var(--atelier-line-soft);
@@ -447,9 +467,6 @@
   border-color: var(--atelier-line);
   border-radius: 15px;
   box-shadow: var(--shadow-sm);
-}
-.lolicode-channel-center [aria-pressed="true"] {
-  border-color: var(--brand-berry);
 }
 .lolicode-channel-center .lolicode-channel-form {
   padding: 18px;

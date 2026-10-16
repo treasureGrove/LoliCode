@@ -1,0 +1,60 @@
+{
+  "version": "main-character-v2-puppy",
+  "status": "concept-for-review",
+  "createdOn": "2026-10-15",
+  "mode": "built-in image_gen",
+  "product": "LoliCode",
+  "parentVersion": "../lolicode-main-v1",
+  "userDirection": "特征更明显，加入小狗兽耳娘元素，表现笨笨的呆萌感。",
+  "direction": "在原主形象上加入圆钝垂犬耳、奶白雾紫卷尾、圆睁眼神与轻微歪头，保留前端与3D造景师的角色定位。本轮仍为主形象，不含Q版。",
+  "preservedFeatures": [
+    "雾紫长发与低束蝴蝶结",
+    "奶白、雾紫、深蓝和少量香槟金配色",
+    "棱晶发饰与领口饰品",
+    "披肩与层叠裙装",
+    "画笔和小型线框构造物"
+  ],
+  "addedFeatures": [
+    "圆钝长垂犬耳，奶白内毛和淡粉耳内",
+    "蓬松C形犬尾",
+    "更圆睁懵懂的眼神与微张嘴表情",
+    "腰包上的小爪印挂饰"
+  ],
+  "reviewNotes": [
+    "V2方向稿，待后续选定角色设计。",
+    "正式建模前仍需进一步校准三视图细节。"
+  ],
+  "references": [
+    {
+      "author": "ZipZipPipe",
+      "title": "所有的AI们，和OpenCode",
+      "url": "https://www.bilibili.com/opus/1233069202138464289",
+      "role": "DeepSeek、ChatGPT、Claude、Grok、Gemini 原始角色设计语言参考"
+    },
+    {
+      "author": "ZipZipPipe",
+      "title": "加班到现在，发点近期做的三视图",
+      "url": "https://www.bilibili.com/opus/1238267551429951496",
+      "role": "服装层次与三视图呈现参考"
+    },
+    {
+      "author": "ZipZipPipe",
+      "title": "龙系角色三视图",
+      "url": "https://www.bilibili.com/opus/1238613841710940181",
+      "role": "三视图参考；原角色分别保留各自来源归属"
+    }
+  ],
+  "referencePolicy": "参考图仅用于设计研究；未复制进仓库。来源记录不构成对参考作品许可范围或生成结果权利的判断。",
+  "assets": [
+    {
+      "file": "standing.png",
+      "description": "犬娘主形象立绘，保留原始透明通道",
+      "prompt": "Use case: identity-preserve.\nAsset type: LoliCode main mascot full-body standing illustration, puppy-girl revision V2.\nInput image 1 is the EDIT TARGET and identity/costume reference: the existing LoliCode main character. Edit this same girl, do not substitute an unrelated character.\nPrimary request: make her distinctive and unmistakably a cute floppy-eared dog girl, with a guileless slightly dopey, affectionate puppy personality.\nPreserve: same recognizable face identity and general proportions; mist-lavender long wavy low twin-tied hair with ivory bows; periwinkle eyes; ivory high-neck blouse and long puff sleeves; midnight-navy short capelet; lavender waist; layered ivory/lilac long skirt with dark split tabs and restrained champagne-gold geometric trim; prism/angle-bracket temple jewel and matching collar clasp; small waist pouch; ivory stockings and lavender/navy shoes; stylus in anatomical right hand (image left), hovering tiny translucent wireframe cube over anatomical left palm (image right). Preserve the polished delicate anime illustration quality and gentle muted palette.\nChange 1 — ears: add TWO very clearly canine, thick soft rounded flop ears attached near the upper sides of her head, with visible folded ear bases and rounded lobes hanging to about jaw length. Inspired by a small spaniel puppy, NOT pointed cat/fox ears, NOT tall rabbit ears. Mist-lilac outer fur, creamy inner fluff and subtle pale pink inner surfaces. Clearly separate the ears from long hair and hair ribbons, and let both ears read in the silhouette. Hide human ears under hair; exactly two animal ears.\nChange 2 — tail: add ONE short-to-medium, plush thick puppy tail with a rounded tip in a soft C-shaped curl, lilac outer fur and a creamy tip. Show it clearly beside her skirt on image right, emerging naturally from the lower back behind the dress, comfortably distinct from flowing hair. No giant fox plume, no thin cat tail.\nChange 3 — expression: eyes slightly rounder and more open than in the reference, relaxed lifted eyebrows, tiny open soft omega-shaped smile, a gentle curious head tilt, one slightly bent prominent ahoge. Expression says 'huh? let me try!' — endearingly slow-on-the-uptake, friendly, eager, a bit clumsy, never distressed. Avoid a smug/seductive or overly clever half-lidded gaze. Keep eye design pretty and readable.\nAdd only one tiny understated puppy-paw charm on the existing waist pouch. Keep the prism motif as the central brand motif. Do not add a collar/leash, bones, extra animals, extra characters, text, logos, scenes, decorative frame, or chibi inserts.\nComposition: one complete standing full-body figure on a genuinely transparent background, vertical portrait, entire ears, ahoge, hair, tail and both shoes inside frame with comfortable blank margin on all sides. Preserve clean silhouette, no cropped extremities. Transparent alpha, no fake checkerboard, no background shadow, no white rectangle."
+    },
+    {
+      "file": "turnaround.png",
+      "description": "犬娘主形象正、侧、背三视图",
+      "prompt": "Use case: stylized-concept.\nAsset type: professional anime character design turnaround sheet for the LoliCode main mascot, puppy-girl revision V2.\nInput image 1 is the sole IDENTITY AND COSTUME REFERENCE, the finished updated puppy-girl standing illustration. Design a new white-background turnaround sheet of EXACTLY THIS character, not a new variation.\nLayout: landscape white canvas; exactly three large full-body figures of the same girl at the same scale, left FRONT, center true SIDE PROFILE facing image left, right BACK. Orthographic garment reference, aligned crown and foot baselines, modest relaxed neutral A-pose with arms slightly apart, neutral head held upright. No perspective/camera tilt. No crops; plenty of white margin.\nIdentity: mist-lavender wavy long low twin-tied hair, ivory bows near shoulders and further down, periwinkle eyes, signature small bent ahoge, gold angle-bracket/lilac prism temple jewel on her ANATOMICAL LEFT temple. Soft rounded open eyes and a small guileless slightly dopey friendly smile, recognizable as the reference girl.\nCANINE FEATURES are critical: exactly TWO fleshy plush rounded FLOPPY DOG EARS with visible fold bases at the upper sides of the head, pale-lilac fur, creamy inner fluff and subtle pale-pink interiors. Rounded lobes hang to jaw level and stand out from the hair and bows. These are spaniel-like dog ears, never triangular cat/fox ears and never tall bunny ears. Human ears are hidden beneath hair, no four-ear anatomy.\nONE short-to-medium thick fluffy DOG TAIL with cream outer-tip fur and lilac near the base, rounded end and C-shaped curl, attached at the center lower back. Keep its design consistent in all three views: behind the body in front view with a little visible silhouette to the viewer's right; in side profile show the lower-back attachment and plush curved tail reaching behind her; in back view clearly show the tail's center lower-back origin above the back skirt and a curl toward the character's left (image right when viewed from back). Hair and skirt must not hide the tail in back view. Do not make a gigantic fox tail or thin cat tail.\nExact clothing from reference: ivory high-neck ruffled blouse with long puff sleeves; midnight-navy short capelet with fine champagne-gold trim, geometric dangling decorations and a lilac prism collar clasp; lavender fitted waist; layered long ivory and pale-lilac skirt with navy split long tabs, subtle gold geometric embroidery and tassels; ivory stockings; lavender/navy low-heel shoes. Existing small square ivory/navy waist pouch with small lavender puppy-paw charm sits on ANATOMICAL RIGHT HIP (front viewer-left, back viewer-right), strap same direction in all views. Tail opening and hair layering should make structural sense.\nRemove the handheld stylus and hovering cube so the costume reads clearly; hands naturally relaxed. Do not add any other objects or costume redesigns.\nRendering: beautifully clean detailed anime concept art matching the supplied image, soft cel/painterly hybrid shading, exact muted ivory/lilac/navy/gold palette, legible outlines, consistent face and body proportions. Main character only, no chibi, no animals, no environment, no elaborate frame, no swatches or extra portrait inserts.\nText: only small refined header at top \"LoliCode · 犬娘主形象 V2\"; beneath respective figures exact Chinese labels \"正面\", \"侧面\", \"背面\". Keep every figure and all ears, ahoge, hair, tails and shoes wholly in frame."
+    }
+  ]
+}

@@ -48,7 +48,8 @@ type DirectoryProps = SidebarProps & { collapsed: boolean };
 
 /** The client is context; the task navigation keeps the same positions for every client. */
 export function Sidebar(props: SidebarProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const chinese = i18n.language.startsWith("zh");
   const collapsed = true;
   const { todayCost, authNeedsAttention } = useSidebarStatus();
   const { hasUpdate } = useUpdate();
@@ -58,7 +59,6 @@ export function Sidebar(props: SidebarProps) {
       data-collapsed={collapsed}
       aria-label={t("nav.mainLabel")}
       className="tai-shell-sidebar lolicode-global-rail"
-      style={{ width: 56 }}
     >
       <a href="#main-content" className="tai-shell-skip">
         {t("nav.skipToContent")}
@@ -81,6 +81,7 @@ export function Sidebar(props: SidebarProps) {
             selected={false}
             icon={Download}
             label={t("nav.softwareUpdates", { defaultValue: "软件更新" })}
+            compactLabel={chinese ? "更新" : "Updates"}
             title={
               hasUpdate
                 ? t("nav.softwareUpdatesAvailable", {
@@ -139,6 +140,7 @@ function MainDirectory({
           selected={view === "agent"}
           icon={Bot}
           label={chinese ? "编程工作台" : "Coding workspace"}
+          compactLabel={chinese ? "工作台" : "Studio"}
           onClick={() => onSelectPage("agent")}
         />
         <NavItem
@@ -151,6 +153,7 @@ function MainDirectory({
           }
           icon={PanelsTopLeft}
           label={workbench}
+          compactLabel={chinese ? "模型" : "Models"}
           alert={authNeedsAttention ? t("nav.authNeedsReauth") : undefined}
           onClick={() => onSelectPage("channels")}
         />
@@ -159,6 +162,7 @@ function MainDirectory({
           selected={view === "usage"}
           icon={ChartColumn}
           label={t("nav.usage")}
+          compactLabel={chinese ? "用量" : "Usage"}
           trailing={todayCost > 0 ? fmtUsd(todayCost, 2) : undefined}
           title={
             todayCost > 0
@@ -177,6 +181,7 @@ function NavItem({
   selected,
   icon: Icon,
   label,
+  compactLabel,
   title,
   trailing,
   alert,
@@ -189,6 +194,7 @@ function NavItem({
   selected: boolean;
   icon: IconComponent;
   label: string;
+  compactLabel?: string;
   title?: string;
   trailing?: string;
   alert?: string;
@@ -238,6 +244,11 @@ function NavItem({
             />
           )}
         </span>
+        {collapsed && compactLabel && (
+          <span className="tai-shell-nav-compact-label" aria-hidden="true">
+            {compactLabel}
+          </span>
+        )}
         {!collapsed && (
           <>
             <span className="tai-shell-nav-label">{label}</span>
@@ -258,12 +269,20 @@ function NavItem({
   );
 }
 
-const SETTINGS_ITEMS: { section: SettingsSection; icon: IconComponent }[] = [
-  { section: "general", icon: SlidersHorizontal },
-  { section: "appConfig", icon: Folder },
-  { section: "network", icon: Globe },
-  { section: "data", icon: Database },
-  { section: "about", icon: Info },
+const SETTINGS_ITEMS: {
+  section: SettingsSection;
+  icon: IconComponent;
+  compactLabel: [string, string];
+}[] = [
+  {
+    section: "general",
+    icon: SlidersHorizontal,
+    compactLabel: ["通用", "General"],
+  },
+  { section: "appConfig", icon: Folder, compactLabel: ["配置", "Config"] },
+  { section: "network", icon: Globe, compactLabel: ["网络", "Network"] },
+  { section: "data", icon: Database, compactLabel: ["数据", "Data"] },
+  { section: "about", icon: Info, compactLabel: ["关于", "About"] },
 ];
 
 function SettingsDirectory({
@@ -272,7 +291,8 @@ function SettingsDirectory({
   onSelectSettingsSection,
   onExitSettings,
 }: DirectoryProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const chinese = i18n.language.startsWith("zh");
   const { hasUpdate } = useUpdate();
   const { data: version } = useQuery({
     queryKey: ["app-version"],
@@ -286,6 +306,7 @@ function SettingsDirectory({
         selected={false}
         icon={ArrowLeft}
         label={t("nav.back")}
+        compactLabel={chinese ? "返回" : "Back"}
         onClick={onExitSettings}
       />
       <div
@@ -296,13 +317,14 @@ function SettingsDirectory({
         {!collapsed && (
           <div className="tai-shell-caption">{t("nav.settings")}</div>
         )}
-        {SETTINGS_ITEMS.map(({ section, icon }) => (
+        {SETTINGS_ITEMS.map(({ section, icon, compactLabel }) => (
           <NavItem
             key={section}
             collapsed={collapsed}
             selected={settingsSection === section}
             icon={icon}
             label={t(`settings.sections.${section}`)}
+            compactLabel={compactLabel[chinese ? 0 : 1]}
             indicator="settings-selection"
             dot={section === "about" && hasUpdate}
             dotTone="success"

@@ -1,5 +1,5 @@
 import mascot from "@/assets/brand/lolicode-maid.png";
-import portrait from "@/assets/brand/lolicode.svg";
+import portrait from "@/assets/brand/lolicode-icon.png";
 import { cn } from "@/lib/utils";
 
 export default function LolicodeMascot({

@@ -40,12 +40,13 @@ const SheetContent = React.forwardRef<
       style,
       dismissOnOutsideClick = false,
       onInteractOutside,
+      onEscapeKeyDown,
       ...props
     },
     ref,
   ) => (
     <DialogPrimitive.Portal>
-      <DialogPrimitive.Overlay className="tai-dialog-overlay fixed inset-0 z-50 bg-overlay" />
+      <DialogPrimitive.Overlay className="tai-dialog-overlay fixed inset-0 z-50 bg-overlay backdrop-blur-sm" />
       <DialogPrimitive.Content
         ref={ref}
         style={{ width, ...style }}
@@ -57,12 +58,19 @@ const SheetContent = React.forwardRef<
           onInteractOutside?.(event);
           if (!dismissOnOutsideClick) event.preventDefault();
         }}
+        onEscapeKeyDown={(event) => {
+          if (event.isComposing || event.keyCode === 229) {
+            event.preventDefault();
+            return;
+          }
+          onEscapeKeyDown?.(event);
+        }}
         {...props}
       >
         {children}
         <DialogPrimitive.Close
           aria-label={closeLabel}
-          className="absolute end-3 top-3 inline-flex h-7 w-7 items-center justify-center rounded-control text-fg-2 transition-colors hover:bg-subtle hover:text-fg-1"
+          className="tai-button absolute end-3 top-3 inline-flex h-8 w-8 items-center justify-center rounded-full bg-subtle text-fg-2 hover:text-fg-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <X className="h-4 w-4" strokeWidth={1.5} />
         </DialogPrimitive.Close>
@@ -95,14 +103,21 @@ const SheetPageContent = React.forwardRef<
     /** 返回按钮的无障碍名字 */
     closeLabel: string;
   }
->(({ title, closeLabel, children, ...props }, ref) => (
+>(({ title, closeLabel, children, onEscapeKeyDown, ...props }, ref) => (
   <DialogPrimitive.Portal
     container={document.getElementById("content-area") ?? undefined}
   >
     <DialogPrimitive.Content
       ref={ref}
-      className="absolute inset-0 z-[60] flex flex-col bg-app text-fg-1 outline-none"
+      className="tai-page-surface absolute inset-0 z-[60] flex flex-col bg-app text-fg-1 outline-none"
       onInteractOutside={(event) => event.preventDefault()}
+      onEscapeKeyDown={(event) => {
+        if (event.isComposing || event.keyCode === 229) {
+          event.preventDefault();
+          return;
+        }
+        onEscapeKeyDown?.(event);
+      }}
       {...props}
     >
       <AppPageHeader

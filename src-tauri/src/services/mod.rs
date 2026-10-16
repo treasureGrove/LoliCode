@@ -1,8 +1,10 @@
 #[cfg(any(test, feature = "test-hooks"))]
 pub mod agent;
 pub mod agent_extensions;
+pub mod agent_automation;
 pub mod agent_history;
 pub mod agent_host;
+pub mod agent_workflows;
 #[cfg(any(test, feature = "test-hooks"))]
 pub mod agent_policy;
 pub mod agent_preferences;

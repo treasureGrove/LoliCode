@@ -6,11 +6,11 @@ LoliCode 的对外发布信息使用自己的[更新记录](../../CHANGELOG.md)�
 
 ## 每个版本一个文件
 
-文件名与应用版本一致，例如 `4.0.16.json`：
+文件名与应用版本一致，例如 `4.0.17.json`：
 
 ```json
 {
-  "version": "4.0.16",
+  "version": "4.0.17",
   "items": [
     {
       "type": "improve",

@@ -4,7 +4,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "CC Switch",
+        "title": "LoliCode",
         "titleBarStyle": "Visible",
         "decorations": false,
         "shadow": true,

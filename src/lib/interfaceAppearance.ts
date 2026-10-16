@@ -8,6 +8,9 @@ export interface InterfaceAppearance {
 
 export const INTERFACE_APPEARANCE_KEY = "lolicode.interface-appearance.v1";
 export const INTERFACE_APPEARANCE_EVENT = "lolicode:interface-appearance";
+export const INTERFACE_BACKGROUND_OPACITY_KEY =
+  "lolicode.interface-background-opacity.v1";
+export const DEFAULT_INTERFACE_BACKGROUND_OPACITY = 75;
 export const DEFAULT_INTERFACE_APPEARANCE: InterfaceAppearance = {
   mode: "full",
   intensity: 48,
@@ -15,6 +18,43 @@ export const DEFAULT_INTERFACE_APPEARANCE: InterfaceAppearance = {
 };
 
 let memoryFallback: string | null = null;
+
+export function readInterfaceBackgroundOpacity() {
+  try {
+    const raw = window.localStorage.getItem(INTERFACE_BACKGROUND_OPACITY_KEY);
+    if (raw === null) return DEFAULT_INTERFACE_BACKGROUND_OPACITY;
+    const value = Number(raw);
+    return Number.isFinite(value)
+      ? Math.round(Math.min(95, Math.max(20, value)))
+      : DEFAULT_INTERFACE_BACKGROUND_OPACITY;
+  } catch {
+    return DEFAULT_INTERFACE_BACKGROUND_OPACITY;
+  }
+}
+
+export function saveInterfaceBackgroundOpacity(opacity: number) {
+  const value = Math.round(Math.min(95, Math.max(20, opacity)));
+  try {
+    window.localStorage.setItem(
+      INTERFACE_BACKGROUND_OPACITY_KEY,
+      String(value),
+    );
+  } catch {
+    // The preview still updates when local storage is unavailable.
+  }
+  applyInterfaceBackgroundOpacity(value);
+}
+
+function applyInterfaceBackgroundOpacity(opacity: number) {
+  document.documentElement.style.setProperty(
+    "--atelier-sheet-opacity",
+    `${opacity}%`,
+  );
+  document.documentElement.style.setProperty(
+    "--atelier-reply-opacity",
+    `${Math.max(20, opacity - 5)}%`,
+  );
+}
 
 /** Old or malformed local preferences must never prevent the workspace opening. */
 export function parseInterfaceAppearance(
@@ -90,4 +130,5 @@ export function applyInterfaceAppearance(appearance: InterfaceAppearance) {
     "--atelier-intensity",
     String(appearance.intensity / 100),
   );
+  applyInterfaceBackgroundOpacity(readInterfaceBackgroundOpacity());
 }

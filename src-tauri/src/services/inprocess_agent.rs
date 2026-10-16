@@ -71,6 +71,33 @@ impl InprocessAgentState {
         Ok(engine)
     }
 
+    pub async fn bind_background_project(
+        &self,
+        app: &tauri::AppHandle,
+        state: &AppState,
+        path: String,
+        accounts: Vec<(String, String)>,
+    ) -> Result<AgentCatalog, String> {
+        let path = tokio::task::spawn_blocking(move || canonical_project(&path))
+            .await
+            .map_err(|_| "项目目录检查未完成")??;
+        let _guard = self.lifecycle.lock().await;
+        let engine = self.start_locked(app).await?;
+        let prepared = prepare_native_binding(state, &accounts).await?;
+        let catalog = prepared.catalog.clone();
+        engine
+            .bind_background(
+                path,
+                serde_json::to_value(&prepared.catalog).map_err(|_| "渠道目录编码失败")?,
+                NativeGateway {
+                    base_url: prepared.base_url,
+                    bearer_token: prepared.bearer_token,
+                },
+            )
+            .await?;
+        Ok(catalog)
+    }
+
     async fn connected(&self) -> Result<NativeEngine, String> {
         self.engine
             .read()
@@ -265,21 +292,13 @@ impl InprocessAgentState {
         state: &AppState,
         path: String,
         accounts: Vec<(String, String)>,
-        refresh: bool,
+        _refresh: bool,
     ) -> Result<AgentOpenProject, String> {
         let path = tokio::task::spawn_blocking(move || canonical_project(&path))
             .await
             .map_err(|_| "项目目录检查未完成")??;
         let _guard = self.lifecycle.lock().await;
         let engine = self.start_locked(app).await?;
-        if engine.busy().await? {
-            return Err(if refresh {
-                "任务结束后会同步模型目录"
-            } else {
-                "还有任务执行中，请结束后再切换项目"
-            }
-            .into());
-        }
         let prepared = prepare_native_binding(state, &accounts).await?;
         let catalog = serde_json::to_value(&prepared.catalog).map_err(|_| "渠道目录编码失败")?;
         let mut result: AgentOpenProject = serde_json::from_value(

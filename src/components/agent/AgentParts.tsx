@@ -3,14 +3,22 @@ import {
   CheckCircle2,
   ChevronRight,
   CircleAlert,
+  FileText,
   Loader2,
   Wrench,
 } from "lucide-react";
-import type { AgentMessage, AgentPart } from "@/types/agent";
+import type {
+  AgentDocumentAttachment,
+  AgentImageAttachment,
+  AgentMessage,
+  AgentPart,
+} from "@/types/agent";
 import { SessionMarkdown } from "@/components/sessions/reader/SessionMarkdown";
 import { SessionCodeBlock } from "@/components/sessions/reader/SessionCodeBlock";
 import { cn } from "@/lib/utils";
 import { AgentFilePath } from "./AgentFilePath";
+import { AgentImage } from "./AgentImage";
+import { AgentAttachmentImage } from "./AgentAttachmentImage";
 import { AgentDisclosure, type AgentDisclosureState } from "./AgentDisclosure";
 import { isAgentCancellation } from "./AgentRunError";
 
@@ -187,7 +195,12 @@ export const AgentTextPart = memo(function AgentTextPart({
 }) {
   const renderLocalImage = useCallback(
     (path: string, alt: string) => (
-      <AgentFilePath path={path} label={alt || undefined} />
+      <AgentImage
+        sessionId={sessionId}
+        path={path}
+        alt={alt}
+        projectPath={projectPath}
+      />
     ),
     [sessionId, projectPath],
   );
@@ -263,10 +276,14 @@ export const AgentMessageView = memo(function AgentMessageView({
   message,
   projectPath,
   sessionId,
+  imageAttachments,
+  documentAttachments,
 }: {
   message: AgentMessage;
   projectPath: string;
   sessionId?: string;
+  imageAttachments?: AgentImageAttachment[];
+  documentAttachments?: AgentDocumentAttachment[];
 }) {
   return (
     <article
@@ -302,6 +319,28 @@ export const AgentMessageView = memo(function AgentMessageView({
           />
         ),
       )}
+      {message.role === "user" && imageAttachments?.length ? (
+        <div className="wb-message-images" aria-label="消息中的图片">
+          {imageAttachments.map((image) => (
+            <AgentAttachmentImage
+              key={image.id}
+              image={image}
+              buttonClassName="wb-message-image-preview"
+              imageClassName="wb-message-image-preview__image"
+            />
+          ))}
+        </div>
+      ) : null}
+      {message.role === "user" && documentAttachments?.length ? (
+        <div className="wb-message-documents" aria-label="消息中的文档">
+          {documentAttachments.map((document) => (
+            <div className="wb-message-document" key={document.id}>
+              <FileText aria-hidden="true" />
+              <span title={document.fileName}>{document.fileName}</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
     </article>
   );
 });

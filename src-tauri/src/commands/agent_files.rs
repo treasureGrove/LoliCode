@@ -12,6 +12,30 @@ use tauri_plugin_opener::OpenerExt;
 const MAX_BYTES: u64 = 10 * 1024 * 1024;
 const MAX_TEXT_BYTES: usize = 2 * 1024 * 1024;
 
+/// Open a selected agent project directory in the system file manager.
+#[tauri::command]
+pub async fn open_agent_project_directory(app: AppHandle, path: String) -> Result<(), String> {
+    let directory = tokio::task::spawn_blocking(move || {
+        let path = PathBuf::from(path);
+        if !path.is_absolute() {
+            return Err("项目文件夹路径必须是绝对路径".to_string());
+        }
+        let path = path
+            .canonicalize()
+            .map_err(|_| "项目文件夹不存在或无法访问".to_string())?;
+        if !path.is_dir() {
+            return Err("所选路径不是文件夹".to_string());
+        }
+        Ok(path)
+    })
+    .await
+    .map_err(|_| "无法验证项目文件夹".to_string())??;
+
+    app.opener()
+        .open_path(directory.to_string_lossy().to_string(), None::<String>)
+        .map_err(|_| "无法打开项目文件夹".to_string())
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentFilePreview {

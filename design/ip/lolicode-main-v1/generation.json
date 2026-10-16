@@ -1,0 +1,58 @@
+{
+  "version": "main-character-v1",
+  "status": "concept-for-review",
+  "createdOn": "2026-10-15",
+  "mode": "built-in image_gen",
+  "product": "LoliCode",
+  "direction": "可爱、亲近的二次元造景师；面向前端视觉与 3D 场景创作。sillyLoli 后续作为同一角色的呆萌 Q 版形态，本轮只设计主形象。",
+  "palette": [
+    "雾紫",
+    "奶白",
+    "深蓝",
+    "少量香槟金"
+  ],
+  "identityFeatures": [
+    "双低束长发与蝴蝶结",
+    "棱晶发饰",
+    "短披肩",
+    "几何裙摆",
+    "画笔与小型线框构造物"
+  ],
+  "reviewNotes": [
+    "第一版概念设计，尚未锁定最终人设与命名。",
+    "三视图用于外观与服装方向讨论，正式建模前仍需校准结构。"
+  ],
+  "references": [
+    {
+      "author": "ZipZipPipe",
+      "title": "所有的AI们，和OpenCode",
+      "url": "https://www.bilibili.com/opus/1233069202138464289",
+      "role": "DeepSeek、ChatGPT、Claude、Grok、Gemini 原始角色设计语言参考"
+    },
+    {
+      "author": "ZipZipPipe",
+      "title": "加班到现在，发点近期做的三视图",
+      "url": "https://www.bilibili.com/opus/1238267551429951496",
+      "role": "服装层次与三视图呈现参考"
+    },
+    {
+      "author": "ZipZipPipe",
+      "title": "龙系角色三视图",
+      "url": "https://www.bilibili.com/opus/1238613841710940181",
+      "role": "三视图参考；原角色分别保留各自来源归属"
+    }
+  ],
+  "referencePolicy": "参考图仅用于设计研究；未复制进仓库。来源记录不构成对参考作品许可范围或生成结果权利的判断。",
+  "assets": [
+    {
+      "file": "standing.png",
+      "description": "主形象全身立绘，保留原始透明通道",
+      "prompt": "Use case: stylized-concept. Asset type: ONE ORIGINAL MAIN CHARACTER key visual for LoliCode, an anime-styled capable multifunction AI companion application.\nInput images 1–5 are VISUAL DESIGN LANGUAGE REFERENCES ONLY: DeepSeek blue whale maid, ChatGPT white dragon woman, Claude orange-haired scholar, Grok blonde gothic character, Gemini purple magical cat. Study their clean readable full-body silhouettes, recognizable hair and compact signature ornaments, expressive anime faces, carefully layered fantasy clothes and restrained emblem placement. Create a NEW unified LoliCode character with her own silhouette, NOT a collage or a recoloring of any one reference. Do not copy their brands, whale logo, OpenAI knot, Claude sun, X symbol, Gemini star, tails, ears, horns, weapons or recognizable costume patterns.\n\nProduct character: a charming, very cute but clearly young ADULT woman around 20–22, about six-head anime proportions, gentle round expressive face, quietly clever and a little playfully absent-minded. She is a friendly 'world builder' who turns ideas into interactive web pages and 3D scenes. Her future miniature model/avatar is named sillyLoli, but DO NOT draw that miniature form here. Only the main character, ONE body, no chibi, no expression collage.\n\nCore design:\n- Hair: misty pale lavender, soft clean highlights, shoulder-length face-framing layers plus TWO low, long, gently wavy tied sections falling behind her shoulders to the waist, restrained ivory ribbon ties. Soft curved fringe and one small curved ahoge.\n- Eyes: matching clear periwinkle-blue eyes, lively and intelligent. No heterochromia.\n- Signature motif: a SINGLE small hexagonal lavender prism held between two champagne-gold angle-bracket shapes, like a tiny original '< >' jewel. Use this as her left-temple hairclip and repeat a smaller version at her collar. Simple and recognizable at avatar size.\n- Outfit: modest high-neck ivory blouse, long softly puffed sleeves tapering into neat cuffs; short midnight-blue bolero capelet with ivory lining, a fitted muted-lavender waist, a gently flared calf-length cream dress with two navy split side tabs and a few lilac pleats. Fine ivory lace edges and sparse geometric line embroidery near the hem, not dense floral ornament. A very small cube-shaped waist pouch with gold clasp. Soft ivory opaque stockings, comfortable lavender-and-navy low-heeled ankle shoes. Fully clothed, no cleavage, exposed midriff, thigh slits or sexualized pose.\n- Palette: milk ivory and mist lavender dominate, midnight navy as controlled contrast, tiny champagne-gold hardware. Soft comfortable colors, no neon.\n- Pose: full-body three-quarter standing, looking warmly at the viewer with a small confident smile. One hand naturally open, showing ONE small floating translucent wireframe cube, no beams or giant glow. Other hand relaxed holding a slim little stylus. Both feet and all hair/ribbons fully visible with breathing room.\n\nStyle: polished crisp 2D anime game-character standing art, expressive clear linework and tidy soft cel shading matching the supplied design-sheet language; delicate but legible cloth construction, correct hands. No sepia/watercolor wash, no fashion-model eight-head proportions, no photorealism or 3D render.\nComposition: clean PORTRAIT full-body standalone cutout on a GENUINELY TRANSPARENT alpha background. No environment, frame, labels, letters, logos, palette swatches, duplicate bodies, other creatures, pet, UI, or watermark. No atmospheric halo, colored haze, background gradient, floor or cast shadow outside the character. Prioritize the original main character's identity and readable silhouette."
+    },
+    {
+      "file": "turnaround.png",
+      "description": "同一主形象的正面、侧面、背面设定稿",
+      "prompt": "Use case: identity-preserve / character turnaround. Asset type: MAIN CHARACTER model reference sheet for LoliCode.\nThe supplied image is the sole approved design reference for THIS DRAWING. Create a NEW wide landscape technical three-view sheet of exactly the same main character. This is not a redesign and not a chibi version. Preserve her face, soft mist-lavender hair, matching periwinkle eyes, forehead ahoge, twin low tied wavy hair sections and all their ivory ribbon positions, gold angle-bracket prism hairclip on her anatomical LEFT temple, collar jewel, capelet, lace blouse, lavender fitted waist, cream wrap-style layered calf-length dress, navy split side panels, existing embroidery, stocking color and exact ankle-shoe design. Preserve the bag on her anatomical RIGHT hip: it appears on viewer-left in the FRONT view and viewer-right in the BACK view.\nEXACTLY THREE orthographic full-body figures, left to right: FRONT (0 degrees), LEFT SIDE PROFILE (90 degrees, face pointing toward image-left), BACK (180 degrees, face completely away). Identical scale and upright height, aligned tops of hair and soles. Neutral relaxed A-pose, hands a little away from torso, feet flat and parallel, relaxed fingers. No perspective or foreshortening. Profile must be genuinely sideways, only one eye visible, nose and shoes in strict profile. Back view must show back of head, cape and skirt and not turn her face toward camera.\nConsistent tailoring in all views. Keep both long tied hair sections attached behind the same sides of the head and draped over/behind the corresponding shoulders, rather than changing them into a single center braid. In back view, show TWO distinct low tied hair sections with ivory bows, with believable uncovered nape hair between them. Accessory placement must obey the character's anatomical sides in each view. Keep all head/hair ornaments and complete shoes inside frame with adequate top and bottom margins. Remove the handheld stylus and floating cube for these technical views so they do not obscure the body and garments. Keep all worn ornaments and the hip bag.\nCrisp clean anime design-sheet lineart, soft flat cel colors matching the original, very restrained shading, no dark haze and no scenic background. Plain warm-white background; a few faint horizontal alignment guides are acceptable. No expressive action poses, no other characters, no miniature mascot, no expression portraits, no new props. Small top title verbatim \"LoliCode · 主形象 V1\" and labels beneath each view verbatim \"正面\", \"侧面\", \"背面\". No other text or watermark. This is an exploratory three-view character design, accurate and readable for future 3D reference."
+    }
+  ]
+}

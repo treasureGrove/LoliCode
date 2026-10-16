@@ -1314,6 +1314,7 @@ pub fn run() {
                 if let Err(error) = crate::services::channel_center::restore_gateway(&state).await {
                     log::warn!("渠道中心后台连接未能恢复，请在渠道页面重试配置: {error}");
                 }
+                crate::services::agent_automation::start_worker(app_handle.clone());
                 // 启动流程走完：托盘这时才开始报「路由服务没在运行」，并记下退回直连的应用。
                 crate::tray::mark_startup_settled(&app_handle);
                 // Codex 官方做路由、发布了 Stack 模型时，官方模型列表过期就在后台刷新。
@@ -1768,6 +1769,7 @@ pub fn run() {
             commands::set_agent_session_metadata,
             commands::delete_agent_session,
             commands::get_agent_session,
+            commands::inspect_agent_document,
             commands::send_agent_message,
             commands::query_agent_command,
             commands::interrupt_agent_session,
@@ -1776,6 +1778,14 @@ pub fn run() {
             commands::reject_agent_question,
             commands::close_agent_project,
             commands::get_agent_extensions,
+            commands::get_agent_plugin_store,
+            commands::add_agent_plugin_marketplace,
+            commands::update_agent_plugin_marketplace,
+            commands::remove_agent_plugin_marketplace,
+            commands::install_agent_marketplace_plugin,
+            commands::restore_agent_builtin_plugin,
+            commands::update_agent_marketplace_plugin,
+            commands::uninstall_agent_marketplace_plugin,
             commands::set_agent_skill_enabled,
             commands::import_agent_skill,
             commands::remove_agent_skill,
@@ -1793,6 +1803,7 @@ pub fn run() {
             commands::get_agent_image,
             commands::preview_agent_file,
             commands::open_agent_path,
+            commands::open_agent_project_directory,
             commands::get_channel_center,
             commands::save_channel_center,
             commands::discover_channel_models,

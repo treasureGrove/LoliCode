@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>D · 樱桃舞台 UI 概念</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #17151a;
+      --bg-2: #1c1920;
+      --panel: #211d25;
+      --panel-2: #29232c;
+      --panel-3: #302933;
+      --line: rgba(241, 221, 229, .11);
+      --line-strong: rgba(241, 221, 229, .19);
+      --text: #f4edf1;
+      --muted: #b5a8b1;
+      --soft: #867985;
+      --berry: #c16b81;
+      --berry-2: #9e4b62;
+      --berry-wash: rgba(193, 107, 129, .13);
+      --gold: #c8a879;
+      --gold-wash: rgba(200, 168, 121, .11);
+      --green: #83b59b;
+      --red: #e58b93;
+      --radius: 16px;
+      --inspector: 310px;
+      font-family: Inter, "Segoe UI", "Microsoft YaHei UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #100e12; color: var(--text); min-height: 100vh; }
+    button, input { font: inherit; }
+    button { color: inherit; }
+    .window { min-height: 100vh; display: grid; grid-template-columns: 66px 250px minmax(540px, 1fr); background: var(--bg); }
+    .rail { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 15px 9px; border-right: 1px solid var(--line); background: #19161c; }
+    .brand { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 14px; color: #ffe9ee; background: linear-gradient(145deg, #a74560, #582d41); box-shadow: inset 0 1px rgba(255,255,255,.18), 0 8px 24px rgba(100,37,57,.24); font-size: 20px; font-weight: 800; margin-bottom: 14px; }
+    .rail-btn { width: 42px; height: 42px; border: 0; background: transparent; border-radius: 13px; color: var(--soft); cursor: pointer; display: grid; place-items: center; font-size: 18px; transition: .18s ease; }
+    .rail-btn:hover { color: var(--text); background: rgba(255,255,255,.05); }
+    .rail-btn.active { color: #f4c5d0; background: var(--berry-wash); box-shadow: inset 2px 0 var(--berry); }
+    .rail-spacer { flex: 1; }
+    .sidebar { min-width: 0; display: flex; flex-direction: column; padding: 18px 14px 14px; background: var(--bg-2); border-right: 1px solid var(--line); }
+    .workspace { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 5px 18px; font-weight: 650; }
+    .workspace small { color: var(--soft); font-size: 11px; font-weight: 500; }
+    .section-label { color: var(--soft); text-transform: uppercase; letter-spacing: .1em; font-size: 10px; padding: 13px 8px 7px; }
+    .side-link, .history-link { border: 0; background: transparent; width: 100%; text-align: left; border-radius: 10px; color: var(--muted); cursor: pointer; display: flex; align-items: center; gap: 10px; padding: 10px 9px; }
+    .side-link:hover, .history-link:hover { background: rgba(255,255,255,.04); color: var(--text); }
+    .side-link.active { color: #f3d6dd; background: linear-gradient(90deg, rgba(177,78,103,.2), rgba(177,78,103,.06)); box-shadow: inset 2px 0 var(--berry); }
+    .glyph { width: 19px; text-align: center; font-size: 15px; color: var(--gold); }
+    .side-app { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 9px; margin: 2px 0; border: 1px solid transparent; border-radius: 11px; color: var(--muted); cursor: pointer; background: transparent; width: 100%; text-align: left; }
+    .side-app:hover { border-color: var(--line); background: rgba(255,255,255,.03); color: var(--text); }
+    .app-name { display: flex; align-items: center; gap: 9px; }
+    .app-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 10px rgba(131,181,155,.25); }
+    .tiny-tag { font-size: 10px; color: var(--soft); }
+    .search { background: #201c24; border: 1px solid var(--line); border-radius: 10px; color: var(--muted); padding: 9px 10px; margin: 12px 0 8px; font-size: 12px; }
+    .history { overflow: auto; min-height: 80px; }
+    .history-link { display: block; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; font-size: 12px; padding: 9px 10px; }
+    .side-bottom { margin-top: auto; border-top: 1px solid var(--line); padding-top: 13px; display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 12px; }
+    .avatar { width: 29px; height: 29px; display: grid; place-items: center; border-radius: 50%; background: linear-gradient(135deg,#493341,#27222d); color: #f1c2cd; border: 1px solid var(--line-strong); }
+    main { min-width: 0; position: relative; }
+    .topbar { height: 62px; display: flex; align-items: center; justify-content: space-between; padding: 0 22px; border-bottom: 1px solid var(--line); background: rgba(28,25,32,.92); }
+    .crumb { display: flex; align-items: center; gap: 11px; color: var(--muted); font-size: 12px; }
+    .crumb strong { color: var(--text); font-size: 14px; }
+    .top-actions { display: flex; align-items: center; gap: 9px; }
+    .icon-btn { width: 34px; height: 34px; border: 1px solid transparent; border-radius: 10px; background: transparent; color: var(--muted); cursor: pointer; }
+    .icon-btn:hover { border-color: var(--line); color: var(--text); background: rgba(255,255,255,.04); }
+    .view { display: none; min-height: calc(100vh - 62px); }
+    .view.active { display: block; }
+    .chat-layout { height: calc(100vh - 62px); min-height: 720px; display: grid; grid-template-columns: minmax(420px, 1fr) 6px var(--inspector); }
+    .conversation { min-width: 0; display: flex; flex-direction: column; position: relative; }
+    .thread-head { height: 66px; padding: 13px 26px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); }
+    .thread-title { font-size: 14px; font-weight: 650; }
+    .thread-sub { color: var(--soft); font-size: 11px; margin-top: 5px; }
+    .live { color: var(--green); font-size: 11px; display: flex; align-items: center; gap: 7px; }
+    .live:before { content: ""; width: 6px; height: 6px; background: var(--green); border-radius: 50%; }
+    .messages { flex: 1; min-height: 0; overflow: auto; padding: 24px clamp(22px, 5vw, 70px) 15px; }
+    .date { text-align: center; color: var(--soft); font-size: 10px; margin: 3px 0 24px; }
+    .message { max-width: 760px; margin: 0 auto 22px; }
+    .message.user { display: flex; justify-content: flex-end; }
+    .bubble { line-height: 1.65; font-size: 13px; }
+    .user .bubble { max-width: 76%; background: #34232c; border: 1px solid rgba(193,107,129,.23); color: #f4e9ee; padding: 11px 15px; border-radius: 15px 15px 4px 15px; }
+    .assistant-head { display: flex; align-items: center; gap: 9px; margin-bottom: 9px; font-size: 11px; color: var(--muted); }
+    .assistant-head .avatar { width: 25px; height: 25px; font-size: 12px; }
+    .assistant .bubble { color: #e8dfe6; padding-left: 34px; }
+    .soft-note { margin: 10px 0 0 34px; padding: 10px 12px; border-left: 2px solid var(--gold); background: rgba(200,168,121,.06); color: var(--muted); border-radius: 0 9px 9px 0; font-size: 11px; }
+    .activity { max-width: 760px; margin: 0 auto 20px 34px; }
+    details.activity-box { border: 1px solid var(--line); background: #201c23; border-radius: 12px; overflow: hidden; }
+    details.activity-box summary { list-style: none; padding: 12px 14px; cursor: pointer; display: flex; align-items: center; gap: 9px; font-size: 11px; color: var(--muted); }
+    details.activity-box summary::-webkit-details-marker { display:none; }
+    .chev { color: var(--soft); transition: transform .2s; }
+    details[open] .chev { transform: rotate(90deg); }
+    .count { margin-left: auto; color: var(--soft); font-variant-numeric: tabular-nums; }
+    .activity-list { padding: 0 12px 10px; display: grid; gap: 5px; }
+    .activity-row { padding: 8px 10px; display: flex; align-items: center; gap: 9px; color: var(--muted); background: rgba(255,255,255,.025); border-radius: 8px; font-size: 10px; }
+    .activity-row .ok { color: var(--green); }
+    .activity-row .path { color: #c9a9ba; }
+    .alert { max-width: 760px; margin: 4px auto 18px; padding: 11px 14px; border-radius: 11px; background: rgba(180,77,87,.13); border: 1px solid rgba(229,139,147,.2); color: #eab8bd; font-size: 11px; display: flex; align-items: center; gap: 9px; }
+    .composer-wrap { padding: 10px clamp(18px, 4vw, 56px) 8px; border-top: 1px solid var(--line); background: linear-gradient(180deg,rgba(23,21,26,.2),#1b181f 28%); }
+    .composer { max-width: 900px; margin: 0 auto; border: 1px solid var(--line-strong); border-radius: 14px; background: #242027; box-shadow: 0 14px 34px rgba(0,0,0,.16); overflow: hidden; }
+    .composer textarea { display: block; width: 100%; resize: vertical; min-height: 56px; max-height: 150px; padding: 15px 16px 7px; background: transparent; color: var(--text); border: 0; outline: none; font-size: 12px; }
+    .composer textarea::placeholder { color: #827681; }
+    .composer-bar { display: flex; gap: 6px; align-items: center; padding: 7px 9px 9px; }
+    .tool-btn { border: 1px solid transparent; background: transparent; border-radius: 8px; color: var(--muted); padding: 7px 9px; font-size: 10px; cursor: pointer; }
+    .tool-btn:hover { background: rgba(255,255,255,.05); color: var(--text); }
+    .tool-btn strong { color: #e9dbe2; font-weight: 550; }
+    .bar-spacer { flex: 1; }
+    .send { border: 0; border-radius: 9px; padding: 8px 15px; background: var(--berry-2); color: #fff3f5; font-size: 11px; cursor: pointer; box-shadow: 0 4px 13px rgba(120,45,67,.23); }
+    .send:hover { background: #b65972; }
+    .usage { max-width: 900px; margin: 8px auto 0; display: flex; flex-wrap: wrap; align-items: center; gap: 14px; color: var(--soft); font-size: 9px; }
+    .usage b { color: #c6b7c1; font-weight: 500; }
+    .resize-handle { cursor: col-resize; display: grid; place-items: center; background: transparent; position: relative; z-index: 2; }
+    .resize-handle:after { content: ""; width: 2px; height: 44px; border-radius: 4px; background: var(--line-strong); transition: .15s; }
+    .resize-handle:hover:after, .resize-handle.dragging:after { background: var(--berry); height: 70px; }
+    .inspector { min-width: 220px; border-left: 1px solid var(--line); background: #1c1920; display: flex; flex-direction: column; }
+    .inspector-head { height: 56px; padding: 0 15px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); font-size: 11px; }
+    .inspector-tabs { display: flex; gap: 15px; color: var(--soft); }
+    .inspector-tabs .selected { color: #f0d3db; border-bottom: 1px solid var(--berry); padding: 20px 0 18px; }
+    .preview-card { margin: 14px; border: 1px solid var(--line); border-radius: 11px; overflow: hidden; background: #211d24; }
+    .preview-title { padding: 10px 11px; border-bottom: 1px solid var(--line); font-size: 10px; color: var(--muted); display: flex; justify-content: space-between; }
+    .code { margin: 0; padding: 13px; color: #cfbdcb; font: 10px/1.8 Consolas, monospace; white-space: pre-wrap; }
+    .code .kw { color: #dc98aa; }
+    .code .str { color: #d9bd8f; }
+    .inspector-foot { margin: auto 14px 15px; border: 1px solid var(--line); border-radius: 11px; padding: 12px; color: var(--muted); font-size: 10px; display: flex; align-items: center; gap: 8px; }
+    .pet { position: fixed; right: calc(var(--inspector) + 32px); bottom: 168px; width: 92px; height: 108px; pointer-events: none; filter: drop-shadow(0 10px 20px rgba(0,0,0,.35)); transition: right .15s; z-index: 3; }
+    .pet img { width: 100%; height: 100%; object-fit: contain; object-position: bottom; }
+    .pet-label { position: absolute; top: 2px; right: 0; transform: translateX(26%); background: #30252e; border: 1px solid rgba(193,107,129,.24); border-radius: 999px; color: #e9c4ce; font-size: 9px; padding: 5px 9px; white-space: nowrap; }
+    .apps-page, .kit-page { max-width: 1240px; margin: 0 auto; padding: 38px clamp(20px,4vw,56px) 60px; }
+    .page-title { display: flex; align-items: end; justify-content: space-between; margin-bottom: 24px; gap: 18px; }
+    .page-title h1 { margin: 0; font-size: 22px; letter-spacing: -.02em; }
+    .page-title p { margin: 8px 0 0; color: var(--muted); font-size: 12px; }
+    .eyebrow { color: var(--gold); font-size: 9px; letter-spacing: .14em; text-transform: uppercase; margin-bottom: 8px; }
+    .app-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 15px; }
+    .app-card { min-height: 228px; border: 1px solid var(--line); background: linear-gradient(145deg,#29232c,#211d24 72%); border-radius: 17px; padding: 18px; display: flex; flex-direction: column; position: relative; overflow: hidden; }
+    .app-card:after { content: ""; position:absolute; width:170px;height:170px;border-radius:50%;right:-60px;top:-70px;background:radial-gradient(circle,rgba(193,107,129,.12),transparent 70%);pointer-events:none; }
+    .app-card h2 { margin: 0 0 7px; font-size: 15px; }
+    .app-card p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.6; max-width: 300px; }
+    .app-icon { width: 42px; height: 42px; border-radius: 13px; display:grid;place-items:center; margin-bottom: 21px; border:1px solid rgba(200,168,121,.2); background:var(--gold-wash); color:#dfc398;font-size:18px; }
+    .app-card .card-bottom { margin-top:auto; padding-top:18px; display:flex;align-items:center;justify-content:space-between; }
+    .open-app { border:1px solid rgba(193,107,129,.34); background:var(--berry-wash); color:#f0c9d2; border-radius:9px; padding:8px 12px; font-size:10px; cursor:pointer; }
+    .app-status { color:var(--green);font-size:10px; }
+    .app-card.disabled { opacity:.57; border-style:dashed; }
+    .app-card.disabled .app-status { color:var(--soft); }
+    .kit-grid { display:grid; grid-template-columns:repeat(12,minmax(0,1fr)); gap:14px; }
+    .kit-card { grid-column:span 4; border:1px solid var(--line); background:#211d24; border-radius:14px; padding:15px; min-height:146px; }
+    .kit-card.wide { grid-column:span 8; }
+    .kit-card.full { grid-column:span 12; }
+    .kit-card h3 { margin:0 0 13px; font-size:11px; font-weight:600; color:#e9dbe2; }
+    .kit-demo { display:flex;align-items:center;gap:8px;flex-wrap:wrap; }
+    .sample-pill { border:1px solid var(--line); background:var(--panel-2); color:var(--muted); padding:7px 10px; border-radius:9px; font-size:10px; }
+    .sample-pill.active { border-color:rgba(193,107,129,.32);color:#f1cad3;background:var(--berry-wash); }
+    .sample-bubble { max-width:440px; padding:10px 12px; color:#e6dce2; border:1px solid var(--line); background:#28232b; border-radius:12px 12px 12px 3px; font-size:10px; line-height:1.55; }
+    .sample-error { background:rgba(180,77,87,.13); border:1px solid rgba(229,139,147,.19); color:#eab8bd; border-radius:9px; padding:10px 12px; font-size:10px; }
+    .swatches { display:flex; gap:9px; }
+    .swatch { display:flex;align-items:center;gap:6px;color:var(--muted);font-size:9px; }
+    .swatch i { display:block;width:18px;height:18px;border-radius:6px;border:1px solid rgba(255,255,255,.12); }
+    .mini-usage { display:flex;align-items:center;gap:13px;color:var(--soft);font-size:9px; }
+    .mini-usage b { color:#d5c5cf;font-weight:500; }
+    .toast { position:fixed; left:50%; bottom:25px; transform:translate(-50%,20px); opacity:0; pointer-events:none; border:1px solid var(--line-strong); background:#302832; color:#f3e9ee; padding:10px 15px; border-radius:10px; font-size:11px; box-shadow:0 12px 30px rgba(0,0,0,.28); transition:.22s; z-index:9; }
+    .toast.show { opacity:1; transform:translate(-50%,0); }
+    .modal-backdrop { display:none; position:fixed;inset:0;background:rgba(8,7,10,.56);z-index:8;place-items:center; }
+    .modal-backdrop.show { display:grid; }
+    .picker { width:300px;background:#28232b;border:1px solid var(--line-strong);border-radius:14px;padding:9px;box-shadow:0 20px 70px rgba(0,0,0,.5); }
+    .picker-title { padding:7px 9px 10px;color:var(--soft);font-size:9px;letter-spacing:.08em;text-transform:uppercase; }
+    .picker button { display:flex;width:100%;align-items:center;justify-content:space-between;border:0;background:transparent;padding:10px;border-radius:8px;color:var(--muted);font-size:11px;cursor:pointer; }
+    .picker button:hover,.picker button.selected { background:var(--berry-wash);color:#f0d0d9; }
+    .picker small { color:var(--soft); }
+    @media (max-width: 1100px) {
+      :root { --inspector: 260px; }
+      .window { grid-template-columns:58px 215px minmax(500px,1fr); }
+      .app-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    }
+    @media (max-width: 820px) {
+      .window { grid-template-columns:58px minmax(0,1fr); }
+      .sidebar { display:none; }
+      .chat-layout { grid-template-columns:minmax(0,1fr); }
+      .resize-handle,.inspector { display:none; }
+      .pet { right:18px; bottom:140px; width:68px; height:82px; opacity:.83; }
+      .kit-card,.kit-card.wide { grid-column:span 6; }
+    }
+    @media (max-width: 560px) {
+      .topbar { padding:0 12px; }
+      .messages { padding:18px 13px 10px; }
+      .composer-wrap { padding:8px 10px; }
+      .composer-bar { flex-wrap:wrap; }
+      .bar-spacer { flex:1 0 4px; }
+      .usage { gap:8px; }
+      .app-grid { grid-template-columns:1fr; }
+      .kit-card,.kit-card.wide,.kit-card.full { grid-column:span 12; }
+    }
+  </style>
+</head>
+<body>
+  <div class="window">
+    <nav class="rail" aria-label="主导航">
+      <div class="brand">D</div>
+      <button class="rail-btn active" data-route="agent" title="主 Agent">✦</button>
+      <button class="rail-btn" data-route="apps" title="应用">▦</button>
+      <button class="rail-btn" data-route="kit" title="组件样式">◫</button>
+      <div class="rail-spacer"></div>
+      <button class="rail-btn" title="设置">⚙</button>
+      <div class="avatar">TG</div>
+    </nav>
+    <aside class="sidebar">
+      <div class="workspace"><span>TAI-Switch</span><small>工作区⌄</small></div>
+      <button class="side-link active" data-route="agent"><span class="glyph">✦</span>主 Agent</button>
+      <button class="side-link" data-route="apps"><span class="glyph">▦</span>应用</button>
+      <div class="section-label">已启用应用</div>
+      <button class="side-app" data-toast="打开 UE Box 应用"><span class="app-name"><span class="app-dot"></span>UE Box</span><span class="tiny-tag">3D 工坊</span></button>
+      <button class="side-app" data-toast="打开酒馆应用"><span class="app-name"><span class="app-dot"></span>酒馆</span><span class="tiny-tag">角色与剧情</span></button>
+      <div class="section-label">会话</div>
+      <div class="search">⌕　搜索会话</div>
+      <div class="history">
+        <button class="history-link">整理本周的开发计划</button>
+        <button class="history-link">制作一个轻量 3D 场景</button>
+        <button class="history-link">梳理模型配置与用量</button>
+      </div>
+      <div class="side-bottom"><span class="avatar">✿</span><span>小林的工作区</span><span style="margin-left:auto;color:var(--soft)">···</span></div>
+    </aside>
+    <main>
+      <header class="topbar">
+        <div class="crumb"><span style="color:var(--gold)">◈</span><strong>TAI-Switch</strong><span>/</span><span id="route-label">主 Agent</span></div>
+        <div class="top-actions"><button class="icon-btn" title="搜索">⌕</button><button class="icon-btn" title="快捷操作">⋯</button></div>
+      </header>
+
+      <section class="view active" id="view-agent">
+        <div class="chat-layout" id="chat-layout">
+          <section class="conversation">
+            <div class="thread-head"><div><div class="thread-title">整理本周的开发计划</div><div class="thread-sub">主 Agent　·　项目：TAI-Switch</div></div><span class="live">已就绪</span></div>
+            <div class="messages" id="messages">
+              <div class="date">今天　14:32</div>
+              <article class="message user"><div class="bubble">帮我把当前迭代内容整理成清晰的开发清单，顺便检查一下相关文件。</div></article>
+              <article class="message assistant">
+                <div class="assistant-head"><span class="avatar">D</span><span>D　·　主 Agent</span><span style="color:var(--soft)">刚刚</span></div>
+                <div class="bubble">我先核对了项目中的迭代说明和 Agent 交互实现。接下来建议分成三步处理：收拢任务状态、修复中断与长会话体验、最后补齐验收用例。</div>
+                <div class="soft-note">已根据当前工作区内容整理；每一步都可以继续追问或调整优先级。</div>
+              </article>
+              <div class="activity">
+                <details class="activity-box">
+                  <summary><span class="chev">›</span><span style="color:var(--gold)">▤</span><span>工作记录　读取 4 项 · 修改 2 项 · 命令 1 条</span><span class="count">+184　−32</span></summary>
+                  <div class="activity-list">
+                    <div class="activity-row"><span class="ok">✓</span>读取文件 <span class="path">src/agent/session.ts</span><span class="count">完成</span></div>
+                    <div class="activity-row"><span class="ok">✓</span>读取文件 <span class="path">src/components/Composer.vue</span><span class="count">完成</span></div>
+                    <div class="activity-row"><span class="ok">✓</span>修改文件 <span class="path">src/agent/session.ts</span><span class="count">完成</span></div>
+                    <div class="activity-row"><span class="ok">✓</span>运行测试 <span class="path">pnpm test:agent</span><span class="count">通过</span></div>
+                  </div>
+                </details>
+              </div>
+              <div class="alert"><span>ⓘ</span><span>模型连接中断，已收到的内容保留；可稍后重试。</span></div>
+            </div>
+            <div class="composer-wrap">
+              <form class="composer" id="composer-form">
+                <textarea id="prompt" placeholder="给主 Agent 发消息…　输入 / 查看指令，@ 引用文件"></textarea>
+                <div class="composer-bar">
+                  <button type="button" class="tool-btn" data-toast="附件与上下文选择">＋</button>
+                  <button type="button" class="tool-btn picker-open" data-picker="model"><strong>DeepSeek V4.1 Flash</strong>⌄</button>
+                  <button type="button" class="tool-btn picker-open" data-picker="thinking">思考：高　⌄</button>
+                  <button type="button" class="tool-btn picker-open" data-picker="permission">权限：询问　⌄</button>
+                  <span class="bar-spacer"></span>
+                  <button type="button" class="tool-btn" data-toast="任务已停止">■ 停止</button>
+                  <button type="submit" class="send">发送　↑</button>
+                </div>
+              </form>
+              <div class="usage"><span>本会话用量</span><span>输入 <b>18.4k</b></span><span>输出 <b>2.1k</b></span><span>缓存命中 <b>82%</b></span><span>请求 <b>6 轮</b></span><span style="margin-left:auto">Enter 发送　·　Shift + Enter 换行</span></div>
+            </div>
+          </section>
+          <div class="resize-handle" id="resize-handle" title="拖动调整预览栏宽度"></div>
+          <aside class="inspector">
+            <div class="inspector-head"><div class="inspector-tabs"><span class="selected">预览</span><span>文件</span></div><button class="icon-btn" id="toggle-inspector" title="隐藏预览栏">×</button></div>
+            <div class="preview-card">
+              <div class="preview-title"><span>session.ts</span><span>↗　▱　↻</span></div>
+              <pre class="code"><span class="kw">export async function</span> runTurn(
+  request: AgentRequest,
+  context: SessionContext
+) {
+  <span class="kw">const</span> response = <span class="kw">await</span>
+    model.stream(request, {
+      signal: context.signal,
+      tools: context.tools
+    })
+
+  <span class="kw">return</span> response
+}</pre>
+            </div>
+            <div class="inspector-foot"><span style="color:var(--gold)">◌</span><span>悬停文件路径可快速打开文件或所在文件夹</span></div>
+          </aside>
+        </div>
+        <div class="pet" aria-label="D 的 Q 版陪伴形象"><span class="pet-label">我在听～</span><img src="../D-pinkdog-q-v1/standing.png" alt="D 的 Q 版立绘"></div>
+      </section>
+
+      <section class="view" id="view-apps">
+        <div class="apps-page">
+          <div class="page-title"><div><div class="eyebrow">Workspace apps</div><h1>应用</h1><p>主 Agent 保持唯一对话入口；专用能力以应用形式打开，按需添加。</p></div><button class="open-app" data-toast="应用目录正在设计中">＋　添加应用</button></div>
+          <div class="app-grid">
+            <article class="app-card"><div class="app-icon">◇</div><h2>UE Box</h2><p>面向虚幻项目的场景、资源与编辑器工具。Agent 可按需调用，不另开一套对话。</p><div class="card-bottom"><span class="app-status">● 已添加</span><button class="open-app" data-toast="UE Box 模块视觉入口">打开应用　→</button></div></article>
+            <article class="app-card"><div class="app-icon">✿</div><h2>酒馆</h2><p>角色卡、剧情与对话配置；可把角色与会话能力交给主 Agent 协同。</p><div class="card-bottom"><span class="app-status">● 已添加</span><button class="open-app" data-toast="酒馆模块视觉入口">打开应用　→</button></div></article>
+            <article class="app-card"><div class="app-icon">✧</div><h2>记忆与知识</h2><p>为 Agent 管理长期记忆、项目知识和可回顾的上下文。</p><div class="card-bottom"><span class="app-status">○ 可添加</span><button class="open-app" data-toast="添加后即可使用">添加应用　＋</button></div></article>
+            <article class="app-card"><div class="app-icon">♬</div><h2>语音陪伴</h2><p>语音输入、朗读和角色化交互；未来与桌面宠物状态联动。</p><div class="card-bottom"><span class="app-status">○ 规划中</span><button class="open-app" data-toast="语音应用尚在规划">了解更多　→</button></div></article>
+            <article class="app-card disabled"><div class="app-icon">⌘</div><h2>第三方扩展</h2><p>后续通过稳定的扩展接口接入外部工具和服务。</p><div class="card-bottom"><span class="app-status">稍后开放</span><button class="open-app" data-toast="扩展平台后续开放">查看路线图　→</button></div></article>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" id="view-kit">
+        <div class="kit-page">
+          <div class="page-title"><div><div class="eyebrow">Cherry stage design system</div><h1>交互组件</h1><p>樱桃黑主色、奶油白信息层次与低饱和莓粉强调；把高频内容收紧、把执行细节折叠。</p></div><span class="tiny-tag">概念规范　·　v1</span></div>
+          <div class="kit-grid">
+            <article class="kit-card wide"><h3>消息层级</h3><div class="kit-demo"><div class="sample-bubble">我已完成检查，下面是最关键的两项发现。<br><span style="color:var(--soft)">正文保持舒适行宽，运行细节收在下面的折叠卡片里。</span></div><span class="sample-pill active">用户消息</span></div></article>
+            <article class="kit-card"><h3>状态与错误提示</h3><div class="kit-demo"><span class="sample-pill">● 运行中</span><span class="sample-pill" style="color:var(--green)">✓ 已完成</span><span class="sample-error">ⓘ 连接中断，内容已保留</span></div></article>
+            <article class="kit-card wide"><h3>折叠执行记录</h3><div class="kit-demo" style="width:100%"><details class="activity-box" style="width:100%"><summary><span class="chev">›</span><span style="color:var(--gold)">▤</span><span>文件修改　3 个文件 · 命令 2 条</span><span class="count">+84　−12</span></summary><div class="activity-list"><div class="activity-row"><span class="ok">✓</span>更新配置与交互逻辑<span class="count">完成</span></div></div></details></div></article>
+            <article class="kit-card"><h3>模型、思考与权限</h3><div class="kit-demo"><span class="sample-pill">DeepSeek · Flash ⌄</span><span class="sample-pill">思考：高 ⌄</span><span class="sample-pill">权限：询问 ⌄</span></div></article>
+            <article class="kit-card full"><h3>短输入栏与会话用量</h3><div class="composer" style="max-width:none"><textarea placeholder="给主 Agent 发消息…" style="min-height:44px"></textarea><div class="composer-bar"><button class="tool-btn">＋</button><button class="tool-btn"><strong>DeepSeek V4.1 Flash</strong>⌄</button><button class="tool-btn">思考：高　⌄</button><button class="tool-btn">权限：询问　⌄</button><span class="bar-spacer"></span><button class="send">发送　↑</button></div></div><div class="mini-usage" style="margin-top:12px"><span>本会话用量</span><span>输入 <b>18.4k</b></span><span>输出 <b>2.1k</b></span><span>缓存命中 <b>82%</b></span><span>请求 <b>6 轮</b></span></div></article>
+            <article class="kit-card wide"><h3>色彩与材质</h3><div class="swatches"><span class="swatch"><i style="background:#17151a"></i>夜莓底色</span><span class="swatch"><i style="background:#29232c"></i>柔和表面</span><span class="swatch"><i style="background:#c16b81"></i>樱桃莓粉</span><span class="swatch"><i style="background:#c8a879"></i>香槟金</span><span class="swatch"><i style="background:#83b59b"></i>完成绿</span></div></article>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <div class="toast" id="toast" role="status"></div>
+  <div class="modal-backdrop" id="picker-modal"><div class="picker" role="dialog" aria-modal="true"><div class="picker-title" id="picker-title">选择</div><div id="picker-options"></div></div></div>
+  <script>
+    const routeNames = { agent: '主 Agent', apps: '应用', kit: '交互组件' };
+    function showRoute(name) {
+      document.querySelectorAll('.view').forEach(x => x.classList.toggle('active', x.id === `view-${name}`));
+      document.querySelectorAll('[data-route]').forEach(x => x.classList.toggle('active', x.dataset.route === name));
+      document.getElementById('route-label').textContent = routeNames[name];
+      document.querySelector('.pet').style.display = name === 'agent' ? '' : 'none';
+    }
+    document.querySelectorAll('[data-route]').forEach(btn => btn.addEventListener('click', () => showRoute(btn.dataset.route)));
+    let toastTimer;
+    function showToast(message) {
+      const el = document.getElementById('toast'); el.textContent = message; el.classList.add('show');
+      clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), 2100);
+    }
+    document.querySelectorAll('[data-toast]').forEach(btn => btn.addEventListener('click', () => showToast(btn.dataset.toast)));
+    const pickerData = {
+      model: ['DeepSeek V4.1 Flash', 'Claude 4.1 Sonnet', 'GPT-5.4', 'LiteLLM · 更多模型'],
+      thinking: ['自动', '低', '中', '高', 'Max'],
+      permission: ['询问后执行', '当前项目内自动', '完整权限']
+    };
+    document.querySelectorAll('.picker-open').forEach(btn => btn.addEventListener('click', () => {
+      const kind = btn.dataset.picker, modal = document.getElementById('picker-modal');
+      document.getElementById('picker-title').textContent = ({model:'选择模型与渠道',thinking:'思考强度',permission:'工具权限'})[kind];
+      const box = document.getElementById('picker-options'); box.replaceChildren();
+      pickerData[kind].forEach((label, i) => { const option = document.createElement('button'); option.textContent = label; if (!i) option.className = 'selected'; option.addEventListener('click', () => { btn.innerHTML = `<strong>${label}</strong>⌄`; modal.classList.remove('show'); }); box.append(option); });
+      modal.classList.add('show');
+    }));
+    document.getElementById('picker-modal').addEventListener('click', e => { if (e.target.id === 'picker-modal') e.currentTarget.classList.remove('show'); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') document.getElementById('picker-modal').classList.remove('show'); });
+    document.getElementById('composer-form').addEventListener('submit', e => {
+      e.preventDefault(); const input = document.getElementById('prompt'); const value = input.value.trim(); if (!value) return;
+      const article = document.createElement('article'); article.className = 'message user';
+      const bubble = document.createElement('div'); bubble.className = 'bubble'; bubble.textContent = value; article.append(bubble);
+      const messages = document.getElementById('messages'); messages.append(article); input.value = ''; messages.scrollTop = messages.scrollHeight;
+      showToast('已发送（交互概念演示）');
+    });
+    const handle = document.getElementById('resize-handle'); let resizing = false;
+    handle.addEventListener('pointerdown', e => { resizing = true; handle.classList.add('dragging'); handle.setPointerCapture(e.pointerId); });
+    handle.addEventListener('pointermove', e => { if (!resizing) return; const width = Math.max(220, Math.min(520, window.innerWidth - e.clientX)); document.documentElement.style.setProperty('--inspector', `${width}px`); });
+    function stopResize() { resizing = false; handle.classList.remove('dragging'); }
+    handle.addEventListener('pointerup', stopResize); handle.addEventListener('pointercancel', stopResize);
+    document.getElementById('toggle-inspector').addEventListener('click', () => {
+      const hidden = document.querySelector('.inspector').style.display === 'none';
+      document.querySelector('.inspector').style.display = hidden ? '' : 'none';
+      document.querySelector('.resize-handle').style.display = hidden ? '' : 'none';
+      document.getElementById('chat-layout').style.gridTemplateColumns = hidden ? '' : 'minmax(420px,1fr)';
+      document.querySelector('.pet').style.right = hidden ? 'calc(var(--inspector) + 32px)' : '24px';
+    });
+  </script>
+</body>
+</html>

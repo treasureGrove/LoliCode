@@ -1,5 +1,6 @@
 //! Bounded local tools. The engine owns approval; paths are revalidated at execution.
 use crate::AgentDiff;
+use base64::{engine::general_purpose::STANDARD, Engine as _};
 use serde_json::{json, Map, Value};
 use std::{
     fs::{self, OpenOptions},
@@ -15,6 +16,7 @@ mod tests;
 
 const MAX_FILE: usize = 1024 * 1024;
 const MAX_OUTPUT: usize = 128 * 1024;
+const MAX_IMAGE_BYTES: u64 = 5 * 1024 * 1024;
 const MAX_ENTRIES: usize = 2000;
 /// Successful cancellation after tool cleanup, distinct from cleanup failure.
 pub const CANCELLED: &str = "任务已停止";
@@ -36,6 +38,7 @@ pub struct ToolInspection {
 }
 pub struct ToolOutput {
     pub text: String,
+    pub image_data_url: Option<String>,
     pub diffs: Vec<AgentDiff>,
     /// Full snapshots are private engine input for cumulative diffs; never
     /// include them in model tool results or IPC snapshots.
@@ -50,6 +53,7 @@ pub struct FileChange {
 pub fn schemas() -> Vec<Value> {
     [
         ("read_file", "Read UTF-8 text inside the project. offset is a 1-based line number; output is bounded.", json!({"path":{"type":"string"},"offset":{"type":"integer","minimum":1},"limit":{"type":"integer","minimum":1,"maximum":2000}}), vec!["path"]),
+        ("view_image", "View a raster image inside the project and inspect its visual contents. The file is sent to the model as an image, not decoded as text. Supports PNG, JPEG, WebP, GIF, BMP and AVIF up to 5 MiB.", json!({"path":{"type":"string"}}), vec!["path"]),
         ("list_files", "List project entries. Recursive listing skips .git, node_modules and target, and is bounded.", json!({"path":{"type":"string"},"recursive":{"type":"boolean"}}), vec![]),
         ("search_files", "Search literal, case-sensitive text in project UTF-8 files, not a regular expression. Skips dependency/build directories and binary or oversized files.", json!({"path":{"type":"string"},"pattern":{"type":"string","minLength":1},"max_results":{"type":"integer","minimum":1,"maximum":500}}), vec!["pattern"]),
         ("write_file", "Atomically create or replace one UTF-8 project file. expected_content must exactly match an existing file; null means the file must not exist. Read existing files first. Parent directory must exist.", json!({"path":{"type":"string"},"content":{"type":"string"},"expected_content":{"type":["string","null"]}}), vec!["path","content","expected_content"]),
@@ -194,6 +198,7 @@ fn resolve(root: &Path, input: &str, allow_new: bool) -> Result<PathBuf, String>
 
 enum Call {
     Read(PathBuf, u64, u64),
+    ViewImage(PathBuf),
     List(PathBuf, bool),
     Search(PathBuf, String, usize),
     Write(PathBuf, String, Option<String>),
@@ -210,6 +215,10 @@ fn parse(project: &Path, name: &str, input: &Value) -> Result<(PathBuf, Call), S
                 number(a, "offset", 1, u32::MAX as u64)?,
                 number(a, "limit", 400, 2000)?,
             )
+        }
+        "view_image" => {
+            let a = args(input, &["path"])?;
+            Call::ViewImage(resolve(&root, text(a, "path")?, false)?)
         }
         "list_files" => {
             let a = args(input, &["path", "recursive"])?;
@@ -270,7 +279,7 @@ fn parse(project: &Path, name: &str, input: &Value) -> Result<(PathBuf, Call), S
         _ => return Err("未知本地工具".into()),
     };
     match &call {
-        Call::Read(path, ..) | Call::Patch(path, ..) if !path.is_file() => {
+        Call::Read(path, ..) | Call::ViewImage(path) | Call::Patch(path, ..) if !path.is_file() => {
             return Err("此工具需要普通文件".into())
         }
         Call::Write(path, ..) if path.exists() && !path.is_file() => {
@@ -288,6 +297,13 @@ pub fn inspect(project: &Path, name: &str, input: &Value) -> Result<ToolInspecti
     let (_, call) = parse(project, name, input)?;
     let (action, resource, mutating, approval, dangerous) = match call {
         Call::Read(path, ..) => (
+            "read",
+            path.to_string_lossy().into_owned(),
+            false,
+            false,
+            false,
+        ),
+        Call::ViewImage(path) => (
             "read",
             path.to_string_lossy().into_owned(),
             false,
@@ -366,6 +382,27 @@ fn relative(root: &Path, path: &Path) -> String {
         .unwrap_or(path)
         .to_string_lossy()
         .replace('\\', "/")
+}
+fn image_media_type(bytes: &[u8]) -> Option<&'static str> {
+    if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+        Some("image/png")
+    } else if bytes.starts_with(&[0xff, 0xd8, 0xff]) {
+        Some("image/jpeg")
+    } else if bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a") {
+        Some("image/gif")
+    } else if bytes.starts_with(b"BM") {
+        Some("image/bmp")
+    } else if bytes.len() >= 12 && &bytes[..4] == b"RIFF" && &bytes[8..12] == b"WEBP" {
+        Some("image/webp")
+    } else if bytes.get(4..8) == Some(b"ftyp")
+        && bytes
+            .get(8..12)
+            .is_some_and(|brand| brand == b"avif" || brand == b"avis")
+    {
+        Some("image/avif")
+    } else {
+        None
+    }
 }
 fn walk(
     root: &Path,
@@ -579,6 +616,7 @@ pub async fn execute(
     tokio::task::spawn_blocking(move || {
         cancelled(&cancel)?;
         let mut file_changes = Vec::new();
+        let mut image_data_url = None;
         let (text, diffs) = match call {
             Call::Read(path, offset, limit) => {
                 let content = read_text(&path)?;
@@ -590,6 +628,32 @@ pub async fn execute(
                     .map(|(i, line)| format!("{}: {line}\n", offset + i as u64))
                     .collect::<String>();
                 (format!("{}\n{}", relative(&root, &path), text), vec![])
+            }
+            Call::ViewImage(path) => {
+                let metadata = fs::metadata(&path).map_err(|_| "无法读取图片元数据")?;
+                if !metadata.is_file() || metadata.len() == 0 || metadata.len() > MAX_IMAGE_BYTES {
+                    return Err("图片必须是非空且不超过 5 MiB 的普通文件".into());
+                }
+                let mut bytes = Vec::with_capacity(metadata.len() as usize);
+                fs::File::open(&path)
+                    .map_err(|_| "无法读取图片文件")?
+                    .take(MAX_IMAGE_BYTES + 1)
+                    .read_to_end(&mut bytes)
+                    .map_err(|_| "无法读取图片文件")?;
+                if bytes.is_empty() || bytes.len() as u64 > MAX_IMAGE_BYTES {
+                    return Err("图片必须是非空且不超过 5 MiB 的普通文件".into());
+                }
+                let mime = image_media_type(&bytes)
+                    .ok_or("图片格式不受支持；请使用 PNG、JPEG、WebP、GIF、BMP 或 AVIF")?;
+                let encoded = STANDARD.encode(bytes);
+                image_data_url = Some(format!("data:{mime};base64,{encoded}"));
+                (
+                    format!(
+                        "已将项目图片作为视觉输入交给模型：{}",
+                        relative(&root, &path)
+                    ),
+                    vec![],
+                )
             }
             Call::List(path, recursive) => {
                 let mut entries = vec![];
@@ -667,6 +731,7 @@ pub async fn execute(
         };
         Ok(ToolOutput {
             text: bounded(text),
+            image_data_url,
             diffs,
             file_changes,
         })

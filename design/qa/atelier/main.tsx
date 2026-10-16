@@ -1,5 +1,14 @@
 /* Development-only visual fixture. This entry is not imported by src/main.tsx or the build. */
 import React, { useState } from "react";
+import { MotionConfig } from "framer-motion";
+import { Sidebar } from "../../../src/components/shell/Sidebar";
+import { UpdateProvider } from "../../../src/contexts/UpdateContext";
+import { ChannelCenterPanel } from "../../../src/components/channels/ChannelCenterPanel";
+import {
+  channelCenterApi,
+  type ChannelCenterSnapshot,
+} from "../../../src/lib/api/channel-center";
+import type { SettingsSection } from "../../../src/lib/navigation";
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AgentPage } from "../../../src/components/agent/AgentPage";
@@ -75,6 +84,12 @@ const billingAccount = {
 Object.assign(window, {
   __TAURI_INTERNALS__: {
     invoke: async (command: string) => {
+      if (command === "get_settings") return { autoCheckUpdate: false };
+      if (command === "get_providers") return {};
+      if (command === "get_current_provider") return "";
+      if (command === "auth_get_status") return { accounts: [] };
+      if (command === "auth_list_accounts") return [];
+      if (command === "plugin:app|version") return "4.0.15";
       if (command === "copilot_list_accounts") return [billingAccount];
       if (command === "copilot_get_auth_status")
         return {
@@ -98,6 +113,45 @@ Object.assign(window, {
   },
 });
 const project = "D:/examples/星图工坊";
+let channelFixture: ChannelCenterSnapshot = {
+  revision: 1,
+  targets: ["opencode"],
+  channels: [
+    {
+      id: "qa-channel",
+      name: "示例创作渠道",
+      baseUrl: "https://example.com/v1",
+      apiKey: "",
+      authKind: "api_key",
+      protocol: "openai_chat",
+      enabled: true,
+      models: [
+        {
+          id: "example-code",
+          name: "Code · 示例模型",
+          enabled: true,
+          supportsTools: true,
+        },
+        {
+          id: "example-think",
+          name: "Think · 示例模型",
+          enabled: true,
+          supportsTools: true,
+        },
+      ],
+    },
+  ],
+};
+channelCenterApi.get = async () => structuredClone(channelFixture);
+channelCenterApi.save = async (value) => {
+  channelFixture = structuredClone(value);
+};
+channelCenterApi.discover = async () => {
+  throw new Error("示例页不连接模型服务。");
+};
+channelCenterApi.apply = async () => {
+  throw new Error("示例页不写入客户端配置。");
+};
 const catalog: AgentCatalog = {
   revision: 1,
   defaultModel: "qa/flash",
@@ -221,6 +275,13 @@ agentApi.listProjects = async () => [
 ];
 agentApi.listSessions = async () => [structuredClone(session)];
 agentApi.getSession = async () => structuredClone(snapshot);
+agentApi.createSession = async () => {
+  session.id = `lc:qa-${Date.now()}`;
+  snapshot.messages = [];
+  snapshot.diffs = [];
+  session.title = "新的创作任务";
+  return structuredClone(session);
+};
 agentApi.updateSession = async (_id, patch) => {
   if (patch.modelId) {
     const model = catalog.models.find((m) => m.id === patch.modelId)!;
@@ -273,6 +334,8 @@ agentFilesApi.open = async () => {};
 
 function QA() {
   const [view, setView] = useState("agent");
+  const [settingsSection, setSettingsSection] =
+    useState<SettingsSection>("general");
   const [dialog, setDialog] = useState(false);
   const { theme, setTheme } = useTheme();
   return (
@@ -295,6 +358,7 @@ function QA() {
         <span>开发组件验收 · 示例数据 · 不调用模型／GitHub</span>
         <div style={{ display: "flex", gap: 16 }}>
           <button onClick={() => setView("agent")}>工作台</button>
+          <button onClick={() => setView("channels")}>渠道样式</button>
           <button onClick={() => setView("settings")}>设置样式</button>
           <button onClick={() => setView("billing")}>账单样式</button>
           <button onClick={() => setDialog(true)}>弹窗样式</button>
@@ -307,12 +371,40 @@ function QA() {
         className="tai-shell flex overflow-hidden text-fg-1"
         style={{ height: "calc(100dvh - 28px)" }}
       >
+        <Sidebar
+          activeApp="claude"
+          view={
+            view === "billing"
+              ? "usage"
+              : (view as "agent" | "channels" | "settings")
+          }
+          visibleApps={{
+            claude: true,
+            "claude-desktop": false,
+            codex: true,
+            gemini: true,
+            grokbuild: false,
+            opencode: true,
+            openclaw: true,
+            hermes: true,
+            pi: false,
+            mcode: false,
+          }}
+          settingsSection={settingsSection}
+          onSelectApp={() => setView("channels")}
+          onSelectPage={(page) => setView(page === "usage" ? "billing" : page)}
+          onSelectSettingsSection={setSettingsSection}
+          onExitSettings={() => setView("agent")}
+          onOpenUpdates={() => setDialog(true)}
+        />
         <main
           data-view={view}
           className="tai-main relative isolate flex min-w-0 flex-1 flex-col overflow-hidden"
         >
           {view === "agent" ? (
-            <AgentPage onOpenChannels={() => setView("settings")} />
+            <AgentPage onOpenChannels={() => setView("channels")} />
+          ) : view === "channels" ? (
+            <ChannelCenterPanel />
           ) : view === "billing" ? (
             <>
               <AppPageHeader
@@ -415,10 +507,14 @@ function QA() {
 
 createRoot(document.getElementById("root")!).render(
   <QueryClientProvider client={new QueryClient()}>
-    <ThemeProvider defaultTheme="dark" storageKey="lolicode.atelier-qa.theme">
-      <TooltipProvider>
-        <QA />
-      </TooltipProvider>
+    <ThemeProvider defaultTheme="light" storageKey="lolicode.atelier-qa.theme">
+      <UpdateProvider>
+        <MotionConfig reducedMotion="user">
+          <TooltipProvider>
+            <QA />
+          </TooltipProvider>
+        </MotionConfig>
+      </UpdateProvider>
     </ThemeProvider>
   </QueryClientProvider>,
 );

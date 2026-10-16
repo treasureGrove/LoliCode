@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useReducedMotion } from "framer-motion";
 import {
   CheckCircle2,
   CircleAlert,
   Eye,
   EyeOff,
+  Layers3,
   Loader2,
   Plus,
   RefreshCw,
@@ -56,12 +58,13 @@ import { ManagedChannelLoginPanel } from "./ManagedChannelLoginPanel";
 import { NativeSubscriptionLoginPanel } from "./NativeSubscriptionLoginPanel";
 import { ChannelModelList } from "./ChannelModelList";
 import { AppsPage } from "@/components/apps/AppsPage";
+import "./channels.css";
 
 const EMPTY_SNAPSHOT: ChannelCenterSnapshot = {
   channels: [],
   targets: ["opencode", "hermes", "openclaw"],
 };
-const CARD = "rounded-panel border border-border bg-surface p-5";
+const CARD = "lolicode-channel-section";
 
 export interface ChannelCenterPanelProps {
   onNavigationBlockedChange?: (blocked: boolean) => void;
@@ -75,6 +78,7 @@ export function ChannelCenterPanel({
   initialAccountManagerOpen = false,
   initialToolsOpen = false,
 }: ChannelCenterPanelProps = {}) {
+  const reducedMotion = useReducedMotion();
   const [snapshot, setSnapshot] =
     useState<ChannelCenterSnapshot>(EMPTY_SNAPSHOT);
   const [loading, setLoading] = useState(true);
@@ -540,35 +544,50 @@ export function ChannelCenterPanel({
 
   return (
     <div
-      className="lolicode-channel-center h-full overflow-y-auto"
+      className="lolicode-channel-center"
       aria-busy={Boolean(busy) || loading}
     >
-      <div className="mx-auto max-w-6xl space-y-5 px-6 py-6 sm:px-8">
-        <header className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="text-xl font-semibold text-fg-1">模型与渠道</h1>
+      <div className="lolicode-channel-content">
+        <header className="lolicode-channel-heading">
+          <div className="lolicode-channel-intro">
+            <span className="lolicode-channel-eyebrow">MODEL LIBRARY</span>
+            <h1>模型与渠道</h1>
             <p className="mt-1 text-body text-fg-2">
-              配置模型与思考强度，自动保存。需要时再把渠道应用到本地 AI 工具。
+              连接喜欢的模型，让灵感随时就绪。
             </p>
           </div>
-          <span className="rounded-full bg-subtle px-3 py-1.5 text-caption text-fg-2">
-            {snapshot.channels.length} 个渠道 · {selected.length} 个已选模型
-          </span>
-          <span role="status" className="text-caption text-fg-3">
-            {saving
-              ? "正在自动保存…"
-              : loadFailed
-                ? "暂时无法确认已保存配置"
-                : saveFailed
-                  ? "自动保存失败，修改仍保留"
-                  : dirty
-                    ? "等待自动保存…"
-                    : formTouched
-                      ? "输入草稿尚未保存"
-                      : !loading
-                        ? "配置已自动保存"
-                        : ""}
-          </span>
+          <div className="lolicode-channel-summary">
+            <span className="lolicode-channel-count">
+              <Layers3 className="h-3.5 w-3.5" aria-hidden="true" />
+              {snapshot.channels.length} 个渠道 · {selected.length} 个已选模型
+            </span>
+            <span
+              role="status"
+              className="lolicode-channel-save-state text-caption text-fg-3"
+            >
+              {!loading &&
+                !dirty &&
+                !formTouched &&
+                !loadFailed &&
+                !saveFailed &&
+                !saving && (
+                  <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
+                )}
+              {saving
+                ? "正在自动保存…"
+                : loadFailed
+                  ? "暂时无法确认已保存配置"
+                  : saveFailed
+                    ? "自动保存失败，修改仍保留"
+                    : dirty
+                      ? "等待自动保存…"
+                      : formTouched
+                        ? "输入草稿尚未保存"
+                        : !loading
+                          ? "配置已自动保存"
+                          : ""}
+            </span>
+          </div>
         </header>
 
         {error && (
@@ -620,194 +639,206 @@ export function ChannelCenterPanel({
           </div>
         )}
 
-        <section className={CARD} aria-labelledby="channel-add-heading">
-          <h2
-            id="channel-add-heading"
-            className="text-base font-semibold text-fg-1"
-          >
-            1. 添加渠道
-          </h2>
-          <Button
-            variant="quiet"
-            size="compact"
-            disabled={disabled}
-            onClick={() => {
-              setAccountManagerTarget(null);
-              setAccountManagerOpen(true);
-            }}
-          >
-            管理登录账号
-          </Button>
-          <ChannelPresetPicker
-            value={preset}
-            disabled={disabled}
-            onValueChange={selectPreset}
-          />
-          <div className="lolicode-channel-form mt-4 max-w-2xl rounded-control border border-border p-4">
-            {selectedAccountPreset && (
-              <div className="mb-4 flex items-center gap-2.5">
-                <ProviderIconBox
-                  icon={selectedAccountPreset.icon}
-                  name={selectedAccountPreset.name}
-                />
-                <h3 className="text-body font-medium text-fg-1">
-                  {selectedAccountPreset.name}
-                </h3>
-              </div>
-            )}
-            {!selectedAccountPreset ? (
-              <form
-                ref={formRef}
-                noValidate
-                className="space-y-3"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  if (!editingId) addApiChannel();
-                }}
+        <section
+          className={cn(CARD, "lolicode-channel-connect")}
+          aria-labelledby="channel-add-heading"
+        >
+          <div className="lolicode-channel-section-heading">
+            <div>
+              <h2
+                id="channel-add-heading"
+                className="text-base font-semibold text-fg-1"
               >
-                <fieldset disabled={disabled} className="space-y-3">
-                  {selectedPreset && (
-                    <div className="flex items-center gap-2.5 rounded-control bg-subtle p-3">
-                      <ProviderIconBox
-                        icon={selectedPreset.icon}
-                        name={selectedPreset.name}
+                添加渠道
+              </h2>
+              <p className="mt-1 text-caption text-fg-3">
+                选择服务，使用密钥或已有账号连接。
+              </p>
+            </div>
+            <Button
+              variant="quiet"
+              size="compact"
+              disabled={disabled}
+              onClick={() => {
+                setAccountManagerTarget(null);
+                setAccountManagerOpen(true);
+              }}
+            >
+              管理登录账号
+            </Button>
+          </div>
+          <div className="lolicode-channel-connect-grid">
+            <ChannelPresetPicker
+              value={preset}
+              disabled={disabled}
+              onValueChange={selectPreset}
+            />
+            <div className="lolicode-channel-form">
+              {selectedAccountPreset && (
+                <div className="mb-4 flex items-center gap-2.5">
+                  <ProviderIconBox
+                    icon={selectedAccountPreset.icon}
+                    name={selectedAccountPreset.name}
+                  />
+                  <h3 className="text-body font-medium text-fg-1">
+                    {selectedAccountPreset.name}
+                  </h3>
+                </div>
+              )}
+              {!selectedAccountPreset ? (
+                <form
+                  ref={formRef}
+                  noValidate
+                  className="space-y-3"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    if (!editingId) addApiChannel();
+                  }}
+                >
+                  <fieldset disabled={disabled} className="space-y-3">
+                    {selectedPreset && (
+                      <div className="lolicode-channel-service-intro flex items-center gap-2.5">
+                        <ProviderIconBox
+                          icon={selectedPreset.icon}
+                          name={selectedPreset.name}
+                        />
+                        <div>
+                          <p className="text-body font-medium text-fg-1">
+                            {selectedPreset.name}
+                          </p>
+                          <p className="mt-0.5 text-caption text-fg-3">
+                            服务地址已准备好，填写密钥即可。
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                    <div className="space-y-1.5">
+                      <Label htmlFor="channel-name">
+                        名称 <span className="text-fg-3">（可选）</span>
+                      </Label>
+                      <Input
+                        id="channel-name"
+                        value={name}
+                        placeholder="例如：工作账号"
+                        onChange={(event) => {
+                          formVersion.current += 1;
+                          setName(event.target.value);
+                          setFormTouched(true);
+                        }}
                       />
-                      <div>
-                        <p className="text-body font-medium text-fg-1">
-                          {selectedPreset.name}
-                        </p>
-                        <p className="mt-0.5 text-caption text-fg-3">
-                          服务地址已准备好，填写密钥即可。
-                        </p>
+                    </div>
+                    {(preset === "custom" || editingId) && (
+                      <div className="space-y-1.5">
+                        <Label htmlFor="channel-url">API 地址</Label>
+                        <Input
+                          id="channel-url"
+                          type="url"
+                          required
+                          value={baseUrl}
+                          placeholder="粘贴服务商提供的 API 地址"
+                          onChange={(event) => {
+                            formVersion.current += 1;
+                            setBaseUrl(event.target.value);
+                            setFormTouched(true);
+                          }}
+                        />
+                      </div>
+                    )}
+                    <div className="space-y-1.5">
+                      <Label htmlFor="channel-key">API Key</Label>
+                      <div className="relative">
+                        <Input
+                          id="channel-key"
+                          type={showKey ? "text" : "password"}
+                          className="pr-10"
+                          required
+                          value={apiKey}
+                          placeholder="粘贴密钥"
+                          autoComplete="new-password"
+                          onChange={(event) => {
+                            formVersion.current += 1;
+                            setApiKey(event.target.value);
+                            setFormTouched(true);
+                          }}
+                        />
+                        <Button
+                          type="button"
+                          variant="quiet"
+                          size="icon-compact"
+                          className="absolute right-1 top-1/2 -translate-y-1/2"
+                          aria-label={showKey ? "隐藏 API Key" : "显示 API Key"}
+                          aria-pressed={showKey}
+                          onClick={() => setShowKey((value) => !value)}
+                        >
+                          {showKey ? (
+                            <EyeOff className="h-4 w-4" />
+                          ) : (
+                            <Eye className="h-4 w-4" />
+                          )}
+                        </Button>
                       </div>
                     </div>
-                  )}
-                  <div className="space-y-1.5">
-                    <Label htmlFor="channel-name">
-                      名称 <span className="text-fg-3">（可选）</span>
-                    </Label>
-                    <Input
-                      id="channel-name"
-                      value={name}
-                      placeholder="例如：工作账号"
-                      onChange={(event) => {
-                        formVersion.current += 1;
-                        setName(event.target.value);
-                        setFormTouched(true);
-                      }}
-                    />
-                  </div>
-                  {(preset === "custom" || editingId) && (
-                    <div className="space-y-1.5">
-                      <Label htmlFor="channel-url">API 地址</Label>
-                      <Input
-                        id="channel-url"
-                        type="url"
-                        required
-                        value={baseUrl}
-                        placeholder="粘贴服务商提供的 API 地址"
-                        onChange={(event) => {
-                          formVersion.current += 1;
-                          setBaseUrl(event.target.value);
-                          setFormTouched(true);
-                        }}
-                      />
+                    <div className="flex flex-wrap items-center gap-2">
+                      {!editingId && (
+                        <Button
+                          type="submit"
+                          variant="neutral"
+                          disabled={!baseUrl.trim() || !apiKey.trim()}
+                        >
+                          {busy === "discover-api" ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Plus className="h-4 w-4" />
+                          )}
+                          添加并查找模型
+                        </Button>
+                      )}
+                      {(formTouched || editingId) && (
+                        <Button
+                          type="button"
+                          variant="quiet"
+                          onClick={() =>
+                            formTouched ? setResetRequested(true) : resetForm()
+                          }
+                        >
+                          {editingId ? "结束编辑" : "清空输入"}
+                        </Button>
+                      )}
                     </div>
-                  )}
-                  <div className="space-y-1.5">
-                    <Label htmlFor="channel-key">API Key</Label>
-                    <div className="relative">
-                      <Input
-                        id="channel-key"
-                        type={showKey ? "text" : "password"}
-                        className="pr-10"
-                        required
-                        value={apiKey}
-                        placeholder="粘贴密钥"
-                        autoComplete="new-password"
-                        onChange={(event) => {
-                          formVersion.current += 1;
-                          setApiKey(event.target.value);
-                          setFormTouched(true);
-                        }}
-                      />
-                      <Button
-                        type="button"
-                        variant="quiet"
-                        size="icon-compact"
-                        className="absolute right-1 top-1/2 -translate-y-1/2"
-                        aria-label={showKey ? "隐藏 API Key" : "显示 API Key"}
-                        aria-pressed={showKey}
-                        onClick={() => setShowKey((value) => !value)}
-                      >
-                        {showKey ? (
-                          <EyeOff className="h-4 w-4" />
-                        ) : (
-                          <Eye className="h-4 w-4" />
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {!editingId && (
-                      <Button
-                        type="submit"
-                        variant="neutral"
-                        disabled={!baseUrl.trim() || !apiKey.trim()}
-                      >
-                        {busy === "discover-api" ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Plus className="h-4 w-4" />
-                        )}
-                        添加并查找模型
-                      </Button>
-                    )}
-                    {(formTouched || editingId) && (
-                      <Button
-                        type="button"
-                        variant="quiet"
-                        onClick={() =>
-                          formTouched ? setResetRequested(true) : resetForm()
-                        }
-                      >
-                        {editingId ? "结束编辑" : "清空输入"}
-                      </Button>
-                    )}
-                  </div>
-                  <p className="text-caption text-fg-3">
-                    {editingId
-                      ? "完整有效的修改会自动保存；不会自动请求模型目录。修改连接信息后，请单独刷新模型。"
-                      : preset === "custom"
-                        ? "填入服务商的地址和密钥，自动获取模型。"
-                        : "自动获取此账号的模型列表；不同服务可以逐个加入。"}
-                  </p>
-                </fieldset>
-              </form>
-            ) : selectedAccountPreset.authProvider === "zhipu_oauth" ? (
-              <ZhipuLoginPanel
-                disabled={loading || loadFailed || Boolean(busy)}
-                onBusyChange={setAccountBusy}
-                onConnected={connectAccountChannel}
-              />
-            ) : selectedAccountPreset.authProvider ? (
-              <ManagedChannelLoginPanel
-                key={selectedAccountPreset.authProvider}
-                authProvider={selectedAccountPreset.authProvider}
-                channels={snapshot.channels}
-                disabled={loading || loadFailed || Boolean(busy)}
-                onBusyChange={setAccountBusy}
-                onConnected={connectAccountChannel}
-              />
-            ) : (
-              <NativeSubscriptionLoginPanel
-                key={selectedAccountPreset.nativeApp}
-                tool={selectedAccountPreset.nativeApp!}
-                disabled={loading || loadFailed || Boolean(busy)}
-                onBusyChange={setAccountBusy}
-                onConnected={connectAccountChannel}
-              />
-            )}
+                    <p className="text-caption text-fg-3">
+                      {editingId
+                        ? "完整有效的修改会自动保存；不会自动请求模型目录。修改连接信息后，请单独刷新模型。"
+                        : preset === "custom"
+                          ? "填入服务商的地址和密钥，自动获取模型。"
+                          : "自动获取此账号的模型列表；不同服务可以逐个加入。"}
+                    </p>
+                  </fieldset>
+                </form>
+              ) : selectedAccountPreset.authProvider === "zhipu_oauth" ? (
+                <ZhipuLoginPanel
+                  disabled={loading || loadFailed || Boolean(busy)}
+                  onBusyChange={setAccountBusy}
+                  onConnected={connectAccountChannel}
+                />
+              ) : selectedAccountPreset.authProvider ? (
+                <ManagedChannelLoginPanel
+                  key={selectedAccountPreset.authProvider}
+                  authProvider={selectedAccountPreset.authProvider}
+                  channels={snapshot.channels}
+                  disabled={loading || loadFailed || Boolean(busy)}
+                  onBusyChange={setAccountBusy}
+                  onConnected={connectAccountChannel}
+                />
+              ) : (
+                <NativeSubscriptionLoginPanel
+                  key={selectedAccountPreset.nativeApp}
+                  tool={selectedAccountPreset.nativeApp!}
+                  disabled={loading || loadFailed || Boolean(busy)}
+                  onBusyChange={setAccountBusy}
+                  onConnected={connectAccountChannel}
+                />
+              )}
+            </div>
           </div>
         </section>
 
@@ -818,17 +849,14 @@ export function ChannelCenterPanel({
                 id="channel-model-heading"
                 className="text-base font-semibold text-fg-1"
               >
-                2. 选择模型
+                选择模型
               </h2>
-              <p className="mt-1 text-caption text-fg-2">
-                模型来自上游目录，尚未发送聊天请求测试，不代表不可用。上下文与思考强度自动读取上游返回的信息；未提供的参数会明确标注。
-              </p>
             </div>
             <div className="relative w-full sm:w-64">
-              <Search className="absolute left-2.5 top-2 h-4 w-4 text-fg-3" />
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-3" />
               <Input
                 aria-label="搜索渠道或模型"
-                className="pl-8"
+                className="pl-9"
                 value={search}
                 placeholder="搜索渠道或模型"
                 onChange={(event) => setSearch(event.target.value)}
@@ -836,18 +864,24 @@ export function ChannelCenterPanel({
             </div>
           </div>
           {snapshot.channels.length === 0 && !loading && (
-            <p className="py-8 text-center text-body text-fg-3">
-              添加 API 或登录订阅账号后，模型会显示在这里。
-            </p>
+            <div className="lolicode-channel-empty">
+              <span className="lolicode-channel-empty-icon" aria-hidden="true">
+                <Layers3 className="h-6 w-6" />
+              </span>
+              <p className="font-medium text-fg-2">你的模型库，从这里开始</p>
+              <p className="text-caption text-fg-3">
+                添加 API 或登录订阅账号后，模型会显示在这里。
+              </p>
+            </div>
           )}
           <div className="mt-4 space-y-3">
             {filteredChannels.map(({ channel, models }) => (
               <article
                 key={channel.id}
-                className="rounded-control border border-border"
+                className="lolicode-saved-channel"
                 aria-label={`${channel.name} 渠道`}
               >
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-subtle/50 px-3 py-2.5">
+                <div className="lolicode-saved-channel-heading flex flex-wrap items-center justify-between gap-2">
                   <label className="flex min-w-0 items-center gap-2 text-body font-medium text-fg-1">
                     <Checkbox
                       aria-label={`启用 ${channel.name}`}
@@ -935,7 +969,7 @@ export function ChannelCenterPanel({
                           setSourceProtocol(channel.protocol);
                           setFormTouched(false);
                           formRef.current?.scrollIntoView?.({
-                            behavior: "smooth",
+                            behavior: reducedMotion ? "auto" : "smooth",
                             block: "center",
                           });
                         }}
@@ -975,11 +1009,11 @@ export function ChannelCenterPanel({
                   channel={channel}
                   models={models}
                   disabled={disabled}
-                  collapsed={Boolean(collapsed[channel.id])}
+                  collapsed={collapsed[channel.id] ?? true}
                   onToggle={() =>
                     setCollapsed((value) => ({
                       ...value,
-                      [channel.id]: !value[channel.id],
+                      [channel.id]: !(value[channel.id] ?? true),
                     }))
                   }
                   onModelsChange={(models) =>
@@ -1058,11 +1092,12 @@ export function ChannelCenterPanel({
               <label
                 key={app}
                 className={cn(
-                  "flex cursor-pointer items-center gap-2 rounded-control border px-3 py-3 text-body text-fg-1",
+                  "lolicode-channel-target flex cursor-pointer items-center gap-2 border px-3 py-3 text-body text-fg-1",
                   snapshot.targets.includes(app)
                     ? "border-border-strong bg-subtle"
                     : "border-border",
                 )}
+                data-selected={snapshot.targets.includes(app)}
               >
                 <Checkbox
                   aria-label={APP_DISPLAY_NAME[app]}

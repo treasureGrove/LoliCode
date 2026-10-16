@@ -1,6 +1,6 @@
 [package]
 name = "tai-switch"
-version = "4.0.16"
+version = "4.0.17"
 description = "LoliCode desktop coding agent with shared model channels"
 authors = ["Jason Young"]
 license = "MIT"

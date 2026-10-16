@@ -140,8 +140,13 @@ pub(super) async fn infer_with_policy(
                 }
                 body.extend_from_slice(&chunk);
             }
-            if serde_json::from_slice::<Value>(&body).is_ok_and(|error| context_error(&error)) {
-                return Err(CONTEXT_EXCEEDED.into());
+            if let Ok(error) = serde_json::from_slice::<Value>(&body) {
+                if context_error(&error) {
+                    return Err(CONTEXT_EXCEEDED.into());
+                }
+                if image_input_error(&error) {
+                    return Err("当前渠道或模型不支持图片输入，请切换支持视觉的模型或渠道。".into());
+                }
             }
         }
         return Err(format!(
@@ -455,4 +460,24 @@ fn context_error(value: &Value) -> bool {
                     | "input_too_long"
             )
         })
+}
+
+fn image_input_error(value: &Value) -> bool {
+    let message = ["/error/message", "/message", "/error/code", "/error/type"]
+        .iter()
+        .filter_map(|pointer| value.pointer(pointer).and_then(Value::as_str))
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_ascii_lowercase();
+    (message.contains("image") || message.contains("vision") || message.contains("multimodal"))
+        && [
+            "unsupported",
+            "not support",
+            "does not support",
+            "not enabled",
+            "invalid content",
+            "unavailable",
+        ]
+        .iter()
+        .any(|marker| message.contains(marker))
 }

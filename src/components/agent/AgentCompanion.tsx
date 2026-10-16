@@ -14,9 +14,10 @@ export function AgentCompanion() {
       : "settings.atelier.showCompanion",
   );
   return (
-    <div className="wb-companion">
+    <div className="wb-companion" data-visible={visible}>
       {visible && (
         <div className="wb-companion-stage">
+          <span className="wb-companion-aura" aria-hidden="true" />
           <img
             className="wb-companion-image"
             src={companion}

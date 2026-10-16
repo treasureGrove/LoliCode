@@ -1,4 +1,6 @@
 import type { AgentMessage, AgentStatus } from "@/types/agent";
+import { Loader2, RotateCcw } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 /** Only explicit stop outcomes are cancellation, never arbitrary HTTP errors. */
 export function isAgentCancellation(value?: string | null) {
@@ -36,6 +38,8 @@ export interface AgentRunErrorProps {
   pending?: boolean;
   /** Optional latest submitted request identity, including unacknowledged turns. */
   currentTurnId?: string | null;
+  onRetry?: () => void;
+  retrying?: boolean;
 }
 
 /** Snapshot errors belong to its final acknowledged user turn, not the page. */
@@ -45,6 +49,8 @@ export function AgentRunError({
   error,
   pending = false,
   currentTurnId,
+  onRetry,
+  retrying = false,
 }: AgentRunErrorProps) {
   const turnId = lastAgentUserTurn(messages);
   if (
@@ -64,7 +70,27 @@ export function AgentRunError({
     >
       <div className="wb-run-error-heading">
         <span className="wb-run-error-dot" aria-hidden="true" />
-        {cancelled ? "本轮已停止" : "本轮运行失败"}
+        <span>{cancelled ? "本轮已停止" : "本轮运行失败"}</span>
+        {!cancelled && onRetry && (
+          <Button
+            type="button"
+            variant="quiet"
+            size="compact"
+            className="wb-run-retry"
+            disabled={retrying}
+            onClick={onRetry}
+          >
+            {retrying ? (
+              <Loader2
+                className="h-3.5 w-3.5 animate-spin"
+                aria-hidden="true"
+              />
+            ) : (
+              <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+            )}
+            {retrying ? "正在重试" : "重试"}
+          </Button>
+        )}
       </div>
       <p className="wb-run-error-reason">{error}</p>
     </div>

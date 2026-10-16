@@ -1,4 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
+import type {
+  AgentDocumentAttachment,
+  AgentImageAttachment,
+} from "@/types/agent";
 import i18n from "@/i18n";
 import type {
   AgentCatalog,
@@ -9,6 +13,7 @@ import type {
   AgentProject,
   AgentExtensions,
   AgentExtensionConfig,
+  AgentPluginStore,
   AgentPermissionDecision,
   AgentProjectResult,
   AgentQuestionAnswer,
@@ -50,6 +55,8 @@ export const agentApi = {
   getCatalog: () => invoke<AgentCatalog>("get_agent_catalog"),
   openProject: (path: string, refreshModels?: boolean) =>
     invoke<AgentProjectResult>("open_agent_project", { path, refreshModels }),
+  openProjectDirectory: (path: string) =>
+    invoke<void>("open_agent_project_directory", { path }),
   listSessions: (projectPath?: string, includeArchived?: boolean) =>
     invoke<AgentSession[]>("list_agent_sessions", {
       projectPath,
@@ -94,12 +101,46 @@ export const agentApi = {
     invoke<void>("delete_agent_session", { sessionId }),
   getSession: (sessionId: string) =>
     invoke<AgentSnapshot>("get_agent_session", { sessionId }),
-  sendMessage: (sessionId: string, text: string, requestId: string) =>
+  inspectDocument: (path: string) =>
+    invoke<{ fileName: string; mime: string; bytes: number }>(
+      "inspect_agent_document",
+      { path },
+    ),
+  sendMessage: (
+    sessionId: string,
+    text: string,
+    requestId: string,
+    images: AgentImageAttachment[] = [],
+    documents: AgentDocumentAttachment[] = [],
+  ) =>
     invoke<void>("send_agent_message", {
       sessionId,
       text,
       requestId,
-      locale: ["zh", "zh-TW", "en", "ja"].includes(i18n.resolvedLanguage || i18n.language)
+      ...(images.length || documents.length
+        ? {
+            attachments: [
+              ...images.map(({ dataUrl, fileName, mime, bytes }) => ({
+                ref: dataUrl,
+                fileName,
+                mime,
+                bytes,
+              })),
+              ...documents.map(
+                ({ dataBase64, localPath, fileName, mime, bytes }) => ({
+                  ...(dataBase64 ? { dataBase64 } : {}),
+                  ...(localPath ? { localPath } : {}),
+                  fileName,
+                  mime,
+                  bytes,
+                }),
+              ),
+            ],
+          }
+        : {}),
+      locale: ["zh", "zh-TW", "en", "ja"].includes(
+        i18n.resolvedLanguage || i18n.language,
+      )
         ? i18n.resolvedLanguage || i18n.language
         : undefined,
     }),
@@ -125,6 +166,26 @@ export const agentApi = {
     invoke<void>("reject_agent_question", { sessionId, requestId }),
   closeProject: () => invoke<void>("close_agent_project"),
   getExtensions: () => invoke<AgentExtensions>("get_agent_extensions"),
+  getPluginStore: () => invoke<AgentPluginStore>("get_agent_plugin_store"),
+  addPluginMarketplace: (source: string) =>
+    invoke<AgentPluginStore>("add_agent_plugin_marketplace", { source }),
+  updatePluginMarketplace: (marketplace?: string) =>
+    invoke<AgentPluginStore>("update_agent_plugin_marketplace", {
+      ...(marketplace ? { marketplace } : {}),
+    }),
+  removePluginMarketplace: (marketplace: string) =>
+    invoke<AgentPluginStore>("remove_agent_plugin_marketplace", { marketplace }),
+  installMarketplacePlugin: (marketplace: string, pluginName: string) =>
+    invoke<AgentPluginStore>("install_agent_marketplace_plugin", {
+      marketplace,
+      pluginName,
+    }),
+  restoreBuiltinPlugin: (pluginId: string) =>
+    invoke<AgentPluginStore>("restore_agent_builtin_plugin", { pluginId }),
+  updateMarketplacePlugin: (pluginId: string) =>
+    invoke<AgentPluginStore>("update_agent_marketplace_plugin", { pluginId }),
+  uninstallMarketplacePlugin: (pluginId: string) =>
+    invoke<AgentPluginStore>("uninstall_agent_marketplace_plugin", { pluginId }),
   setSkillEnabled: (id: string, enabled: boolean) =>
     invoke<AgentExtensions>("set_agent_skill_enabled", { id, enabled }),
   importSkill: (path: string) =>

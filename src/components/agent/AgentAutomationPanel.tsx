@@ -1,4 +1,20 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import {
+  CalendarClock,
+  Check,
+  ChevronDown,
+  CircleAlert,
+  CircleCheck,
+  CircleX,
+  Clock3,
+  FileText,
+  ListChecks,
+  MoreHorizontal,
+  Pause,
+  Play,
+  RefreshCw,
+  Trash2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input, fieldClass } from "@/components/ui/input";
 import { agentApi } from "@/lib/api/agent";
@@ -8,6 +24,7 @@ import {
   useAgentOperation,
   useAgentResource,
 } from "./AgentOperationShared";
+
 type Job = {
   automationId: string;
   title: string;
@@ -19,12 +36,25 @@ type Job = {
 };
 type Run = {
   runId: string;
+  automationId: string;
   outcome?: string;
   dispatchStatus: string;
   sessionId?: string;
   error?: string;
   createdAt: number;
 };
+type TaskFilter = "all" | "running" | "completed" | "failed";
+type ScheduleTemplate = {
+  id: string;
+  title: string;
+  prompt: string;
+  frequency: "daily" | "weekly";
+  time: string;
+  weekday: string;
+  icon: typeof CalendarClock;
+  schedule: string;
+};
+
 const STATUS: Record<string, string> = {
   running: "执行中",
   succeeded: "已完成",
@@ -35,6 +65,55 @@ const STATUS: Record<string, string> = {
   failed_to_dispatch: "派发失败",
   skipped: "已跳过",
 };
+const FILTERS: { id: TaskFilter; label: string }[] = [
+  { id: "all", label: "全部" },
+  { id: "running", label: "进行中" },
+  { id: "completed", label: "已完成" },
+  { id: "failed", label: "失败" },
+];
+const TEMPLATES: ScheduleTemplate[] = [
+  {
+    id: "morning-brief",
+    title: "晨会动态",
+    prompt: "汇总今天的代码变更和待跟进事项。",
+    frequency: "daily",
+    time: "09:00",
+    weekday: "1",
+    icon: CalendarClock,
+    schedule: "每天 09:00",
+  },
+  {
+    id: "risk-review",
+    title: "风险扫描",
+    prompt: "检查当前项目的风险、阻塞项和近期容易出错的变更，并按优先级整理建议。",
+    frequency: "daily",
+    time: "12:00",
+    weekday: "1",
+    icon: CircleAlert,
+    schedule: "每天 12:00",
+  },
+  {
+    id: "release-brief",
+    title: "发布简报",
+    prompt: "整理今天的发布说明草稿，汇总重要功能、修复和需要关注的兼容性变化。",
+    frequency: "daily",
+    time: "18:00",
+    weekday: "1",
+    icon: FileText,
+    schedule: "每天 18:00",
+  },
+  {
+    id: "documentation-review",
+    title: "文档同步检查",
+    prompt: "检查项目文档与当前实现是否保持同步，列出过时、遗漏或互相矛盾的说明。",
+    frequency: "weekly",
+    time: "15:00",
+    weekday: "3",
+    icon: ListChecks,
+    schedule: "每周三 15:00",
+  },
+];
+
 export function automationCron(
   frequency: string,
   time: string,
@@ -53,6 +132,7 @@ export function automationCron(
     throw new Error("请选择运行星期");
   return `${Number(match[2])} ${Number(match[1])} * * ${frequency === "weekly" ? weekday : "*"}`;
 }
+
 export function automationScheduleLabel(cron: string): string {
   const fields = cron.trim().split(/\s+/);
   if (
@@ -73,14 +153,57 @@ export function automationScheduleLabel(cron: string): string {
     return `每周${["日", "一", "二", "三", "四", "五", "六"][Number(fields[4])]} ${time}`;
   return "自定义计划";
 }
+
+function latestRunFor(job: Job, runs: readonly Run[]): Run | undefined {
+  return runs.find((run) => run.automationId === job.automationId);
+}
+
+function filterMatches(filter: TaskFilter, run?: Run): boolean {
+  if (filter === "all") return true;
+  const state = run?.outcome || run?.dispatchStatus;
+  if (filter === "running")
+    return Boolean(run && ["running", "claimed", "dispatched"].includes(state || ""));
+  if (filter === "completed") return state === "succeeded";
+  return state === "failed" || state === "failed_to_dispatch";
+}
+
+function TaskStatus({ run, enabled }: { run?: Run; enabled: boolean }) {
+  const state = run?.outcome || run?.dispatchStatus;
+  if (state === "failed" || state === "failed_to_dispatch")
+    return (
+      <span className="inline-flex items-center gap-1 text-danger-text">
+        <CircleX size={15} /> 执行失败
+      </span>
+    );
+  if (state === "succeeded")
+    return (
+      <span className="inline-flex items-center gap-1 text-success-text">
+        <CircleCheck size={15} /> 已完成
+      </span>
+    );
+  if (state === "running" || state === "claimed" || state === "dispatched")
+    return (
+      <span className="inline-flex items-center gap-1 text-accent-text">
+        <Clock3 size={15} /> {STATUS[state] || "执行中"}
+      </span>
+    );
+  return (
+    <span className="inline-flex items-center gap-1 text-fg-3">
+      <Clock3 size={15} /> {enabled ? "等待下次运行" : "已暂停"}
+    </span>
+  );
+}
+
 export function AgentAutomationPanel({
   projectPath,
   catalog,
   onSession,
+  onCompose,
 }: {
   projectPath: string;
   catalog: AgentCatalog;
   onSession: (session: AgentSession) => void;
+  onCompose?: (text: string) => void;
 }) {
   const [title, setTitle] = useState("");
   const [prompt, setPrompt] = useState("");
@@ -95,15 +218,30 @@ export function AgentAutomationPanel({
   const [selected, setSelected] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [filter, setFilter] = useState<TaskFilter>("all");
+  const [createOpen, setCreateOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const { busy, error, run } = useAgentOperation();
   const scope = { workspacePath: projectPath };
   const jobs = useAgentResource(`automation:${projectPath}`, () =>
     agentApi.automation<Job[]>("list", [scope]),
   );
+  const allRuns = useAgentResource(
+    `automation-runs:${projectPath}`,
+    () => agentApi.automation<Run[]>("listRuns", [null, scope]),
+    3000,
+  );
   const runs = useAgentResource(
     selected ? `automation-runs:${projectPath}:${selected}` : "",
     () => agentApi.automation<Run[]>("listRuns", [selected, scope]),
-    1000,
+    3000,
+  );
+  const visibleJobs = useMemo(
+    () =>
+      (jobs.data || []).filter((job) =>
+        filterMatches(filter, latestRunFor(job, allRuns.data || [])),
+      ),
+    [allRuns.data, filter, jobs.data],
   );
   const create = () =>
     void run(async () => {
@@ -122,7 +260,10 @@ export function AgentAutomationPanel({
             providerId: model.providerId,
             modelId: model.modelId,
             options: {
-              reasoningLevel: model.reasoningEfforts?.[0] || "default",
+              reasoningLevel:
+                model.defaultReasoningEffort ||
+                model.reasoningEfforts?.[0] ||
+                "default",
             },
           },
         },
@@ -131,176 +272,299 @@ export function AgentAutomationPanel({
       setTitle("");
       setPrompt("");
       setNotice("已保存自动化。应用运行时会按计划执行。");
+      setCreateOpen(false);
       jobs.reload();
+      allRuns.reload();
     });
+  const startFromTemplate = (template: ScheduleTemplate) => {
+    setTitle(template.title);
+    setPrompt(template.prompt);
+    setFrequency(template.frequency);
+    setTime(template.time);
+    setWeekday(template.weekday);
+    setCreateOpen(true);
+    setMenuOpen(false);
+  };
+  const createViaChat = () => {
+    if (!onCompose) return;
+    onCompose(
+      `请帮我在当前项目创建一个定时自动化。请先和我确认自动化名称、任务内容、运行频率和时间，再创建。`,
+    );
+  };
+
   return (
-    <div className="space-y-4">
-      <p className="text-caption text-fg-3">
-        自动任务在 LoliCode
-        运行且渠道可用时执行。派发成功不代表任务完成，以下显示原生运行结果。
-      </p>
-      <OperationError>{error || jobs.error || runs.error}</OperationError>
+    <div className="wb-automation space-y-5">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="min-w-0">
+          <h2 className="text-title font-semibold">自动化</h2>
+          <p className="mt-1 text-caption text-fg-3">
+            按计划运行任务，或在需要时立即执行。自动化会在 LoliCode 保持运行时触发。
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="neutral"
+            aria-label="刷新自动化"
+            title="刷新自动化"
+            disabled={busy || jobs.loading}
+            onClick={() => {
+              jobs.reload();
+              allRuns.reload();
+              runs.reload();
+            }}
+          >
+            <RefreshCw size={15} className={jobs.loading ? "animate-spin" : ""} />
+          </Button>
+          <div className="relative">
+            <Button
+              variant="default"
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              onClick={() => setMenuOpen((open) => !open)}
+            >
+              创建定时任务 <ChevronDown size={15} />
+            </Button>
+            {menuOpen && (
+              <div
+                role="menu"
+                className="absolute right-0 z-20 mt-2 min-w-48 rounded-control border border-border bg-bg-card p-1 shadow-lg"
+              >
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="wb-automation-menu-item"
+                  onClick={() => {
+                    setCreateOpen(true);
+                    setMenuOpen(false);
+                  }}
+                >
+                  手动创建
+                </button>
+                {onCompose && (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="wb-automation-menu-item"
+                    onClick={createViaChat}
+                  >
+                    通过对话创建
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <OperationError>{error || jobs.error || allRuns.error || runs.error}</OperationError>
       {notice && (
-        <p role="status" className="text-caption">
+        <p role="status" className="text-caption text-fg-3">
           {notice}
         </p>
       )}
-      <Button
-        variant="neutral"
-        disabled={busy}
-        onClick={() => {
-          jobs.reload();
-          runs.reload();
-        }}
-      >
-        刷新自动化
-      </Button>
-      {!jobs.data?.length && (
-        <p className="text-caption text-fg-3">
-          {jobs.loading ? "正在读取自动化…" : "当前项目还没有自动化任务。"}
-        </p>
-      )}
-      {jobs.data?.map((job) => (
-        <section
-          key={job.automationId}
-          className="space-y-2 rounded-control border border-border p-3"
-        >
-          <div className="flex flex-wrap items-center gap-2">
-            <strong className="mr-auto">{job.title}</strong>
-            <span className="text-caption">
-              {job.enabled ? "已启用" : "已暂停"}
-            </span>
-          </div>
-          <p className="whitespace-pre-wrap text-caption text-fg-3">
-            {job.prompt}
-          </p>
-          <p className="text-caption">
-            计划：{automationScheduleLabel(job.cronExpr)}
-            {job.nextRunAt
-              ? ` · 下次 ${new Date(job.nextRunAt).toLocaleString()}`
-              : ""}
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              disabled={busy}
-              onClick={() =>
-                void run(async () => {
-                  const result = await agentApi.automation<{ status: string }>(
-                    "runNow",
-                    [job.automationId, scope],
-                  );
-                  setSelected(job.automationId);
-                  setNotice(
-                    result.status === "duplicate"
-                      ? "此任务已经在执行，请查看运行记录。"
-                      : "已提交任务，等待原生执行结果。",
-                  );
-                  runs.reload();
-                })
-              }
-            >
-              立即运行
-            </Button>
-            <Button
-              variant="neutral"
-              disabled={busy}
-              onClick={() => setSelected(job.automationId)}
-            >
-              查看运行记录
-            </Button>
-            <Button
-              variant="neutral"
-              disabled={busy}
-              onClick={() =>
-                void run(async () => {
-                  const result = await agentApi.automation<Job | null>(
-                    "setEnabled",
-                    [job.automationId, !job.enabled, scope],
-                  );
-                  if (!result) throw new Error("任务已不存在，请刷新列表");
-                  jobs.reload();
-                })
-              }
-            >
-              {job.enabled ? "暂停计划" : "启用计划"}
-            </Button>
-            <Button
-              variant="quiet"
-              disabled={busy}
-              onClick={() => setConfirmDelete(job.automationId)}
-            >
-              删除任务
-            </Button>
-          </div>
-          {confirmDelete === job.automationId && (
-            <div className="flex gap-2">
-              <Button variant="neutral" onClick={() => setConfirmDelete(null)}>
-                取消删除
-              </Button>
-              <Button
-                disabled={busy}
-                onClick={() =>
-                  void run(async () => {
-                    const removed = await agentApi.automation<boolean>(
-                      "delete",
-                      [job.automationId, scope],
-                    );
-                    if (!removed) throw new Error("删除未完成，请刷新列表");
-                    if (selected === job.automationId) setSelected(null);
-                    setConfirmDelete(null);
-                    jobs.reload();
-                  })
-                }
+
+      {(jobs.data?.length ?? 0) > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="自动化状态筛选">
+            {FILTERS.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                aria-pressed={filter === item.id}
+                className={`wb-automation-filter${filter === item.id ? " is-active" : ""}`}
+                onClick={() => setFilter(item.id)}
               >
-                确认删除自动化
-              </Button>
-            </div>
+                {item.label}
+              </button>
+            ))}
+          </div>
+          <span className="text-caption text-fg-3">
+            {jobs.data?.length ?? 0} 个定时任务
+          </span>
+        </div>
+      )}
+
+      {jobs.data?.length ? (
+        visibleJobs.length ? (
+          <div className="wb-automation-grid">
+            {visibleJobs.map((job) => {
+              const latest = latestRunFor(job, allRuns.data || []);
+              return (
+                <section key={job.automationId} className="wb-automation-card">
+                  <div className="flex min-w-0 items-start gap-3">
+                    <span className="wb-automation-card-icon" aria-hidden="true">
+                      <CalendarClock size={18} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="truncate font-medium">{job.title}</h3>
+                      <p className="mt-1 line-clamp-2 min-h-10 text-caption text-fg-3">
+                        {job.prompt}
+                      </p>
+                    </div>
+                    <details
+                      className="wb-automation-actions"
+                      onClick={(event) => {
+                        if ((event.target as HTMLElement).closest("button")) {
+                          event.currentTarget.open = false;
+                        }
+                      }}
+                    >
+                      <summary aria-label={`${job.title} 的更多操作`}>
+                        <MoreHorizontal size={18} />
+                      </summary>
+                      <div className="wb-automation-actions-menu">
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() =>
+                            void run(async () => {
+                              const result = await agentApi.automation<{ status: string }>(
+                                "runNow",
+                                [job.automationId, scope],
+                              );
+                              setSelected(job.automationId);
+                              setNotice(
+                                result.status === "duplicate"
+                                  ? "此任务已经在执行，请查看运行记录。"
+                                  : "已提交任务，等待原生执行结果。",
+                              );
+                              allRuns.reload();
+                              runs.reload();
+                            })
+                          }
+                        >
+                          <Play size={14} /> 立即运行
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => setSelected(job.automationId)}
+                        >
+                          <Clock3 size={14} /> 查看运行记录
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() =>
+                            void run(async () => {
+                              const result = await agentApi.automation<Job | null>(
+                                "setEnabled",
+                                [job.automationId, !job.enabled, scope],
+                              );
+                              if (!result) throw new Error("任务已不存在，请刷新列表");
+                              jobs.reload();
+                            })
+                          }
+                        >
+                          {job.enabled ? <Pause size={14} /> : <Play size={14} />}
+                          {job.enabled ? "暂停计划" : "启用计划"}
+                        </button>
+                        <button
+                          type="button"
+                          className="is-danger"
+                          disabled={busy}
+                          onClick={() => setConfirmDelete(job.automationId)}
+                        >
+                          <Trash2 size={14} /> 删除任务
+                        </button>
+                      </div>
+                    </details>
+                  </div>
+                  <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border pt-3 text-caption">
+                    <TaskStatus run={latest} enabled={job.enabled} />
+                    <span className="inline-flex items-center gap-1 text-fg-3">
+                      <Clock3 size={14} /> {automationScheduleLabel(job.cronExpr)}
+                    </span>
+                    {job.enabled && job.nextRunAt ? (
+                      <span className="text-fg-3">
+                        下次 {new Date(job.nextRunAt).toLocaleString()}
+                      </span>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="ml-auto text-fg-3 hover:text-fg-1"
+                      onClick={() => setSelected(selected === job.automationId ? null : job.automationId)}
+                    >
+                      {selected === job.automationId ? "收起记录" : "查看记录"}
+                    </button>
+                  </div>
+                  {confirmDelete === job.automationId && (
+                    <div className="mt-3 flex flex-wrap items-center gap-2 rounded-control bg-bg-subtle p-2">
+                      <span className="mr-auto text-caption">确定删除“{job.title}”及其计划吗？</span>
+                      <Button variant="neutral" onClick={() => setConfirmDelete(null)}>
+                        取消
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        disabled={busy}
+                        onClick={() =>
+                          void run(async () => {
+                            const removed = await agentApi.automation<boolean>(
+                              "delete",
+                              [job.automationId, scope],
+                            );
+                            if (!removed) throw new Error("删除未完成，请刷新列表");
+                            if (selected === job.automationId) setSelected(null);
+                            setConfirmDelete(null);
+                            jobs.reload();
+                            allRuns.reload();
+                          })
+                        }
+                      >
+                        确认删除自动化
+                      </Button>
+                    </div>
+                  )}
+                </section>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="wb-automation-empty-filter">
+            <p>没有符合此状态的自动化任务。</p>
+            <button type="button" onClick={() => setFilter("all")}>查看全部任务</button>
+          </div>
+        )
+      ) : (
+        <div className="wb-automation-empty">
+          <p>{jobs.loading ? "正在读取自动化…" : "还没有定时任务"}</p>
+          {!jobs.loading && (
+            <Button variant="default" onClick={() => setCreateOpen(true)}>
+              创建定时任务 <ChevronDown size={15} />
+            </Button>
           )}
-        </section>
-      ))}
-      {selected && (
-        <section
-          className="space-y-2 rounded-control border border-border p-3"
-          aria-label="自动化运行记录"
-        >
-          <h3 className="font-medium">运行记录</h3>
+        </div>
+      )}
+
+      {selected && jobs.data?.some((job) => job.automationId === selected) && (
+        <section className="wb-automation-history" aria-label="自动化运行记录">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="font-medium">运行记录</h3>
+            <Button variant="neutral" onClick={() => setSelected(null)}>收起</Button>
+          </div>
           {!runs.data?.length && (
-            <p className="text-caption text-fg-3">尚无运行记录。</p>
+            <p className="py-4 text-caption text-fg-3">{runs.loading ? "正在读取运行记录…" : "尚无运行记录。"}</p>
           )}
           {runs.data?.map((item) => (
-            <div
-              key={item.runId}
-              className="border-t border-border py-2 text-caption"
-            >
-              <p>
-                {new Date(item.createdAt).toLocaleString()} ·{" "}
-                {STATUS[item.outcome || item.dispatchStatus] ||
-                  item.outcome ||
-                  item.dispatchStatus}
-              </p>
-              {item.error && (
-                <p className="whitespace-pre-wrap text-danger-text">
-                  {item.error}
+            <div key={item.runId} className="wb-automation-run">
+              <div className="min-w-0 flex-1">
+                <p className="text-caption">
+                  {new Date(item.createdAt).toLocaleString()} · {STATUS[item.outcome || item.dispatchStatus] || item.outcome || item.dispatchStatus}
                 </p>
-              )}
-              <p className="break-all text-fg-3">{item.runId}</p>
+                {item.error && <p className="mt-1 whitespace-pre-wrap text-caption text-danger-text">{item.error}</p>}
+                <p className="mt-1 truncate text-caption text-fg-3">{item.runId}</p>
+              </div>
               {item.sessionId && (
                 <Button
                   variant="neutral"
                   disabled={busy}
                   onClick={() =>
                     void run(async () => {
-                      const sessions = await agentApi.listSessions(
-                        projectPath,
-                        true,
-                      );
+                      const sessions = await agentApi.listSessions(projectPath, true);
                       const session = sessions.find(
-                        (session) =>
-                          session.id === item.sessionId ||
-                          session.id === `zc:${item.sessionId}`,
+                        (candidate) => candidate.id === item.sessionId || candidate.id === `zc:${item.sessionId}`,
                       );
-                      if (!session)
-                        throw new Error("运行会话暂未写入索引，请稍后重试");
+                      if (!session) throw new Error("运行会话暂未写入索引，请稍后重试");
                       onSession(session);
                     })
                   }
@@ -312,141 +576,109 @@ export function AgentAutomationPanel({
           ))}
         </section>
       )}
-      <form
-        className="space-y-3 rounded-control border border-border p-3"
-        onSubmit={(event) => {
-          event.preventDefault();
-          create();
-        }}
-      >
-        <h3 className="font-medium">创建自动化</h3>
-        <label className="block text-caption">
-          名称
-          <Input
-            aria-label="自动化名称"
-            value={title}
-            disabled={busy}
-            onChange={(event) => setTitle(event.target.value)}
-          />
-        </label>
-        <label className="block text-caption">
-          任务内容
-          <textarea
-            aria-label="自动化任务内容"
-            className={fieldClass}
-            rows={3}
-            value={prompt}
-            disabled={busy}
-            onChange={(event) => setPrompt(event.target.value)}
-          />
-        </label>
-        <label className="block text-caption">
-          运行频率
-          <select
-            aria-label="自动化运行频率"
-            className={fieldClass}
-            value={frequency}
-            disabled={busy}
-            onChange={(event) => setFrequency(event.target.value)}
-          >
-            <option value="daily">每天</option>
-            <option value="weekly">每周</option>
-            <option value="hourly">每小时</option>
-          </select>
-        </label>
-        {frequency === "hourly" ? (
-          <label className="block text-caption">
-            每小时的第几分钟
-            <Input
-              type="number"
-              min={0}
-              max={59}
-              aria-label="自动化每小时分钟"
-              value={minute}
-              disabled={busy}
-              onChange={(event) => setMinute(event.target.value)}
-            />
-          </label>
-        ) : (
-          <label className="block text-caption">
-            运行时间
-            <Input
-              type="time"
-              aria-label="自动化运行时间"
-              value={time}
-              disabled={busy}
-              onChange={(event) => setTime(event.target.value)}
-            />
-          </label>
-        )}
-        {frequency === "weekly" && (
-          <label className="block text-caption">
-            运行星期
-            <select
-              aria-label="自动化运行星期"
-              className={fieldClass}
-              value={weekday}
-              disabled={busy}
-              onChange={(event) => setWeekday(event.target.value)}
-            >
-              {[
-                "星期日",
-                "星期一",
-                "星期二",
-                "星期三",
-                "星期四",
-                "星期五",
-                "星期六",
-              ].map((name, index) => (
-                <option key={name} value={index}>
-                  {name}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-        <p className="text-caption text-fg-3">
-          按本地时区运行，应用保持开启时生效。
-        </p>
-        <label className="block text-caption">
-          模型
-          <select
-            aria-label="自动化模型"
-            className={fieldClass}
-            value={modelId}
-            disabled={busy}
-            onChange={(event) => setModelId(event.target.value)}
-          >
-            {catalog.models.map((model) => (
-              <option key={model.id} value={model.id}>
-                {model.channelName} · {model.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="block text-caption">
-          执行权限
-          <select
-            aria-label="自动化权限"
-            className={fieldClass}
-            value={mode}
-            disabled={busy}
-            onChange={(event) => setMode(event.target.value)}
-          >
-            <option value="build">操作前询问</option>
-            <option value="guarded">自动 · 风险操作询问</option>
-            <option value="yolo">完全访问</option>
-          </select>
-        </label>
-        <Button
-          type="submit"
-          disabled={
-            busy || !title.trim() || !prompt.trim() || !catalog.models.length
-          }
+
+      {createOpen && (
+        <form
+          className="wb-automation-create"
+          onSubmit={(event) => {
+            event.preventDefault();
+            create();
+          }}
         >
-          保存自动化
-        </Button>
-      </form>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 className="font-medium">创建定时任务</h3>
+              <p className="mt-1 text-caption text-fg-3">任务会在本地时区按计划运行，应用需要保持开启。</p>
+            </div>
+            <button type="button" className="text-caption text-fg-3 hover:text-fg-1" onClick={() => setCreateOpen(false)}>取消</button>
+          </div>
+          <div className="wb-automation-form-grid">
+            <label className="block text-caption">
+              名称
+              <Input aria-label="自动化名称" value={title} disabled={busy} onChange={(event) => setTitle(event.target.value)} />
+            </label>
+            <label className="block text-caption">
+              运行频率
+              <select aria-label="自动化运行频率" className={fieldClass} value={frequency} disabled={busy} onChange={(event) => setFrequency(event.target.value)}>
+                <option value="daily">每天</option>
+                <option value="weekly">每周</option>
+                <option value="hourly">每小时</option>
+              </select>
+            </label>
+            {frequency === "hourly" ? (
+              <label className="block text-caption">
+                每小时的第几分钟
+                <Input type="number" min={0} max={59} aria-label="自动化每小时分钟" value={minute} disabled={busy} onChange={(event) => setMinute(event.target.value)} />
+              </label>
+            ) : (
+              <label className="block text-caption">
+                运行时间
+                <Input type="time" aria-label="自动化运行时间" value={time} disabled={busy} onChange={(event) => setTime(event.target.value)} />
+              </label>
+            )}
+            {frequency === "weekly" && (
+              <label className="block text-caption">
+                运行星期
+                <select aria-label="自动化运行星期" className={fieldClass} value={weekday} disabled={busy} onChange={(event) => setWeekday(event.target.value)}>
+                  {["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"].map((name, index) => <option key={name} value={index}>{name}</option>)}
+                </select>
+              </label>
+            )}
+            <label className="block text-caption">
+              模型
+              <select aria-label="自动化模型" className={fieldClass} value={modelId} disabled={busy} onChange={(event) => setModelId(event.target.value)}>
+                {catalog.models.map((model) => <option key={model.id} value={model.id}>{model.channelName} · {model.name}</option>)}
+              </select>
+            </label>
+            <label className="block text-caption">
+              执行权限
+              <select aria-label="自动化权限" className={fieldClass} value={mode} disabled={busy} onChange={(event) => setMode(event.target.value)}>
+                <option value="build">操作前询问</option>
+                <option value="guarded">自动 · 风险操作询问</option>
+                <option value="yolo">完全访问</option>
+              </select>
+            </label>
+            <label className="block text-caption wb-automation-prompt">
+              任务内容
+              <textarea aria-label="自动化任务内容" className={fieldClass} rows={4} value={prompt} disabled={busy} onChange={(event) => setPrompt(event.target.value)} />
+            </label>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="neutral" onClick={() => setCreateOpen(false)}>取消</Button>
+            <Button type="submit" variant="default" disabled={busy || !title.trim() || !prompt.trim() || !catalog.models.length}>
+              保存定时任务
+            </Button>
+          </div>
+        </form>
+      )}
+
+      <section className="wb-automation-templates">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="text-caption font-medium text-fg-3">定时任务模板</h3>
+          <span className="text-caption text-fg-3">选择模板后可修改名称、计划和任务内容</span>
+        </div>
+        <div className="wb-automation-grid">
+          {TEMPLATES.map((template) => {
+            const Icon = template.icon;
+            return (
+              <button
+                key={template.id}
+                type="button"
+                className="wb-automation-template"
+                onClick={() => startFromTemplate(template)}
+              >
+                <span className="flex items-center gap-2 font-medium text-fg-1">
+                  <Icon size={16} aria-hidden="true" /> {template.title}
+                </span>
+                <span className="line-clamp-2 text-caption text-fg-3">{template.prompt}</span>
+                <span className="mt-auto inline-flex items-center gap-1 text-caption text-fg-3">
+                  <Check size={13} aria-hidden="true" /> {template.schedule}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </section>
     </div>
   );
 }

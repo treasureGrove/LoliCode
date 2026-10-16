@@ -1,0 +1,95 @@
+{
+  "version": "D-outfit-selection-01",
+  "createdOn": "2026-10-16",
+  "status": "selected",
+  "mode": "built-in image_gen",
+  "baseConcept": "../D-pinkdog-outfit-02/standing.png",
+  "identitySource": "../head-studies-01/D-dog-pink-longhair.png",
+  "userDirection": "以已接受的莓黑礼装为基准，提供八个可比较的服装候选；可调整服装结构、配色、犬耳和尾巴配色。",
+  "sharedIdentity": [
+    "粉色长发与侧辫",
+    "蓝绿色眼睛",
+    "折耳犬娘",
+    "一颗小虎牙",
+    "亲近呆萌的表情"
+  ],
+  "sharedPrompt": "Preserve D puppy-girl identity and polished anime rendering. Make a complete, original, full-body costume alternative with clear silhouette and dimensional fabric shading. Use selected ZipZipPipe illustrations only as visual quality guidance; do not copy characters, logos or exact garments. Keep modest, friendly, readable character design on clean white, with no text or props.",
+  "options": [
+    {
+      "file": "01-berry-black-gothic.png",
+      "title": "莓黑玫瑰哥特",
+      "palette": "莓黑、奶油白、灰玫瑰、香槟金",
+      "direction": "收腰哥特礼裙、花瓣式错层裙片、蓬袖与玫瑰色内衬；可可奶白折耳。",
+      "id": "01"
+    },
+    {
+      "file": "02-peacock-glass-garden.png",
+      "title": "孔雀青玻璃花园",
+      "palette": "孔雀青、珠光白、珊瑚粉、古金",
+      "direction": "短身礼 jacket 与花瓣层叠钟形裙、玫瑰内裙；青白折耳。",
+      "id": "02"
+    },
+    {
+      "file": "03-cinnabar-stage.png",
+      "title": "朱砂红小剧场",
+      "palette": "朱砂红、暖白、深咖、金色",
+      "direction": "剧场表演感短外套、对襟扣、层叠不对称裙片；红棕折耳。",
+      "id": "03"
+    },
+    {
+      "file": "04-jade-traveler.png",
+      "title": "翡翠绿月下旅装",
+      "palette": "翡翠绿、象牙白、玫瑰粉、黄铜",
+      "direction": "剪裁短外套、分片长裙与一枚小腰包，带轻幻想旅装感；翡翠色折耳。",
+      "id": "04"
+    },
+    {
+      "file": "05-coral-pearl-tea.png",
+      "title": "珊瑚粉珍珠茶会",
+      "palette": "珊瑚玫瑰、珍珠白、莓紫、浅香槟金",
+      "direction": "结构化茶会礼裙、花瓣袖口、双层裙摆和腰间大结；珊瑚色折耳。",
+      "id": "05"
+    },
+    {
+      "file": "06-glacier-blue-dance.png",
+      "title": "冰川蓝星仪舞裙",
+      "palette": "冰川蓝、银白、深蓝绿、少量粉色",
+      "direction": "舞台短外套、轻盈错层飘片、立体灯笼袖；灰蓝折耳。",
+      "id": "06"
+    },
+    {
+      "file": "07-caramel-academy.png",
+      "title": "焦糖金云朵学园",
+      "palette": "焦糖金、奶油白、巧克力、鼠尾草青",
+      "direction": "学院灵感的马甲与短外套、金色百褶裙和白色内层；焦糖奶白折耳。",
+      "id": "07"
+    },
+    {
+      "file": "08-cherry-stage-cocoa-ears.png",
+      "title": "樱桃黑霓虹舞台",
+      "palette": "樱桃红、炭黑、象牙白、少量蓝绿",
+      "direction": "樱桃黑舞台礼装保持08号设计；折耳恢复原设可可棕外侧与奶油白耳尖/内侧。",
+      "id": "08"
+    }
+  ],
+  "references": [
+    {
+      "title": "ZipZipPipe《所有的AI们，和OpenCode》",
+      "role": "画面完成度、线条、明暗和服装设计语言参考",
+      "url": "https://www.bilibili.com/opus/1233069202138464289"
+    },
+    {
+      "title": "ZipZipPipe《加班到现在，发点近期做的三视图》",
+      "role": "服装与角色设定呈现方式参考",
+      "url": "https://www.bilibili.com/opus/1238267551429951496"
+    }
+  ],
+  "selectedOption": "08",
+  "earColorRevision": {
+    "file": "08-cherry-stage-cocoa-ears.png",
+    "basedOn": "08-cherry-stage.png",
+    "identityReference": "../head-studies-01/D-dog-pink-longhair.png",
+    "change": "Only recolor folded puppy ears to the original cocoa-brown and cream palette; retain outfit 08 unchanged.",
+    "prompt": "Edit image 1 only. Use image 2 as the exact reference for the original puppy-ear colors. Keep the selected cherry-black stage outfit from image 1, including garments, colors, tailoring, ribbons, boots, pose, expression, pink hair, teal eyes, fang, tail, framing, and clean white background. Recolor both folded dog ears to the original soft cocoa-brown outer fur with warm cream tips/inner fur, preserving the ear shapes and folds. Do not recolor hair, tail, clothes, or accessories."
+  }
+}

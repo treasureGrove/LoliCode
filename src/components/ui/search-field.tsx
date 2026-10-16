@@ -49,6 +49,14 @@ export const SearchField = React.forwardRef<HTMLInputElement, SearchFieldProps>(
           value={value}
           onChange={(event) => onValueChange(event.target.value)}
           onKeyDown={(event) => {
+            if (
+              event.key === "Escape" &&
+              (event.nativeEvent.isComposing || event.keyCode === 229)
+            ) {
+              // Escape belongs to the IME candidate window until composition ends.
+              event.stopPropagation();
+              return;
+            }
             if (event.key === "Escape" && value) {
               event.stopPropagation();
               event.preventDefault();
@@ -70,7 +78,7 @@ export const SearchField = React.forwardRef<HTMLInputElement, SearchFieldProps>(
                 inputRef.current?.focus();
               }}
               aria-label={clearLabel}
-              className="absolute end-1 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-control text-fg-3 transition-colors hover:bg-subtle hover:text-fg-1"
+              className="tai-button absolute end-1 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-fg-3 hover:bg-subtle hover:text-fg-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <X aria-hidden="true" className="h-3.5 w-3.5" strokeWidth={1.5} />
             </button>

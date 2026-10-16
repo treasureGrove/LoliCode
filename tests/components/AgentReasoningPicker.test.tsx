@@ -158,7 +158,7 @@ describe("AgentReasoningPicker", () => {
     { label: "unknown efforts", reasoningEfforts: undefined },
     { label: "no efforts", reasoningEfforts: [] },
   ])(
-    "restores the upstream default explicitly for $label",
+    "restores the automatic effort for declared options or upstream default for $label",
     ({ reasoningEfforts }) => {
       const select = vi.fn();
       render(
@@ -169,7 +169,11 @@ describe("AgentReasoningPicker", () => {
         />,
       );
       open();
-      fireEvent.click(screen.getByRole("button", { name: "使用上游默认" }));
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: reasoningEfforts?.length ? "使用自动档位" : "使用上游默认",
+        }),
+      );
       expect(select).toHaveBeenCalledOnce();
       expect(select).toHaveBeenCalledWith("");
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();

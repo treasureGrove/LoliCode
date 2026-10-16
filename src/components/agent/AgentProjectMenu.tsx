@@ -1,4 +1,4 @@
-import { FolderMinus, MoreHorizontal, Pin, PinOff } from "lucide-react";
+import { FolderMinus, MoreHorizontal, Pin, PinOff, Plus } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,14 +14,16 @@ export function AgentProjectMenu({
   name,
   pinned,
   disabled,
-  recent,
+  inProjectList,
+  onCreateTask,
   onTogglePin,
   onRemove,
 }: {
   name: string;
   pinned: boolean;
   disabled: boolean;
-  recent?: boolean;
+  inProjectList?: boolean;
+  onCreateTask?: () => void;
   onTogglePin: () => void;
   onRemove: () => void;
 }) {
@@ -32,7 +34,7 @@ export function AgentProjectMenu({
           type="button"
           className={cn(
             "wb-icon-button wb-project-menu-trigger",
-            recent && "wb-recent-project-menu",
+            inProjectList && "wb-project-list-menu",
           )}
           aria-label={`管理项目：${name}`}
           disabled={disabled}
@@ -45,6 +47,12 @@ export function AgentProjectMenu({
           {name}
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
+        {onCreateTask && (
+          <DropdownMenuItem onSelect={onCreateTask}>
+            <Plus size={14} />
+            在此项目中新建任务
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem onSelect={onTogglePin}>
           {pinned ? <PinOff size={14} /> : <Pin size={14} />}
           {pinned ? "取消置顶" : "置顶项目"}

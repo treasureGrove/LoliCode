@@ -209,6 +209,119 @@ async fn setup(fake: &Fake) -> (TempDir, TempDir, NativeEngine, String) {
         session["id"].as_str().unwrap().into(),
     )
 }
+
+#[tokio::test]
+async fn projects_can_switch_and_run_concurrently_with_isolated_workspaces() {
+    let data = TempDir::new().unwrap();
+    let project_a = TempDir::new().unwrap();
+    let project_b = TempDir::new().unwrap();
+    let project_a_path = project_a.path().to_string_lossy().into_owned();
+    let fake = Fake::start(move |input| {
+        let system = input["messages"][0]["content"].as_str().unwrap_or_default();
+        let is_project_a = system.contains(&project_a_path);
+        match last_tool(input) {
+            None => {
+                let mut reply = tool(
+                    "write_file",
+                    json!({
+                        "path":"parallel-project.txt",
+                        "content":if is_project_a {"written by project A"} else {"written by project B"},
+                        "expected_content":null
+                    }),
+                );
+                reply.pause = is_project_a;
+                reply
+            }
+            Some("call-write_file") => text("PROJECT_TASK_COMPLETED"),
+            other => panic!("unexpected tool call: {other:?}"),
+        }
+    })
+    .await;
+    let engine = NativeEngine::open(data.path().into()).await.unwrap();
+    engine
+        .bind(project_a.path().into(), catalog(), fake.gateway())
+        .await
+        .unwrap();
+    let session_a = engine
+        .call("createSession", json!({"mode":"build","permissionMode":"auto"}))
+        .await
+        .unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    send(&engine, &session_a, "parallel-a", "Work in project A").await;
+
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while fake.count() < 1 {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("project A should reach the model while its response is paused");
+    assert_eq!(snapshot(&engine, &session_a).await["status"], "running");
+
+    engine
+        .bind(project_b.path().into(), catalog(), fake.gateway())
+        .await
+        .expect("switching projects must not wait for project A");
+    let session_b = engine
+        .call("createSession", json!({"mode":"build","permissionMode":"auto"}))
+        .await
+        .unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    send(&engine, &session_b, "parallel-b", "Work in project B").await;
+    let result_b = wait(&engine, &session_b, |value| value["status"] == "idle").await;
+    assert!(result_b.to_string().contains("PROJECT_TASK_COMPLETED"));
+    assert_eq!(snapshot(&engine, &session_a).await["status"], "running");
+
+    let mut refreshed_catalog = catalog();
+    refreshed_catalog["revision"] = json!(2);
+    let reopened_a = engine
+        .bind(
+            project_a.path().into(),
+            refreshed_catalog.clone(),
+            fake.gateway(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        reopened_a["catalog"]["revision"],
+        json!(1),
+        "an active project keeps its original model configuration"
+    );
+    assert_eq!(
+        tokio::fs::read_to_string(project_b.path().join("parallel-project.txt"))
+            .await
+            .unwrap(),
+        "written by project B"
+    );
+    assert!(!project_a.path().join("parallel-project.txt").exists());
+
+    fake.resume.notify_one();
+    let result_a = wait(&engine, &session_a, |value| value["status"] == "idle").await;
+    assert!(result_a.to_string().contains("PROJECT_TASK_COMPLETED"));
+    assert_eq!(
+        tokio::fs::read_to_string(project_a.path().join("parallel-project.txt"))
+            .await
+            .unwrap(),
+        "written by project A"
+    );
+    assert_eq!(
+        tokio::fs::read_to_string(project_b.path().join("parallel-project.txt"))
+            .await
+            .unwrap(),
+        "written by project B"
+    );
+    let refreshed_a = engine
+        .bind(project_a.path().into(), refreshed_catalog, fake.gateway())
+        .await
+        .unwrap();
+    assert_eq!(refreshed_a["catalog"]["revision"], json!(2));
+    engine.shutdown().await.unwrap();
+}
+
 async fn snapshot(engine: &NativeEngine, id: &str) -> Value {
     engine
         .call("getSession", json!({"sessionId":id}))
