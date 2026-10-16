@@ -2,6 +2,13 @@
 
 本流程是 LoliCode 自己的发布链路，不复用 CCSwitch 的公钥、更新地址、GitHub workflow 或下载站清单。`scripts/lolicode-release.mjs` 仅在本地产生并验证发布目录，不上传文件，不读取私钥或 `.env`。
 
+当前已公开版本为 4.0.15，4.0.16 正在准备。公开分发目前是 **Windows x64 NSIS 安装版与便携 ZIP**；macOS 和 Linux 是产品目标，尚未发布对应安装包。真实发布结果记录在每版交付文档中，不能用待发布清单替代发布证据。
+
+- 产品下载：[tools.treasuregrove.art/lolicode](https://tools.treasuregrove.art/lolicode/)。
+- 社区账户：[lolicode.com](https://lolicode.com)，独立于模型渠道授权。
+- 源码与发布记录：[treasureGrove/LoliCode](https://github.com/treasureGrove/LoliCode)。
+- 正式签名更新源：[updates/latest.json](https://tools.treasuregrove.art/lolicode/updates/latest.json)。
+
 ## 更新文件约定
 
 本项目使用 Tauri v2 Windows x64 NSIS 更新。更新客户端下载完整 NSIS 安装器 `.exe`；对应 `.exe.sig` 为 Tauri 签名。`latest.json` 的 `platforms.windows-x86_64.signature` 必须嵌入 `.sig` 的内容，而不是文件路径或 URL。[Tauri 官方 updater 文档](https://v2.tauri.app/plugin/updater/)
@@ -18,7 +25,8 @@
 
 ```powershell
 $env:TAURI_SIGNING_PRIVATE_KEY = Join-Path $env:LOCALAPPDATA 'LoliCode\release-signing\updater.key'
-$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = ''
+# 密码由受控秘密存储预先注入 TAURI_SIGNING_PRIVATE_KEY_PASSWORD。
+# 只有现有签名密钥确实无密码时才允许空值，不在日志中输出密码或私钥。
 try {
   pnpm tauri build --bundles nsis --ci
 } finally {
@@ -44,7 +52,7 @@ pnpm exec tauri signer generate -w "<仓库外私有目录>\LoliCode.key"
 - `plugins.updater.endpoints` 只包含已确认的 LoliCode HTTPS 清单地址。
 - 发布版本与安装器实际编译版本一致。
 
-发布负责人已确定下面的 LoliCode 独立路径。**路径确定不代表已经部署或可用**；实际公开访问与更新演练仍须在发布时确认：
+LoliCode 使用下面的独立分发路径。当前正式清单已在既有发布中上线；每一轮的新安装器、清单及真实公开访问仍须重新核验：
 
 ```text
 https://tools.treasuregrove.art/lolicode/updates/latest.json
@@ -64,8 +72,8 @@ node scripts/lolicode-release.mjs prepare `
   --installer "<NSIS安装器绝对路径>.exe" `
   --signature "<NSIS安装器绝对路径>.exe.sig" `
   --public-key-file "<仓库外私有目录>\LoliCode.key.pub" `
-  --version "4.0.13" `
-  --current-version "4.0.12" `
+  --version "4.0.16" `
+  --current-version "4.0.15" `
   --base-url "https://tools.treasuregrove.art/lolicode/releases" `
   --latest-url "https://tools.treasuregrove.art/lolicode/updates/latest.json" `
   --output-dir "<本地发布暂存目录>" `
@@ -75,7 +83,7 @@ node scripts/lolicode-release.mjs prepare `
 
 示例版本号必须替换为本轮正式版本。若已有公开清单，先获取并保存它，通过 `--previous-manifest "<已发布latest.json>"` 再次约束版本递增。可传 `--pub-date` 固定 RFC3339 发布时间。构建负责人与站点负责人需要核对公开版本，不能仅依赖手工输入的 `--current-version`。
 
-首个独立签名 bootstrap 计划使用 `4.0.13`。现有 `4.0.12` 构建未启用本项目 updater，不能承诺它能直接应用内升级到 bootstrap；用户需要先手动安装可信的 bootstrap 安装器。安装 bootstrap 后，后续更高版本才能使用内嵌的 LoliCode 公钥与更新地址。首次安装不是一次已完成的自动更新演练。
+历史上，`4.0.13` 是首个独立签名 bootstrap 发布。更早的 `4.0.12` 构建未启用本项目 updater，不能假设它可直接应用内升级；这类用户需要先手动安装可信的 LoliCode 安装器。后续版本沿用内嵌的 LoliCode 公钥与更新地址。首次手动安装不能算作自动更新演练。
 
 工具只产生 `<暂存目录>/<version>/`，包括版本文件名的安装器、签名、候选 `latest.json`、`release-manifest.json` 和 `upload-plan.json`。`release-manifest.json` 记录安装器、签名、清单的 SHA256 和字节数及公钥指纹。版本目录已存在时拒绝覆盖；准备失败时不会留下一个可发布的版本目录。
 
@@ -83,7 +91,7 @@ node scripts/lolicode-release.mjs prepare `
 
 ```powershell
 node scripts/lolicode-release.mjs verify `
-  --release-dir "<本地发布暂存目录>\4.0.13" `
+  --release-dir "<本地发布暂存目录>\4.0.16" `
   --public-key-file "<仓库外私有目录>\LoliCode.key.pub"
 ```
 
@@ -107,7 +115,13 @@ node --test scripts/lolicode-release.test.mjs
 node --test scripts/lolicode-publish.test.mjs
 ```
 
-这些测试是本地签名与发布格式测试，使用公开验签向量和临时测试密钥对象，不读取真实私钥或发网络请求。正式交付仍要求：本项目专用公钥已经嵌入正式构建、真实 NSIS 签名通过验证、站点路径确认与部署成功、上一版应用的更新演练成功。本次工具准备本身不代表更新地址已经上线。
+这些测试是本地签名与发布格式测试，使用公开验签向量和临时测试密钥对象，不读取真实私钥或发网络请求。正式交付仍要求：本项目专用公钥已经嵌入正式构建、真实 NSIS 签名通过验证、站点部署成功，以及明确记录上一版应用的更新验证结果。MockRuntime 下载验签不等同于真实桌面覆盖安装和重启；后者未执行时必须如实标明。
+
+## GitHub 工作流与凭据边界
+
+`.github/workflows/release.yml` 是手动触发的 LoliCode Windows 签名构建流程，普通 `v*` tag 不会启动旧上游发布链路。输入版本必须已提交到配置文件；可选择把签名安装器发布到本仓库的 `lolicode-v<version>` Release。该流程不会自动更新官网正式清单；官网仍走下方的独立发布工具。
+
+CI 的签名私钥及密码只来自受控 `release` 环境 secrets。本地 SSH 使用维护者已配置的别名，不能把 SSH 私钥、网站凭据、模型 Key、社区密码或登录令牌加入发布目录、截图和构建日志。社区账户密码仅供登录请求，原生服务保存的是凭据令牌；它与软件更新签名密钥没有关系。验证账户功能使用假数据，不读取真实用户凭据库。
 
 ## 部署辅助工具
 
@@ -117,13 +131,13 @@ node --test scripts/lolicode-publish.test.mjs
 
 ```powershell
 node scripts/lolicode-publish.mjs `
-  --release-dir "<暂存目录>\4.0.13" `
+  --release-dir "<暂存目录>\4.0.16" `
   --public-key-file "src-tauri/updater.pub" `
   --site-dir "<TAWEBTOOL绝对路径>\lolicode" `
   --dry-run
 ```
 
-`--dry-run` 不执行 SSH、SCP 或网络请求。`--site-dir` 可省略；传入时只允许独立 `lolicode` 目录的五个文件：`index.html`、`assets/site.css`、`assets/downloads.js`、`assets/logo.svg`、`assets/maid.png`。根目录 `README.md` 作为本地说明忽略，不读取或上传。整个工具站目录、其他额外文件和 symlink 都会被拒绝。正式执行时去掉 `--dry-run`。
+`--dry-run` 不执行 SSH、SCP 或网络请求。`--site-dir` 可省略；传入时要求独立 `lolicode` 目录的五个基础文件：`index.html`、`assets/site.css`、`assets/downloads.js`、`assets/logo.svg`、`assets/maid.png`，另允许可选的 `assets/workbench.jpg`。网站工作台截图使用示例数据，不代表真实账户、真实用量或所有规划能力已交付。根目录 `README.md` 作为本地说明忽略，不读取或上传。整个工具站目录、其他额外文件和 symlink 都会被拒绝。正式执行时去掉 `--dry-run`。
 
 正式流程会先重跑发布目录验签，再通过唯一 UUID 暂存目录上传，验证远端 SHA256／字节数后生成不可覆盖的 `releases/<version>/`。随后从真实公开 HTTPS 地址重新下载安装器、签名和可选便携包，完成验签／哈希校验，才原子更新网站指定文件和 `updates/latest.json`。更新清单是最后的公开写入；同版或更高版已存在时拒绝回退。
 
@@ -131,7 +145,7 @@ node scripts/lolicode-publish.mjs `
 
 ```powershell
 node scripts/lolicode-publish.mjs `
-  --release-dir "<暂存目录>\4.0.13" `
+  --release-dir "<暂存目录>\4.0.16" `
   --public-key-file "src-tauri/updater.pub" `
   --resume-stage "<失败记录中的UUID>"
 ```

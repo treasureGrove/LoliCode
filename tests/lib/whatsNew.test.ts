@@ -87,10 +87,12 @@ describe("language and links", () => {
     expect(resolveWhatsNewLanguage("fr")).toBe("en");
   });
 
-  it("links to the website changelog, Traditional Chinese uses the zh pages", () => {
+  it("opens LoliCode's own changelog for every language and historical version", () => {
     expect(changelogUrl("en", "4.0.2")).toBe(
-      "https://ccswitch.io/en/changelog/4.0.2",
+      "https://github.com/treasureGrove/LoliCode/blob/TG/freehub-m0/CHANGELOG.md",
     );
-    expect(changelogUrl("zh-TW")).toBe("https://ccswitch.io/zh/changelog");
+    expect(changelogUrl("zh-TW")).toBe(
+      "https://github.com/treasureGrove/LoliCode/blob/TG/freehub-m0/CHANGELOG.md",
+    );
   });
 });

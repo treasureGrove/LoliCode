@@ -8,7 +8,7 @@ import {
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AboutSection } from "@/components/settings/AboutSection";
 import { UpdateProvider } from "@/contexts/UpdateContext";
-import { APP_WEBSITE } from "@/lib/branding";
+import { APP_CHANGELOG, APP_WEBSITE } from "@/lib/branding";
 import { useSettingsMetadata } from "@/hooks/useSettingsMetadata";
 
 const mocks = vi.hoisted(() => ({
@@ -149,8 +149,10 @@ describe("software updates in About", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "settings.releaseNotes" }),
     );
-    expect(mocks.open).toHaveBeenCalledWith(APP_WEBSITE);
-    expect(APP_WEBSITE).toBe("https://tools.treasuregrove.art/lolicode/");
+    expect(mocks.open).toHaveBeenCalledWith(APP_CHANGELOG);
+    expect(APP_CHANGELOG).toBe(
+      "https://github.com/treasureGrove/LoliCode/blob/TG/freehub-m0/CHANGELOG.md",
+    );
   });
 
   it("shows real progress and preserves the running operation when About is reopened", async () => {

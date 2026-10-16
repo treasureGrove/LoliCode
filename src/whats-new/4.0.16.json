@@ -1,0 +1,26 @@
+{
+  "version": "4.0.16",
+  "items": [
+    {
+      "type": "new",
+      "zh": "左下角支持登录 LoliCode，显示你的昵称与头像",
+      "zh-TW": "左下角支援登入 LoliCode，顯示你的暱稱與頭像",
+      "en": "Sign in to LoliCode from the sidebar to show your name and avatar",
+      "ja": "サイドバーからLoliCodeにログインし、名前とアバターを表示"
+    },
+    {
+      "type": "improve",
+      "zh": "精简导航，设置和软件更新集中到头像菜单",
+      "zh-TW": "精簡導覽，設定和軟體更新集中到頭像選單",
+      "en": "A simpler navigation rail with settings and updates in the profile menu",
+      "ja": "ナビゲーションを整理し、設定と更新をプロフィールメニューに集約"
+    },
+    {
+      "type": "fix",
+      "zh": "官网、文档与更新说明统一使用 LoliCode 自有地址",
+      "zh-TW": "官網、文件與更新說明統一使用 LoliCode 自有網址",
+      "en": "Documentation, download pages, and release notes now use LoliCode's own links",
+      "ja": "ドキュメント・ダウンロード・更新履歴をLoliCode独自のリンクに統一"
+    }
+  ]
+}

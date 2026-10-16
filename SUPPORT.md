@@ -1,59 +1,29 @@
-# Support / 获取帮助
+# LoliCode Support / 获取帮助
 
-> [中文版本](#获取帮助)
+## English
 
-## How to Get Help
+Start with the [README](README.md) and [documentation index](docs/README.md). Search [LoliCode Issues](https://github.com/treasureGrove/LoliCode/issues), including closed reports, before opening a new issue.
 
-CC Switch is an open-source project maintained by volunteers. We're happy to help, but please use the right channel so we can respond efficiently.
+- Downloads and published packages: [LoliCode download page](https://tools.treasuregrove.art/lolicode/).
+- Community and website account: [lolicode.com](https://lolicode.com).
+- Bugs, questions, feature requests, and documentation corrections: [open an issue](https://github.com/treasureGrove/LoliCode/issues/new/choose).
+- Release changes: [CHANGELOG.md](CHANGELOG.md) and [LoliCode Releases](https://github.com/treasureGrove/LoliCode/releases).
+- Sensitive vulnerability reports: follow [SECURITY.md](SECURITY.md).
 
-### Before Asking
+For a reproducible report, include the LoliCode version, operating system, installer or portable edition, steps, expected and actual results, and relevant redacted logs. For model problems, include the API protocol and model name where possible. Do not include API keys, passwords, tokens, private conversation content, or private endpoints.
 
-1. **Read the [FAQ](https://github.com/farion1231/cc-switch#faq)** — most common questions are answered there.
-2. **Search [existing issues](https://github.com/farion1231/cc-switch/issues)** (including closed ones) — someone may have had the same question.
+The built-in Agent and external AI tools have different execution boundaries. Report which one you were using. References to CC Switch in archived documentation identify the configuration foundation; LoliCode support and downloads use the addresses above.
 
-### Asking a Question
+## 中文
 
-- **Usage or configuration questions**: [Open a Question issue](https://github.com/farion1231/cc-switch/issues/new?template=question.yml)
-- **General discussion**: [GitHub Discussions](https://github.com/farion1231/cc-switch/discussions)
+请先阅读[项目介绍](README_ZH.md)和[文档导航](docs/README.md)，再搜索 [LoliCode 已有 Issue](https://github.com/treasureGrove/LoliCode/issues)，包括已关闭的问题。
 
-### Reporting Problems
+- 下载与安装包：[LoliCode 下载官网](https://tools.treasuregrove.art/lolicode/)。
+- 社区与网站账户：[lolicode.com](https://lolicode.com)。
+- Bug、使用问题、功能建议和文档纠错：[提交 Issue](https://github.com/treasureGrove/LoliCode/issues/new/choose)。
+- 版本变化：[更新记录](CHANGELOG.md)和 [LoliCode Releases](https://github.com/treasureGrove/LoliCode/releases)。
+- 安全漏洞：按[安全策略](SECURITY.md)私下报告。
 
-- **Bug reports**: [Open a Bug Report](https://github.com/farion1231/cc-switch/issues/new?template=bug_report.yml)
-- **Documentation issues**: [Open a Doc Issue](https://github.com/farion1231/cc-switch/issues/new?template=doc_issue.yml)
-- **Security vulnerabilities**: Please do NOT use public issues. See our [Security Policy](./SECURITY.md).
+报告问题时，请提供 LoliCode 版本、系统、安装版或便携版、复现步骤、预期与实际结果，以及脱敏日志。模型相关问题可补充协议和模型名称。不要上传 API Key、密码、令牌、私聊内容或私有接口地址。
 
-### Feature Requests
-
-- [Submit a Feature Request](https://github.com/farion1231/cc-switch/issues/new?template=feature_request.yml)
-- Please open an issue for discussion before submitting a PR for new features.
-
----
-
-# 获取帮助
-
-> [English Version](#support--获取帮助)
-
-## 如何获取帮助
-
-CC Switch 是一个由志愿者维护的开源项目。我们很乐意提供帮助，但请使用合适的渠道，以便我们高效响应。
-
-### 提问之前
-
-1. **阅读 [常见问题](https://github.com/farion1231/cc-switch/blob/main/README_ZH.md#常见问题)** — 大多数常见问题都已在其中解答。
-2. **搜索 [已有的 Issue](https://github.com/farion1231/cc-switch/issues)**（包括已关闭的） — 可能已经有人问过相同的问题。
-
-### 提问
-
-- **使用或配置问题**：[提交问题 Issue](https://github.com/farion1231/cc-switch/issues/new?template=question.yml)
-- **一般讨论**：[GitHub 讨论区](https://github.com/farion1231/cc-switch/discussions)
-
-### 报告问题
-
-- **Bug 报告**：[提交 Bug 报告](https://github.com/farion1231/cc-switch/issues/new?template=bug_report.yml)
-- **文档问题**：[提交文档问题](https://github.com/farion1231/cc-switch/issues/new?template=doc_issue.yml)
-- **安全漏洞**：请不要使用公开 Issue。请参阅我们的[安全策略](./SECURITY.md)。
-
-### 功能请求
-
-- [提交功能请求](https://github.com/farion1231/cc-switch/issues/new?template=feature_request.yml)
-- 提交新功能的 PR 之前，请先开 Issue 讨论。
+请注明使用的是内置 Agent，还是通过 LoliCode 配置的外部工具。旧文档中的 CC Switch 属于配置基础来源；LoliCode 的下载与反馈入口以上述地址为准。

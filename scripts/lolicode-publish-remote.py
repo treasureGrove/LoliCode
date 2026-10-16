@@ -11,7 +11,7 @@ import sys
 import uuid
 
 ROOT = Path('/www/wwwroot/tools.treasuregrove.art/lolicode')
-SITE_NAMES = {'index.html', 'assets/site.css', 'assets/downloads.js', 'assets/logo.svg', 'assets/maid.png'}
+SITE_NAMES = {'index.html', 'assets/site.css', 'assets/downloads.js', 'assets/logo.svg', 'assets/maid.png', 'assets/workbench.jpg'}
 
 
 def version(value):

@@ -31,6 +31,7 @@ const SITE_FILES = [
   "assets/logo.svg",
   "assets/maid.png",
 ];
+const OPTIONAL_SITE_FILES = ["assets/workbench.jpg"];
 const runFile = promisify(execFile);
 const REMOTE_PROGRAM = readFileSync(
   new URL("./lolicode-publish-remote.py", import.meta.url),
@@ -87,9 +88,14 @@ function localSiteFiles(directory) {
     }
   }
   visit();
-  if (JSON.stringify(actual.sort()) !== JSON.stringify([...SITE_FILES].sort()))
+  if (
+    SITE_FILES.some((file) => !actual.includes(file)) ||
+    actual.some(
+      (file) => ![...SITE_FILES, ...OPTIONAL_SITE_FILES].includes(file),
+    )
+  )
     throw new Error(
-      "Website directory must contain exactly the five approved LoliCode website files.",
+      "Website directory must contain the approved LoliCode website files only.",
     );
   return actual;
 }

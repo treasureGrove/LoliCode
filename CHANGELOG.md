@@ -1,9 +1,28 @@
-# Changelog
+# LoliCode Changelog
 
-All notable changes to CC Switch will be documented in this file.
+LoliCode release information is maintained independently in this repository. Published packages are available from the [LoliCode download page](https://tools.treasuregrove.art/lolicode/); source releases are listed in [LoliCode Releases](https://github.com/treasureGrove/LoliCode/releases).
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [Unreleased] — 4.0.16
+
+This section describes the release being prepared. It is not a publication announcement.
+
+- Refine the desktop navigation while retaining the global navigation rail and project/session sidebar. Move settings into the avatar menu and clarify the open-folder action.
+- Add LoliCode website account sign-in, public profile/avatar display, refresh, and logout independently from model-provider authorization. Keep the account token in the native credential service, with explicit warnings when system persistence is unavailable.
+- Replace inherited public-facing project documentation and support links with LoliCode's own introduction, downloads, community, release notes, and signed update channel.
+- Keep shipped Agent functionality separate from future UE, Tavern, memory, voice, and character-interaction plans.
+
+本节为 **4.0.16 待发布内容**：改进工作台导航与头像设置菜单，接入独立的 LoliCode 网站账户，并重写项目介绍、下载、反馈及更新入口。正式发布状态以官网和 Releases 为准。
+
+## Earlier LoliCode releases
+
+- [4.0.15 release notes](docs/guides/lolicode-4.0.15.md) and [delivery evidence](docs/guides/lolicode-4.0.15-delivery.md): the in-process native Agent.
+- [4.0.14 release notes](docs/guides/lolicode-4.0.14.md) and [delivery evidence](docs/guides/lolicode-4.0.14-delivery.md).
+
+## Upstream history — CC Switch
+
+The entries below are retained from the configuration foundation's history. Their version numbers, product links, features, and statistics describe **CC Switch at those historical revisions**, not LoliCode releases or current downloads. See [FORK_BASELINE.md](FORK_BASELINE.md) for the pinned origin.
+
+以下保留配置基础项目 CC Switch 的历史记录，版本号、链接和功能均属于原历史语境。当前 LoliCode 请使用上方的独立入口。
 
 ## [4.0.10] - 2026-10-13
 

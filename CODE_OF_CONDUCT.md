@@ -38,7 +38,7 @@ This Code of Conduct applies within all community spaces, and also applies when 
 
 ## Enforcement
 
-Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the community leaders responsible for enforcement at **farion1231@gmail.com**. All complaints will be reviewed and investigated promptly and fairly.
+Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to LoliCode maintainers. Use the [LoliCode repository](https://github.com/treasureGrove/LoliCode/issues/new) to request a private reporting channel without posting personal information or incident details publicly. All complaints will be reviewed and investigated fairly.
 
 All community leaders are obligated to respect the privacy and security of the reporter of any incident.
 
@@ -128,7 +128,7 @@ For answers to common questions about this code of conduct, see the FAQ at [http
 
 ## 监督
 
-辱骂、骚扰或其他不可接受的行为可通过 **farion1231@gmail.com** 向负责监督的社区领袖报告。所有投诉都将得到及时和公平的审查和调查。
+辱骂、骚扰或其他不可接受的行为可向 LoliCode 维护者报告。请先通过 [LoliCode 仓库](https://github.com/treasureGrove/LoliCode/issues/new)请求私下报告渠道，不要在公开内容中发布个人信息或事件细节。所有投诉都将得到公平的审查和调查。
 
 所有社区领袖都有义务尊重任何事件报告者的隐私和安全。
 

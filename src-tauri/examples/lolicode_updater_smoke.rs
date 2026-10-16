@@ -7,7 +7,7 @@
 //! cargo run --manifest-path src-tauri/Cargo.toml --features "test-hooks,tauri/test" --example lolicode_updater_smoke -- --endpoint http://127.0.0.1:14422/latest.json
 //!
 //! --help prints the options. --check-only skips the package download.
-//! The current version is deliberately 4.0.14, independent of this crate's
+//! The current version is deliberately 4.0.15, independent of this crate's
 //! package version. MockRuntime has no window, WebView, tray, user state, or app
 //! event loop. Only the repository's public updater configuration is embedded.
 //! A successful Update::download is the official plugin's signature verdict;
@@ -33,7 +33,7 @@ mod smoke {
     use tauri_plugin_updater::{Error, UpdaterExt};
     use url::Url;
 
-    const CURRENT_VERSION: &str = "4.0.14";
+    const CURRENT_VERSION: &str = "4.0.15";
     const HELP: &str = "LoliCode official updater smoke (check/download only)\n\
       --endpoint <URL>       Override metadata with a loopback fixture or HTTPS endpoint\n\
       --expect-version <v>   Fail unless the native check offers exactly this version\n\

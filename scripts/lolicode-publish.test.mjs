@@ -310,10 +310,22 @@ test("remote paths and website allowlist cannot touch the tools root or unrelate
     );
     const plan = await preparePublishPlan({ ...f.options, "site-dir": site });
     assert.equal(plan.files.filter((file) => file.role === "site").length, 5);
+    writeFileSync(
+      path.join(site, "assets/workbench.jpg"),
+      "owned screenshot fixture",
+    );
+    const withScreenshot = await preparePublishPlan({
+      ...f.options,
+      "site-dir": site,
+    });
+    assert.equal(
+      withScreenshot.files.filter((file) => file.role === "site").length,
+      6,
+    );
     writeFileSync(path.join(site, ".env"), "DO NOT READ");
     await assert.rejects(
       preparePublishPlan({ ...f.options, "site-dir": site }),
-      /five approved/,
+      /approved LoliCode website files/,
     );
     await assert.rejects(
       preparePublishPlan({ ...f.options, "site-dir": f.root }),

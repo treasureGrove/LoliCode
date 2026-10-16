@@ -10,17 +10,17 @@ body:
       label: Self Checks / 自检
       options:
         - label: |
-            I have read the [FAQ](https://github.com/farion1231/cc-switch#faq) section in README.
-            我已阅读 README 中的[常见问题](https://github.com/farion1231/cc-switch/blob/main/README_ZH.md#常见问题)。
+            I have read the [FAQ](https://github.com/treasureGrove/LoliCode/blob/TG/freehub-m0/SUPPORT.md) section in README.
+            我已阅读 README 中的[常见问题](https://github.com/treasureGrove/LoliCode/blob/TG/freehub-m0/SUPPORT.md)。
           required: true
         - label: |
-            I have searched for [existing issues](https://github.com/farion1231/cc-switch/issues), including closed ones.
-            我已搜索过[已有的 Issue](https://github.com/farion1231/cc-switch/issues)，包括已关闭的。
+            I have searched for [existing issues](https://github.com/treasureGrove/LoliCode/issues), including closed ones.
+            我已搜索过[已有的 Issue](https://github.com/treasureGrove/LoliCode/issues)，包括已关闭的。
           required: true
 
   - type: input
     attributes:
-      label: CC Switch Version / 版本号
+      label: LoliCode Version / 版本号
       description: |
         See Settings → About in the app.
         在应用的「设置 → 关于」中查看版本号。

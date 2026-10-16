@@ -1,4 +1,5 @@
 import { compareVersions } from "@/lib/version";
+import { APP_CHANGELOG } from "@/lib/branding";
 
 /**
  * 更新摘要：每个版本一份 `src/whats-new/<version>.json`，构建时打进安装包。
@@ -88,12 +89,10 @@ export function resolveWhatsNewLanguage(language: string): WhatsNewLanguage {
     : "en";
 }
 
-/** 官网更新日志：不带版本是列表页。官网只有 zh / en / ja，繁中用简中页面 */
+/** All bundled versions share LoliCode's maintained changelog, including inherited history. */
 export function changelogUrl(
-  language: WhatsNewLanguage,
-  version?: string,
+  _language: WhatsNewLanguage,
+  _version?: string,
 ): string {
-  const siteLanguage = language === "zh-TW" ? "zh" : language;
-  const base = `https://ccswitch.io/${siteLanguage}/changelog`;
-  return version ? `${base}/${version}` : base;
+  return APP_CHANGELOG;
 }

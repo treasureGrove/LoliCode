@@ -22,7 +22,13 @@ import { WhatsNewDialog } from "@/components/WhatsNewDialog";
 import { WHATS_NEW_ENTRIES, entriesUpTo } from "@/lib/whatsNew";
 import appIcon from "@/assets/brand/lolicode.svg";
 import { extractErrorMessage } from "@/utils/errorUtils";
-import { APP_NAME, APP_UPDATES_ENABLED, APP_WEBSITE } from "@/lib/branding";
+import {
+  APP_CHANGELOG,
+  APP_NAME,
+  APP_REPOSITORY,
+  APP_UPDATES_ENABLED,
+  APP_WEBSITE,
+} from "@/lib/branding";
 
 interface AboutSectionProps {
   isPortable: boolean | null;
@@ -109,7 +115,7 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
 
   const handleOpenReleaseNotes = useCallback(async () => {
     try {
-      await settingsApi.openExternal(APP_WEBSITE);
+      await settingsApi.openExternal(APP_CHANGELOG);
     } catch (error) {
       console.error("[AboutSection] Failed to open release notes", error);
       toast.error(t("settings.openReleaseNotesFailed"));
@@ -117,9 +123,7 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
   }, [t]);
 
   const handleOpenGithub = useCallback(() => {
-    void settingsApi.openExternal(
-      "https://github.com/treasureGrove/TAI-Switch",
-    );
+    void settingsApi.openExternal(APP_REPOSITORY);
   }, []);
 
   const handleDismissStarPrompt = useCallback(() => {

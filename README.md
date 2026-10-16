@@ -2,64 +2,43 @@
 
 [简体中文](README_ZH.md) · [日本語](README_JA.md) · [Deutsch](README_DE.md)
 
-**A simple, extensible anime-girl Agent for work, creation, and companionship.**
+**A simple, extensible anime-girl Agent for coding and creation.**
 
-LoliCode combines a capable desktop Agent, shared model configuration, and an expanding set of business tools. Our product vision includes a distinctive anime character, persistent memory, Pet, voice, and expressive interaction; the current implementation and planned capabilities are listed separately below.
+LoliCode brings a desktop coding Agent, shared model channels, and an anime-inspired workspace together. Start with a model and a folder; explore advanced configuration when you need it.
 
-This repository is maintained independently from CC Switch. Its configuration foundation originates from CC Switch; attribution and license notices are preserved.
+[Download](https://tools.treasuregrove.art/lolicode/) · [Community and account](https://lolicode.com) · [Source](https://github.com/treasureGrove/LoliCode) · [Documentation](docs/README.md) · [Release notes](CHANGELOG.md)
 
-## Current state
+## What you can use today
 
-The current desktop implementation uses **Tauri 2, React, TypeScript, and Rust**. Since 4.0.15, the default coding agent runs as an in-process Rust core. It does not require a separate OpenCode or ZCode application.
+- **One main Agent workspace:** streaming conversations, project files, terminal tools, permissions, questions, cancellation, session history, and file-change review.
+- **Shared channels and models:** manage API providers and supported account authorizations, discover models, and select available model options. Context limits and reasoning settings depend on the information and capabilities supplied by the upstream service.
+- **Configuration in one place:** manage provider settings, prompts, Skills, and MCP configuration for supported external AI tools. Configuration support and execution support are distinct; the built-in Agent reports its actual runtime capabilities.
+- **A characterful desktop:** an anime-inspired theme and a pink-haired chibi companion, with compact tool progress and a file-preview panel.
+- **Usage and updates:** view recorded usage and check for independently published LoliCode updates. The LoliCode community account is separate from model-provider accounts.
 
-The existing implementation includes:
+The current implementation uses **Tauri 2, React, TypeScript, and Rust**. The default Agent runs inside the desktop application as a Rust core; a separate OpenCode or ZCode installation is not required. See [current Agent capabilities and limitations](docs/guides/lolicode-inprocess-agent.md).
 
-- Shared channels, model catalog, account authorization, and provider configuration.
-- A coding workspace with streaming conversations, project file tools, terminal execution, permission requests, cancellation, and change review.
-- Session persistence and content-based Skills. Advanced execution support is reported by the runtime instead of inferred from available configuration pages.
-- Configuration management for supported external AI tools, including provider presets, MCP, Skills, and prompts.
-- Usage views, desktop settings, and a separate LoliCode update path.
+Windows, macOS, and Linux are product targets. Current public packages are **Windows x64 NSIS installers and portable ZIPs**; macOS and Linux packages have not been published. Check each release for its actual validation coverage.
 
-These are implementation areas, not a claim that every feature has been validated on every operating system or model. See the [current agent behavior](docs/guides/lolicode-inprocess-agent.md) and [4.0.15 delivery evidence](docs/guides/lolicode-4.0.15-delivery.md).
+## Install and get started
 
-## Product direction
+1. Download a matching package from the [LoliCode download page](https://tools.treasuregrove.art/lolicode/).
+2. Add a channel and select a model in **Channels and models**.
+3. Open a project folder in **Workbench**, describe a task, and review requested permissions and changes.
 
-**Simple to use. Highly extensible. An anime-girl Agent for work, creation, and companionship.**
+Use **Software updates** from the lower-left avatar menu or the update entry to check for new versions. The installer update channel uses the [signed LoliCode update manifest](https://tools.treasuregrove.art/lolicode/updates/latest.json). For portable editions, follow the download page and release notes to replace the application files while retaining your data.
 
-LoliCode centers on one capable Agent with a distinctive anime, moe, and petite character identity. The long-term experience brings together a coherent personality, persistent memory, an anime-inspired interface, a desktop Pet, voice, and character interaction. These are product goals, not a claim that all of them ship today.
+Existing data keeps the historical `~/.tai-switch` directory for compatibility. See the [installation guide](docs/user-manual/en/1-getting-started/1.2-installation.md) before moving or replacing an existing installation.
 
-The main Agent chat is always available. Applications do not create additional Agent chat windows. Users can add built-in business applications to a workspace, similar to adding applications in Feishu or DingTalk, then either open their business pages or let the shared Agent use their exposed tools. Third-party applications come later.
+## What comes next
 
-Getting started should take a few necessary choices: reuse a model account, choose a workspace, and start a conversation. Recommended defaults come first; native model options, tools, Skills, MCP, memory policies, and diagnostics remain available through advanced settings.
+LoliCode will grow around the same main Agent. Planned built-in applications include **UE tools** and **Tavern-style character interaction** as peer applications, sharing selected Agent capabilities. Persistent memory, voice, richer companion interaction, and the lightweight frontend/3D-focused **sillyLoli** model are future directions.
 
-Agent capabilities draw on DSH, OpenCode, ZCode, and other mature implementations. Configuration builds on CC Switch. Hermes memory mechanisms, selected UE Box tools, and open-source Tavern implementations are integration candidates, adopted as capabilities and components rather than complete upstream programs.
+These are plans, not shipped features. We adopt useful capabilities and components rather than bundling complete upstream products. Read the [product vision](docs/guides/lolicode-product-vision.md), [first milestone plan](docs/guides/lolicode-phase-one-plan.md), and [source/capability ledger](docs/guides/lolicode-platform-capabilities.json).
 
-**SillyTavern is the primary Tavern reference**, with RisuAI as a secondary reference for character presentation and long-conversation memory. The [Tavern integration plan](docs/guides/lolicode-tavern-reference.md) records feature boundaries, source entry points, and licensing considerations. These application features have not shipped yet.
+## Develop locally
 
-Implementation order:
-
-1. Prioritize the main Agent and its interactions: questions, direction choices, thinking state, tool progress, cancellation, and recovery.
-2. Integrate UE and Tavern as two built-in business applications.
-3. Complete the first acceptance milestone against real behavior and recovery cases.
-4. Unify the broader frontend visual system later; expand memory, Pet, voice, and character interactions through subsequent iterations.
-
-The target architecture remains **Electron + React + an owned TypeScript Host/Agent Kernel + existing Rust native services**, targeting Windows, macOS, and Linux. The current default is still Tauri with the native Rust Agent.
-
-Read the [product vision](docs/guides/lolicode-product-vision.md), [architecture and migration plan](docs/guides/lolicode-platform-architecture.md), and [capability/source ledger](docs/guides/lolicode-platform-capabilities.json). Proposed applications, memory providers, Pet, voice, and the new shell must not be presented as shipped features.
-
-## Download
-
-Use the [LoliCode download page](https://tools.treasuregrove.art/lolicode/) for published packages. The recorded 4.0.15 delivery covers Windows packages; macOS and Linux release validation remains separate work.
-
-CC Switch release links and packages belong to the upstream project and are not LoliCode downloads.
-
-## Local development
-
-Requirements:
-
-- Node.js compatible with the installed Vite version: ^20.19.0 or >=22.12.0.
-- pnpm 10.12.3, as recorded in package.json.
-- Rust and the platform build tools required by Tauri 2; see [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/).
+Use Node.js 22.12+ (or a version supported by Vite), pnpm 10.12.3, the Rust toolchain pinned in `rust-toolchain.toml`, and the [Tauri platform prerequisites](https://v2.tauri.app/start/prerequisites/).
 
 ```sh
 git clone https://github.com/treasureGrove/LoliCode.git
@@ -68,53 +47,26 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-Vite updates the frontend during development. Rust changes require incremental compilation and a development-process restart, rather than an installer rebuild. To also watch the agent crate outside src-tauri:
+Frontend changes reload through Vite. Rust changes rebuild and restart the development process; an installer rebuild is unnecessary. To watch the Agent crate as well:
 
 ```sh
 pnpm dev --additional-watch-folders ../crates/lolicode-agent
 ```
 
-Production packaging:
-
-```sh
-pnpm build
-```
-
-The proposed Electron/Host development workflow is documented in the architecture plan; it is not the current default entry point.
-
-## Validation
-
-Run checks appropriate to the change:
+Useful checks:
 
 ```sh
 pnpm typecheck
 pnpm test:unit
+pnpm build:renderer
 cargo test --manifest-path crates/lolicode-agent/Cargo.toml
 cargo test --manifest-path src-tauri/Cargo.toml --lib
 ```
 
-The built desktop executable also supports --check-agent-runtime, an isolated local-fixture check of the native agent. It does not require a real model key. Historical test results are not a substitute for validating the current checkout.
+See [Contributing](CONTRIBUTING.md) for development and [the release guide](docs/guides/lolicode-release.md) for packaging and signing.
 
-## Project layout
+## Help, sources, and license
 
-- src/ — React workspace, configuration pages, components, and desktop client APIs.
-- src-tauri/ — current desktop shell, Rust services, account/channel management, and configuration persistence.
-- crates/lolicode-agent/ — current native agent implementation.
-- docs/guides/ — architecture, development, release notes, and delivery evidence.
-- third-party/ — retained upstream provenance and reference material.
+Report problems in [LoliCode Issues](https://github.com/treasureGrove/LoliCode/issues). See [Support](SUPPORT.md), [Security](SECURITY.md), and the [Code of Conduct](CODE_OF_CONDUCT.md).
 
-Existing local workspaces may retain the historical TAI-Switch directory name. Default application data uses ~/.tai-switch; a portable build has its own documented data behavior. Do not point development or parallel application instances at the same production data directory.
-
-## Contributing
-
-Open an issue or pull request in [this repository](https://github.com/treasureGrove/LoliCode). Keep existing configuration fields and data compatible, describe the actual behavior change, and include relevant validation.
-
-New integrations should identify the capability, owning module, execution target, source revision, and license impact. Preserve provider-specific model capabilities rather than flattening every model into a text-only interface.
-
-## Attribution and license
-
-The repository retains the [MIT license](LICENSE). Its CC Switch baseline is pinned to farion1231/cc-switch at 479964f2ef59e291f563218ac674a1fd82dcdbd3; see [FORK_BASELINE.md](FORK_BASELINE.md).
-
-Research and selected integration candidates include [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness), [OpenCode](https://github.com/anomalyco/opencode), [ZCode](https://github.com/zai-org/ZCode), [UE Box](https://github.com/ueboxai/uebox), [Hermes Agent](https://github.com/NousResearch/hermes-agent), and [SillyTavern](https://github.com/SillyTavern/SillyTavern). Mentioning a project does not mean its code or complete application is included.
-
-Reused code retains its applicable notices and license obligations. Future source adoption and the product's licensing decision are tracked separately in the capability/source ledger.
+LoliCode is maintained independently. Its configuration foundation originates from CC Switch; the original [MIT license](LICENSE), copyright notices, and [pinned baseline](FORK_BASELINE.md) remain intact. Other reused components and their notices are listed in [Third-party notices](THIRD_PARTY_NOTICES.md). Reference projects and future integration candidates do not imply that their complete programs or plugin ecosystems are included.
