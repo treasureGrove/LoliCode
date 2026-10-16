@@ -66,12 +66,14 @@ beforeEach(() => {
 });
 
 describe("simple channel navigation", () => {
-  it("opens software updates directly and keeps the About entry available", () => {
+  it("opens software updates from the avatar menu and keeps the About entry available", async () => {
+    const user = userEvent.setup();
     const values = props({ view: "settings" });
     mount(values);
-    const updates = screen.getByRole("button", { name: /^软件更新/ });
+    await user.click(screen.getByRole("button", { name: "头像与设置" }));
+    const updates = screen.getByRole("menuitem", { name: /^软件更新/ });
     expect(updates).toHaveAccessibleName(/发现 LoliCode 新版本/);
-    fireEvent.click(updates);
+    await user.click(updates);
     expect(values.onOpenUpdates).toHaveBeenCalledOnce();
     expect(values.onSelectPage).not.toHaveBeenCalled();
     fireEvent.click(
@@ -80,7 +82,8 @@ describe("simple channel navigation", () => {
     expect(values.onSelectSettingsSection).toHaveBeenLastCalledWith("about");
   });
 
-  it("opens shared channels and retains only the core destinations", () => {
+  it("opens shared channels and retains only the core destinations", async () => {
+    const user = userEvent.setup();
     const values = props({ view: "channels" });
     mount(values);
     const channels = screen.getByRole("button", { name: /^渠道与模型/ });
@@ -90,11 +93,13 @@ describe("simple channel navigation", () => {
     for (const [name, page] of [
       [/^nav.usage/, "usage"],
       [/^编程工作台/, "agent"],
-      [/^nav.settings ·/, "settings"],
     ] as const) {
       fireEvent.click(screen.getByRole("button", { name }));
       expect(values.onSelectPage).toHaveBeenLastCalledWith(page);
     }
+    await user.click(screen.getByRole("button", { name: "头像与设置" }));
+    await user.click(screen.getByRole("menuitem", { name: "设置" }));
+    expect(values.onSelectPage).toHaveBeenLastCalledWith("settings");
     expect(
       screen.queryByRole("button", { name: /^nav.sessions/ }),
     ).not.toBeInTheDocument();

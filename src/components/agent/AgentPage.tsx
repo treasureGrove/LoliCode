@@ -1412,7 +1412,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
               onClick={() => void openProject()}
             >
               <FolderOpen />
-              {workspace ? "切换项目" : "选择项目"}
+              打开文件夹
             </button>
             <button
               className="wb-nav-button"

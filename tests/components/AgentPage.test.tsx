@@ -438,8 +438,8 @@ describe("AgentPage", () => {
     fill("原项目草稿");
     fireEvent.click(screen.getByRole("button", { name: "打断并发送" }));
     await flush();
-    expect(screen.getByRole("button", { name: "切换项目" })).toBeEnabled();
-    fireEvent.click(screen.getByRole("button", { name: "切换项目" }));
+    expect(screen.getByRole("button", { name: "打开文件夹" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "打开文件夹" }));
     await flush();
     fill("新项目草稿");
     await tick(100);
@@ -514,7 +514,7 @@ describe("AgentPage", () => {
       await flush();
       fireEvent.click(
         action === "open"
-          ? screen.getByRole("button", { name: "切换项目" })
+          ? screen.getByRole("button", { name: "打开文件夹" })
           : modelRefreshButton(),
       );
       await flush();
@@ -578,7 +578,7 @@ describe("AgentPage", () => {
       expect(agentApi.sendMessage).not.toHaveBeenCalled();
       expect(agentApi.updateSession).not.toHaveBeenCalled();
 
-      expect(screen.getByRole("button", { name: "切换项目" })).toBeEnabled();
+      expect(screen.getByRole("button", { name: "打开文件夹" })).toBeEnabled();
       snapshot = { ...emptySnapshot(), session: { ...session, id: "lc:new" } };
       fireEvent.click(sessionCreationButton());
       await flush();
@@ -1136,7 +1136,7 @@ describe("AgentPage", () => {
     });
     render(<AgentPage />);
     await flush();
-    fireEvent.click(screen.getByRole("button", { name: "选择项目" }));
+    fireEvent.click(screen.getByRole("button", { name: "打开文件夹" }));
     await flush();
     expect(settingsApi.pickDirectory).toHaveBeenCalledTimes(1);
     expect(agentApi.openProject).toHaveBeenCalledWith(project);
@@ -1294,7 +1294,7 @@ describe("AgentPage", () => {
     expect(requestId).toMatch(/^msg_/);
     expect(screen.getByText("已发送，等待开始…")).toBeInTheDocument();
     expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue("");
-    expect(screen.getByRole("button", { name: "切换项目" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "打开文件夹" })).toBeEnabled();
     await tick();
     expect(screen.getByText("已发送，等待开始…")).toBeInTheDocument();
     snapshot.messages = [
@@ -1796,11 +1796,11 @@ describe("AgentPage", () => {
     await flush();
     fireEvent.click(screen.getByRole("button", { name: /^完成的会话/ }));
     await flush();
-    expect(screen.getByRole("button", { name: "切换项目" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "打开文件夹" })).toBeEnabled();
     expect(modelRefreshButton()).toBeDisabled();
     snapshot.status = "idle";
     await tick(1500);
-    expect(screen.getByRole("button", { name: "切换项目" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "打开文件夹" })).toBeEnabled();
     expect(agentApi.interruptSession).not.toHaveBeenCalled();
   });
 

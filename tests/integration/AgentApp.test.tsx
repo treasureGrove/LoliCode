@@ -41,7 +41,7 @@ beforeEach(() => {
 
 describe("LoliCode desktop entry", () => {
   it("opens the coding workspace and reaches shared channels from onboarding", async () => {
-    render(
+    const { container } = render(
       <QueryClientProvider
         client={
           new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -55,7 +55,10 @@ describe("LoliCode desktop entry", () => {
       "aria-current",
       "page",
     );
-    expect(screen.getByText("LoliCode")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "头像与设置" }),
+    ).toBeInTheDocument();
+    expect(container.querySelector(".tai-shell-mark")).toBeNull();
     expect(
       screen.queryByRole("button", { name: /^应用(?: ·|$)/ }),
     ).not.toBeInTheDocument();

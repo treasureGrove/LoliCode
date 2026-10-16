@@ -13,7 +13,6 @@ import {
   Info,
   PanelsTopLeft,
   Download,
-  Settings,
   SlidersHorizontal,
 } from "lucide-react";
 import type { AppId } from "@/lib/api";
@@ -27,7 +26,7 @@ import { HoverTip } from "@/components/ui/hover-tip";
 import { DRAG_REGION_ATTR, DRAG_REGION_STYLE, isMac } from "@/lib/platform";
 import { motionTokens } from "@/lib/motion";
 import { cn } from "@/lib/utils";
-import { LolicodeMark } from "./LolicodeMark";
+import { SidebarProfileMenu } from "./SidebarProfileMenu";
 import { APP_NAME } from "@/lib/branding";
 
 type IconComponent = ComponentType<{ className?: string }>;
@@ -76,7 +75,7 @@ export function Sidebar(props: SidebarProps) {
             authNeedsAttention={authNeedsAttention}
           />
         )}
-        <div className="tai-shell-footer">
+        <div className="tai-shell-footer tai-shell-footer-with-profile">
           <NavItem
             collapsed={collapsed}
             selected={false}
@@ -93,15 +92,11 @@ export function Sidebar(props: SidebarProps) {
             dotTone="success"
             onClick={props.onOpenUpdates}
           />
-          <NavItem
-            collapsed={collapsed}
+          <SidebarProfileMenu
+            hasUpdate={hasUpdate}
             selected={props.view === "settings"}
-            icon={Settings}
-            label={t("nav.settings")}
-            title={hasUpdate ? t("nav.settingsHasUpdate") : undefined}
-            dot={hasUpdate}
-            dotTone="success"
-            onClick={() => props.onSelectPage("settings")}
+            onOpenSettings={() => props.onSelectPage("settings")}
+            onOpenUpdates={props.onOpenUpdates}
           />
         </div>
       </LayoutGroup>
@@ -112,14 +107,14 @@ export function Sidebar(props: SidebarProps) {
 function SidebarTopBar() {
   return (
     <div
-      className={cn("tai-shell-brand", isMac() && "tai-shell-brand-mac")}
+      className={cn(
+        "tai-shell-drag-spacer",
+        isMac() && "tai-shell-drag-spacer-mac",
+      )}
       {...DRAG_REGION_ATTR}
       style={DRAG_REGION_STYLE as React.CSSProperties}
     >
-      <div className="tai-shell-brand-lockup" {...DRAG_REGION_ATTR}>
-        <LolicodeMark className="tai-shell-mark" />
-        <span className="sr-only">{APP_NAME}</span>
-      </div>
+      <span className="sr-only">{APP_NAME}</span>
     </div>
   );
 }

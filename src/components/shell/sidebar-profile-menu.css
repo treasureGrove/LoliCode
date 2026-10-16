@@ -1,0 +1,76 @@
+.tai-shell-drag-spacer {
+  height: 12px;
+  flex-shrink: 0;
+}
+.tai-shell-drag-spacer-mac {
+  height: 56px;
+}
+.lolicode-global-rail .tai-shell-footer-with-profile {
+  margin-inline: 0;
+  align-items: center;
+}
+.tai-shell-profile {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  margin: 0 auto;
+  padding: 4px;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background: transparent;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease;
+}
+.tai-shell-profile:hover,
+.tai-shell-profile[data-state="open"],
+.tai-shell-profile[data-selected="true"] {
+  border-color: rgb(200 171 130 / 32%);
+  background: rgb(200 171 130 / 10%);
+}
+.tai-shell-profile-picture {
+  position: relative;
+  display: block;
+  width: 34px;
+  height: 34px;
+  overflow: hidden;
+  border: 1px solid rgb(200 171 130 / 34%);
+  border-radius: 50%;
+  background: #4a2e40;
+}
+.tai-shell-profile-avatar {
+  position: absolute;
+  width: 76px;
+  max-width: none;
+  height: 76px;
+  left: -21px;
+  top: -5px;
+  object-fit: contain;
+  pointer-events: none;
+}
+.tai-shell-profile-notice {
+  position: absolute;
+  top: 5px;
+  right: 4px;
+  width: 6px;
+  height: 6px;
+  border: 1px solid #211722;
+  border-radius: 50%;
+  background: #91b8a2;
+}
+@media (forced-colors: active) {
+  .tai-shell-profile-picture {
+    border-color: ButtonText;
+  }
+  .tai-shell-profile-notice {
+    background: Highlight;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tai-shell-profile {
+    transition: none;
+  }
+}
