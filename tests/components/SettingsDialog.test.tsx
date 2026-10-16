@@ -220,7 +220,7 @@ describe("SettingsPage", () => {
     expect(screen.getByText("global-proxy-settings")).toBeInTheDocument();
   });
 
-  it("saves general switches immediately and links to the Apps page", async () => {
+  it("saves supported general switches immediately without the retired Apps-page shortcut", async () => {
     const { props } = renderSettingsPage();
 
     fireEvent.click(
@@ -244,10 +244,20 @@ describe("SettingsPage", () => {
       }),
     );
 
-    fireEvent.click(
-      screen.getByRole("button", { name: /settings\.general\.goToApps/ }),
-    );
-    expect(props.onOpenApps).toHaveBeenCalledTimes(1);
+    expect(
+      screen.queryByRole("button", { name: /settings\.general\.goToApps/ }),
+    ).not.toBeInTheDocument();
+    expect(props.onOpenApps).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole("switch", {
+        name: "settings.appVisibility.showProfileSwitcher",
+      }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("switch", {
+        name: "settings.appVisibility.showProviderSearch",
+      }),
+    ).not.toBeInTheDocument();
   });
 
   it("rolls a failed autosave back and reports it", async () => {

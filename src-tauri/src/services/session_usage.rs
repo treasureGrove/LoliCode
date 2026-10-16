@@ -167,6 +167,9 @@ pub fn sync_all_unlocked(db: &Database) -> SessionSyncResult {
         "MCode",
         crate::services::session_usage_mcode::sync_mcode_usage(db),
     );
+    result.merge(crate::services::session_usage_desktop::sync_desktop_usage(
+        db,
+    ));
     notify_sync_result(&result);
     record_sync_completed(chrono::Utc::now().timestamp_millis());
     result
@@ -185,6 +188,18 @@ pub struct DataSourceSummary {
     pub data_source: String,
     pub request_count: u32,
     pub total_cost_usd: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub app_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unpriced_requests: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cache_partial_requests: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub historical_requests: Option<u32>,
 }
 
 /// 从 JSONL 中解析出的 assistant 消息使用数据
@@ -1307,12 +1322,80 @@ pub fn get_data_source_breakdown(db: &Database) -> Result<Vec<DataSourceSummary>
             data_source: row.get(0)?,
             request_count: row.get::<_, i64>(1)? as u32,
             total_cost_usd: format!("{:.6}", row.get::<_, f64>(2)?),
+            app_type: None,
+            status: None,
+            detail: None,
+            unpriced_requests: None,
+            cache_partial_requests: None,
+            historical_requests: None,
         })
     })?;
 
     let mut summaries = Vec::new();
     for row in rows {
         summaries.push(row.map_err(|e| AppError::Database(e.to_string()))?);
+    }
+
+    for source in crate::services::session_usage_desktop::DesktopSource::ALL {
+        let data_source = source.data_source();
+        let (count, amount, unknown, partial): (u32, f64, u32, u32) = conn.query_row(
+            &format!("SELECT COUNT(*), COALESCE(SUM(CAST(total_cost_usd AS REAL)),0),
+             COALESCE(SUM(CAST(total_cost_usd AS REAL)<=0 AND CAST(COALESCE(cost_multiplier,'1') AS REAL)<>0),0),
+             COALESCE(SUM(provider_type LIKE '%:cache-partial'),0)
+             FROM proxy_request_logs l WHERE l.app_type=?1 AND {effective_filter}"),
+            [source.app()],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )?;
+        let paths = source.paths();
+        let (historical, historical_cost): (u32, f64) = conn.query_row(
+            "SELECT COALESCE(SUM(request_count),0),COALESCE(SUM(CAST(total_cost_usd AS REAL)),0)
+             FROM usage_daily_rollups WHERE app_type=?1",
+            [source.app()],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )?;
+        let detected = paths
+            .as_ref()
+            .is_ok_and(|paths| paths.iter().any(|path| path.exists()));
+        let invalid_path = paths.is_err();
+        let index = summaries
+            .iter()
+            .position(|entry| entry.data_source == data_source);
+        if index.is_none() {
+            summaries.push(DataSourceSummary {
+                data_source: data_source.clone(),
+                request_count: 0,
+                total_cost_usd: "0".into(),
+                app_type: None,
+                status: None,
+                detail: None,
+                unpriced_requests: None,
+                cache_partial_requests: None,
+                historical_requests: None,
+            });
+        }
+        let item = summaries
+            .iter_mut()
+            .find(|entry| entry.data_source == data_source)
+            .unwrap();
+        item.request_count = count.saturating_add(historical);
+        item.total_cost_usd = format!("{:.6}", amount + historical_cost);
+        item.app_type = Some(source.app().into());
+        item.status = Some(
+            if source.unavailable() || invalid_path {
+                "unavailable"
+            } else if item.request_count > 0 {
+                "recorded"
+            } else if detected {
+                "awaiting_usage"
+            } else {
+                "not_found"
+            }
+            .into(),
+        );
+        item.detail = Some(format!("{}：汇总专属路由与只读本机逐请求明细，跨来源去重；金额为已知单价或应用自报的估算，不代表官方账单。缺失 token 不估填，缺失价格或缓存计费字段的请求标记为待定价。",source.label()));
+        item.unpriced_requests = Some(unknown);
+        item.cache_partial_requests = Some(partial);
+        item.historical_requests = Some(historical);
     }
 
     Ok(summaries)

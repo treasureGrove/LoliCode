@@ -22,6 +22,9 @@ use std::{
 };
 use tauri::{AppHandle, Manager};
 use tokio::sync::Mutex;
+#[cfg(test)]
+#[path = "agent_automation_tests.rs"]
+mod integration_tests;
 
 const STORE_KEY: &str = "lolicode_agent_automations_v1";
 const MAX_JOBS: usize = 500;
@@ -43,6 +46,29 @@ struct Job {
     next_run_at: Option<u64>,
     created_at: u64,
     updated_at: u64,
+    #[serde(default = "scheduled_trigger")]
+    trigger: String,
+    #[serde(default = "default_idle_minutes")]
+    idle_after_minutes: u64,
+    #[serde(default = "default_idle_interval")]
+    idle_interval_minutes: u64,
+    #[serde(default = "default_locale")]
+    locale: String,
+    #[serde(default)]
+    last_error: Option<String>,
+}
+
+fn scheduled_trigger() -> String {
+    "schedule".into()
+}
+fn default_idle_minutes() -> u64 {
+    10
+}
+fn default_idle_interval() -> u64 {
+    60
+}
+fn default_locale() -> String {
+    "zh".into()
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -60,6 +86,8 @@ struct Run {
     created_at: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     finished_at: Option<u64>,
+    #[serde(default)]
+    cancel_requested: bool,
 }
 
 #[derive(Default, Serialize, Deserialize)]
@@ -148,6 +176,114 @@ fn next_run_at(expr: &str, after_ms: u64) -> Result<u64, String> {
     Err("无法找到下一次自动化运行时间".into())
 }
 
+/// System input inactivity, rather than an unfocused window or a quiet Agent.
+/// Missing platform support is surfaced on the job; it never runs by guessing.
+#[cfg(any(target_os = "linux", test))]
+fn validate_x11_idle_session(
+    session_type: Option<&std::ffi::OsStr>,
+    wayland_display: Option<&std::ffi::OsStr>,
+) -> Result<(), String> {
+    if session_type.is_some_and(|value| {
+        value
+            .to_string_lossy()
+            .trim()
+            .eq_ignore_ascii_case("wayland")
+    }) || wayland_display.is_some_and(|value| !value.is_empty())
+    {
+        return Err("Wayland 暂不支持系统闲置检测，闲时任务已等待".into());
+    }
+    Ok(())
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn parse_ioreg_idle(success: bool, stdout: &[u8]) -> Result<u64, String> {
+    if !success {
+        return Err("无法读取系统闲置时间，闲时任务已等待".into());
+    }
+    String::from_utf8_lossy(stdout)
+        .lines()
+        .find_map(|line| {
+            line.split_once("\"HIDIdleTime\" = ")
+                .and_then(|(_, value)| value.trim().parse::<u64>().ok())
+        })
+        .map(|nanoseconds| nanoseconds / 1_000_000)
+        .ok_or_else(|| "系统未提供闲置时间，闲时任务已等待".into())
+}
+
+async fn system_idle_ms() -> Result<u64, String> {
+    #[cfg(target_os = "windows")]
+    {
+        #[repr(C)]
+        struct LastInputInfo {
+            size: u32,
+            tick: u32,
+        }
+        #[link(name = "user32")]
+        extern "system" {
+            fn GetLastInputInfo(info: *mut LastInputInfo) -> i32;
+        }
+        #[link(name = "kernel32")]
+        extern "system" {
+            fn GetTickCount() -> u32;
+        }
+        let mut info = LastInputInfo {
+            size: std::mem::size_of::<LastInputInfo>() as u32,
+            tick: 0,
+        };
+        // The Win32 function writes only this correctly sized stack structure.
+        if unsafe { GetLastInputInfo(&mut info) } == 0 {
+            return Err("无法读取系统闲置时间".into());
+        }
+        Ok(unsafe { GetTickCount() }.wrapping_sub(info.tick) as u64)
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let mut command = tokio::process::Command::new("/usr/sbin/ioreg");
+        command.args(["-c", "IOHIDSystem", "-d", "4"]);
+        command.kill_on_drop(true);
+        let output = tokio::time::timeout(Duration::from_secs(3), command.output())
+            .await
+            .map_err(|_| "读取系统闲置时间超时")?
+            .map_err(|_| "无法读取系统闲置时间")?;
+        parse_ioreg_idle(output.status.success(), &output.stdout)
+    }
+    #[cfg(target_os = "linux")]
+    {
+        validate_x11_idle_session(
+            std::env::var_os("XDG_SESSION_TYPE").as_deref(),
+            std::env::var_os("WAYLAND_DISPLAY").as_deref(),
+        )?;
+        let mut command = tokio::process::Command::new("xprintidle");
+        command.kill_on_drop(true);
+        let output = tokio::time::timeout(Duration::from_secs(3), command.output())
+            .await
+            .map_err(|_| "读取系统闲置时间超时")?
+            .map_err(|_| "当前桌面未提供闲置检测（X11 可安装 xprintidle；Wayland 暂不支持）")?;
+        if !output.status.success() {
+            return Err("当前桌面不支持闲置检测，闲时任务已等待".into());
+        }
+        String::from_utf8_lossy(&output.stdout)
+            .trim()
+            .parse()
+            .map_err(|_| "无法读取系统闲置时间".into())
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+    Err("此系统尚未提供闲置检测，闲时任务已等待".into())
+}
+
+fn idle_ready(job: &Job, idle: Result<u64, &str>, agent_busy: bool) -> Result<bool, String> {
+    let elapsed = idle.map_err(str::to_owned)?;
+    Ok(!agent_busy && elapsed >= job.idle_after_minutes.saturating_mul(60_000))
+}
+
+fn next_for_job(job: &Job, now: u64) -> Result<u64, String> {
+    if job.trigger == "idle" {
+        Ok(now.saturating_add(job.idle_interval_minutes.saturating_mul(60_000)))
+    } else {
+        next_run_at(&job.cron_expr, now)
+    }
+}
+
 fn workspace_from_scope(scope: Option<&Value>) -> Result<String, String> {
     let path = scope
         .and_then(|value| value.get("workspacePath"))
@@ -198,8 +334,23 @@ fn validate_job(value: &Value, workspace: String, state: &AppState) -> Result<Jo
     {
         return Err("请填写名称和任务内容（名称不超过 160 字，任务不超过 64 KiB）".into());
     }
-    let cron_expr = value["cronExpr"].as_str().unwrap_or_default().trim();
+    let trigger = value["trigger"].as_str().unwrap_or("schedule");
+    if !matches!(trigger, "schedule" | "idle") {
+        return Err("自动化触发方式无效".into());
+    }
+    let cron_expr = value["cronExpr"].as_str().unwrap_or("0 * * * *").trim();
     cron_parts(cron_expr)?;
+    let idle_after_minutes = value["idleAfterMinutes"].as_u64().unwrap_or(10);
+    let idle_interval_minutes = value["idleIntervalMinutes"].as_u64().unwrap_or(60);
+    if ["idleAfterMinutes", "idleIntervalMinutes"]
+        .iter()
+        .any(|key| value.get(key).is_some_and(|value| value.as_u64().is_none()))
+    {
+        return Err("闲置分钟和运行间隔必须是整数".into());
+    }
+    if !(1..=1440).contains(&idle_after_minutes) || !(1..=10080).contains(&idle_interval_minutes) {
+        return Err("闲置时间需为 1–1440 分钟，运行间隔需为 1–10080 分钟".into());
+    }
     let mode = value["mode"].as_str().unwrap_or("build");
     if !matches!(mode, "build" | "guarded" | "yolo") {
         return Err("自动化权限模式无效".into());
@@ -220,9 +371,23 @@ fn validate_job(value: &Value, workspace: String, state: &AppState) -> Result<Jo
         model_selection,
         enabled: true,
         lifecycle_status: "active".into(),
-        next_run_at: Some(next_run_at(cron_expr, now)?),
+        next_run_at: Some(if trigger == "idle" {
+            now
+        } else {
+            next_run_at(cron_expr, now)?
+        }),
         created_at: now,
         updated_at: now,
+        trigger: trigger.into(),
+        idle_after_minutes,
+        idle_interval_minutes,
+        locale: value["locale"]
+            .as_str()
+            .and_then(|locale| locale.split('-').next())
+            .filter(|locale| matches!(*locale, "zh" | "en" | "ja"))
+            .unwrap_or("zh")
+            .into(),
+        last_error: None,
     })
 }
 
@@ -258,10 +423,15 @@ fn create_run(store: &mut Store, automation_id: &str) -> Run {
         error: None,
         created_at: now_ms(),
         finished_at: None,
+        cancel_requested: false,
     };
     store.runs.push(run.clone());
-    if store.runs.len() > MAX_RUNS {
-        store.runs.drain(..store.runs.len() - MAX_RUNS);
+    while store.runs.len() > MAX_RUNS {
+        if let Some(index) = store.runs.iter().position(|run| !active(run)) {
+            store.runs.remove(index);
+        } else {
+            break;
+        }
     }
     run
 }
@@ -325,6 +495,14 @@ fn catalog_model<'a>(
 async fn dispatch(app: AppHandle, job: Job, run: Run) {
     let result = async {
         let state = app.state::<AppState>();
+        if load(&state.db)?
+            .runs
+            .iter()
+            .find(|item| item.run_id == run.run_id)
+            .is_none_or(|item| item.cancel_requested)
+        {
+            return Err("任务已取消".into());
+        }
         let workspace = registered_project(&state, &job.workspace_path)?;
         if preferences::path_key(&workspace.path) != preferences::path_key(&job.workspace_path) {
             return Err("工作区路径已变化，请重新打开项目".to_string());
@@ -363,6 +541,17 @@ async fn dispatch(app: AppHandle, job: Job, run: Run) {
             record.session_id = Some(session.id.clone());
         })
         .await?;
+        // Serialize the final cancellation check and send acknowledgement. An
+        // interrupt cannot race ahead of the engine creating its flight.
+        let send_guard = mutation_lock().lock().await;
+        if load(&state.db)?
+            .runs
+            .iter()
+            .find(|item| item.run_id == run.run_id)
+            .is_none_or(|item| item.cancel_requested)
+        {
+            return Err("任务已取消".into());
+        }
         carrier
             .call::<Value>(
                 "sendMessage",
@@ -370,11 +559,12 @@ async fn dispatch(app: AppHandle, job: Job, run: Run) {
                     "sessionId": session.id,
                     "requestId": format!("automation:{}", run.run_id),
                     "text": job.prompt,
-                    "locale": "zh",
+                    "locale": job.locale,
                 }),
                 true,
             )
             .await?;
+        drop(send_guard);
         update_run(&state.db, &run.run_id, |record| {
             record.dispatch_status = "dispatched".into();
         })
@@ -396,8 +586,19 @@ async fn dispatch(app: AppHandle, job: Job, run: Run) {
             if let Ok(state) = app.try_state::<AppState>().ok_or(()) {
                 let _ = update_run(&state.db, &run.run_id, |record| {
                     record.dispatch_status = "failed_to_dispatch".into();
-                    record.outcome = Some("failed".into());
-                    record.error = Some(detail);
+                    record.outcome = Some(
+                        if record.cancel_requested {
+                            "stopped"
+                        } else {
+                            "failed"
+                        }
+                        .into(),
+                    );
+                    record.error = if record.cancel_requested {
+                        None
+                    } else {
+                        Some(detail)
+                    };
                     record.finished_at = Some(now_ms());
                 })
                 .await;
@@ -407,20 +608,50 @@ async fn dispatch(app: AppHandle, job: Job, run: Run) {
     }
 }
 
+async fn command_status(
+    carrier: &InprocessAgentState,
+    session_id: &str,
+    run_id: &str,
+) -> Result<Option<String>, String> {
+    let result: Value = carrier
+        .call(
+            "queryCommand",
+            json!({"sessionId": session_id, "requestId": format!("automation:{run_id}")}),
+            false,
+        )
+        .await?;
+    Ok(result["results"][0]["result"]["status"]
+        .as_str()
+        .map(str::to_owned))
+}
+
+// An idle snapshot alone is not proof of success: cancellation and recovery also
+// return an idle session. Persisted command receipts are the terminal authority.
+fn terminal_outcome(
+    command: Option<&str>,
+    cancel_requested: bool,
+    snapshot: &AgentSnapshot,
+) -> (String, Option<String>) {
+    if command == Some("completed") {
+        return ("succeeded".into(), None);
+    }
+    if command == Some("cancelled") || cancel_requested {
+        return ("stopped".into(), None);
+    }
+    let error = snapshot.error.clone().unwrap_or_else(|| {
+        if command.is_none() {
+            "此任务尚未被 Agent 接收，可重试运行".into()
+        } else {
+            "任务未完整结束；已保留会话，可打开后继续".into()
+        }
+    });
+    ("failed".into(), Some(error))
+}
+
 async fn monitor_run(app: AppHandle, run_id: String, session_id: String) {
     let carrier = app.state::<InprocessAgentState>();
     let db = app.state::<AppState>().db.clone();
-    let started = tokio::time::Instant::now();
     loop {
-        if started.elapsed() > Duration::from_secs(12 * 60 * 60) {
-            let _ = update_run(&db, &run_id, |run| {
-                run.outcome = Some("failed".into());
-                run.error = Some("自动化运行超过 12 小时，已停止跟踪".into());
-                run.finished_at = Some(now_ms());
-            })
-            .await;
-            break;
-        }
         let snapshot: Result<AgentSnapshot, String> = carrier
             .call("getSession", json!({"sessionId":session_id}), false)
             .await;
@@ -436,19 +667,17 @@ async fn monitor_run(app: AppHandle, run_id: String, session_id: String) {
                 tokio::time::sleep(Duration::from_secs(2)).await;
             }
             Ok(snapshot) => {
-                let (outcome, error) = if snapshot.status == AgentStatus::Error {
-                    (
-                        "failed",
-                        snapshot
-                            .error
-                            .clone()
-                            .or_else(|| Some("Agent 运行失败".into())),
-                    )
-                } else {
-                    ("succeeded", None)
-                };
+                let cancelled = load(&db)
+                    .ok()
+                    .and_then(|store| store.runs.into_iter().find(|run| run.run_id == run_id))
+                    .is_some_and(|run| run.cancel_requested);
+                let command = command_status(&carrier, &session_id, &run_id)
+                    .await
+                    .ok()
+                    .flatten();
+                let (outcome, error) = terminal_outcome(command.as_deref(), cancelled, &snapshot);
                 let _ = update_run(&db, &run_id, |run| {
-                    run.outcome = Some(outcome.into());
+                    run.outcome = Some(outcome);
                     run.error = error;
                     run.finished_at = Some(now_ms());
                 })
@@ -465,6 +694,200 @@ async fn monitor_run(app: AppHandle, run_id: String, session_id: String) {
                 break;
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn fixture(trigger: &str, now: u64) -> (Store, preferences::Preferences) {
+        let job: Job = serde_json::from_value(json!({"automationId":"owned-job","title":"Fixture","prompt":"Read owned project","workspacePath":"D:/owned/project","cronExpr":"0 * * * *","recurring":true,"mode":"guarded","modelSelection":{"providerId":"fixture","modelId":"fixture"},"enabled":true,"lifecycleStatus":"active","nextRunAt":now,"createdAt":now,"updatedAt":now,"trigger":trigger,"idleAfterMinutes":10,"idleIntervalMinutes":60})).unwrap();
+        let mut registered = preferences::Preferences::default();
+        registered.projects.insert(
+            preferences::path_key(&job.workspace_path),
+            AgentProject {
+                path: job.workspace_path.clone(),
+                name: "fixture".into(),
+                pinned: false,
+                last_opened_at: now,
+            },
+        );
+        (
+            Store {
+                jobs: vec![job],
+                runs: vec![],
+            },
+            registered,
+        )
+    }
+    #[test]
+    fn automation_idle_waits_for_real_inactivity_and_agent_availability_without_consuming_schedule()
+    {
+        let now = now_ms();
+        let (mut store, registered) = fixture("idle", now);
+        assert!(
+            claim_due(&mut store, &registered, now, Ok(9 * 60_000), false)
+                .0
+                .is_empty()
+        );
+        assert!(
+            claim_due(&mut store, &registered, now, Ok(10 * 60_000), true)
+                .0
+                .is_empty()
+        );
+        assert_eq!(store.jobs[0].next_run_at, Some(now));
+        assert!(claim_due(
+            &mut store,
+            &registered,
+            now,
+            Err("UNSUPPORTED_PLATFORM"),
+            false
+        )
+        .0
+        .is_empty());
+        assert_eq!(
+            store.jobs[0].last_error.as_deref(),
+            Some("UNSUPPORTED_PLATFORM")
+        );
+        assert_eq!(
+            claim_due(&mut store, &registered, now, Ok(10 * 60_000), false)
+                .0
+                .len(),
+            1
+        );
+        assert_eq!(store.jobs[0].next_run_at, Some(now + 60 * 60_000));
+        assert!(store.jobs[0].last_error.is_none());
+        assert!(
+            claim_due(
+                &mut store,
+                &registered,
+                now + 60 * 60_000,
+                Ok(100 * 60_000),
+                false
+            )
+            .0
+            .is_empty(),
+            "An active run must not be duplicated"
+        );
+    }
+    #[test]
+    fn automation_single_run_missed_schedule_pause_and_restart_receipts_remain_distinct() {
+        let now = now_ms();
+        let (mut store, registered) = fixture("schedule", now);
+        store.jobs[0].recurring = false;
+        assert_eq!(
+            claim_due(&mut store, &registered, now, Ok(0), false)
+                .0
+                .len(),
+            1
+        );
+        assert!(!store.jobs[0].enabled);
+        assert_eq!(store.jobs[0].next_run_at, None);
+        assert!(
+            claim_due(&mut store, &registered, now + 60_000, Ok(0), false)
+                .0
+                .is_empty()
+        );
+        let (mut missed, registered) = fixture("schedule", now - 121_000);
+        assert!(claim_due(&mut missed, &registered, now, Ok(0), false)
+            .0
+            .is_empty());
+        assert_eq!(missed.runs[0].outcome.as_deref(), Some("skipped"));
+        assert!(missed.jobs[0].next_run_at.unwrap() > now);
+        let db = crate::database::Database::memory().unwrap();
+        save(&db, &missed).unwrap();
+        let restored = load(&db).unwrap();
+        assert_eq!(restored.runs[0].outcome.as_deref(), Some("skipped"));
+        assert!(!active(&restored.runs[0]));
+    }
+    #[test]
+    fn automation_idle_tasks_are_serial_and_cannot_run_unregistered_projects() {
+        let now = now_ms();
+        let (mut store, registered) = fixture("idle", now);
+        let mut other = store.jobs[0].clone();
+        other.automation_id = "other".into();
+        store.jobs.push(other);
+        assert_eq!(
+            claim_due(&mut store, &registered, now, Ok(10 * 60_000), false)
+                .0
+                .len(),
+            1
+        );
+        let (mut store, _) = fixture("idle", now);
+        assert!(claim_due(
+            &mut store,
+            &preferences::Preferences::default(),
+            now,
+            Ok(10 * 60_000),
+            false
+        )
+        .0
+        .is_empty());
+    }
+    #[test]
+    fn automation_cron_validation_does_not_silently_rewrite_unsupported_schedules() {
+        assert!(cron_parts("0 * * * *").is_ok());
+        assert!(cron_parts("35 14 * * 3").is_ok());
+        for expr in [
+            "61 * * * *",
+            "0 24 * * *",
+            "0 9 * * 7",
+            "*/5 * * * *",
+            "0 9 1 * *",
+        ] {
+            assert!(cron_parts(expr).is_err(), "{expr}");
+        }
+        let now = now_ms();
+        assert!(next_run_at("0 9 * * *", now).unwrap() > now);
+    }
+    #[test]
+    fn automation_history_retention_never_evicts_an_active_run() {
+        let now = now_ms();
+        let (mut store, _) = fixture("schedule", now);
+        let first = create_run(&mut store, "owned-job");
+        for index in 1..MAX_RUNS {
+            let mut terminal = first.clone();
+            terminal.run_id = format!("finished-{index}");
+            terminal.outcome = Some("succeeded".into());
+            store.runs.push(terminal);
+        }
+        create_run(&mut store, "another-job");
+        assert_eq!(store.runs.len(), MAX_RUNS);
+        assert!(store
+            .runs
+            .iter()
+            .any(|run| run.run_id == first.run_id && active(run)));
+    }
+    #[cfg(target_os = "windows")]
+    #[tokio::test]
+    async fn automation_windows_idle_probe_reads_os_without_synthesizing_input() {
+        let result = system_idle_ms().await.unwrap();
+        assert!(result <= u32::MAX as u64);
+        println!("WINDOWS_IDLE_PROBE_OK: system input idle {result} ms");
+    }
+
+    #[test]
+    fn automation_linux_rejects_wayland_even_when_an_x11_display_exists() {
+        use std::ffi::OsStr;
+        let x11 = Some(OsStr::new("x11"));
+        let wayland = Some(OsStr::new("wayland"));
+        let display = Some(OsStr::new("wayland-0"));
+        assert!(validate_x11_idle_session(wayland, None).is_err());
+        assert!(validate_x11_idle_session(Some(OsStr::new("Wayland")), None).is_err());
+        assert!(validate_x11_idle_session(x11, display).is_err());
+        assert!(validate_x11_idle_session(None, display).is_err());
+        assert!(validate_x11_idle_session(x11, None).is_ok());
+        assert!(validate_x11_idle_session(x11, Some(OsStr::new(""))).is_ok());
+        assert!(validate_x11_idle_session(None, None).is_ok());
+    }
+
+    #[test]
+    fn automation_macos_idle_requires_successful_probe_and_valid_nanoseconds() {
+        let fixture = b"  |   \"HIDIdleTime\" = 1234567890\n";
+        assert_eq!(parse_ioreg_idle(true, fixture).unwrap(), 1234);
+        assert!(parse_ioreg_idle(false, fixture).is_err());
+        assert!(parse_ioreg_idle(true, b"no idle property").is_err());
+        assert!(parse_ioreg_idle(true, b"\"HIDIdleTime\" = invalid").is_err());
     }
 }
 
@@ -531,7 +954,11 @@ pub async fn invoke(app: &AppHandle, method: &str, args: Vec<Value>) -> Result<V
             job.enabled = enabled;
             job.lifecycle_status = if enabled { "active" } else { "paused" }.into();
             job.next_run_at = if enabled {
-                Some(next_run_at(&job.cron_expr, now_ms())?)
+                Some(if job.trigger == "idle" {
+                    now_ms()
+                } else {
+                    next_for_job(job, now_ms())?
+                })
             } else {
                 None
             };
@@ -539,6 +966,74 @@ pub async fn invoke(app: &AppHandle, method: &str, args: Vec<Value>) -> Result<V
             let result = job.clone();
             save(&state.db, &store)?;
             Ok(json!(result))
+        }
+        "update" => {
+            let id = arg(&args, 0, "自动化编号")?
+                .as_str()
+                .ok_or("自动化编号无效")?;
+            let input = arg(&args, 1, "自动化内容")?;
+            let workspace = workspace_from_scope(args.get(2))?;
+            let replacement = validate_job(input, workspace.clone(), &state)?;
+            let _guard = mutation_lock().lock().await;
+            let mut store = load(&state.db)?;
+            let job = find_job_mut(&mut store, id, &workspace)?;
+            let enabled = job.enabled;
+            let created_at = job.created_at;
+            *job = replacement;
+            job.automation_id = id.into();
+            job.created_at = created_at;
+            job.enabled = enabled;
+            job.lifecycle_status = if enabled { "active" } else { "paused" }.into();
+            if !enabled {
+                job.next_run_at = None;
+            }
+            let result = job.clone();
+            save(&state.db, &store)?;
+            Ok(json!(result))
+        }
+        "cancelRun" => {
+            let id = arg(&args, 0, "运行编号")?.as_str().ok_or("运行编号无效")?;
+            let workspace = workspace_from_scope(args.get(1))?;
+            registered_project(&state, &workspace)?;
+            let session = {
+                let _guard = mutation_lock().lock().await;
+                let mut store = load(&state.db)?;
+                let record = store
+                    .runs
+                    .iter()
+                    .find(|run| run.run_id == id)
+                    .ok_or("运行记录不存在")?;
+                let job = store
+                    .jobs
+                    .iter()
+                    .find(|job| job.automation_id == record.automation_id)
+                    .ok_or("自动化任务不存在")?;
+                ensure_job_scope(job, &workspace)?;
+                let record = store.runs.iter_mut().find(|run| run.run_id == id).unwrap();
+                if !active(record) {
+                    return Ok(json!({"status":"finished"}));
+                }
+                record.cancel_requested = true;
+                let session = record.session_id.clone();
+                if session.is_none() {
+                    record.outcome = Some("stopped".into());
+                    record.dispatch_status = "cancelled".into();
+                    record.finished_at = Some(now_ms());
+                }
+                save(&state.db, &store)?;
+                session
+            };
+            if let Some(session) = session {
+                state_cancel(app, &session).await?;
+            }
+            Ok(json!({"status":"stopping"}))
+        }
+        "idleStatus" => {
+            let idle = system_idle_ms().await;
+            Ok(match idle {
+                Ok(idle) => json!({"supported":true,"idleMs":idle}),
+                Err(error) => json!({"supported":false,"reason":error}),
+            })
         }
         "delete" => {
             let id = arg(&args, 0, "自动化编号")?
@@ -554,6 +1049,13 @@ pub async fn invoke(app: &AppHandle, method: &str, args: Vec<Value>) -> Result<V
                 .find(|job| job.automation_id == id)
                 .ok_or("自动化任务不存在")?;
             ensure_job_scope(job, &workspace)?;
+            if store
+                .runs
+                .iter()
+                .any(|run| run.automation_id == id && active(run))
+            {
+                return Err("请先停止正在运行的任务，再删除自动化".into());
+            }
             store.jobs.retain(|job| job.automation_id != id);
             save(&state.db, &store)?;
             Ok(json!(true))
@@ -591,10 +1093,130 @@ pub async fn invoke(app: &AppHandle, method: &str, args: Vec<Value>) -> Result<V
     }
 }
 
+async fn state_cancel(app: &AppHandle, session_id: &str) -> Result<(), String> {
+    app.state::<InprocessAgentState>()
+        .call::<Value>("interruptSession", json!({"sessionId":session_id}), false)
+        .await
+        .map(|_| ())
+}
+
+fn claim_due(
+    store: &mut Store,
+    registered: &preferences::Preferences,
+    now: u64,
+    idle: Result<u64, &str>,
+    agent_busy: bool,
+) -> (Vec<(Job, Run)>, bool) {
+    let mut due = Vec::new();
+    let mut changed = false;
+    for index in 0..store.jobs.len() {
+        let job = &store.jobs[index];
+        if !job.enabled || job.next_run_at.is_some_and(|next| next > now) {
+            continue;
+        }
+        if job.next_run_at.is_none() && job.trigger != "idle" {
+            store.jobs[index].next_run_at = next_for_job(job, now).ok();
+            changed = true;
+            continue;
+        }
+        if !registered
+            .projects
+            .contains_key(&preferences::path_key(&job.workspace_path))
+        {
+            continue;
+        }
+        if store
+            .runs
+            .iter()
+            .any(|run| run.automation_id == job.automation_id && active(run))
+        {
+            continue;
+        }
+        if job.trigger == "idle" {
+            // One idle task at a time, and no contention with an active main
+            // Agent. A deferred idle job keeps its due timestamp.
+            match idle_ready(job, idle, agent_busy || !due.is_empty()) {
+                Ok(true) => {}
+                Ok(false) => continue,
+                Err(error) => {
+                    if store.jobs[index].last_error.as_ref() != Some(&error) {
+                        store.jobs[index].last_error = Some(error);
+                        changed = true;
+                    }
+                    continue;
+                }
+            }
+        } else if job
+            .next_run_at
+            .is_some_and(|next| now.saturating_sub(next) > 120_000)
+        {
+            let id = job.automation_id.clone();
+            let next = next_for_job(job, now).ok();
+            let run = create_run(store, &id);
+            let record = store
+                .runs
+                .iter_mut()
+                .find(|record| record.run_id == run.run_id)
+                .unwrap();
+            record.dispatch_status = "skipped".into();
+            record.outcome = Some("skipped".into());
+            record.error = Some("应用关闭或系统休眠期间错过本次计划，等待下次运行".into());
+            record.finished_at = Some(now);
+            if store.jobs[index].recurring {
+                store.jobs[index].next_run_at = next;
+            } else {
+                store.jobs[index].next_run_at = None;
+                store.jobs[index].enabled = false;
+                store.jobs[index].lifecycle_status = "completed".into();
+            }
+            changed = true;
+            continue;
+        }
+        let job = store.jobs[index].clone();
+        let run = create_run(store, &job.automation_id);
+        let current = &mut store.jobs[index];
+        current.last_error = None;
+        current.updated_at = now;
+        if current.recurring {
+            current.next_run_at = next_for_job(current, now).ok();
+        } else {
+            current.next_run_at = None;
+            current.enabled = false;
+            current.lifecycle_status = "completed".into();
+        }
+        due.push((job, run));
+        changed = true;
+    }
+    (due, changed)
+}
+
 async fn scheduler_tick(app: &AppHandle) {
+    let state = app.state::<AppState>();
+    let has_idle = load(&state.db).ok().is_some_and(|store| {
+        store
+            .jobs
+            .iter()
+            .any(|job| job.enabled && job.trigger == "idle")
+    });
+    let idle = if has_idle {
+        system_idle_ms().await
+    } else {
+        Ok(0)
+    };
+    let carrier = app.state::<InprocessAgentState>();
+    let agent_busy = if has_idle {
+        match carrier.ensure_started(app).await {
+            Ok(()) => carrier
+                .call::<bool>("busy", json!({}), false)
+                .await
+                .unwrap_or(true),
+            Err(_) => true,
+        }
+    } else {
+        false
+    };
     let due = {
         let _guard = mutation_lock().lock().await;
-        let state = app.state::<AppState>();
         let mut store = match load(&state.db) {
             Ok(store) => store,
             Err(error) => {
@@ -602,52 +1224,28 @@ async fn scheduler_tick(app: &AppHandle) {
                 return;
             }
         };
-        let now = now_ms();
-        let mut due = Vec::new();
-        for job in store
-            .jobs
-            .iter_mut()
-            .filter(|job| job.enabled && job.recurring)
-        {
-            let Some(next) = job.next_run_at else {
-                job.next_run_at = next_run_at(&job.cron_expr, now).ok();
-                continue;
-            };
-            if next <= now {
-                if now.saturating_sub(next) <= 120_000 {
-                    due.push(job.clone());
-                }
-                job.next_run_at = next_run_at(&job.cron_expr, now).ok();
-                job.updated_at = now;
+        let registered = match preferences::load(&state.db) {
+            Ok(value) => value,
+            Err(_) => return,
+        };
+        let (due, changed) = claim_due(
+            &mut store,
+            &registered,
+            now_ms(),
+            idle.as_ref().copied().map_err(String::as_str),
+            agent_busy,
+        );
+        if changed {
+            if let Err(error) = save(&state.db, &store) {
+                log::warn!("自动化计划更新时间失败：{error}");
+                return;
             }
-        }
-        if let Err(error) = save(&state.db, &store) {
-            log::warn!("自动化计划更新时间失败：{error}");
-            return;
         }
         due
     };
-
-    for job in due {
-        let state = app.state::<AppState>();
-        let project_registered = preferences::load(&state.db)
-            .ok()
-            .is_some_and(|preferences| {
-                preferences
-                    .projects
-                    .contains_key(&preferences::path_key(&job.workspace_path))
-            });
-        if !project_registered {
-            continue;
-        }
-        match claim_run(app, &job.automation_id, &job.workspace_path).await {
-            Ok(Some(run)) => {
-                let app = app.clone();
-                tauri::async_runtime::spawn(async move { dispatch(app, job, run).await });
-            }
-            Ok(None) => {}
-            Err(error) => log::warn!("自动化计划派发失败：{error}"),
-        }
+    for (job, run) in due {
+        let app = app.clone();
+        tauri::async_runtime::spawn(async move { dispatch(app, job, run).await });
     }
 }
 
@@ -660,7 +1258,7 @@ async fn recover_interrupted_runs(app: &AppHandle) {
                 .runs
                 .into_iter()
                 .filter(active)
-                .map(|run| (run.run_id, run.session_id))
+                .map(|run| (run.run_id, run.session_id, run.cancel_requested))
                 .collect::<Vec<_>>(),
             Err(error) => {
                 log::warn!("自动化运行记录恢复失败：{error}");
@@ -675,7 +1273,7 @@ async fn recover_interrupted_runs(app: &AppHandle) {
     let carrier = app.state::<InprocessAgentState>();
     if let Err(error) = carrier.ensure_started(app).await {
         let db = app.state::<AppState>().db.clone();
-        for (run_id, _) in runs {
+        for (run_id, _, _) in runs {
             let detail = format!("应用重启后无法恢复运行记录：{error}");
             let _ = update_run(&db, &run_id, |run| {
                 run.dispatch_status = "failed_to_dispatch".into();
@@ -689,8 +1287,8 @@ async fn recover_interrupted_runs(app: &AppHandle) {
     }
 
     let db = app.state::<AppState>().db.clone();
-    for (run_id, session_id) in runs {
-        let result: Result<AgentSnapshot, String> = match session_id {
+    for (run_id, session_id, cancel_requested) in runs {
+        let result: Result<AgentSnapshot, String> = match session_id.as_deref() {
             Some(session_id) => {
                 carrier
                     .call("getSession", json!({"sessionId":session_id}), false)
@@ -699,25 +1297,29 @@ async fn recover_interrupted_runs(app: &AppHandle) {
             None => Err("会话尚未创建".into()),
         };
         let (dispatch_status, outcome, error) = match result {
-            Ok(snapshot)
-                if snapshot.status == AgentStatus::Idle && !snapshot.messages.is_empty() =>
-            {
-                ("dispatched", "succeeded", None)
+            Ok(snapshot) => {
+                let command = match session_id.as_deref() {
+                    Some(id) => command_status(&carrier, id, &run_id).await.ok().flatten(),
+                    None => None,
+                };
+                let (outcome, error) =
+                    terminal_outcome(command.as_deref(), cancel_requested, &snapshot);
+                ("dispatched", outcome, error)
             }
-            Ok(snapshot) => (
+            Err(error) => (
                 "failed_to_dispatch",
-                "failed",
-                Some(
-                    snapshot
-                        .error
-                        .unwrap_or_else(|| "应用关闭前任务尚未完成".into()),
-                ),
+                if cancel_requested {
+                    "stopped"
+                } else {
+                    "failed"
+                }
+                .into(),
+                Some(error),
             ),
-            Err(error) => ("failed_to_dispatch", "failed", Some(error)),
         };
         let _ = update_run(&db, &run_id, |run| {
             run.dispatch_status = dispatch_status.into();
-            run.outcome = Some(outcome.into());
+            run.outcome = Some(outcome);
             run.error = error;
             run.finished_at = Some(now_ms());
         })

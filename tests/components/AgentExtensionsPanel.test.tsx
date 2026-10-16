@@ -17,6 +17,10 @@ import type { AgentExtensions } from "@/types/agent";
 vi.mock("@/lib/api/agent", () => ({
   agentApi: {
     getExtensions: vi.fn(),
+    getPluginStore: vi.fn(),
+    updatePluginMarketplace: vi.fn(),
+    installMarketplacePlugin: vi.fn(),
+    uninstallMarketplacePlugin: vi.fn(),
     setSkillEnabled: vi.fn(),
     importSkill: vi.fn(),
     removeSkill: vi.fn(),
@@ -87,6 +91,14 @@ function PanelHarness({
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(agentApi.getExtensions).mockResolvedValue(structuredClone(catalog));
+  vi.mocked(agentApi.getPluginStore).mockResolvedValue({
+    marketplaces: [],
+    availablePlugins: [],
+    installedPlugins: [],
+    restorableBuiltins: [],
+    diagnostics: [],
+    capability: { supported: true },
+  });
   vi.mocked(agentApi.setSkillEnabled).mockResolvedValue({
     ...catalog,
     revision: 5,
@@ -114,6 +126,102 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 describe("AgentExtensionsPanel", () => {
+  it("keeps verified skills usable when the optional marketplace fails to load", async () => {
+    vi.mocked(agentApi.getPluginStore).mockRejectedValue(
+      new Error("CLI registry unavailable"),
+    );
+    render(<PanelHarness />);
+    await flush();
+    expect(
+      screen.getByRole("checkbox", { name: "启用技能 PDF" }),
+    ).toBeEnabled();
+    fireEvent.click(screen.getByRole("tab", { name: "插件" }));
+    expect(screen.getByText("CLI registry unavailable")).toBeInTheDocument();
+  });
+  it("does not advertise custom stores or JS/MCP execution when the native host only supports CLI skills", async () => {
+    vi.mocked(agentApi.getPluginStore).mockResolvedValue({
+      marketplaces: [],
+      availablePlugins: [],
+      installedPlugins: [],
+      restorableBuiltins: [],
+      diagnostics: [],
+      capability: {
+        supported: true,
+        customSources: false,
+        localPluginRuntime: false,
+        mcpRuntime: false,
+      },
+    });
+    render(<PanelHarness />);
+    await flush();
+    fireEvent.click(screen.getByRole("tab", { name: "插件" }));
+    expect(screen.queryByRole("tab", { name: "个人" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "安装插件文件" }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "管理插件市场来源" }));
+    expect(
+      screen.queryByRole("button", { name: "添加来源" }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: "MCP 工具" }));
+    expect(
+      screen.getByText(/当前应用内执行引擎尚未接入 MCP 连接/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "保存待接入配置" }),
+    ).toBeInTheDocument();
+  });
+  it("installs a real CLI listing, refreshes its receipt, and enables it through the native adapter", async () => {
+    const available = {
+      id: "cli-github",
+      name: "github",
+      marketplace: "zcode-plugins-official",
+      version: "0.1.2",
+      installed: false,
+      componentTypes: ["CLI 技能"],
+      listing: { displayName: "GitHub CLI", category: "developer-tools" },
+    };
+    const empty = {
+      marketplaces: [
+        {
+          id: "zcode-plugins-official",
+          name: "ZCode CLI 适配目录",
+          pluginCount: 1,
+          isOfficial: true,
+        },
+      ],
+      availablePlugins: [available],
+      installedPlugins: [],
+      restorableBuiltins: [],
+      diagnostics: [],
+      capability: { supported: true },
+    };
+    const installed = {
+      ...empty,
+      availablePlugins: [{ ...available, installed: true }],
+      installedPlugins: [{ ...available, enabled: true }],
+    };
+    vi.mocked(agentApi.getPluginStore)
+      .mockResolvedValueOnce(empty)
+      .mockResolvedValue(installed);
+    vi.mocked(agentApi.installMarketplacePlugin).mockResolvedValue(installed);
+    vi.mocked(agentApi.setPluginEnabled).mockResolvedValue(catalog);
+    render(<PanelHarness />);
+    await flush();
+    fireEvent.click(screen.getByRole("tab", { name: "插件" }));
+    fireEvent.change(screen.getByLabelText("搜索插件"), {
+      target: { value: "GitHub" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "安装" }));
+    await flush();
+    expect(agentApi.installMarketplacePlugin).toHaveBeenCalledWith(
+      "zcode-plugins-official",
+      "github",
+    );
+    fireEvent.click(screen.getByLabelText("启用插件 GitHub CLI"));
+    await flush();
+    expect(agentApi.setPluginEnabled).toHaveBeenCalledWith("cli-github", false);
+  });
   it("always exposes both dismiss buttons during a slow initial load and ignores its late reply", async () => {
     let finish: (value: AgentExtensions) => void = () => {};
     vi.mocked(agentApi.getExtensions).mockImplementationOnce(

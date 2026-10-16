@@ -30,6 +30,7 @@ import {
   FileText,
   CircleHelp,
   BookOpen,
+  Brain,
   UsersRound,
   MessageSquare,
   ShieldAlert,
@@ -104,6 +105,7 @@ import { AgentProjectMenu } from "./AgentProjectMenu";
 import { AgentCompanion } from "./AgentCompanion";
 import { AgentAttachmentImage } from "./AgentAttachmentImage";
 import { AgentExtensionsPanel } from "./AgentExtensionsPanel";
+import { AgentMemoryPanel } from "./AgentMemoryPanel";
 import { AgentOperationsPanel } from "./AgentOperationsPanel";
 import {
   Dialog,
@@ -444,6 +446,7 @@ export function AgentPage({
   const [sessionSearch, setSessionSearch] = useState("");
   const sessionSearchRef = useRef<HTMLInputElement>(null);
   const [extensionsOpen, setExtensionsOpen] = useState(false);
+  const [memoryOpen, setMemoryOpen] = useState(false);
   const [operationsOpen, setOperationsOpen] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const [projects, setProjects] = useState<AgentProject[]>([]);
@@ -469,19 +472,6 @@ export function AgentPage({
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [modelId, setModelId] = useState("");
   const [reasoningEffort, setReasoningEffort] = useState("");
-  const [deferredSessionConfig, setDeferredSessionConfig] = useState<
-    Record<
-      string,
-      {
-        modelId?: string;
-        reasoningEffort?: string;
-        permissionMode?: AgentPermissionMode;
-      }
-    >
-  >({});
-  const deferredSessionConfigRef = useRef(deferredSessionConfig);
-  deferredSessionConfigRef.current = deferredSessionConfig;
-  const deferredConfigApplyInFlight = useRef(new Set<string>());
   const [previewPath, setPreviewPath] = useState<string | null>(null);
   const [previewSession, setPreviewSession] = useState<string | null>(null);
   const openPreview = useCallback(
@@ -1129,23 +1119,9 @@ export function AgentPage({
       model.providerId === selectedSession?.model?.providerId &&
       model.modelId === selectedSession?.model?.modelId,
   );
-  const selectedDeferredConfig = sessionId
-    ? deferredSessionConfig[sessionId]
-    : undefined;
-  const displayedModel = selectedDeferredConfig?.modelId
-    ? catalog.models.find(
-        (model) => model.id === selectedDeferredConfig.modelId,
-      )
-    : boundModel;
-  const displayedModelId =
-    selectedDeferredConfig?.modelId || boundModel?.id || "";
-  const currentReasoningEffort = selectedSession?.reasoningEffort || "";
-  const displayedReasoningEffort =
-    selectedDeferredConfig?.reasoningEffort ??
-    (selectedDeferredConfig?.modelId &&
-    !displayedModel?.reasoningEfforts?.includes(currentReasoningEffort)
-      ? ""
-      : currentReasoningEffort);
+  const displayedModel = boundModel;
+  const displayedModelId = boundModel?.id || "";
+  const displayedReasoningEffort = selectedSession?.reasoningEffort || "";
   const key = workspace && sessionId ? draftKey(workspace.path, sessionId) : "";
   const draft = key ? (drafts[key] ?? readDraft(key)) : "";
   const composerImages = sessionId
@@ -2006,55 +1982,6 @@ export function AgentPage({
     )
       return;
     const id = sessionId;
-    const sessionHasActiveRequest =
-      activeStatus(statuses[id]) ||
-      (snapshot?.session.id === id && activeStatus(snapshot.status)) ||
-      Boolean(pendingRef.current[id]);
-    if (
-      sessionHasActiveRequest &&
-      (patch.modelId || patch.reasoningEffort !== undefined)
-    ) {
-      const queuedConfig = {
-        ...deferredSessionConfigRef.current[id],
-        ...patch,
-      };
-      if (patch.modelId && queuedConfig.reasoningEffort) {
-        const nextModel = catalog.models.find(
-          (model) => model.id === patch.modelId,
-        );
-        if (
-          !nextModel?.reasoningEfforts?.includes(queuedConfig.reasoningEffort)
-        )
-          delete queuedConfig.reasoningEffort;
-      }
-      const queued = {
-        ...deferredSessionConfigRef.current,
-        [id]: queuedConfig,
-      };
-      deferredSessionConfigRef.current = queued;
-      setDeferredSessionConfig(queued);
-      if (snapshot?.session.id === id && activeStatus(snapshot.status)) {
-        const observedStatus = snapshot.status;
-        setStatuses((old) =>
-          old[id] === observedStatus ? old : { ...old, [id]: observedStatus },
-        );
-      }
-      if (patch.modelId) {
-        setModelId(patch.modelId);
-        toast.info("当前请求会继续使用原模型，新模型将在本轮结束后应用。");
-        const nextModel = catalog.models.find(
-          (model) => model.id === patch.modelId,
-        );
-        setReasoningEffort((current) =>
-          nextModel?.reasoningEfforts?.includes(current) ? current : "",
-        );
-      }
-      if (patch.reasoningEffort !== undefined)
-        setReasoningEffort(patch.reasoningEffort);
-      if (patch.permissionMode) setPermissionMode(patch.permissionMode);
-      setError(null);
-      return;
-    }
     mutation.current = true;
     setBusy("config");
     setError(null);
@@ -2084,115 +2011,6 @@ export function AgentPage({
       if (mounted.current) setBusy(null);
     }
   };
-  useEffect(() => {
-    for (const [id, patch] of Object.entries(deferredSessionConfig)) {
-      const currentSnapshotStatus =
-        snapshot?.session.id === id ? snapshot.status : undefined;
-      const observedStatuses = [currentSnapshotStatus, statuses[id]];
-      if (
-        observedStatuses.some(activeStatus) ||
-        !observedStatuses.some(
-          (status) => status === "idle" || status === "error",
-        ) ||
-        pending[id] ||
-        pendingRef.current[id] ||
-        stopping[id] ||
-        stoppingRef.current[id] ||
-        agentStopInFlight(id) ||
-        replacement.current ||
-        replacementSession === id ||
-        busy ||
-        mutation.current ||
-        deferredConfigApplyInFlight.current.has(id)
-      )
-        continue;
-
-      deferredConfigApplyInFlight.current.add(id);
-      mutation.current = true;
-      setBusy("config");
-      setError(null);
-      void agentApi
-        .updateSession(id, patch)
-        .then((result) => {
-          if (!mounted.current) return;
-          if (result.id !== id)
-            throw new Error("返回的会话与当前选择不一致，请重新读取。");
-          confirmSession(result, [
-            ...(patch.modelId ? ["model" as const] : []),
-            ...(patch.modelId || patch.reasoningEffort !== undefined
-              ? ["reasoningEffort" as const]
-              : []),
-            ...(patch.permissionMode ? ["permissionMode" as const] : []),
-          ]);
-          const currentConfig = deferredSessionConfigRef.current[id];
-          if (currentConfig === patch) {
-            const next = { ...deferredSessionConfigRef.current };
-            delete next[id];
-            deferredSessionConfigRef.current = next;
-            setDeferredSessionConfig(next);
-          }
-          if (selectedId.current === id) {
-            const nextModel = result.model
-              ? catalog.models.find(
-                  (model) =>
-                    model.providerId === result.model?.providerId &&
-                    model.modelId === result.model?.modelId,
-                )
-              : undefined;
-            if (nextModel) setModelId(nextModel.id);
-            setReasoningEffort(result.reasoningEffort || "");
-            if (patch.permissionMode)
-              setPermissionMode(result.permissionMode as AgentPermissionMode);
-          }
-        })
-        .catch((cause) => {
-          if (!mounted.current) return;
-          if (selectedId.current === id) {
-            setError(agentErrorMessage(cause));
-            const currentSession =
-              sessionOverrides[id] ||
-              sessions.find((session) => session.id === id) ||
-              selectedSession;
-            const currentModel = currentSession?.model
-              ? catalog.models.find(
-                  (model) =>
-                    model.providerId === currentSession.model?.providerId &&
-                    model.modelId === currentSession.model?.modelId,
-                )
-              : undefined;
-            if (currentModel) setModelId(currentModel.id);
-            setReasoningEffort(currentSession?.reasoningEffort || "");
-          } else toast.error(agentErrorMessage(cause));
-          const currentConfig = deferredSessionConfigRef.current[id];
-          if (currentConfig === patch) {
-            const next = { ...deferredSessionConfigRef.current };
-            delete next[id];
-            deferredSessionConfigRef.current = next;
-            setDeferredSessionConfig(next);
-          }
-        })
-        .finally(() => {
-          deferredConfigApplyInFlight.current.delete(id);
-          mutation.current = false;
-          if (mounted.current) setBusy(null);
-        });
-    }
-  }, [
-    busy,
-    catalog.models,
-    confirmSession,
-    deferredSessionConfig,
-    pending,
-    replacementSession,
-    selectedSession,
-    sessionOverrides,
-    sessions,
-    sessionId,
-    stopping,
-    snapshot?.session.id,
-    snapshot?.status,
-    statuses,
-  ]);
   const mutateSession = async (
     id: string,
     operation: () => Promise<AgentSession | void>,
@@ -2416,6 +2234,13 @@ export function AgentPage({
             >
               <Workflow />
               工作流与自动化
+            </button>
+            <button
+              className="wb-nav-button"
+              onClick={() => setMemoryOpen(true)}
+            >
+              <Brain />
+              记忆
             </button>
           </nav>
           <div className="wb-search" role="search">
@@ -3277,15 +3102,13 @@ export function AgentPage({
                       refreshDisabled={Boolean(busy) || working}
                       excludedSources={catalog.excludedSources}
                       notice={
-                        selectedDeferredConfig
-                          ? "当前请求会继续使用原模型，新设置将在本轮结束后应用。"
-                          : catalogUpdate > catalog.revision
-                            ? working
-                              ? "渠道已更新，任务结束后将自动刷新模型目录。"
-                              : "渠道已更新，可刷新模型目录。"
-                            : working
-                              ? "任务结束后可刷新模型目录。"
-                              : undefined
+                        catalogUpdate > catalog.revision
+                          ? working
+                            ? "渠道已更新，任务结束后将自动刷新模型目录。"
+                            : "渠道已更新，可刷新模型目录。"
+                          : working
+                            ? "任务结束后可刷新模型目录。"
+                            : undefined
                       }
                       unavailableLabel={
                         selectedSession?.model
@@ -3319,11 +3142,7 @@ export function AgentPage({
                   <select
                     id="agent-permission-mode"
                     title="逐次确认：改动和命令先询问；Auto Mode：常规编辑和安全命令自动允许；完整权限：允许项目内工具，项目外仍需确认。配置从下一次请求或工具检查生效。"
-                    value={
-                      selectedDeferredConfig?.permissionMode ||
-                      selectedSession?.permissionMode ||
-                      "ask"
-                    }
+                    value={selectedSession?.permissionMode || "ask"}
                     disabled={
                       readOnlySession ||
                       Boolean(busy) ||
@@ -3504,6 +3323,12 @@ export function AgentPage({
             : undefined
         }
       />
+      <Dialog open={memoryOpen} onOpenChange={setMemoryOpen}>
+        <DialogContent className="wb-dialog-content max-h-[85vh] max-w-2xl overflow-y-auto">
+          <DialogTitle className="sr-only">Agent 记忆</DialogTitle>
+          <AgentMemoryPanel projectPath={workspace?.path} />
+        </DialogContent>
+      </Dialog>
       <Dialog open={confirmFullAccess} onOpenChange={setConfirmFullAccess}>
         <DialogContent className="wb-extensions wb-permission-confirm p-5">
           <DialogHeader>

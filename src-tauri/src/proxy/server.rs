@@ -317,6 +317,14 @@ impl ProxyServer {
                 get(channel_gateway::handle_models),
             )
             .route(
+                "/tai/catalogs/:revision/clients/:client/v1/models",
+                get(channel_gateway::handle_models),
+            )
+            .route(
+                "/tai/catalogs/:revision/clients/:client/v1/chat/completions",
+                post(channel_gateway::handle_chat),
+            )
+            .route(
                 "/tai/catalogs/:revision/v1/messages",
                 post(channel_gateway::handle_messages),
             )

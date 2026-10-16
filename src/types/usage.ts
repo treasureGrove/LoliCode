@@ -50,6 +50,12 @@ export interface DataSourceSummary {
   dataSource: string;
   requestCount: number;
   totalCostUsd: string;
+  appType?: string;
+  status?: "recorded" | "awaiting_usage" | "not_found" | "unavailable";
+  detail?: string;
+  unpricedRequests?: number;
+  cachePartialRequests?: number;
+  historicalRequests?: number;
 }
 
 export interface PaginatedLogs {

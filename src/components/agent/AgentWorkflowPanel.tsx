@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { agentApi } from "@/lib/api/agent";
@@ -22,7 +22,14 @@ type Workflow = {
     }
   >;
 };
-type Run = { runId: string; name?: string; status: string; cwd?: string };
+type Run = {
+  runId: string;
+  name?: string;
+  status: string;
+  cwd?: string;
+  sessionId?: string;
+  error?: string;
+};
 type Receipt = {
   key: string;
   sessionId: string;
@@ -71,6 +78,22 @@ export function AgentWorkflowPanel({
   const [values, setValues] = useState<Record<string, string>>({});
   const [script, setScript] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [pendingReceipt, setPendingReceipt] = useState<Receipt | null>(() =>
+    readReceipt(projectPath),
+  );
+  const [createOpen, setCreateOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [document, setDocument] = useState(
+    "---\ndescription: 检查当前项目并总结结果\n---\n1. 阅读项目说明和当前变更。\n2. 执行与变更相关的检查。\n3. 总结发现、验证结果与待处理问题。\n",
+  );
+  useEffect(() => {
+    setSelected(null);
+    setValues({});
+    setScript(null);
+    setConfirmDelete(null);
+    setCreateOpen(false);
+    setPendingReceipt(readReceipt(projectPath));
+  }, [projectPath]);
   const { busy, error, run } = useAgentOperation();
   const request = { workspacePath: projectPath, scope };
   const resource = useAgentResource(
@@ -140,6 +163,8 @@ export function AgentWorkflowPanel({
           "build",
           `工作流 · ${selected.name}`,
           "ask",
+          undefined,
+          projectPath,
         );
         receipt = {
           key: identity,
@@ -148,6 +173,7 @@ export function AgentWorkflowPanel({
           args,
         };
         localStorage.setItem(receiptKey(projectPath), JSON.stringify(receipt));
+        setPendingReceipt(receipt);
       }
       const session = await agentApi.runSavedWorkflow(
         receipt.sessionId,
@@ -157,6 +183,7 @@ export function AgentWorkflowPanel({
         receipt.args,
       );
       localStorage.removeItem(receiptKey(projectPath));
+      setPendingReceipt(null);
       onSession(session);
       resource.reload();
     });
@@ -185,9 +212,16 @@ export function AgentWorkflowPanel({
         </Button>
         <Button
           variant="neutral"
+          disabled={busy}
+          onClick={() => setCreateOpen(!createOpen)}
+        >
+          新建工作流
+        </Button>
+        <Button
+          variant="neutral"
           onClick={() =>
             onCompose(
-              "请根据当前项目帮我创建可复用的工作流，并保存到项目工作流目录。先和我确认具体任务。",
+              "请根据当前项目帮我创建可复用工作流，保存为 .zcode/workflows/名称.md，使用 YAML frontmatter description 字段和 Markdown 步骤正文。任务步骤由当前 Agent 执行，不要输出依赖旧运行时的 JS 脚本。先和我确认具体任务。",
             )
           }
         >
@@ -195,6 +229,91 @@ export function AgentWorkflowPanel({
         </Button>
       </div>
       <OperationError>{error || resource.error}</OperationError>
+      {pendingReceipt && (
+        <div className="flex items-center gap-2 text-caption text-fg-3">
+          <span>
+            上次运行的接收状态待确认。检查会话后可继续运行其他工作流。
+          </span>
+          <Button
+            variant="neutral"
+            disabled={busy}
+            onClick={() =>
+              void run(async () => {
+                const snapshot = await agentApi.getSession(
+                  pendingReceipt.sessionId,
+                );
+                if (
+                  ![
+                    "running",
+                    "waiting_permission",
+                    "waiting_question",
+                  ].includes(snapshot.status)
+                ) {
+                  localStorage.removeItem(receiptKey(projectPath));
+                  setPendingReceipt(null);
+                }
+                onSession(snapshot.session);
+              })
+            }
+          >
+            检查上次运行
+          </Button>
+        </div>
+      )}
+      {createOpen && (
+        <form
+          className="space-y-3 rounded-control border border-border p-3"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void run(async () => {
+              const result = await agentApi.native<{
+                ok: boolean;
+                detail?: string;
+              }>("IZCodeAgentService", "saveSavedWorkflow", [
+                { ...request, name, document },
+              ]);
+              if (!result.ok)
+                throw new Error(result.detail || "工作流保存失败");
+              setName("");
+              setCreateOpen(false);
+              resource.reload();
+            });
+          }}
+        >
+          <label className="block text-caption">
+            名称
+            <Input
+              aria-label="工作流名称"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              disabled={busy}
+            />
+          </label>
+          <label className="block text-caption">
+            工作流说明与步骤
+            <textarea
+              aria-label="工作流内容"
+              rows={8}
+              className="mt-1 w-full rounded-control border bg-card p-3 font-mono text-caption"
+              value={document}
+              onChange={(event) => setDocument(event.target.value)}
+              disabled={busy}
+            />
+          </label>
+          <div className="flex gap-2">
+            <Button type="submit" disabled={busy || !name.trim()}>
+              保存工作流
+            </Button>
+            <Button
+              type="button"
+              variant="neutral"
+              onClick={() => setCreateOpen(false)}
+            >
+              取消
+            </Button>
+          </div>
+        </form>
+      )}
       {!resource.data?.workflows.length && (
         <p className="text-caption text-fg-3">
           {resource.loading
@@ -332,9 +451,47 @@ export function AgentWorkflowPanel({
         <section>
           <h3 className="mb-2 font-medium">工作流运行记录</h3>
           {resource.data.runs.map((item) => (
-            <p key={item.runId} className="mb-1 break-all text-caption">
-              {item.name || item.runId} · {STATUS[item.status] || item.status}
-            </p>
+            <div
+              key={item.runId}
+              className="mb-2 flex items-center gap-2 text-caption"
+            >
+              <span className="mr-auto">
+                {item.name || item.runId} · {STATUS[item.status] || item.status}
+                {item.error && (
+                  <span className="block text-danger-text">{item.error}</span>
+                )}
+              </span>
+              {item.sessionId && (
+                <Button
+                  variant="neutral"
+                  disabled={busy}
+                  onClick={() =>
+                    void run(async () => {
+                      const snapshot = await agentApi.getSession(
+                        item.sessionId!,
+                      );
+                      onSession(snapshot.session);
+                    })
+                  }
+                >
+                  打开会话
+                </Button>
+              )}
+              {item.sessionId && item.status === "running" && (
+                <Button
+                  variant="neutral"
+                  disabled={busy}
+                  onClick={() =>
+                    void run(async () => {
+                      await agentApi.interruptSession(item.sessionId!);
+                      resource.reload();
+                    })
+                  }
+                >
+                  停止
+                </Button>
+              )}
+            </div>
           ))}
         </section>
       )}

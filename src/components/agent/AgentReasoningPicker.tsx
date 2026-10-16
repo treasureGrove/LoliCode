@@ -36,7 +36,10 @@ export function AgentReasoningPicker({
   const declared = Array.isArray(model?.reasoningEfforts);
   const efforts = [...new Set(model?.reasoningEfforts || [])].filter(Boolean);
   const configuredDefault = model?.defaultReasoningEffort;
-  const defaultEffort = configuredDefault || efforts[0];
+  const defaultEffort =
+    configuredDefault ||
+    ["medium", "high"].find((effort) => efforts.includes(effort)) ||
+    efforts[0];
   const validDraft = !draft || /^[A-Za-z0-9_-]{1,64}$/.test(draft);
   const supportedValue = !value || efforts.includes(value);
 
@@ -72,7 +75,7 @@ export function AgentReasoningPicker({
               : configuredDefault
                 ? `模型默认：${defaultEffort}，未设置会话覆盖`
                 : defaultEffort
-                  ? `自动档位：${defaultEffort}（支持列表首项）`
+                  ? `自动档位：${defaultEffort}（优先 medium，其次 high）`
                   : "上游默认：使用模型服务的默认设置"
           }
           className="wb-picker-trigger inline-flex max-w-[180px] items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-xs hover:bg-black/5 dark:hover:bg-white/5"

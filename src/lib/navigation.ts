@@ -1,11 +1,10 @@
 import type { AppId } from "@/lib/api";
 
 /**
- * 主窗口的导航模型（v7）：侧栏选一个应用或一个全局页；设置单独占一屏。
+ * 主窗口入口：主 Agent、统一渠道、用量与设置。
  *
- * - 应用页：点侧栏应用行进入供应商页；OpenClaw、Hermes 在页头下用分段控件切到自己的专属页。
- * - 全局页：用量统计、授权中心、MCP、Skills、提示词、会话、应用（安装与显示），每样只出现一次。
- * - 设置：侧栏换成设置目录，6 个分组。
+ * 旧视图类型仅用于兼容已保存的导航和原生事件，生产入口经
+ * productViewOf 收束，避免恢复已退出的客户端管理页面。
  */
 
 export type AppPage =
@@ -108,13 +107,7 @@ export function appPageBelongsTo(page: AppPage, app: AppId): boolean {
 export function readStoredView(): View {
   try {
     const view = parseView(localStorage.getItem(VIEW_STORAGE_KEY));
-    if (view === "auth") return "channels";
-    // The product starts from its coding workspace. Old resource pages and
-    // per-client configuration are retained internally for existing workflows.
-    return view &&
-      ["agent", "channels", "usage", "apps", "settings"].includes(view)
-      ? view
-      : "agent";
+    return view ? productViewOf(view) : "agent";
   } catch {
     return "agent";
   }
@@ -124,7 +117,28 @@ export function storeView(view: View) {
   try {
     localStorage.setItem(VIEW_STORAGE_KEY, view);
   } catch {
-    // 存不了就算了：下次启动回到供应商页
+    // 存不了就算了：下次启动回到主 Agent
+  }
+}
+
+/** Retired CC Switch pages are migration inputs, never product destinations.
+ * Agent extensions/memory use the workspace; clients use shared channels. */
+export function productViewOf(view: View): View {
+  switch (view) {
+    case "providers":
+    case "workspace":
+    case "openclawConfig":
+    case "auth":
+      return "channels";
+    case "mcp":
+    case "skills":
+    case "skillsDiscovery":
+    case "prompts":
+    case "sessions":
+    case "hermesMemory":
+      return "agent";
+    default:
+      return view;
   }
 }
 

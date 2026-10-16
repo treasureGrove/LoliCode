@@ -21,6 +21,8 @@ vi.mock("@/lib/api/agent", () => ({
     createSession: vi.fn(),
     runSavedWorkflow: vi.fn(),
     listSessions: vi.fn(),
+    getSession: vi.fn(),
+    interruptSession: vi.fn(),
   },
 }));
 const project = "D:/owned/operations";
@@ -133,6 +135,113 @@ afterEach(() => {
 });
 
 describe("native workflow / automation / remote entry", () => {
+  it("saves a reusable workflow document through the native service instead of an inert chat-only entry", async () => {
+    vi.mocked(agentApi.native).mockImplementation(async (_service, method) =>
+      method === "saveSavedWorkflow"
+        ? { ok: true }
+        : method === "listSavedWorkflows"
+          ? { workflows: [], invalid: [] }
+          : { runs: [] },
+    );
+    render(<AgentOperationsPanel {...props()} />);
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: "新建工作流" }));
+    fireEvent.change(screen.getByLabelText("工作流名称"), {
+      target: { value: "release-check" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "保存工作流" }));
+    await flush();
+    expect(agentApi.native).toHaveBeenCalledWith(
+      "IZCodeAgentService",
+      "saveSavedWorkflow",
+      [
+        expect.objectContaining({
+          workspacePath: project,
+          scope: "project",
+          name: "release-check",
+          document: expect.stringContaining("description:"),
+        }),
+      ],
+    );
+  });
+  it("separates real idle triggers from wall-clock schedules and sends the chosen inactivity thresholds", async () => {
+    render(<AgentOperationsPanel {...props()} />);
+    await flush();
+    fireEvent.click(screen.getByRole("tab", { name: "自动化" }));
+    await flush();
+    fireEvent.click(screen.getAllByRole("button", { name: "创建定时任务" })[0]);
+    fireEvent.click(screen.getByRole("menuitem", { name: "手动创建" }));
+    fireEvent.change(screen.getByLabelText("自动化触发方式"), {
+      target: { value: "idle" },
+    });
+    await flush();
+    expect(screen.queryByLabelText("自动化运行时间")).not.toBeInTheDocument();
+    expect(agentApi.automation).toHaveBeenCalledWith("idleStatus", []);
+    fireEvent.change(screen.getByLabelText("自动化名称"), {
+      target: { value: "Idle review" },
+    });
+    fireEvent.change(screen.getByLabelText("自动化任务内容"), {
+      target: { value: "Read owned code" },
+    });
+    fireEvent.change(screen.getByLabelText("自动化闲置分钟"), {
+      target: { value: "15" },
+    });
+    fireEvent.change(screen.getByLabelText("自动化闲时间隔"), {
+      target: { value: "120" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "保存定时任务" }));
+    await flush();
+    expect(agentApi.automation).toHaveBeenCalledWith("create", [
+      expect.objectContaining({
+        trigger: "idle",
+        idleAfterMinutes: 15,
+        idleIntervalMinutes: 120,
+        workspacePath: project,
+      }),
+    ]);
+  });
+  it("edits the existing automation id and keeps cancellation scoped to its recorded run", async () => {
+    vi.mocked(agentApi.automation).mockImplementation(async (method) =>
+      method === "list"
+        ? [job]
+        : method === "listRuns"
+          ? [
+              {
+                runId: "owned-running",
+                automationId: job.automationId,
+                createdAt: 1,
+                dispatchStatus: "dispatched",
+                outcome: "running",
+                sessionId: "lc:owned",
+              },
+            ]
+          : method === "update"
+            ? job
+            : { status: "stopping" },
+    );
+    render(<AgentOperationsPanel {...props()} />);
+    await flush();
+    fireEvent.click(screen.getByRole("tab", { name: "自动化" }));
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: "编辑任务" }));
+    expect(screen.getByLabelText("自动化名称")).toHaveValue(job.title);
+    fireEvent.change(screen.getByLabelText("自动化名称"), {
+      target: { value: "Updated task" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "保存修改" }));
+    await flush();
+    expect(agentApi.automation).toHaveBeenCalledWith("update", [
+      job.automationId,
+      expect.objectContaining({ title: "Updated task" }),
+      { workspacePath: project },
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: "停止任务" }));
+    await flush();
+    expect(agentApi.automation).toHaveBeenCalledWith("cancelRun", [
+      "owned-running",
+      { workspacePath: project },
+    ]);
+  });
   it("does not contact unavailable migrated services while reading or after receiving in-process features", async () => {
     let finish!: (value: {
       inProcess: boolean;
@@ -219,7 +328,7 @@ describe("native workflow / automation / remote entry", () => {
     expect(screen.getByText("review-code")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "在会话中创建工作流" }));
     expect(onCompose).toHaveBeenCalledWith(
-      expect.stringContaining("创建可复用的工作流"),
+      expect.stringContaining("创建可复用工作流"),
     );
   });
   it("uses the same native command identity and session after a lost workflow response", async () => {
@@ -248,6 +357,14 @@ describe("native workflow / automation / remote entry", () => {
     fireEvent.click(screen.getByRole("button", { name: "在新会话运行工作流" }));
     await flush();
     expect(agentApi.createSession).toHaveBeenCalledOnce();
+    expect(agentApi.createSession).toHaveBeenCalledWith(
+      catalog.defaultModel,
+      "build",
+      "工作流 · review-code",
+      "ask",
+      undefined,
+      project,
+    );
     expect(vi.mocked(agentApi.runSavedWorkflow).mock.calls[1]).toEqual(initial);
     expect(onSession).toHaveBeenCalledWith(session);
   });
@@ -257,7 +374,9 @@ describe("native workflow / automation / remote entry", () => {
     fireEvent.click(screen.getByRole("tab", { name: "自动化" }));
     await flush();
     expect(screen.queryByLabelText("自动化执行计划")).not.toBeInTheDocument();
-    expect(screen.getByText("计划：每天 09:00")).toBeInTheDocument();
+    expect(screen.getAllByText("每天 09:00").length).toBeGreaterThan(0);
+    fireEvent.click(screen.getAllByRole("button", { name: "创建定时任务" })[0]);
+    fireEvent.click(screen.getByRole("menuitem", { name: "手动创建" }));
     fireEvent.change(screen.getByLabelText("自动化名称"), {
       target: { value: "每周检查" },
     });
@@ -273,7 +392,7 @@ describe("native workflow / automation / remote entry", () => {
     fireEvent.change(screen.getByLabelText("自动化运行星期"), {
       target: { value: "3" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "保存自动化" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存定时任务" }));
     await flush();
     expect(agentApi.automation).toHaveBeenCalledWith("create", [
       expect.objectContaining({
@@ -299,6 +418,7 @@ describe("native workflow / automation / remote entry", () => {
           ? [
               {
                 runId: "run-owned",
+                automationId: "job-owned",
                 createdAt: 1,
                 dispatchStatus: "dispatched",
                 outcome: terminal ? "succeeded" : "running",
@@ -316,11 +436,11 @@ describe("native workflow / automation / remote entry", () => {
     expect(
       screen.getByText(/已提交任务，等待原生执行结果/),
     ).toBeInTheDocument();
-    expect(screen.getByText(/执行中/)).toBeInTheDocument();
-    expect(screen.queryByText(/已完成/)).not.toBeInTheDocument();
+    expect(screen.getByText(/· 执行中/)).toBeInTheDocument();
+    expect(screen.queryByText(/· 已完成/)).not.toBeInTheDocument();
     terminal = true;
-    await tick();
-    expect(screen.getByText(/已完成/)).toBeInTheDocument();
+    await tick(3000);
+    expect(screen.getByText(/· 已完成/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "打开运行会话" }));
     await flush();
     expect(onSession).toHaveBeenCalledWith(

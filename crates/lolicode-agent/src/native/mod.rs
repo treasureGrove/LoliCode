@@ -3,6 +3,7 @@
 mod engine;
 mod context;
 mod inference;
+mod memory;
 mod persistence;
 pub(crate) mod tools;
 mod types;

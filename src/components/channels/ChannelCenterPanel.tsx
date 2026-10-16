@@ -18,8 +18,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Notice } from "@/components/ui/notice";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { APP_IDS } from "@/config/appConfig";
-import { APP_DISPLAY_NAME, AppGlyph } from "@/components/shell/AppGlyph";
+import {
+  CHANNEL_TARGETS,
+  CHANNEL_TARGET_NAMES,
+  ChannelTargetGlyph,
+} from "./channelTargets";
 import { AuthCenterPanel } from "@/components/settings/AuthCenterPanel";
 import type { ManagedAuthProvider } from "@/lib/api/auth";
 import {
@@ -1088,7 +1091,7 @@ export function ChannelCenterPanel({
             选择明确的目标后，点击下方按钮才会写入这些工具的本地配置。各工具使用兼容模型，结果逐项保留；失败可重试。
           </p>
           <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-            {APP_IDS.map((app) => (
+            {CHANNEL_TARGETS.map((app) => (
               <label
                 key={app}
                 className={cn(
@@ -1100,7 +1103,7 @@ export function ChannelCenterPanel({
                 data-selected={snapshot.targets.includes(app)}
               >
                 <Checkbox
-                  aria-label={APP_DISPLAY_NAME[app]}
+                  aria-label={CHANNEL_TARGET_NAMES[app]}
                   checked={snapshot.targets.includes(app)}
                   disabled={disabled}
                   onCheckedChange={(enabled) =>
@@ -1112,8 +1115,8 @@ export function ChannelCenterPanel({
                     })
                   }
                 />
-                <AppGlyph app={app} size={18} />
-                <span>{APP_DISPLAY_NAME[app]}</span>
+                <ChannelTargetGlyph app={app} />
+                <span>{CHANNEL_TARGET_NAMES[app]}</span>
               </label>
             ))}
           </div>
@@ -1149,7 +1152,7 @@ export function ChannelCenterPanel({
             <span className="text-caption text-fg-3">
               配置目标：
               {snapshot.targets
-                .map((app) => APP_DISPLAY_NAME[app])
+                .map((app) => CHANNEL_TARGET_NAMES[app])
                 .join("、") || "尚未选择"}
               。模型选择会自动保存，外部工具仅在点击时更新。
             </span>
@@ -1175,7 +1178,7 @@ export function ChannelCenterPanel({
                   )}
                   <div>
                     <span className="font-medium">
-                      {APP_DISPLAY_NAME[result.app]} ·{" "}
+                      {CHANNEL_TARGET_NAMES[result.app]} ·{" "}
                       {result.status === "success"
                         ? "配置成功"
                         : result.status === "skipped"

@@ -31,8 +31,8 @@ describe("generated agent image previews", () => {
       path: "./outputs/result.png",
     },
   ])(
-    "routes a generated image into the project preview: $text",
-    ({ text, path }) => {
+    "loads a generated image through the session-scoped backend: $text",
+    async ({ text, path }) => {
       const preview = vi.fn();
       render(
         <AgentFileActionsContext.Provider
@@ -54,15 +54,20 @@ describe("generated agent image previews", () => {
           />
         </AgentFileActionsContext.Provider>,
       );
-      const link = screen.getByRole("button", { name: `预览文件：${path}` });
-      expect(link).toHaveTextContent("生成结果");
-      expect(
-        screen.queryByRole("img", { name: "生成结果" }),
-      ).not.toBeInTheDocument();
-      fireEvent.click(link);
-      expect(preview).toHaveBeenCalledWith(path);
-      // Loading is owned by the preview panel; markdown rendering does not eagerly fetch images.
-      expect(invoke).not.toHaveBeenCalled();
+      const image = await screen.findByRole("button", {
+        name: "放大图片：生成结果",
+      });
+      expect(screen.getByRole("img", { name: "生成结果" })).toHaveAttribute(
+        "src",
+        data.dataUrl,
+      );
+      expect(invoke).toHaveBeenCalledWith("get_agent_image", {
+        sessionId: "zc:fixture",
+        path,
+      });
+      fireEvent.click(image);
+      expect(await screen.findByRole("dialog")).toBeVisible();
+      expect(preview).not.toHaveBeenCalled();
     },
   );
 

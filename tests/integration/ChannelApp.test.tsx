@@ -48,7 +48,7 @@ describe("simple application shell", () => {
     ])
       expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
   });
-  it.each(["auth"])(
+  it.each(["auth", "providers", "openclawConfig", "workspace"])(
     "merges the old %s destination into the channel center",
     async (destination) => {
       localStorage.setItem("cc-switch-last-view", destination);

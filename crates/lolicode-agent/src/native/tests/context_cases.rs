@@ -300,7 +300,7 @@ async fn reasoning_configuration_is_validated_persisted_and_applies_to_the_next_
             text("HIGH_EFFORT_APPLIED")
         }
         _ => {
-            assert!(input.get("reasoning_effort").is_none());
+            assert_eq!(input["reasoning_effort"], "low");
             text("PROVIDER_DEFAULT_APPLIED")
         }
     })

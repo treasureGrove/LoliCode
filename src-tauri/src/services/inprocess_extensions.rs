@@ -11,6 +11,7 @@ use std::{
     io::Read,
     path::{Component, Path, PathBuf},
 };
+mod marketplace;
 
 #[derive(Clone, Copy, Debug)]
 pub struct SkillLimits {
@@ -22,8 +23,8 @@ impl Default for SkillLimits {
     fn default() -> Self {
         Self {
             max_skill_bytes: 128 * 1024,
-            max_total_bytes: 256 * 1024,
-            max_skills: 32,
+            max_total_bytes: 512 * 1024,
+            max_skills: 64,
         }
     }
 }
@@ -103,6 +104,20 @@ impl InprocessExtensionStore {
     pub fn store(&self) -> &AgentExtensionStore {
         &self.store
     }
+    fn catalog_revision(&self, base: u64) -> Result<u64, AppError> {
+        // A broken optional CLI registry must not remove verified bundled
+        // skills. Its diagnostics are returned separately by the marketplace.
+        let market = marketplace::revision(&self.root.join("cli-marketplace")).unwrap_or(0);
+        base.checked_add(
+            market
+                .checked_mul(1_000_000)
+                .ok_or_else(|| AppError::Config("扩展版本超过范围".into()))?,
+        )
+        .ok_or_else(|| AppError::Config("扩展版本超过范围".into()))
+    }
+    pub async fn marketplace_call(&self, method: &str, args: &Value) -> Result<Value, String> {
+        marketplace::invoke(&self.root.join("cli-marketplace"), method, args).await
+    }
 
     pub fn prepare_skills(&self) -> Result<SkillSnapshot, AppError> {
         self.prepare_skills_with_limits(SkillLimits::default())
@@ -121,7 +136,7 @@ impl InprocessExtensionStore {
         for _ in 0..3 {
             let catalog = self.store.list()?;
             let result = self.prepare_catalog(&catalog, limits)?;
-            if self.store.list()?.revision == catalog.revision {
+            if self.catalog_revision(self.store.list()?.revision)? == result.revision {
                 return Ok(result);
             }
         }
@@ -151,7 +166,7 @@ impl InprocessExtensionStore {
             .map(|skill| (skill.id.clone(), skill))
             .collect();
         let mut snapshot = SkillSnapshot {
-            revision: catalog.revision,
+            revision: self.catalog_revision(catalog.revision)?,
             verified_skills: vec![],
             omitted: vec![],
         };
@@ -234,6 +249,22 @@ impl InprocessExtensionStore {
                 }),
             }
         }
+        let (cli_skills, cli_issues) =
+            marketplace::skills(&self.root.join("cli-marketplace")).map_err(AppError::Config)?;
+        snapshot.omitted.extend(cli_issues);
+        for skill in cli_skills {
+            if snapshot.verified_skills.len() >= limits.max_skills
+                || total.saturating_add(skill.content.len()) > limits.max_total_bytes
+            {
+                snapshot.omitted.push(SkillIssue {
+                    id: skill.id,
+                    message: "当前模型技能目录达到预算上限，请停用暂不使用的插件".into(),
+                });
+            } else {
+                total += skill.content.len();
+                snapshot.verified_skills.push(skill);
+            }
+        }
         Ok(snapshot)
     }
 
@@ -248,12 +279,19 @@ impl InprocessExtensionStore {
         let catalog = self.store.list()?;
         let mut value =
             serde_json::to_value(&catalog).map_err(|source| AppError::JsonSerialize { source })?;
-        let pending = active.is_some_and(|snapshot| snapshot.revision != catalog.revision);
+        let revision = self.catalog_revision(catalog.revision)?;
+        value["revision"] = json!(revision);
+        let pending = active.is_some_and(|snapshot| snapshot.revision != revision);
         let available: BTreeSet<_> = active
             .into_iter()
             .flat_map(|snapshot| &snapshot.verified_skills)
             .map(|skill| skill.id.as_str())
             .collect();
+        let (cli_skills, _) =
+            marketplace::skills(&self.root.join("cli-marketplace")).map_err(AppError::Config)?;
+        if let Some(entries) = value["skills"].as_array_mut() {
+            entries.extend(cli_skills.into_iter().map(|skill| json!({"id":skill.id,"name":skill.name,"description":skill.description,"source":"marketplace","installed":true,"enabled":true,"license":"以安装包内上游声明为准","sourceUrl":"https://github.com/zai-org/ZCode","requirements":["安装并登录对应 CLI；首次使用时按需检查"]})));
+        }
         for entry in value["skills"].as_array_mut().into_iter().flatten() {
             let id = entry["id"].as_str().unwrap_or_default().to_owned();
             let verified = available.contains(id.as_str());
@@ -411,6 +449,24 @@ mod tests {
             .unwrap();
         assert_eq!(loaded["skills"][0]["loaded"], true);
         assert!(!loaded.to_string().contains("WHOLE_BUNDLED_BODY"));
+    }
+    #[test]
+    fn inprocess_extensions_broken_optional_cli_registry_does_not_disable_bundled_skills() {
+        let (_temp, store) = fixture();
+        let root = store.root.join("cli-marketplace");
+        fs::create_dir_all(&root).unwrap();
+        fs::write(root.join("cli-installed.json"), "{damaged").unwrap();
+        let prepared = store.prepare_skills().unwrap();
+        assert_eq!(prepared.verified_skills.len(), 1);
+        assert_eq!(prepared.verified_skills[0].id, "bundle-fixture");
+        assert!(prepared
+            .omitted
+            .iter()
+            .any(|issue| issue.id == "cli-marketplace"));
+        assert_eq!(
+            fs::read_to_string(root.join("cli-installed.json")).unwrap(),
+            "{damaged"
+        );
     }
     #[test]
     fn inprocess_extensions_import_enable_and_old_registry_revision_are_real() {

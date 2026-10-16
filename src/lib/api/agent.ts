@@ -73,6 +73,7 @@ export const agentApi = {
     title?: string,
     permissionMode?: AgentPermissionMode,
     reasoningEffort?: string,
+    projectPath?: string,
   ) =>
     invoke<AgentSession>("create_agent_session", {
       modelId,
@@ -80,6 +81,7 @@ export const agentApi = {
       title,
       permissionMode,
       reasoningEffort,
+      ...(projectPath ? { projectPath } : {}),
     }),
   updateSession: (
     sessionId: string,
@@ -174,7 +176,9 @@ export const agentApi = {
       ...(marketplace ? { marketplace } : {}),
     }),
   removePluginMarketplace: (marketplace: string) =>
-    invoke<AgentPluginStore>("remove_agent_plugin_marketplace", { marketplace }),
+    invoke<AgentPluginStore>("remove_agent_plugin_marketplace", {
+      marketplace,
+    }),
   installMarketplacePlugin: (marketplace: string, pluginName: string) =>
     invoke<AgentPluginStore>("install_agent_marketplace_plugin", {
       marketplace,
@@ -185,7 +189,9 @@ export const agentApi = {
   updateMarketplacePlugin: (pluginId: string) =>
     invoke<AgentPluginStore>("update_agent_marketplace_plugin", { pluginId }),
   uninstallMarketplacePlugin: (pluginId: string) =>
-    invoke<AgentPluginStore>("uninstall_agent_marketplace_plugin", { pluginId }),
+    invoke<AgentPluginStore>("uninstall_agent_marketplace_plugin", {
+      pluginId,
+    }),
   setSkillEnabled: (id: string, enabled: boolean) =>
     invoke<AgentExtensions>("set_agent_skill_enabled", { id, enabled }),
   importSkill: (path: string) =>

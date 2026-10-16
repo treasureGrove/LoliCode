@@ -18,6 +18,25 @@ const open = () =>
   fireEvent.click(screen.getByRole("button", { name: "思考档位" }));
 
 describe("AgentReasoningPicker", () => {
+  it.each([
+    { efforts: ["low", "high", "medium", "max"], expected: "medium" },
+    { efforts: ["low", "high", "max"], expected: "high" },
+    { efforts: ["low", "max"], expected: "low" },
+  ])(
+    "shows the supported automatic effort $expected",
+    ({ efforts, expected }) => {
+      render(
+        <AgentReasoningPicker
+          model={{ ...model, reasoningEfforts: efforts }}
+          value=""
+          onSelect={vi.fn()}
+        />,
+      );
+      expect(
+        screen.getByRole("button", { name: "思考档位" }),
+      ).toHaveTextContent(`自动档位 · ${expected}`);
+    },
+  );
   it("inherits the current model default without copying it into the session override", () => {
     const select = vi.fn();
     render(

@@ -1,0 +1,33 @@
+{
+  "version": "4.0.18",
+  "items": [
+    {
+      "type": "new",
+      "zh": "主 Agent 新增可编辑、关闭和清除的本机记忆",
+      "zh-TW": "主 Agent 新增可編輯、關閉及清除的本機記憶",
+      "en": "Edit, disable, and clear local Agent memory for personal and project preferences",
+      "ja": "個人設定とプロジェクト用のローカルメモリを追加。編集・無効化・削除に対応"
+    },
+    {
+      "type": "new",
+      "zh": "新增四款外部 Agent 的模型配置与本地用量统计",
+      "zh-TW": "新增四款外部 Agent 的模型設定與本機用量統計",
+      "en": "Configure models and import local usage from four more Agent apps",
+      "ja": "4種類の外部Agentのモデル設定とローカル使用量の同期に対応"
+    },
+    {
+      "type": "fix",
+      "zh": "修复工作流与闲时任务，接入八类 CLI 技能",
+      "zh-TW": "修復工作流程與閒時任務，接入八類 CLI 技能",
+      "en": "Fix workflows and idle tasks, and add eight CLI skill packages",
+      "ja": "ワークフローとアイドル時タスクを修正し、8種類のCLIスキルを追加"
+    },
+    {
+      "type": "fix",
+      "zh": "修复会话用量与运行中切模型，优先 medium/high",
+      "zh-TW": "修復會話用量與執行中切換模型，優先 medium/high",
+      "en": "Keep session usage visible and apply supported model and reasoning changes at the next request",
+      "ja": "会話使用量と実行中のモデル切り替えを修正。対応時はmedium/highを優先"
+    }
+  ]
+}

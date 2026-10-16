@@ -166,6 +166,14 @@ impl InprocessAgentState {
                 | "setPluginEnabled"
                 | "uninstallPlugin"
                 | "saveExtensionConfig"
+                | "getPluginStore"
+                | "addPluginMarketplace"
+                | "updatePluginMarketplace"
+                | "removePluginMarketplace"
+                | "installMarketplacePlugin"
+                | "updateMarketplacePlugin"
+                | "uninstallMarketplacePlugin"
+                | "restoreBuiltinPlugin"
         ) {
             return Ok(None);
         }
@@ -175,6 +183,21 @@ impl InprocessAgentState {
             .ok_or("默认技能资源不可用，请使用完整安装包；核心编程仍可运行")?;
         let id = || args["id"].as_str().ok_or("缺少扩展编号");
         let enabled = || args["enabled"].as_bool().ok_or("缺少启用状态");
+        if matches!(
+            method,
+            "getPluginStore"
+                | "addPluginMarketplace"
+                | "updatePluginMarketplace"
+                | "removePluginMarketplace"
+                | "installMarketplacePlugin"
+                | "updateMarketplacePlugin"
+                | "uninstallMarketplacePlugin"
+                | "restoreBuiltinPlugin"
+        ) {
+            let value = store.marketplace_call(method, args).await?;
+            self.sync_skills(engine).await?;
+            return Ok(Some(value));
+        }
         match method {
             "getExtensionConfig" => {
                 return serde_json::to_value(store.store().config().map_err(|e| e.to_string())?)
@@ -206,10 +229,14 @@ impl InprocessAgentState {
                     .map_err(|e| e.to_string())?;
             }
             "setPluginEnabled" => {
-                store
-                    .store()
-                    .set_plugin_enabled(id()?, enabled()?)
-                    .map_err(|e| e.to_string())?;
+                if id()?.starts_with("cli-") {
+                    store.marketplace_call("setCliPluginEnabled", args).await?;
+                } else {
+                    store
+                        .store()
+                        .set_plugin_enabled(id()?, enabled()?)
+                        .map_err(|e| e.to_string())?;
+                }
             }
             "uninstallPlugin" => {
                 store

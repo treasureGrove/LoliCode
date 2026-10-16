@@ -132,6 +132,7 @@ async fn cancellation_while_a_completed_summary_waits_for_the_session_lock_prese
     persistence::save(&engine.inner.root, &state.stored).await.unwrap();
     let original_history = state.stored.history.clone();
     let plan = context::Plan {
+        memory: None,
         source_history: original_history.clone(),
         previous_summary: None,
         retained: vec![json!({"role":"user","content":"Continue the original task"})],

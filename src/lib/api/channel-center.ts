@@ -1,6 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { AppId } from "./types";
 
+export type ChannelTarget =
+  | AppId
+  | "workbuddy"
+  | "deepseek-harness"
+  | "zcode"
+  | "mimocode";
+
 export type ChannelProtocol =
   | "openai_chat"
   | "openai_responses"
@@ -46,13 +53,13 @@ export interface ChannelCenterSnapshot {
   /** Protects saved channels against a stale editor overwriting newer changes. */
   revision?: number;
   channels: ChannelSource[];
-  targets: AppId[];
+  targets: ChannelTarget[];
   /** Stable identity, including channel so duplicate upstream names stay distinct. */
   defaultModel?: string;
 }
 
 export interface ChannelApplyResult {
-  app: AppId;
+  app: ChannelTarget;
   status: "success" | "skipped" | "error";
   message: string;
 }

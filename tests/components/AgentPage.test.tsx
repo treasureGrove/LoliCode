@@ -353,6 +353,8 @@ describe("AgentPage", () => {
       session.id,
       "现在改为检查文件",
       expect.any(String),
+      [],
+      [],
     );
     expect(vi.mocked(agentApi.sendMessage).mock.calls[0][2]).not.toBe(
       "old-user",
@@ -665,6 +667,8 @@ describe("AgentPage", () => {
         "lc:new",
         "本体新会话继续任务",
         expect.any(String),
+        [],
+        [],
       );
     },
   );
@@ -727,6 +731,8 @@ describe("AgentPage", () => {
       nativeSession.id,
       "恢复原输入",
       requestId,
+      [],
+      [],
     );
   });
 
@@ -1513,6 +1519,8 @@ describe("AgentPage", () => {
       session.id,
       "需要可靠接收的任务",
       requestId,
+      [],
+      [],
     ]);
   });
 

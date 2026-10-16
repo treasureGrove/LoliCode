@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { ChevronRight, Monitor, Moon, Sun } from "lucide-react";
+import { Monitor, Moon, Sun } from "lucide-react";
 import type { SettingsFormState } from "@/hooks/useSettings";
 import { useTheme } from "@/components/theme-provider";
 import { SegmentedControl } from "@/components/ui/segmented-control";
@@ -10,7 +10,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Button } from "@/components/ui/button";
 import { isLinux } from "@/lib/platform";
 import { TerminalSelect } from "@/components/settings/TerminalSettings";
 import { InterfaceAppearanceSettings } from "@/components/settings/InterfaceAppearanceSettings";
@@ -36,11 +35,7 @@ interface GeneralSectionProps {
   onOpenApps: () => void;
 }
 
-export function GeneralSection({
-  settings,
-  onAutoSave,
-  onOpenApps,
-}: GeneralSectionProps) {
+export function GeneralSection({ settings, onAutoSave }: GeneralSectionProps) {
   const { t } = useTranslation();
   const { theme, setTheme } = useTheme();
 
@@ -127,42 +122,6 @@ export function GeneralSection({
                   },
                 ]}
               />
-            }
-          />
-        </SettingsCard>
-      </SettingsBlock>
-
-      <SettingsBlock title={t("settings.general.sidebarAndHeader")}>
-        <SettingsCard>
-          <SettingsRow
-            label={t("settings.general.visibleApps")}
-            control={
-              <Button variant="quiet" size="compact" onClick={onOpenApps}>
-                {t("settings.general.goToApps")}
-                <ChevronRight className="h-3.5 w-3.5" />
-              </Button>
-            }
-          />
-          <SettingsSwitchRow
-            label={t("settings.appVisibility.showProfileSwitcher")}
-            help={{
-              title: t("settings.appVisibility.showProfileSwitcher"),
-              body: t("settings.appVisibility.showProfileSwitcherDescription"),
-            }}
-            checked={settings.showProfileSwitcher ?? false}
-            onCheckedChange={(value) =>
-              void onAutoSave({ showProfileSwitcher: value })
-            }
-          />
-          <SettingsSwitchRow
-            label={t("settings.appVisibility.showProviderSearch")}
-            help={{
-              title: t("settings.appVisibility.showProviderSearch"),
-              body: t("settings.appVisibility.showProviderSearchDescription"),
-            }}
-            checked={settings.showProviderSearch ?? true}
-            onCheckedChange={(value) =>
-              void onAutoSave({ showProviderSearch: value })
             }
           />
         </SettingsCard>

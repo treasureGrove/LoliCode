@@ -85,6 +85,8 @@ export function channelModelMetadata(
     parts.push(`最大输出 ${model.outputLimit.toLocaleString()} tokens`);
   if (model.reasoningEfforts?.length)
     parts.push(`思考强度：${model.reasoningEfforts.join(" / ")}`);
+  else if (model.reasoningEfforts) parts.push("思考强度不可调");
+  else parts.push("思考强度：上游未提供");
   return parts.join(" · ");
 }
 

@@ -162,6 +162,8 @@ export interface AgentDiff {
 }
 
 export interface AgentTokenUsage {
+  totalTokens?: number;
+  tokenReportedRequests?: number;
   inputTokens?: number;
   outputTokens?: number;
   cacheReadTokens?: number;
@@ -213,7 +215,7 @@ export interface AgentSkill {
   id: string;
   name: string;
   description: string | null;
-  source: "bundled" | "local";
+  source: "bundled" | "local" | "marketplace";
   installed: boolean;
   enabled: boolean;
   license?: string | null;
@@ -332,7 +334,13 @@ export interface AgentPluginStore {
   installedPlugins: AgentInstalledPlugin[];
   restorableBuiltins: AgentAvailablePlugin[];
   diagnostics: { severity?: string; message?: string; pluginId?: string }[];
-  capability: { supported: boolean; reason?: string };
+  capability: {
+    supported: boolean;
+    reason?: string;
+    customSources?: boolean;
+    localPluginRuntime?: boolean;
+    mcpRuntime?: boolean;
+  };
 }
 
 export interface AgentExtensionConfig {

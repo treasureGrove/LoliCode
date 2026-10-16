@@ -21,6 +21,8 @@ vi.mock("@/lib/api/usage", () => ({
     getProviderStats: vi.fn(),
     getUsageFirstDate: vi.fn(),
     getUsageTrends: vi.fn(),
+    getDataSourceBreakdown: vi.fn().mockResolvedValue([]),
+    syncSessionUsage: vi.fn(),
   },
 }));
 vi.mock("@/lib/api/channel-center", () => ({
@@ -55,6 +57,7 @@ function mount() {
   };
 }
 beforeEach(() => {
+  vi.mocked(usageApi.getDataSourceBreakdown).mockResolvedValue([]);
   vi.mocked(copilotBillingApi.listReports).mockResolvedValue([]);
   vi.mocked(copilotListAccounts).mockResolvedValue([]);
   vi.mocked(usageApi.getUsageFirstDate).mockResolvedValue(null);
@@ -77,6 +80,76 @@ beforeEach(() => {
   });
 });
 describe("basic usage", () => {
+  it("keeps historical app usage visible after detail pruning without claiming an unknown history price is free", async () => {
+    vi.mocked(usageApi.getDataSourceBreakdown).mockResolvedValue([
+      {
+        dataSource: "workbuddy_session",
+        appType: "workbuddy",
+        status: "recorded",
+        requestCount: 3,
+        totalCostUsd: "0",
+        historicalRequests: 3,
+        unpricedRequests: 0,
+      },
+    ]);
+    mount();
+    const sources = within(
+      screen.getByRole("region", { name: "本地应用用量来源" }),
+    );
+    expect(await sources.findByText(/3 次历史汇总/)).toBeInTheDocument();
+    expect(sources.queryByText(/\$0\.00/)).not.toBeInTheDocument();
+    expect(
+      sources.queryByText("已检测到，等待请求用量"),
+    ).not.toBeInTheDocument();
+  });
+  it("shows desktop agent sources without presenting unpriced requests as free", async () => {
+    vi.mocked(usageApi.getDataSourceBreakdown).mockResolvedValue([
+      {
+        dataSource: "workbuddy_session",
+        appType: "workbuddy",
+        status: "recorded",
+        requestCount: 3,
+        totalCostUsd: "0",
+        unpricedRequests: 3,
+        cachePartialRequests: 3,
+      },
+      {
+        dataSource: "mimocode_session",
+        appType: "mimocode",
+        status: "not_found",
+        requestCount: 0,
+        totalCostUsd: "0",
+      },
+    ]);
+    mount();
+    const sources = within(
+      screen.getByRole("region", { name: "本地应用用量来源" }),
+    );
+    expect(await sources.findByText(/3 次待定价/)).toBeInTheDocument();
+    expect(sources.getByText("未发现本地记录")).toBeInTheDocument();
+    expect(sources.getByText("DeepSeek Harness")).toBeInTheDocument();
+    expect(sources.getByText("ZCode")).toBeInTheDocument();
+    expect(sources.queryByText(/\$0\.00/)).not.toBeInTheDocument();
+  });
+
+  it("syncs app logs and refreshes the aggregate without losing official billing separation", async () => {
+    vi.mocked(usageApi.syncSessionUsage).mockResolvedValue({
+      imported: 1,
+      skipped: 0,
+      filesScanned: 1,
+      suspectedDuplicates: 0,
+      deferredFiles: 0,
+      errors: [],
+    });
+    mount();
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "同步应用记录" }));
+    await waitFor(() => expect(usageApi.syncSessionUsage).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(usageApi.getDataSourceBreakdown).toHaveBeenCalledTimes(2),
+    );
+  });
   it("keeps official Copilot billing separate from local request estimates and time filters", async () => {
     const now = new Date();
     vi.mocked(copilotListAccounts).mockResolvedValue([

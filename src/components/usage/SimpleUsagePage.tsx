@@ -11,6 +11,8 @@ import { fmtInt, fmtUsd } from "./format";
 import { UsageHeatmap } from "./UsageHeatmap";
 import { usageKeys } from "@/lib/query/usage";
 import { CopilotBillingPanel } from "./CopilotBillingPanel";
+import { DesktopUsageSources } from "./DesktopUsageSources";
+import { DESKTOP_USAGE_APPS } from "./desktopSources";
 
 type Period = "today" | "week" | "all";
 
@@ -99,7 +101,7 @@ export function SimpleUsagePage() {
               {[
                 ["请求次数", fmtInt(summary.totalRequests)],
                 ["消耗 Tokens", fmtInt(summary.realTotalTokens)],
-                ["估算费用（美元）", fmtUsd(summary.totalCost, 4)],
+                ["已定价估算（美元）", fmtUsd(summary.totalCost, 4)],
                 [
                   "请求成功率",
                   summary.totalRequests
@@ -140,7 +142,8 @@ export function SimpleUsagePage() {
                         <p className="text-xs text-fg-2">
                           {provider.appType === "channel-gateway"
                             ? "统一渠道服务"
-                            : (APP_DISPLAY_NAME[provider.appType as AppId] ??
+                            : (DESKTOP_USAGE_APPS[provider.appType] ??
+                              APP_DISPLAY_NAME[provider.appType as AppId] ??
                               provider.appType)}
                         </p>
                       </div>
@@ -150,7 +153,10 @@ export function SimpleUsagePage() {
                           {fmtInt(provider.totalTokens)} Tokens
                         </p>
                         <p className="text-fg-2">
-                          {fmtUsd(provider.totalCost, 4)}
+                          {DESKTOP_USAGE_APPS[provider.appType] &&
+                          Number(provider.totalCost) === 0
+                            ? "待定价"
+                            : fmtUsd(provider.totalCost, 4)}
                         </p>
                       </div>
                     </div>
@@ -169,6 +175,7 @@ export function SimpleUsagePage() {
             正在加载用量…
           </p>
         )}
+        <DesktopUsageSources />
         <CopilotBillingPanel />
       </div>
     </>

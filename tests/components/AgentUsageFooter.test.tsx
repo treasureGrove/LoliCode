@@ -6,8 +6,8 @@ describe("AgentUsageFooter", () => {
   it("shows one compact session line with unknown missing counters", () => {
     render(<AgentUsageFooter />);
     const footer = screen.getByLabelText("本会话用量");
-    expect(footer).toHaveTextContent("会话用量 — tokens");
-    expect(footer).toHaveTextContent("缓存命中 —");
+    expect(footer).toHaveTextContent("尚未记录用量");
+    expect(footer).toHaveTextContent("缓存命中 未回报");
     expect(footer).not.toHaveTextContent(
       /本次任务|耗时|生成速度|用量回报|起计/,
     );
@@ -65,8 +65,8 @@ describe("AgentUsageFooter", () => {
       />,
     );
     const footer = screen.getByLabelText("本会话用量");
-    expect(footer).toHaveTextContent("会话用量 — tokens");
-    expect(footer).toHaveTextContent("缓存命中 —");
+    expect(footer).toHaveTextContent("用量待上游回报");
+    expect(footer).toHaveTextContent("缓存命中 未回报");
   });
 
   it("preserves reported zero values", () => {
@@ -89,5 +89,50 @@ describe("AgentUsageFooter", () => {
     expect(footer).toHaveTextContent("会话用量 0 tokens");
     expect(footer).toHaveTextContent("缓存命中 0.0%");
     expect(footer).toHaveTextContent("0 轮");
+  });
+
+  it("retains paired historical totals while a new request is waiting for usage", () => {
+    render(
+      <AgentUsageFooter
+        usage={{
+          session: {
+            inputTokens: 1000,
+            outputTokens: 50,
+            totalTokens: 1050,
+            tokenReportedRequests: 2,
+            modelRequests: 3,
+            reportedRequests: 2,
+            cacheHitRate: 0.8,
+            since: 1,
+            complete: true,
+          },
+        }}
+      />,
+    );
+    const footer = screen.getByLabelText("本会话用量");
+    expect(footer).toHaveTextContent("会话用量 1.1K tokens");
+    expect(footer).toHaveTextContent("缓存命中 80.0%");
+    expect(footer.title).toContain("1 次请求尚未完整回报");
+  });
+
+  it("does not combine input-only and output-only requests into a fabricated total", () => {
+    render(
+      <AgentUsageFooter
+        usage={{
+          session: {
+            inputTokens: 1000,
+            outputTokens: 50,
+            tokenReportedRequests: 0,
+            modelRequests: 2,
+            reportedRequests: 2,
+            since: 1,
+            complete: true,
+          },
+        }}
+      />,
+    );
+    const footer = screen.getByLabelText("本会话用量");
+    expect(footer).toHaveTextContent("用量待上游回报");
+    expect(footer).not.toHaveTextContent("1.1K");
   });
 });

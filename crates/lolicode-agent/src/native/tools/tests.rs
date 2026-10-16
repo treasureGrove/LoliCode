@@ -27,6 +27,7 @@ fn schema_and_inspection_expose_real_tools_and_plan_mutation_boundaries() {
         names,
         [
             "read_file",
+            "view_image",
             "list_files",
             "search_files",
             "write_file",

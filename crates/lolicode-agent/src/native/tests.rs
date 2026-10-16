@@ -367,6 +367,7 @@ fn is_compaction(input: &Value) -> bool {
 
 mod context_cases;
 mod stream_usage_cases;
+mod memory_cases;
 
 #[tokio::test]
 async fn long_tool_tasks_complete_real_edits_after_more_than_twenty_four_rounds() {
@@ -758,7 +759,7 @@ async fn real_read_patch_continuation_persists_and_idempotent_restart_uses_no_pr
             )
             .await
             .unwrap()["results"][0]["result"]["status"],
-        "accepted"
+        "completed"
     );
     let files = std::fs::read_dir(data.path().join("sessions")).unwrap();
     for file in files {

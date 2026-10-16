@@ -17,7 +17,9 @@
 
 新会话 ID 为 `lc:<UUID>`。公共快照保留现有 `AgentSnapshot` 结构；完整文件基线、模型网关令牌与内部模型历史不通过公共 IPC 暴露。网关绑定仅允许应用内 `127.0.0.1` HTTP 地址，并禁用重定向和系统代理。上游 Key 留在渠道中心。
 
-后续工作流、调度器、远程项目和扩展执行应直接接入这套核心及现有权限、取消、回执和更新空闲检查。当前能力以核心 `capabilities` / `activity.features` 返回值为准；未迁入功能不会回退启动旧引擎。
+4.0.18 在这套核心上接入了可编辑的[本机记忆](../architecture/agent-memory.md)，以及[Markdown 工作流、定时/闲时任务和 CLI 技能市场](agent-workflows-cli-adapter.md)，共用现有权限、取消、回执和更新空闲检查。支持的自动思考档位优先 medium、其次 high；运行中模型/强度修改在下一次模型请求生效，已发出的请求保持原配置。
+
+远程项目、通用 JavaScript/MCP 宿主与高级记忆提供者仍需分别接入。当前能力以核心 `capabilities` / `activity.features` 返回值为准；未迁入功能不会回退启动旧引擎。外部应用配置和日志用量的边界分别见[模型接入](../architecture/external-model-config.md)与[本机用量](local-agent-usage.md)。
 
 默认构建只执行 `prepare:agent-assets` 并打包校验后的技能及许可证内容。保留的旧引擎源码和手动准备脚本用于历史参考与专门测试，不是默认发行版的运行依赖。
 

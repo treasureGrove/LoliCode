@@ -16,6 +16,34 @@ const defaults: SettingsFormState = {
   minimizeToTrayOnClose: false,
 };
 describe("software update preference", () => {
+  it("removes retired per-client navigation preferences without rewriting saved client configuration", () => {
+    const save = vi.fn();
+    render(
+      <GeneralSection
+        settings={{
+          ...defaults,
+          showProfileSwitcher: true,
+          showProviderSearch: true,
+        }}
+        onAutoSave={save}
+        onOpenApps={vi.fn()}
+      />,
+    );
+    expect(
+      screen.queryByRole("switch", {
+        name: "settings.appVisibility.showProfileSwitcher",
+      }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("switch", {
+        name: "settings.appVisibility.showProviderSearch",
+      }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "settings.general.goToApps" }),
+    ).not.toBeInTheDocument();
+    expect(save).not.toHaveBeenCalled();
+  });
   it("defaults to enabled and saves an explicit user opt out", () => {
     const save = vi.fn().mockResolvedValue(true);
     render(

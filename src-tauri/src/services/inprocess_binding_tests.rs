@@ -168,7 +168,10 @@ async fn inprocess_binding_routes_opaque_model_through_real_proxy_without_persis
         assert_eq!(persisted["snapshot"]["session"]["model"]["modelId"],route);
         engine.call("sendMessage",command).await.unwrap();
         let captured = requests.lock().unwrap();
-        assert_eq!(captured.len(),1,"Replay must not call the model again");
+        // A completed first turn may also generate its title asynchronously.
+        // Only inference requests advertise tools; a replay must not start
+        // another inference turn or depend on the title request's timing.
+        assert_eq!(captured.iter().filter(|request| request.body["tools"].as_array().is_some_and(|tools| !tools.is_empty())).count(),1,"Replay must not call the task model again");
         assert_eq!(captured[0].body["model"],MODEL,"Only the channel namespace may be removed from the opaque model ID");
         assert_eq!(captured[0].body["stream"],true);
         assert!(captured[0].body["tools"].as_array().is_some_and(|tools| tools.iter().any(|tool|tool["function"]["name"]=="read_file")));

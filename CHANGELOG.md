@@ -1,6 +1,17 @@
 # LoliCode Changelog
 
-LoliCode release information is maintained independently in this repository. Published packages are available from the [LoliCode download page](https://tools.treasuregrove.art/lolicode/); source releases are listed in [LoliCode Releases](https://github.com/treasureGrove/LoliCode/releases).
+LoliCode release information is maintained independently in this repository. Published packages are available from the [LoliCode website](https://lolicode.com/) and [public LoliCode Releases](https://github.com/treasureGrove/LoliCode-Releases/releases).
+
+## [4.0.18] — 2026-10-17
+
+- Add bounded, editable local Agent memory for user preferences and project conventions, with project isolation and permission-controlled model updates. The implementation follows Hermes memory concepts without embedding its runtime.
+- Add model configuration writers and read-only usage importers for WorkBuddy, DeepSeek Harness, ZCode, and MiMo Code. Preserve existing client configuration, verify owned updates, and separate local cost estimates from provider bills. Exclude DSH fork-inherited history and claim matching gateway requests once.
+- Replace workflow title-based tracking with a persistent run ledger; add editable schedules, actual system-idle triggers, accurate completion/failure/cancellation, and restart recovery without replaying finished work.
+- Adapt eight ZCode marketplace CLI packages as permission-controlled, on-demand skills, with source hash verification and bounded extraction. CLI binaries and accounts require setup; custom JavaScript and MCP hosts are not represented as working native integrations.
+- Preserve reported session totals during pending or interrupted requests and calculate cache hits only from paired measurements. Prefer supported medium/high automatic reasoning and apply model/reasoning changes at the next request during active tasks.
+- Retire inherited configuration-page navigation and obsolete setup prompts while retaining client writers, user data, migration and license records.
+
+Windows x64 release candidate. Native core, multimodal GLM, workflow/CLI, configuration and usage acceptance details are recorded under `docs/architecture/` and `docs/guides/`. macOS/Linux packages and OS-specific idle detection still need platform acceptance.
 
 ## [4.0.16] — 2026-10-16
 

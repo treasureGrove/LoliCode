@@ -7,8 +7,8 @@
 //! cargo run --manifest-path src-tauri/Cargo.toml --features "test-hooks,tauri/test" --example lolicode_updater_smoke -- --endpoint http://127.0.0.1:14422/latest.json
 //!
 //! --help prints the options. --check-only skips the package download.
-//! The current version is deliberately 4.0.15, independent of this crate's
-//! package version. MockRuntime has no window, WebView, tray, user state, or app
+//! The simulated current version defaults to 4.0.15 and is configurable,
+//! independent of this crate's package version. MockRuntime has no window, WebView, tray, user state, or app
 //! event loop. Only the repository's public updater configuration is embedded.
 //! A successful Update::download is the official plugin's signature verdict;
 //! this example does not implement its own signature verifier or save/run bytes.
@@ -37,6 +37,7 @@ mod smoke {
     const HELP: &str = "LoliCode official updater smoke (check/download only)\n\
       --endpoint <URL>       Override metadata with a loopback fixture or HTTPS endpoint\n\
       --expect-version <v>   Fail unless the native check offers exactly this version\n\
+      --current-version <v>  Simulate an installed version (default: 4.0.15)\n\
       --check-only           Check metadata without downloading a package\n\
       --help                 Print this help\n\
       JSON proof is printed to stdout. Errors are classified without raw URLs,\n\
@@ -46,6 +47,7 @@ mod smoke {
     struct Options {
         endpoint: Option<Url>,
         expected_version: Option<String>,
+        current_version: String,
         check_only: bool,
     }
 
@@ -69,6 +71,7 @@ mod smoke {
         let mut options = Options {
             endpoint: None,
             expected_version: None,
+            current_version: CURRENT_VERSION.into(),
             check_only: false,
         };
         while let Some(option) = args.next() {
@@ -85,6 +88,9 @@ mod smoke {
                 }
                 "--expect-version" => {
                     options.expected_version = Some(args.next().ok_or("missing_expected_version")?);
+                }
+                "--current-version" => {
+                    options.current_version = args.next().ok_or("missing_current_version")?;
                 }
                 _ => return Err("unknown_option"),
             }
@@ -155,7 +161,14 @@ mod smoke {
 
         let mut context = mock_context::<MockRuntime, _>(noop_assets());
         context.package_info_mut().name = "lolicode-updater-isolated-smoke".into();
-        context.package_info_mut().version = CURRENT_VERSION.parse().expect("fixed valid semver");
+        context.package_info_mut().version = match options.current_version.parse() {
+            Ok(version) => version,
+            Err(_) => {
+                reject(proof, "arguments", "invalid_current_version");
+                return;
+            }
+        };
+        proof["currentVersion"] = json!(options.current_version);
         context.config_mut().identifier = "art.treasuregrove.lolicode.updater-smoke".into();
         context
             .config_mut()

@@ -227,8 +227,10 @@ pub async fn create_agent_session(
     title: Option<String>,
     permission_mode: Option<String>,
     reasoning_effort: Option<String>,
+    project_path: Option<String>,
 ) -> Result<AgentSession, String> {
-    let mut session: AgentSession = native(&app, "createSession", json!({"modelId":model_id,"mode":mode,"title":title,"permissionMode":permission_mode.unwrap_or_else(|| "ask".into()),"reasoningEffort":reasoning_effort}), true).await?;
+    if let Some(path) = &project_path { check_project(&app, path)?; }
+    let mut session: AgentSession = native(&app, "createSession", json!({"projectPath":project_path,"modelId":model_id,"mode":mode,"title":title,"permissionMode":permission_mode.unwrap_or_else(|| "ask".into()),"reasoningEffort":reasoning_effort}), true).await?;
     decorate(&app, &mut session)?;
     Ok(session)
 }
@@ -637,7 +639,7 @@ fn command_receipt(value: &Value, session_id: &str, request_id: &str) -> Value {
         return json!({"status":"unknown"});
     }
     let status = match result["status"].as_str() {
-        Some("accepted" | "duplicate") => "accepted",
+        Some("accepted" | "duplicate" | "completed" | "cancelled") => "accepted",
         Some("rejected") => "rejected",
         Some("failed") => "failed",
         _ => "unknown",
@@ -735,7 +737,12 @@ pub async fn close_agent_project(app: AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn list_agent_native_capabilities(app: AppHandle) -> Result<Value, String> {
-    native(&app, "capabilities", json!({}), false).await
+    let mut value: Value = native(&app, "capabilities", json!({}), false).await?;
+    // CLI/content plugins are adapted by the desktop extension host. The core's
+    // generic JS-plugin/MCP flags remain false until those runtimes exist.
+    value["features"]["cliPlugins"] = json!(true);
+    value["features"]["pluginMarketplace"] = json!(true);
+    Ok(value)
 }
 #[tauri::command(rename_all = "camelCase")]
 pub async fn run_agent_saved_workflow(
@@ -752,6 +759,8 @@ pub async fn run_agent_saved_workflow(
     if !matches!(scope.as_str(), "project" | "global")
         || name.trim().is_empty()
         || request_id.trim().is_empty()
+        || request_id.len() > 256
+        || request_id.contains('\0')
         || !args.is_object()
     {
         return Err("工作流名称、参数或运行编号无效".into());
@@ -775,10 +784,12 @@ pub async fn run_agent_saved_workflow(
         &args,
     )
     .await?;
+    crate::services::agent_workflows::record_run(&app, &project_path, &session_id, &name, &scope, &request_id, &prompt).await?;
+    let locale = crate::settings::get_settings().language.unwrap_or_else(|| "zh".into());
     let _: Value = native(
         &app,
         "sendMessage",
-        json!({"sessionId":session_id,"requestId":request_id,"text":prompt,"locale":"zh"}),
+        json!({"sessionId":session_id,"requestId":request_id,"text":prompt,"locale":locale}),
         true,
     )
     .await?;
@@ -809,6 +820,7 @@ pub async fn invoke_agent_native_service(
             method.as_str(),
             "listSavedWorkflows"
                 | "getSavedWorkflow"
+                | "saveSavedWorkflow"
                 | "deleteSavedWorkflow"
                 | "listSavedWorkflowRuns"
         )
@@ -1002,6 +1014,14 @@ pub async fn save_agent_extension_config(app: AppHandle, config: Value) -> Resul
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn completed_and_cancelled_receipts_remain_accepted_after_lost_renderer_ack() {
+        for status in ["accepted", "completed", "cancelled"] {
+            let result=json!({"results":[{"key":{"sessionId":"owned","commandId":"owned-request"},"result":{"commandId":"owned-request","status":status}}]});
+            assert_eq!(command_receipt(&result,"lc:owned","owned-request")["status"],"accepted");
+            assert_eq!(command_receipt(&result,"lc:other","owned-request")["status"],"unknown");
+        }
+    }
     #[test]
     fn uncertain_commands_are_only_resolved_by_the_exact_native_command_key() {
         assert_eq!(

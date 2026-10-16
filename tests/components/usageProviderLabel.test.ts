@@ -27,6 +27,21 @@ describe("getUsageProviderLabel", () => {
     });
   });
 
+  it("labels newly supported desktop app usage without treating MiMo as MiniMax", () => {
+    expect(getUsageProviderLabel("MiMo (Session)", t).label).toBe(
+      "usage.sessionProvider.label:MiMo",
+    );
+    expect(getUsageProviderLabel("WorkBuddy (Session)", t).label).toBe(
+      "usage.sessionProvider.label:WorkBuddy",
+    );
+    expect(getUsageProviderLabel("DeepSeek Harness (Session)", t).label).toBe(
+      "usage.sessionProvider.label:DeepSeek Harness",
+    );
+    expect(getUsageProviderLabel("ZCode (Session)", t).label).toBe(
+      "usage.sessionProvider.label:ZCode",
+    );
+  });
+
   it("falls back to unknown provider for empty names", () => {
     expect(getUsageProviderLabel("", t).label).toBe("usage.unknownProvider");
     expect(getUsageProviderLabel(undefined, t).label).toBe(

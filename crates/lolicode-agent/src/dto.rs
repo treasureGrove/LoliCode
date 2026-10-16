@@ -164,6 +164,12 @@ pub struct AgentUsageTotals {
     pub tokens: AgentTokenUsage,
     pub model_requests: u64,
     pub reported_requests: u64,
+    /// Sum only requests with both input and output reported. Pending or
+    /// incomplete requests do not erase already accounted usage.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub total_tokens: Option<u64>,
+    #[serde(default)]
+    pub token_reported_requests: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cache_hit_rate: Option<f64>,
 }

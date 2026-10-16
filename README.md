@@ -12,7 +12,8 @@ LoliCode brings a desktop coding Agent, shared model channels, and an anime-insp
 
 - **One main Agent workspace:** streaming conversations, project files, terminal tools, permissions, questions, cancellation, session history, and file-change review.
 - **Shared channels and models:** manage API providers and supported account authorizations, discover models, and select available model options. Context limits and reasoning settings depend on the information and capabilities supplied by the upstream service.
-- **Configuration in one place:** manage provider settings, prompts, Skills, and MCP configuration for supported external AI tools. Configuration support and execution support are distinct; the built-in Agent reports its actual runtime capabilities.
+- **Configuration in one place:** apply shared models to supported external tools, including WorkBuddy, DeepSeek Harness, ZCode, and MiMo. Preserve existing configuration and show per-tool results.
+- **Memory and reusable tasks:** edit or disable local personal/project memory, save Markdown workflows, schedule tasks, and use verified CLI skills on demand. CLI tools and their accounts require separate setup; custom JS/MCP execution is not included.
 - **A characterful desktop:** an anime-inspired theme and a pink-haired chibi companion, with compact tool progress and a file-preview panel.
 - **Usage and updates:** view recorded usage and check for independently published LoliCode updates. The LoliCode community account is separate from model-provider accounts.
 
@@ -32,7 +33,7 @@ Existing data keeps the historical `~/.tai-switch` directory for compatibility. 
 
 ## What comes next
 
-LoliCode will grow around the same main Agent. Planned built-in applications include **UE tools** and **Tavern-style character interaction** as peer applications, sharing selected Agent capabilities. Persistent memory, voice, richer companion interaction, and the lightweight frontend/3D-focused **sillyLoli** model are future directions.
+LoliCode will grow around the same main Agent. Planned built-in applications include **UE tools** and **Tavern-style character interaction** as peer applications, sharing selected Agent capabilities. Advanced memory providers, voice, richer companion interaction, and the lightweight frontend/3D-focused **sillyLoli** model are future directions.
 
 These are plans, not shipped features. We adopt useful capabilities and components rather than bundling complete upstream products. Read the [product vision](docs/guides/lolicode-product-vision.md), [first milestone plan](docs/guides/lolicode-phase-one-plan.md), and [source/capability ledger](docs/guides/lolicode-platform-capabilities.json).
 

@@ -388,6 +388,10 @@ fn provider_name_coalesce(log_alias: &str, provider_alias: &str) -> String {
          WHEN '_grok_session' THEN 'Grok Build (Session)' \
          WHEN '_mcode_session' THEN 'MiniMax Code (Session)' \
          WHEN '_pi_session' THEN 'Pi (Session)' \
+         WHEN '_workbuddy_session' THEN 'WorkBuddy (Session)' \
+         WHEN '_deepseek-harness_session' THEN 'DeepSeek Harness (Session)' \
+         WHEN '_zcode_session' THEN 'ZCode (Session)' \
+         WHEN '_mimocode_session' THEN 'MiMo (Session)' \
          ELSE {log_alias}.provider_id END)"
     )
 }
@@ -2453,6 +2457,17 @@ impl Database {
 
         if has_cost || !has_usage {
             return Ok(false);
+        }
+
+        if crate::services::session_usage_desktop::DesktopSource::ALL
+            .iter().any(|source| source.app() == log.app_type)
+        {
+            let incomplete_cache: bool = conn.query_row(
+                "SELECT COALESCE(provider_type LIKE 'desktop-usage:%:cache-partial',0)
+                 FROM proxy_request_logs WHERE request_id=?1", [&log.request_id], |row| row.get(0))?;
+            // Missing counters are unknown, not zero. A pricing refresh must
+            // not silently turn a partial usage report into a complete cost.
+            if incomplete_cache { return Ok(false); }
         }
 
         let pricing = match Self::get_log_model_pricing_cached(conn, pricing_cache, log)? {

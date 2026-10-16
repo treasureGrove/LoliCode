@@ -1,6 +1,6 @@
 use super::{
     inference::{self, Delta},
-    context, persistence, tools, usage,
+    context, memory, persistence, tools, usage,
     types::*,
 };
 use crate::*;
@@ -61,6 +61,7 @@ struct Inner {
     grants: Mutex<Vec<Grant>>,
     skills: RwLock<Arc<Skills>>,
     loaded_skills: Mutex<BTreeSet<String>>,
+    memory_gate: Mutex<()>,
     gate: Mutex<()>,
     updating: AtomicBool,
     closed: AtomicBool,
@@ -136,6 +137,7 @@ impl NativeEngine {
                 grants: Mutex::new(grants),
                 skills: RwLock::new(Arc::new(Skills::default())),
                 loaded_skills: Mutex::new(BTreeSet::new()),
+                memory_gate: Mutex::new(()),
                 gate: Mutex::new(()),
                 updating: AtomicBool::new(false),
                 closed: AtomicBool::new(false),
@@ -314,6 +316,9 @@ impl NativeEngine {
                 | "closeProject"
                 | "beginUpdate"
                 | "endUpdate"
+                | "editMemory"
+                | "configureMemory"
+                | "clearMemory"
         );
         let _gate = if mutation {
             Some(self.inner.gate.lock().await)
@@ -324,6 +329,7 @@ impl NativeEngine {
             self.mutable()?;
         }
         match method {
+            "getMemory" | "editMemory" | "configureMemory" | "clearMemory" => self.memory_call(method, &args).await,
             "status" => {
                 let bound = self.bound().await.ok();
                 Ok(
@@ -421,7 +427,7 @@ impl NativeEngine {
                     .stored
                     .commands
                     .get(command)
-                    .map(|_| json!({"commandId":command,"status":"accepted"}));
+                    .map(|record| json!({"commandId":command,"status":record.status}));
                 Ok(
                     json!({"results":[{"key":{"sessionId":id.trim_start_matches("lc:"),"commandId":command},"result":result}]}),
                 )
@@ -770,8 +776,6 @@ impl NativeEngine {
         skills: Arc<Skills>,
         cancel: watch::Receiver<bool>,
     ) -> Result<(), String> {
-        let mut schemas = tools::schemas();
-        schemas.extend(internal_schemas());
         let mut reactive_retry = false;
         let mut needs_final_answer = false;
         // Continue until the model finishes, the user stops, or a real transport,
@@ -794,11 +798,19 @@ impl NativeEngine {
                 (state.stored.history.clone(), state.stored.context_summary.clone(),
                     project, mode, model, context, effort, system)
             };
-            if let Some(plan) = context::plan(&history, summary.as_deref(), &system, &schemas, context, false)? {
+            let memory = {
+                let _guard = self.inner.memory_gate.lock().await;
+                memory::load(&self.inner.root).await?
+            };
+            let remembered = memory.context(&project_key(&project));
+            let mut schemas = tools::schemas();
+            schemas.extend(internal_schemas());
+            if memory.enabled() { schemas.push(memory::schema()); }
+            if let Some(plan) = context::plan_with_memory(&history, summary.as_deref(), &system, &schemas, context, false, remembered.as_deref())? {
                 self.compact(&entry, &gateway, &model, effort.as_deref(), &system, &schemas, plan, cancel.clone()).await?;
                 continue;
             }
-            let messages = context::messages(&system, summary.as_deref(), &history);
+            let messages = context::with_memory(&system, summary.as_deref(), remembered.as_deref(), &history);
             let assistant_id = format!("assistant-{}", Uuid::new_v4());
             {
                 let mut state = entry.lock().await;
@@ -840,7 +852,7 @@ impl NativeEngine {
                         }
                         state.stored.snapshot.messages.retain(|message| message.id != assistant_id || !message.parts.is_empty());
                     }
-                    let plan = context::plan(&history, summary.as_deref(), &system, &schemas, context, true)?
+                    let plan = context::plan_with_memory(&history, summary.as_deref(), &system, &schemas, context, true, remembered.as_deref())?
                         .ok_or("上游报告上下文超限，但没有可安全整理的已完成历史；原记录已保留。")?;
                     self.compact(&entry, &gateway, &model, effort.as_deref(), &system, &schemas, plan, cancel.clone()).await?;
                     reactive_retry = true;
@@ -926,6 +938,9 @@ impl NativeEngine {
                             diffs: Vec::new(),
                             file_changes: Vec::new(),
                         })
+                } else if call.name == "memory" {
+                    self.memory_tool(&entry, &project, &mode, &input, cancel.clone()).await
+                        .map(|text| tools::ToolOutput { text, image_data_url: None, diffs: Vec::new(), file_changes: Vec::new() })
                 } else if call.name == "read_skill" {
                     self.read_skill(&entry, &skills, &input, context)
                         .await
@@ -994,6 +1009,54 @@ impl NativeEngine {
                 persistence::save(&self.inner.root, &state.stored).await?;
             }
         }
+    }
+
+    async fn memory_project(&self, args: &Value) -> Result<Option<String>, String> {
+        if let Some(path) = args["projectPath"].as_str() {
+            let path = canonical_project(Path::new(path)).await?;
+            let key = project_key(&path);
+            if !self.inner.bindings.read().await.contains_key(&key) { return Err("请先在工作台打开该项目".into()); }
+            Ok(Some(key))
+        } else {
+            Ok(self.bound().await.ok().map(|binding| project_key(&binding.project)))
+        }
+    }
+
+    async fn memory_call(&self, method: &str, args: &Value) -> Result<Value, String> {
+        let project = self.memory_project(args).await?;
+        let _guard = self.inner.memory_gate.lock().await;
+        let mut store = memory::load(&self.inner.root).await?;
+        if method != "getMemory" {
+            let mut input = args.clone();
+            input.as_object_mut().ok_or("记忆参数必须是对象")?.remove("projectPath");
+            match method {
+                "editMemory" => store.edit(project.as_deref(), &input)?,
+                "configureMemory" => store.configure(&input)?,
+                "clearMemory" => store.clear(&input, project.as_deref())?,
+                _ => return Err("无法识别记忆操作".into()),
+            }
+            memory::save(&self.inner.root, &store).await?;
+        }
+        Ok(store.snapshot(project.as_deref()))
+    }
+
+    async fn memory_tool(&self, entry: &Entry, project: &Path, mode: &str, input: &Value, cancel: watch::Receiver<bool>) -> Result<String, String> {
+        let key = project_key(project);
+        let inspection = {
+            let _guard = self.inner.memory_gate.lock().await;
+            memory::load(&self.inner.root).await?.inspect(&key, input)?
+        };
+        if mode == "plan" && inspection.mutating { return Err("分析模式不能修改跨会话记忆，请先批准实施或从记忆面板编辑".into()); }
+        if !self.authorize(entry, &inspection, "memory", input, cancel.clone()).await? { return Err("用户拒绝了记忆修改，原记忆保留".into()); }
+        if *cancel.borrow() { return Err(inference::CANCELLED.into()); }
+        let source = entry.lock().await.stored.snapshot.session.id.clone();
+        let _guard = self.inner.memory_gate.lock().await;
+        let mut store = memory::load(&self.inner.root).await?;
+        // Re-parse and validate after approval, because another session or the
+        // user's memory panel may have edited/disabled the store while waiting.
+        let result = store.execute(&key, input, &source)?;
+        if inspection.mutating { memory::save(&self.inner.root, &store).await?; }
+        Ok(result.to_string())
     }
 
     async fn compact(
@@ -1922,8 +1985,12 @@ fn effective_effort(
     let first_supported = metadata["reasoningEfforts"]
         .as_array()
         .and_then(|efforts| efforts.iter().find_map(Value::as_str));
+    let preferred = ["medium", "high"]
+        .into_iter()
+        .find(|effort| declared_effort(catalog, model, effort));
     valid_effort(manual)
         .or_else(|| valid_effort(configured_default))
+        .or(preferred)
         .or_else(|| valid_effort(first_supported))
         .map(str::to_owned)
 }
@@ -2087,3 +2154,26 @@ fn internal_schemas() -> Vec<Value> {
 #[cfg(test)]
 #[path = "outcome_tests.rs"]
 mod outcome_tests;
+
+#[cfg(test)]
+mod automatic_effort_tests {
+    use super::*;
+
+    #[test]
+    fn automatic_effort_prefers_medium_then_high_without_inventing_support() {
+        let model = AgentModelRef { provider_id: "channel".into(), model_id: "model".into() };
+        for (efforts, expected) in [
+            (json!(["low", "high", "medium", "max"]), Some("medium")),
+            (json!(["low", "high", "max"]), Some("high")),
+            (json!(["low", "max"]), Some("low")),
+            (json!([]), None),
+            (Value::Null, None),
+        ] {
+            let catalog = json!({"models":[{"providerId":"channel","modelId":"model","reasoningEfforts":efforts}]});
+            assert_eq!(effective_effort(&catalog, &model, None).as_deref(), expected);
+            assert_eq!(effective_effort(&catalog, &model, Some("low")).as_deref(), Some("low"));
+        }
+        let configured = json!({"models":[{"providerId":"channel","modelId":"model","reasoningEfforts":["low","medium","high"],"defaultReasoningEffort":"low"}]});
+        assert_eq!(effective_effort(&configured, &model, None).as_deref(), Some("low"));
+    }
+}

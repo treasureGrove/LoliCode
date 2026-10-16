@@ -1,6 +1,7 @@
 import type { TFunction } from "i18next";
 import { APP_DISPLAY_NAME } from "@/components/shell/AppGlyph";
 import type { AppId } from "@/lib/api";
+import { DESKTOP_USAGE_APPS } from "./desktopSources";
 
 /**
  * 后端给会话日志导入的用量返回的占位供应商名（`usage_stats.rs` 的
@@ -35,6 +36,15 @@ export function getUsageProviderLabel(
     return { label, shortLabel: label };
   }
   const app = SESSION_PROVIDER_APPS[name];
+  const desktopApp = Object.entries(DESKTOP_USAGE_APPS).find(
+    ([, label]) => `${label} (Session)` === name,
+  )?.[1];
+  if (desktopApp)
+    return {
+      label: t("usage.sessionProvider.label", { app: desktopApp }),
+      shortLabel: t("usage.sessionProvider.short"),
+      hint: t("usage.sessionProvider.hint"),
+    };
   if (!app) return { label: name, shortLabel: name };
   return {
     label: t("usage.sessionProvider.label", { app: APP_DISPLAY_NAME[app] }),

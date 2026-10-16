@@ -53,6 +53,45 @@ pub(crate) struct GatewayPeer(pub SocketAddr);
 #[derive(Clone)]
 pub(crate) struct GatewaySecrets(pub Vec<String>);
 
+#[derive(Clone, Copy)]
+struct GatewayClient(&'static str);
+
+pub(crate) fn is_external_client(client: &str) -> bool {
+    matches!(
+        client,
+        "workbuddy" | "deepseek-harness" | "zcode" | "mimocode"
+    )
+}
+
+/// Attribution comes from the generated configuration URL, never upstream model
+/// names or user-controlled forwarding headers.
+fn client_for_uri(uri: &http::Uri) -> Result<&'static str, ProxyError> {
+    let Some(path) = uri.path().strip_prefix("/tai/catalogs/") else {
+        return Ok("channel-gateway");
+    };
+    let segments: Vec<_> = path.split('/').collect();
+    if segments.get(1) != Some(&"clients") {
+        return Ok("channel-gateway");
+    }
+    match segments.get(2).copied() {
+        Some("workbuddy") => Ok("workbuddy"),
+        Some("deepseek-harness") => Ok("deepseek-harness"),
+        Some("zcode") => Ok("zcode"),
+        Some("mimocode") => Ok("mimocode"),
+        _ => Err(ProxyError::InvalidRequest("未知的客户端配置入口".into())),
+    }
+}
+
+pub(crate) fn external_client_base_url(catalog_base: &str, client: &str) -> Result<String, AppError> {
+    if !is_external_client(client) {
+        return Err(AppError::InvalidInput("未知的客户端配置入口".into()));
+    }
+    Ok(format!(
+        "{}/clients/{client}/v1",
+        catalog_base.trim_end_matches("/v1")
+    ))
+}
+
 pub(crate) fn gateway_base_url(address: &str, port: u16) -> Result<String, AppError> {
     let host = if address == "localhost" {
         "127.0.0.1".to_string()
@@ -240,6 +279,7 @@ pub(crate) async fn handle_models(
     request: Request,
 ) -> Result<Json<Value>, ProxyError> {
     authorize_request(&state, &request)?;
+    client_for_uri(request.uri())?;
     let snapshot = snapshot_for_uri(&state, request.uri())?;
     let data: Vec<Value> = snapshot
         .channels
@@ -444,8 +484,10 @@ pub(crate) async fn handle_gemini(
 
 async fn handle(state: ProxyState, request: Request, wire: Wire) -> Result<Response, ProxyError> {
     authorize_request(&state, &request)?;
+    let client = client_for_uri(request.uri())?;
     let snapshot = snapshot_for_uri(&state, request.uri())?;
     let (mut parts, raw_body) = request.into_parts();
+    parts.extensions.insert(GatewayClient(client));
     parts
         .extensions
         .insert(GatewaySecrets(vec![channel_center::gateway_token(
@@ -709,7 +751,10 @@ async fn forward(
         &headers,
         app.clone(),
         "Channel center",
-        "channel-gateway",
+        extensions
+            .get::<GatewayClient>()
+            .map(|client| client.0)
+            .unwrap_or("channel-gateway"),
         Some(explicit),
     )
     .await?;
@@ -1882,6 +1927,24 @@ mod tests {
             .await
             .unwrap();
         assert!(previous_response.status().is_success());
+        for app in ["workbuddy", "deepseek-harness", "zcode", "mimocode"] {
+            let client_base = external_client_base_url(&version_base, app).unwrap();
+            let uri: http::Uri = format!("{client_base}/chat/completions").parse().unwrap();
+            assert_eq!(client_for_uri(&uri).unwrap(), app);
+            let response = client
+                .post(format!("{client_base}/chat/completions"))
+                .bearer_auth(&token)
+                .json(&request)
+                .send()
+                .await
+                .unwrap();
+            assert!(response.status().is_success(), "{app}: {}", response.status());
+            let output: Value = response.json().await.unwrap();
+            assert_eq!(output["choices"][0]["finish_reason"], "tool_calls");
+        }
+        assert!(external_client_base_url(&version_base, "unknown").is_err());
+        assert_eq!(client.get(format!("{}/clients/unknown/v1/models",version_base.trim_end_matches("/v1")))
+            .bearer_auth(&token).send().await.unwrap().status(), http::StatusCode::BAD_REQUEST);
         assert_eq!(
             client
                 .post(format!("{base}/chat/completions"))

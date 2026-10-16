@@ -12,7 +12,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { useNewLayoutNoticePending } from "@/components/shell/NewLayoutDialog";
 import { settingsApi } from "@/lib/api";
 import { useSettingsQuery } from "@/lib/query";
 import {
@@ -153,12 +152,11 @@ export function WhatsNewDialog({
 /**
  * 启动时的更新摘要：当前版本比 settings.json 里记的 whatsNewSeenVersion 新，
  * 就把这之间有内容的版本弹给用户看，关掉后记下当前版本。
- * 排在欢迎弹窗和「界面改版了」后面，那两个确认时会顺手记下当前版本，不会接着弹。
+ * 欢迎弹窗确认后显示 LoliCode 的版本摘要。
  */
 export function WhatsNewNotice() {
   const queryClient = useQueryClient();
   const { data: settings } = useSettingsQuery();
-  const newLayoutPending = useNewLayoutNoticePending(settings);
   const { data: currentVersion } = useQuery({
     queryKey: ["app-version"],
     queryFn: () => getVersion(),
@@ -171,7 +169,6 @@ export function WhatsNewNotice() {
   const due =
     settings != null &&
     settings.firstRunNoticeConfirmed === true &&
-    newLayoutPending === false &&
     !!currentVersion &&
     isNewerThanSeen(currentVersion, seen);
 

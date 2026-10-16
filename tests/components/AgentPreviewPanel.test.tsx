@@ -6,6 +6,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { invoke } from "@tauri-apps/api/core";
 import {
   AgentPreviewPanel,
   isolatedAgentHtml,
@@ -20,6 +21,7 @@ import { agentFilesApi, type AgentFilePreview } from "@/lib/api/agent-files";
 vi.mock("@/lib/api/agent-files", () => ({
   agentFilesApi: { preview: vi.fn(), open: vi.fn() },
 }));
+vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 const file = (values: Partial<AgentFilePreview> = {}): AgentFilePreview => ({
   kind: "text",
   name: "readme.txt",
@@ -31,6 +33,12 @@ const file = (values: Partial<AgentFilePreview> = {}): AgentFilePreview => ({
   ...values,
 });
 beforeEach(() => {
+  vi.mocked(invoke)
+    .mockReset()
+    .mockResolvedValue({
+      dataUrl: "data:image/png;base64,aGVsbG8=",
+      mediaType: "image/png",
+    });
   vi.mocked(agentFilesApi.preview).mockReset().mockResolvedValue(file());
   vi.mocked(agentFilesApi.open).mockReset().mockResolvedValue();
 });
@@ -188,7 +196,7 @@ describe("Agent file previews", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
-  it("does not read local image links or render repeated assistant headers before the user acts", async () => {
+  it("renders session-scoped image previews without repeated assistant headers and keeps file actions", async () => {
     const preview = vi.fn();
     const view = render(
       <AgentFileActionsContext.Provider
@@ -213,11 +221,14 @@ describe("Agent file previews", () => {
     );
     expect(agentFilesApi.preview).not.toHaveBeenCalled();
     expect(view.container.querySelector(".wb-message-meta")).toBeNull();
-    expect(view.container.querySelector("img")).toBeNull();
-    fireEvent.click(
-      screen.getByRole("button", { name: "预览文件：/project/shot.png" }),
-    );
-    expect(preview).toHaveBeenCalledWith("/project/shot.png");
+    expect(
+      await screen.findByRole("button", { name: "放大图片：Screenshot" }),
+    ).toBeVisible();
+    expect(invoke).toHaveBeenCalledWith("get_agent_image", {
+      sessionId: "lc:session",
+      path: "/project/shot.png",
+    });
+    expect(preview).not.toHaveBeenCalled();
     fireEvent.click(
       screen.getByRole("button", {
         name: "打开所在文件夹：/project/result.html",

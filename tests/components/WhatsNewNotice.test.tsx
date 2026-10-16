@@ -159,16 +159,14 @@ describe("WhatsNewNotice", () => {
     expect(mocks.save).not.toHaveBeenCalled();
   });
 
-  it("waits while the new layout dialog is showing", async () => {
+  it("shows the product update without querying legacy providers or waiting for the retired layout notice", async () => {
     mocks.settings = {
       firstRunNoticeConfirmed: true,
       whatsNewSeenVersion: "4.0.1",
     };
     renderNotice();
-    await waitFor(() => expect(mocks.getAll).toHaveBeenCalled());
-    await settle();
-    expect(title()).not.toBeInTheDocument();
-    expect(mocks.save).not.toHaveBeenCalled();
+    expect(await screen.findByText("whatsNew.updatedTo")).toBeInTheDocument();
+    expect(mocks.getAll).not.toHaveBeenCalled();
   });
 
   it("shows when the new layout dialog does not apply", async () => {
@@ -201,12 +199,12 @@ describe("WhatsNewNotice", () => {
       screen.getAllByRole("button", { name: "whatsNew.versionDetails" })[0],
     );
     expect(mocks.openExternal).toHaveBeenCalledWith(
-      "https://github.com/treasureGrove/LoliCode/blob/TG/freehub-m0/CHANGELOG.md",
+      "https://github.com/treasureGrove/LoliCode-Releases/releases",
     );
 
     fireEvent.click(screen.getByRole("button", { name: "whatsNew.viewFull" }));
     expect(mocks.openExternal).toHaveBeenLastCalledWith(
-      "https://github.com/treasureGrove/LoliCode/blob/TG/freehub-m0/CHANGELOG.md",
+      "https://github.com/treasureGrove/LoliCode-Releases/releases",
     );
     await waitFor(() => expect(title()).not.toBeInTheDocument());
     expect(mocks.save).toHaveBeenCalledWith(

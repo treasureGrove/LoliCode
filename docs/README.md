@@ -7,10 +7,10 @@ LoliCode is a simple, extensible desktop Agent with an anime-inspired identity. 
 ## 开始使用 / Start here
 
 - 项目介绍：[中文](../README_ZH.md) · [English](../README.md) · [日本語](../README_JA.md) · [Deutsch](../README_DE.md)。
-- [下载与安装包 / Downloads](https://tools.treasuregrove.art/lolicode/)。
-- [社区与账户 / Community and account](https://lolicode.com)。
+- [下载与安装包 / Downloads](https://lolicode.com/)。
+- [社区与账户 / Community and account](https://lolicode.com/all)。
 - 安装与更新：[中文](user-manual/zh/1-getting-started/1.2-installation.md) · [English](user-manual/en/1-getting-started/1.2-installation.md) · [日本語](user-manual/ja/1-getting-started/1.2-installation.md)。
-- [更新记录 / Changelog](../CHANGELOG.md)与 [GitHub Releases](https://github.com/treasureGrove/LoliCode/releases)。
+- [更新记录 / Changelog](../CHANGELOG.md)与 [GitHub Releases](https://github.com/treasureGrove/LoliCode-Releases/releases)。
 - [获取帮助 / Support](../SUPPORT.md)与[安全报告 / Security](../SECURITY.md)。
 
 ## 当前实现 / Current implementation
@@ -18,6 +18,9 @@ LoliCode is a simple, extensible desktop Agent with an anime-inspired identity. 
 - [内置 Agent 的实际能力与限制](guides/lolicode-inprocess-agent.md)。
 - [Agent 交互约定](guides/lolicode-agent-interactions.md)。
 - [渠道中心与模型配置](CHANNEL_CENTER.md)。
+- [本机记忆](architecture/agent-memory.md)、[外部模型接入](architecture/external-model-config.md)与[本机用量](guides/local-agent-usage.md)。
+- [工作流、闲时任务与 CLI 市场](guides/agent-workflows-cli-adapter.md)。
+- [原生 Agent 的实际 GLM 验收](architecture/native-agent-live-acceptance.md)。
 - [Cherry Atelier 界面与装饰资源](guides/cherry-atelier-ui.md)。
 - [4.0.15 交付记录](guides/lolicode-4.0.15-delivery.md)：该版本的历史验证证据，不替代当前版本验收。
 
@@ -44,7 +47,7 @@ These documents include future work or architectural proposals, not a list of sh
 - [能力、来源与许可影响清单](guides/lolicode-platform-capabilities.json)。
 - [酒馆功能参考与接入边界](guides/lolicode-tavern-reference.md)。
 
-UE 工具、酒馆、长期记忆、语音及更多角色交互按阶段接入；它们尚未全部实现。
+UE 工具、酒馆、高级记忆提供者、语音及更多角色交互按阶段接入；它们尚未全部实现。本机个人/项目记忆已在当前原生核心中实现。
 
 ## 配置参考与历史资料 / Configuration reference and history
 

@@ -12,7 +12,8 @@ LoliCode verbindet einen Desktop-Agenten für Programmierung, gemeinsame Modellz
 
 - **Ein zentraler Agent:** gestreamte Gespräche, Projektdateien, Terminalwerkzeuge, Berechtigungsabfragen, Rückfragen und Auswahlmöglichkeiten, Abbruch, Gesprächsverlauf und Änderungsansicht.
 - **Gemeinsame Modelle und Zugänge:** API-Anbieter, unterstützte Kontoanmeldungen, Modellverzeichnisse und verfügbare Modelloptionen verwalten. Kontextgrenzen und Denkstufen hängen von den Angaben und Fähigkeiten des jeweiligen Dienstes ab.
-- **Zentrale Konfiguration:** Anbieter, Prompts, Skills und MCP-Konfiguration für unterstützte externe KI-Werkzeuge. Konfigurationsverwaltung und Ausführung durch den integrierten Agenten werden getrennt ausgewiesen.
+- **Zentrale Konfiguration:** Gemeinsame Modelle für unterstützte Werkzeuge wie WorkBuddy, DeepSeek Harness, ZCode und MiMo einrichten, bestehende Einstellungen erhalten und Ergebnisse pro Werkzeug anzeigen.
+- **Gedächtnis und wiederkehrende Aufgaben:** Lokale persönliche und Projekt-Erinnerungen bearbeiten oder deaktivieren, Markdown-Abläufe speichern und geplante oder Leerlauf-Aufgaben ausführen. Geprüfte CLI-Skills werden bei Bedarf geladen; CLI-Werkzeuge und Konten benötigen eine separate Einrichtung. Allgemeine JS/MCP-Plugins werden noch nicht ausgeführt.
 - **Ein Desktop mit Charakter:** Anime-Design, ein rosahaariges Chibi-Maskottchen, kompakte Werkzeugfortschritte und Dateivorschau in einer Seitenleiste.
 - **Verbrauch und Updates:** erfasste Nutzung anzeigen und eigenständige LoliCode-Updates prüfen. Das Community-Konto ist von den Konten der Modellanbieter getrennt.
 
@@ -32,7 +33,7 @@ Aus Kompatibilitätsgründen bleibt das bisherige Datenverzeichnis `~/.tai-switc
 
 ## Geplante Erweiterungen
 
-**UE-Werkzeuge** und **Tavern-artige Charaktergespräche** sollen als gleichrangige Anwendungen ausgewählte Fähigkeiten desselben Haupt-Agenten nutzen. Dauerhaftes Gedächtnis, Sprache, weitere Maskottchen-Interaktionen und das leichte, auf Frontend und 3D ausgerichtete Modell **sillyLoli** sind weitere Entwicklungsziele.
+**UE-Werkzeuge** und **Tavern-artige Charaktergespräche** sollen als gleichrangige Anwendungen ausgewählte Fähigkeiten desselben Haupt-Agenten nutzen. Erweiterte Gedächtnisanbieter, Sprache, weitere Maskottchen-Interaktionen und das leichte, auf Frontend und 3D ausgerichtete Modell **sillyLoli** sind weitere Entwicklungsziele.
 
 Diese Funktionen sind noch nicht vollständig ausgeliefert. Wir binden gezielte Fähigkeiten und Komponenten ein. Die vollständigen Programme der Referenzprojekte werden dadurch nicht automatisch übernommen. Siehe [Produktvision](docs/guides/lolicode-product-vision.md), [erster Meilenstein](docs/guides/lolicode-phase-one-plan.md) und [Funktions- und Quellenverzeichnis](docs/guides/lolicode-platform-capabilities.json).
 

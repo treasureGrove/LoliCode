@@ -605,7 +605,9 @@ pub(crate) fn normalize_gateway_usage(
     input_includes_cache: bool,
     mut usage: TokenUsage,
 ) -> TokenUsage {
-    if app_type == "channel-gateway" && input_includes_cache {
+    if (app_type == "channel-gateway" || super::channel_gateway::is_external_client(app_type))
+        && input_includes_cache
+    {
         usage.input_tokens = usage
             .input_tokens
             .saturating_sub(usage.cache_read_tokens)
@@ -1027,45 +1029,47 @@ mod tests {
                 ("json", parsed),
                 ("sse", (parser.stream_parser)(&events).unwrap()),
             ] {
-                let mut usage =
-                    normalize_gateway_usage("channel-gateway", parser.input_includes_cache, usage);
-                assert_eq!(usage.input_tokens, fresh, "{name}/{suffix}");
-                assert_eq!(usage.cache_read_tokens, 200);
-                assert_eq!(usage.cache_creation_tokens, cache_creation);
-                assert_eq!(usage.output_tokens, 50);
-                let id = format!("usage-{name}-{suffix}");
-                usage.message_id = Some(id.clone());
-                log_usage_internal(
-                    &state,
-                    "usage-channel",
-                    "channel-gateway",
-                    "usage-model",
-                    "usage-model",
-                    "usage-model",
-                    usage,
-                    10,
-                    None,
-                    suffix == "sse",
-                    200,
-                    None,
-                )
-                .await;
-                let conn = db.conn.lock().unwrap();
-                let row: (u32,u32,u32,i64,String) = conn.query_row(
-                    "SELECT input_tokens,cache_read_tokens,cache_creation_tokens,input_token_semantics,total_cost_usd
-                     FROM proxy_request_logs WHERE request_id LIKE ?1",
-                    [format!("%:{id}")],
-                    |row| Ok((row.get(0)?,row.get(1)?,row.get(2)?,row.get(3)?,row.get(4)?)),
-                ).unwrap();
-                assert_eq!((row.0, row.1, row.2), (fresh, 200, cache_creation));
-                assert_eq!(
-                    row.3,
-                    crate::services::sql_helpers::INPUT_TOKEN_SEMANTICS_FRESH
-                );
-                assert_eq!(
-                    Decimal::from_str(&row.4).unwrap(),
-                    Decimal::from_str(expected_cost).unwrap()
-                );
+                for app in ["channel-gateway", "workbuddy", "deepseek-harness", "zcode", "mimocode"] {
+                  let mut usage =
+                      normalize_gateway_usage(app, parser.input_includes_cache, usage.clone());
+                  assert_eq!(usage.input_tokens, fresh, "{name}/{suffix}");
+                  assert_eq!(usage.cache_read_tokens, 200);
+                  assert_eq!(usage.cache_creation_tokens, cache_creation);
+                  assert_eq!(usage.output_tokens, 50);
+                  let id = format!("usage-{app}-{name}-{suffix}");
+                  usage.message_id = Some(id.clone());
+                  log_usage_internal(
+                      &state,
+                      "usage-channel",
+                      app,
+                      "usage-model",
+                      "usage-model",
+                      "usage-model",
+                      usage,
+                      10,
+                      None,
+                      suffix == "sse",
+                      200,
+                      None,
+                  )
+                  .await;
+                  let conn = db.conn.lock().unwrap();
+                  let row: (u32,u32,u32,i64,String) = conn.query_row(
+                      "SELECT input_tokens,cache_read_tokens,cache_creation_tokens,input_token_semantics,total_cost_usd
+                       FROM proxy_request_logs WHERE request_id LIKE ?1",
+                      [format!("%:{id}")],
+                      |row| Ok((row.get(0)?,row.get(1)?,row.get(2)?,row.get(3)?,row.get(4)?)),
+                  ).unwrap();
+                  assert_eq!((row.0, row.1, row.2), (fresh, 200, cache_creation));
+                  assert_eq!(
+                      row.3,
+                      crate::services::sql_helpers::INPUT_TOKEN_SEMANTICS_FRESH
+                  );
+                  assert_eq!(
+                      Decimal::from_str(&row.4).unwrap(),
+                      Decimal::from_str(expected_cost).unwrap()
+                  );
+                }
             }
         }
     }

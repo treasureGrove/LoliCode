@@ -89,10 +89,10 @@ describe("language and links", () => {
 
   it("opens LoliCode's own changelog for every language and historical version", () => {
     expect(changelogUrl("en", "4.0.2")).toBe(
-      "https://github.com/treasureGrove/LoliCode/blob/TG/freehub-m0/CHANGELOG.md",
+      "https://github.com/treasureGrove/LoliCode-Releases/releases",
     );
     expect(changelogUrl("zh-TW")).toBe(
-      "https://github.com/treasureGrove/LoliCode/blob/TG/freehub-m0/CHANGELOG.md",
+      "https://github.com/treasureGrove/LoliCode-Releases/releases",
     );
   });
 });

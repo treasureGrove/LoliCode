@@ -16,7 +16,7 @@ const SETTINGS_KEY: &str = "channel_center";
 const TOKEN_KEY: &str = "channel_center_gateway_token";
 const APPLIED_KEY: &str = "channel_center_applied";
 const BACKGROUND_KEY: &str = "channel_center_requires_background";
-const TARGETS: [&str; 10] = [
+const TARGETS: [&str; 14] = [
     "claude",
     "claude-desktop",
     "codex",
@@ -27,6 +27,10 @@ const TARGETS: [&str; 10] = [
     "openclaw",
     "pi",
     "mcode",
+    "workbuddy",
+    "deepseek-harness",
+    "zcode",
+    "mimocode",
 ];
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -2573,6 +2577,30 @@ async fn ensure_gateway_running(
     Ok(())
 }
 
+async fn apply_external_target(
+    state: &AppState,
+    snapshot: &ChannelCenterSnapshot,
+    target: &str,
+    gateway: &(String, String),
+) -> Result<String, AppError> {
+    prepare_gateway_write(state.db.as_ref(), snapshot.revision)?;
+    ensure_gateway_running(state, &gateway.0, snapshot.revision).await?;
+    let base = crate::proxy::channel_gateway::external_client_base_url(&gateway.0, target)?;
+    let source = aggregate_source(snapshot, &base, &gateway.1, "openai_chat");
+    let default = snapshot.default_model.clone().ok_or_else(|| {
+        AppError::InvalidInput("没有可用的默认 API 模型，客户端配置未改动".into())
+    })?;
+    let owned_target = target.to_string();
+    let outcome = tauri::async_runtime::spawn_blocking(move || {
+        super::external_agent_config::apply(&owned_target, &source, &default)
+    })
+    .await
+    .map_err(|_| AppError::Message("客户端配置任务执行失败".into()))??;
+    ensure_gateway_running(state, &gateway.0, snapshot.revision).await?;
+    commit_applied(state.db.as_ref(), snapshot)?;
+    Ok(outcome.message)
+}
+
 /// Every selected target gets an independent result. A successful DB save alone is not success.
 pub async fn apply(
     state: &AppState,
@@ -2648,14 +2676,13 @@ pub async fn apply(
         })
         .collect();
     let native_count = models.len().saturating_sub(api_models.len());
-    let any_gateway = snapshot
-        .targets
-        .iter()
-        .filter_map(|app| AppType::from_str(app).ok())
-        .any(|app| {
-            !api_models.is_empty()
-                && native_selection_for(&snapshot, &app).is_none()
-                && needs_gateway(&api_snapshot, &app)
+    let any_gateway = !api_models.is_empty()
+        && snapshot.targets.iter().any(|target| {
+            super::external_agent_config::TARGETS.contains(&target.as_str())
+                || AppType::from_str(target).ok().is_some_and(|app| {
+                    native_selection_for(&snapshot, &app).is_none()
+                        && needs_gateway(&api_snapshot, &app)
+                })
         });
     let mut gateway_error = None;
     let gateway = if any_gateway {
@@ -2693,6 +2720,20 @@ pub async fn apply(
         None
     };
     for target in &snapshot.targets {
+        if super::external_agent_config::TARGETS.contains(&target.as_str()) {
+            let (status, message) = if api_models.is_empty() {
+                ("skipped", "此工具没有可用 API 渠道；原生登录账号只用于对应工具，配置未改动".into())
+            } else if let Some(gateway) = &gateway {
+                match apply_external_target(state, &api_snapshot, target, gateway).await {
+                    Ok(message) => ("success", message),
+                    Err(error) => ("error", crate::error_for_log(&error.to_string())),
+                }
+            } else {
+                ("error", gateway_error.clone().unwrap_or_else(|| "本地渠道服务不可用".into()))
+            };
+            report.results.push(ChannelApplyResult { app: target.clone(), status: status.into(), message });
+            continue;
+        }
         let app = AppType::from_str(target)?;
         if let Some(native) = native_selection_for(&snapshot, &app) {
             let checked_app = app.clone();
@@ -3012,6 +3053,16 @@ mod tests {
             default_model: Some("one/model-b".into()),
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn external_targets_roundtrip_without_changing_client_files() {
+        let db = Database::memory().unwrap();
+        let mut configured = snapshot();
+        configured.targets = super::super::external_agent_config::TARGETS.iter().map(|target| target.to_string()).collect();
+        save(&db, configured).unwrap();
+        assert_eq!(load(&db).unwrap().targets, ["workbuddy", "deepseek-harness", "zcode", "mimocode"]);
+        assert!(db.get_setting(APPLIED_KEY).unwrap().is_none());
     }
 
     #[test]

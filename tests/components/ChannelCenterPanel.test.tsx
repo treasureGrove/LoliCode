@@ -186,7 +186,47 @@ function fillApi() {
   });
 }
 
+function modelList(channel = "DeepSeek") {
+  const expand = screen.queryByRole("button", { name: `展开 ${channel} 模型` });
+  if (expand) fireEvent.click(expand);
+  return screen.getByRole("group", { name: `${channel} 模型列表` });
+}
+
 describe("ChannelCenterPanel", () => {
+  it("offers external agent targets without selecting them until requested", async () => {
+    saved = structuredClone(populated);
+    render(<ChannelCenterPanel />);
+    await ready();
+    for (const name of [
+      "WorkBuddy",
+      "DeepSeek Harness",
+      "ZCode",
+      "MiMo Code",
+    ]) {
+      expect(screen.getByRole("checkbox", { name })).not.toBeChecked();
+    }
+    for (const name of [
+      "WorkBuddy",
+      "DeepSeek Harness",
+      "ZCode",
+      "MiMo Code",
+    ]) {
+      fireEvent.click(screen.getByRole("checkbox", { name }));
+      await waitFor(() =>
+        expect(screen.getByRole("checkbox", { name })).toBeChecked(),
+      );
+    }
+    fireEvent.click(screen.getByRole("button", { name: "一键配置 7 个工具" }));
+    await waitFor(() => expect(channelCenterApi.apply).toHaveBeenCalled());
+    expect(saved.targets).toEqual(
+      expect.arrayContaining([
+        "workbuddy",
+        "deepseek-harness",
+        "zcode",
+        "mimocode",
+      ]),
+    );
+  });
   it("reveals a key only after the eye action and hides it when switching channels", async () => {
     render(<ChannelCenterPanel />);
     await ready();
@@ -217,10 +257,8 @@ describe("ChannelCenterPanel", () => {
     );
     render(<ChannelCenterPanel />);
     await ready();
-    const list = screen.getByRole("group", { name: "DeepSeek 模型列表" });
-    expect(
-      within(list).getByText(/思考强度：low/),
-    ).toBeInTheDocument();
+    const list = modelList();
+    expect(within(list).getByText(/思考强度：low/)).toBeInTheDocument();
     expect(
       screen.queryByRole("combobox", { name: /默认思考强度/ }),
     ).not.toBeInTheDocument();
@@ -275,7 +313,7 @@ describe("ChannelCenterPanel", () => {
               finish = () => resolve(structuredClone(saved));
             }),
         );
-      const list = screen.getByRole("group", { name: "DeepSeek 模型列表" });
+      const list = modelList();
       const firstModel = within(list).getByRole("checkbox", {
         name: "DeepSeek · DeepSeek Chat",
       });
@@ -313,8 +351,8 @@ describe("ChannelCenterPanel", () => {
     );
     render(<ChannelCenterPanel />);
     await ready();
-    const list = screen.getByRole("group", { name: "DeepSeek 模型列表" });
-    expect(list).toHaveClass("max-h-96", "overflow-y-auto");
+    const list = modelList();
+    expect(list).toHaveClass("lolicode-model-list");
     fireEvent.change(screen.getByRole("textbox", { name: "搜索渠道或模型" }), {
       target: { value: "extra-model-89" },
     });
@@ -410,7 +448,7 @@ describe("ChannelCenterPanel", () => {
     );
     render(<ChannelCenterPanel />);
     await ready();
-    const list = screen.getByRole("group", { name: "DeepSeek 模型列表" });
+    const list = modelList();
     const model = within(list).getByRole("checkbox", {
       name: "DeepSeek · DeepSeek Chat",
     });
@@ -706,6 +744,7 @@ describe("ChannelCenterPanel", () => {
         }),
       );
       expect(screen.getByText("仅原生工具")).toBeInTheDocument();
+      modelList(`${brand} 原生订阅`);
       expect(
         screen.getByText("native-default · 由原生工具管理"),
       ).toBeInTheDocument();
@@ -888,6 +927,7 @@ describe("ChannelCenterPanel", () => {
     render(<ChannelCenterPanel />);
     await ready();
     expect(screen.queryByLabelText("API 地址")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /^展开更多服务/ }));
     const kimi = screen.getByRole("button", { name: "Kimi · 中国" });
     expect(kimi.querySelector("svg")).not.toBeNull();
     fireEvent.click(kimi);
@@ -1011,13 +1051,11 @@ describe("ChannelCenterPanel", () => {
   it("lets a user search more existing services and pick a regional endpoint", async () => {
     render(<ChannelCenterPanel />);
     await ready();
-    fireEvent.click(screen.getByRole("button", { name: "更多服务" }));
+    fireEvent.click(screen.getByRole("button", { name: /^展开更多服务/ }));
     fireEvent.change(screen.getByLabelText("搜索服务"), {
       target: { value: "Kimi Global" },
     });
-    fireEvent.change(screen.getByLabelText("更多渠道服务"), {
-      target: { value: "opencode:Kimi Global" },
-    });
+    fireEvent.click(screen.getByRole("button", { name: "Kimi Global" }));
     fireEvent.change(screen.getByLabelText("API Key"), {
       target: { value: "fixture-global-key" },
     });
@@ -1197,9 +1235,11 @@ describe("ChannelCenterPanel", () => {
     );
     render(<ChannelCenterPanel />);
     await ready();
+    modelList();
     expect(
       screen.getByRole("checkbox", { name: "DeepSeek · embedding-model" }),
     ).toBeDisabled();
+    modelList();
     expect(
       screen.getByRole("checkbox", { name: "DeepSeek · embedding-model" }),
     ).not.toBeChecked();

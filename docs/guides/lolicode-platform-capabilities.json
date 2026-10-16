@@ -1,13 +1,13 @@
 {
   "schemaVersion": 4,
-  "reviewedAt": "2026-10-15",
+  "reviewedAt": "2026-10-17",
   "status": "product-aligned-single-anime-agent-first-agent-interactions-then-ue-tavern",
   "supersedes": "complete-upstream-runtime-and-companion-app-first proposal",
   "productLicensingDecision": "undecided",
   "product": {
     "platforms": ["windows", "macos", "linux"],
     "webPriority": "later",
-    "architecture": "electron-react-typescript-own-host-rust-native-core",
+    "architecture": "tauri2-react-typescript-own-host-rust-native-core",
     "integrationUnit": "feature-module-or-library",
     "hostComposition": "modular-monolith",
     "agent": "one-owned-kernel-with-domain-policies",
@@ -139,11 +139,11 @@
     {
       "id": "hermes",
       "repository": "NousResearch/hermes-agent",
-      "revision": "450ad5055eb3c4852d96676ee99287d618bd283a",
+      "revision": "848fc0ad8be766b9dc10fe42bd80b5fc2d45d95c",
       "licenseObserved": "MIT",
-      "usage": "candidate-persistent-memory-and-memory-provider-mechanisms",
-      "status": "candidate-not-adopted",
-      "impact": "Root license observed only; audit selected files, Python dependency closure and separately licensed memory plugins; do not assume complete Hermes runtime is required or adopted."
+      "usage": "bounded-user-project-memory-and-snapshot-design-reference",
+      "status": "independent-native-implementation-no-hermes-runtime",
+      "impact": "MIT reference; this implementation does not copy or bundle Hermes runtime code. Advanced providers and separately licensed memory plugins remain future candidates. See docs/architecture/agent-memory.md."
     }
   ],
   "provenance": {
@@ -310,10 +310,10 @@
       "title": "Skills 内容与作用域",
       "owner": "agent-services",
       "sourceIds": ["current", "dsh", "ccswitch"],
-      "current": "native-support-declared-not-revalidated",
+      "current": "native-bundled-content-and-eight-cli-packages-with-on-demand-references",
       "target": "protocol-and-content-support",
       "phase": 4,
-      "status": "proposed-or-preserve-not-accepted",
+      "status": "native-content-accepted-js-mcp-hosts-not-included",
       "accept": [
         "discovery",
         "content and referenced resources",
@@ -381,11 +381,11 @@
       "id": "automation",
       "title": "工作流、定时与后台任务",
       "owner": "task-service",
-      "sourceIds": ["current", "dsh"],
-      "current": "native-declared-disabled",
+      "sourceIds": ["current", "dsh", "zcode"],
+      "current": "native-markdown-workflows-and-desktop-scheduler",
       "target": "own-module",
       "phase": 4,
-      "status": "proposed-or-preserve-not-accepted",
+      "status": "native-runs-accepted-windows-idle-verified-other-os-pending",
       "accept": [
         "durable schedules",
         "missed run policy",
@@ -717,10 +717,10 @@
       "title": "持久记忆、用户偏好与提供者",
       "owner": "memory-service",
       "sourceIds": ["hermes"],
-      "current": "not-accepted-as-shipped-feature",
+      "current": "native-bounded-editable-user-and-project-memory",
       "target": "local-first-owned-memory-service",
       "phase": 4,
-      "status": "product-roadmap-not-implemented",
+      "status": "native-basics-accepted-advanced-providers-planned",
       "accept": [
         "user preferences and agent experience",
         "project and domain scope",

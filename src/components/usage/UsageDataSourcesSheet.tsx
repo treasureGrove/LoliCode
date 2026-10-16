@@ -17,6 +17,7 @@ import { APP_DISPLAY_NAME } from "@/components/shell/AppGlyph";
 import { KNOWN_APP_TYPES } from "@/types/usage";
 import { cn } from "@/lib/utils";
 import { getResolvedLang, joinNames } from "./format";
+import { DESKTOP_USAGE_APPS } from "./desktopSources";
 
 interface UsageDataSourcesSheetProps {
   open: boolean;
@@ -95,7 +96,10 @@ export function UsageDataSourcesSheet({
 }: UsageDataSourcesSheetProps) {
   const { t, i18n } = useTranslation();
   const coveredApps = joinNames(
-    KNOWN_APP_TYPES.map((app) => APP_DISPLAY_NAME[app]),
+    [
+      ...KNOWN_APP_TYPES.map((app) => APP_DISPLAY_NAME[app]),
+      ...Object.values(DESKTOP_USAGE_APPS),
+    ],
     getResolvedLang(i18n),
   );
   const cadence = sessionAutoSyncEnabled

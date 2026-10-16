@@ -1,9 +1,8 @@
 //! 托盘菜单（v7）
 //!
 //! 结构：问题区（出问题才有）→ 反馈行（托盘里刚做完要重启才生效的操作）→ 打开 LoliCode →
-//! 切换式应用的子菜单（Claude Code、Claude Desktop、Codex、Gemini CLI、Grok Build；在「应用」页
-//! 隐藏的不列）→ 轻量模式 → 打开官方网站 / 退出 LoliCode。累加式应用（OpenCode / OpenClaw /
-//! Hermes / Pi / MiniMax Code）不进托盘；托盘里不切模式、不启停路由服务。
+//! 轻量模式 → 打开官方网站 / 退出 LoliCode。
+//! 外部客户端统一在渠道中心配置，托盘不再重复展示供应商切换子菜单。
 //!
 //! 分三层：`collect_*` 从数据库和设备状态读出快照，`build_menu_model` 把快照变成纯数据的菜单
 //! 模型（单测覆盖这一层），`attach_*` 把模型挂到 Tauri 原生菜单上。
@@ -33,14 +32,10 @@ const COPILOT_UNIT_PREMIUM: &str = "requests";
 
 pub const TRAY_ID: &str = "cc-switch";
 
-/// 进托盘的应用，顺序和侧栏一致。累加式应用没有「当前供应商」，不进托盘。
-pub const TRAY_APPS: [AppType; 5] = [
-    AppType::Claude,
-    AppType::ClaudeDesktop,
-    AppType::Codex,
-    AppType::Gemini,
-    AppType::GrokBuild,
-];
+/// Client providers are configured in LoliCode's shared channel center. The
+/// product tray no longer offers a parallel CC Switch provider switcher.
+pub const TRAY_APPS: [AppType; 0] = [];
+const OFFICIAL_WEBSITE: &str = "https://lolicode.com/";
 
 /// 应用全称（产品名，不翻译）。用全称是为了把 Claude Code 和 Claude Desktop 分开。
 fn app_display_name(app: &AppType) -> &'static str {
@@ -2666,7 +2661,7 @@ pub fn handle_tray_menu_event(app: &tauri::AppHandle, event_id: &str) {
     match event_id {
         "show_main" => show_main_window(app),
         "open_website" => {
-            if let Err(e) = app.opener().open_url("https://ccswitch.io", None::<String>) {
+            if let Err(e) = app.opener().open_url(OFFICIAL_WEBSITE, None::<String>) {
                 log::error!("打开官方网站失败: {e}");
             }
         }
@@ -2868,18 +2863,10 @@ mod tests {
     }
 
     #[test]
-    fn tray_lists_switch_apps_in_sidebar_order_without_additive_apps() {
+    fn product_tray_does_not_duplicate_the_channel_center() {
         let names: Vec<&str> = TRAY_APPS.iter().map(app_display_name).collect();
-        assert_eq!(
-            names,
-            [
-                "Claude Code",
-                "Claude Desktop",
-                "Codex",
-                "Gemini CLI",
-                "Grok Build"
-            ]
-        );
+        assert!(names.is_empty());
+        assert_eq!(OFFICIAL_WEBSITE, "https://lolicode.com/");
         for app in TRAY_APPS {
             assert!(!app.is_additive_mode(), "{app:?} 是累加式应用，不进托盘");
         }
