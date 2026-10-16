@@ -10,6 +10,7 @@ import type { AppId } from "@/lib/api";
 import { fmtInt, fmtUsd } from "./format";
 import { UsageHeatmap } from "./UsageHeatmap";
 import { usageKeys } from "@/lib/query/usage";
+import { CopilotBillingPanel } from "./CopilotBillingPanel";
 
 type Period = "today" | "week" | "all";
 
@@ -168,6 +169,7 @@ export function SimpleUsagePage() {
             正在加载用量…
           </p>
         )}
+        <CopilotBillingPanel />
       </div>
     </>
   );

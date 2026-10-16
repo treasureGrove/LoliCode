@@ -759,6 +759,26 @@ impl CopilotAuthManager {
         accounts.get(account_id).map(GitHubAccount::from)
     }
 
+    /// Backend-only access to the GitHub OAuth credential, never the short-lived
+    /// Copilot inference token. No Tauri command exposes this method.
+    pub(crate) async fn github_billing_credential(
+        &self,
+        account_id: &str,
+        username: &str,
+    ) -> Result<String, String> {
+        let accounts = self.accounts.read().await;
+        let account = accounts
+            .get(account_id)
+            .ok_or_else(|| "Copilot 账号不存在，请重新选择账号".to_string())?;
+        if account.github_domain != DEFAULT_GITHUB_DOMAIN {
+            return Err("个人 Copilot 官方账单仅支持 GitHub.com 账号".into());
+        }
+        if !account.user.login.eq_ignore_ascii_case(username) {
+            return Err("账单用户名与所选 Copilot 账号不一致".into());
+        }
+        Ok(account.github_token.clone())
+    }
+
     /// 移除指定账号
     pub async fn remove_account(&self, account_id: &str) -> Result<(), CopilotAuthError> {
         log::info!("[CopilotAuth] 移除账号: {account_id}");

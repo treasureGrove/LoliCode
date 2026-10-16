@@ -5,12 +5,15 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SimpleUsagePage } from "@/components/usage/SimpleUsagePage";
 import { usageApi } from "@/lib/api/usage";
 import { channelCenterApi } from "@/lib/api/channel-center";
+import { copilotListAccounts } from "@/lib/api/copilot";
+import { copilotBillingApi } from "@/lib/api/copilotBilling";
 
 vi.mock("@/lib/api/usage", () => ({
   usageApi: {
@@ -22,6 +25,21 @@ vi.mock("@/lib/api/usage", () => ({
 }));
 vi.mock("@/lib/api/channel-center", () => ({
   channelCenterApi: { get: vi.fn() },
+}));
+vi.mock("@/lib/api/copilotBilling", () => ({
+  COPILOT_BILLING_QUERY_KEY: ["copilot", "billing", "reports"],
+  copilotBillingApi: {
+    listReports: vi.fn().mockResolvedValue([]),
+    sync: vi.fn(),
+  },
+}));
+vi.mock("@/lib/api/copilot", () => ({
+  copilotListAccounts: vi.fn().mockResolvedValue([]),
+  copilotGetAuthStatus: vi.fn().mockResolvedValue({
+    authenticated: false,
+    default_account_id: null,
+    accounts: [],
+  }),
 }));
 function mount() {
   const client = new QueryClient({
@@ -37,6 +55,8 @@ function mount() {
   };
 }
 beforeEach(() => {
+  vi.mocked(copilotBillingApi.listReports).mockResolvedValue([]);
+  vi.mocked(copilotListAccounts).mockResolvedValue([]);
   vi.mocked(usageApi.getUsageFirstDate).mockResolvedValue(null);
   vi.mocked(usageApi.getUsageTrends).mockResolvedValue([]);
   vi.mocked(usageApi.getUsageSummary).mockResolvedValue({
@@ -57,6 +77,53 @@ beforeEach(() => {
   });
 });
 describe("basic usage", () => {
+  it("keeps official Copilot billing separate from local request estimates and time filters", async () => {
+    const now = new Date();
+    vi.mocked(copilotListAccounts).mockResolvedValue([
+      {
+        id: "personal-alice",
+        login: "alice",
+        avatar_url: null,
+        authenticated_at: 0,
+        github_domain: "github.com",
+      },
+    ]);
+    vi.mocked(copilotBillingApi.listReports).mockResolvedValue([
+      {
+        accountLogin: "alice",
+        year: now.getFullYear(),
+        month: now.getMonth() + 1,
+        kind: "ai_credits",
+        fetchedAt: Math.floor(now.getTime() / 1000),
+        source: "github-billing-api",
+        items: [
+          {
+            product: "Copilot AI Credits",
+            sku: "AI Credit",
+            model: "example-model",
+            unitType: "ai-credits",
+            pricePerUnit: 0.01,
+            grossQuantity: 900,
+            grossAmount: 9,
+            discountQuantity: 800,
+            discountAmount: 8,
+            netQuantity: 100,
+            netAmount: 1,
+          },
+        ],
+      },
+    ]);
+    mount();
+    const official = within(
+      screen.getByRole("region", { name: "GitHub Copilot 官方账单" }),
+    );
+    expect(await official.findAllByText("US$1.00")).toHaveLength(2);
+    expect(await screen.findByText("$0.1234")).toBeInTheDocument();
+    expect(screen.queryByText("$1.1234")).not.toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole("button", { name: "全部" }));
+    expect(official.getAllByText("US$1.00")).toHaveLength(2);
+    expect(screen.getByText("$0.1234")).toBeInTheDocument();
+  });
   it("keeps recorded daily data if the first-date background refresh fails", async () => {
     vi.mocked(usageApi.getUsageFirstDate).mockResolvedValue("2024-01-01");
     const { client } = mount();
