@@ -1,22 +1,22 @@
-/* Cream, berry and lavender workbench surfaces share the shell's theme tokens.
-   Decorations stay in welcome areas; chat, tools and diffs remain readable. */
+/* Neutral, compact workbench surfaces follow ZCode's calm, operational style. */
 .lolicode-workbench,
 .wb-extensions {
-  --wb-bg: var(--bg-app, #fff9f6);
-  --wb-sidebar: var(--bg-sidebar, #fff3f5);
-  --wb-panel: var(--bg-card, #fffdfb);
-  --wb-input: var(--bg-card, #fffdfb);
-  --wb-text: var(--text-1, #3b2c38);
-  --wb-muted: var(--text-2, #796775);
-  --wb-border: var(--brand-border, #e8d6df);
-  --wb-hover: var(--brand-pink-soft, #fbe9f0);
-  --wb-selected: var(--brand-pink-soft, #fbe9f0);
-  --wb-button: var(--action-bg, #c04f7d);
-  --wb-button-text: var(--action-fg, #fff);
-  --wb-accent: var(--brand-berry, #c04f7d);
-  --wb-accent-soft: var(--brand-pink-soft, #fbe9f0);
-  --wb-lavender: var(--brand-lavender, #8d79bb);
-  --wb-lavender-soft: var(--brand-lavender-soft, #f0ebf9);
+  --wb-bg: #fafafa;
+  --wb-sidebar: #f5f5f5;
+  --wb-panel: #fff;
+  --wb-input: #fff;
+  --wb-text: #202124;
+  --wb-muted: #74777c;
+  --wb-border: #e4e5e7;
+  --wb-hover: #eeeeef;
+  --wb-selected: #e9eaec;
+  --wb-button: #202124;
+  --wb-button-hover: #383a3e;
+  --wb-button-text: #fff;
+  --wb-accent: #2d75c7;
+  --wb-accent-soft: #eaf2fb;
+  --wb-lavender: #2d75c7;
+  --wb-lavender-soft: #eaf2fb;
   color: var(--wb-text);
   background: var(--wb-bg);
   font-size: 14px;
@@ -30,21 +30,22 @@
 }
 .dark .lolicode-workbench,
 .dark .wb-extensions {
-  --wb-bg: var(--bg-app, #241e2b);
-  --wb-sidebar: var(--bg-sidebar, #2d2333);
-  --wb-panel: var(--bg-card, #332938);
-  --wb-input: var(--bg-card, #332938);
-  --wb-text: var(--text-1, #f9edf4);
-  --wb-muted: var(--text-2, #cfb9c9);
-  --wb-border: var(--brand-border, #514154);
-  --wb-hover: var(--brand-pink-soft, #48303e);
-  --wb-selected: var(--brand-pink-soft, #48303e);
-  --wb-button: var(--action-bg, #f0a4c4);
-  --wb-button-text: var(--action-fg, #2b1927);
-  --wb-accent: var(--brand-berry, #f0a4c4);
-  --wb-accent-soft: var(--brand-pink-soft, #48303e);
-  --wb-lavender: var(--brand-lavender, #cab2ec);
-  --wb-lavender-soft: var(--brand-lavender-soft, #40364f);
+  --wb-bg: #171819;
+  --wb-sidebar: #1d1e20;
+  --wb-panel: #202123;
+  --wb-input: #202123;
+  --wb-text: #e7e8ea;
+  --wb-muted: #a1a3a7;
+  --wb-border: #343639;
+  --wb-hover: #2b2c2f;
+  --wb-selected: #303236;
+  --wb-button: #e7e8ea;
+  --wb-button-hover: #f5f6f7;
+  --wb-button-text: #202124;
+  --wb-accent: #76b5f2;
+  --wb-accent-soft: #243447;
+  --wb-lavender: #76b5f2;
+  --wb-lavender-soft: #2a3038;
 }
 .lolicode-workbench button,
 .lolicode-workbench select,
@@ -65,8 +66,8 @@
   outline-offset: 2px;
 }
 .wb-sidebar {
-  width: 232px;
-  flex: 0 0 232px;
+  width: 252px;
+  flex: 0 0 252px;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -74,15 +75,15 @@
   border-right: 1px solid var(--wb-border);
 }
 .wb-brand {
-  height: 56px;
+  height: 48px;
   flex-shrink: 0;
   padding: 0 16px;
   display: flex;
   align-items: center;
-  gap: 9px;
-  font-size: 17px;
-  letter-spacing: -0.04em;
-  font-weight: 650;
+  gap: 8px;
+  font-size: 14px;
+  letter-spacing: -0.02em;
+  font-weight: 600;
 }
 .wb-brand-label {
   display: flex;
@@ -96,18 +97,25 @@
   font-weight: 400;
   margin-left: 7px;
 }
-.wb-brand-mascot {
-  width: 30px;
-  height: 30px;
+.wb-brand-mark {
+  width: 25px;
+  height: 25px;
   flex-shrink: 0;
-  object-fit: contain;
-  border-radius: 50%;
-  background: var(--wb-accent-soft);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+  background: var(--wb-button);
+  color: var(--wb-button-text);
+}
+.wb-brand-mark svg {
+  width: 15px;
+  height: 15px;
 }
 .wb-nav {
-  padding: 6px 10px 12px;
+  padding: 7px 10px 9px;
   display: grid;
-  gap: 5px;
+  gap: 2px;
 }
 .wb-nav-button {
   border: 0;
@@ -117,7 +125,7 @@
   width: 100%;
   min-height: 36px;
   padding: 8px 10px;
-  border-radius: 11px;
+  border-radius: 7px;
   background: transparent;
   color: inherit;
   text-align: left;
@@ -335,7 +343,7 @@
   align-items: center;
   flex-shrink: 0;
   gap: 8px;
-  height: 56px;
+  height: 46px;
   padding: 0 14px;
   border-bottom: 1px solid var(--wb-border);
   background: var(--wb-panel);
@@ -373,7 +381,7 @@
 }
 .wb-icon-button {
   border: 0;
-  border-radius: 9px;
+  border-radius: 7px;
   background: transparent;
   color: var(--wb-muted);
   width: 28px;
@@ -393,7 +401,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  padding: 10px 24px 0;
+  padding: 8px 24px 0;
   color: var(--wb-muted);
   font-size: 11px;
 }
@@ -415,7 +423,7 @@
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 24px clamp(20px, 4vw, 52px);
+  padding: 20px clamp(20px, 4vw, 52px);
   scrollbar-color: var(--wb-border) transparent;
 }
 .wb-chat-content {
@@ -423,13 +431,13 @@
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 22px;
+  gap: 18px;
 }
 .wb-message-user {
-  padding: 12px 16px;
-  background: var(--wb-accent-soft);
-  border: 1px solid var(--wb-border);
-  border-radius: 17px 17px 5px 17px;
+  padding: 10px 13px;
+  background: var(--wb-hover);
+  border: 1px solid transparent;
+  border-radius: 10px;
   margin-left: auto;
   max-width: 90%;
 }
@@ -546,12 +554,13 @@
   .wb-preview-panel { position: absolute; inset: 0 0 0 auto; width: min(600px, 90%); z-index: 30; }
 }
 .wb-assistant-avatar {
-  width: 26px;
-  height: 26px;
+  width: 22px;
+  height: 22px;
   flex-shrink: 0;
-  border-radius: 50%;
+  padding: 4px;
+  border-radius: 6px;
   background: var(--wb-accent-soft);
-  object-fit: contain;
+  color: var(--wb-accent);
 }
 .wb-message-assistant .wb-message-meta {
   color: var(--wb-accent);
@@ -641,57 +650,30 @@
   max-width: 540px;
   text-align: center;
 }
-.wb-welcome-art {
-  position: relative;
-  width: 200px;
-  height: 218px;
-  margin: 0 auto 10px;
+.wb-welcome-mark {
+  width: 40px;
+  height: 40px;
+  margin: 0 auto 14px;
   display: flex;
   align-items: center;
   justify-content: center;
-  pointer-events: none;
+  border: 1px solid var(--wb-border);
+  border-radius: 10px;
+  color: var(--wb-muted);
+  background: var(--wb-panel);
 }
-.wb-welcome-halo {
-  position: absolute;
-  width: 150px;
-  height: 172px;
-  border-radius: 48% 52% 45% 55%;
-  background: var(--wb-accent-soft);
-  box-shadow: 14px -6px 0 -3px var(--wb-lavender-soft);
+.wb-welcome-mark svg {
+  width: 20px;
+  height: 20px;
 }
-.wb-welcome-mascot {
-  position: relative;
-  width: 142px;
-  height: 210px;
-  object-fit: contain;
+.wb-welcome-mark-compact {
+  width: 34px;
+  height: 34px;
+  margin-bottom: 12px;
 }
-.wb-welcome-sparkles {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  color: var(--wb-lavender);
-}
-.wb-welcome-art-compact {
-  width: 146px;
-  height: 166px;
-  margin-bottom: 6px;
-}
-.wb-welcome-art-compact .wb-welcome-mascot {
-  width: 110px;
-  height: 162px;
-}
-.wb-welcome-art-compact .wb-welcome-halo {
-  width: 108px;
-  height: 128px;
-}
-.wb-welcome-eyebrow {
-  display: block;
-  color: var(--wb-accent);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  margin: 0 0 9px;
+.wb-welcome-mark-compact svg {
+  width: 17px;
+  height: 17px;
 }
 .wb-empty-select {
   display: block;
@@ -717,9 +699,9 @@
   height: 26px;
 }
 .wb-empty h2 {
-  font-size: 23px;
-  letter-spacing: -0.035em;
-  font-weight: 650;
+  font-size: 20px;
+  letter-spacing: -0.02em;
+  font-weight: 600;
   margin-bottom: 8px;
 }
 .wb-empty p {
@@ -731,7 +713,7 @@
   border: 1px solid transparent;
   background: var(--wb-button);
   color: var(--wb-button-text);
-  border-radius: 11px;
+  border-radius: 7px;
   padding: 8px 13px;
   font-weight: 600;
   display: inline-flex;
@@ -745,7 +727,7 @@
     transform 140ms ease;
 }
 .wb-primary:not(:disabled):hover {
-  background: var(--action-hover, var(--wb-button));
+  background: var(--wb-button-hover);
 }
 .wb-primary:not(:disabled):active {
   transform: translateY(1px);
@@ -770,23 +752,23 @@
   max-width: 840px;
   margin: auto;
   border: 1px solid var(--wb-border);
-  border-radius: 17px;
+  border-radius: 11px;
   background: var(--wb-input);
-  box-shadow: 0 4px 16px rgb(104 44 77 / 5%);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 4%);
   transition:
     border-color 140ms ease,
     box-shadow 140ms ease;
 }
 .wb-composer:focus-within {
   border-color: var(--wb-accent);
-  box-shadow: 0 0 0 3px var(--wb-accent-soft);
+  box-shadow: 0 0 0 2px var(--wb-accent-soft);
 }
 .wb-composer textarea {
   display: block;
   border: 0;
   width: 100%;
   resize: vertical;
-  min-height: 88px;
+  min-height: 78px;
   max-height: 210px;
   outline: none;
   background: transparent;
@@ -863,7 +845,7 @@
 .wb-changes {
   margin: 0 clamp(20px, 4vw, 52px);
   border: 1px solid var(--wb-border);
-  border-radius: 13px;
+  border-radius: 9px;
   background: var(--wb-input);
   max-height: 40%;
   overflow-y: auto;
@@ -891,7 +873,7 @@
 .wb-permission {
   border-color: var(--wb-border);
   background: var(--wb-input);
-  border-radius: 15px;
+  border-radius: 10px;
   box-shadow: inset 3px 0 0 var(--wb-accent);
 }
 .wb-permission-heading {
@@ -910,7 +892,7 @@
   color: var(--wb-button-text);
 }
 .wb-permission .wb-permission-allow:not(:disabled):hover {
-  background: var(--action-hover, var(--wb-button));
+  background: var(--wb-button-hover);
 }
 .wb-permission button {
   font-size: 12px;
@@ -921,7 +903,7 @@
   height: auto;
   background: var(--wb-input);
   border-color: var(--wb-border);
-  border-radius: 20px;
+  border-radius: 12px;
 }
 .wb-extensions.tai-dialog-surface:has(.wb-extension-header) {
   height: min(620px, calc(100dvh - 56px));
@@ -1169,27 +1151,6 @@
 @media (max-height: 700px) {
   .wb-empty {
     padding: 16px 20px;
-  }
-  .wb-welcome-art {
-    width: 174px;
-    height: 188px;
-    margin-bottom: 8px;
-  }
-  .wb-welcome-mascot {
-    width: 122px;
-    height: 180px;
-  }
-  .wb-welcome-art-compact {
-    width: 130px;
-    height: 144px;
-  }
-  .wb-welcome-art-compact .wb-welcome-mascot {
-    width: 94px;
-    height: 138px;
-  }
-  .wb-welcome-art-compact .wb-welcome-halo {
-    width: 94px;
-    height: 112px;
   }
   .wb-composer textarea {
     min-height: 78px;

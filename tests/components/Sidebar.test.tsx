@@ -89,7 +89,7 @@ describe("simple channel navigation", () => {
     expect(values.onSelectPage).toHaveBeenLastCalledWith("channels");
     for (const [name, page] of [
       [/^nav.usage/, "usage"],
-      [/^nav.apps ·/, "apps"],
+      [/^编程工作台/, "agent"],
       [/^nav.settings ·/, "settings"],
     ] as const) {
       fireEvent.click(screen.getByRole("button", { name }));
@@ -97,6 +97,9 @@ describe("simple channel navigation", () => {
     }
     expect(
       screen.queryByRole("button", { name: /^nav.sessions/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /^nav.apps(?: ·|$)/ }),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /^nav.auth/ }),

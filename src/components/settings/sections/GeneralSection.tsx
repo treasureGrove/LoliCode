@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { isLinux } from "@/lib/platform";
 import { TerminalSelect } from "@/components/settings/TerminalSettings";
+import { InterfaceAppearanceSettings } from "@/components/settings/InterfaceAppearanceSettings";
 import {
   SettingsBlock,
   SettingsCard,
@@ -100,6 +101,7 @@ export function GeneralSection({
               />
             }
           />
+          <InterfaceAppearanceSettings />
           <SettingsRow
             label={t("settings.general.quotaDisplay")}
             help={{

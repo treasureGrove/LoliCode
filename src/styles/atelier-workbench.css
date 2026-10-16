@@ -1,0 +1,610 @@
+/* The workbench uses the same semantic surfaces as configuration pages. */
+.lolicode-workbench.lolicode-workbench,
+.wb-extensions.wb-extensions {
+  --wb-bg: var(--bg-app);
+  --wb-sidebar: var(--bg-sidebar);
+  --wb-panel: var(--bg-card);
+  --wb-input: var(--bg-card);
+  --wb-text: var(--text-1);
+  --wb-muted: var(--text-3);
+  --wb-border: hsl(var(--border));
+  --wb-hover: var(--bg-subtle);
+  --wb-selected: var(--bg-selected);
+  --wb-button: var(--action-bg);
+  --wb-button-hover: var(--action-hover);
+  --wb-button-text: var(--action-fg);
+  --wb-accent: var(--action-text);
+  --wb-accent-soft: var(--action-soft);
+  --wb-lavender: var(--action-text);
+  --wb-lavender-soft: var(--bg-subtle);
+  color: var(--wb-text);
+}
+.lolicode-workbench.lolicode-workbench {
+  background: transparent;
+}
+.lolicode-workbench .wb-sidebar {
+  color-scheme: dark;
+  --wb-sidebar: #211722;
+  --wb-input: #2a1c29;
+  --wb-panel: #2a1c29;
+  --wb-text: #eadce3;
+  --wb-muted: #bda7b5;
+  --wb-border: rgb(200 171 130 / 24%);
+  --wb-accent: #edc7d0;
+  --wb-accent-soft: #49303c;
+  --wb-hover: rgb(200 171 130 / 10%);
+  --wb-selected: #50303f;
+  position: relative;
+  isolation: isolate;
+  margin: 6px 0 6px 5px;
+  padding: 45px 14px 25px;
+  color: var(--wb-text);
+  background: #211722;
+  border: 1px solid var(--atelier-line-soft);
+  border-radius: 12px;
+  box-shadow: 4px 0 18px rgb(35 20 31 / 5%);
+}
+/* Nine-slicing preserves the bow and the bottom trim when the user resizes the pane. */
+.lolicode-workbench .wb-sidebar::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: -1px;
+  border-style: solid;
+  border-color: transparent;
+  border-width: 55px 13px 32px;
+  border-image-source: var(--atelier-sidebar);
+  border-image-slice: 230 90 145 90 fill;
+  border-image-width: 55px 13px 32px;
+  border-image-repeat: stretch;
+  opacity: 0.82;
+  pointer-events: none;
+}
+.lolicode-workbench .wb-brand {
+  padding: 0 8px;
+  height: 43px;
+  gap: 8px;
+}
+.lolicode-workbench .wb-brand-mark {
+  display: none;
+  width: 32px;
+  height: 25px;
+  border-radius: 0;
+  background: var(--atelier-brooch) center / contain no-repeat;
+}
+.lolicode-workbench .wb-brand-mark svg {
+  display: none;
+}
+.lolicode-workbench .wb-brand-label {
+  font-family: Georgia, "Microsoft YaHei UI", serif;
+  font-size: 18px;
+  letter-spacing: 0.045em;
+}
+.lolicode-workbench .wb-brand-label > span {
+  font-family: "Segoe UI", "Microsoft YaHei UI", sans-serif;
+  color: var(--wb-muted);
+  font-size: 10px;
+}
+.lolicode-workbench .wb-nav {
+  padding: 5px 2px 10px;
+  gap: 4px;
+}
+.lolicode-workbench .wb-nav-button {
+  min-height: 33px;
+  font-size: 12px;
+  border-radius: 8px;
+}
+.lolicode-workbench .wb-nav > .wb-nav-button:first-child {
+  border: 1px solid rgb(204 164 140 / 33%);
+  color: #f0dfdc;
+  background: linear-gradient(125deg, #68404d, #4a2e3c);
+  box-shadow: 0 3px 9px rgb(10 4 14 / 15%);
+  justify-content: center;
+  margin-bottom: 4px;
+}
+.lolicode-workbench .wb-nav > .wb-nav-button:first-child:hover:not(:disabled) {
+  background: #704452;
+}
+.lolicode-workbench .wb-search {
+  margin: 0 5px 10px;
+  padding: 7px 9px;
+  border-radius: 8px;
+  background: rgb(17 11 20 / 38%);
+}
+.lolicode-workbench .wb-search:focus-within {
+  border-color: #b89b78;
+  box-shadow: 0 0 0 2px rgb(200 171 130 / 12%);
+}
+.lolicode-workbench .wb-search input:focus-visible {
+  outline: none;
+}
+.lolicode-workbench .wb-projects {
+  padding: 0 2px 6px;
+}
+.lolicode-workbench .wb-section-label {
+  color: #c0a88f;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  padding: 10px 7px 7px;
+}
+.lolicode-workbench .wb-project-row {
+  border-bottom: 1px solid var(--wb-border);
+  margin-bottom: 5px;
+}
+.lolicode-workbench .wb-project-row > span {
+  font-size: 12px;
+}
+.lolicode-workbench .wb-session-row {
+  font-size: 12px;
+  min-height: 33px;
+  padding-left: 16px;
+  border-radius: 7px;
+}
+.lolicode-workbench .wb-session-row[aria-pressed="true"] {
+  background: linear-gradient(100deg, #51323f, #372733);
+  box-shadow: inset 2px 0 0 #c6a47c;
+  color: #f2dcd5;
+}
+.lolicode-workbench .wb-session-menu {
+  background: var(--wb-sidebar);
+}
+.lolicode-workbench .wb-project-menu-trigger {
+  width: 24px;
+  height: 24px;
+}
+.lolicode-workbench .wb-recent-project-menu {
+  position: absolute;
+  right: 2px;
+  top: 5px;
+}
+.lolicode-workbench .wb-sidebar-footer {
+  padding: 0;
+  border: 0;
+  flex-shrink: 0;
+}
+.lolicode-workbench .wb-companion {
+  position: relative;
+  padding-top: 6px;
+  border-top: 1px solid var(--wb-border);
+}
+.lolicode-workbench .wb-companion-stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 152px;
+  border-radius: 12px;
+  background: radial-gradient(
+    ellipse at 50% 80%,
+    rgb(188 115 138 / 12%),
+    transparent 65%
+  );
+}
+.lolicode-workbench .wb-companion-image {
+  display: block;
+  height: 144px;
+  max-width: 100%;
+  object-fit: contain;
+  user-select: none;
+  pointer-events: none;
+  filter: drop-shadow(0 4px 5px rgb(0 0 0 / 18%));
+}
+.lolicode-workbench .wb-companion-hide,
+.lolicode-workbench .wb-companion-restore {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--wb-muted);
+  border: 1px solid var(--wb-border);
+  border-radius: 8px;
+  background: var(--wb-sidebar);
+}
+.lolicode-workbench .wb-companion-hide {
+  position: absolute;
+  top: 10px;
+  right: 2px;
+  width: 28px;
+  height: 28px;
+}
+.lolicode-workbench .wb-companion-restore {
+  min-height: 30px;
+  gap: 7px;
+  padding: 5px 8px;
+  width: 100%;
+  font-size: 11px;
+}
+.lolicode-workbench :is(.wb-companion-hide, .wb-companion-restore):hover {
+  background: var(--wb-hover);
+  color: var(--wb-text);
+}
+.lolicode-workbench .wb-titlebar {
+  background: var(--atelier-header);
+  border: 0;
+  min-height: 64px;
+  height: 64px;
+  gap: 12px;
+  padding-inline: 22px;
+}
+.lolicode-workbench .wb-titlebar-heading {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.lolicode-workbench .wb-titlebar-caption {
+  font-size: 9px;
+  line-height: 1.2;
+  letter-spacing: 0.16em;
+  color: var(--text-3);
+}
+.lolicode-workbench .wb-context-line {
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  gap: 10px;
+  min-height: 36px;
+  padding: 0 25px 10px;
+  border-bottom: 1px solid var(--atelier-rule);
+  background: var(--atelier-header);
+  font-size: 10px;
+}
+.lolicode-workbench .wb-context-model {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-2);
+}
+.lolicode-workbench .wb-context-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 12px;
+}
+.lolicode-workbench .wb-context-actions > .wb-icon-button {
+  width: 25px;
+  height: 25px;
+  border: 1px solid var(--atelier-rule);
+  border-radius: 7px;
+}
+.lolicode-workbench .wb-status {
+  font-size: 10px;
+  letter-spacing: 0.025em;
+}
+.lolicode-workbench .wb-status[data-phase="idle"]::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--direct-text);
+}
+.lolicode-workbench .wb-titlebar h1 {
+  flex: initial;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+  letter-spacing: 0.02em;
+}
+.lolicode-workbench .wb-titlebar-project {
+  font-size: 10px;
+  max-width: 130px;
+  padding-left: 12px;
+  border-left: 1px solid var(--atelier-rule);
+}
+.lolicode-workbench .wb-main {
+  container-type: inline-size;
+  background: linear-gradient(
+    90deg,
+    var(--atelier-edge-wash),
+    var(--atelier-sheet-wash) 12%,
+    var(--atelier-sheet-wash) 88%,
+    var(--atelier-edge-wash)
+  );
+}
+.lolicode-workbench .wb-chat {
+  padding: 30px clamp(24px, 4vw, 56px) 24px;
+}
+.lolicode-workbench .wb-chat-content:not(:empty) {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  gap: 22px;
+}
+.lolicode-workbench .wb-chat-content:has(> .wb-empty:only-child) {
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+.lolicode-workbench .wb-message-user {
+  padding: 12px 17px;
+  max-width: 82%;
+  border: 1px solid var(--atelier-line-soft);
+  background: var(--atelier-toolbar);
+  border-radius: 14px 14px 4px 14px;
+  box-shadow: 0 2px 7px rgb(44 25 37 / 3%);
+}
+.lolicode-workbench .wb-message-assistant {
+  line-height: 1.85;
+  color: var(--atelier-ink);
+}
+.lolicode-workbench .wb-code-block,
+.lolicode-workbench .wb-code-diff {
+  background: var(--atelier-paper);
+  border-color: var(--atelier-rule);
+  border-radius: 10px;
+}
+.lolicode-workbench .wb-empty-content {
+  max-width: 530px;
+  padding: 30px 32px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.lolicode-workbench .wb-empty h2 {
+  font-family: Georgia, "Microsoft YaHei UI", serif;
+  font-size: 23px;
+  letter-spacing: 0.03em;
+  font-weight: 500;
+}
+.lolicode-workbench .wb-welcome-mark {
+  width: 84px;
+  height: 56px;
+  border: 0;
+  border-radius: 0;
+  background: var(--atelier-brooch) center / contain no-repeat;
+}
+.lolicode-workbench .wb-welcome-mark svg {
+  display: none;
+}
+.lolicode-workbench .wb-composer-area {
+  padding: 18px clamp(18px, 3vw, 42px) 14px;
+  background: linear-gradient(transparent, var(--atelier-header) 75%);
+}
+.lolicode-workbench .wb-composer {
+  position: relative;
+  isolation: isolate;
+  border: 1px solid var(--atelier-line);
+  border-radius: 14px;
+  background: var(--atelier-paper);
+  box-shadow:
+    0 6px 24px rgb(52 29 43 / 6%),
+    0 1px 3px rgb(52 29 43 / 4%);
+}
+.lolicode-workbench .wb-composer::after {
+  content: "";
+  position: absolute;
+  top: -12px;
+  left: 21px;
+  width: 40px;
+  height: 27px;
+  background: var(--atelier-brooch) center / contain no-repeat;
+  pointer-events: none;
+}
+.lolicode-workbench .wb-composer:focus-within {
+  border-color: var(--atelier-gold);
+  box-shadow:
+    0 0 0 2px var(--atelier-line-soft),
+    0 6px 24px rgb(52 29 43 / 8%);
+}
+.lolicode-workbench .wb-composer textarea {
+  padding: 12px 17px 5px;
+  font-size: 13px;
+  color: var(--atelier-ink);
+  line-height: 22px;
+  min-height: 40px;
+}
+.lolicode-workbench .wb-composer textarea:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+.lolicode-workbench .wb-composer-toolbar {
+  gap: 5px;
+  padding: 5px 10px 10px;
+}
+.lolicode-workbench .wb-composer-toolbar button[aria-label="模型"],
+.lolicode-workbench .wb-composer-toolbar button[aria-label="思考档位"],
+.lolicode-workbench .wb-composer-toolbar select {
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: var(--text-2);
+}
+.lolicode-workbench
+  .wb-composer-toolbar
+  :is(
+    button[aria-label="模型"],
+    button[aria-label="思考档位"],
+    select
+  ):hover:not(:disabled) {
+  border-color: var(--atelier-rule);
+  background: var(--atelier-toolbar);
+}
+.lolicode-workbench .wb-primary {
+  border-color: var(--atelier-line);
+  border-radius: 8px;
+  font-weight: 500;
+}
+.lolicode-workbench .wb-composer-toolbar > .wb-primary {
+  border-radius: 8px;
+  padding-inline: 12px;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 10%);
+}
+.lolicode-workbench .wb-usage-footer {
+  justify-content: center;
+  color: var(--text-3);
+  margin-top: 9px;
+  opacity: 0.9;
+}
+.lolicode-workbench .wb-pane-resizer::after {
+  width: 2px;
+}
+.lolicode-workbench .wb-pane-resizer:hover::after,
+.lolicode-workbench .wb-pane-resizer[data-dragging]::after {
+  background: var(--atelier-gold);
+}
+.lolicode-workbench .wb-changes {
+  background: var(--atelier-paper);
+  border-color: var(--atelier-rule);
+  border-radius: 9px;
+  box-shadow: 0 1px 5px rgb(52 29 43 / 3%);
+}
+.lolicode-workbench .wb-permission {
+  background: var(--bg-card);
+  border-color: var(--atelier-line);
+  box-shadow: inset 2px 0 0 var(--atelier-gold);
+}
+.wb-extensions.wb-extensions.tai-dialog-surface {
+  background: var(--bg-card);
+  border-color: var(--atelier-line);
+  border-radius: 16px;
+}
+.wb-extensions .wb-extension-tabs {
+  border-color: var(--atelier-line-soft);
+}
+.wb-extensions .wb-extension-card {
+  background: var(--bg-app);
+  border-color: var(--atelier-line-soft);
+  border-radius: 11px;
+}
+.wb-extensions .wb-extension-tabs button[aria-selected="true"] {
+  background: var(--action-soft);
+  color: var(--action-text);
+}
+.wb-model-picker-content.wb-model-picker-content,
+.wb-reasoning-picker-content.wb-reasoning-picker-content {
+  background: var(--bg-card);
+  border-color: var(--atelier-line);
+  border-radius: 12px;
+  box-shadow: var(--shadow-lg);
+}
+.wb-picker-option[aria-pressed="true"] {
+  background: var(--action-soft);
+  color: var(--action-text);
+}
+.wb-picker-group[aria-expanded="true"] {
+  color: var(--action-text);
+}
+.wb-picker-search {
+  border-color: var(--atelier-line-soft);
+}
+.wb-picker-search:focus-within {
+  background: var(--atelier-toolbar);
+  box-shadow: inset 0 -2px 0 var(--atelier-gold);
+}
+.wb-picker-search input:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+.wb-picker-actions {
+  background: var(--bg-app);
+  border-color: var(--atelier-line-soft);
+  border-radius: 0 0 11px 11px;
+}
+:root[data-decoration="soft"] .lolicode-workbench .wb-sidebar {
+  padding-top: 12px;
+}
+:root[data-decoration="soft"] .lolicode-workbench .wb-sidebar::before {
+  display: none;
+}
+:root[data-decoration="soft"] .lolicode-workbench .wb-composer::after {
+  opacity: 0.65;
+  top: -9px;
+  width: 30px;
+  height: 20px;
+}
+:root[data-decoration="off"] .lolicode-workbench .wb-sidebar {
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+:root[data-decoration="off"] .lolicode-workbench .wb-sidebar::before,
+:root[data-decoration="off"] .lolicode-workbench .wb-composer::after {
+  display: none;
+}
+:root[data-decoration="off"] .lolicode-workbench .wb-welcome-mark,
+:root[data-decoration="off"] .lolicode-workbench .wb-brand-mark {
+  background: none;
+}
+:root[data-decoration="off"]
+  .lolicode-workbench
+  :is(.wb-brand-mark, .wb-welcome-mark)
+  svg {
+  display: block;
+}
+:root[data-decoration="off"] .lolicode-workbench .wb-composer-toolbar {
+  padding-left: 9px;
+}
+@container (max-width: 540px) {
+  .lolicode-workbench .wb-chat {
+    padding: 20px;
+  }
+  .lolicode-workbench .wb-chat-content:not(:empty) {
+    padding: 0;
+  }
+  .lolicode-workbench .wb-composer::after {
+    top: -9px;
+    width: 30px;
+    height: 20px;
+    left: 18px;
+  }
+  .lolicode-workbench .wb-composer-toolbar {
+    padding-left: 10px;
+  }
+  .lolicode-workbench .wb-titlebar {
+    padding-inline: 14px;
+  }
+  .lolicode-workbench .wb-context-line {
+    padding-inline: 17px;
+  }
+  .lolicode-workbench .wb-context-actions {
+    gap: 8px;
+  }
+  .lolicode-workbench .wb-empty-content {
+    padding: 25px 18px;
+  }
+}
+@media (max-height: 650px) {
+  .lolicode-workbench .wb-titlebar {
+    height: 56px;
+    min-height: 56px;
+  }
+  .lolicode-workbench .wb-chat {
+    padding-top: 18px;
+  }
+  .lolicode-workbench .wb-companion-stage {
+    height: 100px;
+  }
+  .lolicode-workbench .wb-companion-image {
+    height: 92px;
+  }
+  .lolicode-workbench .wb-sidebar {
+    padding-top: 35px;
+    padding-bottom: 20px;
+  }
+  .lolicode-workbench .wb-brand {
+    height: 36px;
+  }
+  .lolicode-workbench .wb-nav-button {
+    min-height: 30px;
+  }
+  .lolicode-workbench .wb-nav {
+    gap: 1px;
+    padding-bottom: 7px;
+  }
+}
+@media (forced-colors: active) {
+  .lolicode-workbench :is(.wb-composer, .wb-search):focus-within,
+  .wb-picker-search:focus-within {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
+  .lolicode-workbench .wb-sidebar::before,
+  .lolicode-workbench .wb-composer::after {
+    display: none;
+  }
+  .lolicode-workbench :is(.wb-sidebar, .wb-empty-content, .wb-composer) {
+    border: 1px solid CanvasText;
+    background: Canvas;
+    color: CanvasText;
+    box-shadow: none;
+  }
+}

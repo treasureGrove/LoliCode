@@ -1,190 +1,297 @@
-/* LoliCode's cream, berry and lavender palette stays quiet behind code.
-   Keep the shared token names so every configuration page inherits the theme. */
+@import "./atelier-workbench.css";
+
+/* Cherry Atelier: the shared palette also reaches Radix portals outside the shell. */
 :root {
   color-scheme: light;
-  --background: 30 100% 98%;
-  --foreground: 307 19% 19%;
-  --card: 30 100% 99.2%;
-  --card-foreground: 307 19% 19%;
-  --popover: 30 100% 99.2%;
-  --popover-foreground: 307 19% 19%;
-  --primary: 335.6 47.3% 53.1%;
-  --primary-foreground: 0 0% 100%;
-  --secondary: 261 54% 95%;
-  --secondary-foreground: 267 25% 35%;
-  --muted: 342 42% 95%;
-  --muted-foreground: 308 12% 36%;
-  --accent: 335 52% 91%;
-  --accent-foreground: 307 19% 19%;
-  --border: 331 29% 84.5%;
-  --input: 328 27% 76.5%;
-  --ring: 335.6 46.1% 48%;
+  --background: 30 38% 96%;
+  --foreground: 315 14% 20%;
+  --card: 30 50% 98%;
+  --card-foreground: 315 14% 20%;
+  --popover: 30 50% 98%;
+  --popover-foreground: 315 14% 20%;
+  --primary: 341 38% 37%;
+  --primary-foreground: 30 50% 98%;
+  --secondary: 330 21% 91%;
+  --secondary-foreground: 315 14% 25%;
+  --muted: 330 19% 92%;
+  --muted-foreground: 315 9% 42%;
+  --accent: 337 30% 89%;
+  --accent-foreground: 335 29% 29%;
+  --border: 329 17% 83%;
+  --input: 329 17% 72%;
+  --ring: 341 38% 43%;
   --radius: 0.75rem;
-  --brand-berry: #c04f7d;
-  --brand-lavender: #8d79bb;
-  --brand-lavender-soft: #f0ebf9;
-  --brand-pink-soft: #fbe9f0;
-  --brand-border: #e8d6df;
-  --bg-app: #fffaf5;
-  --bg-sidebar: #fff6f3;
-  --bg-subtle: #f8eef1;
-  --bg-selected: #f4dce6;
-  --bg-card: #fffdfb;
-  --border-strong: #d3b3c4;
-  --text-1: #392737;
-  --text-2: #685165;
-  --text-3: #755e6e;
-  --action-bg: #c04f7d;
-  --action-fg: #ffffff;
-  --action-hover: #a83d67;
-  --action-text: #a03661;
-  --action-soft: #fbe7ef;
-  --inverse-bg: #493348;
-  --inverse-fg: #ffffff;
-  --inverse-hover: #5a4059;
-  --overlay: rgb(42 21 42 / 45%);
-  --control-off: #967b8d;
-  --chart-1: #b23d6f;
-  --chart-2: #8265b2;
-  --chart-grid: #efdee5;
-  --heat-4: #943057;
-  --shadow-sm: 0 2px 5px rgb(102 48 79 / 5%);
-  --shadow-md: 0 8px 28px rgb(102 48 79 / 9%);
-  --shadow-lg: 0 24px 80px rgb(69 35 65 / 19%);
+  --bg-app: #f5f1eb;
+  --bg-sidebar: #eee5e3;
+  --bg-subtle: #f0e7e8;
+  --bg-selected: #e8d5db;
+  --bg-card: #fcfaf7;
+  --text-1: #352c32;
+  --text-2: #665963;
+  --text-3: #80717b;
+  --border-strong: #c7aeb8;
+  --action-bg: #8b4059;
+  --action-fg: #fff8f2;
+  --action-hover: #74334b;
+  --action-text: #82364f;
+  --action-soft: #f2e1e7;
+  --inverse-bg: #412d3a;
+  --inverse-fg: #fff8f2;
+  --inverse-hover: #573b4e;
+  --brand-berry: #8b4059;
+  --brand-lavender: #967a99;
+  --brand-lavender-soft: #eee5ef;
+  --brand-pink-soft: #f4e6e8;
+  --brand-border: #cfb4be;
+  --overlay: rgb(28 15 27 / 48%);
+  --control-off: #97818e;
+  --direct-fill: #6f9c9a;
+  --direct-text: #386b69;
+  --direct-soft: #e4efeb;
+  --direct-solid: #386b69;
+  --direct-on: #fffaf5;
+  --route-fill: #ac8753;
+  --route-text: #805e2e;
+  --route-soft: #f2eadd;
+  --route-solid: #805e2e;
+  --route-on: #fffaf5;
+  --stack-fill: #9b769f;
+  --stack-text: #78517c;
+  --stack-soft: #efe5f0;
+  --stack-solid: #78517c;
+  --stack-on: #fffaf5;
+  --chart-1: #9a506e;
+  --chart-2: #4f8a87;
+  --chart-grid: #e9dce0;
+  --heat-4: #713447;
+  --atelier-gold: #a18461;
+  --atelier-line: rgb(138 111 92 / 26%);
+  --atelier-line-soft: rgb(138 111 92 / 12%);
+  --atelier-paper: #fcfaf7;
+  --atelier-ink: #352c32;
+  --atelier-champagne: #d8c5a9;
+  --atelier-rule: rgb(143 119 101 / 22%);
+  --atelier-toolbar: #f3eee8;
+  --atelier-reading: rgb(252 250 247 / 97%);
+  --atelier-header: #f8f5f0;
+  --atelier-edge-wash: rgb(252 250 247 / 40%);
+  --atelier-sheet-wash: rgb(252 250 247 / 97%);
+  --atelier-scene-opacity: calc(var(--atelier-intensity, 0.48) * 0.24);
+  --atelier-scene-filter: saturate(0.65) brightness(1.15);
+  --atelier-scene: url("../assets/atelier/ribbon-atelier.png");
+  --atelier-sidebar: url("../assets/atelier/sidebar-frame.png");
+  --atelier-brooch: url("../assets/atelier/brooch-accent.png");
+  --shadow-sm: 0 2px 5px rgb(69 32 50 / 5%);
+  --shadow-md: 0 8px 26px rgb(69 32 50 / 10%);
+  --shadow-lg: 0 22px 70px rgb(41 18 37 / 24%), 0 4px 12px rgb(41 18 37 / 8%);
 }
 .dark {
   color-scheme: dark;
-  --background: 268 17% 14.7%;
-  --foreground: 322 41% 94.7%;
-  --card: 276 16% 18.2%;
-  --card-foreground: 322 41% 94.7%;
-  --popover: 276 16% 18.2%;
-  --popover-foreground: 322 41% 94.7%;
-  --primary: 334.7 71.7% 79.2%;
-  --primary-foreground: 294 27% 15.5%;
-  --secondary: 264 19% 26%;
-  --secondary-foreground: 267 55% 90%;
-  --muted: 273 17% 21%;
-  --muted-foreground: 309 17% 77%;
-  --accent: 319 21% 26%;
-  --accent-foreground: 322 41% 94.7%;
-  --border: 290 13% 29%;
-  --input: 289 12% 44%;
-  --ring: 334.7 71.7% 79.2%;
-  --brand-berry: #f0a4c4;
-  --brand-lavender: #cab2ec;
-  --brand-lavender-soft: #40364f;
-  --brand-pink-soft: #48303e;
-  --brand-border: #514154;
-  --bg-app: #251f2c;
-  --bg-sidebar: #2a2230;
-  --bg-subtle: #382d40;
-  --bg-selected: #513548;
-  --bg-card: #302736;
-  --border-strong: #78627d;
-  --text-1: #f7ecf3;
-  --text-2: #cebacb;
-  --text-3: #bea8ba;
-  --action-bg: #f0a4c4;
-  --action-fg: #301d32;
-  --action-hover: #f7bfd5;
-  --action-text: #f7bad3;
-  --action-soft: #48303e;
-  --inverse-bg: #eddfef;
-  --inverse-fg: #352a3e;
-  --inverse-hover: #fff0f6;
-  --overlay: rgb(15 7 24 / 65%);
-  --control-off: #8c7891;
-  --chart-1: #e4a0be;
-  --chart-2: #baa1df;
-  --chart-grid: #463549;
-  --heat-4: #f4b8d4;
-  --shadow-sm: 0 2px 5px rgb(13 7 19 / 18%);
-  --shadow-md: 0 8px 28px rgb(13 7 19 / 28%);
-  --shadow-lg: 0 24px 80px rgb(13 7 19 / 50%);
+  --background: 300 15% 9%;
+  --foreground: 325 19% 88%;
+  --card: 300 15% 13%;
+  --card-foreground: 325 19% 88%;
+  --popover: 300 15% 13%;
+  --popover-foreground: 325 19% 88%;
+  --primary: 340 34% 51%;
+  --primary-foreground: 30 50% 98%;
+  --secondary: 307 15% 18%;
+  --secondary-foreground: 325 19% 88%;
+  --muted: 307 15% 17%;
+  --muted-foreground: 320 13% 70%;
+  --accent: 335 24% 23%;
+  --accent-foreground: 330 30% 89%;
+  --border: 325 17% 25%;
+  --input: 325 17% 36%;
+  --ring: 35 37% 65%;
+  --bg-app: #1b141c;
+  --bg-sidebar: #211822;
+  --bg-subtle: #2b202d;
+  --bg-selected: #49303e;
+  --bg-card: #261c28;
+  --text-1: #e9dfe3;
+  --text-2: #c5b3bf;
+  --text-3: #b6a2af;
+  --border-strong: #745766;
+  --action-bg: #9d506b;
+  --action-fg: #fff8f2;
+  --action-hover: #b15c79;
+  --action-text: #e4b0c3;
+  --action-soft: #422738;
+  --inverse-bg: #e5d6dc;
+  --inverse-fg: #30202e;
+  --inverse-hover: #f2e3e8;
+  --brand-berry: #ce91a8;
+  --brand-lavender: #bea4c4;
+  --brand-lavender-soft: #362b3e;
+  --brand-pink-soft: #38242f;
+  --brand-border: #604552;
+  --overlay: rgb(11 5 15 / 72%);
+  --control-off: #8e7485;
+  --direct-fill: #70aaa3;
+  --direct-text: #94c6be;
+  --direct-soft: #203633;
+  --direct-solid: #467c74;
+  --direct-on: #fffaf5;
+  --route-fill: #b99c70;
+  --route-text: #d1b68d;
+  --route-soft: #372d25;
+  --route-solid: #8d6c43;
+  --route-on: #fffaf5;
+  --stack-fill: #a88caf;
+  --stack-text: #c9b0d1;
+  --stack-soft: #33273b;
+  --stack-solid: #7c5d89;
+  --stack-on: #fffaf5;
+  --success: #8cbe9f;
+  --success-text: #9dc9ac;
+  --success-soft: #203027;
+  --warning: #d1af77;
+  --warning-text: #dec394;
+  --warning-soft: #372c20;
+  --danger: #de8193;
+  --danger-text: #efa7b5;
+  --danger-soft: #3c202c;
+  --chart-1: #c685a3;
+  --chart-2: #79b3ab;
+  --chart-grid: #412d3c;
+  --heat-4: #d89ab6;
+  --atelier-gold: #c8ab82;
+  --atelier-line: rgb(200 171 130 / 34%);
+  --atelier-line-soft: rgb(200 171 130 / 17%);
+  --atelier-paper: #211a23;
+  --atelier-ink: #e9dfe3;
+  --atelier-champagne: #9f8263;
+  --atelier-rule: rgb(196 168 136 / 21%);
+  --atelier-toolbar: #2a212c;
+  --atelier-reading: rgb(33 26 35 / 97%);
+  --atelier-header: #211a23;
+  --atelier-edge-wash: rgb(30 23 33 / 45%);
+  --atelier-sheet-wash: rgb(30 23 33 / 95%);
+  --atelier-scene-opacity: calc(var(--atelier-intensity, 0.48) * 0.8);
+  --atelier-scene-filter: saturate(0.75);
+  --shadow-sm: 0 2px 5px rgb(10 5 15 / 20%);
+  --shadow-md: 0 8px 28px rgb(10 5 15 / 35%);
+  --shadow-lg: 0 22px 75px rgb(5 2 10 / 55%), 0 4px 14px rgb(5 2 10 / 25%);
 }
-.tai-shell-sidebar {
-  --bg-sidebar: #fff6f3;
-  --bg-subtle: #f8eef1;
-  --bg-selected: #f4dce6;
-  --text-1: #392737;
-  --text-2: #685165;
-  --text-3: #755e6e;
-  --border: 331 29% 84.5%;
-  --ring: 335.6 46.1% 48%;
-  border-inline-end: 1px solid hsl(var(--border));
-  background-image: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--brand-lavender-soft) 45%, transparent),
-    transparent 130px
-  );
+:root[data-decoration="soft"],
+:root[data-decoration="off"] {
+  --atelier-scene-opacity: 0;
 }
-.dark .tai-shell-sidebar {
-  --bg-sidebar: #2a2230;
-  --bg-subtle: #382d40;
-  --bg-selected: #513548;
-  --text-1: #f7ecf3;
-  --text-2: #cebacb;
-  --text-3: #bea8ba;
-  --border: 290 13% 29%;
-  --ring: 334.7 71.7% 79.2%;
+.tai-main {
+  background: var(--bg-app);
+}
+.tai-main::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background: var(--atelier-scene) center / cover no-repeat;
+  opacity: var(--atelier-scene-opacity);
+  filter: var(--atelier-scene-filter);
+  mask-image: radial-gradient(ellipse at 52% 30%, transparent 12%, #000 100%);
+  pointer-events: none;
+}
+.tai-main[data-view]:not([data-view="agent"])::before {
+  opacity: calc(var(--atelier-scene-opacity) * 0.45);
+}
+.tai-settings-body {
+  width: calc(100% - 40px);
+  margin-block: 20px;
+  border: 1px solid var(--atelier-line-soft);
+  border-radius: 16px;
+  background: var(--atelier-reading);
+}
+.lolicode-global-rail.tai-shell-sidebar {
+  --bg-sidebar: #211722;
+  --bg-subtle: #382632;
+  --bg-selected: #4b2d3f;
+  --text-1: #eadce3;
+  --text-2: #c4acbb;
+  --text-3: #b39ba9;
+  --border: 326 19% 26%;
+  --ring: 35 37% 65%;
+  color: var(--text-1);
+  background: linear-gradient(180deg, #2b1b2a, #1b131e);
+  border-inline-end: 1px solid var(--atelier-line);
 }
 .lolicode-global-rail .tai-shell-brand,
 .lolicode-global-rail[data-collapsed="true"] .tai-shell-brand {
-  height: 60px;
-  min-height: 60px;
+  height: 66px;
+  min-height: 66px;
   padding: 10px;
   justify-content: center;
 }
 .lolicode-global-rail .tai-shell-brand-lockup {
-  width: 36px;
-  height: 36px;
+  width: 38px;
+  height: 34px;
   justify-content: center;
-  border: 1px solid var(--brand-border);
-  border-radius: 13px;
-  background: var(--bg-card);
-  box-shadow: var(--shadow-sm);
+  background: transparent;
 }
-.lolicode-global-rail .tai-shell-mark {
-  width: 30px;
-  height: 30px;
+.lolicode-global-rail .tai-shell-brand-lockup::before {
+  content: "";
+  width: 14px;
+  height: 20px;
+  border: 2px solid #c8ab82;
+  border-radius: 45%;
+  background: linear-gradient(
+    135deg,
+    #98c2bc 0 28%,
+    #366e6d 29% 55%,
+    #234a54 56% 75%,
+    #7bafaa 76%
+  );
+  box-shadow: 0 0 0 3px rgb(200 171 130 / 15%);
+}
+.lolicode-global-rail .lolicode-mark {
+  display: none;
 }
 .lolicode-global-rail .tai-shell-directory {
-  padding: 4px 6px 8px;
+  padding: 7px 6px 8px;
 }
 .lolicode-global-rail .tai-shell-task-group {
-  gap: 7px;
+  gap: 9px;
 }
 .lolicode-global-rail[data-collapsed="true"] .tai-shell-nav-item {
   width: 40px;
   min-height: 40px;
-  padding: 0;
   margin-inline: auto;
-  border-radius: 13px;
-  border: 1px solid transparent;
+  padding: 0;
   justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 12px;
 }
 .lolicode-global-rail .tai-shell-footer {
-  padding: 10px 6px;
-  gap: 7px;
+  padding: 12px 6px;
+  gap: 9px;
 }
 .lolicode-global-rail .tai-shell-selection {
-  background: var(--bg-selected);
-  box-shadow: inset 0 0 0 1px var(--brand-border);
-  border-radius: 12px;
+  background: linear-gradient(135deg, #633746, #3e2736);
+  box-shadow: inset 0 0 0 1px rgb(200 171 130 / 28%);
+  border-radius: 11px;
+}
+.lolicode-global-rail .tai-shell-nav-item[aria-current="page"] {
+  color: #f1d7ce;
 }
 .lolicode-global-rail .tai-shell-nav-item[aria-current="page"]::before {
   content: "";
   position: absolute;
   inset-inline-start: -4px;
-  top: 12px;
-  width: 3px;
+  top: 13px;
+  width: 2px;
   height: 14px;
-  border-radius: 4px;
-  background: var(--brand-berry);
+  border-radius: 2px;
+  background: var(--atelier-gold);
 }
 .tai-shell-sidebar :focus-visible {
-  outline-color: hsl(var(--ring));
+  outline-color: var(--atelier-gold);
+}
+.tai-shell-nav-item:hover {
+  background: var(--bg-subtle);
+  color: var(--text-1);
+}
+.tai-shell-footer {
+  border-color: var(--atelier-line-soft);
 }
 .tai-shell-skip:focus-visible {
   position: fixed;
@@ -192,47 +299,50 @@
   top: 12px;
   color: var(--text-1);
   background: var(--bg-card);
-  outline-offset: 3px;
   box-shadow: var(--shadow-md);
-}
-.tai-shell-nav-item[aria-current="page"] {
-  color: var(--action-text);
-}
-.tai-shell-nav-item:hover {
-  background: var(--bg-subtle);
-  color: var(--text-1);
-}
-.tai-shell-nav-item[aria-current="page"]:hover {
-  color: var(--action-text);
-  background: transparent;
-}
-.tai-shell-footer {
-  border-color: hsl(var(--border));
-}
-.tai-main {
-  background-color: var(--bg-app);
-  background-image: none;
 }
 .lolicode-mark {
   display: block;
   object-fit: contain;
 }
 .tai-shell-page-header {
-  min-height: 60px;
-  border-color: hsl(var(--border));
+  min-height: 64px;
+  background: var(--atelier-header);
+  border-color: var(--atelier-line);
+}
+.tai-shell-heading-title {
+  font-size: 19px;
+  letter-spacing: 0.02em;
+  font-weight: 550;
+}
+.tai-shell-heading-icon {
+  color: var(--atelier-gold);
+  border: 1px solid var(--atelier-line);
+  background: linear-gradient(135deg, var(--bg-subtle), var(--bg-card));
+  box-shadow: inset 0 0 0 3px var(--atelier-line-soft);
+}
+.tai-shell-heading-eyebrow {
+  letter-spacing: 0.04em;
 }
 .tai-button {
-  border-radius: 10px;
+  border-radius: 9px;
+}
+/* Fields already provide a rounded focus ring; avoid a second square outline. */
+.tai-field:focus-visible {
+  outline: none;
 }
 .tai-button.bg-action {
-  box-shadow: 0 2px 3px color-mix(in srgb, var(--brand-berry) 16%, transparent);
+  border-color: var(--atelier-line);
+  box-shadow:
+    inset 0 1px 0 rgb(255 237 219 / 10%),
+    0 3px 7px rgb(42 15 30 / 10%);
 }
 .tai-button.bg-danger {
-  background: #bd3551;
-  color: #ffffff;
+  color: white;
+  background: #a63650;
 }
 .tai-button.bg-danger:hover {
-  background: #9c2942;
+  background: #8d2c44;
   filter: none;
 }
 .tai-button:focus-visible,
@@ -240,58 +350,150 @@
   outline: 2px solid hsl(var(--ring));
   outline-offset: 2px;
 }
-:where(
-  input,
-  textarea,
-  select,
-  a,
-  [role="checkbox"],
-  [role="switch"]
-):focus-visible {
-  outline-color: hsl(var(--ring));
-}
 ::selection {
-  color: var(--text-1);
   background: var(--bg-selected);
+  color: var(--text-1);
+}
+
+/* Menus remain fully opaque: no wallpaper through a model name or submenu. */
+.tai-floating-surface {
+  border: 1px solid var(--atelier-line);
+  border-radius: 12px;
+  background: var(--bg-card);
+  color: var(--text-1);
+  box-shadow: var(--shadow-lg);
+}
+.tai-floating-surface
+  :is(
+    [role="menuitem"],
+    [role="menuitemcheckbox"],
+    [role="menuitemradio"],
+    [role="option"]
+  ) {
+  min-height: 32px;
+  border-radius: 7px;
+  margin-block: 2px;
+}
+.tai-floating-surface
+  :is([data-highlighted], [role="option"]:focus, [data-selected="true"]) {
+  color: var(--text-1);
+  background: var(--action-soft);
+}
+.tai-floating-surface :is([data-disabled], [aria-disabled="true"]) {
+  opacity: 0.45;
+}
+.tai-floating-surface [role="separator"] {
+  background: var(--atelier-line-soft);
 }
 .tai-dialog-overlay {
   backdrop-filter: blur(4px);
 }
-.tai-dialog-surface {
-  border-color: var(--brand-border);
-  border-radius: 18px;
+.tai-dialog-surface,
+.tai-sheet-surface {
+  border-color: var(--atelier-line);
+  border-radius: 16px;
   background: var(--bg-card);
-  box-shadow: var(--shadow-lg);
+  color: var(--text-1);
+  box-shadow:
+    var(--shadow-lg),
+    inset 0 0 0 3px var(--atelier-line-soft);
 }
 .tai-dialog-header {
-  border-bottom: 1px solid hsl(var(--border));
+  border-bottom: 1px solid var(--atelier-line-soft);
   background: linear-gradient(
     120deg,
     var(--brand-pink-soft),
-    var(--bg-card) 75%
+    var(--bg-card) 78%
   );
-  border-radius: 17px 17px 0 0;
+  border-radius: 15px 15px 0 0;
 }
 .tai-dialog-footer {
-  border-top: 1px solid hsl(var(--border));
-  background: color-mix(in srgb, var(--bg-app) 65%, var(--bg-card));
-  border-radius: 0 0 17px 17px;
+  border-top: 1px solid var(--atelier-line-soft);
+  background: color-mix(in srgb, var(--bg-app) 60%, var(--bg-card));
+  border-radius: 0 0 15px 15px;
 }
-.lolicode-channel-center section {
-  box-shadow: none;
+.tai-settings-intro {
+  color: var(--text-2);
+  border-color: var(--atelier-line);
+}
+.tai-settings-block-heading h2 {
+  color: var(--text-2);
+  font-weight: 500;
+  letter-spacing: 0.05em;
+}
+.tai-settings-card {
+  border-color: var(--atelier-line);
+  box-shadow: var(--shadow-sm);
+}
+.atelier-intensity-control {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.atelier-intensity-control input {
+  width: clamp(96px, 14vw, 160px);
+  accent-color: var(--action-bg);
+}
+.atelier-intensity-control input:disabled {
+  opacity: 0.35;
+}
+.atelier-intensity-control output {
+  min-width: 3.5ch;
+  color: var(--text-2);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.lolicode-channel-center > section {
+  border-color: var(--atelier-line);
+  border-radius: 15px;
+  box-shadow: var(--shadow-sm);
 }
 .lolicode-channel-center [aria-pressed="true"] {
   border-color: var(--brand-berry);
 }
 .lolicode-channel-center .lolicode-channel-form {
-  border: 1px solid hsl(var(--border));
-  background: var(--bg-card);
-  border-radius: 16px;
   padding: 18px;
+  border: 1px solid var(--atelier-line);
+  border-radius: 14px;
+  background: var(--bg-card);
+}
+:root[data-decoration="off"] .lolicode-global-rail .tai-shell-brand-lockup {
+  background: none;
+}
+:root[data-decoration="off"]
+  .lolicode-global-rail
+  .tai-shell-brand-lockup::before {
+  content: "✧";
+  width: auto;
+  height: auto;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  font-size: 25px;
+  color: var(--atelier-gold);
+}
+:root[data-decoration="off"]
+  :is(.tai-dialog-surface, .tai-sheet-surface, .tai-floating-surface) {
+  box-shadow: var(--shadow-md);
 }
 @media (prefers-reduced-motion: reduce) {
   .lolicode-global-rail *,
   .tai-button {
     transition: none !important;
+  }
+}
+@media (forced-colors: active) {
+  .tai-field:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
+  .tai-main::before {
+    display: none;
+  }
+  .tai-floating-surface,
+  .tai-dialog-surface {
+    background: Canvas;
+    border: 1px solid CanvasText;
   }
 }

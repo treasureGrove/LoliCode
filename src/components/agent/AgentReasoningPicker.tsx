@@ -71,7 +71,7 @@ export function AgentReasoningPicker({
                 ? `模型默认：${model.defaultReasoningEffort}，未设置会话覆盖`
                 : "上游默认：使用模型服务的默认设置"
           }
-          className="inline-flex max-w-[180px] items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-xs hover:bg-black/5 dark:hover:bg-white/5"
+          className="wb-picker-trigger inline-flex max-w-[180px] items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-xs hover:bg-black/5 dark:hover:bg-white/5"
         >
           <Brain size={13} className="shrink-0" aria-hidden="true" />
           <span className="truncate">
@@ -92,9 +92,9 @@ export function AgentReasoningPicker({
         align="start"
         side="top"
         collisionPadding={12}
-        className="w-[min(340px,calc(100vw-24px))] space-y-3 p-3"
+        className="wb-reasoning-picker-content w-[min(340px,calc(100vw-24px))] space-y-3 p-3"
       >
-        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+        <dl className="wb-picker-metadata grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
           <dt className="text-fg-2">上下文窗口</dt>
           <dd>{formatLimit(model?.contextLimit)}</dd>
           <dt className="text-fg-2">最大输出</dt>
@@ -121,7 +121,7 @@ export function AgentReasoningPicker({
               model?.defaultReasoningEffort ? "使用模型默认" : "使用上游默认"
             }
             aria-pressed={!value}
-            className="flex w-full items-center justify-between gap-2 rounded px-2 py-2 text-left text-sm hover:bg-black/5 dark:hover:bg-white/5"
+            className="wb-picker-option flex w-full items-center justify-between gap-2 rounded px-2 py-2 text-left text-sm hover:bg-black/5 dark:hover:bg-white/5"
             onClick={() => select("")}
           >
             <span>
@@ -137,7 +137,8 @@ export function AgentReasoningPicker({
               type="button"
               aria-label={`思考档位 ${effort}`}
               aria-pressed={value === effort}
-              className="flex w-full items-center justify-between gap-2 rounded px-2 py-2 text-left text-sm hover:bg-black/5 dark:hover:bg-white/5"
+              title={effort}
+              className="wb-picker-option flex w-full items-center justify-between gap-2 rounded px-2 py-2 text-left text-sm hover:bg-black/5 dark:hover:bg-white/5"
               onClick={() => select(effort)}
             >
               <span className="min-w-0 truncate">{effort}</span>

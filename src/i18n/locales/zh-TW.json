@@ -391,6 +391,19 @@
     }
   },
   "settings": {
+    "atelier": {
+      "decoration": "介面裝飾",
+      "help": "以角色的緞帶、寶石與金線裝飾介面，正文與程式碼保持清晰。調整即時儲存於目前裝置。",
+      "full": "華麗",
+      "soft": "柔和",
+      "off": "簡潔",
+      "intensity": "背景氛圍",
+      "companion": "顯示看板娘",
+      "companionHelp": "在工作台側欄顯示已選的 Q 版形象。收起後可在此重新開啟，選擇會自動儲存。",
+      "companionAlt": "LoliCode Q 版看板娘",
+      "hideCompanion": "收起看板娘",
+      "showCompanion": "顯示看板娘"
+    },
     "appUpdate": {
       "unknownModeHelp": "尚未確認安裝方式，請從下載頁面取得新版本，完成任務後手動安裝。",
       "installFailed": "更新未完成，請查看原因後重試。",

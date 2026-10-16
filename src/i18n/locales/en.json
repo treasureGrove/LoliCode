@@ -393,6 +393,19 @@
     }
   },
   "settings": {
+    "atelier": {
+      "decoration": "Interface decoration",
+      "help": "Ribbon, gemstone and embroidered details inspired by the character's outfit. Text and code stay clear. Changes save automatically on this device.",
+      "full": "Ornate",
+      "soft": "Soft",
+      "off": "Minimal",
+      "intensity": "Background ambience",
+      "companion": "Show mascot",
+      "companionHelp": "Show the selected chibi mascot in the workspace sidebar. You can show her here again after hiding her. Your choice saves automatically.",
+      "companionAlt": "LoliCode chibi mascot",
+      "hideCompanion": "Hide mascot",
+      "showCompanion": "Show mascot"
+    },
     "appUpdate": {
       "unknownModeHelp": "Installation mode is not confirmed. Download the new version and install it manually after your tasks finish.",
       "installFailed": "Update did not finish. Check the reason and try again.",

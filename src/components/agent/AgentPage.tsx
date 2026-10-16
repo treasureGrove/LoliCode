@@ -14,7 +14,6 @@ import {
   Blocks,
   Archive,
   Pin,
-  MoreHorizontal,
   Workflow,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -68,10 +67,11 @@ import { AgentUsageFooter } from "./AgentUsageFooter";
 import { AgentPaneResizeHandle, useAgentPaneLayout } from "./AgentPaneLayout";
 import { useAgentAutoSizeTextarea } from "./useAgentAutoSizeTextarea";
 import { WindowControlsContext } from "@/components/shell/AppPageHeader";
-import LolicodeMascot from "@/components/shell/LolicodeMascot";
 import { DRAG_REGION_ATTR, DRAG_REGION_STYLE } from "@/lib/platform";
 import "./lolicode-workbench.css";
 import { AgentSessionMenu } from "./AgentSessionMenu";
+import { AgentProjectMenu } from "./AgentProjectMenu";
+import { AgentCompanion } from "./AgentCompanion";
 import { AgentExtensionsPanel } from "./AgentExtensionsPanel";
 import { AgentOperationsPanel } from "./AgentOperationsPanel";
 import {
@@ -94,33 +94,13 @@ type PendingSend = {
   uncertain?: boolean;
 };
 
-function WelcomeMascot({ compact = false }: { compact?: boolean }) {
+function WelcomeMark({ compact = false }: { compact?: boolean }) {
   return (
     <div
-      className={`wb-welcome-art${compact ? " wb-welcome-art-compact" : ""}`}
+      className={`wb-welcome-mark${compact ? " wb-welcome-mark-compact" : ""}`}
       aria-hidden="true"
     >
-      <div className="wb-welcome-halo" />
-      <LolicodeMascot className="wb-welcome-mascot" variant="full" decorative />
-      <svg
-        className="wb-welcome-sparkles"
-        viewBox="0 0 180 150"
-        fill="none"
-        focusable="false"
-      >
-        <path
-          d="m25 25 3.5 8 8 3.5-8 3.5-3.5 8-3.5-8-8-3.5 8-3.5ZM151 92l2.5 6 6 2.5-6 2.5-2.5 6-2.5-6-6-2.5 6-2.5Z"
-          fill="currentColor"
-        />
-        <path
-          d="M139 31c-6-5-13-7-14-2-1 4 6 8 14 9m0-7c6-5 13-7 14-2 1 4-6 8-14 9m0-7v7"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        <circle cx="139" cy="34" r="3" fill="currentColor" />
-      </svg>
+      <Blocks />
     </div>
   );
 }
@@ -1408,11 +1388,9 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
             {...DRAG_REGION_ATTR}
             style={DRAG_REGION_STYLE as React.CSSProperties}
           >
-            <LolicodeMascot
-              className="wb-brand-mascot"
-              variant="portrait"
-              decorative
-            />
+            <span className="wb-brand-mark" aria-hidden="true">
+              <Blocks />
+            </span>
             <div className="wb-brand-label">
               LoliCode <span>工作台</span>
             </div>
@@ -1424,7 +1402,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
               onClick={() => void createSession()}
             >
               <MessageSquarePlus />
-              {busy === "create" ? "正在创建…" : "新建会话"}
+              {busy === "create" ? "正在创建…" : "新建任务"}
             </button>
             <button
               className="wb-nav-button"
@@ -1441,7 +1419,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
               onClick={() => setExtensionsOpen(true)}
             >
               <Blocks />
-              技能与插件
+              技能
             </button>
             <button
               className="wb-nav-button"
@@ -1462,7 +1440,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
           </label>
           <div className="wb-projects">
             <div className="wb-section-label">
-              <span>{showArchived ? "归档会话" : "项目与会话"}</span>
+              <span>{showArchived ? "归档任务" : "工作区与任务"}</span>
               <button
                 className="wb-icon-button"
                 disabled={!workspace || Boolean(busy)}
@@ -1481,50 +1459,37 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
                   <span>{workspace.name}</span>
                   {projects.find((item) => item.path === workspace.path)
                     ?.pinned && <Pin size={11} />}
-                  <details className="wb-project-menu wb-current-project-menu">
-                    <summary aria-label={`管理项目：${workspace.name}`}>
-                      <MoreHorizontal size={14} />
-                    </summary>
-                    <div>
-                      <button
-                        disabled={Boolean(busy)}
-                        onClick={() =>
-                          void updateProject(
-                            projects.find(
-                              (item) => item.path === workspace.path,
-                            ) || {
-                              ...workspace,
-                              pinned: false,
-                              lastOpenedAt: 0,
-                            },
-                          )
-                        }
-                      >
-                        {projects.find((item) => item.path === workspace.path)
-                          ?.pinned
-                          ? "取消置顶"
-                          : "置顶项目"}
-                      </button>
-                      <button
-                        disabled={Boolean(busy)}
-                        onClick={() =>
-                          void updateProject(
-                            projects.find(
-                              (item) => item.path === workspace.path,
-                            ) || {
-                              ...workspace,
-                              pinned: false,
-                              lastOpenedAt: 0,
-                            },
-                            true,
-                          )
-                        }
-                      >
-                        移出项目列表
-                      </button>
-                      <p>项目文件与会话保留。</p>
-                    </div>
-                  </details>
+                  <AgentProjectMenu
+                    name={workspace.name}
+                    pinned={Boolean(
+                      projects.find((item) => item.path === workspace.path)
+                        ?.pinned,
+                    )}
+                    disabled={Boolean(busy)}
+                    onTogglePin={() =>
+                      void updateProject(
+                        projects.find(
+                          (item) => item.path === workspace.path,
+                        ) || {
+                          ...workspace,
+                          pinned: false,
+                          lastOpenedAt: 0,
+                        },
+                      )
+                    }
+                    onRemove={() =>
+                      void updateProject(
+                        projects.find(
+                          (item) => item.path === workspace.path,
+                        ) || {
+                          ...workspace,
+                          pinned: false,
+                          lastOpenedAt: 0,
+                        },
+                        true,
+                      )
+                    }
+                  />
                 </div>
                 {sessions
                   .filter(
@@ -1609,7 +1574,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
                     </div>
                   ))}
                 {!sessions.length && (
-                  <p className="wb-sidebar-note">项目还没有会话。</p>
+                  <p className="wb-sidebar-note">当前项目还没有任务。</p>
                 )}
                 {sessionSearch &&
                   !sessions.some((session) =>
@@ -1624,7 +1589,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
               : recent
             ).filter((path) => path !== workspace?.path).length > 0 && (
               <>
-                <div className="wb-section-label">最近的项目</div>
+                <div className="wb-section-label">最近的工作区</div>
                 {(projects.length
                   ? projects
                   : recent.map((path) => ({
@@ -1656,32 +1621,22 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
                         <span className="truncate">{project.name}</span>
                         {project.pinned && <Pin size={11} />}
                       </button>
-                      <details className="wb-project-menu">
-                        <summary aria-label={`管理项目：${project.name}`}>
-                          <MoreHorizontal size={14} />
-                        </summary>
-                        <div>
-                          <button
-                            disabled={Boolean(busy)}
-                            onClick={() => void updateProject(project)}
-                          >
-                            {project.pinned ? "取消置顶" : "置顶项目"}
-                          </button>
-                          <button
-                            disabled={Boolean(busy)}
-                            onClick={() => void updateProject(project, true)}
-                          >
-                            移出项目列表
-                          </button>
-                          <p>项目文件与会话保留。</p>
-                        </div>
-                      </details>
+                      <AgentProjectMenu
+                        name={project.name}
+                        pinned={Boolean(project.pinned)}
+                        disabled={Boolean(busy)}
+                        recent
+                        onTogglePin={() => void updateProject(project)}
+                        onRemove={() => void updateProject(project, true)}
+                      />
                     </div>
                   ))}
               </>
             )}
           </div>
-          <div className="wb-sidebar-footer"></div>
+          <div className="wb-sidebar-footer">
+            <AgentCompanion />
+          </div>
         </aside>
       )}
       {!sidebarCollapsed && paneLayout.sidebarVisible && (
@@ -1702,9 +1657,12 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
           >
             {sidebarCollapsed ? <PanelLeftOpen /> : <PanelLeftClose />}
           </button>
-          <h1 {...DRAG_REGION_ATTR}>
-            {selectedSession?.title || "编程工作台"}
-          </h1>
+          <div className="wb-titlebar-heading" {...DRAG_REGION_ATTR}>
+            <span className="wb-titlebar-caption">对话工作台</span>
+            <h1 {...DRAG_REGION_ATTR}>
+              {selectedSession?.title || "编程工作台"}
+            </h1>
+          </div>
           {workspace && (
             <span className="wb-titlebar-project" title={workspace.path}>
               <Folder />
@@ -1746,8 +1704,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
         {!workspace ? (
           <div className="wb-empty">
             <div className="wb-empty-content">
-              <WelcomeMascot />
-              <span className="wb-welcome-eyebrow">LoliCode 工作台</span>
+              <WelcomeMark />
               <h2>从一个项目开始</h2>
               <p>选择项目，与 LoliCode 一起分析和实现代码。</p>
               <button
@@ -1774,11 +1731,11 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
         ) : !sessionId ? (
           <div className="wb-empty">
             <div className="wb-empty-content">
-              <WelcomeMascot compact />
-              <h2>开始新的任务</h2>
+              <WelcomeMark compact />
+              <h2>开始新任务</h2>
               <p>
                 {catalog.models.length
-                  ? "选择模型并新建会话。"
+                  ? "选择模型，然后描述你想完成的工作。"
                   : "先在渠道与模型中添加可用于编程的模型。"}
               </p>
               <AgentModelPicker
@@ -1846,23 +1803,25 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
               </p>
             )}
             <div className="wb-context-line">
-              <span>
+              <span className="wb-context-model">
                 {boundModel ? modelLabel(boundModel) : "会话绑定的模型"}
               </span>
-              <button
-                type="button"
-                className="wb-icon-button"
-                aria-label="预览项目文件"
-                onClick={() => openPreview("")}
-              >
-                <PanelRightOpen />
-              </button>
-              <AgentActivityStatus
-                snapshot={snapshot}
-                queued={queuedHere}
-                stopping={stoppingHere}
-                loading={snapshotLoading}
-              />
+              <div className="wb-context-actions">
+                <button
+                  type="button"
+                  className="wb-icon-button"
+                  aria-label="预览项目文件"
+                  onClick={() => openPreview("")}
+                >
+                  <PanelRightOpen />
+                </button>
+                <AgentActivityStatus
+                  snapshot={snapshot}
+                  queued={queuedHere}
+                  stopping={stoppingHere}
+                  loading={snapshotLoading}
+                />
+              </div>
             </div>
             {snapshotError && (
               <div role="alert" className="wb-notice">
@@ -1913,7 +1872,7 @@ export function AgentPage({ onOpenChannels, onBusyChange }: AgentPageProps) {
                   {snapshot && !snapshot.messages.length && (
                     <div className="wb-empty">
                       <div className="wb-empty-content">
-                        <WelcomeMascot compact />
+                        <WelcomeMark compact />
                         <h2>今天想完成什么？</h2>
                         <p>说说你想完成的任务。</p>
                       </div>

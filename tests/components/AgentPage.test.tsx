@@ -785,7 +785,8 @@ describe("AgentPage", () => {
     fill("保留模型切换前的草稿");
     selectModel("Model B");
     await flush();
-    expect(screen.getByLabelText("模型", { exact: true })).toHaveTextContent(
+    expect(screen.getByLabelText("模型", { exact: true })).toHaveAttribute(
+      "title",
       "DeepSeek · Code Model",
     );
     expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
@@ -807,7 +808,8 @@ describe("AgentPage", () => {
     selectModel("Model B");
     await flush();
     await tick(5000);
-    expect(screen.getByLabelText("模型", { exact: true })).toHaveTextContent(
+    expect(screen.getByLabelText("模型", { exact: true })).toHaveAttribute(
+      "title",
       "Copilot · Model B",
     );
     snapshot.session.model = {
@@ -1272,7 +1274,8 @@ describe("AgentPage", () => {
     expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
       "保留这段输入",
     );
-    expect(screen.getByRole("button", { name: "模型" })).toHaveTextContent(
+    expect(screen.getByRole("button", { name: "模型" })).toHaveAttribute(
+      "title",
       "DeepSeek · Code Model",
     );
     expect(agentApi.getCatalog).toHaveBeenCalledTimes(1);

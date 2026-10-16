@@ -1556,6 +1556,7 @@ function App() {
         <main
           ref={mainScrollRef}
           id="content-area"
+          data-view={currentView}
           className="tai-main relative isolate flex min-w-0 flex-1 flex-col overflow-hidden bg-app"
         >
           {showEnvBanner && envConflicts.length > 0 && (

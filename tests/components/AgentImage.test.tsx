@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { vi, describe, it, expect, beforeEach } from "vitest";
 import { AgentMessageView } from "@/components/agent/AgentParts";
 import { AgentImage } from "@/components/agent/AgentImage";
+import { AgentFileActionsContext } from "@/components/agent/AgentFilePath";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 const data = {
@@ -15,35 +16,55 @@ beforeEach(() => {
 
 describe("generated agent image previews", () => {
   it.each([
-    "![生成结果](/tmp/project/result.png)",
-    "![生成结果](<C:/project/generated image.png>)",
-    "![生成结果](./outputs/result.png)",
-    "[生成结果](outputs/result.png)",
-    "![生成结果][output]\n\n[output]: ./outputs/result.png",
-  ])("loads project images through session-scoped IPC: %s", async (text) => {
-    render(
-      <AgentMessageView
-        sessionId="zc:fixture"
-        projectPath="C:/project"
-        message={{
-          id: "assistant",
-          role: "assistant",
-          createdAt: 1,
-          parts: [{ type: "text", text }],
-        }}
-      />,
-    );
-    await waitFor(() =>
-      expect(screen.getByRole("img", { name: "生成结果" })).toHaveAttribute(
-        "src",
-        data.dataUrl,
-      ),
-    );
-    expect(invoke).toHaveBeenCalledWith(
-      "get_agent_image",
-      expect.objectContaining({ sessionId: "zc:fixture" }),
-    );
-  });
+    {
+      text: "![生成结果](/tmp/project/result.png)",
+      path: "/tmp/project/result.png",
+    },
+    {
+      text: "![生成结果](<C:/project/generated image.png>)",
+      path: "C:/project/generated image.png",
+    },
+    { text: "![生成结果](./outputs/result.png)", path: "./outputs/result.png" },
+    { text: "[生成结果](outputs/result.png)", path: "outputs/result.png" },
+    {
+      text: "![生成结果][output]\n\n[output]: ./outputs/result.png",
+      path: "./outputs/result.png",
+    },
+  ])(
+    "routes a generated image into the project preview: $text",
+    ({ text, path }) => {
+      const preview = vi.fn();
+      render(
+        <AgentFileActionsContext.Provider
+          value={{
+            sessionId: "zc:fixture",
+            projectPath: "C:/project",
+            onPreview: preview,
+          }}
+        >
+          <AgentMessageView
+            sessionId="zc:fixture"
+            projectPath="C:/project"
+            message={{
+              id: "assistant",
+              role: "assistant",
+              createdAt: 1,
+              parts: [{ type: "text", text }],
+            }}
+          />
+        </AgentFileActionsContext.Provider>,
+      );
+      const link = screen.getByRole("button", { name: `预览文件：${path}` });
+      expect(link).toHaveTextContent("生成结果");
+      expect(
+        screen.queryByRole("img", { name: "生成结果" }),
+      ).not.toBeInTheDocument();
+      fireEvent.click(link);
+      expect(preview).toHaveBeenCalledWith(path);
+      // Loading is owned by the preview panel; markdown rendering does not eagerly fetch images.
+      expect(invoke).not.toHaveBeenCalled();
+    },
+  );
 
   it("supports zoom and closing the image preview with Escape", async () => {
     render(

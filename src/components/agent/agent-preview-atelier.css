@@ -1,0 +1,275 @@
+/* The inspector is a quiet gallery beside the conversation. */
+.lolicode-workbench .wb-preview-panel {
+  --preview-paper: var(--atelier-paper, var(--bg-card));
+  --preview-ink: var(--atelier-ink, var(--wb-text));
+  --preview-rule: var(--atelier-rule, var(--wb-border));
+  color: var(--preview-ink);
+  background: var(--preview-paper);
+  min-width: 0;
+  overflow: hidden;
+  box-shadow: -1px 0 0 var(--preview-rule);
+}
+
+.lolicode-workbench .wb-preview-panel > .wb-preview-header {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 10px;
+  min-height: 76px;
+  padding: 15px 16px 13px;
+  border: 0;
+  background: transparent;
+}
+
+.wb-preview-panel .wb-preview-heading {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-width: 0;
+  gap: 5px;
+}
+
+.wb-preview-panel .wb-preview-eyebrow {
+  color: var(--wb-muted);
+  font-size: 10px;
+  line-height: 1;
+  letter-spacing: 0.15em;
+}
+
+.wb-preview-panel .wb-preview-filename {
+  overflow: hidden;
+  color: var(--preview-ink);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wb-preview-panel .wb-preview-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 2px;
+}
+
+.wb-preview-panel .wb-preview-actions button {
+  display: grid;
+  width: 26px;
+  height: 28px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: var(--wb-muted);
+  background: transparent;
+}
+
+.wb-preview-panel button:not(:disabled):hover {
+  color: var(--preview-ink);
+  background: var(--wb-hover);
+}
+
+.wb-preview-panel button:focus-visible,
+.wb-preview-panel summary:focus-visible {
+  outline: 2px solid var(--wb-accent);
+  outline-offset: 2px;
+}
+
+.wb-preview-panel button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.wb-preview-panel .wb-preview-path-form {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  min-height: 33px;
+  margin: 0 14px;
+  padding: 3px 4px 3px 9px;
+  border: 1px solid var(--preview-rule);
+  border-radius: 8px;
+  color: var(--wb-muted);
+  background: var(--atelier-toolbar, var(--wb-hover));
+  font-size: 11px;
+}
+.wb-preview-panel .wb-preview-path-form:focus-within {
+  border-color: var(--atelier-gold);
+  box-shadow: 0 0 0 2px var(--atelier-line-soft);
+}
+.wb-preview-panel .wb-preview-path-form input:focus-visible {
+  outline: none;
+}
+
+.wb-preview-panel .wb-preview-path-form > svg {
+  flex: 0 0 auto;
+}
+
+.wb-preview-panel .wb-preview-path-form input {
+  flex: 1 1 0;
+  width: 0;
+  min-width: 0;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  color: var(--preview-ink);
+  font-family: inherit;
+  font-size: 11px;
+  background: transparent;
+  text-overflow: ellipsis;
+}
+
+.wb-preview-panel .wb-preview-path-form > button {
+  flex: 0 0 auto;
+  min-width: 40px;
+  height: 25px;
+  padding: 0 8px;
+  border: 1px solid var(--preview-rule);
+  border-radius: 5px;
+  color: var(--preview-ink);
+  background: var(--preview-paper);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.wb-preview-panel .wb-preview-toolbar {
+  position: relative;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 40px;
+  padding: 7px 15px;
+}
+
+.wb-preview-panel .wb-preview-view-switch {
+  display: flex;
+  gap: 2px;
+}
+
+.wb-preview-panel .wb-preview-view-switch button {
+  padding: 4px 7px;
+  border: 0;
+  border-radius: 5px;
+  color: var(--wb-muted);
+  background: transparent;
+  font-size: 10px;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.wb-preview-panel .wb-preview-view-switch button[aria-pressed="true"] {
+  color: var(--wb-accent);
+  background: var(--wb-selected);
+}
+
+.wb-preview-panel .wb-preview-isolation {
+  margin-left: auto;
+  color: var(--wb-muted);
+  font-size: 10px;
+}
+
+.wb-preview-panel .wb-preview-isolation summary {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 0;
+  border-radius: 3px;
+  list-style: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.wb-preview-panel .wb-preview-isolation summary::-webkit-details-marker {
+  display: none;
+}
+
+.wb-preview-panel .wb-preview-isolation[open] summary > svg:last-child {
+  transform: rotate(180deg);
+}
+
+.wb-preview-panel .wb-preview-isolation > p {
+  position: absolute;
+  top: calc(100% - 3px);
+  right: 14px;
+  left: 14px;
+  z-index: 3;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--preview-rule);
+  border-radius: 8px;
+  color: var(--wb-muted);
+  background: var(--preview-paper);
+  box-shadow: 0 8px 24px rgb(32 19 28 / 10%);
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+.wb-preview-panel .wb-preview-content {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  margin: 0 14px 14px;
+  padding: 12px;
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--atelier-champagne) transparent;
+  border: 1px solid var(--preview-rule);
+  border-radius: 10px;
+  background: var(--atelier-toolbar, var(--wb-hover));
+  box-shadow: inset 0 1px 3px rgb(32 19 28 / 3%);
+}
+
+.wb-preview-panel .wb-preview-content[data-kind="image"] {
+  display: grid;
+  align-content: start;
+  justify-items: center;
+  padding: 18px;
+}
+
+.wb-preview-panel .wb-preview-content > img {
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  max-height: none;
+  margin: 0;
+  border-radius: 3px;
+  background: #fff;
+  box-shadow: 0 4px 18px rgb(32 19 28 / 9%);
+}
+
+.wb-preview-panel .wb-preview-content[data-kind="html"][data-view="preview"] {
+  padding: 0;
+}
+
+.wb-preview-panel .wb-preview-content > iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+  border: 0;
+  background: #fff;
+}
+
+.wb-preview-panel .wb-preview-source {
+  margin: 0;
+  border-color: var(--preview-rule);
+  border-radius: 6px;
+  background: var(--preview-paper);
+}
+
+.wb-preview-panel .wb-preview-state {
+  margin: 0 14px 10px;
+  padding: 10px 0;
+  font-size: 11px;
+  line-height: 1.6;
+}
+@media (forced-colors: active) {
+  .wb-preview-panel .wb-preview-path-form:focus-within {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
+}

@@ -114,6 +114,8 @@ describe("Agent file previews", () => {
     expect(frame).toHaveAttribute("sandbox", "");
     expect(frame).toHaveAttribute("referrerpolicy", "no-referrer");
     expect(frame.getAttribute("srcdoc")).not.toContain("<script>");
+    expect(screen.getByText(/静态预览不执行脚本/)).not.toBeVisible();
+    fireEvent.click(screen.getByText("隔离预览"));
     expect(screen.getByText(/静态预览不执行脚本/)).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "源码" }));
     expect(screen.queryByTitle("HTML 预览：demo.html")).not.toBeInTheDocument();

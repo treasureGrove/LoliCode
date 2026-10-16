@@ -1,7 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
-import { ExternalLink, FolderOpen, Loader2, RefreshCw, X } from "lucide-react";
+import {
+  ChevronDown,
+  ExternalLink,
+  File,
+  FolderOpen,
+  Loader2,
+  RefreshCw,
+  ShieldCheck,
+  X,
+} from "lucide-react";
 import { agentFilesApi, type AgentFilePreview } from "@/lib/api/agent-files";
 import { SessionCodeBlock } from "@/components/sessions/reader/SessionCodeBlock";
+import "./agent-preview-atelier.css";
 
 const STATIC_TAGS = new Set(
   "a abbr address article aside b blockquote br button caption center code col colgroup dd del details div dl dt em figcaption figure footer h1 h2 h3 h4 h5 h6 header hr i img input label legend li main mark nav ol p pre s section small span strong style sub summary sup table tbody td textarea tfoot th thead tr u ul".split(
@@ -140,39 +150,55 @@ export function AgentPreviewPanel({
       aria-label="文件预览"
       style={width === undefined ? undefined : { width, flexBasis: width }}
     >
-      <header>
-        <span className="min-w-0 flex-1 truncate" title={requestedPath}>
-          {preview?.name ||
-            requestedPath.split(/[\\/]/).pop() ||
-            "项目文件预览"}
-        </span>
-        <button
-          type="button"
-          aria-label="打开预览文件"
-          disabled={!requestedPath}
-          onClick={() => void open("file")}
-        >
-          <ExternalLink size={15} />
-        </button>
-        <button
-          type="button"
-          aria-label="打开预览所在文件夹"
-          disabled={!requestedPath}
-          onClick={() => void open("directory")}
-        >
-          <FolderOpen size={15} />
-        </button>
-        <button
-          type="button"
-          aria-label="重新读取预览"
-          disabled={loading}
-          onClick={() => setRevision((old) => old + 1)}
-        >
-          <RefreshCw size={15} />
-        </button>
-        <button type="button" aria-label="关闭预览" onClick={onClose}>
-          <X size={16} />
-        </button>
+      <header className="wb-preview-header">
+        <div className="wb-preview-heading">
+          <span className="wb-preview-eyebrow">作品检视</span>
+          <span className="wb-preview-filename" title={requestedPath}>
+            {preview?.name ||
+              requestedPath.split(/[\\/]/).pop() ||
+              "项目文件预览"}
+          </span>
+        </div>
+        <div className="wb-preview-actions">
+          <button
+            type="button"
+            aria-label="打开预览文件"
+            title="在默认应用中打开"
+            disabled={!requestedPath}
+            onClick={() => void open("file")}
+          >
+            <ExternalLink size={15} />
+          </button>
+          <button
+            type="button"
+            aria-label="打开预览所在文件夹"
+            title="打开所在文件夹"
+            disabled={!requestedPath}
+            onClick={() => void open("directory")}
+          >
+            <FolderOpen size={15} />
+          </button>
+          <button
+            type="button"
+            aria-label="重新读取预览"
+            title="重新读取预览"
+            disabled={loading}
+            onClick={() => setRevision((old) => old + 1)}
+          >
+            <RefreshCw
+              size={15}
+              className={loading ? "animate-spin" : undefined}
+            />
+          </button>
+          <button
+            type="button"
+            aria-label="关闭预览"
+            title="关闭预览"
+            onClick={onClose}
+          >
+            <X size={16} />
+          </button>
+        </div>
       </header>
       <form
         className="wb-preview-path-form"
@@ -181,6 +207,7 @@ export function AgentPreviewPanel({
           if (draft.trim()) setRequestedPath(draft.trim());
         }}
       >
+        <File size={13} aria-hidden="true" />
         <input
           aria-label="预览文件路径"
           placeholder="输入项目内文件路径…"
@@ -191,39 +218,55 @@ export function AgentPreviewPanel({
           预览
         </button>
       </form>
-      <p className="wb-preview-note">
-        静态预览不执行脚本或加载外部依赖；交互页面可打开文件在浏览器中运行。
-      </p>
-      {preview?.kind === "html" && (
-        <div className="wb-preview-path-form">
-          <button
-            type="button"
-            aria-pressed={view === "preview"}
-            onClick={() => setView("preview")}
-          >
-            静态预览
-          </button>
-          <button
-            type="button"
-            aria-pressed={view === "source"}
-            onClick={() => setView("source")}
-          >
-            源码
-          </button>
-        </div>
-      )}
+      <div className="wb-preview-toolbar">
+        {preview?.kind === "html" && (
+          <div className="wb-preview-view-switch" aria-label="预览显示方式">
+            <button
+              type="button"
+              aria-pressed={view === "preview"}
+              onClick={() => setView("preview")}
+            >
+              静态预览
+            </button>
+            <button
+              type="button"
+              aria-pressed={view === "source"}
+              onClick={() => setView("source")}
+            >
+              源码
+            </button>
+          </div>
+        )}
+        <details className="wb-preview-isolation">
+          <summary>
+            <ShieldCheck size={12} aria-hidden="true" />
+            隔离预览
+            <ChevronDown size={11} aria-hidden="true" />
+          </summary>
+          <p className="wb-preview-note">
+            静态预览不执行脚本或加载外部依赖；交互页面可打开文件在浏览器中运行。
+          </p>
+        </details>
+      </div>
       {loading && (
-        <p role="status" className="wb-preview-note">
+        <p role="status" className="wb-preview-note wb-preview-state">
           <Loader2 className="inline animate-spin" size={14} /> 正在读取文件…
         </p>
       )}
       {error && (
-        <p role="alert" className="wb-preview-note text-danger-text">
+        <p
+          role="alert"
+          className="wb-preview-note wb-preview-state text-danger-text"
+        >
           {error}
         </p>
       )}
       {preview && (
-        <div className="wb-preview-content">
+        <div
+          className="wb-preview-content"
+          data-kind={preview.kind}
+          data-view={view}
+        >
           {preview.truncated && (
             <p role="status" className="wb-preview-note">
               文件较大，当前仅显示部分内容。
@@ -245,7 +288,10 @@ export function AgentPreviewPanel({
               <p role="alert">图片数据无法显示。</p>
             )
           ) : (
-            <SessionCodeBlock code={preview.content || ""} />
+            <SessionCodeBlock
+              className="wb-preview-source"
+              code={preview.content || ""}
+            />
           )}
         </div>
       )}

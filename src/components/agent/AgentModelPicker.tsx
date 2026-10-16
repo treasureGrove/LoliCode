@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import {
   Check,
   ChevronDown,
@@ -60,6 +60,8 @@ export function AgentModelPicker({
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const contentId = useId();
+  const listRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (disabled) setOpen(false);
   }, [disabled]);
@@ -103,12 +105,12 @@ export function AgentModelPicker({
           aria-controls={contentId}
           disabled={disabled}
           title={selected ? agentModelLabel(selected) : unavailableLabel}
-          className={`inline-flex max-w-[280px] items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-xs hover:bg-black/5 dark:hover:bg-white/5 ${className}`}
+          className={`wb-picker-trigger inline-flex max-w-[280px] items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-xs hover:bg-black/5 dark:hover:bg-white/5 ${className}`}
         >
           <Sparkles size={13} className="shrink-0" aria-hidden="true" />
           <span className="truncate">
             {selected
-              ? agentModelLabel(selected)
+              ? modelName(selected)
               : unavailableLabel || "还没有可用模型"}
           </span>
           <ChevronDown size={13} className="shrink-0" aria-hidden="true" />
@@ -120,11 +122,12 @@ export function AgentModelPicker({
         align="start"
         side="top"
         collisionPadding={12}
-        className="w-[min(360px,calc(100vw-24px))] p-0"
+        className="wb-model-picker-content w-[min(360px,calc(100vw-24px))] p-0"
       >
-        <label className="flex items-center gap-2 border-b px-3 py-2">
+        <label className="wb-picker-search flex items-center gap-2 border-b px-3 py-2">
           <Search size={15} aria-hidden="true" />
           <input
+            ref={searchRef}
             aria-label="搜索模型或渠道"
             type="search"
             placeholder="搜索模型或渠道…"
@@ -133,10 +136,59 @@ export function AgentModelPicker({
               setQuery(event.target.value);
               setExpanded({});
             }}
+            onKeyDown={(event) => {
+              if (event.nativeEvent.isComposing) return;
+              if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                const buttons =
+                  listRef.current?.querySelectorAll<HTMLButtonElement>(
+                    "button[data-picker-item]",
+                  );
+                const target =
+                  event.key === "ArrowDown"
+                    ? buttons?.[0]
+                    : buttons?.[buttons.length - 1];
+                if (target) {
+                  event.preventDefault();
+                  target.focus();
+                }
+              }
+            }}
             className="min-w-0 flex-1 bg-transparent text-sm outline-none"
           />
         </label>
-        <div className="max-h-80 overflow-y-auto p-1.5">
+        <div
+          ref={listRef}
+          className="max-h-80 overflow-y-auto p-1.5"
+          onKeyDown={(event) => {
+            if (
+              event.nativeEvent.isComposing ||
+              !["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)
+            )
+              return;
+            const buttons = Array.from(
+              event.currentTarget.querySelectorAll<HTMLButtonElement>(
+                "button[data-picker-item]",
+              ),
+            );
+            const index = buttons.indexOf(event.target as HTMLButtonElement);
+            if (index < 0) return;
+            event.preventDefault();
+            if (event.key === "ArrowUp" && index === 0) {
+              searchRef.current?.focus();
+              return;
+            }
+            const next =
+              event.key === "Home"
+                ? 0
+                : event.key === "End"
+                  ? buttons.length - 1
+                  : Math.min(
+                      buttons.length - 1,
+                      index + (event.key === "ArrowDown" ? 1 : -1),
+                    );
+            buttons[next]?.focus();
+          }}
+        >
           {!groups.size && (
             <p role="status" className="px-3 py-5 text-sm text-fg-2">
               没有匹配的模型
@@ -151,7 +203,9 @@ export function AgentModelPicker({
               <div key={key}>
                 <button
                   type="button"
-                  className="flex w-full items-center gap-2 rounded px-2 py-2 text-left text-sm hover:bg-black/5 dark:hover:bg-white/5"
+                  data-picker-item=""
+                  title={group.label}
+                  className="wb-picker-group flex w-full items-center gap-2 rounded px-2 py-2 text-left text-sm hover:bg-black/5 dark:hover:bg-white/5"
                   aria-expanded={isExpanded}
                   aria-controls={groupId}
                   aria-label={`${group.label} 模型`}
@@ -175,9 +229,11 @@ export function AgentModelPicker({
                       <button
                         key={model.id}
                         type="button"
+                        data-picker-item=""
                         aria-label={agentModelLabel(model)}
                         aria-pressed={model.id === value}
-                        className="flex w-full items-center gap-2 rounded py-2 pl-7 pr-2 text-left text-sm hover:bg-black/5 dark:hover:bg-white/5"
+                        title={agentModelLabel(model)}
+                        className="wb-picker-option flex w-full items-center gap-2 rounded py-2 pl-7 pr-2 text-left text-sm hover:bg-black/5 dark:hover:bg-white/5"
                         onClick={() => {
                           onSelect(model.id);
                           setOpen(false);
@@ -202,7 +258,7 @@ export function AgentModelPicker({
             );
           })}
         </div>
-        <div className="space-y-1 border-t p-1.5">
+        <div className="wb-picker-actions space-y-1 border-t p-1.5">
           {notice && <p className="px-2 py-1 text-xs text-fg-2">{notice}</p>}
           {onRefresh && (
             <button

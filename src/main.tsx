@@ -29,8 +29,17 @@ import {
 } from "./lib/modelsDevAutoSync";
 import { initializeWindowActivity } from "@/lib/windowActivity";
 import { initializeInputModality } from "@/lib/inputModality";
+import { InterfaceAppearanceRoot } from "@/components/shell/InterfaceAppearanceRoot";
+import {
+  applyInterfaceAppearance,
+  parseInterfaceAppearance,
+  readInterfaceAppearanceSnapshot,
+} from "@/lib/interfaceAppearance";
 
 installGlobalErrorHandlers();
+applyInterfaceAppearance(
+  parseInterfaceAppearance(readInterfaceAppearanceSnapshot()),
+);
 
 // 根据平台添加 body class，便于平台特定样式
 try {
@@ -140,6 +149,7 @@ async function bootstrap() {
               <MotionConfig reducedMotion="user">
                 {/* 全局悬停提示：移上去立即出现（HoverTip） */}
                 <TooltipProvider delayDuration={0} skipDelayDuration={0}>
+                  <InterfaceAppearanceRoot />
                   <App />
                 </TooltipProvider>
               </MotionConfig>
