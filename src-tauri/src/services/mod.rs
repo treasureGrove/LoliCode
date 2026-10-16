@@ -23,6 +23,7 @@ mod inprocess_binding_tests;
 pub mod inprocess_diagnostics;
 pub mod inprocess_extensions;
 mod litellm_capabilities;
+pub mod lolicode_account;
 pub mod mcp;
 pub mod model_fetch;
 pub mod model_pricing;

@@ -1219,6 +1219,7 @@ pub fn run() {
             // 将同一个实例注入到全局状态，避免重复创建导致的不一致
             app.manage(app_state);
             app.manage(services::inprocess_agent::InprocessAgentState::default());
+            app.manage(services::lolicode_account::LolicodeAccountState::default());
 
             // 初始化 SkillService
             let skill_service = SkillService::new();
@@ -1453,6 +1454,9 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            commands::lolicode_account_status,
+            commands::lolicode_account_login,
+            commands::lolicode_account_logout,
             commands::get_providers,
             commands::get_current_provider,
             commands::add_provider,

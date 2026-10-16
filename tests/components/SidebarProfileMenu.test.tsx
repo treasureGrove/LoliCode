@@ -1,137 +1,227 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import companion from "@/assets/atelier/companion.png";
 import { SidebarProfileMenu } from "@/components/shell/SidebarProfileMenu";
+import type { LolicodeAccount } from "@/lib/api/lolicode-account";
 
-const locale = vi.hoisted(() => ({ language: "zh" }));
+const mocks = vi.hoisted(() => ({
+  language: "zh",
+  account: null as LolicodeAccount | null,
+  isLoading: false,
+  isPending: false,
+  isRefreshing: false,
+  warning: null as string | null,
+  error: null as string | null,
+  login: vi.fn(),
+  logout: vi.fn(),
+  refresh: vi.fn(),
+  openExternal: vi.fn(),
+}));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
-    i18n: { language: locale.language },
+    i18n: { language: mocks.language },
     t: (key: string, options?: { defaultValue?: string }) =>
       options?.defaultValue || key,
   }),
 }));
+vi.mock("@/hooks/useLolicodeAccount", () => ({
+  useLolicodeAccount: () => mocks,
+}));
+vi.mock("@/lib/api/settings", () => ({
+  settingsApi: { openExternal: mocks.openExternal },
+}));
 
-beforeEach(() => {
-  locale.language = "zh";
-});
-
-describe("sidebar profile menu", () => {
-  it("uses the local companion as its trigger without opening an account flow", async () => {
-    const onOpenSettings = vi.fn();
-    const onOpenUpdates = vi.fn();
-    const { rerender } = render(
+const account: LolicodeAccount = {
+  id: "42",
+  username: "forum-user",
+  displayName: "小桃",
+  avatarUrl: "https://lolicode.com/assets/avatars/42.png",
+  profileUrl: "https://lolicode.com/u/42",
+};
+function mount() {
+  const onOpenSettings = vi.fn();
+  const onOpenUpdates = vi.fn();
+  return {
+    ...render(
       <SidebarProfileMenu
         selected
-        onOpenSettings={onOpenSettings}
-        onOpenUpdates={onOpenUpdates}
-      />,
-    );
-    const trigger = screen.getByRole("button", { name: "头像与设置" });
-    expect(trigger).toHaveAttribute("data-selected", "true");
-    expect(trigger.querySelector("img")).toHaveAttribute("src", companion);
-    expect(trigger).not.toHaveAttribute("aria-describedby");
-    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
-    await userEvent.setup().click(trigger);
-    expect(screen.getByRole("menu")).toHaveTextContent("LoliCode");
-    expect(onOpenSettings).not.toHaveBeenCalled();
-    expect(onOpenUpdates).not.toHaveBeenCalled();
-    rerender(
-      <SidebarProfileMenu
-        onOpenSettings={onOpenSettings}
-        onOpenUpdates={onOpenUpdates}
-      />,
-    );
-    expect(trigger).toHaveAttribute("data-selected", "false");
-  });
-
-  it("opens settings only after the settings menu item is selected", async () => {
-    const user = userEvent.setup();
-    const onOpenSettings = vi.fn();
-    const onOpenUpdates = vi.fn();
-    render(
-      <SidebarProfileMenu
-        onOpenSettings={onOpenSettings}
-        onOpenUpdates={onOpenUpdates}
-      />,
-    );
-    const trigger = screen.getByRole("button", { name: "头像与设置" });
-    await user.click(trigger);
-    await user.click(screen.getByRole("menuitem", { name: "设置" }));
-    expect(onOpenSettings).toHaveBeenCalledTimes(1);
-    expect(onOpenUpdates).not.toHaveBeenCalled();
-    await waitFor(() =>
-      expect(screen.queryByRole("menu")).not.toBeInTheDocument(),
-    );
-    expect(trigger).toHaveFocus();
-  });
-
-  it("preserves the new-version notice and routes software updates separately", async () => {
-    const user = userEvent.setup();
-    const onOpenSettings = vi.fn();
-    const onOpenUpdates = vi.fn();
-    render(
-      <SidebarProfileMenu
         hasUpdate
         onOpenSettings={onOpenSettings}
         onOpenUpdates={onOpenUpdates}
       />,
-    );
+    ),
+    onOpenSettings,
+    onOpenUpdates,
+  };
+}
+async function openMenu() {
+  await userEvent
+    .setup()
+    .click(screen.getByRole("button", { name: "头像与设置" }));
+}
+async function openLogin() {
+  await openMenu();
+  await userEvent
+    .setup()
+    .click(screen.getByRole("menuitem", { name: "登录 LoliCode" }));
+  return screen.findByRole("dialog", { name: "登录 LoliCode" });
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.language = "zh";
+  mocks.account = null;
+  mocks.isLoading = false;
+  mocks.isPending = false;
+  mocks.isRefreshing = false;
+  mocks.warning = null;
+  mocks.error = null;
+  mocks.login.mockResolvedValue({ account });
+  mocks.logout.mockResolvedValue({ account: null });
+  mocks.refresh.mockResolvedValue({ account });
+});
+
+describe("LoliCode sidebar account", () => {
+  it("offers a website login with a neutral signed-out avatar", async () => {
+    mount();
     const trigger = screen.getByRole("button", { name: "头像与设置" });
-    expect(trigger).toHaveAccessibleDescription("发现 LoliCode 新版本");
-    await user.click(trigger);
-    const updates = screen.getByRole("menuitem", { name: /^软件更新/ });
-    expect(updates).toHaveAccessibleName("软件更新 · 发现 LoliCode 新版本");
-    await user.click(updates);
-    expect(onOpenUpdates).toHaveBeenCalledTimes(1);
-    expect(onOpenSettings).not.toHaveBeenCalled();
+    expect(trigger).toHaveAttribute("data-selected", "true");
+    expect(trigger.querySelector("img")).toBeNull();
+    await openMenu();
+    expect(screen.getByRole("menu")).toHaveTextContent("尚未登录 LoliCode");
+    expect(
+      screen.getByRole("menuitem", { name: "登录 LoliCode" }),
+    ).toBeInTheDocument();
+    expect(mocks.login).not.toHaveBeenCalled();
   });
 
-  it("supports keyboard selection and Escape with focus returning to the avatar", async () => {
-    const user = userEvent.setup();
-    const onOpenSettings = vi.fn();
-    const onOpenUpdates = vi.fn();
-    render(
-      <SidebarProfileMenu
-        onOpenSettings={onOpenSettings}
-        onOpenUpdates={onOpenUpdates}
-      />,
-    );
+  it("shows the website nickname/avatar, opens its profile, and refreshes it", async () => {
+    mocks.account = account;
+    mount();
     const trigger = screen.getByRole("button", { name: "头像与设置" });
+    expect(trigger.querySelector("img")).toHaveAttribute(
+      "src",
+      account.avatarUrl,
+    );
+    expect(trigger.querySelector("img")).toHaveAttribute(
+      "referrerpolicy",
+      "no-referrer",
+    );
+    await openMenu();
+    expect(screen.getByRole("menu")).toHaveTextContent("小桃");
+    expect(screen.getByRole("menu")).toHaveTextContent("@forum-user");
+    expect(
+      screen.queryByRole("menuitem", { name: "登录 LoliCode" }),
+    ).not.toBeInTheDocument();
+    await userEvent
+      .setup()
+      .click(screen.getByRole("menuitem", { name: "刷新账户资料" }));
+    await waitFor(() => expect(mocks.refresh).toHaveBeenCalledOnce());
+    await userEvent
+      .setup()
+      .click(screen.getByRole("menuitem", { name: "个人主页" }));
+    expect(mocks.openExternal).toHaveBeenCalledWith(account.profileUrl);
+  });
+
+  it("falls back to the nickname when the real avatar cannot load", () => {
+    mocks.account = account;
+    mount();
+    const trigger = screen.getByRole("button", { name: "头像与设置" });
+    fireEvent.error(trigger.querySelector("img")!);
+    expect(trigger.querySelector("img")).toBeNull();
+    expect(trigger).toHaveTextContent("小");
+  });
+
+  it("submits only user-entered credentials and clears them after cancel", async () => {
+    const user = userEvent.setup();
+    mount();
+    await openLogin();
+    const password = screen.getByLabelText("密码");
+    expect(password).toHaveAttribute("type", "password");
+    await user.type(screen.getByLabelText("用户名或邮箱"), "me@example.test");
+    await user.type(password, "test-password");
+    await user.click(screen.getByRole("button", { name: "显示密码" }));
+    expect(password).toHaveAttribute("type", "text");
+    await user.click(screen.getByRole("button", { name: "取消" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    expect(screen.getByRole("button", { name: "头像与设置" })).toHaveFocus();
+    await openLogin();
+    expect(screen.getByLabelText("密码")).toHaveValue("");
+    expect(screen.getByLabelText("用户名或邮箱")).toHaveValue("");
+    await user.type(screen.getByLabelText("用户名或邮箱"), " forum-user ");
+    await user.type(screen.getByLabelText("密码"), "test-password");
+    await user.click(screen.getByRole("button", { name: "登录" }));
+    expect(mocks.login).toHaveBeenCalledWith("forum-user", "test-password");
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+  });
+
+  it("keeps failed login retryable without showing raw server errors", async () => {
+    mocks.login.mockRejectedValue("unsafe server echo test-password");
+    const user = userEvent.setup();
+    mount();
+    await openLogin();
+    await user.type(screen.getByLabelText("用户名或邮箱"), "forum-user");
+    await user.type(screen.getByLabelText("密码"), "test-password");
+    await user.click(screen.getByRole("button", { name: "登录" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("登录失败");
+    expect(screen.getByRole("alert")).not.toHaveTextContent("test-password");
+    expect(
+      screen.getByRole("button", { name: "登录" }),
+    ).toBeEnabled();
+  });
+
+  it("retains offline account details and lets the user sign out", async () => {
+    mocks.account = account;
+    mocks.warning = "暂时无法连接 LoliCode，请检查网络后重试。";
+    mount();
+    await openMenu();
+    expect(screen.getByRole("status")).toHaveTextContent("暂时无法连接");
+    expect(screen.getByRole("menu")).toHaveTextContent("小桃");
+    await userEvent
+      .setup()
+      .click(screen.getByRole("menuitem", { name: "退出 LoliCode 登录" }));
+    expect(mocks.logout).toHaveBeenCalledOnce();
+  });
+
+  it("preserves separate settings/updates actions, badges, and keyboard focus", async () => {
+    const user = userEvent.setup();
+    const { onOpenSettings, onOpenUpdates } = mount();
+    const trigger = screen.getByRole("button", { name: "头像与设置" });
+    expect(trigger).toHaveAccessibleDescription("发现 LoliCode 新版本");
     trigger.focus();
     await user.keyboard("{ArrowDown}");
-    expect(screen.getByRole("menuitem", { name: "设置" })).toHaveFocus();
+    expect(
+      screen.getByRole("menuitem", { name: "登录 LoliCode" }),
+    ).toHaveFocus();
     await user.keyboard("{ArrowDown}{Enter}");
-    expect(onOpenUpdates).toHaveBeenCalledTimes(1);
+    expect(onOpenSettings).toHaveBeenCalledOnce();
+    await waitFor(() => expect(trigger).toHaveFocus());
+    await user.click(trigger);
+    await user.click(screen.getByRole("menuitem", { name: /^软件更新/ }));
+    expect(onOpenUpdates).toHaveBeenCalledOnce();
+    await waitFor(() => expect(trigger).toHaveFocus());
+    await user.keyboard("{Enter}{Escape}");
     await waitFor(() =>
       expect(screen.queryByRole("menu")).not.toBeInTheDocument(),
     );
-    expect(trigger).toHaveFocus();
-    await user.keyboard("{Enter}");
-    expect(screen.getByRole("menu")).toBeInTheDocument();
-    await user.keyboard("{Escape}");
-    await waitFor(() =>
-      expect(screen.queryByRole("menu")).not.toBeInTheDocument(),
-    );
-    expect(trigger).toHaveFocus();
-    expect(onOpenSettings).not.toHaveBeenCalled();
     expect(document.body.style.pointerEvents).not.toBe("none");
   });
 
-  it("uses the editor language for the profile label and actions", async () => {
-    locale.language = "en";
-    render(
-      <SidebarProfileMenu onOpenSettings={vi.fn()} onOpenUpdates={vi.fn()} />,
-    );
+  it("uses the editor language for account actions", async () => {
+    mocks.language = "en";
+    mount();
     await userEvent
       .setup()
       .click(screen.getByRole("button", { name: "Profile and settings" }));
     expect(
-      screen.getByRole("menuitem", { name: "Settings" }),
+      screen.getByRole("menuitem", { name: "Sign in to LoliCode" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("menuitem", { name: "Software updates" }),
+      screen.getByRole("menuitem", { name: "Settings" }),
     ).toBeInTheDocument();
   });
 });
