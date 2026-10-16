@@ -2,16 +2,16 @@
 
 LoliCode release information is maintained independently in this repository. Published packages are available from the [LoliCode download page](https://tools.treasuregrove.art/lolicode/); source releases are listed in [LoliCode Releases](https://github.com/treasureGrove/LoliCode/releases).
 
-## [Unreleased] — 4.0.16
+## [4.0.16] — 2026-10-16
 
-This section describes the release being prepared. It is not a publication announcement.
+Published Windows x64 downloads and signed updates are available from the [LoliCode website](https://tools.treasuregrove.art/lolicode/). See the [delivery record](docs/guides/lolicode-4.0.16-delivery.md) for validation and scope.
 
 - Refine the desktop navigation while retaining the global navigation rail and project/session sidebar. Move settings into the avatar menu and clarify the open-folder action.
 - Add LoliCode website account sign-in, public profile/avatar display, refresh, and logout independently from model-provider authorization. Keep the account token in the native credential service, with explicit warnings when system persistence is unavailable.
 - Replace inherited public-facing project documentation and support links with LoliCode's own introduction, downloads, community, release notes, and signed update channel.
 - Keep shipped Agent functionality separate from future UE, Tavern, memory, voice, and character-interaction plans.
 
-本节为 **4.0.16 待发布内容**：改进工作台导航与头像设置菜单，接入独立的 LoliCode 网站账户，并重写项目介绍、下载、反馈及更新入口。正式发布状态以官网和 Releases 为准。
+**4.0.16 已于 2026-10-16 发布**：改进工作台导航与头像设置菜单，接入独立的 LoliCode 网站账户，并重写项目介绍、下载、反馈及更新入口。Windows x64 安装版、便携 ZIP 与签名更新已上线；跨机和真实账户验收由用户继续进行。
 
 ## Earlier LoliCode releases
 

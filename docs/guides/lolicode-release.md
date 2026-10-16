@@ -2,7 +2,7 @@
 
 本流程是 LoliCode 自己的发布链路，不复用 CCSwitch 的公钥、更新地址、GitHub workflow 或下载站清单。`scripts/lolicode-release.mjs` 仅在本地产生并验证发布目录，不上传文件，不读取私钥或 `.env`。
 
-当前已公开版本为 4.0.15，4.0.16 正在准备。公开分发目前是 **Windows x64 NSIS 安装版与便携 ZIP**；macOS 和 Linux 是产品目标，尚未发布对应安装包。真实发布结果记录在每版交付文档中，不能用待发布清单替代发布证据。
+当前已公开版本为 **4.0.16**，见[本次交付记录](lolicode-4.0.16-delivery.md)。公开分发目前是 **Windows x64 NSIS 安装版与便携 ZIP**；macOS 和 Linux 是产品目标，尚未发布对应安装包。真实发布结果记录在每版交付文档中，不能用待发布清单替代发布证据。
 
 - 产品下载：[tools.treasuregrove.art/lolicode](https://tools.treasuregrove.art/lolicode/)。
 - 社区账户：[lolicode.com](https://lolicode.com)，独立于模型渠道授权。
