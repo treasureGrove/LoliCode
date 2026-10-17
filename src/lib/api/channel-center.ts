@@ -58,6 +58,11 @@ export interface ChannelCenterSnapshot {
   defaultModel?: string;
 }
 
+export interface ChannelUsageLabel {
+  providerId: string;
+  name: string;
+}
+
 export interface ChannelApplyResult {
   app: ChannelTarget;
   status: "success" | "skipped" | "error";
@@ -85,6 +90,8 @@ export interface ZhipuLoginStatus {
 
 export const channelCenterApi = {
   get: () => invoke<ChannelCenterSnapshot>("get_channel_center"),
+  listUsageLabels: () =>
+    invoke<ChannelUsageLabel[]>("list_channel_usage_labels"),
   save: (snapshot: ChannelCenterSnapshot) =>
     invoke<void>("save_channel_center", { snapshot }),
   discover: (channel: ChannelSource) =>

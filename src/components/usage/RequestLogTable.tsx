@@ -8,6 +8,7 @@ import type { AppId } from "@/lib/api";
 import {
   getFreshInputTokens,
   isUnpricedUsage,
+  USAGE_APP_LABELS,
   type LogFilters,
   type RequestLog,
   type UsageRangeSelection,
@@ -39,6 +40,7 @@ interface RequestLogTableProps {
   refreshIntervalMs: number;
   /** 点一行打开请求详情 */
   onOpenDetail?: (requestId: string) => void;
+  channelNamesByProviderId?: Readonly<Record<string, string>>;
 }
 
 const pad2 = (value: number) => String(value).padStart(2, "0");
@@ -76,7 +78,9 @@ export function isKnownAppId(appType: string): appType is AppId {
 }
 
 export function appDisplayName(appType: string): string {
-  return isKnownAppId(appType) ? APP_DISPLAY_NAME[appType] : appType;
+  if (isKnownAppId(appType)) return APP_DISPLAY_NAME[appType];
+  if (appType === "channel-gateway") return "Channel Gateway";
+  return USAGE_APP_LABELS[appType as keyof typeof USAGE_APP_LABELS] ?? appType;
 }
 
 /**
@@ -97,7 +101,10 @@ const APP_SHORT_NAME: Record<AppId, string> = {
 };
 
 export function appShortName(appType: string): string {
-  return isKnownAppId(appType) ? APP_SHORT_NAME[appType] : appType;
+  if (isKnownAppId(appType)) return APP_SHORT_NAME[appType];
+  if (appType === "channel-gateway") return "Gateway";
+  if (appType === "deepseek-harness") return "DSH";
+  return USAGE_APP_LABELS[appType as keyof typeof USAGE_APP_LABELS] ?? appType;
 }
 
 const isSuccessStatus = (code: number) => code >= 200 && code < 300;
@@ -110,6 +117,7 @@ export function RequestLogTable({
   statusCode,
   refreshIntervalMs,
   onOpenDetail,
+  channelNamesByProviderId,
 }: RequestLogTableProps) {
   const { t, i18n } = useTranslation();
   const [page, setPage] = useState(0);
@@ -166,7 +174,11 @@ export function RequestLogTable({
     const isCacheInclusive = log.inputTokens !== freshInput;
     const time = formatLogTime(log.createdAt, now);
     const fullTime = formatLogFullTime(log.createdAt);
-    const providerLabel = getUsageProviderLabel(log.providerName, t);
+    const providerLabel = getUsageProviderLabel(
+      log.providerName,
+      t,
+      channelNamesByProviderId,
+    );
     const provider = providerLabel.shortLabel;
     const exactTps = formatOutputTokensPerSecond(log);
     // 会话日志导入的请求没有首字计时，速度是按日志时间戳估的，前面带 ≈
@@ -348,7 +360,13 @@ export function RequestLogTable({
             <tr className={usageTable.headRow}>
               <th className={usageTable.th}>{t("usage.time")}</th>
               <th className={usageTable.th}>{t("usage.app")}</th>
-              <th className={usageTable.th}>{t("usage.provider")}</th>
+              <th className={usageTable.th}>
+                {dashboardAppType === "lolicode" ||
+                dashboardAppType === "channel-gateway" ||
+                dashboardAppType === "tavern"
+                  ? t("usage.channelFilter.label")
+                  : t("usage.provider")}
+              </th>
               <th className={usageTable.th}>{t("usage.model")}</th>
               <th className={usageTable.th}>{t("usage.freshInput")}</th>
               <th className={usageTable.th}>{t("usage.outputTokens")}</th>

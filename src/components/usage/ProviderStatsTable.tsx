@@ -21,6 +21,7 @@ interface ProviderStatsTableProps {
   providerName?: string;
   model?: string;
   refreshIntervalMs: number;
+  channelNamesByProviderId?: Readonly<Record<string, string>>;
 }
 
 export function ProviderStatsTable({
@@ -29,6 +30,7 @@ export function ProviderStatsTable({
   providerName,
   model,
   refreshIntervalMs,
+  channelNamesByProviderId,
 }: ProviderStatsTableProps) {
   const { t, i18n } = useTranslation();
   const locale = getLocaleFromLanguage(getResolvedLang(i18n));
@@ -59,11 +61,23 @@ export function ProviderStatsTable({
       <div className={usageTable.scroller}>
         <table
           className={cn(usageTable.table, "min-w-[620px]")}
-          aria-label={t("usage.providerStats")}
+          aria-label={
+            appType === "lolicode" ||
+            appType === "channel-gateway" ||
+            appType === "tavern"
+              ? t("usage.tabs.channels")
+              : t("usage.providerStats")
+          }
         >
           <thead>
             <tr className={usageTable.headRow}>
-              <th className={usageTable.th}>{t("usage.provider")}</th>
+              <th className={usageTable.th}>
+                {appType === "lolicode" ||
+                appType === "channel-gateway" ||
+                appType === "tavern"
+                  ? t("usage.channelFilter.label")
+                  : t("usage.provider")}
+              </th>
               <th className={usageTable.th}>{t("usage.requests")}</th>
               <th className={usageTable.th}>{t("usage.tokens")}</th>
               <th className={usageTable.th}>{t("usage.cost")}</th>
@@ -79,7 +93,11 @@ export function ProviderStatsTable({
               </tr>
             ) : (
               pagination.pageRows.map((stat) => {
-                const provider = getUsageProviderLabel(stat.providerName, t);
+                const provider = getUsageProviderLabel(
+                  stat.providerName,
+                  t,
+                  channelNamesByProviderId,
+                );
                 return (
                   <tr
                     key={JSON.stringify([stat.appType, stat.providerId])}

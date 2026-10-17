@@ -38,6 +38,8 @@ mod settings;
 pub mod skill;
 mod stream_check;
 mod subscription;
+mod tavern;
+mod unreal;
 mod sync_support;
 mod xai_oauth;
 mod zhipu_login;
@@ -84,6 +86,8 @@ pub use settings::*;
 pub use skill::*;
 pub use stream_check::*;
 pub use subscription::*;
+pub use tavern::*;
+pub use unreal::*;
 pub use xai_oauth::*;
 pub use zhipu_login::*;
 
@@ -92,3 +96,9 @@ pub use s3_sync::*;
 pub use usage::*;
 pub use webdav_sync::*;
 pub use workspace::*;
+
+mod builtin_apps;
+pub use builtin_apps::*;
+
+mod resource_updates;
+pub use resource_updates::*;

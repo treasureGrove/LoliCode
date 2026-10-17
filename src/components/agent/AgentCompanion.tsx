@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 // Keep the selected artwork inside the renderer bundle: it must also display
 // offline, without a separate asset request from the desktop WebView.
 import companion from "@/assets/atelier/companion.png?inline";
+import { useResourceImage } from "@/components/shell/ResourcePackProvider";
 import { useInterfaceAppearance } from "@/hooks/useInterfaceAppearance";
 
 /** A reserved sidebar slot keeps the companion clear of the transcript and composer. */
@@ -10,6 +11,7 @@ export function AgentCompanion() {
   const { t } = useTranslation();
   const { appearance, setAppearance } = useInterfaceAppearance();
   const visible = appearance.companionVisible;
+  const companionSource = useResourceImage("companion", companion);
   const toggleLabel = t(
     visible
       ? "settings.atelier.hideCompanion"
@@ -22,7 +24,7 @@ export function AgentCompanion() {
           <span className="wb-companion-aura" aria-hidden="true" />
           <img
             className="wb-companion-image"
-            src={companion}
+            src={companionSource}
             alt={t("settings.atelier.companionAlt")}
             draggable={false}
             decoding="async"

@@ -32,13 +32,10 @@ export function SimpleUsagePage() {
       const [summary, providers, catalog] = await Promise.all([
         usageApi.getUsageSummary(from, to),
         usageApi.getProviderStats(from, to),
-        channelCenterApi.get().catch(() => undefined),
+        channelCenterApi.listUsageLabels().catch(() => []),
       ]);
       const channelNames = Object.fromEntries(
-        catalog?.channels.map((channel) => [
-          `channel-${channel.id}`,
-          channel.name,
-        ]) ?? [],
+        catalog.map((channel) => [channel.providerId, channel.name]),
       );
       return { summary, providers, channelNames };
     },
@@ -134,17 +131,22 @@ export function SimpleUsagePage() {
                     >
                       <div>
                         <p className="font-medium">
-                          {provider.appType === "channel-gateway"
+                          {provider.appType === "lolicode" ||
+                          provider.appType === "channel-gateway"
                             ? (usage.data?.channelNames[provider.providerId] ??
                               provider.providerName)
                             : provider.providerName}
                         </p>
                         <p className="text-xs text-fg-2">
-                          {provider.appType === "channel-gateway"
-                            ? "统一渠道服务"
-                            : (DESKTOP_USAGE_APPS[provider.appType] ??
-                              APP_DISPLAY_NAME[provider.appType as AppId] ??
-                              provider.appType)}
+                          {provider.appType === "lolicode"
+                            ? "LoliCode"
+                            : provider.appType === "tavern"
+                              ? "酒馆"
+                              : provider.appType === "channel-gateway"
+                                ? "通用渠道网关"
+                                : (DESKTOP_USAGE_APPS[provider.appType] ??
+                                  APP_DISPLAY_NAME[provider.appType as AppId] ??
+                                  provider.appType)}
                         </p>
                       </div>
                       <div className="text-right text-sm tabular-nums">

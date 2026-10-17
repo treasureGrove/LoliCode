@@ -7,6 +7,7 @@ import {
   ChartColumn,
   ChevronDown,
   Database,
+  Bot,
   Loader2,
   RefreshCw,
 } from "lucide-react";
@@ -31,6 +32,8 @@ import {
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import {
   KNOWN_APP_TYPES,
+  USAGE_APP_LABELS,
+  type AppType,
   type AppTypeFilter,
   type UsageRangeSelection,
 } from "@/types/usage";
@@ -42,6 +45,7 @@ import {
 } from "@/lib/query/usage";
 import { useUsageEventBridge } from "@/hooks/useUsageEventBridge";
 import { usageApi } from "@/lib/api/usage";
+import { channelCenterApi } from "@/lib/api/channel-center";
 import { getUsageRangePresetLabel, resolveUsageRange } from "@/lib/usageRange";
 import { cn } from "@/lib/utils";
 import { UsageHero } from "./UsageHero";
@@ -70,6 +74,20 @@ const normalizeRefreshInterval = (value: number | undefined) =>
   isRefreshIntervalOption(value) ? value : DEFAULT_REFRESH_INTERVAL_MS;
 
 const STATUS_CODE_OPTIONS = [200, 400, 401, 429, 500] as const;
+const USAGE_APP_ABBREVIATIONS: Partial<Record<AppType, string>> = {
+  "channel-gateway": "GW",
+  workbuddy: "WB",
+  "deepseek-harness": "DSH",
+  zcode: "Z",
+  mimocode: "Mi",
+  tavern: "酒",
+};
+
+function usageAppLabel(app: AppType, channelGatewayLabel: string): string {
+  if (app === "channel-gateway") return channelGatewayLabel;
+  if (USAGE_APP_LABELS[app]) return USAGE_APP_LABELS[app]!;
+  return APP_DISPLAY_NAME[app as keyof typeof APP_DISPLAY_NAME] ?? app;
+}
 
 type UsageTab = "logs" | "providers" | "models" | "pricing";
 const TABS: UsageTab[] = ["logs", "providers", "models", "pricing"];
@@ -163,6 +181,10 @@ export function UsageDashboard({
     preset: "today",
   });
   const [appType, setAppType] = useState<AppTypeFilter>(initialAppType);
+  const isChannelAppType =
+    appType === "lolicode" ||
+    appType === "channel-gateway" ||
+    appType === "tavern";
   const [providerName, setProviderName] = useState<string | undefined>(
     undefined,
   );
@@ -268,9 +290,11 @@ export function UsageDashboard({
     setSyncingSession(true);
     try {
       const result = await usageApi.syncSessionUsage();
-      await queryClient.invalidateQueries({ queryKey: usageKeys.all });
       lastManualSessionSyncAt = Date.now();
       setLastManualSyncAt(lastManualSessionSyncAt);
+      // The scan is complete even if a secondary chart/label refresh is slow.
+      // Keep its receipt and the sync button independent of those queries.
+      void queryClient.invalidateQueries({ queryKey: usageKeys.all });
       const message = t("usage.sessionSync.syncCompleted", {
         imported: result.imported,
         files: result.filesScanned,
@@ -323,6 +347,22 @@ export function UsageDashboard({
     range,
     { appType, providerName },
     refetch,
+  );
+  const { data: channelUsageLabels } = useQuery({
+    queryKey: ["usage", "channel-labels"],
+    queryFn: channelCenterApi.listUsageLabels,
+    staleTime: 5 * 60_000,
+    refetchInterval: refetch.refetchInterval,
+  });
+  const channelNamesByProviderId = useMemo(
+    () =>
+      Object.fromEntries(
+        (channelUsageLabels ?? []).map(({ providerId, name }) => [
+          providerId,
+          name,
+        ]),
+      ),
+    [channelUsageLabels],
   );
   // 有没有任何用量（不分时间范围）：一条都没有时显示空状态
   const { data: allTimeSummary } = useQuery({
@@ -496,26 +536,44 @@ export function UsageDashboard({
           {t("usage.appFilter.all")}
         </button>
         {/* 应用只露图标，名字放悬停提示和 aria-label */}
-        {KNOWN_APP_TYPES.map((app) => (
-          <HoverTip key={app} content={APP_DISPLAY_NAME[app]}>
-            <button
-              type="button"
-              aria-pressed={appType === app}
-              aria-label={APP_DISPLAY_NAME[app]}
-              className={cn(
-                chipClass(appType === app),
-                "w-[30px] justify-center px-0",
-              )}
-              onClick={() => changeAppType(app)}
-            >
-              <AppGlyph
-                app={app}
-                size={16}
-                badgeClassName={appType === app ? "bg-surface" : "bg-subtle"}
-              />
-            </button>
-          </HoverTip>
-        ))}
+        {KNOWN_APP_TYPES.map((app) => {
+          const label = usageAppLabel(app, t("usage.appFilter.channelGateway"));
+          const isManagedApp = Object.prototype.hasOwnProperty.call(
+            APP_DISPLAY_NAME,
+            app,
+          );
+          return (
+            <HoverTip key={app} content={label}>
+              <button
+                type="button"
+                aria-pressed={appType === app}
+                aria-label={label}
+                title={label}
+                className={cn(
+                  chipClass(appType === app),
+                  "w-[30px] justify-center px-0",
+                )}
+                onClick={() => changeAppType(app)}
+              >
+                {app === "lolicode" ? (
+                  <Bot className="h-4 w-4" aria-hidden="true" />
+                ) : isManagedApp ? (
+                  <AppGlyph
+                    app={app as keyof typeof APP_DISPLAY_NAME}
+                    size={16}
+                    badgeClassName={
+                      appType === app ? "bg-surface" : "bg-subtle"
+                    }
+                  />
+                ) : (
+                  <span className="text-[9px] font-semibold leading-none">
+                    {USAGE_APP_ABBREVIATIONS[app]}
+                  </span>
+                )}
+              </button>
+            </HoverTip>
+          );
+        })}
       </div>
       <div className="tai-usage-filter-spacer" />
       <DropdownMenu>
@@ -527,21 +585,39 @@ export function UsageDashboard({
             className="min-w-[78px] max-w-[156px] shrink gap-1 pe-2 ps-3"
             title={
               providerName
-                ? usageProviderTitle(getUsageProviderLabel(providerName, t))
-                : t("usage.providerFilter.title")
+                ? usageProviderTitle(
+                    getUsageProviderLabel(
+                      providerName,
+                      t,
+                      channelNamesByProviderId,
+                    ),
+                  )
+                : isChannelAppType
+                  ? t("usage.channelFilter.title")
+                  : t("usage.providerFilter.title")
             }
           >
             <span className="min-w-0 truncate">
               {providerName
-                ? getUsageProviderLabel(providerName, t).label
-                : t("usage.providerFilter.label")}
+                ? getUsageProviderLabel(
+                    providerName,
+                    t,
+                    channelNamesByProviderId,
+                  ).label
+                : isChannelAppType
+                  ? t("usage.channelFilter.label")
+                  : t("usage.providerFilter.label")}
             </span>
             <ChevronDown className="h-3.5 w-3.5 shrink-0 text-fg-2" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent
           align="end"
-          aria-label={t("usage.providerFilter.title")}
+          aria-label={
+            isChannelAppType
+              ? t("usage.channelFilter.title")
+              : t("usage.providerFilter.title")
+          }
           className={cn(menuContentClass, "max-h-[360px] overflow-y-auto")}
         >
           <DropdownMenuItem
@@ -549,11 +625,17 @@ export function UsageDashboard({
             onSelect={() => changeProviderName(undefined)}
           >
             <MenuCheck checked={providerName == null} />
-            {t("usage.providerFilter.all")}
+            {isChannelAppType
+              ? t("usage.channelFilter.all")
+              : t("usage.providerFilter.all")}
             <MenuMeta>{fmtInt(providerTotal, locale)}</MenuMeta>
           </DropdownMenuItem>
           {providerOptions.map((option) => {
-            const label = getUsageProviderLabel(option.name, t);
+            const label = getUsageProviderLabel(
+              option.name,
+              t,
+              channelNamesByProviderId,
+            );
             return (
               <DropdownMenuItem
                 key={option.name}
@@ -624,7 +706,9 @@ export function UsageDashboard({
   // ── 子页签 ───────────────────────────────────────────────────────────
   const tabLabel: Record<UsageTab, string> = {
     logs: t("usage.requestLogs"),
-    providers: t("usage.tabs.providers"),
+    providers: isChannelAppType
+      ? t("usage.tabs.channels")
+      : t("usage.tabs.providers"),
     models: t("usage.tabs.models"),
     pricing: t("usage.tabs.pricing"),
   };
@@ -706,6 +790,7 @@ export function UsageDashboard({
             model={model}
             statusCode={statusCode}
             refreshIntervalMs={refreshIntervalMs}
+            channelNamesByProviderId={channelNamesByProviderId}
             onOpenDetail={setDetailRequestId}
           />
         )}
@@ -716,6 +801,7 @@ export function UsageDashboard({
             providerName={providerName}
             model={model}
             refreshIntervalMs={refreshIntervalMs}
+            channelNamesByProviderId={channelNamesByProviderId}
           />
         )}
         {tab === "models" && (
@@ -832,6 +918,7 @@ export function UsageDashboard({
       <RequestDetailPanel
         requestId={detailRequestId}
         onClose={() => setDetailRequestId(null)}
+        channelNamesByProviderId={channelNamesByProviderId}
       />
       <UsageDataSourcesSheet
         open={sourcesOpen}

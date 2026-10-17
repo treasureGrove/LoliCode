@@ -1401,6 +1401,8 @@
   gap: 8px;
 }
 .wb-extension-hint {
+  display: grid;
+  gap: 6px;
   font-size: 12px;
   color: var(--wb-muted);
 }

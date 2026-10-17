@@ -359,6 +359,34 @@ async fn install_update_and_restart_inner(app: &AppHandle) -> Result<bool, Strin
         None => None,
     };
 
+    // The package signature is verified and the local agent is idle. Snapshot
+    // user data before the installer replaces application files.
+    let backup_path = if let Some(state) = app.try_state::<crate::store::AppState>() {
+        let db = state.db.clone();
+        tauri::async_runtime::spawn_blocking(move || db.backup_database_file())
+            .await
+            .map_err(|e| format!("更新前数据库备份任务未完成: {e}"))?
+            .map_err(|e| format!("更新前数据库备份失败，已取消更新以保护项目和渠道配置: {e}"))?
+    } else {
+        let db_path = crate::config::get_app_config_dir().join("cc-switch.db");
+        if db_path.is_file() {
+            tauri::async_runtime::spawn_blocking(move || {
+                crate::database::Database::backup_database_path(&db_path)
+            })
+            .await
+            .map_err(|e| format!("更新前数据库备份任务未完成: {e}"))?
+            .map_err(|e| format!("更新前数据库备份失败，已取消更新以保护项目和渠道配置: {e}"))?
+        } else {
+            None
+        }
+    };
+    if let Some(path) = backup_path {
+        log::info!(
+            "更新前数据库快照已完成: {}",
+            path.file_name().unwrap_or_default().to_string_lossy()
+        );
+    }
+
     log::info!("开始安装应用更新: {}", update.version);
     emit_update_phase(app, "installing", None);
     let installed = tauri::async_runtime::spawn_blocking(move || update.install(bytes))
@@ -425,6 +453,26 @@ pub async fn set_app_config_dir_override(
     path: Option<String>,
 ) -> Result<bool, String> {
     crate::app_store::set_app_config_dir_to_store(&app, path.as_deref())?;
+    Ok(true)
+}
+
+/// 恢复启动时丢失的自定义数据目录。只接受包含现有数据库或旧版配置的目录。
+#[tauri::command]
+pub async fn recover_app_config_dir(app: AppHandle, path: String) -> Result<bool, String> {
+    let selected = std::path::PathBuf::from(path.trim())
+        .canonicalize()
+        .map_err(|e| format!("无法读取所选数据目录: {e}"))?;
+    if !selected.is_dir() {
+        return Err("请选择一个现有的数据目录。".into());
+    }
+    if !selected.join("cc-switch.db").is_file() && !selected.join("config.json").is_file() {
+        return Err("所选目录中没有 cc-switch.db 或旧版 config.json。为避免创建空数据库，请选择原 LoliCode 数据目录。".into());
+    }
+    let selected = selected
+        .to_str()
+        .ok_or_else(|| "所选路径无法安全保存，请选择一个普通本地目录。".to_string())?;
+    crate::app_store::set_app_config_dir_to_store(&app, Some(selected))
+        .map_err(|e| e.to_string())?;
     Ok(true)
 }
 

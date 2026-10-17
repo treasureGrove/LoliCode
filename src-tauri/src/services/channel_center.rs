@@ -2049,7 +2049,21 @@ pub async fn prepare_agent_catalog(state: &AppState) -> Result<PreparedAgentCata
 pub async fn prepare_inprocess_agent_binding(
     state: &AppState,
 ) -> Result<AgentGatewayBinding, AppError> {
-    prepare_agent_binding_with(state, |_| Ok(())).await
+    let mut binding = prepare_agent_binding_with(state, |_| Ok(())).await?;
+    binding.base_url = crate::proxy::channel_gateway::catalog_client_base_url(
+        &binding.base_url,
+        "lolicode",
+    )?;
+    Ok(binding)
+}
+
+/// Prepare the shared model catalog for Tavern requests with separate usage
+/// attribution. Credentials remain inside this backend-only binding.
+pub async fn prepare_tavern_binding(state: &AppState) -> Result<AgentGatewayBinding, AppError> {
+    let mut binding = prepare_agent_binding_with(state, |_| Ok(())).await?;
+    binding.base_url =
+        crate::proxy::channel_gateway::catalog_client_base_url(&binding.base_url, "tavern")?;
+    Ok(binding)
 }
 
 async fn prepare_agent_binding_with(
@@ -2065,7 +2079,7 @@ async fn prepare_agent_binding_with(
         .is_some_and(|id| catalog.models.iter().any(|model| &model.id == id))
     {
         return Err(AppError::InvalidInput(
-            "请先在渠道与模型中添加并启用支持工具调用的模型".into(),
+            "请先在渠道与模型中添加并启用一个可通过共享网关调用的模型".into(),
         ));
     }
     validate_engine(&catalog)?;
@@ -2585,7 +2599,7 @@ async fn apply_external_target(
 ) -> Result<String, AppError> {
     prepare_gateway_write(state.db.as_ref(), snapshot.revision)?;
     ensure_gateway_running(state, &gateway.0, snapshot.revision).await?;
-    let base = crate::proxy::channel_gateway::external_client_base_url(&gateway.0, target)?;
+    let base = crate::proxy::channel_gateway::catalog_client_base_url(&gateway.0, target)?;
     let source = aggregate_source(snapshot, &base, &gateway.1, "openai_chat");
     let default = snapshot.default_model.clone().ok_or_else(|| {
         AppError::InvalidInput("没有可用的默认 API 模型，客户端配置未改动".into())

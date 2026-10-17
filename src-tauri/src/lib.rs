@@ -84,6 +84,10 @@ pub use store::AppState;
 /// desktop account storage or exposing its internal configuration over IPC.
 #[cfg(feature = "test-hooks")]
 pub mod agent_test_support {
+    pub use crate::services::{builtin_apps as builtin_apps_test, tavern as tavern_test};
+    pub use crate::services::agent_workflows::{invoke_file_service as workflow_files, record_run_in_db, workflow_prompt};
+    pub use crate::services::zhipu_login::acceptance_secret_read_only as glm_acceptance_secret;
+    pub use crate::services::resource_updates::{Envelope as ResourceEnvelope, ResourceStore};
     pub use crate::proxy::providers::codex_oauth_auth::CodexOAuthManager;
     pub use crate::services::{
         agent::{AgentState, AgentWorkspace},
@@ -490,7 +494,16 @@ pub fn run() {
 
             // 预先刷新 Store 覆盖配置，确保后续路径读取正确（日志/数据库等）
             app_store::refresh_app_config_dir_override(app.handle());
-            panic_hook::init_app_config_dir(crate::config::get_app_config_dir());
+            let missing_app_config_dir =
+                app_store::get_app_config_dir_override().filter(|path| !path.is_dir());
+            // Keep startup diagnostics writable while a custom data volume is
+            // unavailable; never initialize a replacement DB at a fallback path.
+            panic_hook::init_app_config_dir(
+                missing_app_config_dir
+                    .as_ref()
+                    .map(|_| crate::config::get_device_config_dir())
+                    .unwrap_or_else(crate::config::get_app_config_dir),
+            );
 
             // 初始化日志（输出到 <app_config_dir>/logs/cc-switch.log）
             {
@@ -536,6 +549,28 @@ pub fn run() {
             // 首次读取覆盖路径时 logger 尚未可用；此处重放一次，
             // 让 Store 损坏或路径无效等启动警告能够真正落盘。
             let _ = app_store::refresh_app_config_dir_override(app.handle());
+
+            if let Some(path) = app_store::get_app_config_dir_override()
+                .filter(|path| !path.is_dir())
+            {
+                log::error!("Configured application data directory is unavailable: {path:?}");
+                crate::init_status::set_init_error(crate::init_status::InitErrorPayload {
+                    path: path.display().to_string(),
+                    error: "配置的数据目录当前不可用。为避免打开空数据库，应用已暂停启动，也没有清除旧数据。请重新连接原目录，或选择以前使用的数据目录。".into(),
+                    kind: Some("app_config_dir_missing".into()),
+                    db_version: None,
+                    supported_version: None,
+                });
+                if let Some(window) = app.get_webview_window("main") {
+                    #[cfg(target_os = "windows")]
+                    {
+                        let _ = window.set_skip_taskbar(false);
+                    }
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+                return Ok(());
+            }
 
             #[cfg(target_os = "windows")]
             set_windows_app_user_model_id(app.handle());
@@ -1587,6 +1622,7 @@ pub fn run() {
             // app_config_dir override via Store
             commands::get_app_config_dir_override,
             commands::set_app_config_dir_override,
+            commands::recover_app_config_dir,
             // provider sort order management
             commands::update_providers_sort_order,
             // theirs: config import/export and dialogs
@@ -1771,6 +1807,26 @@ pub fn run() {
             commands::get_agent_session,
             commands::inspect_agent_document,
             commands::send_agent_message,
+            commands::get_resource_pack,
+            commands::check_resource_update,
+            commands::install_resource_update,
+            commands::confirm_resource_pack,
+            commands::rollback_resource_pack,
+            commands::list_builtin_apps,
+            commands::set_builtin_app_enabled,
+            commands::get_tavern_snapshot,
+            commands::import_tavern_character,
+            commands::get_tavern_avatar,
+            commands::get_tavern_catalog,
+            commands::create_tavern_story,
+            commands::delete_tavern_story,
+            commands::preview_tavern_context,
+            commands::send_tavern_message,
+            commands::get_unreal_snapshot,
+            commands::add_unreal_project,
+            commands::remove_unreal_project,
+            commands::launch_unreal_project,
+            commands::install_unreal_agent_link,
             commands::query_agent_command,
             commands::interrupt_agent_session,
             commands::reply_agent_permission,
@@ -1809,6 +1865,7 @@ pub fn run() {
             commands::open_agent_path,
             commands::open_agent_project_directory,
             commands::get_channel_center,
+            commands::list_channel_usage_labels,
             commands::save_channel_center,
             commands::discover_channel_models,
             commands::apply_channel_center,

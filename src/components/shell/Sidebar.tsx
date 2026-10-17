@@ -5,7 +5,9 @@ import { getVersion } from "@tauri-apps/api/app";
 import { LayoutGroup, motion, useReducedMotion } from "framer-motion";
 import {
   ArrowLeft,
+  BookHeart,
   Bot,
+  Boxes,
   ChartColumn,
   Database,
   Folder,
@@ -13,8 +15,10 @@ import {
   Info,
   PanelsTopLeft,
   Download,
+  Plus,
   SlidersHorizontal,
 } from "lucide-react";
+import { useBuiltinApps } from "@/lib/api/builtin-apps";
 import type { AppId } from "@/lib/api";
 import type { VisibleApps } from "@/types";
 import type { GlobalPage, SettingsSection, View } from "@/lib/navigation";
@@ -129,12 +133,19 @@ function MainDirectory({
 }: DirectoryProps & { todayCost: number; authNeedsAttention: boolean }) {
   const { t, i18n } = useTranslation();
   const chinese = i18n.language.startsWith("zh");
+  const apps = useBuiltinApps();
+  const installed = (id: string) =>
+    apps.data?.some((app) => app.id === id && app.enabled) === true;
   const workbench = t("channelCenter.navigation", {
     defaultValue: chinese ? "渠道与模型" : "Channels & models",
   });
   return (
     <div className="tai-shell-directory">
-      <div role="group" aria-label={workbench} className="tai-shell-task-group">
+      <div
+        role="group"
+        aria-label={t("nav.appsGroup")}
+        className="tai-shell-task-group"
+      >
         <NavItem
           collapsed={collapsed}
           selected={view === "agent"}
@@ -143,6 +154,40 @@ function MainDirectory({
           compactLabel={chinese ? "工作台" : "Studio"}
           onClick={() => onSelectPage("agent")}
         />
+        {installed("tavern") && (
+          <NavItem
+            collapsed={collapsed}
+            selected={view === "tavern"}
+            icon={BookHeart}
+            label={t("nav.tavern", {
+              defaultValue: chinese ? "酒馆" : "Tavern",
+            })}
+            compactLabel={chinese ? "酒馆" : "Tavern"}
+            onClick={() => onSelectPage("tavern")}
+          />
+        )}
+        {installed("unreal") && (
+          <NavItem
+            collapsed={collapsed}
+            selected={view === "unreal"}
+            icon={Boxes}
+            label={t("nav.unreal", {
+              defaultValue: chinese ? "虚幻工作台" : "Unreal workspace",
+            })}
+            compactLabel={chinese ? "虚幻" : "Unreal"}
+            onClick={() => onSelectPage("unreal")}
+          />
+        )}
+        <NavItem
+          collapsed={collapsed}
+          selected={view === "applications"}
+          icon={Plus}
+          label={t("applications.title")}
+          compactLabel={chinese ? "应用" : "Apps"}
+          onClick={() => onSelectPage("applications")}
+        />
+      </div>
+      <div role="group" aria-label={workbench} className="tai-shell-task-group">
         <NavItem
           collapsed={collapsed}
           selected={

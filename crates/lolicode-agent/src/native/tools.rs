@@ -204,6 +204,7 @@ enum Call {
     Write(PathBuf, String, Option<String>),
     Patch(PathBuf, String, String),
     Command(PathBuf, String, u64),
+    Unreal(String, Value),
 }
 fn parse(project: &Path, name: &str, input: &Value) -> Result<(PathBuf, Call), String> {
     let root = root(project)?;
@@ -276,6 +277,23 @@ fn parse(project: &Path, name: &str, input: &Value) -> Result<(PathBuf, Call), S
                 number(a, "timeout_seconds", 60, 120)?,
             )
         }
+        "unreal_editor_command" => {
+            let a = args(input, &["method", "params"])?;
+            let method = text(a, "method")?;
+            if !super::unreal::method_is_allowed(method) {
+                return Err("当前版本尚未开放这条 UnrealAgentLink 命令".into());
+            }
+            let params = a.get("params").cloned().unwrap_or_else(|| json!({}));
+            if !params.is_object()
+                || serde_json::to_vec(&params).map_err(|_| "虚幻参数无法编码")?.len() > 64 * 1024
+            {
+                return Err("虚幻编辑器参数必须是 64 KiB 以内的 JSON 对象".into());
+            }
+            if !super::unreal::find_project_file(&root).is_some() {
+                return Err("主 Agent 当前项目不是 Unreal 工程；请先在虚幻工作区选择 .uproject 工程".into());
+            }
+            Call::Unreal(method.to_string(), params)
+        }
         _ => return Err("未知本地工具".into()),
     };
     match &call {
@@ -333,6 +351,13 @@ pub fn inspect(project: &Path, name: &str, input: &Value) -> Result<ToolInspecti
             let safe = command::safe_command(&command);
             ("shell", command, !safe, !safe, !safe)
         }
+        Call::Unreal(method, _) => (
+            if super::unreal::method_is_mutating(&method) { "unreal-edit" } else { "unreal-read" },
+            format!("{} · {}", project.display(), method),
+            super::unreal::method_is_mutating(&method),
+            super::unreal::method_is_mutating(&method),
+            false,
+        ),
     };
     Ok(ToolInspection {
         action: action.into(),
@@ -613,6 +638,15 @@ pub async fn execute(
     if let Call::Command(workdir, command, seconds) = call {
         return command::execute(&root, &workdir, &command, seconds, cancel).await;
     }
+    if let Call::Unreal(method, params) = call {
+        let result = super::unreal::request(&root, &method, &params, cancel).await?;
+        return Ok(ToolOutput {
+            text: serde_json::to_string_pretty(&result).unwrap_or_else(|_| result.to_string()),
+            image_data_url: None,
+            diffs: Vec::new(),
+            file_changes: Vec::new(),
+        });
+    }
     tokio::task::spawn_blocking(move || {
         cancelled(&cancel)?;
         let mut file_changes = Vec::new();
@@ -728,6 +762,7 @@ pub async fn execute(
                 (format!("已更新 {}", relative(&root, &path)), diffs)
             }
             Call::Command(..) => unreachable!(),
+            Call::Unreal(..) => unreachable!(),
         };
         Ok(ToolOutput {
             text: bounded(text),

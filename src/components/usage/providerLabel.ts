@@ -30,10 +30,15 @@ export interface UsageProviderLabel {
 export function getUsageProviderLabel(
   name: string | undefined,
   t: TFunction,
+  channelNamesByProviderId?: Readonly<Record<string, string>>,
 ): UsageProviderLabel {
   if (!name) {
     const label = t("usage.unknownProvider");
     return { label, shortLabel: label };
+  }
+  if (name.startsWith("channel-")) {
+    const channelName = channelNamesByProviderId?.[name];
+    if (channelName) return { label: channelName, shortLabel: channelName };
   }
   const app = SESSION_PROVIDER_APPS[name];
   const desktopApp = Object.entries(DESKTOP_USAGE_APPS).find(

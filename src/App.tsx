@@ -3,6 +3,10 @@ import { DeepLinkImportDialog } from "@/components/DeepLinkImportDialog";
 import { FirstRunNoticeDialog } from "@/components/FirstRunNoticeDialog";
 import { WhatsNewNotice } from "@/components/WhatsNewDialog";
 import { AgentPage } from "@/components/agent/AgentPage";
+import { BuiltinApplicationsPage } from "@/components/apps/BuiltinApplicationsPage";
+import { useBuiltinApps } from "@/lib/api/builtin-apps";
+import { TavernPage } from "@/components/tavern/TavernPage";
+import { UnrealPage } from "@/components/unreal/UnrealPage";
 import {
   checkToolUpdatesInBackground,
   useToolUpdatesAvailable,
@@ -66,6 +70,7 @@ function App() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { hasUpdate, checkUpdate } = useUpdate();
+  const builtinApps = useBuiltinApps();
 
   const [activeApp, setActiveApp] = useState<AppId>(getInitialApp);
   const [currentView, setCurrentView] = useState<View>(readStoredView);
@@ -75,6 +80,8 @@ function App() {
   // 进设置前停留的页面：设置目录里的「← 返回」回到这里
   const settingsReturnViewRef = useRef<View>("channels");
   const [channelNavigationBusy, setChannelNavigationBusy] = useState(false);
+  const [agentInitialProjectPath, setAgentInitialProjectPath] =
+    useState<string>();
 
   useEffect(() => {
     storeView(currentView);
@@ -382,6 +389,13 @@ function App() {
     setCurrentView(productViewOf(page));
   };
 
+  const openUnrealProjectInAgent = (path: string) => {
+    const navigate = () => openUnrealProjectInAgent(path);
+    if (managementBusyRef.current || confirmLeave(navigate)) return;
+    setAgentInitialProjectPath(path);
+    setCurrentView("agent");
+  };
+
   useTrayNavigation((navigation) => {
     const navigate = () => {
       if (navigation.section) {
@@ -457,12 +471,24 @@ function App() {
   // ─── 全局页 ─────────────────────────────────────────────────────────────
 
   const renderGlobalPage = () => {
+    if (
+      (currentView === "tavern" || currentView === "unreal") &&
+      !builtinApps.data?.some((app) => app.id === currentView && app.enabled)
+    ) {
+      return <BuiltinApplicationsPage onOpen={openPage} />;
+    }
     switch (productViewOf(currentView)) {
+      case "applications":
+        return <BuiltinApplicationsPage onOpen={openPage} />;
       case "agent":
         return (
           <>
             <div id="main-content" className="min-h-0 flex-1 overflow-hidden">
               <AgentPage
+                initialProjectPath={agentInitialProjectPath}
+                onInitialProjectConsumed={() =>
+                  setAgentInitialProjectPath(undefined)
+                }
                 onOpenChannels={() => openPage("channels")}
                 onOpenAbout={() => openSettings("about")}
                 onCheckUpdate={() => {
@@ -513,6 +539,15 @@ function App() {
         );
       case "usage":
         return <SimpleUsagePage />;
+      case "tavern":
+        return <TavernPage onOpenChannels={() => openPage("channels")} />;
+      case "unreal":
+        return (
+          <UnrealPage
+            onOpenChannels={() => openPage("channels")}
+            onOpenAgentProject={openUnrealProjectInAgent}
+          />
+        );
       default:
         return null;
     }

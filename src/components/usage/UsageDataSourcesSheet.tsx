@@ -14,10 +14,9 @@ import { HelpTip } from "@/components/ui/help-tip";
 import { Switch } from "@/components/ui/switch";
 import { useGlobalProxyConfig } from "@/lib/query/proxy";
 import { APP_DISPLAY_NAME } from "@/components/shell/AppGlyph";
-import { KNOWN_APP_TYPES } from "@/types/usage";
+import { KNOWN_APP_TYPES, USAGE_APP_LABELS } from "@/types/usage";
 import { cn } from "@/lib/utils";
 import { getResolvedLang, joinNames } from "./format";
-import { DESKTOP_USAGE_APPS } from "./desktopSources";
 
 interface UsageDataSourcesSheetProps {
   open: boolean;
@@ -97,8 +96,12 @@ export function UsageDataSourcesSheet({
   const { t, i18n } = useTranslation();
   const coveredApps = joinNames(
     [
-      ...KNOWN_APP_TYPES.map((app) => APP_DISPLAY_NAME[app]),
-      ...Object.values(DESKTOP_USAGE_APPS),
+      ...KNOWN_APP_TYPES.map(
+        (app) =>
+          USAGE_APP_LABELS[app] ??
+          APP_DISPLAY_NAME[app as keyof typeof APP_DISPLAY_NAME] ??
+          app,
+      ),
     ],
     getResolvedLang(i18n),
   );

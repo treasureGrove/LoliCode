@@ -2239,6 +2239,12 @@
       "grokbuild": "Grok Build",
       "pi": "Pi",
       "mcode": "MiniMax Code",
+      "lolicode": "LoliCode",
+      "channelGateway": "共通チャネルゲートウェイ",
+      "workbuddy": "WorkBuddy",
+      "deepseek-harness": "DeepSeek Harness",
+      "zcode": "ZCode",
+      "mimocode": "MiMo",
       "label": "アプリで絞り込み"
     },
     "rawInputLabel": "原始",
@@ -2415,6 +2421,11 @@
       "all": "すべてのプロバイダー",
       "title": "プロバイダーで絞り込み"
     },
+    "channelFilter": {
+      "label": "チャネル",
+      "all": "すべてのチャネル",
+      "title": "チャネルで絞り込み"
+    },
     "modelFilter": {
       "label": "モデル",
       "title": "モデルで絞り込み（プロバイダーに連動）"
@@ -2447,6 +2458,7 @@
     "tabs": {
       "label": "明細",
       "providers": "プロバイダー",
+      "channels": "チャネル",
       "models": "モデル",
       "pricing": "料金"
     },
@@ -4139,7 +4151,58 @@
     "clientSwitcher": "クライアントを切り替え",
     "currentClient": "現在のクライアント",
     "workbench": "ワークベンチ",
+    "tavern": "酒場",
     "resources": "設定リソース"
+  },
+  "tavern": {
+    "title": "酒場",
+    "subtitle": "キャラクターカードを読み込み、設定済みモデルで物語を保存",
+    "importTitle": "SillyTavern キャラクターカードを読み込む",
+    "characterCard": "キャラクターカード",
+    "importCard": "カードを読み込む",
+    "importing": "読み込み中…",
+    "importSuccess": "{{name}} を読み込みました",
+    "importFailed": "カードを読み込めませんでした",
+    "supportedFormats": "V1/V2/V3 JSON と chara / ccv3 メタデータ付き PNG に対応。未知のフィールドも保持します。",
+    "characterLibrary": "キャラクター",
+    "characterCount": "{{count}} 人",
+    "noCharacters": "カードはまだありません",
+    "stories": "ストーリー",
+    "newStory": "新しいストーリー",
+    "noStories": "ストーリーはまだありません",
+    "chooseCharacter": "左側からキャラクターを選択",
+    "welcomeTitle": "新しい物語を始めましょう",
+    "startStoryHint": "共有モデルチャンネルで会話できます。ストーリーはローカルに保存されます。",
+    "emptyLibraryHint": "SillyTavern PNG または JSON カードを読み込みます。未知のフィールドはローカルデータに保持します。",
+    "emptyStory": "最初のメッセージを送って物語を始めます。",
+    "model": "モデルとチャンネル",
+    "noModels": "先にモデルを設定してください",
+    "configureModels": "モデルを設定",
+    "configureModelsHint": "「モデルとチャンネル」でモデルを追加して有効にしてください。",
+    "loadingModels": "利用可能なモデルを読み込み中…",
+    "contextPreview": "コンテキスト",
+    "loadingContext": "今回のコンテキストを確認中…",
+    "worldInfoIncluded": "世界設定 {{count}} 件を追加 · {{chars}} 文字",
+    "worldInfoExcluded": "未追加 {{count}} 件",
+    "includedEntries": "追加：{{entries}}",
+    "excludedEntries": "未追加：{{entries}}",
+    "promptDetails": "組み立てたキャラクタープロンプトを表示",
+    "deleteStory": "このストーリーを削除",
+    "storyDeleted": "ストーリーを削除しました",
+    "storyCreateFailed": "ストーリーを作成できませんでした",
+    "storyDeleteFailed": "ストーリーを削除できませんでした",
+    "selectStoryHint": "ストーリーを選択または作成してください。",
+    "contextUsesSharedModel": "選択したモデルとキャラクター設定を使用",
+    "messageInput": "ストーリーメッセージ",
+    "inputPlaceholder": "{{name}} に話しかける…",
+    "you": "あなた",
+    "youShort": "私",
+    "messageCount": "このストーリーのメッセージ {{count}} 件",
+    "generating": "生成中…",
+    "generationFailed": "生成に失敗しました。送信した内容は保持されています",
+    "generationFailedShort": "失敗 · 再送信できます",
+    "send": "送信",
+    "enterHint": "Enter で送信 · Shift + Enter で改行"
   },
   "appsPage": {
     "showInSidebar": "{{name}} をサイドバーに表示",
@@ -4845,5 +4908,38 @@
       "refresh": "残量を更新",
       "refreshAria": "{{login}} の残量を更新"
     }
+  },
+  "applications": {
+    "title": "アプリ",
+    "subtitle": "必要なアプリを追加し、同じ Agent とモデルを使用",
+    "loading": "読み込み中",
+    "loadFailed": "アプリを読み込めません",
+    "retry": "再試行",
+    "saving": "保存中",
+    "changeFailed": "状態を保存できません",
+    "open": "開く",
+    "remove": "入口を削除",
+    "add": "追加",
+    "retained": "削除してもキャラクター、物語、プロジェクトは保持されます。再追加すると利用できます。",
+    "tavern": {
+      "title": "酒場",
+      "description": "キャラクターカードとワールドブックを読み込み、共通モデルで会話できます。"
+    },
+    "unreal": {
+      "title": "Unreal ワークスペース",
+      "description": "Unreal プロジェクトを管理し、メイン Agent と連携。Unreal Engine が必要です。"
+    }
+  },
+  "resourceUpdates": {
+    "title": "装飾リソース更新",
+    "check": "更新を確認",
+    "install": "v{{version}} を適用",
+    "rollback": "前の版に戻す",
+    "current": "リソース v{{version}}",
+    "bundled": "内蔵ローカルリソース",
+    "scope": "画像と装飾のみ。再起動不要",
+    "none": "新しいリソースはありません",
+    "applying": "画像を検証中。失敗時は元に戻ります",
+    "restored": "前の版または内蔵リソースに戻しました"
   }
 }

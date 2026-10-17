@@ -53,6 +53,7 @@ impl InprocessAgentState {
         }
         let engine =
             NativeEngine::open(crate::config::get_app_config_dir().join("agent/native")).await?;
+        engine.set_application_tools(Arc::new(super::agent_applications::DesktopApplicationTools(app.state::<AppState>().inner().clone()))).await;
         let mut bundled = app
             .path()
             .resource_dir()

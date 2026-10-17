@@ -351,6 +351,8 @@ export interface AgentPageProps {
   onOpenAbout?: () => void;
   onCheckUpdate?: () => void;
   onBusyChange?: (busy: boolean) => void;
+  initialProjectPath?: string;
+  onInitialProjectConsumed?: () => void;
 }
 
 const LoliCodeRepository = "https://github.com/treasureGrove/LoliCode";
@@ -440,12 +442,17 @@ export function AgentPage({
   onOpenAbout,
   onCheckUpdate,
   onBusyChange,
+  initialProjectPath,
+  onInitialProjectConsumed,
 }: AgentPageProps) {
   const windowControls = useContext(WindowControlsContext);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sessionSearch, setSessionSearch] = useState("");
   const sessionSearchRef = useRef<HTMLInputElement>(null);
   const [extensionsOpen, setExtensionsOpen] = useState(false);
+  const [extensionsInitialTab, setExtensionsInitialTab] = useState<
+    "skills" | "plugins" | "mcp"
+  >("skills");
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [operationsOpen, setOperationsOpen] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
@@ -1489,6 +1496,18 @@ export function AgentPage({
       if (mounted.current) setBusy(null);
     }
   };
+  const consumedInitialProject = useRef<string | null>(null);
+  useEffect(() => {
+    if (
+      !initialProjectPath ||
+      initializing ||
+      consumedInitialProject.current === initialProjectPath
+    )
+      return;
+    consumedInitialProject.current = initialProjectPath;
+    onInitialProjectConsumed?.();
+    void openProject(initialProjectPath);
+  }, [initialProjectPath, initializing, onInitialProjectConsumed]);
   const createSession = async () => {
     if (
       mutation.current ||
@@ -2223,7 +2242,10 @@ export function AgentPage({
             </button>
             <button
               className="wb-nav-button"
-              onClick={() => setExtensionsOpen(true)}
+              onClick={() => {
+                setExtensionsInitialTab("skills");
+                setExtensionsOpen(true);
+              }}
             >
               <Blocks />
               技能
@@ -3087,6 +3109,18 @@ export function AgentPage({
                   >
                     <FileText aria-hidden="true" />
                   </button>
+                  <button
+                    type="button"
+                    className="wb-attach-image-button"
+                    aria-label="添加插件"
+                    title="打开插件市场；安装后可将技能添加到当前会话"
+                    onClick={() => {
+                      setExtensionsInitialTab("plugins");
+                      setExtensionsOpen(true);
+                    }}
+                  >
+                    <Blocks aria-hidden="true" />
+                  </button>
                   <div className="wb-composer-model">
                     <AgentModelPicker
                       models={catalog.models}
@@ -3306,6 +3340,7 @@ export function AgentPage({
       <AgentExtensionsPanel
         open={extensionsOpen}
         onOpenChange={setExtensionsOpen}
+        initialTab={extensionsInitialTab}
         working={working}
         projectOpen={Boolean(workspace)}
         onReload={async () => {
@@ -3319,6 +3354,7 @@ export function AgentPage({
                   `${draft}${draft && !draft.endsWith("\n") ? "\n" : ""}请使用 ${skill.name} 技能完成这个任务。\n`,
                 );
                 setExtensionsOpen(false);
+                composerInputRef.current?.focus();
               }
             : undefined
         }

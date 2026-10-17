@@ -573,6 +573,16 @@ pub async fn resolve_account(account_id: &str) -> Result<ResolvedMaterial, Strin
     manager().resolve(account_id).await
 }
 
+/// Opt-in acceptance harness: no login/location discovery writes, no IPC exposure.
+#[cfg(feature = "test-hooks")]
+pub async fn acceptance_secret_read_only(account_id: &str) -> Result<String, String> {
+    let account = manager().account(account_id).await?;
+    if account.location.is_none() {
+        return Err("测试账号尚无已保存的项目位置，请先在渠道中心完成目录发现".into());
+    }
+    Ok(manager().resolve(account_id).await?.api_key)
+}
+
 pub async fn discover_account(account_id: &str) -> Result<ChannelSource, String> {
     let account = manager().account(account_id).await?;
     let material = resolve_account(account_id).await?;

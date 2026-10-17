@@ -35,6 +35,7 @@ interface RequestDetailPanelProps {
   /** 要看的请求；null 时抽屉关闭 */
   requestId: string | null;
   onClose: () => void;
+  channelNamesByProviderId?: Readonly<Record<string, string>>;
 }
 
 interface DetailRow {
@@ -87,7 +88,10 @@ const usd = (value: string) => {
   return num == null ? "--" : `$${num.toFixed(4)}`;
 };
 
-function useDetailSections(request: RequestLog) {
+function useDetailSections(
+  request: RequestLog,
+  channelNamesByProviderId?: Readonly<Record<string, string>>,
+) {
   const { t, i18n } = useTranslation();
   const locale = getLocaleFromLanguage(getResolvedLang(i18n));
   const freshInput = getFreshInputTokens(request);
@@ -113,8 +117,17 @@ function useDetailSections(request: RequestLog) {
     },
     {
       key: "provider",
-      label: t("usage.provider"),
-      value: getUsageProviderLabel(request.providerName, t).shortLabel,
+      label:
+        request.appType === "lolicode" ||
+        request.appType === "channel-gateway" ||
+        request.appType === "tavern"
+          ? t("usage.channelFilter.label")
+          : t("usage.provider"),
+      value: getUsageProviderLabel(
+        request.providerName,
+        t,
+        channelNamesByProviderId,
+      ).shortLabel,
     },
     {
       key: "providerId",
@@ -319,9 +332,15 @@ function useDetailSections(request: RequestLog) {
   return { basic, tokens, cost, performance };
 }
 
-function RequestDetailBody({ request }: { request: RequestLog }) {
+function RequestDetailBody({
+  request,
+  channelNamesByProviderId,
+}: {
+  request: RequestLog;
+  channelNamesByProviderId?: Readonly<Record<string, string>>;
+}) {
   const { t } = useTranslation();
-  const sections = useDetailSections(request);
+  const sections = useDetailSections(request, channelNamesByProviderId);
   return (
     <div className="flex flex-col gap-4">
       <DetailSection title={t("usage.basicInfo")} rows={sections.basic} />
@@ -352,6 +371,7 @@ function RequestDetailBody({ request }: { request: RequestLog }) {
 export function RequestDetailPanel({
   requestId,
   onClose,
+  channelNamesByProviderId,
 }: RequestDetailPanelProps) {
   const { t } = useTranslation();
   const {
@@ -365,7 +385,8 @@ export function RequestDetailPanel({
     ? [
         new Date(request.createdAt * 1000).toLocaleString(),
         appDisplayName(request.appType),
-        getUsageProviderLabel(request.providerName, t).shortLabel,
+        getUsageProviderLabel(request.providerName, t, channelNamesByProviderId)
+          .shortLabel,
       ].join(" · ")
     : undefined;
 
@@ -391,7 +412,10 @@ export function RequestDetailPanel({
           {isLoading ? (
             <div className="h-[320px] animate-pulse rounded-panel bg-subtle" />
           ) : request ? (
-            <RequestDetailBody request={request} />
+            <RequestDetailBody
+              request={request}
+              channelNamesByProviderId={channelNamesByProviderId}
+            />
           ) : error ? (
             // 查询失败和「没有这条记录」分开说：前者能重试，也要让人看到原因
             <Notice

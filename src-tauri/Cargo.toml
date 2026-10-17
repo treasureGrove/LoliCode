@@ -82,6 +82,8 @@ indexmap = { version = "2", features = ["serde"] }
 rust_decimal = "1.33"
 uuid = { version = "1.11", features = ["v4"] }
 sha2 = "0.10"
+minisign-verify = "0.2.5"
+semver = "1"
 hmac = "0.12"
 json5 = "0.4"
 json-five = "0.3.1"
@@ -128,3 +130,7 @@ strip = "symbols"
 [dev-dependencies]
 serial_test = "3"
 tempfile = "3"
+
+[[example]]
+name = "lolicode_resource_acceptance"
+required-features = ["test-hooks"]

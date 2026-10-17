@@ -1,7 +1,7 @@
 import {
   act,
   fireEvent,
-  render,
+  render as renderBase,
   screen,
   waitFor,
 } from "@testing-library/react";
@@ -10,6 +10,31 @@ import { AboutSection } from "@/components/settings/AboutSection";
 import { UpdateProvider } from "@/contexts/UpdateContext";
 import { APP_CHANGELOG, APP_WEBSITE } from "@/lib/branding";
 import { useSettingsMetadata } from "@/hooks/useSettingsMetadata";
+
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+const render = (ui: React.ReactNode) => {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return renderBase(ui, {
+    wrapper: ({ children }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    ),
+  });
+};
+vi.mock("@/lib/api/resource-updates", () => ({
+  resourcePackKey: ["presentation-resource-pack"],
+  resourceUpdatesApi: {
+    local: async () => ({
+      id: null,
+      version: null,
+      assets: {},
+      canRollback: false,
+      pendingConfirmation: false,
+      warning: null,
+    }),
+  },
+}));
 
 const mocks = vi.hoisted(() => ({
   check: vi.fn(),

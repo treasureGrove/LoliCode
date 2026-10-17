@@ -480,6 +480,21 @@ impl Database {
         self.backup_database_file_locked(&backup_file_guard)
     }
 
+    /// Snapshot an existing database if startup recovery prevented AppState
+    /// from opening it (for example, a database created by a newer release).
+    pub(crate) fn backup_database_path(db_path: &Path) -> Result<Option<PathBuf>, AppError> {
+        if !db_path.is_file() {
+            return Ok(None);
+        }
+        let backup_file_guard = lock_backup_file_operations()?;
+        let source = Connection::open_with_flags(
+            db_path,
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        )
+        .map_err(|e| AppError::Database(format!("打开待备份数据库失败: {e}")))?;
+        Self::backup_database_file_from_conn(&backup_file_guard, &source, &[])
+    }
+
     fn backup_database_file_locked(
         &self,
         backup_file_guard: &BackupFileOperationGuard,

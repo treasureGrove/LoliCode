@@ -45,6 +45,13 @@ const TOOL_NAMES: Record<string, string> = {
   ask_user: "询问你的意见",
   exit_plan_mode: "确认实施计划",
   read_skill: "读取技能",
+  tavern_list_characters: "查看酒馆角色",
+  tavern_list_stories: "查看酒馆故事",
+  tavern_read_story: "读取酒馆故事",
+  tavern_import_character: "导入酒馆角色卡",
+  tavern_create_story: "新建酒馆故事",
+  tavern_preview_context: "预览角色与世界书",
+  unreal_editor_command: "操作虚幻编辑器",
 };
 
 function toolTarget(part: Extract<AgentPart, { type: "tool" }>) {

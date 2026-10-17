@@ -7,9 +7,32 @@ use crate::services::channel_center::{
 use crate::store::AppState;
 use tauri::{AppHandle, Emitter, State};
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChannelUsageLabel {
+    pub provider_id: String,
+    pub name: String,
+}
+
 #[tauri::command]
 pub fn get_channel_center(state: State<'_, AppState>) -> Result<ChannelCenterSnapshot, String> {
     channel_center::load(state.db.as_ref()).map_err(|error| error.to_string())
+}
+
+/// Return only channel identity and display names for usage views; never serialize channel keys.
+#[tauri::command]
+pub fn list_channel_usage_labels(
+    state: State<'_, AppState>,
+) -> Result<Vec<ChannelUsageLabel>, String> {
+    let snapshot = channel_center::load(state.db.as_ref()).map_err(|error| error.to_string())?;
+    Ok(snapshot
+        .channels
+        .into_iter()
+        .map(|channel| ChannelUsageLabel {
+            provider_id: format!("channel-{}", channel.id),
+            name: channel.name,
+        })
+        .collect())
 }
 
 #[tauri::command]

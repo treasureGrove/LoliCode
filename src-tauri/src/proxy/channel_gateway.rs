@@ -56,10 +56,10 @@ pub(crate) struct GatewaySecrets(pub Vec<String>);
 #[derive(Clone, Copy)]
 struct GatewayClient(&'static str);
 
-pub(crate) fn is_external_client(client: &str) -> bool {
+pub(crate) fn is_attributed_client(client: &str) -> bool {
     matches!(
         client,
-        "workbuddy" | "deepseek-harness" | "zcode" | "mimocode"
+        "lolicode" | "tavern" | "workbuddy" | "deepseek-harness" | "zcode" | "mimocode"
     )
 }
 
@@ -74,6 +74,8 @@ fn client_for_uri(uri: &http::Uri) -> Result<&'static str, ProxyError> {
         return Ok("channel-gateway");
     }
     match segments.get(2).copied() {
+        Some("lolicode") => Ok("lolicode"),
+        Some("tavern") => Ok("tavern"),
         Some("workbuddy") => Ok("workbuddy"),
         Some("deepseek-harness") => Ok("deepseek-harness"),
         Some("zcode") => Ok("zcode"),
@@ -82,8 +84,11 @@ fn client_for_uri(uri: &http::Uri) -> Result<&'static str, ProxyError> {
     }
 }
 
-pub(crate) fn external_client_base_url(catalog_base: &str, client: &str) -> Result<String, AppError> {
-    if !is_external_client(client) {
+pub(crate) fn catalog_client_base_url(
+    catalog_base: &str,
+    client: &str,
+) -> Result<String, AppError> {
+    if !is_attributed_client(client) {
         return Err(AppError::InvalidInput("未知的客户端配置入口".into()));
     }
     Ok(format!(
@@ -1927,8 +1932,15 @@ mod tests {
             .await
             .unwrap();
         assert!(previous_response.status().is_success());
-        for app in ["workbuddy", "deepseek-harness", "zcode", "mimocode"] {
-            let client_base = external_client_base_url(&version_base, app).unwrap();
+        for app in [
+            "lolicode",
+            "tavern",
+            "workbuddy",
+            "deepseek-harness",
+            "zcode",
+            "mimocode",
+        ] {
+            let client_base = catalog_client_base_url(&version_base, app).unwrap();
             let uri: http::Uri = format!("{client_base}/chat/completions").parse().unwrap();
             assert_eq!(client_for_uri(&uri).unwrap(), app);
             let response = client
@@ -1942,7 +1954,7 @@ mod tests {
             let output: Value = response.json().await.unwrap();
             assert_eq!(output["choices"][0]["finish_reason"], "tool_calls");
         }
-        assert!(external_client_base_url(&version_base, "unknown").is_err());
+        assert!(catalog_client_base_url(&version_base, "unknown").is_err());
         assert_eq!(client.get(format!("{}/clients/unknown/v1/models",version_base.trim_end_matches("/v1")))
             .bearer_auth(&token).send().await.unwrap().status(), http::StatusCode::BAD_REQUEST);
         assert_eq!(

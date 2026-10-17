@@ -52,6 +52,8 @@ pub mod speedtest;
 pub mod sql_helpers;
 pub mod stream_check;
 pub mod subscription;
+pub mod tavern;
+pub mod unreal;
 pub mod subscription_grok;
 pub mod sync_protocol;
 pub mod usage_cache;
@@ -80,3 +82,9 @@ pub use usage_stats::{
 };
 
 pub mod session_usage_mcode;
+
+pub mod builtin_apps;
+
+pub mod agent_applications;
+
+pub mod resource_updates;

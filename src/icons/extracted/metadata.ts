@@ -988,6 +988,27 @@ export const iconMetadata: Record<string, IconMetadata> = {
     shape: "tile",
     keywords: ["sssaicode", "ssai", "relay", "gateway"],
   },
+  cursor: {
+    name: "cursor",
+    displayName: "Cursor",
+    category: "tool",
+    keywords: ["cursor", "cursor ai", "ide", "editor"],
+    defaultColor: "#222222",
+  },
+  workbuddy: {
+    name: "workbuddy",
+    displayName: "WorkBuddy",
+    category: "tool",
+    keywords: ["workbuddy", "work buddy", "tencent", "agent"],
+    defaultColor: "#0052D9",
+  },
+  zcode: {
+    name: "zcode",
+    displayName: "ZCode",
+    category: "tool",
+    keywords: ["zcode", "z code", "zhipu", "agent"],
+    defaultColor: "#3859FF",
+  },
 };
 
 export function getIconMetadata(name: string): IconMetadata | undefined {

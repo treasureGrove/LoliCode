@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { RefreshCw } from "lucide-react";
 import { usageApi } from "@/lib/api/usage";
 import { usageKeys } from "@/lib/query/usage";
+import { ChannelTargetGlyph } from "@/components/channels/channelTargets";
+import type { ChannelTarget } from "@/lib/api/channel-center";
 import { Button } from "@/components/ui/button";
 import { DESKTOP_USAGE_APPS } from "./desktopSources";
 import { fmtInt, fmtUsd } from "./format";
@@ -71,7 +73,10 @@ export function DesktopUsageSources() {
               className="flex flex-wrap items-center justify-between gap-2 py-3"
               title={source?.detail}
             >
-              <span className="text-sm font-medium">{name}</span>
+              <span className="inline-flex items-center gap-2 text-sm font-medium">
+                <ChannelTargetGlyph app={app as ChannelTarget} />
+                {name}
+              </span>
               <span className="text-right text-xs text-fg-2">
                 {source && source.requestCount > 0 ? (
                   <>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { agentApi } from "@/lib/api/agent";
@@ -82,6 +82,12 @@ export function AgentWorkflowPanel({
     readReceipt(projectPath),
   );
   const [createOpen, setCreateOpen] = useState(false);
+  const [editing, setEditing] = useState<{
+    name: string;
+    baseDocument: string;
+  } | null>(null);
+  const editorContext = useRef("");
+  editorContext.current = `${projectPath}\0${scope}`;
   const [name, setName] = useState("");
   const [document, setDocument] = useState(
     "---\ndescription: 检查当前项目并总结结果\n---\n1. 阅读项目说明和当前变更。\n2. 执行与变更相关的检查。\n3. 总结发现、验证结果与待处理问题。\n",
@@ -92,6 +98,7 @@ export function AgentWorkflowPanel({
     setScript(null);
     setConfirmDelete(null);
     setCreateOpen(false);
+    setEditing(null);
     setPendingReceipt(readReceipt(projectPath));
   }, [projectPath]);
   const { busy, error, run } = useAgentOperation();
@@ -201,6 +208,8 @@ export function AgentWorkflowPanel({
               setScope(event.target.value as typeof scope);
               setSelected(null);
               setScript(null);
+              setCreateOpen(false);
+              setEditing(null);
             }}
           >
             <option value="project">当前项目</option>
@@ -213,7 +222,13 @@ export function AgentWorkflowPanel({
         <Button
           variant="neutral"
           disabled={busy}
-          onClick={() => setCreateOpen(!createOpen)}
+          onClick={() => {
+            if (editing) {
+              setEditing(null);
+              setName("");
+            }
+            setCreateOpen(!createOpen || editing !== null);
+          }}
         >
           新建工作流
         </Button>
@@ -270,23 +285,39 @@ export function AgentWorkflowPanel({
                 ok: boolean;
                 detail?: string;
               }>("IZCodeAgentService", "saveSavedWorkflow", [
-                { ...request, name, document },
+                {
+                  ...request,
+                  name,
+                  document,
+                  ...(editing
+                    ? {
+                        overwrite: true,
+                        expectedDocument: editing.baseDocument,
+                      }
+                    : {}),
+                },
               ]);
               if (!result.ok)
                 throw new Error(result.detail || "工作流保存失败");
               setName("");
               setCreateOpen(false);
+              setEditing(null);
+              setSelected(null);
+              setScript(null);
               resource.reload();
             });
           }}
         >
+          {editing && (
+            <h3 className="font-medium">编辑工作流 · {editing.name}</h3>
+          )}
           <label className="block text-caption">
             名称
             <Input
               aria-label="工作流名称"
               value={name}
               onChange={(event) => setName(event.target.value)}
-              disabled={busy}
+              disabled={busy || editing !== null}
             />
           </label>
           <label className="block text-caption">
@@ -302,7 +333,7 @@ export function AgentWorkflowPanel({
           </label>
           <div className="flex gap-2">
             <Button type="submit" disabled={busy || !name.trim()}>
-              保存工作流
+              {editing ? "保存修改" : "保存工作流"}
             </Button>
             <Button
               type="button"
@@ -338,6 +369,36 @@ export function AgentWorkflowPanel({
               }}
             >
               配置与运行
+            </Button>
+            <Button
+              variant="neutral"
+              disabled={busy}
+              onClick={() =>
+                void run(async () => {
+                  const context = editorContext.current;
+                  const detail = await agentApi.native<{
+                    ok: boolean;
+                    document?: string;
+                    detail?: string;
+                  }>("IZCodeAgentService", "getSavedWorkflow", [
+                    { ...request, name: item.name },
+                  ]);
+                  if (editorContext.current !== context) return;
+                  if (!detail.ok || typeof detail.document !== "string")
+                    throw new Error(
+                      detail.detail || "无法读取工作流原文，请刷新后重试",
+                    );
+                  setName(item.name);
+                  setDocument(detail.document);
+                  setEditing({
+                    name: item.name,
+                    baseDocument: detail.document,
+                  });
+                  setCreateOpen(true);
+                })
+              }
+            >
+              编辑工作流
             </Button>
             <Button
               variant="quiet"

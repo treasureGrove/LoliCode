@@ -14,7 +14,10 @@ export type AppPage =
   | "hermesMemory";
 
 export type GlobalPage =
+  | "applications"
   | "agent"
+  | "tavern"
+  | "unreal"
   | "channels"
   | "usage"
   | "auth"
@@ -52,7 +55,10 @@ const APP_PAGES: AppPage[] = [
 ];
 
 const GLOBAL_PAGES: GlobalPage[] = [
+  "applications",
   "agent",
+  "tavern",
+  "unreal",
   "channels",
   "usage",
   "auth",

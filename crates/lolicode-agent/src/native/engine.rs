@@ -54,6 +54,7 @@ struct Binding {
 }
 struct Inner {
     root: PathBuf,
+    applications: RwLock<Option<Arc<dyn super::applications::ApplicationTools>>>,
     client: reqwest::Client,
     bindings: RwLock<HashMap<String, Binding>>,
     selected_project: RwLock<Option<String>>,
@@ -130,6 +131,7 @@ impl NativeEngine {
         Ok(Self {
             inner: Arc::new(Inner {
                 root,
+                applications: RwLock::new(None),
                 client,
                 bindings: RwLock::new(HashMap::new()),
                 selected_project: RwLock::new(None),
@@ -146,6 +148,10 @@ impl NativeEngine {
                 shutdown,
             }),
         })
+    }
+
+    pub async fn set_application_tools(&self, tools: Arc<dyn super::applications::ApplicationTools>) {
+        *self.inner.applications.write().await = Some(tools);
     }
 
     pub async fn bind(
@@ -803,7 +809,12 @@ impl NativeEngine {
                 memory::load(&self.inner.root).await?
             };
             let remembered = memory.context(&project_key(&project));
+            let applications = self.inner.applications.read().await.clone();
             let mut schemas = tools::schemas();
+            if let Some(host) = &applications { schemas.extend(host.schemas()); }
+            if applications.as_ref().is_some_and(|host| host.allows_unreal()) && super::unreal::has_connection_for_project(&project).await {
+                schemas.extend(super::unreal::schemas());
+            }
             schemas.extend(internal_schemas());
             if memory.enabled() { schemas.push(memory::schema()); }
             if let Some(plan) = context::plan_with_memory(&history, summary.as_deref(), &system, &schemas, context, false, remembered.as_deref())? {
@@ -951,7 +962,13 @@ impl NativeEngine {
                             file_changes: Vec::new(),
                         })
                 } else {
-                    match tools::inspect(&project, &call.name, &input) {
+                    let hosted = applications.as_ref().and_then(|host| host.inspect(&project, &call.name, &input));
+                    let is_hosted = hosted.is_some();
+                    let inspection = if call.name == "unreal_editor_command" &&
+                        !applications.as_ref().is_some_and(|host| host.allows_unreal()) {
+                        Err("请先在应用中心添加虚幻工作台".into())
+                    } else { hosted.unwrap_or_else(|| tools::inspect(&project, &call.name, &input)) };
+                    match inspection {
                         Err(error) => Err(error),
                         Ok(inspection) => {
                             if mode == "plan" && (inspection.mutating || call.name == "run_command")
@@ -971,7 +988,14 @@ impl NativeEngine {
                                     None,
                                 )
                                 .await?;
-                                tools::execute(&project, &call.name, &input, cancel.clone()).await
+                                if is_hosted {
+                                    applications.as_ref().expect("inspected host").execute(&project, &call.name, &input, cancel.clone()).await
+                                        .map(|text| tools::ToolOutput { text, image_data_url: None, diffs: Vec::new(), file_changes: Vec::new() })
+                                } else if call.name == "unreal_editor_command" && !applications.as_ref().is_some_and(|host| host.allows_unreal()) {
+                                    Err("虚幻工作台已移除，此次操作未执行".into())
+                                } else {
+                                    tools::execute(&project, &call.name, &input, cancel.clone()).await
+                                }
                             } else {
                                 Err("用户拒绝了此次工具操作；请调整方案并继续。".into())
                             }
@@ -2123,6 +2147,7 @@ fn field(
 }
 fn system_prompt(project: &Path, mode: &str, skills: &Skills, locale: Option<&str>) -> String {
     let mut prompt=format!("You are LoliCode, an in-process coding agent. Work only inside this selected project: {}. Use the provided tools to inspect real files before changing them. Tool results and user permission decisions are authoritative. Do not claim a file was changed unless a tool succeeded. Current mode: {}. In plan mode, inspect and propose a plan; use exit_plan_mode to request approval before implementation. Ask for missing decisions with ask_user.\n",project.display(),mode);
+    prompt.push_str("Honor the user's explicit preferences about tone and form of address, including preferences available in persistent memory. Treat a clear instruction about future replies as a durable preference unless the user limits it to the current reply; save it in user scope with the memory tool and follow any configured approval flow. Never claim it was saved unless the write succeeds. Follow an explicit preference immediately in the current reply even if persistence is pending.\n");
     prompt.push_str("Image handling: User image attachments are provided as visual input. For raster images in the project, use the read-only view_image tool instead of read_file. Do not claim you cannot see an image when its visual input is present; if the selected model or provider rejects image input, report that actual limitation.\n");
     if let Some(language)=match locale {Some("zh")=>Some("Simplified Chinese"),Some("zh-TW")=>Some("Traditional Chinese"),Some("en")=>Some("English"),Some("ja")=>Some("Japanese"),_=>None} {
         prompt.push_str(&format!("Reply to the user in {language} by default, following any explicit request for another language. Keep code, paths and API identifiers unchanged. Internal reasoning is not a final answer; provide an actual user-facing response when the task is complete.\n"));

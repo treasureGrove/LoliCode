@@ -44,15 +44,14 @@ fn read_override_from_store(app: &tauri::AppHandle) -> Option<PathBuf> {
 
             let path = resolve_path(path_str);
 
-            if !path.exists() {
-                log::warn!(
-                    "Store 中配置的 app_config_dir 不存在: {path:?}\n\
-                     将使用默认路径。"
-                );
-                return None;
+            if !path.is_dir() {
+                // Keep the configured path authoritative. Falling back to a new
+                // empty directory makes projects and provider keys appear lost.
+                // Startup enters recovery mode before opening or creating a DB.
+                log::warn!("Store 中配置的 app_config_dir 不存在或不是目录: {path:?}");
+            } else {
+                log::info!("使用 Store 中的 app_config_dir: {path:?}");
             }
-
-            log::info!("使用 Store 中的 app_config_dir: {path:?}");
             Some(path)
         }
         Some(_) => {

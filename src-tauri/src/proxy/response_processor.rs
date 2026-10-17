@@ -605,7 +605,8 @@ pub(crate) fn normalize_gateway_usage(
     input_includes_cache: bool,
     mut usage: TokenUsage,
 ) -> TokenUsage {
-    if (app_type == "channel-gateway" || super::channel_gateway::is_external_client(app_type))
+    if (app_type == "channel-gateway"
+        || super::channel_gateway::is_attributed_client(app_type))
         && input_includes_cache
     {
         usage.input_tokens = usage
@@ -1029,9 +1030,17 @@ mod tests {
                 ("json", parsed),
                 ("sse", (parser.stream_parser)(&events).unwrap()),
             ] {
-                for app in ["channel-gateway", "workbuddy", "deepseek-harness", "zcode", "mimocode"] {
-                  let mut usage =
-                      normalize_gateway_usage(app, parser.input_includes_cache, usage.clone());
+                for app in [
+                    "channel-gateway",
+                    "lolicode",
+                    "tavern",
+                    "workbuddy",
+                    "deepseek-harness",
+                    "zcode",
+                    "mimocode",
+                ] {
+                    let mut usage =
+                        normalize_gateway_usage(app, parser.input_includes_cache, usage.clone());
                   assert_eq!(usage.input_tokens, fresh, "{name}/{suffix}");
                   assert_eq!(usage.cache_read_tokens, 200);
                   assert_eq!(usage.cache_creation_tokens, cache_creation);

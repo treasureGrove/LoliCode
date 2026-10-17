@@ -1339,3 +1339,57 @@ async fn a_real_waiting_checkpoint_recovers_as_interrupted_without_replaying_its
     );
     reopened.shutdown().await.unwrap();
 }
+
+
+struct HostedFixture {
+    enabled: std::sync::atomic::AtomicBool,
+    executions: std::sync::atomic::AtomicUsize,
+}
+impl applications::ApplicationTools for HostedFixture {
+    fn schemas(&self) -> Vec<Value> {
+        if !self.enabled.load(std::sync::atomic::Ordering::SeqCst) { return vec![]; }
+        vec![json!({"type":"function","function":{"name":"tavern_fixture","description":"Host test","parameters":{"type":"object","properties":{}}}})]
+    }
+    fn inspect(&self, _: &std::path::Path, name: &str, _: &Value) -> Option<Result<applications::ToolInspection, String>> {
+        if name != "tavern_fixture" { return None; }
+        Some(if self.enabled.load(std::sync::atomic::Ordering::SeqCst) {
+            Ok(applications::ToolInspection { action: name.into(), resources: vec!["tavern:fixture".into()], description: "Create fixture".into(), mutating: true, requires_approval: true, dangerous: false })
+        } else { Err("APP_DISABLED_NO_SIDE_EFFECT".into()) })
+    }
+    fn execute<'a>(&'a self, project: &'a std::path::Path, name: &'a str, input: &'a Value, cancel: tokio::sync::watch::Receiver<bool>) -> applications::ApplicationResult<'a> {
+        Box::pin(async move {
+            if *cancel.borrow() { return Err("cancelled".into()); }
+            self.inspect(project, name, input).unwrap()?;
+            self.executions.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Ok("HOST_STORE_UPDATED".into())
+        })
+    }
+}
+
+#[tokio::test]
+async fn application_tools_use_engine_permissions_and_revocation() {
+    for revoke in [false, true] {
+        let fake = Fake::start(|input| {
+            if last_tool(input).is_none() { tool("tavern_fixture", json!({})) }
+            else { text("HOST_TOOL_FINISHED") }
+        }).await;
+        let (_data, _project, engine, id) = setup(&fake).await;
+        let host = Arc::new(HostedFixture { enabled: true.into(), executions: 0.into() });
+        engine.set_application_tools(host.clone()).await;
+        engine.call("updateSession", json!({"sessionId":id,"permissionMode":"ask"})).await.unwrap();
+        send(&engine, &id, "host-approval", "Use the added application").await;
+        let pending = wait(&engine, &id, |v| v["status"] == "waiting_permission").await;
+        assert_eq!(host.executions.load(std::sync::atomic::Ordering::SeqCst), 0);
+        host.enabled.store(!revoke, std::sync::atomic::Ordering::SeqCst);
+        engine.call("replyPermission", json!({"sessionId":id,"requestId":pending["permissions"][0]["id"],"decision":"once"})).await.unwrap();
+        let result = wait(&engine, &id, |v| v["status"] == "idle").await;
+        assert_eq!(host.executions.load(std::sync::atomic::Ordering::SeqCst), usize::from(!revoke));
+        assert!(result.to_string().contains(if revoke { "APP_DISABLED_NO_SIDE_EFFECT" } else { "HOST_STORE_UPDATED" }));
+        let requests = fake.requests.lock().unwrap();
+        let has_tool = |request: &Value| request["tools"].as_array().unwrap().iter().any(|tool| tool["function"]["name"] == "tavern_fixture");
+        assert!(has_tool(&requests[0]));
+        assert_eq!(has_tool(requests.last().unwrap()), !revoke);
+        drop(requests);
+        engine.shutdown().await.unwrap();
+    }
+}

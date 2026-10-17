@@ -11,6 +11,7 @@ import {
   Star,
   X,
 } from "lucide-react";
+import { ResourceUpdatesSection } from "./ResourceUpdatesSection";
 import { Button } from "@/components/ui/button";
 import { useTranslation } from "react-i18next";
 import { toast } from "@/lib/toast";
@@ -20,7 +21,7 @@ import { useUpdate } from "@/contexts/UpdateContext";
 import { Badge } from "@/components/ui/badge";
 import { WhatsNewDialog } from "@/components/WhatsNewDialog";
 import { WHATS_NEW_ENTRIES, entriesUpTo } from "@/lib/whatsNew";
-  import appIcon from "@/assets/brand/lolicode-icon.png";
+import appIcon from "@/assets/brand/lolicode-icon.png";
 import { extractErrorMessage } from "@/utils/errorUtils";
 import {
   APP_CHANGELOG,
@@ -241,6 +242,7 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
           </div>
         </div>
       </div>
+      <ResourceUpdatesSection />
       <section
         aria-label={t("nav.softwareUpdates", { defaultValue: "软件更新" })}
         className="space-y-3 px-5 py-4"

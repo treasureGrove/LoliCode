@@ -14,6 +14,10 @@ import { SETTINGS_SECTIONS } from "@/lib/navigation";
 import { useSidebarCollapsed } from "@/hooks/useSidebarCollapsed";
 import type { VisibleApps } from "@/types";
 
+vi.mock("@/lib/api/builtin-apps", () => ({
+  useBuiltinApps: () => ({ data: [] }),
+}));
+
 vi.mock("@/contexts/UpdateContext", () => ({
   useUpdate: () => ({ hasUpdate: true }),
 }));

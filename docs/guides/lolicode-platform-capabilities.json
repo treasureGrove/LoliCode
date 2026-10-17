@@ -87,9 +87,9 @@
       "revision": "ec65d7d1ae018944739d28cef18c78b4c53bca8f",
       "versionObserved": "1.0.8",
       "licenseObserved": "Apache-2.0",
-      "usage": "candidate-ue-domain-tools-locks-verification",
-      "status": "candidate-not-adopted",
-      "impact": "License copy, applicable attribution/NOTICE and change notices; inspect nested licenses and dependencies."
+      "usage": "reference-only-for-ue-domain-workflow-and-editor-bridge-discovery",
+      "status": "reference-only-no-uebox-application-code-adopted",
+      "impact": "No UEBox application code is vendored. The optional UnrealAgentLink component is tracked separately under its MIT license."
     },
     {
       "id": "unreal-agent-link",
@@ -97,9 +97,9 @@
       "revision": "ec65d7d1ae018944739d28cef18c78b4c53bca8f",
       "path": "plugin/UnrealAgentLink",
       "licenseObserved": "MIT",
-      "usage": "candidate-editor-bridge",
-      "status": "candidate-not-adopted",
-      "impact": "Separate subdirectory license; retain applicable notices and audit plugin dependencies."
+      "usage": "optional-project-local-editor-bridge-installed-from-pinned-upstream-archive",
+      "status": "selected-component-adapted-partial-no-plugin-source-vendored",
+      "impact": "The installer fetches a pinned source archive and extracts only this component at runtime, copying its MIT LICENSE into the UE project. Pairing, loopback transport, routing and Agent tools are implemented in LoliCode."
     },
     {
       "id": "sillytavern",
@@ -509,10 +509,10 @@
       "title": "UE 引擎、工程与插件管理",
       "owner": "unreal",
       "sourceIds": ["uebox"],
-      "current": "not-integrated",
+      "current": "integrated-partial-unaccepted",
       "target": "own-domain-services",
       "phase": 2,
-      "status": "proposed-or-preserve-not-accepted",
+      "status": "implemented-partial-real-editor-acceptance-pending",
       "accept": [
         "engine discovery",
         "project import",
@@ -547,10 +547,10 @@
       "title": "UE 编辑器连接与命令桥",
       "owner": "unreal-connector",
       "sourceIds": ["unreal-agent-link"],
-      "current": "not-integrated",
+      "current": "integrated-partial-unaccepted",
       "target": "editor-plugin-adaptation",
       "phase": 2,
-      "status": "proposed-or-preserve-not-accepted",
+      "status": "implemented-partial-real-editor-acceptance-pending",
       "accept": [
         "project and editor instance identity",
         "plugin/engine versions",
@@ -565,10 +565,10 @@
       "title": "UE 场景、蓝图、材质与 UMG",
       "owner": "unreal",
       "sourceIds": ["uebox", "unreal-agent-link"],
-      "current": "not-integrated",
+      "current": "integrated-partial-unaccepted",
       "target": "domain-tools-on-own-agent",
       "phase": 2,
-      "status": "proposed-or-preserve-not-accepted",
+      "status": "implemented-read-only-and-basic-actor-tools-real-editor-acceptance-pending",
       "accept": [
         "actor edits",
         "blueprints",
@@ -660,10 +660,10 @@
       "title": "应用中心、添加与启用",
       "owner": "application-service",
       "sourceIds": ["current", "workbuddy"],
-      "current": "external-tool-manager-only",
+      "current": "built-in-app-opt-in-persisted-host-tools-gated-local-tests-passed",
       "target": "feishu-like-built-in-business-applications",
       "phase": 2,
-      "status": "proposed",
+      "status": "implemented-not-yet-desktop-or-release-accepted",
       "accept": [
         "add business applications to my workspace",
         "main Agent remains available",

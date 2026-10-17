@@ -26,7 +26,7 @@ vi.mock("@/lib/api/usage", () => ({
   },
 }));
 vi.mock("@/lib/api/channel-center", () => ({
-  channelCenterApi: { get: vi.fn() },
+  channelCenterApi: { get: vi.fn(), listUsageLabels: vi.fn() },
 }));
 vi.mock("@/lib/api/copilotBilling", () => ({
   COPILOT_BILLING_QUERY_KEY: ["copilot", "billing", "reports"],
@@ -78,6 +78,7 @@ beforeEach(() => {
     channels: [],
     targets: [],
   });
+  vi.mocked(channelCenterApi.listUsageLabels).mockResolvedValue([]);
 });
 describe("basic usage", () => {
   it("keeps historical app usage visible after detail pruning without claiming an unknown history price is free", async () => {
@@ -264,21 +265,9 @@ describe("basic usage", () => {
     ).not.toHaveLength(0);
   });
   it("labels recorded gateway usage with its shared source name", async () => {
-    vi.mocked(channelCenterApi.get).mockResolvedValue({
-      channels: [
-        {
-          id: "fixture",
-          name: "工作用 DeepSeek",
-          baseUrl: "https://api.deepseek.com/v1",
-          apiKey: "",
-          authKind: "api_key",
-          protocol: "openai_chat",
-          models: [],
-          enabled: true,
-        },
-      ],
-      targets: [],
-    });
+    vi.mocked(channelCenterApi.listUsageLabels).mockResolvedValue([
+      { providerId: "channel-fixture", name: "工作用 DeepSeek" },
+    ]);
     vi.mocked(usageApi.getProviderStats).mockResolvedValue([
       {
         providerId: "channel-fixture",
@@ -291,8 +280,9 @@ describe("basic usage", () => {
     ]);
     mount();
     expect(await screen.findByText("工作用 DeepSeek")).toBeInTheDocument();
-    expect(screen.getByText("统一渠道服务")).toBeInTheDocument();
+    expect(screen.getByText("通用渠道网关")).toBeInTheDocument();
     expect(screen.queryByText("channel-fixture")).not.toBeInTheDocument();
+    expect(channelCenterApi.get).not.toHaveBeenCalled();
   });
   it("shows actual recorded metrics and changes the selected period", async () => {
     mount();

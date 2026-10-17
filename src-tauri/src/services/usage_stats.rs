@@ -3487,6 +3487,81 @@ mod tests {
     }
 
     #[test]
+    fn test_channel_gateway_and_lolicode_usage_stay_separate() -> Result<(), AppError> {
+        let db = Database::memory()?;
+        {
+            let conn = lock_conn!(db.conn);
+            insert_usage_log(
+                &conn,
+                "loli-legacy",
+                "channel-gateway",
+                "channel-legacy",
+                "model-a",
+                "proxy",
+                1_800_000_000,
+                100,
+                20,
+                0,
+                10,
+                200,
+                "0.01",
+            )?;
+            insert_usage_log(
+                &conn,
+                "loli-attributed",
+                "lolicode",
+                "channel-current",
+                "model-b",
+                "proxy",
+                1_800_000_001,
+                200,
+                40,
+                0,
+                20,
+                200,
+                "0.02",
+            )?;
+        }
+
+        let by_app = db.get_usage_summary_by_app(None, None, None, None)?;
+        assert_eq!(by_app.len(), 2);
+        assert_eq!(
+            by_app
+                .iter()
+                .find(|row| row.app_type == "lolicode")
+                .unwrap()
+                .summary
+                .total_requests,
+            1
+        );
+        assert_eq!(
+            by_app
+                .iter()
+                .find(|row| row.app_type == "channel-gateway")
+                .unwrap()
+                .summary
+                .total_requests,
+            1
+        );
+
+        let summary = db.get_usage_summary(None, None, Some("lolicode"), None, None)?;
+        assert_eq!(summary.total_requests, 1);
+
+        let logs = db.get_request_logs(
+            &LogFilters {
+                app_type: Some("lolicode".to_string()),
+                ..Default::default()
+            },
+            0,
+            10,
+        )?;
+        assert_eq!(logs.total, 1);
+        assert!(logs.data.iter().any(|row| row.app_type == "lolicode"));
+
+        Ok(())
+    }
+
+    #[test]
     fn test_backfill_missing_usage_costs_uses_new_gpt_5_5_pricing() -> Result<(), AppError> {
         let db = Database::memory()?;
 

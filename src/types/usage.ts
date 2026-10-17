@@ -223,6 +223,9 @@ export interface UsageRangeSelection {
  * only ever show a partial number and mislead users into reading it as the
  * Desktop's full usage. The backend collapses `claude-desktop → claude` in
  * every dashboard query (see `folded_app_type_sql`).
+ * LoliCode and the desktop-agent importers have their own buckets. Unattributed
+ * channel-gateway traffic remains separate because older Grok Build and Agent
+ * requests shared that route and cannot be distinguished from stored rows.
  * `opencode` and `pi` have no proxy handler; their usage reaches this
  * dashboard through session importers. `openclaw` / `hermes` appear only as
  * managed apps elsewhere.
@@ -234,7 +237,14 @@ export type AppType =
   | "grokbuild"
   | "opencode"
   | "pi"
-  | "mcode";
+  | "mcode"
+  | "lolicode"
+  | "channel-gateway"
+  | "workbuddy"
+  | "deepseek-harness"
+  | "zcode"
+  | "mimocode"
+  | "tavern";
 
 export type AppTypeFilter = "all" | AppType;
 
@@ -246,7 +256,25 @@ export const KNOWN_APP_TYPES: ReadonlyArray<AppType> = [
   "opencode",
   "pi",
   "mcode",
+  "lolicode",
+  "channel-gateway",
+  "workbuddy",
+  "deepseek-harness",
+  "zcode",
+  "mimocode",
+  "tavern",
 ];
+
+/** Human-readable labels for usage sources that are not in the managed-app registry. */
+export const USAGE_APP_LABELS: Partial<Record<AppType, string>> = {
+  lolicode: "LoliCode",
+  "channel-gateway": "Channel Gateway",
+  workbuddy: "WorkBuddy",
+  "deepseek-harness": "DeepSeek Harness",
+  zcode: "ZCode",
+  mimocode: "MiMo",
+  tavern: "酒馆",
+};
 
 /**
  * App types whose proxy uses an OpenAI-style protocol. Two consequences:

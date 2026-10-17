@@ -127,7 +127,7 @@ async fn inprocess_binding_routes_opaque_model_through_real_proxy_without_persis
             channels:vec![source],targets:vec![],default_model:Some(route.clone()),revision:0,
         }).unwrap();
         let prepared = agent_host::prepare_native_binding(&state,&[]).await.unwrap();
-        assert!(prepared.base_url.ends_with("/tai/catalogs/1/v1"));
+        assert!(prepared.base_url.ends_with("/tai/catalogs/1/clients/lolicode/v1"), "Native requests must use the attributed LoliCode route");
         assert!(prepared.base_url.starts_with("http://127.0.0.1:"));
         assert_eq!(prepared.catalog.default_model.as_deref(),Some(full_model.as_str()));
         assert_eq!(prepared.catalog.models.len(),1);

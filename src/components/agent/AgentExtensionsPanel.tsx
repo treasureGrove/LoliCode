@@ -102,6 +102,7 @@ export function AgentExtensionsPanel({
   onReload,
   onUseSkill,
   projectOpen = true,
+  initialTab,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -109,10 +110,13 @@ export function AgentExtensionsPanel({
   onReload: () => Promise<void>;
   onUseSkill?: (skill: AgentSkill) => void;
   projectOpen?: boolean;
+  initialTab?: "skills" | "plugins" | "mcp";
 }) {
   const [catalog, setCatalog] = useState<AgentExtensions | null>(null);
   const [pluginStore, setPluginStore] = useState<AgentPluginStore | null>(null);
-  const [tab, setTab] = useState<"skills" | "plugins" | "mcp">("skills");
+  const [tab, setTab] = useState<"skills" | "plugins" | "mcp">(
+    initialTab ?? "skills",
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [needsReload, setNeedsReload] = useState(false);
@@ -152,26 +156,24 @@ export function AgentExtensionsPanel({
     try {
       const [next, store] = await Promise.all([
         agentApi.getExtensions(),
-        agentApi
-          .getPluginStore()
-          .catch(
-            (cause): AgentPluginStore => ({
-              marketplaces: [],
-              availablePlugins: [],
-              installedPlugins: [],
-              restorableBuiltins: [],
-              diagnostics: [
-                { severity: "error", message: agentErrorMessage(cause) },
-              ],
-              capability: {
-                supported: false,
-                reason: agentErrorMessage(cause),
-                customSources: false,
-                localPluginRuntime: false,
-                mcpRuntime: false,
-              },
-            }),
-          ),
+        agentApi.getPluginStore().catch(
+          (cause): AgentPluginStore => ({
+            marketplaces: [],
+            availablePlugins: [],
+            installedPlugins: [],
+            restorableBuiltins: [],
+            diagnostics: [
+              { severity: "error", message: agentErrorMessage(cause) },
+            ],
+            capability: {
+              supported: false,
+              reason: agentErrorMessage(cause),
+              customSources: false,
+              localPluginRuntime: false,
+              mcpRuntime: false,
+            },
+          }),
+        ),
       ]);
       if (isCurrent(current) && loading.current === requestId) {
         setCatalog(next);
@@ -191,6 +193,7 @@ export function AgentExtensionsPanel({
     const current = ++generation.current;
     loading.current = null;
     if (!visible) return;
+    if (initialTab) setTab(initialTab);
     setCatalog(null);
     setPluginStore(null);
     setNeedsReload(false);
@@ -199,7 +202,7 @@ export function AgentExtensionsPanel({
       generation.current += 1;
       loading.current = null;
     };
-  }, [visible]);
+  }, [visible, initialTab]);
   const run = async (
     operation: () => Promise<AgentExtensions | null>,
     markReload = true,
@@ -243,6 +246,7 @@ export function AgentExtensionsPanel({
   const runStore = async (
     operation: () => Promise<AgentPluginStore>,
     markReload = false,
+    refreshExtensions = false,
   ) => {
     const current = generation.current;
     if (!isCurrent(current) || pending.current) return false;
@@ -256,7 +260,19 @@ export function AgentExtensionsPanel({
       changed = true;
       if (isCurrent(current)) {
         setPluginStore(next);
-        if (markReload) setNeedsReload(true);
+        if (refreshExtensions) {
+          try {
+            const extensions = await agentApi.getExtensions();
+            if (isCurrent(current)) {
+              setCatalog(extensions);
+              setNeedsReload(Boolean(extensions.pendingReload));
+            }
+          } catch {
+            if (isCurrent(current)) setNeedsReload(markReload);
+          }
+        } else if (markReload) {
+          setNeedsReload(true);
+        }
       }
       return isCurrent(current);
     } catch (cause) {
@@ -269,6 +285,8 @@ export function AgentExtensionsPanel({
       if (visibleRef.current) setBusy(Boolean(loading.current));
     }
   };
+  const runMarketplaceStore = (operation: () => Promise<AgentPluginStore>) =>
+    runStore(operation, false, true);
   const pickSkill = () => {
     const current = generation.current;
     return run(async () => {
@@ -456,9 +474,13 @@ export function AgentExtensionsPanel({
       >
         <DialogHeader className="wb-extension-header">
           <div className="wb-extension-heading">
-            <DialogTitle>技能与插件</DialogTitle>
+            <DialogTitle>
+              {tab === "plugins" ? "添加插件" : "技能与插件"}
+            </DialogTitle>
             <DialogDescription>
-              只配置 LoliCode 工作台，已安装的技能可以由 Agent 按任务选用。
+              {tab === "plugins"
+                ? "从 ZCode 目录安装技能并自动同步到 Agent；当前会话可一键加入草稿。若技能依赖本机 CLI，需按插件说明安装并登录。"
+                : "只配置 LoliCode 工作台，已安装的技能可以由 Agent 按任务选用。"}
             </DialogDescription>
           </div>
           <DialogClose asChild>
@@ -673,8 +695,9 @@ export function AgentExtensionsPanel({
                 <div>
                   <h2>插件市场</h2>
                   <p>
-                    接入 ZCode 公开目录中的独立 CLI 技能。安装后先由 Agent
-                    检查本机依赖和登录状态。
+                    已安装技能会自动同步到
+                    Agent，并可加入当前会话。若技能依赖本机
+                    CLI，需按插件说明安装并登录。
                   </p>
                 </div>
                 <div className="wb-plugin-store-actions">
@@ -684,7 +707,9 @@ export function AgentExtensionsPanel({
                     title="刷新插件市场"
                     disabled={busy}
                     onClick={() =>
-                      void runStore(() => agentApi.updatePluginMarketplace())
+                      void runMarketplaceStore(() =>
+                        agentApi.updatePluginMarketplace(),
+                      )
                     }
                   >
                     {busy ? (
@@ -916,13 +941,13 @@ export function AgentExtensionsPanel({
                                 checked={plugin.enabled}
                                 disabled={busy}
                                 onChange={(event) =>
-                                  void runStore(async () => {
+                                  void runMarketplaceStore(async () => {
                                     await agentApi.setPluginEnabled(
                                       plugin.id,
                                       event.target.checked,
                                     );
                                     return agentApi.getPluginStore();
-                                  }, true)
+                                  })
                                 }
                               />
                               启用
@@ -934,12 +959,10 @@ export function AgentExtensionsPanel({
                                   type="button"
                                   disabled={busy}
                                   onClick={() =>
-                                    void runStore(
-                                      () =>
-                                        agentApi.updateMarketplacePlugin(
-                                          plugin.id,
-                                        ),
-                                      true,
+                                    void runMarketplaceStore(() =>
+                                      agentApi.updateMarketplacePlugin(
+                                        plugin.id,
+                                      ),
                                     )
                                   }
                                 >
@@ -953,12 +976,10 @@ export function AgentExtensionsPanel({
                               title="卸载插件"
                               disabled={busy}
                               onClick={() =>
-                                void runStore(
-                                  () =>
-                                    agentApi.uninstallMarketplacePlugin(
-                                      plugin.id,
-                                    ),
-                                  true,
+                                void runMarketplaceStore(() =>
+                                  agentApi.uninstallMarketplacePlugin(
+                                    plugin.id,
+                                  ),
                                 )
                               }
                             >
@@ -1041,6 +1062,13 @@ export function AgentExtensionsPanel({
                             (marketplace) =>
                               marketplace.id === item.marketplace,
                           )?.description;
+                        const pluginSkills = (catalog?.skills ?? []).filter(
+                          (skill) =>
+                            skill.source === "marketplace" &&
+                            skill.id.startsWith(`cli-${item.name}-`) &&
+                            skill.installed &&
+                            skill.enabled,
+                        );
                         return (
                           <article
                             className="wb-plugin-store-card"
@@ -1090,13 +1118,13 @@ export function AgentExtensionsPanel({
                                       checked={installed.enabled}
                                       disabled={busy}
                                       onChange={(event) =>
-                                        void runStore(async () => {
+                                        void runMarketplaceStore(async () => {
                                           await agentApi.setPluginEnabled(
                                             installed.id,
                                             event.target.checked,
                                           );
                                           return agentApi.getPluginStore();
-                                        }, true)
+                                        })
                                       }
                                     />
                                     启用
@@ -1107,12 +1135,10 @@ export function AgentExtensionsPanel({
                                       type="button"
                                       disabled={busy}
                                       onClick={() =>
-                                        void runStore(
-                                          () =>
-                                            agentApi.updateMarketplacePlugin(
-                                              installed.id,
-                                            ),
-                                          true,
+                                        void runMarketplaceStore(() =>
+                                          agentApi.updateMarketplacePlugin(
+                                            installed.id,
+                                          ),
                                         )
                                       }
                                     >
@@ -1136,12 +1162,10 @@ export function AgentExtensionsPanel({
                                     title="卸载插件"
                                     disabled={busy}
                                     onClick={() =>
-                                      void runStore(
-                                        () =>
-                                          agentApi.uninstallMarketplacePlugin(
-                                            installed.id,
-                                          ),
-                                        true,
+                                      void runMarketplaceStore(() =>
+                                        agentApi.uninstallMarketplacePlugin(
+                                          installed.id,
+                                        ),
                                       )
                                     }
                                   >
@@ -1153,17 +1177,13 @@ export function AgentExtensionsPanel({
                                   type="button"
                                   disabled={busy}
                                   onClick={() =>
-                                    void runStore(
-                                      () =>
-                                        restorable
-                                          ? agentApi.restoreBuiltinPlugin(
-                                              item.id,
-                                            )
-                                          : agentApi.installMarketplacePlugin(
-                                              item.marketplace,
-                                              item.name,
-                                            ),
-                                      true,
+                                    void runMarketplaceStore(() =>
+                                      restorable
+                                        ? agentApi.restoreBuiltinPlugin(item.id)
+                                        : agentApi.installMarketplacePlugin(
+                                            item.marketplace,
+                                            item.name,
+                                          ),
                                     )
                                   }
                                 >
@@ -1171,6 +1191,28 @@ export function AgentExtensionsPanel({
                                   {restorable ? "恢复" : "安装"}
                                 </button>
                               )}
+                              {installed?.enabled &&
+                                onUseSkill &&
+                                pluginSkills.map((skill) => (
+                                  <button
+                                    key={skill.id}
+                                    type="button"
+                                    className="wb-plugin-store-use"
+                                    disabled={
+                                      busy || skill.runtimeStatus === "failed"
+                                    }
+                                    title={
+                                      skill.runtimeStatus === "failed"
+                                        ? skill.error ||
+                                          "技能载入失败，请重新安装插件"
+                                        : `将“${skill.name}”加入当前会话草稿`
+                                    }
+                                    onClick={() => onUseSkill(skill)}
+                                  >
+                                    <Sparkles size={13} />
+                                    使用 {skill.name.split(":").at(-1)}
+                                  </button>
+                                ))}
                               {item.listing?.homepage &&
                                 /^https:\/\//i.test(item.listing.homepage) && (
                                   <button

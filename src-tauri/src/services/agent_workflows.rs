@@ -47,15 +47,32 @@ pub async fn record_run(
     request_id: &str,
     prompt: &str,
 ) -> Result<(), String> {
-    let _guard = runs_lock().lock().await;
     let state = app.state::<crate::store::AppState>();
-    let mut runs = read_runs(&state.db)?;
+    record_run_in_db(&state.db, project, session, name, scope, request_id, prompt).await
+}
+
+pub async fn record_run_in_db(
+    db: &crate::database::Database,
+    project: &str,
+    session: &str,
+    name: &str,
+    scope: &str,
+    request_id: &str,
+    prompt: &str,
+) -> Result<(), String> {
+    let _guard = runs_lock().lock().await;
+    let mut runs = read_runs(db)?;
     let hash = format!("{:x}", Sha256::digest(prompt.as_bytes()));
     if let Some(existing) = runs
         .iter()
         .find(|run| run.session_id == session && run.request_id == request_id)
     {
-        if existing.prompt_hash != hash || existing.name != name || existing.scope != scope {
+        if existing.prompt_hash != hash
+            || existing.name != name
+            || existing.scope != scope
+            || crate::services::agent_preferences::path_key(&existing.cwd)
+                != crate::services::agent_preferences::path_key(project)
+        {
             return Err("重试的工作流已被修改，请新建一次运行".into());
         }
         return Ok(());
@@ -73,13 +90,11 @@ pub async fn record_run(
     if runs.len() > 2000 {
         runs.drain(..runs.len() - 2000);
     }
-    state
-        .db
-        .set_setting(
-            RUNS_KEY,
-            &serde_json::to_string(&runs).map_err(|_| "工作流记录编码失败")?,
-        )
-        .map_err(|error| error.to_string())
+    db.set_setting(
+        RUNS_KEY,
+        &serde_json::to_string(&runs).map_err(|_| "工作流记录编码失败")?,
+    )
+    .map_err(|error| error.to_string())
 }
 
 #[derive(Clone)]
@@ -89,6 +104,7 @@ pub struct SavedWorkflow {
     pub scope: String,
     pub meta: Value,
     pub script: String,
+    pub document: String,
 }
 
 fn request(args: &[Value]) -> Result<&Value, String> {
@@ -143,8 +159,14 @@ fn parse_document(
     let rest = normalized
         .strip_prefix("---\n")
         .ok_or_else(|| "缺少 YAML frontmatter（文件需以 --- 开始）".to_string())?;
-    let end = rest
-        .find("\n---")
+    let mut offset = 0;
+    let (end, script_start) = rest
+        .split_inclusive('\n')
+        .find_map(|line| {
+            let start = offset;
+            offset += line.len();
+            (line.trim_end() == "---").then_some((start, offset))
+        })
         .ok_or_else(|| "YAML frontmatter 未结束".to_string())?;
     let metadata: serde_yaml::Value =
         serde_yaml::from_str(&rest[..end]).map_err(|_| "YAML frontmatter 格式无效".to_string())?;
@@ -175,7 +197,7 @@ fn parse_document(
             }
         }
     }
-    let script = rest[end + 4..].trim().to_string();
+    let script = rest[script_start..].trim().to_string();
     if script.is_empty() {
         return Err("工作流脚本不能为空".into());
     }
@@ -188,7 +210,24 @@ fn parse_document(
         scope,
         meta,
         script,
+        document: content.to_string(),
     })
+}
+
+async fn read_document(path: &std::path::Path) -> Result<String, String> {
+    use tokio::io::AsyncReadExt;
+    let file = tokio::fs::File::open(path)
+        .await
+        .map_err(|_| "无法读取工作流文件")?;
+    let mut bytes = Vec::new();
+    file.take(MAX_WORKFLOW_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .await
+        .map_err(|_| "无法读取工作流文件")?;
+    if bytes.len() > MAX_WORKFLOW_BYTES as usize {
+        return Err("工作流文件超过 256 KiB 上限".into());
+    }
+    String::from_utf8(bytes).map_err(|_| "工作流文件不是有效的 UTF-8 文本".into())
 }
 
 async fn load_workflow(root: PathBuf, name: &str, scope: String) -> Result<SavedWorkflow, String> {
@@ -214,9 +253,7 @@ async fn load_workflow(root: PathBuf, name: &str, scope: String) -> Result<Saved
     if !canonical.starts_with(&root_path) {
         return Err("工作流路径越过了工作流目录".into());
     }
-    let content = tokio::fs::read_to_string(&canonical)
-        .await
-        .map_err(|_| "工作流文件不是有效的 UTF-8 文本".to_string())?;
+    let content = read_document(&canonical).await?;
     parse_document(
         &content,
         name,
@@ -274,11 +311,7 @@ async fn delete_workflow(root: &std::path::Path, name: &str) -> Result<Value, St
     Ok(json!({"ok":true,"path":path.to_string_lossy()}))
 }
 
-pub async fn invoke_service(
-    app: &AppHandle,
-    method: &str,
-    args: Vec<Value>,
-) -> Result<Value, String> {
+pub async fn invoke_file_service(method: &str, args: Vec<Value>) -> Result<Value, String> {
     let params = request(&args)?;
     let (root, scope) = workflow_root(params)?;
     ensure_no_links(&root)?;
@@ -344,6 +377,7 @@ pub async fn invoke_service(
                     "scope":workflow.scope,
                     "meta":workflow.meta,
                     "script":workflow.script,
+                    "document":workflow.document,
                 })),
                 Err(error) => Ok(invalid(&error)),
             }
@@ -368,6 +402,20 @@ pub async fn invoke_service(
             if path.exists() && params["overwrite"].as_bool() != Some(true) {
                 return Err("同名工作流已存在，请更名或明确覆盖".into());
             }
+            if let Some(expected) = params.get("expectedDocument") {
+                let expected = expected.as_str().ok_or("工作流原文无效，请重新读取")?;
+                if expected.len() > MAX_WORKFLOW_BYTES as usize {
+                    return Err("工作流原文超过大小限制".into());
+                }
+                let actual = read_document(&path)
+                    .await
+                    .map_err(|_| "工作流已被删除、过大或无法读取，请重新加载")?;
+                if actual != expected {
+                    return Err(
+                        "工作流已被其他操作修改，请重新加载后再保存；你的编辑内容仍保留".into(),
+                    );
+                }
+            }
             std::fs::create_dir_all(&root).map_err(|_| "无法创建工作流目录")?;
             crate::config::atomic_write_private(&path, content.as_bytes())
                 .map_err(|error| error.to_string())?;
@@ -375,80 +423,91 @@ pub async fn invoke_service(
         }
         "deleteSavedWorkflow" => {
             let name = params["name"].as_str().ok_or("缺少工作流名称")?;
+            let _guard = runs_lock().lock().await;
             delete_workflow(&root, name).await
-        }
-        "listSavedWorkflowRuns" => {
-            let state = app.state::<InprocessAgentState>();
-            state.ensure_started(app).await?;
-            let project_path = params["workspacePath"].as_str().ok_or("缺少工作区路径")?;
-            let target_name = params["name"].as_str();
-            let state_db = app.state::<crate::store::AppState>();
-            let records = {
-                let _guard = runs_lock().lock().await;
-                read_runs(&state_db.db)?
-            };
-            let mut runs = Vec::new();
-            for record in records
-                .into_iter()
-                .filter(|run| {
-                    crate::services::agent_preferences::path_key(&run.cwd)
-                        == crate::services::agent_preferences::path_key(project_path)
-                        && run.scope == scope
-                        && target_name.is_none_or(|name| name == run.name)
-                })
-                .rev()
-                .take(51)
-            {
-                let snapshot: Result<lolicode_agent::AgentSnapshot, String> = state
-                    .call("getSession", json!({"sessionId":record.session_id}), false)
-                    .await;
-                let command: Result<Value, String> = state
-                    .call(
-                        "queryCommand",
-                        json!({"sessionId":record.session_id,"requestId":record.request_id}),
-                        false,
-                    )
-                    .await;
-                let status = match (
-                    snapshot.as_ref(),
-                    command
-                        .as_ref()
-                        .ok()
-                        .and_then(|value| value["results"][0]["result"]["status"].as_str()),
-                ) {
-                    (_, Some("completed")) => "completed",
-                    (_, Some("cancelled")) => "stopped",
-                    (_, Some("failed")) => "errored",
-                    (Err(_), _) => "errored",
-                    (Ok(snapshot), _) if snapshot.status == AgentStatus::Error => "errored",
-                    (Ok(snapshot), _)
-                        if matches!(
-                            snapshot.status,
-                            AgentStatus::Running
-                                | AgentStatus::WaitingPermission
-                                | AgentStatus::WaitingQuestion
-                        ) =>
-                    {
-                        "running"
-                    }
-                    (Ok(_), Some("accepted" | "running")) => "errored",
-                    _ => "pending",
-                };
-                runs.push(json!({"runId":record.run_id,"name":record.name,"scope":record.scope,"status":status,"createdAt":record.created_at,"cwd":record.cwd,"sessionId":record.session_id,"error":snapshot.as_ref().ok().and_then(|snapshot| snapshot.error.clone())}));
-            }
-            runs.sort_by(|left, right| {
-                right["createdAt"].as_u64().cmp(&left["createdAt"].as_u64())
-            });
-            let truncated = runs.len() > 50;
-            runs.truncate(50);
-            Ok(if truncated {
-                json!({"runs":runs,"truncated":true})
-            } else {
-                json!({"runs":runs})
-            })
         }
         _ => Err("此工作流功能暂不可用".into()),
     }
+}
+
+pub async fn invoke_service(
+    app: &AppHandle,
+    method: &str,
+    args: Vec<Value>,
+) -> Result<Value, String> {
+    if method != "listSavedWorkflowRuns" {
+        return invoke_file_service(method, args).await;
+    }
+    let params = request(&args)?;
+    let (root, scope) = workflow_root(params)?;
+    ensure_no_links(&root)?;
+
+    let state = app.state::<InprocessAgentState>();
+    state.ensure_started(app).await?;
+    let project_path = params["workspacePath"].as_str().ok_or("缺少工作区路径")?;
+    let target_name = params["name"].as_str();
+    let state_db = app.state::<crate::store::AppState>();
+    let records = {
+        let _guard = runs_lock().lock().await;
+        read_runs(&state_db.db)?
+    };
+    let mut runs = Vec::new();
+    for record in records
+        .into_iter()
+        .filter(|run| {
+            crate::services::agent_preferences::path_key(&run.cwd)
+                == crate::services::agent_preferences::path_key(project_path)
+                && run.scope == scope
+                && target_name.is_none_or(|name| name == run.name)
+        })
+        .rev()
+        .take(51)
+    {
+        let snapshot: Result<lolicode_agent::AgentSnapshot, String> = state
+            .call("getSession", json!({"sessionId":record.session_id}), false)
+            .await;
+        let command: Result<Value, String> = state
+            .call(
+                "queryCommand",
+                json!({"sessionId":record.session_id,"requestId":record.request_id}),
+                false,
+            )
+            .await;
+        let status = match (
+            snapshot.as_ref(),
+            command
+                .as_ref()
+                .ok()
+                .and_then(|value| value["results"][0]["result"]["status"].as_str()),
+        ) {
+            (_, Some("completed")) => "completed",
+            (_, Some("cancelled")) => "stopped",
+            (_, Some("failed")) => "errored",
+            (Err(_), _) => "errored",
+            (Ok(snapshot), _) if snapshot.status == AgentStatus::Error => "errored",
+            (Ok(snapshot), _)
+                if matches!(
+                    snapshot.status,
+                    AgentStatus::Running
+                        | AgentStatus::WaitingPermission
+                        | AgentStatus::WaitingQuestion
+                ) =>
+            {
+                "running"
+            }
+            (Ok(_), Some("accepted" | "running")) => "errored",
+            _ => "pending",
+        };
+        runs.push(json!({"runId":record.run_id,"name":record.name,"scope":record.scope,"status":status,"createdAt":record.created_at,"cwd":record.cwd,"sessionId":record.session_id,"error":snapshot.as_ref().ok().and_then(|snapshot| snapshot.error.clone())}));
+    }
+    runs.sort_by(|left, right| right["createdAt"].as_u64().cmp(&left["createdAt"].as_u64()));
+    let truncated = runs.len() > 50;
+    runs.truncate(50);
+    Ok(if truncated {
+        json!({"runs":runs,"truncated":true})
+    } else {
+        json!({"runs":runs})
+    })
 }
 
 pub async fn workflow_prompt(
@@ -523,6 +582,134 @@ fn render_prompt(workflow: &SavedWorkflow, args: &Value) -> Result<String, Strin
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn edits_preserve_original_yaml_and_reject_stale_overwrites() {
+        let temp = tempfile::tempdir().unwrap();
+        let document = "---\r\n# Keep this comment\r\ndescription: Saved edit\r\ncustom: kept\r\nnotes: |\r\n  ---not a delimiter\r\n---\r\nRead README.\r\n";
+        let params = json!({"workspacePath":temp.path(),"scope":"project","name":"editable","document":document});
+        invoke_file_service("saveSavedWorkflow", vec![params.clone()])
+            .await
+            .unwrap();
+        let loaded = invoke_file_service("getSavedWorkflow", vec![params.clone()])
+            .await
+            .unwrap();
+        assert_eq!(loaded["document"], document);
+        assert_eq!(loaded["meta"]["custom"], "kept");
+        let changed = document.replace("Read README.", "Read README and test the change.");
+        let mut edit = params.clone();
+        edit["document"] = json!(changed);
+        edit["expectedDocument"] = json!(document);
+        edit["overwrite"] = json!(true);
+        invoke_file_service("saveSavedWorkflow", vec![edit.clone()])
+            .await
+            .unwrap();
+        edit["document"] =
+            json!(document.replace("Read README.", "Stale edit must not replace anything."));
+        assert!(invoke_file_service("saveSavedWorkflow", vec![edit])
+            .await
+            .unwrap_err()
+            .contains("已被其他操作修改"));
+        let final_document = invoke_file_service("getSavedWorkflow", vec![params])
+            .await
+            .unwrap();
+        assert_eq!(final_document["document"], changed);
+        assert_eq!(final_document["meta"]["custom"], "kept");
+    }
+
+    #[tokio::test]
+    async fn simultaneous_edits_with_same_base_only_accept_one_writer() {
+        let temp = tempfile::tempdir().unwrap();
+        let original = "---\ndescription: Concurrent\n---\nOriginal steps.";
+        let base = json!({"workspacePath":temp.path(),"scope":"project","name":"shared","document":original});
+        invoke_file_service("saveSavedWorkflow", vec![base.clone()])
+            .await
+            .unwrap();
+        let mut a = base.clone();
+        a["overwrite"] = json!(true);
+        a["expectedDocument"] = json!(original);
+        a["document"] = json!(original.replace("Original steps.", "Writer A."));
+        let mut b = a.clone();
+        b["document"] = json!(original.replace("Original steps.", "Writer B."));
+        let (first, second) = tokio::join!(
+            invoke_file_service("saveSavedWorkflow", vec![a]),
+            invoke_file_service("saveSavedWorkflow", vec![b])
+        );
+        assert_ne!(first.is_ok(), second.is_ok());
+        let loaded = invoke_file_service("getSavedWorkflow", vec![base])
+            .await
+            .unwrap();
+        assert!(loaded["document"]
+            .as_str()
+            .unwrap()
+            .contains(if first.is_ok() {
+                "Writer A."
+            } else {
+                "Writer B."
+            }));
+    }
+
+    #[tokio::test]
+    async fn run_receipt_survives_database_reopen_and_rejects_changed_scope_or_prompt() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("workflow-receipts.db");
+        let open = || {
+            let conn = rusqlite::Connection::open(&path).unwrap();
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)",
+                [],
+            )
+            .unwrap();
+            crate::database::Database {
+                conn: std::sync::Mutex::new(conn),
+                log_count_cache: std::sync::Mutex::new(None),
+            }
+        };
+        let db = open();
+        record_run_in_db(
+            &db,
+            "D:/owned/project",
+            "lc:owned",
+            "check",
+            "project",
+            "owned-request",
+            "Owned workflow prompt",
+        )
+        .await
+        .unwrap();
+        drop(db);
+        let db = open();
+        record_run_in_db(
+            &db,
+            "D:/owned/project",
+            "lc:owned",
+            "check",
+            "project",
+            "owned-request",
+            "Owned workflow prompt",
+        )
+        .await
+        .unwrap();
+        assert_eq!(read_runs(&db).unwrap().len(), 1);
+        for (cwd, prompt, scope) in [
+            ("D:/different/project", "Owned workflow prompt", "project"),
+            ("D:/owned/project", "Changed prompt", "project"),
+            ("D:/owned/project", "Owned workflow prompt", "global"),
+        ] {
+            assert!(record_run_in_db(
+                &db,
+                cwd,
+                "lc:owned",
+                "check",
+                scope,
+                "owned-request",
+                prompt
+            )
+            .await
+            .is_err());
+        }
+        assert_eq!(read_runs(&db).unwrap().len(), 1);
+    }
     #[test]
     fn workflow_arguments_apply_defaults_and_validate_before_model_dispatch() {
         let workflow=parse_document("---\ndescription: Fixture\nargs:\n  count:\n    type: number\n    required: true\n    default: 2\n  apply:\n    type: boolean\n---\nRead the owned project before changing anything.","fixture".into(),"fixture.md".into(),"project".into()).unwrap();

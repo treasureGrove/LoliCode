@@ -69,11 +69,6 @@ export function AgentOperationsPanel({
     if (activity?.features) return activity.features[feature] === true;
     return activity?.inProcess !== true;
   };
-  const unavailable =
-    ready &&
-    ["workflows", "automation", "remote"].some(
-      (feature) => !supported(feature as "workflows" | "automation" | "remote"),
-    );
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="wb-extensions">
@@ -111,10 +106,10 @@ export function AgentOperationsPanel({
               type="button"
               role="tab"
               aria-selected={tab === value}
-              disabled={!supported(value)}
+              disabled={!ready}
               title={
                 ready && !supported(value)
-                  ? "此功能正在迁移至应用本体，暂不可用"
+                  ? "查看当前执行引擎的功能状态"
                   : undefined
               }
               onClick={() => setTab(value)}
@@ -142,12 +137,21 @@ export function AgentOperationsPanel({
               </button>
             </div>
           )}
-          {open && unavailable && (
-            <p className="wb-extension-hint">
-              部分功能正在迁移至 Rust
-              本体，暂不可用。已保存的工作流、自动化及远程数据会保留，当前不会启动旧的
-              ZCode 服务。
-            </p>
+          {open && ready && !supported(tab) && (
+            <div className="wb-extension-hint" role="status">
+              <strong>
+                {tab === "remote"
+                  ? "远端工程暂未接入当前 Rust 执行引擎"
+                  : tab === "workflows"
+                    ? "当前执行引擎未提供工作流"
+                    : "当前执行引擎未提供自动化"}
+              </strong>
+              <p>
+                {tab === "remote"
+                  ? "本地工作流和定时任务可以正常使用；SSH / WSL 项目还没有远程任务执行接口，因此不会显示为可运行或可调度项目。已保存的远端配置会保留，也不会启动旧的 ZCode 服务。"
+                  : "已保存的数据会保留。切换到支持此功能的执行引擎后即可继续管理。"}
+              </p>
+            </div>
           )}
           {open &&
             supported(tab) &&
@@ -157,8 +161,10 @@ export function AgentOperationsPanel({
                 projectOpen={Boolean(projectPath)}
               />
             ) : !projectPath ? (
-              <p className="text-body">
-                请先在工作台选择本地项目，然后管理该项目的工作流与自动化。
+              <p className="wb-extension-hint">
+                {tab === "workflows"
+                  ? "请先在工作台打开一个本地项目，再管理或运行该项目的工作流。"
+                  : "自动化任务按本地项目保存。请先在工作台打开一个本地项目。"}
               </p>
             ) : tab === "workflows" ? (
               <AgentWorkflowPanel

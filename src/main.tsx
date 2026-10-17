@@ -1,6 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
+import { AppDataRecovery } from "./components/AppDataRecovery";
 import { DatabaseUpgrade } from "./components/DatabaseUpgrade";
 import { UpdateProvider } from "./contexts/UpdateContext";
 import "./index.css";
@@ -29,6 +30,7 @@ import {
 } from "./lib/modelsDevAutoSync";
 import { initializeWindowActivity } from "@/lib/windowActivity";
 import { initializeInputModality } from "@/lib/inputModality";
+import { ResourcePackProvider } from "@/components/shell/ResourcePackProvider";
 import { InterfaceAppearanceRoot } from "@/components/shell/InterfaceAppearanceRoot";
 import {
   applyInterfaceAppearance,
@@ -105,6 +107,21 @@ async function bootstrap() {
     const initError = (await invoke(
       "get_init_error",
     )) as ConfigLoadErrorPayload | null;
+    if (initError && initError.kind === "app_config_dir_missing") {
+      ReactDOM.createRoot(document.getElementById("root")!).render(
+        <React.StrictMode>
+          <FrontendErrorBoundary>
+            <ThemeProvider defaultTheme="system" storageKey="cc-switch-theme">
+              <AppDataRecovery
+                path={initError.path ?? ""}
+                error={initError.error ?? ""}
+              />
+            </ThemeProvider>
+          </FrontendErrorBoundary>
+        </React.StrictMode>,
+      );
+      return;
+    }
     if (initError && initError.kind === "db_version_too_new") {
       // 数据库版本过新：渲染应用内「升级应用」恢复界面，不进入正常 App
       ReactDOM.createRoot(document.getElementById("root")!).render(
@@ -150,7 +167,9 @@ async function bootstrap() {
                 {/* 全局悬停提示：移上去立即出现（HoverTip） */}
                 <TooltipProvider delayDuration={0} skipDelayDuration={0}>
                   <InterfaceAppearanceRoot />
-                  <App />
+                  <ResourcePackProvider>
+                    <App />
+                  </ResourcePackProvider>
                 </TooltipProvider>
               </MotionConfig>
               <Toaster />

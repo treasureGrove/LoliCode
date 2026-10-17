@@ -135,6 +135,89 @@ afterEach(() => {
 });
 
 describe("native workflow / automation / remote entry", () => {
+  it("edits the complete saved document and keeps the draft when a stale save is rejected", async () => {
+    const original =
+      "---\n# preserve this comment\ndescription: Original\ncustom: keep-me\n---\nRead README.";
+    vi.mocked(agentApi.native).mockImplementation(async (_service, method) => {
+      if (method === "listSavedWorkflows")
+        return { workflows: [workflow], invalid: [] };
+      if (method === "listSavedWorkflowRuns") return { runs: [] };
+      if (method === "getSavedWorkflow")
+        return { ok: true, document: original, script: "Read README." };
+      if (method === "saveSavedWorkflow")
+        throw new Error(
+          "工作流已被其他操作修改，请重新加载后再保存；你的编辑内容仍保留",
+        );
+      return {};
+    });
+    render(<AgentOperationsPanel {...props()} />);
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: "编辑工作流" }));
+    await flush();
+    expect(screen.getByLabelText("工作流名称")).toBeDisabled();
+    expect(screen.getByLabelText("工作流内容")).toHaveValue(original);
+    const edited = original.replace(
+      "Read README.",
+      "Read README and validate the change.",
+    );
+    fireEvent.change(screen.getByLabelText("工作流内容"), {
+      target: { value: edited },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "保存修改" }));
+    await flush();
+    expect(agentApi.native).toHaveBeenCalledWith(
+      "IZCodeAgentService",
+      "saveSavedWorkflow",
+      [
+        expect.objectContaining({
+          name: workflow.name,
+          document: edited,
+          overwrite: true,
+          expectedDocument: original,
+        }),
+      ],
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent("已被其他操作修改");
+    expect(screen.getByLabelText("工作流内容")).toHaveValue(edited);
+  });
+
+  it("does not load an old workflow editor into a newly selected project", async () => {
+    let resolveDocument!: (value: unknown) => void;
+    const documentRequest = new Promise((resolve) => {
+      resolveDocument = resolve;
+    });
+    vi.mocked(agentApi.native).mockImplementation(async (_service, method) => {
+      if (method === "listSavedWorkflows")
+        return { workflows: [workflow], invalid: [] };
+      if (method === "listSavedWorkflowRuns") return { runs: [] };
+      if (method === "getSavedWorkflow") return documentRequest;
+      return {};
+    });
+    const view = render(<AgentOperationsPanel {...props()} />);
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: "编辑工作流" }));
+    view.rerender(
+      <AgentOperationsPanel
+        {...props()}
+        projectPath="D:/owned/second-project"
+      />,
+    );
+    await act(async () => {
+      resolveDocument({
+        ok: true,
+        document: "---\ndescription: Old project\n---\nOld steps",
+      });
+      await documentRequest;
+    });
+    await flush();
+    expect(screen.queryByLabelText("工作流内容")).not.toBeInTheDocument();
+    expect(agentApi.native).not.toHaveBeenCalledWith(
+      "IZCodeAgentService",
+      "saveSavedWorkflow",
+      expect.anything(),
+    );
+  });
+
   it("saves a reusable workflow document through the native service instead of an inert chat-only entry", async () => {
     vi.mocked(agentApi.native).mockImplementation(async (_service, method) =>
       method === "saveSavedWorkflow"
@@ -267,8 +350,12 @@ describe("native workflow / automation / remote entry", () => {
       }),
     );
     await flush();
-    expect(screen.getByText(/当前不会启动旧的 ZCode 服务/)).toBeInTheDocument();
+    expect(screen.getByText("当前执行引擎未提供工作流")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("tab", { name: "SSH / WSL" }));
+    expect(
+      screen.getByText("远端工程暂未接入当前 Rust 执行引擎"),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/不会启动旧的 ZCode 服务/)).toBeInTheDocument();
     expect(agentApi.native).not.toHaveBeenCalled();
     expect(agentApi.automation).not.toHaveBeenCalled();
     expect(agentApi.remote).not.toHaveBeenCalled();
@@ -293,7 +380,8 @@ describe("native workflow / automation / remote entry", () => {
     await flush();
     await act(async () => old({}));
     await flush();
-    expect(screen.getByRole("tab", { name: "工作流" })).toBeDisabled();
+    expect(screen.getByRole("tab", { name: "工作流" })).toBeEnabled();
+    expect(screen.getByText("当前执行引擎未提供工作流")).toBeInTheDocument();
     expect(agentApi.native).not.toHaveBeenCalled();
   });
   it("retries capability failures and requests only explicitly supported advanced features", async () => {
