@@ -4,6 +4,8 @@
 
 当前已公开版本为 **4.0.20**，见[本次交付记录](lolicode-4.0.20-delivery.md)。公开分发目前是 **Windows x64 NSIS 安装版与便携 ZIP**；macOS 和 Linux 是产品目标，尚未发布对应安装包。真实发布结果记录在每版交付文档中，不能用待发布清单替代发布证据。
 
+另有 **4.0.21-rc.1 测试候选版**，见[候选交付记录](lolicode-4.0.21-rc.1-delivery.md)。候选附件与独立清单已公开并验签，正式 `latest.json` 与 GitHub Latest 继续保持 4.0.20；实际覆盖安装、数据保留及其余未完成能力仍需继续验收。
+
 - 产品下载：[lolicode.com](https://lolicode.com/)，工具站保留兼容入口。
 - 社区账户：[社区](https://lolicode.com/all)，独立于模型渠道授权。
 - 源码与发布记录：[treasureGrove/LoliCode](https://github.com/treasureGrove/LoliCode)。
