@@ -1,0 +1,33 @@
+{
+  "version": "4.0.21-rc.1",
+  "items": [
+    {
+      "type": "new",
+      "zh": "按需添加酒馆与虚幻应用，移除入口保留数据",
+      "zh-TW": "按需加入酒館與虛幻應用，移除入口保留資料",
+      "en": "Add Tavern and Unreal applications on demand; removal preserves data",
+      "ja": "酒場とUnrealを必要に応じて追加。削除時もデータを保持"
+    },
+    {
+      "type": "fix",
+      "zh": "路径配置异常时暂停启动并提供备份恢复，避免误开空数据库",
+      "zh-TW": "路徑設定異常時暫停啟動並提供備份復原，避免誤開空資料庫",
+      "en": "Recover invalid data paths with a configuration backup instead of opening a blank profile",
+      "ja": "データ保存先の異常時は空のDBを開かず、設定をバックアップして復元"
+    },
+    {
+      "type": "improve",
+      "zh": "支持完整原文编辑工作流，检测冲突并隔离项目切换状态",
+      "zh-TW": "支援完整原文編輯工作流，偵測衝突並隔離專案切換狀態",
+      "en": "Edit complete workflow documents with conflict checks and isolated project state",
+      "ja": "ワークフロー原文の編集、競合検出とプロジェクト切替時の状態分離に対応"
+    },
+    {
+      "type": "new",
+      "zh": "签名装饰图片可独立更新与回退；本版为待验收测试版",
+      "zh-TW": "簽名裝飾圖片可獨立更新與回退；本版為待驗收測試版",
+      "en": "Update signed artwork with offline fallback; this is a test candidate awaiting acceptance",
+      "ja": "署名付き画像を個別更新・復元可能に。本版は検証待ちの候補版"
+    }
+  ]
+}

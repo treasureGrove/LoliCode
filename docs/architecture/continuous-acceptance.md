@@ -111,3 +111,13 @@
 审查另外修复了酒馆完成结果仍带 `isGenerating=true` 的问题；读取响应加大小限制，并对 HTTP 错误给出固定指引，避免将服务端可能含 Key 的原始错误体显示给用户。UE 工程库的添加/移除加共享写入锁，16 路注册和并行移除验证不会相互覆盖且不会删除工程文件。上述 UE 检查不启动 Editor，真实桥接和未实现的 UE 能力仍保持未通过。
 
 验证文件：`workflow-edit-ui-tests.json`、`workflow-edit-tests.log`、`tavern-generation-tests.log`、`agent-checkpoint-native-full.log`、`agent-checkpoint-desktop-full.log`、`workflow-frontend-full.json`、`workflow-typecheck.log`、`workflow-renderer-build.log`。源码检查点随后推送到原分支；新安装器、实际安装升级、SSH/WSL、前端行为热更新、完整 UE 和指定 testkey 仍需继续，goal 不关闭。
+
+## 中断补查与 4.0.21-rc.1 候选准备
+
+源码检查点 `22c4af582a74be3accd700e6f0a4368655148f11` 已提交并普通推送到原分支 `TG/freehub-m0`，远端 SHA 相同；其完整回归为前端 3,082、桌面 Rust 3,817（12 忽略）、原生 Agent 104。B01 中的 `efed637` 是当时同步快照，不能继续当作最新源码。已发布稳定版仍是 4.0.20，不能把源码推送说成新包上线。
+
+补查发现 `app_paths.json` 解析失败、字段类型错误等情况仍可能被通用 Store 的宽松初始加载变成“没有配置”，进而误开默认空库。本次改为严格、有大小限制的读取；无效 JSON、非对象、错误字段类型、相对路径、超大文件和不可读取情况都在数据库初始化前进入恢复页。正常设置保存拒绝覆盖无效文件；明确选择原目录恢复时，先创建不可覆盖的原始字节备份，再原子写入路径配置。仍可解析的未知字段保留。恢复界面支持失败后重试，取消选择不会改配置或重启。
+
+`path-store-recovery-tests.log` 包含 7 项隔离文件回归；`path-store-recovery-ui.json` 包含 3 项恢复页组件测试。最终桌面 Rust 全量 3,824 通过、12 忽略；类型检查和 renderer 构建通过。初次全量前端检查发现候选版本更新说明过长，按原规则缩为四条摘要，原约束未放宽，修复后专项及全量 3,085 项通过。全部测试证据在 `release/acceptance/path-recovery-*`。这些是文件与组件证据，不是实际安装升级或真实桌面截图。
+
+版本元数据准备为 `4.0.21-rc.1`，用于冻结候选包。发布前需重新核对源码 SHA、签名、实际载荷及下载字节；不会替换稳定更新清单。腾讯控制台重新打开后显示微信登录页，当前登录已过期；已保留页面并等待用户登录。DNS 生效但证书名称校验失败的下载线路仍未验收，也未降低 TLS 校验。

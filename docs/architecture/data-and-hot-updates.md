@@ -10,6 +10,7 @@ Two protections now apply to this boundary:
 
 - Before an update installs, LoliCode creates and verifies a SQLite snapshot after the signed package has downloaded and the local agent has gone idle. A failed snapshot cancels installation.
 - If a configured data directory is missing, startup stops before opening a database. The recovery screen accepts only a directory containing the existing database or legacy config, then restarts against that directory. It does not silently create a blank profile.
+- The path-selector JSON is read strictly, independently of the generic Tauri store's permissive initial load. Malformed JSON, invalid field types, relative paths, oversized files and read failures enter the same recovery flow before the database opens. Ordinary settings saves cannot replace an invalid selector. Explicit recovery first preserves the exact original selector in a uniquely named backup and then atomically saves the selected original data root; valid unknown settings are retained.
 
 ## Update policy
 

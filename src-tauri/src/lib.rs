@@ -84,16 +84,18 @@ pub use store::AppState;
 /// desktop account storage or exposing its internal configuration over IPC.
 #[cfg(feature = "test-hooks")]
 pub mod agent_test_support {
-    pub use crate::services::{builtin_apps as builtin_apps_test, tavern as tavern_test};
-    pub use crate::services::agent_workflows::{invoke_file_service as workflow_files, record_run_in_db, workflow_prompt};
-    pub use crate::services::zhipu_login::acceptance_secret_read_only as glm_acceptance_secret;
-    pub use crate::services::resource_updates::{Envelope as ResourceEnvelope, ResourceStore};
     pub use crate::proxy::providers::codex_oauth_auth::CodexOAuthManager;
+    pub use crate::services::agent_workflows::{
+        invoke_file_service as workflow_files, record_run_in_db, workflow_prompt,
+    };
+    pub use crate::services::resource_updates::{Envelope as ResourceEnvelope, ResourceStore};
+    pub use crate::services::zhipu_login::acceptance_secret_read_only as glm_acceptance_secret;
     pub use crate::services::{
         agent::{AgentState, AgentWorkspace},
         agent_extensions::{AgentExtensionStore, AgentExtensionsCatalog},
         channel_center, UsageCache,
     };
+    pub use crate::services::{builtin_apps as builtin_apps_test, tavern as tavern_test};
     pub async fn extensions_runtime_catalog(
         state: &AgentState,
         catalog: AgentExtensionsCatalog,
@@ -493,16 +495,18 @@ pub fn run() {
             let _ = rustls::crypto::ring::default_provider().install_default();
 
             // 预先刷新 Store 覆盖配置，确保后续路径读取正确（日志/数据库等）
-            app_store::refresh_app_config_dir_override(app.handle());
+            let path_store_unreadable =
+                app_store::refresh_app_config_dir_override(app.handle()).is_err();
             let missing_app_config_dir =
                 app_store::get_app_config_dir_override().filter(|path| !path.is_dir());
             // Keep startup diagnostics writable while a custom data volume is
             // unavailable; never initialize a replacement DB at a fallback path.
             panic_hook::init_app_config_dir(
-                missing_app_config_dir
-                    .as_ref()
-                    .map(|_| crate::config::get_device_config_dir())
-                    .unwrap_or_else(crate::config::get_app_config_dir),
+                if path_store_unreadable || missing_app_config_dir.is_some() {
+                    crate::config::get_device_config_dir()
+                } else {
+                    crate::config::get_app_config_dir()
+                },
             );
 
             // 初始化日志（输出到 <app_config_dir>/logs/cc-switch.log）
@@ -548,7 +552,25 @@ pub fn run() {
 
             // 首次读取覆盖路径时 logger 尚未可用；此处重放一次，
             // 让 Store 损坏或路径无效等启动警告能够真正落盘。
-            let _ = app_store::refresh_app_config_dir_override(app.handle());
+            if let Err(error) = app_store::refresh_app_config_dir_override(app.handle()) {
+                log::error!("Application data path configuration is unreadable: {error}");
+                crate::init_status::set_init_error(crate::init_status::InitErrorPayload {
+                    path: app_store::path_store_path(app.handle())
+                        .map(|path| path.display().to_string())
+                        .unwrap_or_default(),
+                    error: format!("{error} 为避免打开空数据库，应用已暂停启动，没有清除旧数据。请修复路径配置，或选择以前使用的数据目录；恢复前会保留原路径配置的备份。"),
+                    kind: Some("app_config_dir_invalid".into()),
+                    db_version: None,
+                    supported_version: None,
+                });
+                if let Some(window) = app.get_webview_window("main") {
+                    #[cfg(target_os = "windows")]
+                    let _ = window.set_skip_taskbar(false);
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+                return Ok(());
+            }
 
             if let Some(path) = app_store::get_app_config_dir_override()
                 .filter(|path| !path.is_dir())

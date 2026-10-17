@@ -8,9 +8,14 @@ import { Button } from "@/components/ui/button";
 interface AppDataRecoveryProps {
   path: string;
   error: string;
+  invalidConfiguration?: boolean;
 }
 
-export function AppDataRecovery({ path, error }: AppDataRecoveryProps) {
+export function AppDataRecovery({
+  path,
+  error,
+  invalidConfiguration = false,
+}: AppDataRecoveryProps) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -39,15 +44,22 @@ export function AppDataRecovery({ path, error }: AppDataRecoveryProps) {
         <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl bg-destructive/10 text-destructive">
           <AlertTriangle aria-hidden="true" />
         </div>
-        <h1 className="text-xl font-semibold">找不到原来的数据目录</h1>
+        <h1 className="text-xl font-semibold">
+          {invalidConfiguration
+            ? "无法读取数据目录配置"
+            : "找不到原来的数据目录"}
+        </h1>
         <p className="mt-3 leading-7 text-muted-foreground">
           LoliCode
-          检测到上次使用的数据目录当前不可用，因此暂停启动，避免创建一份空数据库让项目、渠道和
-          API Key 看起来丢失。本次启动没有清除旧数据。
+          {invalidConfiguration
+            ? "无法确认上次使用的数据目录"
+            : "检测到上次使用的数据目录当前不可用"}
+          ，因此暂停启动，避免创建一份空数据库让项目、渠道和 API Key
+          看起来丢失。本次启动没有清除旧数据。
         </p>
         <div className="my-5 rounded-lg border border-border bg-muted/40 p-3">
           <div className="mb-1 text-xs font-medium text-muted-foreground">
-            上次使用的位置
+            {invalidConfiguration ? "需要恢复的路径配置文件" : "上次使用的位置"}
           </div>
           <code className="break-all text-sm">{path}</code>
         </div>
@@ -56,6 +68,12 @@ export function AppDataRecovery({ path, error }: AppDataRecoveryProps) {
           <code>cc-switch.db</code>（或旧版 <code>config.json</code>
           ）的原数据目录。
         </p>
+        {invalidConfiguration && (
+          <p className="mt-3 text-sm leading-6 text-muted-foreground">
+            选择后会先备份当前路径配置文件，再保存原数据目录。项目、渠道和 Key
+            不会被迁移或清空。
+          </p>
+        )}
         {error && <p className="mt-3 text-sm text-muted-foreground">{error}</p>}
         {message && (
           <p

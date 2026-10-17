@@ -1,12 +1,15 @@
-use serde_json::Value;
-use std::path::PathBuf;
-use std::sync::{OnceLock, RwLock};
-use tauri_plugin_store::StoreExt;
+use serde_json::{Map, Value};
+use std::io::{Read, Write};
+use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock, RwLock};
+use tauri::Manager;
 
 use crate::error::AppError;
 
 /// Store 中的键名
 const STORE_KEY_APP_CONFIG_DIR: &str = "app_config_dir_override";
+const MAX_PATH_STORE_BYTES: u64 = 1024 * 1024;
+static PATH_STORE_WRITE: Mutex<()> = Mutex::new(());
 
 /// 缓存当前的 app_config_dir 覆盖路径，避免存储 AppHandle
 static APP_CONFIG_DIR_OVERRIDE: OnceLock<RwLock<Option<PathBuf>>> = OnceLock::new();
@@ -26,47 +29,66 @@ pub fn get_app_config_dir_override() -> Option<PathBuf> {
     override_cache().read().ok()?.clone()
 }
 
-fn read_override_from_store(app: &tauri::AppHandle) -> Option<PathBuf> {
-    let store = match app.store_builder("app_paths.json").build() {
-        Ok(store) => store,
-        Err(e) => {
-            log::warn!("无法创建 Store: {e}");
-            return None;
-        }
+pub fn path_store_path(app: &tauri::AppHandle) -> Result<PathBuf, AppError> {
+    app.path()
+        .app_data_dir()
+        .map(|dir| dir.join("app_paths.json"))
+        .map_err(|e| AppError::Config(format!("无法定位数据目录配置: {e}")))
+}
+
+// plugin-store intentionally ignores initial load errors. This particular file
+// selects the user's database, so read it strictly before any database is opened.
+fn read_path_document(path: &Path) -> Result<Map<String, Value>, AppError> {
+    let file = match std::fs::File::open(path) {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Map::new()),
+        Err(error) => return Err(AppError::io(path, error)),
     };
+    let mut bytes = Vec::new();
+    file.take(MAX_PATH_STORE_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|e| AppError::io(path, e))?;
+    if bytes.len() as u64 > MAX_PATH_STORE_BYTES {
+        return Err(AppError::Config(
+            "数据目录配置文件过大，请选择原数据目录恢复。".into(),
+        ));
+    }
+    serde_json::from_slice(&bytes).map_err(|_| {
+        // Do not include malformed source values in diagnostics.
+        AppError::Config("数据目录配置文件无法解析，请选择原数据目录恢复。".into())
+    })
+}
 
-    match store.get(STORE_KEY_APP_CONFIG_DIR) {
-        Some(Value::String(path_str)) => {
-            let path_str = path_str.trim();
-            if path_str.is_empty() {
-                return None;
+fn document_override(document: &Map<String, Value>) -> Result<Option<PathBuf>, AppError> {
+    match document.get(STORE_KEY_APP_CONFIG_DIR) {
+        Some(Value::String(raw)) if raw.trim().is_empty() => Ok(None),
+        Some(Value::String(raw)) => {
+            let path = resolve_path(raw.trim());
+            if !path.is_absolute() || raw.contains('\0') {
+                return Err(AppError::Config(
+                    "数据目录必须是完整的绝对路径，请选择原数据目录恢复。".into(),
+                ));
             }
-
-            let path = resolve_path(path_str);
-
-            if !path.is_dir() {
-                // Keep the configured path authoritative. Falling back to a new
-                // empty directory makes projects and provider keys appear lost.
-                // Startup enters recovery mode before opening or creating a DB.
-                log::warn!("Store 中配置的 app_config_dir 不存在或不是目录: {path:?}");
-            } else {
-                log::info!("使用 Store 中的 app_config_dir: {path:?}");
-            }
-            Some(path)
+            // A missing directory remains authoritative; startup handles recovery.
+            Ok(Some(path))
         }
-        Some(_) => {
-            log::warn!("Store 中的 {STORE_KEY_APP_CONFIG_DIR} 类型不正确，应为字符串");
-            None
-        }
-        None => None,
+        Some(_) => Err(AppError::Config(
+            "数据目录配置类型错误，请选择原数据目录恢复。".into(),
+        )),
+        None => Ok(None),
     }
 }
 
 /// 从 Store 刷新 app_config_dir 覆盖值并更新缓存
-pub fn refresh_app_config_dir_override(app: &tauri::AppHandle) -> Option<PathBuf> {
-    let value = read_override_from_store(app);
+pub fn refresh_app_config_dir_override(
+    app: &tauri::AppHandle,
+) -> Result<Option<PathBuf>, AppError> {
+    let _guard = PATH_STORE_WRITE
+        .lock()
+        .map_err(|e| AppError::Lock(e.to_string()))?;
+    let value = document_override(&read_path_document(&path_store_path(app)?)?)?;
     update_cached_override(value.clone());
-    value
+    Ok(value)
 }
 
 /// 写入 app_config_dir 到 Tauri Store
@@ -74,34 +96,80 @@ pub fn set_app_config_dir_to_store(
     app: &tauri::AppHandle,
     path: Option<&str>,
 ) -> Result<(), AppError> {
-    let store = app
-        .store_builder("app_paths.json")
-        .build()
-        .map_err(|e| AppError::Message(format!("创建 Store 失败: {e}")))?;
+    let _guard = PATH_STORE_WRITE
+        .lock()
+        .map_err(|e| AppError::Lock(e.to_string()))?;
+    let value = write_path_override(&path_store_path(app)?, path, false)?;
+    update_cached_override(value);
+    Ok(())
+}
 
-    match path {
-        Some(p) => {
-            let trimmed = p.trim();
-            if !trimmed.is_empty() {
-                store.set(STORE_KEY_APP_CONFIG_DIR, Value::String(trimmed.to_string()));
-                log::info!("已将 app_config_dir 写入 Store: {trimmed}");
-            } else {
-                store.delete(STORE_KEY_APP_CONFIG_DIR);
-                log::info!("已从 Store 中删除 app_config_dir 配置");
+/// Only the explicit recovery action may replace an unreadable/invalid selector,
+/// and only after retaining its exact bytes in a new, non-overwriting backup.
+pub fn recover_app_config_dir_to_store(app: &tauri::AppHandle, path: &str) -> Result<(), AppError> {
+    let _guard = PATH_STORE_WRITE
+        .lock()
+        .map_err(|e| AppError::Lock(e.to_string()))?;
+    let value = write_path_override(&path_store_path(app)?, Some(path), true)?;
+    update_cached_override(value);
+    Ok(())
+}
+
+fn write_path_override(
+    store_path: &Path,
+    path: Option<&str>,
+    recovery: bool,
+) -> Result<Option<PathBuf>, AppError> {
+    let loaded = read_path_document(store_path);
+    let original = loaded
+        .as_ref()
+        .map_err(ToString::to_string)
+        .and_then(|document| document_override(document).map_err(|error| error.to_string()));
+    let mut document = match original {
+        Ok(_) => loaded?,
+        Err(error) if recovery => {
+            let mut source =
+                std::fs::File::open(store_path).map_err(|e| AppError::io(store_path, e))?;
+            let backup_path = store_path.with_file_name(format!(
+                "app_paths.recovery-{}.json.bak",
+                uuid::Uuid::new_v4()
+            ));
+            let mut options = std::fs::OpenOptions::new();
+            options.write(true).create_new(true);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::OpenOptionsExt;
+                options.mode(0o600);
             }
+            let mut backup = options
+                .open(&backup_path)
+                .map_err(|e| AppError::io(&backup_path, e))?;
+            std::io::copy(&mut source, &mut backup).map_err(|e| AppError::io(&backup_path, e))?;
+            backup
+                .flush()
+                .and_then(|_| backup.sync_all())
+                .map_err(|e| AppError::io(&backup_path, e))?;
+            log::warn!(
+                "保留数据目录配置备份 {} 后恢复: {error}",
+                backup_path.display()
+            );
+            loaded.unwrap_or_default()
+        }
+        Err(error) => return Err(AppError::Config(error)),
+    };
+    match path.map(str::trim).filter(|path| !path.is_empty()) {
+        Some(path) => {
+            document.insert(STORE_KEY_APP_CONFIG_DIR.into(), Value::String(path.into()));
         }
         None => {
-            store.delete(STORE_KEY_APP_CONFIG_DIR);
-            log::info!("已从 Store 中删除 app_config_dir 配置");
+            document.remove(STORE_KEY_APP_CONFIG_DIR);
         }
     }
-
-    store
-        .save()
-        .map_err(|e| AppError::Message(format!("保存 Store 失败: {e}")))?;
-
-    refresh_app_config_dir_override(app);
-    Ok(())
+    let value = document_override(&document)?;
+    let bytes = serde_json::to_vec_pretty(&document)
+        .map_err(|source| AppError::JsonSerialize { source })?;
+    crate::config::atomic_write_private(store_path, &bytes)?;
+    Ok(value)
 }
 
 /// 解析路径，支持 ~ 开头的相对路径
@@ -129,6 +197,155 @@ pub fn migrate_app_config_dir_from_settings(app: &tauri::AppHandle) -> Result<()
     // 如果用户在旧版本设置过 app_config_dir，需要在 Store 中手动配置
     log::info!("app_config_dir 迁移功能已移除，请在设置中重新配置");
 
-    let _ = refresh_app_config_dir_override(app);
+    refresh_app_config_dir_override(app)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn fresh_profile_has_no_override_and_read_does_not_create_files() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = directory.path().join("app_paths.json");
+        assert!(document_override(&read_path_document(&store).unwrap())
+            .unwrap()
+            .is_none());
+        assert_eq!(std::fs::read_dir(directory.path()).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn malformed_or_wrong_typed_selector_never_becomes_a_fresh_profile() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = directory.path().join("app_paths.json");
+        for bytes in [
+            b"{broken-private-path".as_slice(),
+            b"null",
+            b"[]",
+            b"{\"app_config_dir_override\":false}",
+            b"{\"app_config_dir_override\":\"relative/data\"}",
+        ] {
+            std::fs::write(&store, bytes).unwrap();
+            let error = read_path_document(&store)
+                .and_then(|doc| document_override(&doc))
+                .unwrap_err();
+            assert!(!error.to_string().contains("broken-private-path"));
+            assert!(write_path_override(&store, None, false).is_err());
+            assert_eq!(std::fs::read(&store).unwrap(), bytes);
+            assert_eq!(std::fs::read_dir(directory.path()).unwrap().count(), 1);
+        }
+    }
+
+    #[test]
+    fn missing_custom_volume_stays_authoritative_and_does_not_create_database() {
+        let directory = tempfile::tempdir().unwrap();
+        let missing = directory.path().join("disconnected/data");
+        let store = directory.path().join("app_paths.json");
+        std::fs::write(
+            &store,
+            json!({STORE_KEY_APP_CONFIG_DIR: missing}).to_string(),
+        )
+        .unwrap();
+        assert_eq!(
+            document_override(&read_path_document(&store).unwrap()).unwrap(),
+            Some(missing.clone())
+        );
+        assert!(!missing.exists());
+        assert!(!directory.path().join("cc-switch.db").exists());
+    }
+
+    #[test]
+    fn normal_writes_preserve_unknown_keys_and_allow_explicit_reset() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = directory.path().join("app_paths.json");
+        let data = directory.path().join("existing-profile");
+        std::fs::write(
+            &store,
+            json!({"future_setting": {"enabled": true}}).to_string(),
+        )
+        .unwrap();
+        assert_eq!(
+            write_path_override(&store, Some(data.to_str().unwrap()), false).unwrap(),
+            Some(data)
+        );
+        assert_eq!(
+            read_path_document(&store).unwrap()["future_setting"],
+            json!({"enabled":true})
+        );
+        assert!(write_path_override(&store, None, false).unwrap().is_none());
+        let document = read_path_document(&store).unwrap();
+        assert!(!document.contains_key(STORE_KEY_APP_CONFIG_DIR));
+        assert_eq!(document["future_setting"], json!({"enabled":true}));
+    }
+
+    #[test]
+    fn explicit_recovery_keeps_exact_corrupt_bytes_before_replacing_selector() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = directory.path().join("app_paths.json");
+        let data = directory.path().join("original-profile");
+        std::fs::create_dir(&data).unwrap();
+        let sentinel = data.join("cc-switch.db");
+        std::fs::write(&sentinel, b"original-database-not-opened-or-modified").unwrap();
+        let original = b"{broken config\r\n\x00";
+        std::fs::write(&store, original).unwrap();
+        write_path_override(&store, Some(data.to_str().unwrap()), true).unwrap();
+        let backups: Vec<_> = std::fs::read_dir(directory.path())
+            .unwrap()
+            .filter_map(Result::ok)
+            .filter(|entry| entry.file_name().to_string_lossy().ends_with(".bak"))
+            .collect();
+        assert_eq!(backups.len(), 1);
+        assert_eq!(std::fs::read(backups[0].path()).unwrap(), original);
+        assert_eq!(
+            document_override(&read_path_document(&store).unwrap()).unwrap(),
+            Some(data)
+        );
+        assert_eq!(
+            std::fs::read(sentinel).unwrap(),
+            b"original-database-not-opened-or-modified"
+        );
+    }
+
+    #[test]
+    fn type_error_recovery_keeps_other_settings_and_original_backup() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = directory.path().join("app_paths.json");
+        let original =
+            json!({STORE_KEY_APP_CONFIG_DIR: 73, "future_setting": "retained"}).to_string();
+        std::fs::write(&store, &original).unwrap();
+        write_path_override(&store, Some(directory.path().to_str().unwrap()), true).unwrap();
+        assert_eq!(
+            read_path_document(&store).unwrap()["future_setting"],
+            json!("retained")
+        );
+        let backup = std::fs::read_dir(directory.path())
+            .unwrap()
+            .filter_map(Result::ok)
+            .find(|entry| entry.file_name().to_string_lossy().ends_with(".bak"))
+            .unwrap();
+        assert_eq!(std::fs::read_to_string(backup.path()).unwrap(), original);
+    }
+
+    #[test]
+    fn oversized_or_unreadable_selector_is_an_error_and_is_never_overwritten() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = directory.path().join("app_paths.json");
+        std::fs::write(&store, vec![b' '; MAX_PATH_STORE_BYTES as usize + 1]).unwrap();
+        assert!(read_path_document(&store)
+            .unwrap_err()
+            .to_string()
+            .contains("过大"));
+        assert!(write_path_override(&store, None, false).is_err());
+        assert_eq!(
+            std::fs::metadata(&store).unwrap().len(),
+            MAX_PATH_STORE_BYTES + 1
+        );
+        let bad_store = directory.path().join("directory-not-a-file");
+        std::fs::create_dir(&bad_store).unwrap();
+        assert!(read_path_document(&bad_store).is_err());
+        assert!(write_path_override(&bad_store, None, true).is_err());
+        assert!(bad_store.is_dir());
+    }
 }

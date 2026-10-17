@@ -2,6 +2,16 @@
 
 LoliCode release information is maintained independently in this repository. Published packages are available from the [LoliCode website](https://lolicode.com/) and [public LoliCode Releases](https://github.com/treasureGrove/LoliCode-Releases/releases).
 
+## [4.0.21-rc.1] — candidate, 2026-10-18
+
+- Add persistent opt-in Tavern and Unreal application entries and permission-controlled Tavern management tools in the main Agent. Removal preserves domain data; full Unreal Editor functionality remains under development.
+- Add signed PNG presentation packs with bounded downloads, compatible versions, atomic activation and rollback to bundled offline artwork. Renderer JavaScript updates still require an application release.
+- Preserve workflow source documents when editing, detect stale saves, and keep pending editors isolated across project changes. Verify run receipts against their project scope.
+- Fix Tavern completion state, bound provider responses, and avoid displaying raw provider error bodies. Serialize project-library writes.
+- Stop startup when the data-path selector is invalid or unreadable instead of silently opening a blank default profile. Explicit recovery retains the original selector bytes before an atomic replacement.
+
+This is a test candidate, not a promotion of the stable update feed. Real GLM supplemental checks cover natural memory recall across an engine restart, automatic titles, file/image tools, workflows and Tavern generation. They do not replace the designated testkey, installed upgrades, desktop interaction, or actual Unreal Editor acceptance. Stable downloads remain 4.0.20 until publication is separately verified.
+
 ## [4.0.20] — 2026-10-17
 
 - Add an explicit close button to the Agent memory dialog, including while memory is loading or saving. Wire the controlled dialog close callback without changing memory permissions or save behavior.

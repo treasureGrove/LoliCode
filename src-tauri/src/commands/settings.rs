@@ -443,6 +443,7 @@ pub async fn check_app_update_available(app: AppHandle) -> Result<Option<String>
 #[tauri::command]
 pub async fn get_app_config_dir_override(app: AppHandle) -> Result<Option<String>, String> {
     Ok(crate::app_store::refresh_app_config_dir_override(&app)
+        .map_err(|e| e.to_string())?
         .map(|p| p.to_string_lossy().to_string()))
 }
 
@@ -471,8 +472,7 @@ pub async fn recover_app_config_dir(app: AppHandle, path: String) -> Result<bool
     let selected = selected
         .to_str()
         .ok_or_else(|| "所选路径无法安全保存，请选择一个普通本地目录。".to_string())?;
-    crate::app_store::set_app_config_dir_to_store(&app, Some(selected))
-        .map_err(|e| e.to_string())?;
+    crate::app_store::recover_app_config_dir_to_store(&app, selected).map_err(|e| e.to_string())?;
     Ok(true)
 }
 

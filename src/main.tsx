@@ -107,7 +107,11 @@ async function bootstrap() {
     const initError = (await invoke(
       "get_init_error",
     )) as ConfigLoadErrorPayload | null;
-    if (initError && initError.kind === "app_config_dir_missing") {
+    if (
+      initError &&
+      (initError.kind === "app_config_dir_missing" ||
+        initError.kind === "app_config_dir_invalid")
+    ) {
       ReactDOM.createRoot(document.getElementById("root")!).render(
         <React.StrictMode>
           <FrontendErrorBoundary>
@@ -115,6 +119,9 @@ async function bootstrap() {
               <AppDataRecovery
                 path={initError.path ?? ""}
                 error={initError.error ?? ""}
+                invalidConfiguration={
+                  initError.kind === "app_config_dir_invalid"
+                }
               />
             </ThemeProvider>
           </FrontendErrorBoundary>
