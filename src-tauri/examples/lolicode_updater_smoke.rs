@@ -38,6 +38,7 @@ mod smoke {
       --endpoint <URL>       Override metadata with a loopback fixture or HTTPS endpoint\n\
       --expect-version <v>   Fail unless the native check offers exactly this version\n\
       --current-version <v>  Simulate an installed version (default: 4.0.15)\n\
+      --package-base-url <URL> Allow the standard versioned installer under this exact HTTPS directory (ending in /)\n\
       --check-only           Check metadata without downloading a package\n\
       --help                 Print this help\n\
       JSON proof is printed to stdout. Errors are classified without raw URLs,\n\
@@ -49,6 +50,7 @@ mod smoke {
         expected_version: Option<String>,
         current_version: String,
         check_only: bool,
+        package_base_url: Option<Url>,
     }
 
     fn loopback(url: &Url) -> bool {
@@ -66,13 +68,47 @@ mod smoke {
             && (url.scheme() == "https" || (url.scheme() == "http" && loopback(url)))
     }
 
-    fn options() -> Result<Option<Options>, &'static str> {
-        let mut args = std::env::args().skip(1);
+    fn package_base(raw: &str) -> Result<Url, &'static str> {
+        let base = Url::parse(raw).map_err(|_| "invalid_package_base_url")?;
+        // Keep the operator's directory unambiguous. In particular, do not
+        // silently normalize traversal, backslashes, credentials or URL suffixes.
+        if base.scheme() != "https"
+            || !base.has_host()
+            || !clean_transport(&base)
+            || !base.path().ends_with('/')
+            || base.as_str() != raw
+            || raw.contains('\\')
+        {
+            return Err("unsafe_package_base_url");
+        }
+        Ok(base)
+    }
+
+    fn explicit_package_matches(base: &Url, package: &Url, version: &str) -> bool {
+        // check() already parses the release's semver. Also prevent path syntax
+        // from entering this helper's filename when testing synthetic metadata.
+        if version.is_empty()
+            || version.len() > 128
+            || !version
+                .chars()
+                .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '-' | '+'))
+            || !clean_transport(package)
+        {
+            return false;
+        }
+        base.join(&format!("LoliCode-{version}-Windows-x64-Setup.exe"))
+            .is_ok_and(|expected| expected.as_str() == package.as_str())
+    }
+
+    fn parse_options(
+        mut args: impl Iterator<Item = String>,
+    ) -> Result<Option<Options>, &'static str> {
         let mut options = Options {
             endpoint: None,
             expected_version: None,
             current_version: CURRENT_VERSION.into(),
             check_only: false,
+            package_base_url: None,
         };
         while let Some(option) = args.next() {
             match option.as_str() {
@@ -86,6 +122,13 @@ mod smoke {
                     }
                     options.endpoint = Some(endpoint);
                 }
+                "--package-base-url" => {
+                    let raw = args.next().ok_or("missing_package_base_url")?;
+                    if options.package_base_url.is_some() {
+                        return Err("duplicate_package_base_url");
+                    }
+                    options.package_base_url = Some(package_base(&raw)?);
+                }
                 "--expect-version" => {
                     options.expected_version = Some(args.next().ok_or("missing_expected_version")?);
                 }
@@ -96,6 +139,10 @@ mod smoke {
             }
         }
         Ok(Some(options))
+    }
+
+    fn options() -> Result<Option<Options>, &'static str> {
+        parse_options(std::env::args().skip(1))
     }
 
     fn classify(error: &Error) -> &'static str {
@@ -248,12 +295,24 @@ mod smoke {
                     "https://github.com/treasureGrove/LoliCode-Releases/releases/download/lolicode-v{0}/LoliCode-{0}-Windows-x64-Setup.exe",
                     update.version
                 );
+        let explicit_package = options.package_base_url.as_ref().is_some_and(|base| {
+            explicit_package_matches(base, &update.download_url, &update.version)
+        });
         if !clean_transport(&update.download_url)
-            || (update.download_url.origin() != endpoint.origin() && !official_github_asset)
+            || (update.download_url.origin() != endpoint.origin()
+                && !official_github_asset
+                && !explicit_package)
         {
             reject(proof, "downloading", "unsafe_package_url");
             return;
         }
+        proof["packageSourceKind"] = json!(if explicit_package {
+            "explicit_https_directory"
+        } else if official_github_asset {
+            "official_github_release"
+        } else {
+            "same_origin"
+        });
         proof["downloadAttempted"] = json!(true);
         let downloaded = AtomicU64::new(0);
         let finished = AtomicBool::new(false);
@@ -325,6 +384,91 @@ mod smoke {
             std::process::ExitCode::SUCCESS
         } else {
             std::process::ExitCode::FAILURE
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        const BASE: &str =
+            "https://lolicode-fixture.cos.ap-singapore.myqcloud.com/releases/4.0.18/";
+
+        #[test]
+        fn package_base_is_one_explicit_clean_https_directory() {
+            assert_eq!(package_base(BASE).unwrap().as_str(), BASE);
+            for raw in [
+                "http://bucket.test/releases/",
+                "https://user:secret@bucket.test/releases/",
+                "https://bucket.test/releases/?token=synthetic",
+                "https://bucket.test/releases/#fragment",
+                "https://bucket.test/releases",
+                "https://bucket.test/releases/../other/",
+                "https://bucket.test/releases/%2e%2e/other/",
+                "https://bucket.test\\releases/",
+            ] {
+                assert!(
+                    package_base(raw).is_err(),
+                    "unsafe synthetic base was accepted"
+                );
+            }
+        }
+
+        #[test]
+        fn explicit_package_requires_the_exact_origin_path_version_and_filename() {
+            let base = package_base(BASE).unwrap();
+            let package = format!("{BASE}LoliCode-4.0.18-Windows-x64-Setup.exe");
+            assert!(explicit_package_matches(
+                &base,
+                &Url::parse(&package).unwrap(),
+                "4.0.18"
+            ));
+            for raw in [
+                "https://another.test/releases/4.0.18/LoliCode-4.0.18-Windows-x64-Setup.exe",
+                "https://lolicode-fixture.cos.ap-singapore.myqcloud.com.evil.test/releases/4.0.18/LoliCode-4.0.18-Windows-x64-Setup.exe",
+                "https://lolicode-fixture.cos.ap-singapore.myqcloud.com:8443/releases/4.0.18/LoliCode-4.0.18-Windows-x64-Setup.exe",
+                "https://lolicode-fixture.cos.ap-singapore.myqcloud.com/releases/4.0.18/../LoliCode-4.0.18-Windows-x64-Setup.exe",
+                "https://lolicode-fixture.cos.ap-singapore.myqcloud.com/releases/4.0.18/%2e%2e/LoliCode-4.0.18-Windows-x64-Setup.exe",
+                "https://lolicode-fixture.cos.ap-singapore.myqcloud.com/releases/4.0.18-other/LoliCode-4.0.18-Windows-x64-Setup.exe",
+            ] {
+                assert!(!explicit_package_matches(&base, &Url::parse(raw).unwrap(), "4.0.18"));
+            }
+            for suffix in [
+                "LoliCode-4.0.19-Windows-x64-Setup.exe",
+                "arbitrary.exe",
+                "LoliCode-4.0.18-Windows-x64-Setup.exe.sig",
+                "nested/LoliCode-4.0.18-Windows-x64-Setup.exe",
+                "LoliCode-4.0.18-Windows-x64-Setup.exe?token=synthetic",
+                "LoliCode-4.0.18-Windows-x64-Setup.exe#fragment",
+                "%4coliCode-4.0.18-Windows-x64-Setup.exe",
+                "..%2fLoliCode-4.0.18-Windows-x64-Setup.exe",
+            ] {
+                let package = Url::parse(&format!("{BASE}{suffix}")).unwrap();
+                assert!(!explicit_package_matches(&base, &package, "4.0.18"));
+            }
+            assert!(!explicit_package_matches(
+                &base,
+                &Url::parse(&package).unwrap(),
+                "4.0.18/../other"
+            ));
+        }
+
+        #[test]
+        fn package_source_override_is_optional_and_never_a_list() {
+            let options = parse_options(std::iter::empty()).unwrap().unwrap();
+            assert!(options.package_base_url.is_none());
+            let options =
+                parse_options(["--package-base-url", BASE].into_iter().map(str::to_owned))
+                    .unwrap()
+                    .unwrap();
+            assert_eq!(options.package_base_url.unwrap().as_str(), BASE);
+            assert!(parse_options(["--package-base-url"].into_iter().map(str::to_owned)).is_err());
+            assert!(parse_options(
+                ["--package-base-url", BASE, "--package-base-url", BASE]
+                    .into_iter()
+                    .map(str::to_owned)
+            )
+            .is_err());
         }
     }
 }

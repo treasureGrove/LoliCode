@@ -108,6 +108,25 @@ function sha256(filename) {
 
 function payloadFromGeneratedScript(filename) {
   const source = readFileSync(workspaceFile(filename), "utf8");
+  const bundledHookIncludes = [
+    ...source.matchAll(
+      /^!include "([^"\r\n]*lolicode-installer-hooks\.nsh)"\r?$/gmu,
+    ),
+  ];
+  assert.equal(
+    bundledHookIncludes.length,
+    1,
+    "Verify the hook used by this actual generated installer",
+  );
+  const bundledHooks = workspaceFile(bundledHookIncludes[0][1]);
+  assert.equal(
+    readFileSync(bundledHooks, "utf8").replaceAll("\r\n", "\n"),
+    readFileSync(hooksPath, "utf8").replaceAll("\r\n", "\n"),
+    "Generated installer must use the reviewed hook, not a stale build copy",
+  );
+  workspaceFile(
+    path.join(path.dirname(bundledHooks), "lolicode-process-guard.ps1"),
+  );
   const version = source.match(/^!define VERSION "([^"\r\n]+)"\r?$/mu)?.[1];
   assert.equal(
     version,
@@ -208,7 +227,7 @@ function payloadFromGeneratedScript(filename) {
       /(?:^|\\)LICENSE(?:\.[^\\]+)?$/iu.test(file.destination),
     ).length >= 5,
   );
-  return { files, operations, version };
+  return { files, operations, version, hooksPath: bundledHooks };
 }
 
 function run(command, args, options, label) {
@@ -311,7 +330,7 @@ test(
         `!include "${quoted(path.join(path.dirname(makensis), "Include/LogicLib.nsh"))}"`,
         "!macro CheckIfAppIsRunning executableName productName",
         "!macroend",
-        `!include "${quoted(hooksPath)}"`,
+        `!include "${quoted(payload.hooksPath)}"`,
         // A fresh random private registry key is read only by PREINSTALL. No
         // production uninstall registration or installer instructions are run.
         `!define UNINSTKEY "${quoted(registryKey)}"`,
