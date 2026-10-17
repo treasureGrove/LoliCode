@@ -10,13 +10,14 @@ use super::{
 };
 use crate::{commands::agent_dispatch, store::AppState};
 use chrono::{Datelike, Local, TimeZone, Timelike};
+use futures::future::BoxFuture;
 use lolicode_agent::{AgentSession, AgentSnapshot, AgentStatus};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
     sync::{
         atomic::{AtomicBool, Ordering},
-        OnceLock,
+        Arc, OnceLock,
     },
     time::Duration,
 };
@@ -29,6 +30,49 @@ mod integration_tests;
 const STORE_KEY: &str = "lolicode_agent_automations_v1";
 const MAX_JOBS: usize = 500;
 const MAX_RUNS: usize = 2_000;
+
+/// Shared execution boundary for desktop scheduling and isolated acceptance.
+/// The desktop adapter retains ownership of accounts, project binding and native
+/// permissions; the scheduler never embeds another Agent runtime.
+pub trait AutomationRuntime: Send + Sync {
+    fn bind_project<'a>(&'a self, path: &'a str) -> BoxFuture<'a, Result<AgentCatalog, String>>;
+    fn call<'a>(
+        &'a self,
+        method: &'a str,
+        params: Value,
+        mutate: bool,
+    ) -> BoxFuture<'a, Result<Value, String>>;
+}
+
+struct DesktopAutomationRuntime(AppHandle);
+
+impl AutomationRuntime for DesktopAutomationRuntime {
+    fn bind_project<'a>(&'a self, path: &'a str) -> BoxFuture<'a, Result<AgentCatalog, String>> {
+        Box::pin(async move {
+            let state = self.0.state::<AppState>();
+            let accounts = agent_dispatch::accounts(&self.0).await?;
+            self.0
+                .state::<InprocessAgentState>()
+                .bind_background_project(&self.0, &state, path.into(), accounts)
+                .await
+        })
+    }
+
+    fn call<'a>(
+        &'a self,
+        method: &'a str,
+        params: Value,
+        mutate: bool,
+    ) -> BoxFuture<'a, Result<Value, String>> {
+        Box::pin(async move {
+            let carrier = self.0.state::<InprocessAgentState>();
+            if method == "busy" {
+                carrier.ensure_started(&self.0).await?;
+            }
+            carrier.call(method, params, mutate).await
+        })
+    }
+}
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -210,7 +254,7 @@ fn parse_ioreg_idle(success: bool, stdout: &[u8]) -> Result<u64, String> {
         .ok_or_else(|| "系统未提供闲置时间，闲时任务已等待".into())
 }
 
-async fn system_idle_ms() -> Result<u64, String> {
+pub async fn system_idle_ms() -> Result<u64, String> {
     #[cfg(target_os = "windows")]
     {
         #[repr(C)]
@@ -295,7 +339,14 @@ fn workspace_from_scope(scope: Option<&Value>) -> Result<String, String> {
 }
 
 fn registered_project(state: &AppState, path: &str) -> Result<AgentProject, String> {
-    let projects = preferences::load(&state.db)?;
+    registered_project_in_db(&state.db, path)
+}
+
+fn registered_project_in_db(
+    db: &crate::database::Database,
+    path: &str,
+) -> Result<AgentProject, String> {
+    let projects = preferences::load(db)?;
     projects
         .projects
         .get(&preferences::path_key(path))
@@ -323,8 +374,12 @@ fn model_selection_valid(value: &Value) -> bool {
             .is_some_and(|s| !s.trim().is_empty())
 }
 
-fn validate_job(value: &Value, workspace: String, state: &AppState) -> Result<Job, String> {
-    registered_project(state, &workspace)?;
+fn validate_job(
+    value: &Value,
+    workspace: String,
+    db: &crate::database::Database,
+) -> Result<Job, String> {
+    registered_project_in_db(db, &workspace)?;
     let title = value["title"].as_str().unwrap_or_default().trim();
     let prompt = value["prompt"].as_str().unwrap_or_default().trim();
     if title.is_empty()
@@ -493,9 +548,33 @@ fn catalog_model<'a>(
 }
 
 async fn dispatch(app: AppHandle, job: Job, run: Run) {
+    let db = app.state::<AppState>().db.clone();
+    let runtime: Arc<dyn AutomationRuntime> = Arc::new(DesktopAutomationRuntime(app));
+    dispatch_with_runtime(runtime, db, job, run).await;
+}
+
+async fn dispatch_with_runtime(
+    runtime: Arc<dyn AutomationRuntime>,
+    db: Arc<crate::database::Database>,
+    job: Job,
+    run: Run,
+) {
+    let run_id = run.run_id.clone();
+    if let Some(session_id) = dispatch_run(runtime.clone(), db.clone(), job, run).await {
+        tauri::async_runtime::spawn(async move {
+            monitor_run(runtime, db, run_id, session_id).await;
+        });
+    }
+}
+
+async fn dispatch_run(
+    runtime: Arc<dyn AutomationRuntime>,
+    db: Arc<crate::database::Database>,
+    job: Job,
+    run: Run,
+) -> Option<String> {
     let result = async {
-        let state = app.state::<AppState>();
-        if load(&state.db)?
+        if load(&db)?
             .runs
             .iter()
             .find(|item| item.run_id == run.run_id)
@@ -503,15 +582,11 @@ async fn dispatch(app: AppHandle, job: Job, run: Run) {
         {
             return Err("任务已取消".into());
         }
-        let workspace = registered_project(&state, &job.workspace_path)?;
+        let workspace = registered_project_in_db(&db, &job.workspace_path)?;
         if preferences::path_key(&workspace.path) != preferences::path_key(&job.workspace_path) {
             return Err("工作区路径已变化，请重新打开项目".to_string());
         }
-        let accounts = agent_dispatch::accounts(&app).await?;
-        let carrier = app.state::<InprocessAgentState>();
-        let catalog = carrier
-            .bind_background_project(&app, &state, job.workspace_path.clone(), accounts)
-            .await?;
+        let catalog = runtime.bind_project(&job.workspace_path).await?;
         let model = catalog_model(&catalog, &job.model_selection)?;
         let reasoning = job.model_selection["options"]["reasoningLevel"]
             .as_str()
@@ -522,21 +597,24 @@ async fn dispatch(app: AppHandle, job: Job, run: Run) {
             "yolo" => "full_access",
             _ => "ask",
         };
-        let session: AgentSession = carrier
-            .call(
-                "createSession",
-                json!({
-                    "projectPath": job.workspace_path,
-                    "modelId": model.id,
-                    "mode": "build",
-                    "permissionMode": permission,
-                    "reasoningEffort": reasoning,
-                    "title": format!("自动化 · {}", job.title),
-                }),
-                true,
-            )
-            .await?;
-        update_run(&state.db, &run.run_id, |record| {
+        let session: AgentSession = serde_json::from_value(
+            runtime
+                .call(
+                    "createSession",
+                    json!({
+                        "projectPath": job.workspace_path,
+                        "modelId": model.id,
+                        "mode": "build",
+                        "permissionMode": permission,
+                        "reasoningEffort": reasoning,
+                        "title": format!("自动化 · {}", job.title),
+                    }),
+                    true,
+                )
+                .await?,
+        )
+        .map_err(|_| "自动化会话回执无效".to_string())?;
+        update_run(&db, &run.run_id, |record| {
             record.dispatch_status = "running".into();
             record.session_id = Some(session.id.clone());
         })
@@ -544,7 +622,7 @@ async fn dispatch(app: AppHandle, job: Job, run: Run) {
         // Serialize the final cancellation check and send acknowledgement. An
         // interrupt cannot race ahead of the engine creating its flight.
         let send_guard = mutation_lock().lock().await;
-        if load(&state.db)?
+        if load(&db)?
             .runs
             .iter()
             .find(|item| item.run_id == run.run_id)
@@ -552,8 +630,8 @@ async fn dispatch(app: AppHandle, job: Job, run: Run) {
         {
             return Err("任务已取消".into());
         }
-        carrier
-            .call::<Value>(
+        runtime
+            .call(
                 "sendMessage",
                 json!({
                     "sessionId": session.id,
@@ -565,7 +643,7 @@ async fn dispatch(app: AppHandle, job: Job, run: Run) {
             )
             .await?;
         drop(send_guard);
-        update_run(&state.db, &run.run_id, |record| {
+        update_run(&db, &run.run_id, |record| {
             record.dispatch_status = "dispatched".into();
         })
         .await?;
@@ -574,42 +652,35 @@ async fn dispatch(app: AppHandle, job: Job, run: Run) {
     .await;
 
     match result {
-        Ok(session) => {
-            let app_for_monitor = app.clone();
-            let run_id = run.run_id.clone();
-            tauri::async_runtime::spawn(async move {
-                monitor_run(app_for_monitor, run_id, session.id).await;
-            });
-        }
+        Ok(session) => Some(session.id),
         Err(error) => {
             let detail = error.clone();
-            if let Ok(state) = app.try_state::<AppState>().ok_or(()) {
-                let _ = update_run(&state.db, &run.run_id, |record| {
-                    record.dispatch_status = "failed_to_dispatch".into();
-                    record.outcome = Some(
-                        if record.cancel_requested {
-                            "stopped"
-                        } else {
-                            "failed"
-                        }
-                        .into(),
-                    );
-                    record.error = if record.cancel_requested {
-                        None
+            let _ = update_run(&db, &run.run_id, |record| {
+                record.dispatch_status = "failed_to_dispatch".into();
+                record.outcome = Some(
+                    if record.cancel_requested {
+                        "stopped"
                     } else {
-                        Some(detail)
-                    };
-                    record.finished_at = Some(now_ms());
-                })
-                .await;
-            }
+                        "failed"
+                    }
+                    .into(),
+                );
+                record.error = if record.cancel_requested {
+                    None
+                } else {
+                    Some(detail)
+                };
+                record.finished_at = Some(now_ms());
+            })
+            .await;
             log::warn!("自动化任务派发失败：{error}");
+            None
         }
     }
 }
 
 async fn command_status(
-    carrier: &InprocessAgentState,
+    carrier: &dyn AutomationRuntime,
     session_id: &str,
     run_id: &str,
 ) -> Result<Option<String>, String> {
@@ -648,13 +719,19 @@ fn terminal_outcome(
     ("failed".into(), Some(error))
 }
 
-async fn monitor_run(app: AppHandle, run_id: String, session_id: String) {
-    let carrier = app.state::<InprocessAgentState>();
-    let db = app.state::<AppState>().db.clone();
+async fn monitor_run(
+    carrier: Arc<dyn AutomationRuntime>,
+    db: Arc<crate::database::Database>,
+    run_id: String,
+    session_id: String,
+) {
     loop {
         let snapshot: Result<AgentSnapshot, String> = carrier
             .call("getSession", json!({"sessionId":session_id}), false)
-            .await;
+            .await
+            .and_then(|value| {
+                serde_json::from_value(value).map_err(|_| "自动化会话状态无效".to_string())
+            });
         match snapshot {
             Ok(snapshot)
                 if matches!(
@@ -671,7 +748,7 @@ async fn monitor_run(app: AppHandle, run_id: String, session_id: String) {
                     .ok()
                     .and_then(|store| store.runs.into_iter().find(|run| run.run_id == run_id))
                     .is_some_and(|run| run.cancel_requested);
-                let command = command_status(&carrier, &session_id, &run_id)
+                let command = command_status(carrier.as_ref(), &session_id, &run_id)
                     .await
                     .ok()
                     .flatten();
@@ -824,6 +901,50 @@ mod tests {
         .0
         .is_empty());
     }
+
+    #[test]
+    fn automation_due_schedule_precedes_idle_independently_of_creation_order() {
+        let now = now_ms();
+        for idle_first in [true, false] {
+            let (mut store, registered) = fixture("idle", now);
+            let mut scheduled = store.jobs[0].clone();
+            scheduled.automation_id = "scheduled".into();
+            scheduled.trigger = "schedule".into();
+            if idle_first {
+                store.jobs.push(scheduled);
+            } else {
+                store.jobs.insert(0, scheduled);
+            }
+            let (due, _) = claim_due(&mut store, &registered, now, Ok(10 * 60_000), false);
+            assert_eq!(due.len(), 1);
+            assert_eq!(due[0].0.automation_id, "scheduled");
+            let idle = store.jobs.iter().find(|job| job.trigger == "idle").unwrap();
+            assert_eq!(idle.next_run_at, Some(now));
+        }
+    }
+
+    #[test]
+    fn automation_idle_waits_for_another_claim_even_before_native_flight_exists() {
+        let now = now_ms();
+        let (mut store, registered) = fixture("idle", now);
+        let pending = create_run(&mut store, "another-automation");
+        let (due, _) = claim_due(&mut store, &registered, now, Ok(10 * 60_000), false);
+        assert!(due.is_empty());
+        assert_eq!(store.jobs[0].next_run_at, Some(now));
+        let previous = store
+            .runs
+            .iter_mut()
+            .find(|run| run.run_id == pending.run_id)
+            .unwrap();
+        previous.outcome = Some("succeeded".into());
+        previous.finished_at = Some(now);
+        assert_eq!(
+            claim_due(&mut store, &registered, now, Ok(10 * 60_000), false)
+                .0
+                .len(),
+            1
+        );
+    }
     #[test]
     fn automation_cron_validation_does_not_silently_rewrite_unsupported_schedules() {
         assert!(cron_parts("0 * * * *").is_ok());
@@ -906,6 +1027,22 @@ async fn run_now(app: &AppHandle, id: &str, workspace: &str) -> Result<Value, St
     Ok(json!({"status":"claimed"}))
 }
 
+pub async fn create_saved_job(
+    db: &crate::database::Database,
+    input: &Value,
+) -> Result<Value, String> {
+    let workspace = workspace_from_scope(Some(input))?;
+    let job = validate_job(input, workspace, db)?;
+    let _guard = mutation_lock().lock().await;
+    let mut store = load(db)?;
+    if store.jobs.len() >= MAX_JOBS {
+        return Err("自动化数量达到上限".into());
+    }
+    store.jobs.push(job.clone());
+    save(db, &store)?;
+    Ok(json!(job))
+}
+
 pub async fn invoke(app: &AppHandle, method: &str, args: Vec<Value>) -> Result<Value, String> {
     let state = app.state::<AppState>();
     match method {
@@ -923,16 +1060,7 @@ pub async fn invoke(app: &AppHandle, method: &str, args: Vec<Value>) -> Result<V
         }
         "create" => {
             let input = arg(&args, 0, "自动化内容")?;
-            let workspace = workspace_from_scope(Some(input))?;
-            let job = validate_job(input, workspace, &state)?;
-            let _guard = mutation_lock().lock().await;
-            let mut store = load(&state.db)?;
-            if store.jobs.len() >= MAX_JOBS {
-                return Err("自动化数量达到上限".into());
-            }
-            store.jobs.push(job.clone());
-            save(&state.db, &store)?;
-            Ok(json!(job))
+            create_saved_job(&state.db, input).await
         }
         "runNow" => {
             let id = arg(&args, 0, "自动化编号")?
@@ -973,7 +1101,7 @@ pub async fn invoke(app: &AppHandle, method: &str, args: Vec<Value>) -> Result<V
                 .ok_or("自动化编号无效")?;
             let input = arg(&args, 1, "自动化内容")?;
             let workspace = workspace_from_scope(args.get(2))?;
-            let replacement = validate_job(input, workspace.clone(), &state)?;
+            let replacement = validate_job(input, workspace.clone(), &state.db)?;
             let _guard = mutation_lock().lock().await;
             let mut store = load(&state.db)?;
             let job = find_job_mut(&mut store, id, &workspace)?;
@@ -1109,7 +1237,11 @@ fn claim_due(
 ) -> (Vec<(Job, Run)>, bool) {
     let mut due = Vec::new();
     let mut changed = false;
-    for index in 0..store.jobs.len() {
+    // Scheduled work gets first claim regardless of creation order. An idle job
+    // must not be dispatched alongside a due scheduled task in this same tick.
+    let mut indexes: Vec<_> = (0..store.jobs.len()).collect();
+    indexes.sort_by_key(|index| store.jobs[*index].trigger == "idle");
+    for index in indexes {
         let job = &store.jobs[index];
         if !job.enabled || job.next_run_at.is_some_and(|next| next > now) {
             continue;
@@ -1135,7 +1267,8 @@ fn claim_due(
         if job.trigger == "idle" {
             // One idle task at a time, and no contention with an active main
             // Agent. A deferred idle job keeps its due timestamp.
-            match idle_ready(job, idle, agent_busy || !due.is_empty()) {
+            let any_claimed = store.runs.iter().any(active);
+            match idle_ready(job, idle, agent_busy || !due.is_empty() || any_claimed) {
                 Ok(true) => {}
                 Ok(false) => continue,
                 Err(error) => {
@@ -1191,43 +1324,40 @@ fn claim_due(
 }
 
 async fn scheduler_tick(app: &AppHandle) {
-    let state = app.state::<AppState>();
-    let has_idle = load(&state.db).ok().is_some_and(|store| {
-        store
-            .jobs
-            .iter()
-            .any(|job| job.enabled && job.trigger == "idle")
-    });
+    let db = app.state::<AppState>().db.clone();
+    let runtime: Arc<dyn AutomationRuntime> = Arc::new(DesktopAutomationRuntime(app.clone()));
+    if let Err(error) = scheduler_tick_runtime(runtime, db).await {
+        log::warn!("自动化计划检查失败：{error}");
+    }
+}
+
+pub async fn scheduler_tick_runtime(
+    runtime: Arc<dyn AutomationRuntime>,
+    db: Arc<crate::database::Database>,
+) -> Result<Vec<String>, String> {
+    let has_idle = load(&db)?
+        .jobs
+        .iter()
+        .any(|job| job.enabled && job.trigger == "idle");
     let idle = if has_idle {
         system_idle_ms().await
     } else {
         Ok(0)
     };
-    let carrier = app.state::<InprocessAgentState>();
     let agent_busy = if has_idle {
-        match carrier.ensure_started(app).await {
-            Ok(()) => carrier
-                .call::<bool>("busy", json!({}), false)
-                .await
-                .unwrap_or(true),
-            Err(_) => true,
-        }
+        runtime
+            .call("busy", json!({}), false)
+            .await
+            .ok()
+            .and_then(|value| value.as_bool())
+            .unwrap_or(true)
     } else {
         false
     };
     let due = {
         let _guard = mutation_lock().lock().await;
-        let mut store = match load(&state.db) {
-            Ok(store) => store,
-            Err(error) => {
-                log::warn!("自动化计划读取失败：{error}");
-                return;
-            }
-        };
-        let registered = match preferences::load(&state.db) {
-            Ok(value) => value,
-            Err(_) => return,
-        };
+        let mut store = load(&db)?;
+        let registered = preferences::load(&db)?;
         let (due, changed) = claim_due(
             &mut store,
             &registered,
@@ -1236,17 +1366,19 @@ async fn scheduler_tick(app: &AppHandle) {
             agent_busy,
         );
         if changed {
-            if let Err(error) = save(&state.db, &store) {
-                log::warn!("自动化计划更新时间失败：{error}");
-                return;
-            }
+            save(&db, &store)?;
         }
         due
     };
+    let run_ids = due.iter().map(|(_, run)| run.run_id.clone()).collect();
     for (job, run) in due {
-        let app = app.clone();
-        tauri::async_runtime::spawn(async move { dispatch(app, job, run).await });
+        let runtime = runtime.clone();
+        let db = db.clone();
+        tauri::async_runtime::spawn(
+            async move { dispatch_with_runtime(runtime, db, job, run).await },
+        );
     }
+    Ok(run_ids)
 }
 
 async fn recover_interrupted_runs(app: &AppHandle) {
@@ -1299,7 +1431,10 @@ async fn recover_interrupted_runs(app: &AppHandle) {
         let (dispatch_status, outcome, error) = match result {
             Ok(snapshot) => {
                 let command = match session_id.as_deref() {
-                    Some(id) => command_status(&carrier, id, &run_id).await.ok().flatten(),
+                    Some(id) => command_status(&DesktopAutomationRuntime(app.clone()), id, &run_id)
+                        .await
+                        .ok()
+                        .flatten(),
                     None => None,
                 };
                 let (outcome, error) =

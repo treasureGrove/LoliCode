@@ -51,6 +51,7 @@ mod live {
         Coding,
         Memory(MemoryScenario),
         Workflow,
+        Automation,
         Title,
         Tavern,
     }
@@ -629,6 +630,194 @@ mod live {
         )
     }
 
+    struct AutomationAcceptanceRuntime {
+        engine: NativeEngine,
+        catalog: channel_center::AgentCatalog,
+        gateway: NativeGateway,
+    }
+    impl cc_switch_lib::agent_test_support::AutomationRuntime for AutomationAcceptanceRuntime {
+        fn bind_project<'a>(
+            &'a self,
+            path: &'a str,
+        ) -> futures::future::BoxFuture<'a, std::result::Result<channel_center::AgentCatalog, String>>
+        {
+            Box::pin(async move {
+                self.engine
+                    .bind_background(
+                        path.into(),
+                        serde_json::to_value(&self.catalog)
+                            .map_err(|_| "isolated catalog encoding failed")?,
+                        self.gateway.clone(),
+                    )
+                    .await?;
+                Ok(self.catalog.clone())
+            })
+        }
+        fn call<'a>(
+            &'a self,
+            method: &'a str,
+            params: Value,
+            _mutate: bool,
+        ) -> futures::future::BoxFuture<'a, std::result::Result<Value, String>> {
+            Box::pin(async move { self.engine.call(method, params).await })
+        }
+    }
+
+    fn automation_store(db: &Database) -> Result<Value> {
+        Ok(serde_json::from_str(
+            &db.get_setting("lolicode_agent_automations_v1")?
+                .context("automation store missing")?,
+        )?)
+    }
+
+    async fn automation_acceptance(
+        engine: &NativeEngine,
+        db: &Arc<Database>,
+        project: &Path,
+        requests: &AtomicUsize,
+        catalog: &Value,
+        gateway: &NativeGateway,
+    ) -> Result<Value> {
+        use cc_switch_lib::agent_test_support::{
+            automation_system_idle_ms, automation_tick, create_automation,
+            load_workspace_preferences, save_workspace_preferences, workspace_path_key,
+            AgentProject, AutomationRuntime,
+        };
+        use chrono::Timelike;
+        let typed_catalog: channel_center::AgentCatalog = serde_json::from_value(catalog.clone())?;
+        let model = typed_catalog
+            .models
+            .first()
+            .context("automation test model missing")?
+            .clone();
+        let canonical = project
+            .canonicalize()?
+            .to_string_lossy()
+            .trim_start_matches(r"\\?\")
+            .to_owned();
+        let mut prefs = load_workspace_preferences(db).map_err(|error| anyhow!(error))?;
+        prefs.projects.insert(
+            workspace_path_key(&canonical),
+            AgentProject {
+                path: canonical.clone(),
+                name: "isolated automation project".into(),
+                pinned: false,
+                last_opened_at: chrono::Utc::now().timestamp_millis() as u64,
+            },
+        );
+        save_workspace_preferences(db, &prefs).map_err(|error| anyhow!(error))?;
+        engine
+            .call("configureMemory", json!({"revision":0,"enabled":false}))
+            .await
+            .map_err(|error| anyhow!(error))?;
+        let runtime: Arc<dyn AutomationRuntime> = Arc::new(AutomationAcceptanceRuntime {
+            engine: engine.clone(),
+            catalog: typed_catalog,
+            gateway: gateway.clone(),
+        });
+        let mut records = Vec::new();
+        for trigger in ["schedule", "idle"] {
+            let idle_at_create = automation_system_idle_ms()
+                .await
+                .map_err(|error| anyhow!(error))?;
+            let minute = (chrono::Local::now().minute() + 1) % 60;
+            let prompt = if trigger == "schedule" {
+                "Read sum.js and fix its add function so add(2,3) equals 5, add(-2,3) equals 1, and add(0,0) equals 0. Make the smallest edit to sum.js only using real tools. Do not run commands, access network, view images, write memories, or read outside this isolated project. Report the correction briefly in Chinese."
+            } else {
+                "这是一项电脑真实闲置后运行的有界检查。请只回复一句中文，内容包含 IDLE_CHECK_COMPLETED，不调用任何工具。"
+            };
+            let job = create_automation(db,&json!({"workspacePath":canonical,"title":format!("GLM isolated {trigger}"),"prompt":prompt,"trigger":trigger,"cronExpr":format!("{minute} * * * *"),"idleAfterMinutes":1,"idleIntervalMinutes":1,"recurring":false,"mode":"guarded","locale":"zh","modelSelection":{"providerId":model.provider_id,"modelId":model.model_id,"options":{"reasoningLevel":"medium"}}})).await.map_err(|error|anyhow!(error))?;
+            let automation_id = job["automationId"]
+                .as_str()
+                .context("automation id missing")?;
+            let due = job["nextRunAt"].as_u64().context("due timestamp missing")?;
+            let deadline = tokio::time::Instant::now() + Duration::from_secs(240);
+            let mut snapshot = None;
+            let mut observed_idle = None;
+            let finished = loop {
+                ensure!(
+                    tokio::time::Instant::now() < deadline,
+                    "bounded automation did not complete before its deadline"
+                );
+                if trigger == "idle" {
+                    observed_idle = Some(
+                        automation_system_idle_ms()
+                            .await
+                            .map_err(|error| anyhow!(error))?,
+                    );
+                }
+                automation_tick(runtime.clone(), db.clone())
+                    .await
+                    .map_err(|error| anyhow!(error))?;
+                let store = automation_store(db)?;
+                if let Some(run) = store["runs"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .find(|run| run["automationId"] == automation_id)
+                {
+                    if snapshot.is_none() {
+                        if let Some(session) = run["sessionId"].as_str() {
+                            snapshot = Some(wait(engine, session, project).await?);
+                        }
+                    }
+                    if run["finishedAt"].is_u64() {
+                        break run.clone();
+                    }
+                }
+                tokio::time::sleep(Duration::from_secs(1)).await;
+            };
+            let snapshot = snapshot.context("completed automation had no session")?;
+            ensure!(
+                finished["outcome"] == "succeeded",
+                "automation dispatcher reported a non-success outcome"
+            );
+            let session_id = finished["sessionId"]
+                .as_str()
+                .context("completed session missing")?;
+            let request_id = format!(
+                "automation:{}",
+                finished["runId"].as_str().context("run id missing")?
+            );
+            let command = engine
+                .call(
+                    "queryCommand",
+                    json!({"sessionId":session_id,"requestId":request_id}),
+                )
+                .await
+                .map_err(|error| anyhow!(error))?;
+            let actual_run = finished["createdAt"]
+                .as_u64()
+                .context("run timestamp missing")?;
+            let effect = if trigger == "schedule" {
+                validate_js(project).await?
+                    && tokio::fs::read_to_string(project.join("sum.js")).await? != BEFORE
+            } else {
+                assistant_text(&snapshot).contains("IDLE_CHECK_COMPLETED")
+                    && observed_idle.is_some_and(|elapsed| elapsed >= 60_000)
+            };
+            records.push(json!({"trigger":trigger,"jobCreatedAt":job["createdAt"],"scheduledFor":due,"runCreatedAt":actual_run,"realTimeReachedDue":actual_run>=due,"systemIdleAtCreationMs":idle_at_create,"systemIdleObservedMs":observed_idle,"outcome":finished["outcome"],"nativeReceiptCompleted":command["results"][0]["result"]["status"]=="completed","actualEffectVerified":effect,"summary":assistant_text(&snapshot),"tools":tool_parts(&snapshot),"usage":snapshot["usage"]}));
+        }
+        let calls_before = requests.load(Ordering::SeqCst);
+        let duplicate_claims = automation_tick(runtime.clone(), db.clone())
+            .await
+            .map_err(|error| anyhow!(error))?;
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        let store = automation_store(db)?;
+        let no_replay = duplicate_claims.is_empty()
+            && requests.load(Ordering::SeqCst) == calls_before
+            && store["runs"].as_array().is_some_and(|runs| runs.len() == 2);
+        let passed = records.iter().all(|run| {
+            run["outcome"] == "succeeded"
+                && run["realTimeReachedDue"] == true
+                && run["nativeReceiptCompleted"] == true
+                && run["actualEffectVerified"] == true
+        }) && no_replay;
+        Ok(
+            json!({"passed":passed,"engine":"rust-native-in-process","productionChannelGateway":true,"productionAutomationSchedulerAndDispatcher":true,"realWallClockSchedule":true,"realSystemIdleProbe":true,"desktopIpcExercised":false,"desktopWorkerIntervalExercised":false,"acceptanceTickIntervalSeconds":1,"model":MODEL,"maxLiveModelRequests":8,"loopbackModelRequests":requests.load(Ordering::SeqCst),"jobs":records,"completedRunsNotReplayed":no_replay,"temporaryProjectAndDatabaseOnly":true,"userConfigWritten":false}),
+        )
+    }
+
     async fn title_acceptance(
         engine: &NativeEngine,
         private: &Path,
@@ -753,6 +942,7 @@ mod live {
                 Some(AcceptanceScenario::Memory(MemoryScenario::Address))
             }
             Some("--workflow-smoke") => Some(AcceptanceScenario::Workflow),
+            Some("--automation-smoke") => Some(AcceptanceScenario::Automation),
             Some("--auto-title-smoke") => Some(AcceptanceScenario::Title),
             Some("--tavern-smoke") => Some(AcceptanceScenario::Tavern),
             _ => None,
@@ -760,7 +950,7 @@ mod live {
         if scenario.is_some() {
             args.remove(0);
         }
-        ensure!(args.len()==2 && args[0]=="--out","usage: [--memory-smoke | --memory-address-smoke | --workflow-smoke | --auto-title-smoke | --tavern-smoke] --out <absolute-evidence-json-path>");
+        ensure!(args.len()==2 && args[0]=="--out","usage: [--memory-smoke | --memory-address-smoke | --workflow-smoke | --automation-smoke | --auto-title-smoke | --tavern-smoke] --out <absolute-evidence-json-path>");
         let path = PathBuf::from(&args[1]);
         ensure!(
             path.is_absolute(),
@@ -775,6 +965,7 @@ mod live {
             _ => None,
         };
         let workflow_smoke = matches!(scenario, AcceptanceScenario::Workflow);
+        let automation_smoke = matches!(scenario, AcceptanceScenario::Automation);
         let title_smoke = matches!(scenario, AcceptanceScenario::Title);
         let tavern_smoke = matches!(scenario, AcceptanceScenario::Tavern);
         let memory_smoke = memory_scenario.is_some();
@@ -907,6 +1098,7 @@ mod live {
             }
             if tavern_smoke { return tavern_acceptance(&state, &project).await; }
             if workflow_smoke { return workflow_acceptance(&engine, &db, &project, &requests).await; }
+            if automation_smoke { return automation_acceptance(&engine, &db, &project, &requests, &catalog, &gateway).await; }
             if title_smoke { return title_acceptance(&engine, &private, &project, &requests, &audits).await; }
             engine.call("configureMemory",json!({"revision":0,"enabled":false})).await.map_err(|error|anyhow!(error))?;
             let session=engine.call("createSession",json!({"mode":"build","permissionMode":"ask","title":"Native GLM multimodal acceptance"})).await.map_err(|error|anyhow!(error))?;
@@ -952,6 +1144,8 @@ mod live {
             println!("GLM Tavern debug: passed={}, requests={}, world_book={}, stored={}, idle={}; sanitized proof={}",proof["passed"],proof["tavernAttributedRequests"],proof["replyUsedWorldBookPlace"],proof["storyReplyPersisted"],proof["completedResultIdle"],out.display());
         } else if title_smoke {
             println!("Native GLM title debug: passed={}, requests={}, generated={}, persisted={}; sanitized proof={}", proof["passed"],proof["loopbackModelRequests"],proof["actualTitleRequestObserved"],proof["automaticTitleGeneratedAndPersisted"],out.display());
+        } else if automation_smoke {
+            println!("Native GLM automation debug: passed={}, requests={}, completed_jobs={}, no_replay={}; sanitized proof={}",proof["passed"],proof["loopbackModelRequests"],proof["jobs"].as_array().map_or(0,|jobs|jobs.len()),proof["completedRunsNotReplayed"],out.display());
         } else if workflow_smoke {
             println!("Native GLM workflow debug: passed={}, requests={}, saved_once={}, no_replay={}, js_assertions={}; sanitized proof={}", proof["passed"],proof["loopbackModelRequests"],proof["workflowReceiptStoredOnce"],proof["retryDidNotReplayModelOrFileEdit"],proof["actualJsEditAndNodeAssertionsPassed"],out.display());
         } else {

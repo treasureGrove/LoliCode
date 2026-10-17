@@ -2,6 +2,11 @@
 
 LoliCode release information is maintained independently in this repository. Published packages are available from the [LoliCode website](https://lolicode.com/) and [public LoliCode Releases](https://github.com/treasureGrove/LoliCode-Releases/releases).
 
+## Unreleased
+
+- Prioritize due scheduled automations before idle automations, independent of creation order. Defer idle work while another run is claimed or active, including the interval before a native model flight starts.
+- Share automation creation, dispatch and completion monitoring between the desktop host and isolated execution. Supplementary GLM checks exercise a real next-minute schedule and real Windows input-idle trigger, without changing stable release artifacts.
+
 ## [4.0.21-rc.1] — candidate, 2026-10-18
 
 - Add persistent opt-in Tavern and Unreal application entries and permission-controlled Tavern management tools in the main Agent. Removal preserves domain data; full Unreal Editor functionality remains under development.

@@ -85,6 +85,14 @@ pub use store::AppState;
 #[cfg(feature = "test-hooks")]
 pub mod agent_test_support {
     pub use crate::proxy::providers::codex_oauth_auth::CodexOAuthManager;
+    pub use crate::services::agent_automation::{
+        create_saved_job as create_automation, scheduler_tick_runtime as automation_tick,
+        system_idle_ms as automation_system_idle_ms, AutomationRuntime,
+    };
+    pub use crate::services::agent_preferences::{
+        load as load_workspace_preferences, path_key as workspace_path_key,
+        save as save_workspace_preferences, AgentProject,
+    };
     pub use crate::services::agent_workflows::{
         invoke_file_service as workflow_files, record_run_in_db, workflow_prompt,
     };

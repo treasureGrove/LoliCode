@@ -43,3 +43,19 @@ C:/Users/admin/.cargo/bin/cargo.exe run --manifest-path src-tauri/Cargo.toml --f
 同批次 `lolicode-agent` 全部 100 个测试通过；内置记忆 8 个 Rust 测试、外部模型配置 writer 最终 11 个 fixture 测试通过。全量前端最终 3,072 项、桌面 Rust 3,795 项通过，类型检查通过。前端覆盖运行中切模型/权限、配置请求等待时仍可停止、打断发送及未知接收状态沿用原 requestId 重试。
 
 这些结果验证了上述有界任务和交互，不代表已验证每个第三方客户端的 live 写入、所有 GLM 模型或发布更新链路；外部客户端 writer 只对隔离 fixture 写入。
+
+## 定时与闲时自动化补充调试（2026-10-18）
+
+新增 `--automation-smoke`，继续使用此前明确授权的 GLM 订阅作补充调试；`designatedTestkeyAcceptance=false`，不替代用户本次指定 testkey。先前图片、记忆、标题、工作流和酒馆证据保留，不把多个独立场景合并成一次验收。
+
+```powershell
+C:/Users/admin/.cargo/bin/cargo.exe run --manifest-path src-tauri/Cargo.toml --features test-hooks --example lolicode_native_glm_smoke -- --automation-smoke --out D:/projectGithub/TAI-Switch/release/acceptance/glm-supplemental-automation.json
+```
+
+测试注册临时项目，使用生产自动化创建服务、调度检查、派发和结果监测，运行同一个 NativeEngine 与生产渠道网关。桌面宿主适配器继续负责真实账号解析和工程绑定；隔离适配器只替换宿主环境，未复制另一套调度或回执实现。
+
+- 定时任务选择真实的下一分钟，等待实际时钟到达，不修改保存的 `nextRunAt` 或传入模拟当前时间。3 次真实模型请求完成读取与修复 `sum.js`，Node 对正数、负数、零的结果断言通过；生产运行记录为 succeeded，NativeEngine 命令回执为 completed。
+- 闲时任务读取真实 Win32 系统输入闲置时间，满足一分钟阈值后执行，未合成用户输入或绕过检测。1 次模型请求返回检查标记，生产记录和命令回执完成。
+- 两个任务都是单次任务。再次运行调度检查无新领取、无新模型调用，只有两条运行记录。用量分别为 4,687 tokens（缓存读取 2,944）与 1,466 tokens（缓存读取 0），零和未知保持不同含义；此处不推断订阅收费金额。
+
+脱敏证据为 `release/acceptance/glm-supplemental-automation.json`，合计 4 次真实模型请求，预算上限 8 次、每次最大输出 4096 tokens。调试中的检查间隔为一秒；未验证桌面 worker 的十五秒周期、真实按钮/IPC、跨进程自动化数据库恢复、全部权限取消路径或 SSH/WSL，相关完整范围仍保持待验收。
