@@ -2,6 +2,11 @@
 
 LoliCode release information is maintained independently in this repository. Published packages are available from the [LoliCode website](https://lolicode.com/) and [public LoliCode Releases](https://github.com/treasureGrove/LoliCode-Releases/releases).
 
+## [4.0.20] — 2026-10-17
+
+- Add an explicit close button to the Agent memory dialog, including while memory is loading or saving. Wire the controlled dialog close callback without changing memory permissions or save behavior.
+- Include the 4.0.19 installer destination and offline companion fixes in a new signed Windows release; previously published artifacts remain immutable.
+
 ## [4.0.19] — 2026-10-17
 
 - Fix the Windows install hook changing NSIS `$OUTDIR` to its temporary plugin folder. Stage the guard with an absolute destination so fresh installs, reinstalls, and upgrades deploy the executable and `agent/extensions/LICENSE` to the selected install directory.

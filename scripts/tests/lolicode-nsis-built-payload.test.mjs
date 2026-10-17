@@ -22,7 +22,10 @@ const repositoryRoot = path.resolve(
   "../..",
 );
 const generatedScript = process.env.LOLICODE_NSIS_GENERATED_SCRIPT;
-const expectedVersion = process.env.LOLICODE_NSIS_EXPECTED_VERSION ?? "4.0.19";
+const expectedVersion =
+  process.env.LOLICODE_NSIS_EXPECTED_VERSION ??
+  JSON.parse(readFileSync(path.join(repositoryRoot, "package.json"), "utf8"))
+    .version;
 const makensis =
   process.env.NSIS_MAKENSIS ??
   path.join(process.env.LOCALAPPDATA ?? "", "tauri/NSIS/makensis.exe");

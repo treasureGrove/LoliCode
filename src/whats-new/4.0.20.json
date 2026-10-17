@@ -1,0 +1,12 @@
+{
+  "version": "4.0.20",
+  "items": [
+    {
+      "type": "fix",
+      "zh": "记忆面板增加关闭按钮，加载或保存时也可退出",
+      "zh-TW": "記憶面板增加關閉按鈕，載入或儲存時也可退出",
+      "en": "Add a memory-panel close button that remains available while loading or saving",
+      "ja": "記憶パネルに閉じるボタンを追加し、読込・保存中も閉じられるように改善"
+    }
+  ]
+}
