@@ -2,6 +2,14 @@
 
 LoliCode release information is maintained independently in this repository. Published packages are available from the [LoliCode website](https://lolicode.com/) and [public LoliCode Releases](https://github.com/treasureGrove/LoliCode-Releases/releases).
 
+## [4.0.19] — 2026-10-17
+
+- Fix the Windows install hook changing NSIS `$OUTDIR` to its temporary plugin folder. Stage the guard with an absolute destination so fresh installs, reinstalls, and upgrades deploy the executable and `agent/extensions/LICENSE` to the selected install directory.
+- Embed the sidebar companion image in the frontend bundle so it displays without a separate image request, including offline desktop use.
+- Add executable NSIS resource-layout regressions and an acceptance test that extracts every final installer payload file into an isolated directory, checks hashes, and runs the extracted Agent self-check. Keep process checks and existing user data handling unchanged.
+
+The affected 4.0.18 installer was withdrawn from the default update recommendation. See the [4.0.19 delivery record](docs/guides/lolicode-4.0.19-delivery.md) for publication status and evidence.
+
 ## [4.0.18] — 2026-10-17
 
 - Add bounded, editable local Agent memory for user preferences and project conventions, with project isolation and permission-controlled model updates. The implementation follows Hermes memory concepts without embedding its runtime.

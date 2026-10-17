@@ -4,8 +4,9 @@
 
 !macro LoliCodePrepareProcessGuard
   InitPluginsDir
-  SetOutPath "$PLUGINSDIR"
-  File "${LoliCodeProcessGuardPath}"
+  ; Tauri extracts application resources relative to the caller's $OUTDIR.
+  ; Use an absolute destination so preparing this helper never redirects them.
+  File "/oname=$PLUGINSDIR\lolicode-process-guard.ps1" "${LoliCodeProcessGuardPath}"
 !macroend
 
 !macro LoliCodeRunProcessGuard binaryName

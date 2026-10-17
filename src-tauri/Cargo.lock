@@ -5621,7 +5621,7 @@ dependencies = [
 
 [[package]]
 name = "tai-switch"
-version = "4.0.18"
+version = "4.0.19"
 dependencies = [
  "anyhow",
  "arboard",

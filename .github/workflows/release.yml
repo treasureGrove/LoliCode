@@ -65,6 +65,10 @@ jobs:
           pnpm exec vitest run tests/config/whatsNewEntries.test.ts tests/lib/whatsNew.test.ts tests/lib/updater.test.ts
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node --test scripts/lolicode-release.test.mjs scripts/lolicode-publish.test.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node --test scripts/tests/lolicode-nsis-upgrade-guard.test.mjs scripts/tests/lolicode-nsis-resource-layout.test.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node --test scripts/tests/lolicode-bundled-mascot.test.mjs
           exit $LASTEXITCODE
       - name: Build signed LoliCode installer
         shell: pwsh
@@ -74,6 +78,10 @@ jobs:
         run: |
           if (-not $env:TAURI_SIGNING_PRIVATE_KEY) { throw 'Configure the LoliCode signing key in the release environment.' }
           pnpm tauri build --bundles nsis --ci
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $env:LOLICODE_NSIS_GENERATED_SCRIPT = (Resolve-Path "src-tauri/target/release/nsis/x64/installer.nsi").Path
+          $env:LOLICODE_NSIS_EXPECTED_VERSION = $env:RELEASE_VERSION
+          node --test scripts/tests/lolicode-nsis-built-payload.test.mjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $installer = "src-tauri/target/release/bundle/nsis/LoliCode_$($env:RELEASE_VERSION)_x64-setup.exe"
           if (-not (Test-Path "$installer.sig")) { throw 'Missing updater signature.' }

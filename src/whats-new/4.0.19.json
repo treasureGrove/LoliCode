@@ -1,0 +1,26 @@
+{
+  "version": "4.0.19",
+  "items": [
+    {
+      "type": "fix",
+      "zh": "修复首次安装及重装时 LICENSE 解压路径错误",
+      "zh-TW": "修復首次安裝及重裝時 LICENSE 解壓路徑錯誤",
+      "en": "Fix LICENSE extraction paths during fresh installation and reinstallation",
+      "ja": "新規・再インストール時のLICENSE展開先を修正"
+    },
+    {
+      "type": "fix",
+      "zh": "安装升级检查保持原输出目录，正确部署主程序与资源",
+      "zh-TW": "安裝升級檢查保持原輸出目錄，正確部署主程式與資源",
+      "en": "Keep the install destination intact when staging the upgrade process guard",
+      "ja": "更新確認時に出力先を維持し、本体とリソースを正しく配置"
+    },
+    {
+      "type": "fix",
+      "zh": "看板娘图片直接内嵌，离线显示无需独立图片请求",
+      "zh-TW": "看板娘圖片直接內嵌，離線顯示無需獨立圖片請求",
+      "en": "Embed the sidebar companion image for offline display without a separate image request",
+      "ja": "看板娘の画像を内蔵し、個別取得なしでオフライン表示"
+    }
+  ]
+}

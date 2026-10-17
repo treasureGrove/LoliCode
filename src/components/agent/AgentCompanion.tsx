@@ -1,6 +1,8 @@
 import { EyeOff, Sparkles } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import companion from "@/assets/atelier/companion.png";
+// Keep the selected artwork inside the renderer bundle: it must also display
+// offline, without a separate asset request from the desktop WebView.
+import companion from "@/assets/atelier/companion.png?inline";
 import { useInterfaceAppearance } from "@/hooks/useInterfaceAppearance";
 
 /** A reserved sidebar slot keeps the companion clear of the transcript and composer. */

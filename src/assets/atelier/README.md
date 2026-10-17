@@ -5,7 +5,7 @@
 - `ribbon-atelier.png`：背景，来自 `design/ip/D-pinkdog-ui-v1/costume-raster-v2/ribbon-atelier.png`。
 - `sidebar-frame.png`：精修侧栏，来自 `design/ip/D-pinkdog-ui-v1/costume-raster-v3/ribbon-sidebar-refined.png`。
 - `brooch-accent.png`：独立胸针，用于欢迎区与输入区，来自 `design/ip/D-pinkdog-ui-v1/costume-raster-v4/brooch-accent.png`。
-- `companion.png`：Q 版看板娘，原样复制自 `design/ip/D-pinkdog-q-v1/standing.png`，保留已选的粉色长发、折耳与服装设计。
+- `companion.png`：Q 版看板娘，原样复制自 `design/ip/D-pinkdog-q-v1/standing.png`，保留已选的粉色长发、折耳与服装设计。组件使用 Vite `?inline` 将原图作为 `data:image/png` 内嵌到渲染器中，不单独请求图片路径、不依赖网络或安装目录外的文件；现有 CSP 的 `img-src data:` 即可显示。
 
 选中素材的完整提示词、来源设计路径和 SHA-256 保存在同目录 `provenance.json`；以上 `design/ip` 路径指本地设计过程。CSS 使用本地资源引用，Vite 会把图片打包进应用。侧栏用九宫格切片保持上下角比例，独立胸针保持原比例显示；所有装饰层均不接收鼠标操作。
 
