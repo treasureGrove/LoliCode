@@ -3326,7 +3326,10 @@ export function AgentPage({
       <Dialog open={memoryOpen} onOpenChange={setMemoryOpen}>
         <DialogContent className="wb-dialog-content max-h-[85vh] max-w-2xl overflow-y-auto">
           <DialogTitle className="sr-only">Agent 记忆</DialogTitle>
-          <AgentMemoryPanel projectPath={workspace?.path} />
+          <AgentMemoryPanel
+            projectPath={workspace?.path}
+            onClose={() => setMemoryOpen(false)}
+          />
         </DialogContent>
       </Dialog>
       <Dialog open={confirmFullAccess} onOpenChange={setConfirmFullAccess}>

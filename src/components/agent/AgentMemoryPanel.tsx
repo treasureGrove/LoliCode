@@ -10,7 +10,17 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 
 /** Main-Agent memory surface. Can be embedded in a settings dialog or app panel. */
-export function AgentMemoryPanel({ projectPath }: { projectPath?: string }) {
+export function AgentMemoryPanel({
+  projectPath,
+  onClose,
+}: {
+  projectPath?: string;
+  /**
+   * Renders a close affordance when the panel is hosted in a dismissable
+   * surface (for example a Dialog). Omit it for embedded, non-dismissable use.
+   */
+  onClose?: () => void;
+}) {
   const [memory, setMemory] = useState<AgentMemorySnapshot>();
   const [scope, setScope] = useState<AgentMemoryScope>("user");
   const [content, setContent] = useState("");
@@ -80,15 +90,28 @@ export function AgentMemoryPanel({ projectPath }: { projectPath?: string }) {
             记住你的偏好和项目约定，跨会话继续使用。
           </p>
         </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label="刷新记忆"
-          disabled={busy}
-          onClick={() => void perform(() => agentMemoryApi.get(projectPath))}
-        >
-          <RefreshCw className="h-4 w-4" />
-        </Button>
+        <div className="flex shrink-0 items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="刷新记忆"
+            disabled={busy}
+            onClick={() => void perform(() => agentMemoryApi.get(projectPath))}
+          >
+            <RefreshCw className="h-4 w-4" />
+          </Button>
+          {onClose && (
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="关闭记忆面板"
+              title="关闭记忆面板"
+              onClick={onClose}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
       </header>
       {error && (
         <p

@@ -77,6 +77,22 @@ describe("AgentMemoryPanel", () => {
     );
   });
 
+  it("exposes a close affordance when the host passes onClose", async () => {
+    const onClose = vi.fn();
+    render(<AgentMemoryPanel projectPath="D:/project" onClose={onClose} />);
+    await screen.findByText("默认用中文回答");
+    fireEvent.click(screen.getByRole("button", { name: "关闭记忆面板" }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("omits the close affordance when the host does not provide one", async () => {
+    render(<AgentMemoryPanel projectPath="D:/project" />);
+    await screen.findByText("默认用中文回答");
+    expect(
+      screen.queryByRole("button", { name: "关闭记忆面板" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("requires an explicit confirmation for clearing all projects and user memories", async () => {
     render(<AgentMemoryPanel />);
     await screen.findByText("默认用中文回答");
