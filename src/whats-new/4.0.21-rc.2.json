@@ -1,0 +1,33 @@
+{
+  "version": "4.0.21-rc.2",
+  "items": [
+    {
+      "type": "new",
+      "zh": "添加 SSH／WSL 远程项目，复用主 Agent 对话与权限",
+      "zh-TW": "加入 SSH／WSL 遠端專案，沿用主 Agent 對話與權限",
+      "en": "Open SSH/WSL projects in the main Agent with shared conversations and permissions",
+      "ja": "SSH/WSLプロジェクトを主Agentの会話と権限で操作"
+    },
+    {
+      "type": "new",
+      "zh": "远程项目支持文件预览与工作流编辑、运行和冲突检查",
+      "zh-TW": "遠端專案支援檔案預覽與工作流程編輯、執行及衝突檢查",
+      "en": "Preview remote files and edit or run workflows with conflict checks",
+      "ja": "リモートファイルのプレビューとワークフローの編集・実行・競合検出に対応"
+    },
+    {
+      "type": "fix",
+      "zh": "定时任务优先，修复闲时冲突、取消回执与运行状态恢复",
+      "zh-TW": "排程任務優先，修復閒置衝突、取消回執與執行狀態復原",
+      "en": "Prioritize scheduled jobs and fix idle conflicts, cancellation and run recovery",
+      "ja": "定時処理を優先し、待機処理の競合・取消結果・状態復元を修正"
+    },
+    {
+      "type": "improve",
+      "zh": "本版为测试候选，保留原有项目、记忆与离线装饰资源",
+      "zh-TW": "本版為測試候選，保留原有專案、記憶與離線裝飾資源",
+      "en": "Test candidate retaining projects, memory and bundled offline artwork",
+      "ja": "テスト候補版。既存プロジェクト・記憶・オフライン装飾画像を保持"
+    }
+  ]
+}

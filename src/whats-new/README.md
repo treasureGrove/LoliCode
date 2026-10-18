@@ -2,7 +2,7 @@
 
 用户升级后第一次打开 LoliCode，应用会汇总从上次已读版本到当前版本的摘要。数据来自本目录的 JSON，构建时打进安装包，由 `src/lib/whatsNew.ts` 读取；摘要本身不需要联网。
 
-LoliCode 的对外发布信息使用自己的[更新记录](../../CHANGELOG.md)、[GitHub Releases](https://github.com/treasureGrove/LoliCode/releases)和[产品下载页](https://tools.treasuregrove.art/lolicode/)。旧 JSON 中保留的 CC Switch 版本属于历史记录，不是当前产品身份或下载入口。
+LoliCode 的对外发布信息使用自己的[更新记录](../../CHANGELOG.md)、[GitHub Releases](https://github.com/treasureGrove/LoliCode-Releases/releases)和[产品下载页](https://lolicode.com/)。旧 JSON 中保留的 CC Switch 版本属于历史记录，不是当前产品身份或下载入口。
 
 ## 每个版本一个文件
 

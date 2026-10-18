@@ -4,6 +4,8 @@ LoliCode release information is maintained independently in this repository. Pub
 
 ## Unreleased
 
+## [4.0.21-rc.2] — candidate preparation, 2026-10-18
+
 - Keep acknowledged remote cancellation as a cancelled native command instead of an error. Recovering automation history reattaches monitoring to an already running session without replaying it or prematurely marking it failed. Real SSH acceptance exercises clock/idle triggers, remote process cancellation, scope isolation and separate-process receipt persistence.
 
 - Add SSH/WSL connection management and persistent remote projects in the main Agent. Route remote permissions, diffs, image results, bounded previews and workflow files through the native host; remote projects use the existing conversation instead of a separate Agent service. Real Linux SSH checks cover workflow changes, stale-save conflicts and cancellation. Actual desktop interaction, remote automation triggers and WSL acceptance remain pending.

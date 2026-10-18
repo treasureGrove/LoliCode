@@ -87,3 +87,14 @@ C:/Users/admin/.cargo/bin/cargo.exe run --manifest-path src-tauri/Cargo.toml --f
 此命令真实连接已授权 SSH alias，只写独立 nonce 工程和临时 SQLite/本体目录。实际等待下一分钟计划、读取当前 Windows 输入闲置时间，不修改 nextRunAt 或合成用户输入；生产调度器通过同一个 NativeEngine 的远程工具写入两份标记并回读。第三个远程进程由生产取消入口停止，/proc 确认退出。前台另选本地项目，范围隔离和跨工程取消拒绝均通过；本地确定性模型合计 5 次请求，无外部模型或凭据。
 
 独立子进程重开 SQLite 和本体存储，三条记录与命令为 succeeded/completed、succeeded/completed、stopped/cancelled，不绑定模型网关、不重放。此处是已完成/停止回执的实际重开，未证明应用强杀期间的远程进程回收。首两次揭露的取消文案/哨兵不一致已修正并另存通过记录，原失败保留。详见持续验收记录；指定 testkey、真实桌面按钮、WSL、异常断线与强杀场景保持待验证。
+
+
+## 已安装 GitHub CLI 技能补充调试
+
+```powershell
+C:/Users/admin/.cargo/bin/cargo.exe run --manifest-path src-tauri/Cargo.toml --features test-hooks --example lolicode_native_glm_smoke -- --marketplace-smoke --out D:/projectGithub/TAI-Switch/release/acceptance/glm-supplemental-marketplace-v3.json
+```
+
+使用此前允许的 GLM 订阅，通过真实市场安装到临时扩展库、生产技能准备与 NativeEngine，要求参考已安装扩展说明后查询已有 CLI 版本，不指定工具名/技能 ID。模型实际 read_skill，再经一次权限批准执行 gh --version，真实版本和回复一致；停用/启用/重开/卸载检查通过。3 次真实请求、11,505 tokens，未安装依赖、登录或修改用户配置；不是指定 testkey 或桌面按钮验收。
+
+首轮 HTTP 500 保留于 glm-supplemental-marketplace.json；第二轮简单版本任务直接使用 CLI，完成用户任务但没有读取技能，因此技能闭环判定为 false，保留于 v2。最终 v3 明确需要参考说明后通过，不把本次有界检查扩大为全部第三方 CLI 或 MCP/JS 支持。

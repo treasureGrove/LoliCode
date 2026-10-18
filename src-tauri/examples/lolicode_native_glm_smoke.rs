@@ -54,6 +54,7 @@ mod live {
         Automation,
         Title,
         Tavern,
+        Marketplace,
     }
     impl MemoryScenario {
         fn request_budget(self) -> usize {
@@ -934,6 +935,203 @@ mod live {
             json!({"passed":response.contains("PINK_LIBRARY_73") && persisted && !finished.is_generating && attributed==1 && lolicode==0,"engine":"native-tavern-domain-service","productionChannelGateway":true,"desktopIpcExercised":false,"model":MODEL,"directTavernHttpSubmissions":1,"tavernAttributedRequests":attributed,"mainAgentAttributedRequests":lolicode,"worldBookEntryIncluded":true,"replyUsedWorldBookPlace":response.contains("PINK_LIBRARY_73"),"completedResultIdle":!finished.is_generating,"storyReplyPersisted":persisted,"summary":response,"temporaryStoreOnly":true,"userConfigWritten":false}),
         )
     }
+    async fn marketplace_acceptance(
+        engine: &NativeEngine,
+        root: &Path,
+        requests: &AtomicUsize,
+    ) -> Result<Value> {
+        use cc_switch_lib::agent_test_support::InprocessExtensionStore;
+        let bundled = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/agent/extensions");
+        let store = InprocessExtensionStore::new(root.into(), bundled)?;
+        store
+            .marketplace_call("updatePluginMarketplace", &json!({}))
+            .await
+            .map_err(|e| anyhow!(e))?;
+        let installed = store
+            .marketplace_call("installMarketplacePlugin", &json!({"pluginName":"github"}))
+            .await
+            .map_err(|e| anyhow!(e))?;
+        ensure!(
+            installed["installedPlugins"]
+                .as_array()
+                .is_some_and(|items| items.iter().any(|p| p["name"] == "github")),
+            "GitHub CLI plugin install receipt missing"
+        );
+        let skills = store.prepare_skills()?;
+        let ids = skills
+            .verified_skills
+            .iter()
+            .filter(|s| s.id.starts_with("cli-github-"))
+            .map(|s| s.id.clone())
+            .collect::<Vec<_>>();
+        ensure!(
+            !ids.is_empty()
+                && !skills
+                    .omitted
+                    .iter()
+                    .any(|s| s.id.starts_with("cli-github")),
+            "installed plugin skills unavailable"
+        );
+        engine
+            .call("configureSkills", skills.configure_payload())
+            .await
+            .map_err(|e| anyhow!(e))?;
+        engine
+            .call("configureMemory", json!({"revision":0,"enabled":false}))
+            .await
+            .map_err(|e| anyhow!(e))?;
+        let expected = tokio::time::timeout(
+            Duration::from_secs(10),
+            tokio::process::Command::new("gh").arg("--version").output(),
+        )
+        .await??;
+        ensure!(expected.status.success(), "existing GitHub CLI unavailable");
+        let version = String::from_utf8(expected.stdout)?
+            .lines()
+            .next()
+            .context("CLI version missing")?
+            .to_owned();
+        let session=engine.call("createSession",json!({"title":"Installed GitHub capability check","mode":"build","permissionMode":"ask"})).await.map_err(|e|anyhow!(e))?;
+        let id = session["id"].as_str().context("session missing")?;
+        // No tool name or skill ID is prescribed. Only the bounded user task is
+        // supplied; the actual model chooses discovery and the version command.
+        let prompt="请先阅读我刚安装的 GitHub 扩展的使用说明，再参考说明检查这台电脑已有的 GitHub CLI 的实际版本，用一句中文告诉我版本。只做版本查询，不安装软件、不登录账号、不查询账号信息、不操作任何仓库，也不修改文件。";
+        engine.call("sendMessage",json!({"sessionId":id,"requestId":"installed-marketplace-cli-check","text":prompt,"locale":"zh"})).await.map_err(|e|anyhow!(e))?;
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(150);
+        let mut approvals = Vec::new();
+        let snapshot = loop {
+            let snapshot = engine
+                .call("getSession", json!({"sessionId":id}))
+                .await
+                .map_err(|e| anyhow!(e))?;
+            if tokio::time::Instant::now() > deadline || tool_parts(&snapshot).len() > 6 {
+                let _ = engine
+                    .call("interruptSession", json!({"sessionId":id}))
+                    .await;
+                return Err(anyhow!(
+                    "marketplace task exceeded bounded tool/time budget"
+                ));
+            }
+            for permission in snapshot["permissions"].as_array().into_iter().flatten() {
+                let cmd = permission["toolInput"]["command"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .trim();
+                let safe = permission["toolName"] == "run_command" && cmd == "gh --version";
+                approvals.push(json!({"toolName":permission["toolName"],"command":if safe {"gh --version"}else{"[not approved]"},"decision":if safe {"once"}else{"reject"}}));
+                engine.call("replyPermission",json!({"sessionId":id,"requestId":permission["id"],"decision":if safe {"once"}else{"reject"}})).await.map_err(|e|anyhow!(e))?;
+            }
+            ensure!(
+                snapshot["questions"]
+                    .as_array()
+                    .is_none_or(|q| q.is_empty()),
+                "marketplace task unexpectedly required interactive setup"
+            );
+            if matches!(snapshot["status"].as_str(), Some("idle" | "error")) {
+                break snapshot;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        };
+        let parts = tool_parts(&snapshot);
+        let loaded = engine
+            .call("loadedSkills", json!({}))
+            .await
+            .map_err(|e| anyhow!(e))?;
+        let skill_used = loaded.as_array().is_some_and(|items| {
+            items
+                .iter()
+                .any(|v| v.as_str().is_some_and(|id| ids.iter().any(|s| s == id)))
+        }) && parts
+            .iter()
+            .any(|p| p["name"] == "read_skill" && p["state"] == "completed");
+        let actual_cli = parts.iter().any(|p| {
+            p["name"] == "run_command"
+                && p["state"] == "completed"
+                && p["output"].as_str().is_some_and(|s| s.contains(&version))
+        });
+        let summary = assistant_text(&snapshot);
+        let final_answer = summary.contains(
+            version
+                .strip_prefix("gh version ")
+                .unwrap_or(&version)
+                .split_whitespace()
+                .next()
+                .unwrap(),
+        );
+        store
+            .marketplace_call(
+                "setCliPluginEnabled",
+                &json!({"id":"cli-github","enabled":false}),
+            )
+            .await
+            .map_err(|e| anyhow!(e))?;
+        let disabled = store.prepare_skills()?;
+        ensure!(
+            !disabled
+                .verified_skills
+                .iter()
+                .any(|s| s.id.starts_with("cli-github-")),
+            "disabled plugin remains available"
+        );
+        engine
+            .call("configureSkills", disabled.configure_payload())
+            .await
+            .map_err(|e| anyhow!(e))?;
+        store
+            .marketplace_call(
+                "setCliPluginEnabled",
+                &json!({"id":"cli-github","enabled":true}),
+            )
+            .await
+            .map_err(|e| anyhow!(e))?;
+        let enabled = store.prepare_skills()?;
+        ensure!(
+            enabled
+                .verified_skills
+                .iter()
+                .any(|s| s.id.starts_with("cli-github-")),
+            "re-enabled plugin not restored"
+        );
+        engine
+            .call("configureSkills", enabled.configure_payload())
+            .await
+            .map_err(|e| anyhow!(e))?;
+        let reopened = InprocessExtensionStore::new(
+            root.into(),
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/agent/extensions"),
+        )?;
+        ensure!(
+            reopened
+                .prepare_skills()?
+                .verified_skills
+                .iter()
+                .any(|s| s.id.starts_with("cli-github-")),
+            "plugin lost after store reopen"
+        );
+        store
+            .marketplace_call(
+                "uninstallMarketplacePlugin",
+                &json!({"pluginId":"cli-github"}),
+            )
+            .await
+            .map_err(|e| anyhow!(e))?;
+        let removed = store.prepare_skills()?;
+        ensure!(
+            !removed
+                .verified_skills
+                .iter()
+                .any(|s| s.id.starts_with("cli-github-")),
+            "uninstalled plugin remains available"
+        );
+        engine
+            .call("configureSkills", removed.configure_payload())
+            .await
+            .map_err(|e| anyhow!(e))?;
+        Ok(
+            json!({"passed":snapshot["status"]=="idle" && skill_used && actual_cli && final_answer,"engine":"rust-native-in-process","productionChannelGateway":true,"model":MODEL,"publicMarketplaceDownloaded":true,"actualPluginInstallVerified":true,"modelPromptPrescribedToolOrSkillId":false,"modelWasAskedToConsultInstalledInstructions":true,"modelSelectedInstalledSkill":skill_used,"actualExistingCliExecuted":actual_cli,"cliVersion":version,"finalAnswerMatchesRealCli":final_answer,"enableDisableReopenUninstallVerified":true,"loopbackModelRequests":requests.load(Ordering::SeqCst),"permissionApprovals":approvals,"tools":parts,"summary":summary,"snapshotStatus":snapshot["status"],"error":snapshot["error"],"usage":snapshot["usage"],"desktopIpcOrUiExercised":false,"temporaryExtensionStoreOnly":true,"userConfigWritten":false,"cliInstallerOrLoginExecuted":false}),
+        )
+    }
+
     fn output_path() -> Result<(PathBuf, AcceptanceScenario)> {
         let mut args = std::env::args_os().skip(1).collect::<Vec<_>>();
         let scenario = match args.first().and_then(|value| value.to_str()) {
@@ -945,12 +1143,13 @@ mod live {
             Some("--automation-smoke") => Some(AcceptanceScenario::Automation),
             Some("--auto-title-smoke") => Some(AcceptanceScenario::Title),
             Some("--tavern-smoke") => Some(AcceptanceScenario::Tavern),
+            Some("--marketplace-smoke") => Some(AcceptanceScenario::Marketplace),
             _ => None,
         };
         if scenario.is_some() {
             args.remove(0);
         }
-        ensure!(args.len()==2 && args[0]=="--out","usage: [--memory-smoke | --memory-address-smoke | --workflow-smoke | --automation-smoke | --auto-title-smoke | --tavern-smoke] --out <absolute-evidence-json-path>");
+        ensure!(args.len()==2 && args[0]=="--out","usage: [--memory-smoke | --memory-address-smoke | --workflow-smoke | --automation-smoke | --auto-title-smoke | --tavern-smoke | --marketplace-smoke] --out <absolute-evidence-json-path>");
         let path = PathBuf::from(&args[1]);
         ensure!(
             path.is_absolute(),
@@ -968,6 +1167,7 @@ mod live {
         let automation_smoke = matches!(scenario, AcceptanceScenario::Automation);
         let title_smoke = matches!(scenario, AcceptanceScenario::Title);
         let tavern_smoke = matches!(scenario, AcceptanceScenario::Tavern);
+        let marketplace_smoke = matches!(scenario, AcceptanceScenario::Marketplace);
         let memory_smoke = memory_scenario.is_some();
         let authorized = PathBuf::from("C:/Users/admin/.tai-switch/cc-switch.db");
         ensure!(
@@ -1096,6 +1296,7 @@ mod live {
             if let Some(scenario) = memory_scenario {
                 return memory_acceptance(&engine, &private, &requests, &offline, &audits, scenario, &project, &catalog, &gateway).await;
             }
+            if marketplace_smoke { return marketplace_acceptance(&engine, &temporary.path().join("extensions"), &requests).await; }
             if tavern_smoke { return tavern_acceptance(&state, &project).await; }
             if workflow_smoke { return workflow_acceptance(&engine, &db, &project, &requests).await; }
             if automation_smoke { return automation_acceptance(&engine, &db, &project, &requests, &catalog, &gateway).await; }

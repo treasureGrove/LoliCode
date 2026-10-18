@@ -202,3 +202,14 @@ remote-automation-real-ssh-v3.json 使用生产自动化创建、真实调度检
 
 
 本轮最终桌面 Rust 全量 3,842 通过、12 忽略，见 remote-automation-desktop-final.log。前端与本体核心源码未改，沿用上一检查点前端 3,087 和核心 107 的证据，不将它们记作本轮重跑。最终远程真实链路在补齐终态保护后再次运行，另存 remote-automation-real-ssh-v4.json；v3 保留为修正取消哨兵后的第一次成功检查点。
+
+
+## 真实 CLI 插件与 RC2 冻结准备（2026-10-18）
+
+新增 GLM 补充入口 --marketplace-smoke，使用此前授权的 GLM 订阅，仍标记 designatedTestkeyAcceptance=false。生产插件市场从实际官方目录下载 GitHub 插件，校验原始 SHA256，安装到临时扩展库，使用生产 prepare_skills/configureSkills 接入同一个 NativeEngine；不修改用户扩展配置或 CLI 账号。
+
+glm-supplemental-marketplace-v3.json 通过：提示要求先参考已安装扩展说明再检查现有 CLI 版本，没有指定 read_skill、run_command 或技能 ID；GLM 实际读取安装技能，按权限确认一次后运行唯一批准的 gh --version，回复版本 2.101.0 与真实输出一致。3 次真实模型请求，上报 11,505 tokens，缓存读取 5,440。停用、重新启用、扩展库重开和卸载分别校验目录；同步通过同一 configureSkills 生产入口。没有安装依赖、登录、读取账号或修改仓库。
+
+首轮提供商 HTTP 500，原失败记录保留。第二轮用更简单的“检查版本”提示，模型直接正确运行 CLI，没有读取插件技能；任务本身完成，但不满足技能加载证明，因此记录 passed=false，没有为通过而强制产品加载所有技能。第三轮明确任务需要参考扩展说明后，通过按需读取链路；不把它描述为无提示自动使用技能。此项是 GitHub CLI 的有界 live 例子，不证明其全部仓库/PR/发布操作、其他七类 CLI、MCP/自定义 JS 宿主或真实桌面按钮。A08 完整范围继续保留。
+
+候选元数据准备为 4.0.21-rc.2，包含 RC1 之后的自动化、远程项目/预览/工作流与取消修复；四处版本一致，新摘要遵守四语言长度限制。前端 3,087 通过、摘要专项 3 通过、发布准备脚本 9 通过，类型检查与 renderer 构建通过。桌面/core 生产逻辑沿用上一检查点证据（3,842/107），本轮只增加测试入口导出和版本，不把旧结果说成重新执行。RC2 打包/签名/完整载荷及公开下载仍需后续实际验证；RC1 和稳定版附件、清单不覆盖，goal active。
