@@ -1925,6 +1925,8 @@ pub fn run() {
             commands::open_agent_path,
             commands::open_agent_project_directory,
             commands::get_channel_center,
+            commands::get_channel_connections,
+            commands::set_channel_connection,
             commands::list_channel_usage_labels,
             commands::save_channel_center,
             commands::discover_channel_models,

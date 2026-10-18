@@ -1277,7 +1277,7 @@ fn native_supported(app: &AppType, protocol: &str) -> bool {
             || matches!(app, AppType::OpenCode | AppType::OpenClaw | AppType::Pi))
 }
 
-const MANAGED_NOTE: &str = "TAI Channel Center managed";
+pub(super) const MANAGED_NOTE: &str = "TAI Channel Center managed";
 
 /// Pure projection: no API request, database mutation or filesystem access.
 fn native_provider(
@@ -1783,7 +1783,7 @@ fn project_opencode_v2(provider: &mut Provider) {
     }
 }
 
-fn apply_lock() -> &'static tokio::sync::Mutex<()> {
+pub(super) fn apply_lock() -> &'static tokio::sync::Mutex<()> {
     static LOCK: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
     LOCK.get_or_init(|| tokio::sync::Mutex::new(()))
 }
@@ -2323,6 +2323,9 @@ fn apply_plans(
             &crate::mcode_config::config_path(),
         );
     }
+    if gateway {
+        super::channel_connections::capture_native(state, app)?;
+    }
     let ids: Vec<String> = plans.iter().map(|p| p.id.clone()).collect();
     for provider in &plans {
         if *app == AppType::GrokBuild {
@@ -2683,8 +2686,20 @@ pub async fn apply(
     state: &AppState,
     expected_revision: Option<u64>,
 ) -> Result<ChannelApplyReport, AppError> {
+    apply_to(state, expected_revision, None, false).await
+}
+
+pub(super) async fn apply_to(
+    state: &AppState,
+    expected_revision: Option<u64>,
+    target: Option<&str>,
+    force_route: bool,
+) -> Result<ChannelApplyReport, AppError> {
     let _guard = apply_lock().lock().await;
     let snapshot = load(state.db.as_ref())?;
+    let targets = target
+        .map(|app| vec![app.to_owned()])
+        .unwrap_or_else(|| snapshot.targets.clone());
     if expected_revision.is_some_and(|expected| expected != snapshot.revision) {
         return Err(AppError::Conflict(
             "渠道已在另一处修改，请重新加载后再应用；客户端配置尚未改动".into(),
@@ -2711,7 +2726,7 @@ pub async fn apply(
         requires_background: state.db.get_bool_flag(BACKGROUND_KEY)?,
     };
     if models.is_empty() {
-        for app in &snapshot.targets {
+        for app in &targets {
             report.results.push(ChannelApplyResult {
                 app: app.clone(),
                 status: "skipped".into(),
@@ -2754,10 +2769,10 @@ pub async fn apply(
         .collect();
     let native_count = models.len().saturating_sub(api_models.len());
     let any_gateway = !api_models.is_empty()
-        && snapshot.targets.iter().any(|target| {
+        && targets.iter().any(|target| {
             super::external_agent_config::TARGETS.contains(&target.as_str())
                 || AppType::from_str(target).ok().is_some_and(|app| {
-                    native_selection_for(&snapshot, &app).is_none()
+                    (force_route || native_selection_for(&snapshot, &app).is_none())
                         && needs_gateway(&api_snapshot, &app)
                 })
         });
@@ -2796,7 +2811,7 @@ pub async fn apply(
     } else {
         None
     };
-    for target in &snapshot.targets {
+    for target in &targets {
         if super::external_agent_config::TARGETS.contains(&target.as_str()) {
             let (status, message) = if api_models.is_empty() {
                 ("skipped", "此工具没有可用 API 渠道；原生登录账号只用于对应工具，配置未改动".into())
@@ -2812,7 +2827,7 @@ pub async fn apply(
             continue;
         }
         let app = AppType::from_str(target)?;
-        if let Some(native) = native_selection_for(&snapshot, &app) {
+        if let Some(native) = native_selection_for(&snapshot, &app).filter(|_| !force_route) {
             let checked_app = app.clone();
             if let Err(error) =
                 prepare_native_login_mode(state, &app, move || validate_native_login(&checked_app))

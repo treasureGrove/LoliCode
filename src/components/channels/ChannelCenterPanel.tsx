@@ -36,6 +36,7 @@ import {
 import {
   channelCenterApi,
   type ChannelApplyResponse,
+  type ChannelConnection,
   type ChannelCenterSnapshot,
   type ChannelProtocol,
   type ChannelSource,
@@ -59,6 +60,7 @@ import {
 } from "./channelPresets";
 import { ManagedChannelLoginPanel } from "./ManagedChannelLoginPanel";
 import { NativeSubscriptionLoginPanel } from "./NativeSubscriptionLoginPanel";
+import { ChannelConnectionPanel } from "./ChannelConnectionPanel";
 import { ChannelModelList } from "./ChannelModelList";
 import { AppsPage } from "@/components/apps/AppsPage";
 import "./channels.css";
@@ -231,8 +233,9 @@ export function ChannelCenterPanel({
     label: string,
     operation: () => Promise<void>,
     propagate = false,
+    independent = false,
   ) => {
-    if (busyRef.current || loading || loadFailed) {
+    if (busyRef.current || (!independent && (loading || loadFailed))) {
       if (propagate)
         throw new Error("请等待当前操作完成或重新加载渠道后再加入。");
       return;
@@ -1157,6 +1160,40 @@ export function ChannelCenterPanel({
               。模型选择会自动保存，外部工具仅在点击时更新。
             </span>
           </div>
+          <ChannelConnectionPanel
+            disabled={Boolean(busy) || accountBusy || saving}
+            routeDisabled={
+              disabled ||
+              conflict ||
+              dirty ||
+              formTouched ||
+              saving ||
+              !selected.some(
+                ({ channel }) =>
+                  channel.authKind !== "claude_subscription" &&
+                  channel.authKind !== "gemini_subscription",
+              )
+            }
+            refreshToken={response}
+            onSet={async (target, mode) => {
+              let result: ChannelConnection | undefined;
+              await run(
+                `connection-${target}`,
+                async () => {
+                  const saved =
+                    mode === "lolicode" ? await persist() : snapshotRef.current;
+                  result = await channelCenterApi.setConnection(
+                    target,
+                    mode,
+                    saved.revision,
+                  );
+                },
+                false,
+                mode === "native",
+              );
+              return result;
+            }}
+          />
           {response && (
             <div className="mt-5 space-y-2" aria-live="polite">
               {response.results.map((result) => (
@@ -1203,7 +1240,7 @@ export function ChannelCenterPanel({
                 </div>
               ))}
               {response.requiresBackground && (
-                <Notice title="这些配置需要 LoliCode 在后台运行。" />
+                <Notice title="使用这些 LoliCode 路由模型时，需要 LoliCode 在后台运行。" />
               )}
               {response.results.length === 0 && (
                 <Notice tone="warning" title="没有收到工具配置结果，请重试。" />

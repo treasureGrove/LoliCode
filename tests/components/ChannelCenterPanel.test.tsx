@@ -24,6 +24,8 @@ vi.mock("@/lib/api/channel-center", () => ({
     save: vi.fn(),
     discover: vi.fn(),
     apply: vi.fn(),
+    getConnections: vi.fn(),
+    setConnection: vi.fn(),
     startZhipuLogin: vi.fn(),
     pollZhipuLogin: vi.fn(),
     cancelZhipuLogin: vi.fn(),
@@ -103,6 +105,23 @@ const populated: ChannelCenterSnapshot = {
 let saved: ChannelCenterSnapshot;
 
 beforeEach(() => {
+  vi.mocked(channelCenterApi.getConnections)
+    .mockReset()
+    .mockResolvedValue([
+      {
+        app: "codex",
+        mode: "native",
+        configured: false,
+        hasNativeProfile: false,
+      },
+      {
+        app: "claude",
+        mode: "native",
+        configured: false,
+        hasNativeProfile: false,
+      },
+    ]);
+  vi.mocked(channelCenterApi.setConnection).mockReset();
   discardUnsavedChanges();
   copilot.accounts = [];
   copilot.defaultAccountId = null;
@@ -193,6 +212,72 @@ function modelList(channel = "DeepSeek") {
 }
 
 describe("ChannelCenterPanel", () => {
+  it("can activate one tool route from saved models without reapplying other tools", async () => {
+    saved = structuredClone(populated);
+    vi.mocked(channelCenterApi.setConnection).mockResolvedValue({
+      app: "codex",
+      mode: "lolicode",
+      configured: true,
+      hasNativeProfile: true,
+    });
+    render(<ChannelCenterPanel />);
+    await ready();
+    const route = screen.getByRole("button", {
+      name: "Codex 使用LoliCode 路由",
+    });
+    await waitFor(() => expect(route).toBeEnabled());
+    fireEvent.click(route);
+    await waitFor(() =>
+      expect(channelCenterApi.setConnection).toHaveBeenCalledWith(
+        "codex",
+        "lolicode",
+        expect.any(Number),
+      ),
+    );
+    expect(channelCenterApi.apply).not.toHaveBeenCalled();
+    await waitFor(() => expect(route).toHaveAttribute("aria-pressed", "true"));
+  });
+
+  it("restores native configuration even when loading model channels failed", async () => {
+    vi.mocked(channelCenterApi.get).mockRejectedValue(
+      new Error("synthetic catalog read failure"),
+    );
+    vi.mocked(channelCenterApi.getConnections).mockResolvedValue([
+      {
+        app: "codex",
+        mode: "lolicode",
+        configured: true,
+        hasNativeProfile: true,
+      },
+      {
+        app: "claude",
+        mode: "native",
+        configured: false,
+        hasNativeProfile: false,
+      },
+    ]);
+    vi.mocked(channelCenterApi.setConnection).mockResolvedValue({
+      app: "codex",
+      mode: "native",
+      configured: true,
+      hasNativeProfile: true,
+    });
+    render(<ChannelCenterPanel />);
+    await ready();
+    const native = screen.getByRole("button", { name: "Codex 使用原生配置" });
+    await waitFor(() => expect(native).toBeEnabled());
+    fireEvent.click(native);
+    await waitFor(() =>
+      expect(channelCenterApi.setConnection).toHaveBeenCalledWith(
+        "codex",
+        "native",
+        undefined,
+      ),
+    );
+    expect(channelCenterApi.save).not.toHaveBeenCalled();
+    await waitFor(() => expect(native).toHaveAttribute("aria-pressed", "true"));
+  });
+
   it("automatically saves a model window choice without applying external tools", async () => {
     saved = structuredClone(populated);
     saved.channels[0].models[0].contextLimit = 128000;
@@ -1215,7 +1300,9 @@ describe("ChannelCenterPanel", () => {
     expect(screen.getByText("OpenClaw · 配置失败")).toBeInTheDocument();
     expect(screen.queryByText("OpenClaw · 配置成功")).not.toBeInTheDocument();
     expect(
-      screen.getByText("这些配置需要 LoliCode 在后台运行。"),
+      screen.getByText(
+        "使用这些 LoliCode 路由模型时，需要 LoliCode 在后台运行。",
+      ),
     ).toBeInTheDocument();
     expect(navigation).toHaveBeenLastCalledWith(false);
   });

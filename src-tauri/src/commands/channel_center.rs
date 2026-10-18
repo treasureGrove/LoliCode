@@ -152,6 +152,19 @@ pub async fn apply_channel_center(
     xai: State<'_, XaiOAuthState>,
 ) -> Result<ChannelApplyReport, String> {
     let snapshot = channel_center::load(state.db.as_ref()).map_err(|error| error.to_string())?;
+    let accounts = managed_accounts(&copilot, &codex, &xai).await;
+    channel_center::validate_managed_account_references(&snapshot, &accounts)
+        .map_err(|error| error.to_string())?;
+    channel_center::apply(state.inner(), expected_revision)
+        .await
+        .map_err(|error| error.to_string())
+}
+
+async fn managed_accounts(
+    copilot: &CopilotAuthState,
+    codex: &CodexOAuthState,
+    xai: &XaiOAuthState,
+) -> Vec<(String, String)> {
     let mut accounts = Vec::new();
     for account in copilot.0.read().await.list_accounts().await {
         accounts.push(("github_copilot".into(), account.id));
@@ -162,9 +175,38 @@ pub async fn apply_channel_center(
     for account in xai.0.read().await.list_accounts().await {
         accounts.push(("xai_oauth".into(), account.id));
     }
-    channel_center::validate_managed_account_references(&snapshot, &accounts)
-        .map_err(|error| error.to_string())?;
-    channel_center::apply(state.inner(), expected_revision)
-        .await
-        .map_err(|error| error.to_string())
+    accounts
+}
+
+#[tauri::command]
+pub fn get_channel_connections(
+    state: State<'_, AppState>,
+) -> Result<Vec<crate::services::channel_connections::ChannelConnection>, String> {
+    crate::services::channel_connections::list(state.inner()).map_err(|error| error.to_string())
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub async fn set_channel_connection(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    target: String,
+    mode: String,
+    expected_revision: Option<u64>,
+    copilot: State<'_, CopilotAuthState>,
+    codex: State<'_, CodexOAuthState>,
+    xai: State<'_, XaiOAuthState>,
+) -> Result<crate::services::channel_connections::ChannelConnection, String> {
+    if mode == "lolicode" {
+        let snapshot =
+            channel_center::load(state.db.as_ref()).map_err(|error| error.to_string())?;
+        let accounts = managed_accounts(&copilot, &codex, &xai).await;
+        channel_center::validate_managed_account_references(&snapshot, &accounts)
+            .map_err(|error| error.to_string())?;
+    }
+    let result =
+        crate::services::channel_connections::set(state.inner(), &target, &mode, expected_revision)
+            .await
+            .map_err(|error| crate::error_for_log(&error.to_string()))?;
+    let _ = app.emit("channel-connection-changed", &result);
+    Ok(result)
 }

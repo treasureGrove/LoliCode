@@ -77,6 +77,14 @@ export interface ChannelApplyResponse {
   requiresBackground: boolean;
 }
 
+export interface ChannelConnection {
+  app: "codex" | "claude";
+  mode: "native" | "lolicode" | "unknown";
+  configured: boolean;
+  hasNativeProfile: boolean;
+  message?: string | null;
+}
+
 export type ZhipuLoginProvider = "bigmodel" | "zai";
 
 export interface ZhipuLoginFlow {
@@ -101,6 +109,17 @@ export const channelCenterApi = {
     invoke<ChannelSource>("discover_channel_models", { channel }),
   apply: (expectedRevision?: number) =>
     invoke<ChannelApplyResponse>("apply_channel_center", { expectedRevision }),
+  getConnections: () => invoke<ChannelConnection[]>("get_channel_connections"),
+  setConnection: (
+    target: ChannelConnection["app"],
+    mode: "native" | "lolicode",
+    expectedRevision?: number,
+  ) =>
+    invoke<ChannelConnection>("set_channel_connection", {
+      target,
+      mode,
+      expectedRevision,
+    }),
   startZhipuLogin: (provider: ZhipuLoginProvider) =>
     invoke<ZhipuLoginFlow>("start_zhipu_login", { provider }),
   pollZhipuLogin: (flowId: string) =>

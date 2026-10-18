@@ -11,6 +11,7 @@ pub mod agent_workflows;
 pub mod backup_storage;
 pub mod balance;
 pub mod channel_center;
+pub mod channel_connections;
 pub mod channel_grok;
 pub mod codex_oauth_models;
 pub mod codex_session_compression;
