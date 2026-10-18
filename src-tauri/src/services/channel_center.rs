@@ -1471,14 +1471,10 @@ pub(crate) fn gateway_provider(
             {
                 env["CLAUDE_CODE_MAX_CONTEXT_TOKENS"] = json!(window.to_string());
             }
-            if let Some(output) = source
-                .models
-                .iter()
-                .filter_map(|model| model.output_limit.filter(|limit| *limit > 0))
-                .min()
-            {
-                env["CLAUDE_CODE_MAX_OUTPUT_TOKENS"] = json!(output.to_string());
-            }
+            // Output limits belong to each routed request. A process-wide
+            // minimum makes one small catalog model constrain every other
+            // model's answer and thinking budget, even after /model switches.
+            // The gateway caps requests against the actual selected model.
             json!({"env":env,"modelPicker":{"replaceBuiltInOptions":true,"options":source.models.iter().map(|m| json!({"model":claude_client_alias(m),"label":m.name.as_deref().unwrap_or(&m.id),"description":"渠道目录"})).collect::<Vec<_>>()}})
         }
         AppType::ClaudeDesktop => {
@@ -3999,7 +3995,7 @@ mod tests {
     }
 
     #[test]
-    fn claude_gateway_aliases_and_limits_match_the_original_stack_contract() {
+    fn claude_gateway_aliases_keep_context_safety_without_a_catalog_wide_output_cap() {
         let mut catalog = snapshot();
         catalog.channels[0].models[0].context_limit = Some(32768);
         catalog.channels[0].models[0].output_limit = Some(4096);
@@ -4014,7 +4010,7 @@ mod tests {
         let provider = gateway_provider(&AppType::Claude, &gateway_source, "one/model-b").unwrap();
         let env = &provider.settings_config["env"];
         assert_eq!(env["CLAUDE_CODE_MAX_CONTEXT_TOKENS"], "32768");
-        assert_eq!(env["CLAUDE_CODE_MAX_OUTPUT_TOKENS"], "4096");
+        assert!(env.get("CLAUDE_CODE_MAX_OUTPUT_TOKENS").is_none());
         let selected = env["ANTHROPIC_MODEL"].as_str().unwrap();
         assert!(selected.starts_with("tai-claude-") && !selected.starts_with("claude-"));
         assert!(selected.ends_with("[1M]"));

@@ -720,6 +720,51 @@ fn provider_for(
     Ok(provider)
 }
 
+/// Messages clients can send effort without a separate thinking block. During
+/// an OpenAI conversion, an omitted block must not turn an explicit high effort
+/// into low. This is an internal bridge hint only; native Messages is untouched
+/// and an explicit thinking:disable still retains the existing off semantics.
+fn prepare_messages_request(
+    body: &mut Value,
+    model: &ChannelModel,
+    upstream_protocol: &str,
+) -> Result<(), ProxyError> {
+    if matches!(upstream_protocol, "openai_chat" | "openai_responses")
+        && body.get("thinking").is_none_or(Value::is_null)
+        && body
+            .pointer("/output_config/effort")
+            .and_then(Value::as_str)
+            .is_some_and(|effort| matches!(effort, "low" | "medium" | "high" | "xhigh" | "max"))
+    {
+        body["thinking"] = json!({"type":"adaptive"});
+    }
+
+    if let (Some(limit), Some(requested)) = (
+        model.output_limit.filter(|limit| *limit > 0),
+        body.get("max_tokens").and_then(Value::as_u64),
+    ) {
+        if requested > limit {
+            body["max_tokens"] = json!(limit);
+            // Legacy thinking budgets count toward max_tokens. Keep them valid
+            // when switching from a large-output model to a smaller one.
+            if body.pointer("/thinking/type").and_then(Value::as_str) == Some("enabled")
+                && body
+                    .pointer("/thinking/budget_tokens")
+                    .and_then(Value::as_u64)
+                    .is_some_and(|budget| budget >= limit)
+            {
+                if limit <= 1024 {
+                    return Err(ProxyError::InvalidRequest(
+                        "该模型的输出上限不足以容纳当前思考预算，请切换模型或关闭思考".into(),
+                    ));
+                }
+                body["thinking"]["budget_tokens"] = json!(limit - 1);
+            }
+        }
+    }
+    Ok(())
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn forward(
     state: &ProxyState,
@@ -732,6 +777,9 @@ async fn forward(
     wire: Wire,
 ) -> Result<Response, ProxyError> {
     let client_stream = body.get("stream").and_then(Value::as_bool).unwrap_or(false);
+    if wire == Wire::Messages {
+        prepare_messages_request(&mut body, model, normalize_protocol(protocol(source, model))?)?;
+    }
     if source.auth_kind == "codex_oauth" && wire == Wire::Responses {
         super::providers::transform_responses::normalize_codex_oauth_responses_request(
             &mut body, false,
@@ -1627,6 +1675,140 @@ mod tests {
         assert!(
             validate_capabilities(&unsupported, &json!({"tools":[{"type":"function"}]})).is_err()
         );
+    }
+
+    #[test]
+    fn messages_limits_preserve_lower_user_caps_and_keep_legacy_thinking_valid() {
+        let mut model = source().models.remove(0);
+        model.output_limit = Some(4096);
+        let mut request = json!({"max_tokens":16384,"thinking":{"type":"enabled","budget_tokens":12000}});
+        prepare_messages_request(&mut request, &model, "anthropic").unwrap();
+        assert_eq!(request["max_tokens"], 4096);
+        assert_eq!(request["thinking"]["budget_tokens"], 4095);
+
+        let mut lower = json!({"max_tokens":2048,"output_config":{"effort":"low"}});
+        prepare_messages_request(&mut lower, &model, "anthropic").unwrap();
+        assert_eq!(lower["max_tokens"], 2048);
+        assert!(lower.get("thinking").is_none(), "native Messages stays native");
+
+        model.output_limit = Some(1024);
+        let mut too_small = json!({"max_tokens":16384,"thinking":{"type":"enabled","budget_tokens":12000}});
+        assert!(prepare_messages_request(&mut too_small, &model, "anthropic").is_err());
+
+        model.output_limit = None;
+        let unchanged = json!({"max_tokens":16384});
+        let mut unknown = unchanged.clone();
+        prepare_messages_request(&mut unknown, &model, "openai_chat").unwrap();
+        assert_eq!(unknown, unchanged, "unknown limits and omitted effort are not guessed");
+    }
+
+    #[tokio::test]
+    async fn claude_gateway_preserves_explicit_effort_and_uses_each_models_output_limit() {
+        use super::super::{server::ProxyServer, types::ProxyConfig};
+        use crate::database::Database;
+        use std::sync::Arc;
+        use tokio::sync::Mutex;
+
+        let captured = Arc::new(Mutex::new(Vec::<(String, Value)>::new()));
+        let capture = {
+            let captured = captured.clone();
+            move |request: Request| {
+                let captured = captured.clone();
+                async move {
+                    let path = request.uri().path().to_string();
+                    let bytes = axum::body::to_bytes(request.into_body(), MAX_REQUEST_BYTES).await.unwrap();
+                    let body: Value = serde_json::from_slice(&bytes).unwrap();
+                    captured.lock().await.push((path.clone(), body.clone()));
+                    let reply = if path.ends_with("/chat/completions") {
+                        json!({"id":"chat_test","object":"chat.completion","model":body["model"],
+                            "choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],
+                            "usage":{"prompt_tokens":3,"completion_tokens":2}})
+                    } else if path.ends_with("/responses") {
+                        json!({"id":"resp_test","object":"response","model":body["model"],"status":"completed",
+                            "output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"ok"}]}],
+                            "usage":{"input_tokens":3,"output_tokens":2}})
+                    } else {
+                        json!({"id":"msg_test","type":"message","model":body["model"],"role":"assistant",
+                            "content":[{"type":"text","text":"ok"}],"stop_reason":"end_turn",
+                            "usage":{"input_tokens":3,"output_tokens":2}})
+                    };
+                    Json(reply)
+                }
+            }
+        };
+        let upstream = axum::Router::new()
+            .route("/v1/messages", axum::routing::post(capture.clone()))
+            .route("/v1/chat/completions", axum::routing::post(capture.clone()))
+            .route("/v1/responses", axum::routing::post(capture));
+        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let upstream_task = tokio::spawn(async move { axum::serve(listener, upstream).await.unwrap(); });
+        let db = Arc::new(Database::memory().unwrap());
+        let token = channel_center::gateway_token(&db).unwrap();
+        let proxy = ProxyServer::new(ProxyConfig { listen_port:0, ..Default::default() }, db.clone(), None);
+        let info = proxy.start().await.unwrap();
+        let base = gateway_base_url(&info.address, info.port).unwrap();
+        let client = reqwest::Client::builder().no_proxy().build().unwrap();
+        let mut source = source();
+        source.base_url = format!("http://{address}/v1");
+        source.models.truncate(1);
+        source.models[0].id = "gpt-5.4".into();
+        source.models[0].output_limit = Some(32768);
+        let mut small = source.models[0].clone();
+        small.id = "gpt-5.4-mini".into();
+        small.output_limit = Some(4096);
+        source.models.push(small);
+
+        for upstream_protocol in ["openai_chat", "openai_responses", "anthropic"] {
+            source.protocol = upstream_protocol.into();
+            db.set_setting("channel_center_applied", &serde_json::to_string(&ChannelCenterSnapshot {
+                channels:vec![source.clone()], ..Default::default()
+            }).unwrap()).unwrap();
+            for (model_index, output_cap) in [(0,16384), (1,4096), (0,16384)] {
+                for thinking_off in [false, true] {
+                    let published = channel_center::claude_route_id(&source, &source.models[model_index]);
+                    let mut request = json!({"model":published,"max_tokens":16384,"output_config":{"effort":"high"},
+                        "system":"Keep the task instructions unchanged.",
+                        "messages":[{"role":"user","content":"inspect x"},
+                            {"role":"assistant","content":[{"type":"tool_use","id":"call_test","name":"read","input":{"path":"x"}}]},
+                            {"role":"user","content":[{"type":"tool_result","tool_use_id":"call_test","content":"original file contents"}]}],
+                        "tools":[{"name":"read","description":"read a file","input_schema":{"type":"object","properties":{"path":{"type":"string"}}}}]});
+                    if thinking_off { request["thinking"] = json!({"type":"disabled"}); }
+                    let response = client.post(format!("{base}/messages")).bearer_auth(&token)
+                        .json(&request).send().await.unwrap();
+                    assert!(response.status().is_success(), "{upstream_protocol}: {}", response.text().await.unwrap());
+                    let output: Value = response.json().await.unwrap();
+                    assert_eq!(output["content"][0]["text"], "ok");
+                    let captured = captured.lock().await;
+                    let (_, sent) = captured.last().unwrap();
+                    assert_eq!(sent["model"], source.models[model_index].id);
+                    if upstream_protocol == "anthropic" {
+                        assert_eq!(sent["max_tokens"], output_cap);
+                        assert_eq!(sent["output_config"]["effort"], "high");
+                        assert_eq!(sent.get("thinking"), request.get("thinking"));
+                        assert_eq!(sent["system"], request["system"]);
+                        assert_eq!(sent["tools"], request["tools"]);
+                        assert_eq!(sent["messages"], request["messages"]);
+                    } else {
+                        let effort = if upstream_protocol == "openai_chat" {
+                            assert_eq!(sent["max_tokens"], output_cap);
+                            &sent["reasoning_effort"]
+                        } else {
+                            assert_eq!(sent["max_output_tokens"], output_cap);
+                            &sent["reasoning"]["effort"]
+                        };
+                        assert_eq!(effort, if thinking_off { "low" } else { "high" });
+                        assert!(sent.to_string().contains("Keep the task instructions unchanged."));
+                        assert!(sent.to_string().contains("original file contents"));
+                        assert!(sent.to_string().contains("call_test"));
+                        assert!(sent["tools"].as_array().is_some_and(|tools| !tools.is_empty()));
+                    }
+                }
+            }
+        }
+        assert_eq!(captured.lock().await.len(), 18);
+        proxy.stop().await.unwrap();
+        upstream_task.abort();
     }
 
     #[test]
