@@ -18,7 +18,7 @@
 - A08 插件：输入栏添加入口、市场搜索/安装/更新/卸载、CLI 技能依赖诊断、安装后被当前 Agent 实际选用；MCP 或本地插件未接入时继续列为未通过。
 - A09 工作流：本地保存/编辑/参数/运行/取消/结果、丢失回执重试的幂等性；通过当前 Rust 引擎的生产入口执行。
 - A10 自动化：定时和闲时触发、运行历史/取消/重启恢复；真实执行一次有界模型任务，不能只校验定时器和持久化。
-- A11 远端：SSH/WSL 项目发现、连接、执行、同步/断线恢复，并能与工作流/自动化耦合。当前 Rust 引擎 `remote=false`，未实现。
+- A11 远端：SSH/WSL 项目发现、连接、执行、同步/断线恢复，并能与工作流/自动化耦合。完整远端接口仍未接通，当前 Rust 引擎 `remote=false`；已补工具传输基础但不视为用户可用功能。
 - A12 用量：LoliCode 自身、WorkBuddy/DSH/ZCode/MiMo 等按应用筛选，按渠道筛选；真实 token/缓存/费用来源、去重和历史汇总；未上报保持未知，未知价格不显示免费；Copilot 官方账单单列。
 - A13 酒馆：角色卡/头像/世界书导入、上下文预览、故事保存/删除、真实模型生成/失败恢复、独立用量；不把格式解析通过当作生成闭环验收。
 - A14 UE：引擎/工程/插件管理、真实 Editor 安装与配对、主 Agent 读取及 actor 写入/回读/保存、蓝图/材质/UMG/资源与构建功能分别验收。当前只完成首段接入，未连接真实 Editor，后续功能未完成。
@@ -137,3 +137,17 @@
 这些是共用服务和实际依赖证据，调试检查间隔为一秒，不是桌面按钮/IPC 或十五秒 worker 周期的完整证明。跨进程自动化库恢复、所有权限/取消路径、SSH/WSL 与远程项目耦合仍待继续；A10/A11 不自动改为完整通过。本轮新增修复尚未进入既有 `4.0.21-rc.1` 二进制，不能覆盖该版本已发布附件。
 
 最终桌面 Rust 全量 3,828 通过、12 忽略，见 `automation-runtime-desktop-final.log`；新增生产派发/前置取消/绑定失败与优先级回归均包含在内。本轮未修改 renderer 或原生 Agent 核心，前端和核心使用上一检查点证据，不伪造新一轮运行次数。开发桌面进程已经随源码重编译重启，实际窗口交互继续单列。
+
+## SSH / WSL 传输基础续修
+
+本轮新增 `remote_transport.rs` 与随二进制嵌入的 POSIX Python 工具协议。主 Agent、模型请求、渠道 Key 和会话保留本机；远端不安装 ZCode 或另一套 Agent、不运行常驻服务或开放端口。SSH 使用系统客户端、既有配置/ssh-agent/私钥文件，保持严格主机指纹校验，禁用额外端口/agent 转发和 LocalCommand。子进程清空环境后只保留系统启动、身份、home、locale 与本机 SSH-agent 所需变量，避免把渠道 Key 或 WSLENV 传给远端。
+
+路径、命令和文本走有大小限制的帧协议，不拼进远程 shell 命令。文件工具使用目录描述符和 no-follow 检查拒绝越界、符号链接、FIFO/设备等特殊文件；写入执行预期内容比较、锁和原子替换，并返回实际 before/after 回执。命令在选定工程目录执行，保留远端账号权限，不宣称 OS 沙箱；输出有界，超时/主动取消/输入通道断开时清理所属进程组。连接中断且没有匹配回执的修改返回 cleanup_uncertain，不自动重试、也不宣称未发生修改。服务端原始错误和环境不会显示给用户。
+
+首次真实 SSH 检查在创建临时目录前失败：过窄的环境白名单令 Windows OpenSSH 直接退出。补回必要 Windows 身份/系统环境后，原严格校验和无 Key 传输策略保留；失败证据 `remote-transport-real-ssh.json` 与日志没有覆盖。
+
+`remote-transport-real-ssh-v2.json` 经明确选择的既有 `tools` SSH alias，连接实际 Linux / Python 3.11.6，在独立 nonce 标记的 `/tmp/lolicode-remote-acceptance-*` 目录验证：Unicode/空格路径/CRLF 的读写、补丁、搜索与列表；路径越界、symlink 和 FIFO 拒绝；两路并发 CAS 只有一个成功；命令 cwd 与输出截断；真实超时、主动取消和调用端连接中断后，回读 `/proc` 确认测试进程已停止；实际 PNG 字节往返一致。最后核对标记与属主后删除临时工程，cleanupConfirmed=true。模型请求为 0，不读写用户真实工程，不把协议往返称为 Agent 任务闭环。
+
+执行方式：`cargo run --manifest-path src-tauri/Cargo.toml --features test-hooks --example lolicode_remote_transport_acceptance -- --ssh-config-alias <已授权既有别名> --out <绝对证据路径>`。该入口会真实连接目标，只创建自己的临时工程。4 项传输单元检查与全量桌面 Rust 3,832 通过、12 忽略，证据为 `remote-transport-unit.log`、`remote-transport-desktop-full.log`。本机 `wsl --list --quiet` 返回 exit 1 和帮助页，尚未取得可用发行版；WSL 实测保持未通过，不擅自安装或重启系统。
+
+此时仍未启用 `remote=true`、未替换旧远程页、未接主 Agent 工具权限/差异/图片结果路由及工作流/自动化。下一步接通这些生产入口并做实际本体远程任务，不能把传输基础完成扩大成 A11 完成，也不能发布覆盖既有候选版。

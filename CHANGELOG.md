@@ -4,6 +4,7 @@ LoliCode release information is maintained independently in this repository. Pub
 
 ## Unreleased
 
+- Add an SSH/WSL tool-transport foundation with strict SSH host verification, framed bounded responses, guarded remote file changes, and command cancellation. Real Linux SSH fixture checks pass; remote workspace UI and main-Agent routing are not yet enabled.
 - Prioritize due scheduled automations before idle automations, independent of creation order. Defer idle work while another run is claimed or active, including the interval before a native model flight starts.
 - Share automation creation, dispatch and completion monitoring between the desktop host and isolated execution. Supplementary GLM checks exercise a real next-minute schedule and real Windows input-idle trigger, without changing stable release artifacts.
 
