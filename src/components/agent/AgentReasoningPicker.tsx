@@ -1,4 +1,5 @@
 import { useEffect, useId, useState } from "react";
+import { ContextWindowSelect } from "@/components/channels/ContextWindowSelect";
 import { Brain, Check, ChevronDown } from "lucide-react";
 import {
   Popover,
@@ -22,12 +23,16 @@ export function AgentReasoningPicker({
   model,
   value,
   onSelect,
+  contextValue,
+  onContextSelect,
   disabled = false,
 }: {
   model?: AgentModel;
   value: string;
   onSelect: (value: string) => void;
   disabled?: boolean;
+  contextValue?: number | null;
+  onContextSelect?: (value: number | null) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(value);
@@ -92,6 +97,18 @@ export function AgentReasoningPicker({
                   ? `自动档位 · ${defaultEffort}`
                   : "上游默认"}
           </span>
+          {(model?.contextLimits?.length ?? 0) > 1 && (
+            <span
+              className="shrink-0 text-fg-3"
+              title={`当前上下文：${formatLimit(contextValue ?? model?.contextLimit)}`}
+            >
+              ·{" "}
+              {new Intl.NumberFormat("en", {
+                notation: "compact",
+                maximumFractionDigits: 1,
+              }).format(contextValue ?? model?.contextLimit ?? 0)}
+            </span>
+          )}
           <ChevronDown size={13} className="shrink-0" aria-hidden="true" />
         </button>
       </PopoverTrigger>
@@ -105,7 +122,19 @@ export function AgentReasoningPicker({
       >
         <dl className="wb-picker-metadata grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
           <dt className="text-fg-2">上下文窗口</dt>
-          <dd>{formatLimit(model?.contextLimit)}</dd>
+          <dd>
+            {formatLimit(contextValue ?? model?.contextLimit)}
+            {onContextSelect && (
+              <ContextWindowSelect
+                windows={model?.contextLimits}
+                defaultLimit={model?.contextLimit}
+                value={contextValue}
+                onSelect={onContextSelect}
+                disabled={disabled}
+                className="mt-1 block w-full"
+              />
+            )}
+          </dd>
           <dt className="text-fg-2">最大输出</dt>
           <dd>{formatLimit(model?.outputLimit)}</dd>
           {model?.reasoningEffortSource && (

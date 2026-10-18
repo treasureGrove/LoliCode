@@ -26,6 +26,7 @@ const FAILURE_TTL: Duration = Duration::from_secs(30);
 #[derive(Clone, Default)]
 struct Supplement {
     context: Option<u64>,
+    context_limits: Option<Vec<u64>>,
     output: Option<u64>,
     efforts: Option<Vec<String>>,
     source: Option<String>,
@@ -240,10 +241,19 @@ fn aggregate(deployments: &[&Value]) -> Supplement {
     let mut complete = true;
     let mut registry_used = false;
     let mut declared = 0;
+    let mut windows: Option<Vec<u64>> = None;
+    let mut windows_complete = true;
     for deployment in deployments {
         let info = deployment.get("model_info").unwrap_or(&Value::Null);
         let metadata = super::model_fetch::declared_model_metadata(info);
         supplement.context = minimum(supplement.context, metadata.context_limit);
+        match metadata.context_limits {
+            Some(current) => match &mut windows {
+                Some(shared) => shared.retain(|limit| current.contains(limit)),
+                None => windows = Some(current),
+            },
+            None => windows_complete = false,
+        }
         supplement.output = minimum(
             supplement.output,
             metadata
@@ -301,6 +311,9 @@ fn aggregate(deployments: &[&Value]) -> Supplement {
         }
         .into(),
     );
+    if windows_complete {
+        supplement.context_limits = windows.filter(|windows| !windows.is_empty());
+    }
     supplement
 }
 
@@ -367,6 +380,10 @@ fn apply(models: &mut [ChannelModel], catalog: &Catalog) {
             continue;
         };
         model.context_limit = model.context_limit.or(extra.context);
+        model.context_limits = model
+            .context_limits
+            .take()
+            .or_else(|| extra.context_limits.clone());
         model.output_limit = model.output_limit.or(extra.output);
         if model.reasoning_efforts.is_none() {
             model.reasoning_efforts = extra.efforts.clone();
@@ -399,6 +416,15 @@ mod tests {
             format!("http://{address}/v1"),
             tokio::spawn(async move { axum::serve(listener, router).await.unwrap() }),
         )
+    }
+
+    #[test]
+    fn context_windows_require_explicit_choices_shared_by_every_deployment() {
+        let a = json!({"model_info":{"context_window":128000,"context_windows":[128000,1000000]}});
+        let b = json!({"model_info":{"context_window":128000,"context_windows":[128000,256000]}});
+        assert_eq!(aggregate(&[&a, &b]).context_limits, Some(vec![128000]));
+        let scalar = json!({"model_info":{"context_window":1000000}});
+        assert_eq!(aggregate(&[&a, &scalar]).context_limits, None);
     }
 
     #[test]

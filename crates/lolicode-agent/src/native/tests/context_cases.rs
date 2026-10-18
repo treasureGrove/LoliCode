@@ -1,6 +1,56 @@
 use super::*;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
+#[tokio::test]
+async fn switching_context_windows_rechecks_budget_without_changing_models_or_other_sessions() {
+    let fake = Fake::start(|_| tool("ask_user", json!({"questions":[{"question":"Continue?","options":[{"label":"Yes"}]}]}))).await;
+    let (data, project, engine, id) = setup(&fake).await;
+    let mut models = catalog();
+    models["models"][0]["contextLimits"] = json!([1024,128000,1000000]);
+    engine.bind(project.path().into(), models.clone(), fake.gateway()).await.unwrap();
+    let other = engine.call("createSession",json!({"contextLimit":1000000})).await.unwrap();
+    assert!(engine.call("updateSession",json!({"sessionId":id,"contextLimit":999999})).await.is_err());
+    let saved = engine.call("updateSession",json!({"sessionId":id,"contextLimit":128000})).await.unwrap();
+    assert_eq!(saved["contextLimit"],128000);
+    send(&engine, &id, "new-window", &"A useful long specification. ".repeat(250)).await;
+    let pending = wait(&engine,&id,|value| value["status"] == "waiting_question").await;
+    engine.call("updateSession",json!({"sessionId":id,"contextLimit":1024})).await.unwrap();
+    engine.call("replyQuestion",json!({"sessionId":id,"requestId":pending["questions"][0]["id"],"answer":{"answer_0":"Yes"}})).await.unwrap();
+    let result = wait(&engine,&id,|value| value["status"] == "error").await;
+    assert!(result["error"].as_str().unwrap().contains("上下文预算"));
+    assert_eq!(fake.count(),1,"the smaller window must be checked before another request");
+    assert_eq!(result["session"]["model"]["modelId"],"channel/opaque/model");
+    let other_state=engine.call("getSession",json!({"sessionId":other["id"]})).await.unwrap();
+    assert_eq!(other_state["session"]["contextLimit"],1000000);
+    engine.shutdown().await.unwrap();
+    let restored=NativeEngine::open(data.path().into()).await.unwrap();
+    restored.bind(project.path().into(),models,fake.gateway()).await.unwrap();
+    let snapshot=restored.call("getSession",json!({"sessionId":id})).await.unwrap();
+    assert_eq!(snapshot["session"]["contextLimit"],1024);
+    let reset=restored.call("updateSession",json!({"sessionId":id,"resetContextLimit":true})).await.unwrap();
+    assert!(reset["contextLimit"].is_null());
+    restored.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn switching_models_clears_a_window_not_advertised_by_the_new_model() {
+    let fake=Fake::start(|_|text("OK")).await;
+    let (_data,project,engine,id)=setup(&fake).await;
+    let mut models=catalog();
+    models["models"][0]["contextLimits"]=json!([128000,1000000]);
+    let mut other=models["models"][0].clone();
+    other["id"]=json!("lolicode/channel/other/model");
+    other["modelId"]=json!("channel/other/model");
+    other["contextLimit"]=json!(32000);
+    other["contextLimits"]=json!([32000,64000]);
+    models["models"].as_array_mut().unwrap().push(other);
+    engine.bind(project.path().into(),models,fake.gateway()).await.unwrap();
+    engine.call("updateSession",json!({"sessionId":id,"contextLimit":1000000})).await.unwrap();
+    let changed=engine.call("updateSession",json!({"sessionId":id,"modelId":"lolicode/channel/other/model"})).await.unwrap();
+    assert!(changed["contextLimit"].is_null());
+    engine.shutdown().await.unwrap();
+}
+
 fn assert_protocol(messages: &[Value]) {
     let mut index = 0;
     while index < messages.len() {

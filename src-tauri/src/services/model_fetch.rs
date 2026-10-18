@@ -28,6 +28,8 @@ pub struct FetchedModelMetadata {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_limit: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_limits: Option<Vec<u64>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub output_limit: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reasoning_efforts: Option<Vec<String>>,
@@ -57,6 +59,115 @@ fn declared_efforts(values: &[serde_json::Value]) -> Option<Vec<String>> {
     }
     // Empty is an explicit declaration; malformed nonempty input is unknown.
     (values.is_empty() || !efforts.is_empty()).then_some(efforts)
+}
+
+/// A window enum describes choices, not additional input/output ceilings.
+/// Never infer windows from a model name or turn a numeric range into an enum.
+pub(super) fn declared_context_windows(
+    entry: &serde_json::Value,
+) -> (Option<u64>, Option<Vec<u64>>) {
+    use serde_json::Value;
+    fn tokens(value: &Value) -> Option<u64> {
+        value
+            .as_u64()
+            .or_else(|| value.as_str()?.parse().ok())
+            .filter(|value| *value > 0 && *value <= 9_007_199_254_740_991)
+    }
+    fn option(value: &Value) -> Option<u64> {
+        tokens(value).or_else(|| {
+            [
+                "value",
+                "tokens",
+                "contextLimit",
+                "context_window",
+                "context_length",
+            ]
+            .iter()
+            .find_map(|key| value.get(*key).and_then(tokens))
+        })
+    }
+    const SCALARS: &[&str] = &[
+        "/context_window",
+        "/contextWindow",
+        "/context_limit",
+        "/contextLimit",
+        "/context_length",
+        "/contextLength",
+        "/context/length",
+        "/max_context_tokens",
+        "/maxContextTokens",
+        "/maxContextLength",
+        "/maxContextWindowTokens",
+        "/max_model_len",
+        "/max_model_length",
+        "/max_sequence_length",
+        "/max_seq_len",
+        "/max_position_embeddings",
+        "/inputTokenLimit",
+        "/maxInputTokens",
+        "/max_input_tokens",
+        "/input_token_limit",
+        "/max_prompt_tokens",
+        "/limits/context_length",
+        "/limits/context_window",
+        "/limits/max_context_tokens",
+        "/limits/max_input_tokens",
+        "/capabilities/limits/max_prompt_tokens",
+        "/capabilities/limits/max_context_tokens",
+        "/capabilities/limits/max_context_window_tokens",
+        "/limit/context",
+    ];
+    let default = SCALARS.iter().find_map(|pointer| {
+        let value = entry.pointer(pointer)?;
+        tokens(value).or_else(|| value.get("default").and_then(tokens))
+    });
+    let mut windows = Vec::new();
+    for pointer in SCALARS.iter().copied().chain([
+        "/context_windows",
+        "/contextWindows",
+        "/context_limits",
+        "/contextLimits",
+        "/supported_context_windows",
+        "/supported_context_lengths",
+        "/supported_context_limits",
+        "/limits/context_windows",
+        "/capabilities/limits/context_windows",
+        "/parameters/context_window/enum",
+        "/parameters/context_length/enum",
+    ]) {
+        let Some(value) = entry.pointer(pointer) else {
+            continue;
+        };
+        let Some(values) = value
+            .as_array()
+            .or_else(|| value.get("enum").and_then(Value::as_array))
+            .or_else(|| value.get("options").and_then(Value::as_array))
+        else {
+            continue;
+        };
+        windows.extend(values.iter().filter_map(option));
+    }
+    if !windows.is_empty() {
+        // An input ceiling can reserve space for output and need not be a
+        // selectable context window. Only a direct context declaration may
+        // add a default outside the enum.
+        if let Some(explicit) = SCALARS[..7].iter().find_map(|pointer| {
+            let value = entry.pointer(pointer)?;
+            tokens(value).or_else(|| value.get("default").and_then(tokens))
+        }) {
+            windows.push(explicit);
+        }
+        windows.sort_unstable();
+        windows.dedup();
+        (
+            default
+                .filter(|value| windows.contains(value))
+                .or_else(|| windows.first().copied()),
+            Some(windows),
+        )
+    } else {
+        (default, None)
+    }
 }
 
 pub fn declared_model_metadata(entry: &serde_json::Value) -> FetchedModelMetadata {
@@ -108,38 +219,10 @@ pub fn declared_model_metadata(entry: &serde_json::Value) -> FetchedModelMetadat
         }
         declared.then(|| declared_efforts(&values)).flatten()
     });
+    let (context_limit, context_limits) = declared_context_windows(entry);
     FetchedModelMetadata {
-        context_limit: positive(&[
-            "/context_window",
-            "/contextWindow",
-            "/context_limit",
-            "/contextLimit",
-            "/context_length",
-            "/contextLength",
-            "/context/length",
-            "/max_context_tokens",
-            "/maxContextTokens",
-            "/maxContextLength",
-            "/maxContextWindowTokens",
-            "/max_model_len",
-            "/max_model_length",
-            "/max_sequence_length",
-            "/max_seq_len",
-            "/max_position_embeddings",
-            "/inputTokenLimit",
-            "/maxInputTokens",
-            "/max_input_tokens",
-            "/input_token_limit",
-            "/max_prompt_tokens",
-            "/limits/context_length",
-            "/limits/context_window",
-            "/limits/max_context_tokens",
-            "/limits/max_input_tokens",
-            "/capabilities/limits/max_prompt_tokens",
-            "/capabilities/limits/max_context_tokens",
-            "/capabilities/limits/max_context_window_tokens",
-            "/limit/context",
-        ]),
+        context_limit,
+        context_limits,
         output_limit: positive(&[
             "/output_limit",
             "/outputLimit",
@@ -537,6 +620,40 @@ fn ends_with_version_segment(url: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn context_window_enums_are_retained_without_inventing_ranges_or_variants() {
+        for entry in [
+            serde_json::json!({"context_window":[128000,1000000,128000,0,-1,"invalid"]}),
+            serde_json::json!({"context_limits":[{"value":128000},{"tokens":"1000000"}]}),
+            serde_json::json!({"context_window":{"default":128000,"enum":[128000,1000000]}}),
+            serde_json::json!({"parameters":{"context_length":{"enum":["128000",1000000]}}}),
+        ] {
+            let metadata = declared_model_metadata(&entry);
+            assert_eq!(metadata.context_limit, Some(128000));
+            assert_eq!(metadata.context_limits, Some(vec![128000, 1000000]));
+        }
+        assert_eq!(
+            declared_model_metadata(&serde_json::json!({"context_window":1000000})).context_limits,
+            None
+        );
+        assert_eq!(
+            declared_model_metadata(
+                &serde_json::json!({"context_window":{"min":128000,"max":1000000}})
+            )
+            .context_limits,
+            None
+        );
+        assert_eq!(
+            declared_model_metadata(&serde_json::json!({"id":"model-1m"})).context_limit,
+            None
+        );
+        let reserved = declared_model_metadata(&serde_json::json!({
+            "max_input_tokens":900000,"context_windows":[128000,1000000]
+        }));
+        assert_eq!(reserved.context_limit, Some(128000));
+        assert_eq!(reserved.context_limits, Some(vec![128000, 1000000]));
+    }
 
     #[test]
     fn capability_enums_and_typed_upstream_options_are_read_without_guessing() {

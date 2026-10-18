@@ -23,6 +23,16 @@ const source: ChannelSource = {
 };
 
 describe("upstream model metadata descriptions", () => {
+  it("shows the advertised windows and the selected default", () => {
+    expect(
+      channelModelMetadata(source, {
+        id: "multi",
+        contextLimit: 128000,
+        contextLimits: [128000, 1000000],
+        selectedContextLimit: 1000000,
+      }),
+    ).toContain("上下文 128,000 / 1,000,000 tokens（当前 1,000,000）");
+  });
   it("distinguishes missing upstream metadata from a failed model test", () => {
     const description = channelModelMetadata(source, { id: "unlisted-name" });
     expect(description).toContain("上下文：上游未提供");
@@ -51,6 +61,36 @@ describe("upstream model metadata descriptions", () => {
 });
 
 describe("channel catalog selection", () => {
+  it("keeps a supported window choice on refresh and drops removed options", () => {
+    const previous = {
+      ...source,
+      models: [
+        {
+          id: "same/model",
+          contextLimit: 128000,
+          contextLimits: [128000, 1000000],
+          selectedContextLimit: 1000000,
+        },
+      ],
+    };
+    const fresh = {
+      ...source,
+      models: [
+        {
+          id: "same/model",
+          contextLimit: 128000,
+          contextLimits: [128000, 1000000],
+        },
+      ],
+    };
+    expect(
+      mergeDiscoveredChannel(fresh, previous).models[0].selectedContextLimit,
+    ).toBe(1000000);
+    fresh.models[0].contextLimits = [128000];
+    expect(
+      mergeDiscoveredChannel(fresh, previous).models[0].selectedContextLimit,
+    ).toBeUndefined();
+  });
   it("keeps model selection while refreshed upstream metadata replaces old values", () => {
     const refreshed = mergeDiscoveredChannel(
       {

@@ -1,3 +1,4 @@
+import { ContextWindowSelect } from "./ContextWindowSelect";
 import { ChevronDown } from "lucide-react";
 import { motion, useReducedMotion } from "framer-motion";
 import { motionTokens } from "@/lib/motion";
@@ -151,6 +152,19 @@ export function ChannelModelList({
                       </span>
                     </span>
                   </label>
+                  <ContextWindowSelect
+                    windows={model.contextLimits}
+                    defaultLimit={model.contextLimit}
+                    value={model.selectedContextLimit}
+                    disabled={disabled || !channel.enabled}
+                    label={`${title} 上下文窗口`}
+                    className="ml-6 mt-2 max-w-full"
+                    onSelect={(limit) =>
+                      update(model.id, {
+                        selectedContextLimit: limit ?? undefined,
+                      })
+                    }
+                  />
                 </div>
               );
             })}

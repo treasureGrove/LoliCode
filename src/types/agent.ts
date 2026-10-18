@@ -27,6 +27,8 @@ export interface AgentModel {
   name: string;
   channelName: string;
   contextLimit?: number | null;
+  /** Window sizes explicitly advertised by this channel. */
+  contextLimits?: number[] | null;
   outputLimit?: number | null;
   reasoningEfforts?: string[] | null;
   defaultReasoningEffort?: string | null;
@@ -60,6 +62,8 @@ export interface AgentSession {
   mode?: AgentMode | string;
   permissionMode?: AgentPermissionMode | "custom" | string;
   reasoningEffort?: string | null;
+  /** Per-session override; absent inherits the channel model default. */
+  contextLimit?: number | null;
   pinned?: boolean;
   archived?: boolean;
   createdAt: number;

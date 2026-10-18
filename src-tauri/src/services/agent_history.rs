@@ -147,6 +147,7 @@ fn metadata(value: &Value) -> Option<AgentSession> {
         updated_at: value["time"]["updated"].as_u64().unwrap_or(0),
         activity: None,
         reasoning_effort: None,
+        context_limit: None,
     })
 }
 fn valid_id(id: &str) -> bool {

@@ -42,6 +42,10 @@ pub struct ChannelModel {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_limit: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_limits: Option<Vec<u64>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected_context_limit: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub output_limit: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reasoning_efforts: Option<Vec<String>>,
@@ -60,6 +64,16 @@ pub struct ChannelModel {
 }
 
 impl ChannelModel {
+    pub fn effective_context_limit(&self) -> Option<u64> {
+        self.selected_context_limit
+            .filter(|selected| {
+                self.context_limits
+                    .as_ref()
+                    .is_some_and(|windows| windows.contains(selected))
+            })
+            .or(self.context_limit)
+    }
+
     pub fn available(&self) -> bool {
         self.enabled != Some(false) && self.supports_tools != Some(false)
     }
@@ -144,6 +158,8 @@ pub struct AgentCatalogModel {
     pub channel_name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub context_limit: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_limits: Option<Vec<u64>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub output_limit: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -435,6 +451,23 @@ fn validate_channel(channel: &ChannelSource) -> Result<(), AppError> {
         {
             return Err(AppError::InvalidInput("模型使用了不支持的 API 格式".into()));
         }
+        if model.context_limits.as_ref().is_some_and(|windows| {
+            windows.is_empty()
+                || windows.len() > 128
+                || windows
+                    .iter()
+                    .any(|value| *value == 0 || *value > 9_007_199_254_740_991)
+                || windows.iter().collect::<HashSet<_>>().len() != windows.len()
+        }) || model.selected_context_limit.is_some_and(|selected| {
+            !model
+                .context_limits
+                .as_ref()
+                .is_some_and(|windows| windows.contains(&selected))
+        }) {
+            return Err(AppError::InvalidInput(
+                "上下文窗口档位无效，请选择渠道提供的窗口".into(),
+            ));
+        }
         if model.context_limit == Some(0) || model.output_limit == Some(0) {
             return Err(AppError::InvalidInput(
                 "模型上下文和输出上限需要填写正整数，未知时请留空".into(),
@@ -514,6 +547,8 @@ fn blank_model(id: String) -> ChannelModel {
         id,
         name: None,
         context_limit: None,
+        context_limits: None,
+        selected_context_limit: None,
         output_limit: None,
         reasoning_efforts: None,
         reasoning_effort_source: None,
@@ -613,6 +648,15 @@ fn merge_discovered(existing: &[ChannelModel], discovered: Vec<ChannelModel>) ->
         if let Some(saved) = existing.iter().find(|saved| saved.id == model.id) {
             model.name = model.name.or_else(|| saved.name.clone());
             model.context_limit = model.context_limit.or(saved.context_limit);
+            model.context_limits = model
+                .context_limits
+                .or_else(|| saved.context_limits.clone());
+            model.selected_context_limit = saved.selected_context_limit.filter(|selected| {
+                model
+                    .context_limits
+                    .as_ref()
+                    .is_some_and(|windows| windows.contains(selected))
+            });
             model.output_limit = model.output_limit.or(saved.output_limit);
             // Keep capability provenance attached to the exact enum it describes.
             // Saved values without provenance can be user-provided; a registry
@@ -830,6 +874,7 @@ fn parse_channel_catalog(raw: &Value) -> Result<Vec<ChannelModel>, AppError> {
         );
         let metadata = crate::services::model_fetch::declared_model_metadata(entry);
         model.context_limit = metadata.context_limit.or(model.context_limit);
+        model.context_limits = metadata.context_limits;
         model.output_limit = metadata.output_limit.or(model.output_limit);
         model.reasoning_efforts = metadata.reasoning_efforts;
         if model.reasoning_efforts.is_some() {
@@ -1034,7 +1079,14 @@ pub fn merge_copilot_models(
             ChannelModel {
                 id: model.id,
                 name: Some(model.name),
-                context_limit: model.context_window,
+                context_limit: model.context_window.or_else(|| {
+                    model
+                        .context_windows
+                        .as_ref()
+                        .and_then(|windows| windows.first().copied())
+                }),
+                context_limits: model.context_windows,
+                selected_context_limit: None,
                 output_limit: None,
                 reasoning_efforts: model.reasoning_effort.map(|efforts| {
                     efforts
@@ -1113,6 +1165,8 @@ pub fn native_subscription_channel(tool: &str) -> Result<ChannelSource, AppError
             id: "native-default".into(),
             name: Some("原生工具默认模型（工具维护目录）".into()),
             context_limit: None,
+            context_limits: None,
+            selected_context_limit: None,
             output_limit: None,
             reasoning_efforts: None,
             reasoning_effort_source: None,
@@ -1169,6 +1223,8 @@ pub fn merge_subscription_models(
             name: Some(model.id.clone()),
             id: model.id,
             context_limit: model.metadata.context_limit,
+            context_limits: model.metadata.context_limits,
+            selected_context_limit: None,
             output_limit: model.metadata.output_limit,
             reasoning_efforts: model.metadata.reasoning_efforts,
             reasoning_effort_source: None,
@@ -1247,7 +1303,7 @@ fn native_provider(
                 json!(model.name.as_deref().unwrap_or(&model.id)),
             );
             let mut limit = Map::new();
-            if let Some(context) = model.context_limit {
+            if let Some(context) = model.effective_context_limit() {
                 limit.insert("context".into(), json!(context));
             }
             if let Some(output) = model.output_limit {
@@ -1270,7 +1326,7 @@ fn native_provider(
         .map(|model| {
             let mut entry =
                 json!({"id":model.id,"name":model.name.as_deref().unwrap_or(&model.id)});
-            if let Some(context) = model.context_limit {
+            if let Some(context) = model.effective_context_limit() {
                 entry["contextWindow"] = json!(context);
             }
             if let Some(output) = model.output_limit {
@@ -1290,7 +1346,7 @@ fn native_provider(
             json!({"baseUrl":base_url,"apiKey":source.api_key,"api":api,"models":list})
         }
         AppType::Hermes => {
-            json!({"name":id,"base_url":base_url,"api_key":source.api_key,"api_mode":match protocol {"anthropic"=>"anthropic_messages","openai_responses"=>"codex_responses",_=>"chat_completions"},"models":models.iter().map(|model| { let mut entry=json!({"id":model.id,"name":model.name}); if let Some(context)=model.context_limit {entry["context_length"]=json!(context);} entry }).collect::<Vec<_>>()})
+            json!({"name":id,"base_url":base_url,"api_key":source.api_key,"api_mode":match protocol {"anthropic"=>"anthropic_messages","openai_responses"=>"codex_responses",_=>"chat_completions"},"models":models.iter().map(|model| { let mut entry=json!({"id":model.id,"name":model.name}); if let Some(context)=model.effective_context_limit() {entry["context_length"]=json!(context);} entry }).collect::<Vec<_>>()})
         }
         AppType::Pi => {
             json!({"name":source.name,"baseUrl":base_url,"apiKey":source.api_key,"api":api,"models":list})
@@ -1406,7 +1462,7 @@ pub(crate) fn gateway_provider(
                 .iter()
                 .map(|model| {
                     model
-                        .context_limit
+                        .effective_context_limit()
                         .filter(|limit| *limit > 0)
                         .unwrap_or(crate::mode::stack::CLAUDE_DEFAULT_WINDOW)
                 })
@@ -1438,7 +1494,7 @@ pub(crate) fn gateway_provider(
             doc["model_providers"]["custom"]["wire_api"] = toml_edit::value("responses");
             doc["model_providers"]["custom"]["experimental_bearer_token"] =
                 toml_edit::value(source.api_key.as_str());
-            json!({"auth":{"OPENAI_API_KEY":source.api_key},"config":doc.to_string(),"modelCatalog":{"models":source.models.iter().map(|m| {let mut item=json!({"model":m.id,"displayName":m.name});if let Some(c)=m.context_limit {item["contextWindow"]=json!(c);}if let Some(i)=&m.input_modalities {item["inputModalities"]=json!(i);}item}).collect::<Vec<_>>()}})
+            json!({"auth":{"OPENAI_API_KEY":source.api_key},"config":doc.to_string(),"modelCatalog":{"models":source.models.iter().map(|m| {let mut item=json!({"model":m.id,"displayName":m.name});if let Some(c)=m.effective_context_limit() {item["contextWindow"]=json!(c);}if let Some(i)=&m.input_modalities {item["inputModalities"]=json!(i);}item}).collect::<Vec<_>>()}})
         }
         AppType::GrokBuild => {
             let mut doc = toml_edit::DocumentMut::new();
@@ -1454,7 +1510,10 @@ pub(crate) fn gateway_provider(
                 entry["api_key"] = toml_edit::value(source.api_key.as_str());
                 entry["api_backend"] = toml_edit::value("responses");
                 entry["context_window"] = toml_edit::value(
-                    model.context_limit.unwrap_or(128_000).min(i64::MAX as u64) as i64,
+                    model
+                        .effective_context_limit()
+                        .unwrap_or(128_000)
+                        .min(i64::MAX as u64) as i64,
                 );
             }
             json!({"config":doc.to_string()})
@@ -1482,7 +1541,7 @@ pub(crate) fn gateway_provider(
                 .map(|m| crate::provider::ClaudeStackModel {
                     model: m.id.clone(),
                     display_name: m.name.clone(),
-                    one_m: m.context_limit.is_some_and(|c| c >= 1_000_000),
+                    one_m: m.effective_context_limit().is_some_and(|c| c >= 1_000_000),
                 })
                 .collect(),
         );
@@ -1501,7 +1560,7 @@ pub(crate) fn gateway_provider(
                     crate::provider::ClaudeDesktopModelRoute {
                         model: claude_desktop_gateway_alias(&model.id),
                         label_override: model.name.clone(),
-                        supports_1m: model.context_limit.map(|c| c >= 1_000_000),
+                        supports_1m: model.effective_context_limit().map(|c| c >= 1_000_000),
                     },
                 )
             })
@@ -1547,7 +1606,10 @@ fn claude_desktop_gateway_alias(route: &str) -> String {
 
 fn claude_client_alias(model: &ChannelModel) -> String {
     let alias = claude_code_gateway_alias(&model.id);
-    if model.context_limit.is_some_and(|limit| limit >= 1_000_000) {
+    if model
+        .effective_context_limit()
+        .is_some_and(|limit| limit >= 1_000_000)
+    {
         format!("{alias}[1M]")
     } else {
         alias
@@ -1841,7 +1903,8 @@ fn agent_catalog_from_snapshot(snapshot: &ChannelCenterSnapshot) -> AgentCatalog
                             model.name.as_deref().unwrap_or(&model.id)
                         ),
                         channel_name: source.name.clone(),
-                        context_limit: model.context_limit,
+                        context_limit: model.effective_context_limit(),
+                        context_limits: model.context_limits.clone(),
                         output_limit: model.output_limit,
                         reasoning_efforts: model.reasoning_efforts.clone(),
                         reasoning_effort_source: model.reasoning_effort_source.clone(),
@@ -3067,6 +3130,48 @@ mod tests {
             default_model: Some("one/model-b".into()),
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn selected_context_windows_survive_refresh_and_project_to_agent_and_external_clients() {
+        let mut saved = source("multi");
+        saved.models = parse_channel_catalog(&json!({"data":[{"id":"model","context_window":128000,"context_windows":[128000,1000000]}]})).unwrap();
+        saved.models[0].selected_context_limit = Some(1000000);
+        let snapshot = ChannelCenterSnapshot {
+            channels: vec![saved.clone()],
+            ..Default::default()
+        };
+        validate(&snapshot).unwrap();
+        let catalog = agent_catalog_from_snapshot(&snapshot);
+        assert_eq!(catalog.models[0].context_limit, Some(1000000));
+        assert_eq!(
+            catalog.models[0].context_limits,
+            Some(vec![128000, 1000000])
+        );
+        let provider = native_provider(
+            &AppType::OpenCode,
+            &saved,
+            "openai_chat",
+            &saved.models,
+            "owned".into(),
+        )
+        .unwrap();
+        assert!(provider.settings_config.to_string().contains("1000000"));
+        let fresh = parse_channel_catalog(&json!({"data":[{"id":"model","context_window":128000,"context_windows":[128000,1000000]}]})).unwrap();
+        assert_eq!(
+            merge_discovered(&saved.models, fresh)[0].selected_context_limit,
+            Some(1000000)
+        );
+        let smaller = parse_channel_catalog(
+            &json!({"data":[{"id":"model","context_window":128000,"context_windows":[128000]}]}),
+        )
+        .unwrap();
+        assert_eq!(
+            merge_discovered(&saved.models, smaller)[0].selected_context_limit,
+            None
+        );
+        saved.models[0].selected_context_limit = Some(777777);
+        assert!(validate_channel(&saved).is_err());
     }
 
     #[test]

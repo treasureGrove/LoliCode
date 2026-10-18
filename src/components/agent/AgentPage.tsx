@@ -482,6 +482,7 @@ export function AgentPage({
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [modelId, setModelId] = useState("");
   const [reasoningEffort, setReasoningEffort] = useState("");
+  const [contextLimit, setContextLimit] = useState<number | null>(null);
   const [previewPath, setPreviewPath] = useState<string | null>(null);
   const [previewSession, setPreviewSession] = useState<string | null>(null);
   const openPreview = useCallback(
@@ -1523,13 +1524,15 @@ export function AgentPage({
     setError(null);
     const requestGeneration = generation.current;
     try {
-      const session = await agentApi.createSession(
+      const sessionArgs: Parameters<typeof agentApi.createSession> = [
         modelId,
         "build",
         undefined,
         permissionMode,
         reasoningEffort || undefined,
-      );
+      ];
+      if (contextLimit != null) sessionArgs[6] = contextLimit;
+      const session = await agentApi.createSession(...sessionArgs);
       if (!mounted.current || generation.current !== requestGeneration) return;
       setSessions((old) => [
         session,
@@ -1989,9 +1992,14 @@ export function AgentPage({
     modelId?: string;
     permissionMode?: AgentPermissionMode;
     reasoningEffort?: string;
+    contextLimit?: number | null;
   }) => {
     if (!sessionId) {
-      if (patch.modelId) setModelId(patch.modelId);
+      if (patch.modelId) {
+        setModelId(patch.modelId);
+        setContextLimit(null);
+      }
+      if (patch.contextLimit !== undefined) setContextLimit(patch.contextLimit);
       if (patch.permissionMode) setPermissionMode(patch.permissionMode);
       if (patch.reasoningEffort !== undefined)
         setReasoningEffort(patch.reasoningEffort);
@@ -2016,6 +2024,9 @@ export function AgentPage({
         ...(patch.modelId ? ["model" as const] : []),
         ...(patch.modelId || patch.reasoningEffort !== undefined
           ? ["reasoningEffort" as const]
+          : []),
+        ...(patch.modelId || patch.contextLimit !== undefined
+          ? ["contextLimit" as const]
           : []),
         ...(patch.permissionMode ? ["permissionMode" as const] : []),
       ]);
@@ -2710,6 +2721,7 @@ export function AgentPage({
                   excludedSources={catalog.excludedSources}
                   onSelect={(id) => {
                     setModelId(id);
+                    setContextLimit(null);
                     setReasoningEffort((old) =>
                       catalog.models
                         .find((model) => model.id === id)
@@ -2724,6 +2736,8 @@ export function AgentPage({
                   value={reasoningEffort}
                   disabled={Boolean(busy) || !modelId}
                   onSelect={setReasoningEffort}
+                  contextValue={contextLimit}
+                  onContextSelect={setContextLimit}
                 />
                 <label className="sr-only" htmlFor="agent-new-permission">
                   执行权限
@@ -3178,6 +3192,10 @@ export function AgentPage({
                   <AgentReasoningPicker
                     model={displayedModel}
                     value={displayedReasoningEffort}
+                    contextValue={selectedSession?.contextLimit}
+                    onContextSelect={(value) =>
+                      void updateSessionConfig({ contextLimit: value })
+                    }
                     disabled={
                       readOnlySession ||
                       Boolean(busy) ||

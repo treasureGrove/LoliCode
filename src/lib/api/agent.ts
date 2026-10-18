@@ -74,6 +74,7 @@ export const agentApi = {
     permissionMode?: AgentPermissionMode,
     reasoningEffort?: string,
     projectPath?: string,
+    contextLimit?: number,
   ) =>
     invoke<AgentSession>("create_agent_session", {
       modelId,
@@ -81,6 +82,7 @@ export const agentApi = {
       title,
       permissionMode,
       reasoningEffort,
+      ...(contextLimit !== undefined ? { contextLimit } : {}),
       ...(projectPath ? { projectPath } : {}),
     }),
   updateSession: (
@@ -90,8 +92,16 @@ export const agentApi = {
       mode?: AgentMode;
       permissionMode?: AgentPermissionMode;
       reasoningEffort?: string;
+      contextLimit?: number | null;
     },
-  ) => invoke<AgentSession>("update_agent_session", { sessionId, ...patch }),
+  ) =>
+    invoke<AgentSession>("update_agent_session", {
+      sessionId,
+      ...patch,
+      ...(patch.contextLimit === null
+        ? { contextLimit: undefined, resetContextLimit: true }
+        : {}),
+    }),
   renameSession: (sessionId: string, title: string) =>
     invoke<AgentSession>("rename_agent_session", { sessionId, title }),
   setSessionMetadata: (

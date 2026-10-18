@@ -946,6 +946,36 @@ describe("AgentPage", () => {
     expect(agentApi.sendMessage).not.toHaveBeenCalled();
   });
 
+  it("saves a session window during a running task while preserving the draft", async () => {
+    snapshot.status = "running";
+    const models = structuredClone(catalog);
+    models.models[0].contextLimit = 128000;
+    models.models[0].contextLimits = [128000, 1000000];
+    vi.mocked(agentApi.getCatalog).mockResolvedValue(models);
+    vi.mocked(agentApi.updateSession).mockResolvedValue({
+      ...session,
+      contextLimit: 1000000,
+    });
+    render(<AgentPage />);
+    await flush();
+    fill("保留窗口切换期间的草稿");
+    fireEvent.click(screen.getByRole("button", { name: "思考档位" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "上下文窗口" }), {
+      target: { value: "1000000" },
+    });
+    await flush();
+    expect(agentApi.updateSession).toHaveBeenLastCalledWith(session.id, {
+      contextLimit: 1000000,
+    });
+    expect(
+      screen.getByTitle("当前上下文：1,000,000 tokens"),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
+      "保留窗口切换期间的草稿",
+    );
+    expect(agentApi.sendMessage).not.toHaveBeenCalled();
+  });
+
   it("keeps the saved effort when an explicit manual override fails", async () => {
     vi.mocked(agentApi.updateSession).mockRejectedValue(
       new Error("中转不接受此思考档位"),
@@ -984,6 +1014,34 @@ describe("AgentPage", () => {
       undefined,
       "ask",
       "high",
+    );
+  });
+
+  it("passes the chosen window when creating a new conversation", async () => {
+    const models = structuredClone(catalog);
+    models.models[0].contextLimit = 128000;
+    models.models[0].contextLimits = [128000, 1000000];
+    vi.mocked(agentApi.getCatalog).mockResolvedValue(models);
+    vi.mocked(agentApi.listSessions).mockResolvedValue([]);
+    render(<AgentPage />);
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: "思考档位" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "上下文窗口" }), {
+      target: { value: "1000000" },
+    });
+    fireEvent.keyDown(document.activeElement || document.body, {
+      key: "Escape",
+    });
+    fireEvent.click(sessionCreationButton());
+    await flush();
+    expect(agentApi.createSession).toHaveBeenCalledWith(
+      catalog.models[0].id,
+      "build",
+      undefined,
+      "ask",
+      undefined,
+      undefined,
+      1000000,
     );
   });
 

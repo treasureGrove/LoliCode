@@ -7,6 +7,8 @@ export interface FetchedModel {
   id: string;
   ownedBy: string | null;
   contextLimit?: number;
+  /** Window sizes explicitly advertised by this channel. */
+  contextLimits?: number[] | null;
   outputLimit?: number;
   reasoningEfforts?: string[];
 }

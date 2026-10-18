@@ -43,6 +43,11 @@ export function mergeDiscoveredChannel(
     enabled: previous?.enabled ?? discovered.enabled,
     models: discovered.models.map((model) => ({
       ...model,
+      selectedContextLimit: model.contextLimits?.includes(
+        previousModels.get(model.id)?.selectedContextLimit ?? -1,
+      )
+        ? previousModels.get(model.id)?.selectedContextLimit
+        : model.selectedContextLimit,
       enabled: previousModels.has(model.id)
         ? previousModels.get(model.id)!.enabled !== false
         : model.enabled !== false && model.supportsTools !== false,
@@ -77,9 +82,11 @@ export function channelModelMetadata(
         : "上游未提供工具能力",
   ];
   parts.push(
-    model.contextLimit
-      ? `上下文 ${model.contextLimit.toLocaleString()} tokens`
-      : "上下文：上游未提供",
+    model.contextLimits && model.contextLimits.length > 1
+      ? `上下文 ${model.contextLimits.map((limit) => limit.toLocaleString()).join(" / ")} tokens（当前 ${(model.selectedContextLimit ?? model.contextLimit)?.toLocaleString() ?? "渠道默认"}）`
+      : model.contextLimit
+        ? `上下文 ${(model.selectedContextLimit ?? model.contextLimit).toLocaleString()} tokens`
+        : "上下文：上游未提供",
   );
   if (model.outputLimit)
     parts.push(`最大输出 ${model.outputLimit.toLocaleString()} tokens`);

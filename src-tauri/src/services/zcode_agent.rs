@@ -584,6 +584,7 @@ pub fn legacy_sessions(root: &Path, project: Option<&str>) -> Result<Vec<AgentSe
             updated_at: value["time"]["updated"].as_u64().unwrap_or(0),
             activity: None,
             reasoning_effort: None,
+            context_limit: None,
         });
     }
     sessions.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));

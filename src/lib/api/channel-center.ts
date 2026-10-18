@@ -18,6 +18,9 @@ export interface ChannelModel {
   id: string;
   name?: string;
   contextLimit?: number;
+  selectedContextLimit?: number;
+  /** Window sizes explicitly advertised by this channel. */
+  contextLimits?: number[] | null;
   outputLimit?: number;
   /** Exact effort values advertised by the upstream catalog; absent is unknown. */
   reasoningEfforts?: string[];

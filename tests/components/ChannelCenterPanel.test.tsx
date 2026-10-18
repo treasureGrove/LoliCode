@@ -193,6 +193,27 @@ function modelList(channel = "DeepSeek") {
 }
 
 describe("ChannelCenterPanel", () => {
+  it("automatically saves a model window choice without applying external tools", async () => {
+    saved = structuredClone(populated);
+    saved.channels[0].models[0].contextLimit = 128000;
+    saved.channels[0].models[0].contextLimits = [128000, 1000000];
+    render(<ChannelCenterPanel />);
+    await ready();
+    const list = modelList();
+    fireEvent.change(
+      within(list).getByRole("combobox", { name: "DeepSeek Chat 上下文窗口" }),
+      {
+        target: { value: "1000000" },
+      },
+    );
+    await waitFor(() =>
+      expect(saved.channels[0].models[0].selectedContextLimit).toBe(1000000),
+    );
+    expect(channelCenterApi.apply).not.toHaveBeenCalled();
+    expect(saved.channels[0].models[0].contextLimits).toEqual([
+      128000, 1000000,
+    ]);
+  });
   it("offers external agent targets without selecting them until requested", async () => {
     saved = structuredClone(populated);
     render(<ChannelCenterPanel />);

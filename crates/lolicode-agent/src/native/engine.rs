@@ -536,6 +536,7 @@ impl NativeEngine {
             updated_at: time,
             activity: None,
             reasoning_effort: reasoning_effort(&binding.catalog, &model, args.get("reasoningEffort"))?,
+            context_limit: context_choice(&binding.catalog, &model, args.get("contextLimit"))?,
         };
         let stored = StoredSession {
             format: 1,
@@ -619,6 +620,8 @@ impl NativeEngine {
                 let catalog = self.bound_for(Path::new(&session.project_path)).await?.catalog;
                 let model = selection(&catalog, id)?.0;
                 if session.model.as_ref() != Some(&model) {
+                    session.context_limit = session.context_limit.filter(|limit|
+                        context_choice(&catalog, &model, Some(&json!(limit))).is_ok());
                     if let Some(effort) = session.reasoning_effort.as_ref() {
                         if !declared_effort(&catalog, &model, effort) {
                             session.reasoning_effort = None;
@@ -626,6 +629,13 @@ impl NativeEngine {
                     }
                 }
                 session.model = Some(model);
+            }
+            if args["resetContextLimit"].as_bool() == Some(true) {
+                session.context_limit = None;
+            } else if let Some(value) = args.get("contextLimit").filter(|value| !value.is_null()) {
+                session.context_limit = context_choice(
+                    &self.bound_for(Path::new(&session.project_path)).await?.catalog,
+                    session.model.as_ref().ok_or("此会话没有可用模型")?, Some(value))?;
             }
             if args["reasoningEffort"].is_string() {
                 session.reasoning_effort = reasoning_effort(
@@ -681,7 +691,7 @@ impl NativeEngine {
             .model
             .clone()
             .ok_or("此会话没有可用模型")?;
-        model_context(&binding.catalog, &model)?;
+        model_context(&binding.catalog, &model, state.stored.snapshot.session.context_limit)?;
         let (cancel, receiver) = watch::channel(false);
         let skills = self.inner.skills.read().await.clone();
         let mut stored = state.stored.clone();
@@ -797,7 +807,7 @@ impl NativeEngine {
                 let project = PathBuf::from(&session.project_path);
                 let mode = session.mode.clone();
                 let model = session.model.clone().ok_or("此会话没有可用模型")?;
-                let context = model_context(&catalog, &model)?;
+                let context = model_context(&catalog, &model, session.context_limit)?;
                 let effort = effective_effort(&catalog,&model,session.reasoning_effort.as_deref());
                 let mut system = system_prompt(&project, &mode, &skills, state.stored.response_locale.as_deref());
                 if needs_final_answer { system.push_str("The previous response ended without a user-facing answer. Now provide the actual final answer to the user in the requested language; do not return only reasoning. Do not repeat completed tools.\n"); }
@@ -1947,6 +1957,7 @@ fn catalog_value(value: Value) -> Result<Value, String> {
             "name",
             "channelName",
             "contextLimit",
+            "contextLimits",
             "outputLimit",
             "reasoningEfforts",
             "reasoningEffortSource",
@@ -1976,7 +1987,17 @@ fn selection(catalog: &Value, id: &str) -> Result<(AgentModelRef, Option<u64>), 
         model["contextLimit"].as_u64().filter(|limit| *limit > 0),
     ))
 }
-fn model_context(catalog: &Value, model: &AgentModelRef) -> Result<Option<u64>, String> {
+fn context_choice(catalog: &Value, model: &AgentModelRef, value: Option<&Value>) -> Result<Option<u64>, String> {
+    let Some(value) = value.filter(|value| !value.is_null()) else { return Ok(None); };
+    let limit = value.as_u64().filter(|value| *value > 0).ok_or("上下文窗口需要正整数")?;
+    let declared = model_metadata(catalog, model).is_some_and(|metadata| {
+        metadata["contextLimit"].as_u64() == Some(limit) || metadata["contextLimits"].as_array()
+            .is_some_and(|windows| windows.iter().any(|item| item.as_u64() == Some(limit)))
+    });
+    if !declared { return Err("此上下文窗口不在模型当前公布的档位中，请重新选择".into()); }
+    Ok(Some(limit))
+}
+fn model_context(catalog: &Value, model: &AgentModelRef, selected: Option<u64>) -> Result<Option<u64>, String> {
     let catalog_model = catalog["models"]
         .as_array()
         .and_then(|items| {
@@ -1988,10 +2009,12 @@ fn model_context(catalog: &Value, model: &AgentModelRef) -> Result<Option<u64>, 
     // A missing limit means the provider did not publish context metadata.
     // Do not turn that unknown value into an 8K hard limit: large system
     // prompts and skill catalogs can exceed it before reaching the model.
-    Ok(catalog_model["contextLimit"]
-        .as_u64()
+    if let Some(selected) = selected {
+        context_choice(catalog, model, Some(&json!(selected)))?;
+    }
+    Ok(selected.or_else(|| catalog_model["contextLimit"].as_u64())
         .filter(|limit| *limit > 0)
-        .map(|limit| limit.clamp(1024, 2_000_000)))
+        .map(|limit| limit.max(1024)))
 }
 fn model_metadata<'a>(catalog: &'a Value, model: &AgentModelRef) -> Option<&'a Value> {
     catalog["models"].as_array()?.iter().find(|item| {

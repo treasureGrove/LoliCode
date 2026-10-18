@@ -269,6 +269,8 @@ pub struct CopilotModel {
     /// Copilot-reported maximum prompt limit for this exact model ID.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_window: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_windows: Option<Vec<u64>>,
     /// Upstream protocols supported by this exact model ID.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub supported_endpoints: Vec<String>,
@@ -1246,6 +1248,8 @@ impl CopilotAuthManager {
                 vendor: m.vendor,
                 model_picker_enabled: m.model_picker_enabled,
                 context_window: extract_copilot_prompt_limit(m.capabilities.as_ref()),
+                context_windows: m.capabilities.as_ref().and_then(|capabilities|
+                    crate::services::model_fetch::declared_model_metadata(&serde_json::json!({"capabilities":capabilities})).context_limits),
                 supported_endpoints: m.supported_endpoints,
                 supports_parallel_tool_calls: extract_copilot_parallel_tool_calls(
                     m.capabilities.as_ref(),
@@ -2215,6 +2219,7 @@ mod tests {
             vendor: "OpenAI".to_string(),
             model_picker_enabled: true,
             context_window: Some(922_000),
+            context_windows: None,
             supported_endpoints: vec!["/responses".to_string()],
             supports_parallel_tool_calls: Some(true),
             reasoning_effort: Some(vec![
@@ -2481,6 +2486,7 @@ mod tests {
                         vendor: "OpenAI".to_string(),
                         model_picker_enabled: true,
                         context_window: None,
+                        context_windows: None,
                         supported_endpoints: Vec::new(),
                         supports_parallel_tool_calls: None,
                         reasoning_effort: None,
@@ -2491,6 +2497,7 @@ mod tests {
                         vendor: "Anthropic".to_string(),
                         model_picker_enabled: true,
                         context_window: None,
+                        context_windows: None,
                         supported_endpoints: Vec::new(),
                         supports_parallel_tool_calls: None,
                         reasoning_effort: None,
@@ -2501,6 +2508,7 @@ mod tests {
                         vendor: "OpenAI".to_string(),
                         model_picker_enabled: false,
                         context_window: Some(128_000),
+                        context_windows: None,
                         supported_endpoints: vec![
                             "/v1/chat/completions".to_string(),
                             "/responses".to_string(),
@@ -2584,6 +2592,7 @@ mod tests {
             vendor: "Anthropic".to_string(),
             model_picker_enabled: false,
             context_window: Some(1_000_000),
+            context_windows: None,
             supported_endpoints: endpoints
                 .iter()
                 .map(|endpoint| endpoint.to_string())

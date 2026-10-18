@@ -411,7 +411,7 @@ fn zcode_provider_name(key: &str) -> String {
 }
 fn model_value(model: &ChannelModel) -> Value {
     let mut value = json!({"id":model.id,"name":model.name.as_deref().unwrap_or(&model.id),"tool_call":model.supports_tools != Some(false)});
-    if let Some(context) = model.context_limit {
+    if let Some(context) = model.effective_context_limit() {
         value["limit"]["context"] = json!(context);
     }
     if let Some(output) = model.output_limit {
@@ -640,7 +640,7 @@ fn validate_zcode_personal(value: &Value) -> Result<(), AppError> {
 
 fn zcode_model_rule(model: &ChannelModel, provider_key: &str) -> Value {
     let mut config = json!({});
-    if let Some(context) = model.context_limit {
+    if let Some(context) = model.effective_context_limit() {
         config["properties"]["contextWindow"] = json!(context);
     }
     if let Some(supports_tools) = model.supports_tools {
@@ -808,7 +808,7 @@ fn workbuddy(
     let mut result = BTreeMap::new();
     let next = models.iter().map(|model| {
         let mut entry = json!({"id":model.id,"name":model.name.as_deref().unwrap_or(&model.id),"vendor":"openai","url":format!("{}/chat/completions", source.base_url.trim_end_matches('/')),"apiKey":source.api_key});
-        if let Some(context) = model.context_limit { entry["maxInputTokens"] = json!(context); }
+        if let Some(context) = model.effective_context_limit() { entry["maxInputTokens"] = json!(context); }
         if let Some(output) = model.output_limit { entry["maxOutputTokens"] = json!(output); }
         entry
     }).collect::<Vec<_>>();
@@ -1010,7 +1010,7 @@ fn dsh(
     }
     let provider_models = models.iter().map(|model| {
         let mut value = json!({"id":model.id,"name":model.name.as_deref().unwrap_or(&model.id),"api":"openai-completions","input":model.input_modalities.clone().unwrap_or_else(|| vec!["text".into()])});
-        if let Some(context) = model.context_limit { value["contextWindow"] = json!(context); }
+        if let Some(context) = model.effective_context_limit() { value["contextWindow"] = json!(context); }
         if let Some(output) = model.output_limit { value["maxTokens"] = json!(output); }
         if let Some(efforts) = &model.reasoning_efforts { value["reasoningEfforts"] = Value::Object(efforts.iter().map(|effort| (effort.clone(), json!(effort))).collect()); }
         value

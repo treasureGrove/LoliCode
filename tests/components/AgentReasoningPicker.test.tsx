@@ -18,6 +18,25 @@ const open = () =>
   fireEvent.click(screen.getByRole("button", { name: "思考档位" }));
 
 describe("AgentReasoningPicker", () => {
+  it("switches a session context window independently from reasoning", () => {
+    const select = vi.fn(),
+      context = vi.fn();
+    render(
+      <AgentReasoningPicker
+        model={{ ...model, contextLimits: [131072, 1000000] }}
+        value="high"
+        onSelect={select}
+        contextValue={131072}
+        onContextSelect={context}
+      />,
+    );
+    open();
+    fireEvent.change(screen.getByRole("combobox", { name: "上下文窗口" }), {
+      target: { value: "1000000" },
+    });
+    expect(context).toHaveBeenCalledWith(1000000);
+    expect(select).not.toHaveBeenCalled();
+  });
   it.each([
     { efforts: ["low", "high", "medium", "max"], expected: "medium" },
     { efforts: ["low", "high", "max"], expected: "high" },

@@ -227,10 +227,11 @@ pub async fn create_agent_session(
     title: Option<String>,
     permission_mode: Option<String>,
     reasoning_effort: Option<String>,
+    context_limit: Option<u64>,
     project_path: Option<String>,
 ) -> Result<AgentSession, String> {
     if let Some(path) = &project_path { check_project(&app, path)?; }
-    let mut session: AgentSession = native(&app, "createSession", json!({"projectPath":project_path,"modelId":model_id,"mode":mode,"title":title,"permissionMode":permission_mode.unwrap_or_else(|| "ask".into()),"reasoningEffort":reasoning_effort}), true).await?;
+    let mut session: AgentSession = native(&app, "createSession", json!({"projectPath":project_path,"modelId":model_id,"mode":mode,"title":title,"permissionMode":permission_mode.unwrap_or_else(|| "ask".into()),"reasoningEffort":reasoning_effort,"contextLimit":context_limit}), true).await?;
     decorate(&app, &mut session)?;
     Ok(session)
 }
@@ -242,11 +243,13 @@ pub async fn update_agent_session(
     mode: Option<String>,
     permission_mode: Option<String>,
     reasoning_effort: Option<String>,
+    context_limit: Option<u64>,
+    reset_context_limit: Option<bool>,
 ) -> Result<AgentSession, String> {
     if legacy_id(&session_id)? {
         return historical_read_only();
     }
-    let mut result: AgentSession = native(&app, "updateSession", json!({"sessionId":session_id,"modelId":model_id,"mode":mode,"permissionMode":permission_mode,"reasoningEffort":reasoning_effort}), true).await?;
+    let mut result: AgentSession = native(&app, "updateSession", json!({"sessionId":session_id,"modelId":model_id,"mode":mode,"permissionMode":permission_mode,"reasoningEffort":reasoning_effort,"contextLimit":context_limit,"resetContextLimit":reset_context_limit}), true).await?;
     if result.id != session_id {
         return Err("返回的会话与当前选择不一致".into());
     }
