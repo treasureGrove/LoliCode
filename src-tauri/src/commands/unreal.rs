@@ -54,6 +54,9 @@ pub async fn launch_unreal_project(
         crate::services::builtin_apps::BuiltinApp::Unreal,
     )?;
     let (project, engine) = unreal::launch_target(&state, &project_id)?;
+    if !project.plugin_enabled || !project.plugin_ready {
+        return Err("此工程的桥接插件尚未编译或启用，请先点击安装／修复桥".into());
+    }
     if lolicode_agent::native::unreal::has_connection_for_project(Path::new(&project.path)).await {
         return Err(
             "这个工程已经连接 Unreal Editor；请在虚幻工作区查看当前连接，不重复启动".into(),

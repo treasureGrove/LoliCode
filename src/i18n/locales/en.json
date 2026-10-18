@@ -4242,7 +4242,7 @@
     "launchStarted": "Launching {{name}}",
     "launchFailed": "Could not launch Unreal Editor",
     "pluginInstalled": "Editor bridge installed and enabled for {{name}}",
-    "restartEditor": "Restart Unreal Editor for the plugin to load. The original project descriptor is backed up as .uproject.lolicode.bak.",
+    "restartEditor": "Plugin built and enabled. Launch the editor from this page to pair with LoliCode; opening the project directly does not pair it. The original project is backed up as .uproject.lolicode.bak.",
     "pluginInstallFailed": "Could not install the editor bridge",
     "projectRemoved": "Removed {{name}} from LoliCode",
     "removeFailed": "Could not remove project",
@@ -4275,7 +4275,11 @@
     "removeProject": "Remove from project library",
     "howItWorks": "Bridge and permissions",
     "howItWorksHint": "The editor bridge uses the MIT-licensed UnrealAgentLink plugin at a reviewed, pinned revision. It listens on 127.0.0.1 and authenticates the editor with a launch-only pairing token. Only a selected set of read and edit commands is exposed for the paired project. Arbitrary Python, console commands, quitting the editor, and plugin management are not exposed yet.",
-    "configureModels": "Configure models and channels"
+    "configureModels": "Configure models and channels",
+    "repairBridge": "Repair and enable bridge",
+    "pluginNeedsBuild": "Editor module needs building or does not match this engine",
+    "buildingBridge": "Building and validating the plugin for this engine. The first build may take several minutes. Keep the editor closed.",
+    "buildingBridgeShort": "Preparing bridge…"
   },
   "appsPage": {
     "showInSidebar": "Show {{name}} in the sidebar",

@@ -1,0 +1,13 @@
+{
+  "passed": true,
+  "engine": "5.8.3",
+  "platform": "Windows",
+  "upstream": "ec65d7d1ae018944739d28cef18c78b4c53bca8f",
+  "compiledAndBuildIdVerified": true,
+  "repeatInstallDidNotRebuild": true,
+  "realEditorPaired": true,
+  "projectInfoRead": true,
+  "projectDirectoryAnnouncementAccepted": true,
+  "userDatabaseRead": false,
+  "desktopInstallerPublished": false
+}

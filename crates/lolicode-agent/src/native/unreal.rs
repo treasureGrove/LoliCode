@@ -115,10 +115,29 @@ fn canonical_path(path: &Path) -> Result<PathBuf, String> {
 fn path_key(path: &Path) -> String {
     let value = path.to_string_lossy().replace('\\', "/");
     if cfg!(windows) {
-        value.to_lowercase()
+        // Rust canonicalize adds a verbatim prefix; Unreal reports ordinary
+        // forward-slash paths. Both must identify the same selected project.
+        let value = value.to_lowercase();
+        let value = if let Some(unc) = value.strip_prefix("//?/unc/") {
+            format!("//{unc}")
+        } else {
+            value.strip_prefix("//?/").unwrap_or(&value).to_string()
+        };
+        value.trim_end_matches('/').to_string()
     } else {
-        value
+        value.trim_end_matches('/').to_string()
     }
+}
+
+fn announced_project_key(path: &str) -> Option<String> {
+    if path.is_empty() {
+        return None;
+    }
+    // BuildProjectInfo() in the pinned plugin emits FPaths::ProjectDir(),
+    // whereas project.closed emits GetProjectFilePath(). Accept both forms,
+    // but resolve and verify a real, unique .uproject before pairing.
+    let canonical = canonical_path(Path::new(path)).ok()?;
+    find_project_file(&canonical).map(|file| path_key(&file))
 }
 
 /// Bind one authenticated editor launch to the selected project and return its
@@ -146,7 +165,7 @@ pub async fn prepare_editor_launch(project_path: &Path) -> Result<(String, Strin
         );
     Ok((
         token.clone(),
-        format!("ws://127.0.0.1:{BRIDGE_PORT}?token={token}"),
+        format!("ws://127.0.0.1:{BRIDGE_PORT}/?token={token}"),
     ))
 }
 
@@ -291,8 +310,7 @@ async fn serve_connection(bridge: Arc<Bridge>, stream: TcpStream) -> Result<(), 
                                 Some("evt") if value["method"] == "project.info" => {
                                     let payload = &value["payload"];
                                     let path = payload["projectPath"].as_str().unwrap_or_default();
-                                    let current_key = if path.is_empty() { String::new() } else { path_key(Path::new(path)) };
-                                    if current_key != expected_project {
+                                    if announced_project_key(path).as_deref() != Some(expected_project.as_str()) {
                                         return Err("已拒绝与配对工程不一致的编辑器连接".into());
                                     }
                                     let project_name = payload["projectName"].as_str().filter(|value| !value.is_empty()).unwrap_or("Unreal Project").to_string();
@@ -544,6 +562,99 @@ pub async fn request(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn plugin_project_dir_and_project_file_resolve_to_the_same_identity() {
+        let temp = tempfile::tempdir().unwrap();
+        let project = temp.path().join("Game.uproject");
+        std::fs::write(&project, "{}").unwrap();
+        let expected = path_key(&project.canonicalize().unwrap());
+        assert_eq!(
+            announced_project_key(temp.path().to_str().unwrap()),
+            Some(expected.clone())
+        );
+        assert_eq!(
+            announced_project_key(project.to_str().unwrap()),
+            Some(expected)
+        );
+        assert!(announced_project_key("").is_none());
+        std::fs::write(temp.path().join("Other.uproject"), "{}").unwrap();
+        assert!(announced_project_key(temp.path().to_str().unwrap()).is_none());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_verbatim_and_editor_paths_have_the_same_key() {
+        assert_eq!(
+            path_key(Path::new(r"\\?\D:\Games\My Project\Game.uproject")),
+            path_key(Path::new("D:/Games/My Project/Game.uproject"))
+        );
+        assert_eq!(
+            path_key(Path::new(r"\\?\UNC\server\share\Game.uproject")),
+            path_key(Path::new("//server/share/Game.uproject"))
+        );
+    }
+
+    #[tokio::test]
+    async fn pinned_plugin_directory_announcement_pairs_but_another_project_is_rejected() {
+        use tokio_tungstenite::client_async;
+        let temp = tempfile::tempdir().unwrap();
+        std::fs::write(temp.path().join("Game.uproject"), "{}").unwrap();
+        let other = tempfile::tempdir().unwrap();
+        std::fs::write(other.path().join("Other.uproject"), "{}").unwrap();
+        for (announced, accept) in [(temp.path(), true), (other.path(), false)] {
+            let bridge = Arc::new(Bridge::new());
+            bridge.pairings.lock().unwrap().insert(
+                "test-pairing".into(),
+                Pairing {
+                    project_path: announced_project_key(temp.path().to_str().unwrap()).unwrap(),
+                    expires_at: now_ms() + 60_000,
+                },
+            );
+            let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let address = listener.local_addr().unwrap();
+            let server_bridge = bridge.clone();
+            let server = tokio::spawn(async move {
+                let (stream, _) = listener.accept().await.unwrap();
+                serve_connection(server_bridge, stream).await
+            });
+            let stream = TcpStream::connect(address).await.unwrap();
+            let (mut socket, _) =
+                client_async(format!("ws://{address}/?token=test-pairing"), stream)
+                    .await
+                    .unwrap();
+            socket.send(Message::Text(json!({"ver":"1.0", "type":"evt", "method":"project.info", "payload": {
+                "projectPath": announced.to_string_lossy().replace('\\', "/") + "/", "projectName":"Game", "engineVersion":"5.8.3"
+            }}).to_string())).await.unwrap();
+            if accept {
+                timeout(Duration::from_secs(2), async {
+                    loop {
+                        if !bridge.clients.read().await.is_empty() {
+                            break;
+                        }
+                        tokio::task::yield_now().await;
+                    }
+                })
+                .await
+                .unwrap();
+                assert!(bridge
+                    .clients
+                    .read()
+                    .await
+                    .values()
+                    .all(|client| client.verified));
+                socket.close(None).await.unwrap();
+                assert!(server.await.unwrap().is_ok());
+            } else {
+                assert!(timeout(Duration::from_secs(2), server)
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .is_err());
+                assert!(bridge.clients.read().await.is_empty());
+            }
+        }
+    }
 
     #[test]
     fn command_allowlist_keeps_arbitrary_code_execution_out() {

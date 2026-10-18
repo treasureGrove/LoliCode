@@ -7,6 +7,7 @@ export interface UnrealProject {
   engineAssociation?: string | null;
   pluginInstalled: boolean;
   pluginEnabled: boolean;
+  pluginReady: boolean;
   addedAt: number;
 }
 

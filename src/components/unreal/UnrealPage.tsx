@@ -32,7 +32,11 @@ function errorMessage(error: unknown): string {
 }
 
 function normalizePath(path: string): string {
-  const normalized = path.replace(/\\/g, "/").replace(/\/+$/, "");
+  const normalized = path
+    .replace(/\\/g, "/")
+    .replace(/^\/\/\?\/UNC\//i, "//")
+    .replace(/^\/\/\?\//, "")
+    .replace(/\/+$/, "");
   return navigator.platform.toLowerCase().includes("win")
     ? normalized.toLowerCase()
     : normalized;
@@ -72,6 +76,7 @@ export function UnrealPage({
   const queryClient = useQueryClient();
   const [adding, setAdding] = useState(false);
   const [busyProject, setBusyProject] = useState<string | null>(null);
+  const [installing, setInstalling] = useState(false);
   const snapshot = useQuery({
     queryKey: QUERY_KEY,
     queryFn: unrealApi.snapshot,
@@ -130,6 +135,7 @@ export function UnrealPage({
 
   const installBridge = async (project: UnrealProject) => {
     setBusyProject(project.id);
+    setInstalling(true);
     try {
       const updated = await unrealApi.installAgentLink(project.id);
       await queryClient.invalidateQueries({ queryKey: QUERY_KEY });
@@ -144,6 +150,7 @@ export function UnrealPage({
       });
     } finally {
       setBusyProject(null);
+      setInstalling(false);
     }
   };
 
@@ -314,7 +321,7 @@ export function UnrealPage({
                               {t("unreal.connected")}
                             </span>
                           ) : null}
-                          {project.pluginEnabled ? (
+                          {project.pluginEnabled && project.pluginReady ? (
                             <span className="inline-flex items-center gap-1 rounded-full border border-border bg-subtle px-2 py-0.5 text-[11px] text-fg-2">
                               <ShieldCheck className="h-3 w-3" />{" "}
                               {t("unreal.bridgeReady")}
@@ -342,6 +349,14 @@ export function UnrealPage({
                           {project.pluginInstalled && !project.pluginEnabled ? (
                             <span>{t("unreal.pluginNeedsEnable")}</span>
                           ) : null}
+                          {project.pluginInstalled && !project.pluginReady && (
+                            <span>{t("unreal.pluginNeedsBuild")}</span>
+                          )}
+                          {installing && busy && (
+                            <span role="status">
+                              {t("unreal.buildingBridge")}
+                            </span>
+                          )}
                         </div>
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
@@ -354,11 +369,11 @@ export function UnrealPage({
                         >
                           <Bot className="h-4 w-4" /> {t("unreal.openInAgent")}
                         </Button>
-                        {!project.pluginEnabled ? (
+                        {!project.pluginEnabled || !project.pluginReady ? (
                           <Button
                             variant="outline"
                             size="sm"
-                            disabled={busy}
+                            disabled={busyProject !== null || connected}
                             onClick={() => void installBridge(project)}
                           >
                             {busy ? (
@@ -366,13 +381,19 @@ export function UnrealPage({
                             ) : (
                               <Puzzle className="h-4 w-4" />
                             )}
-                            {t("unreal.installBridge")}
+                            {installing && busy
+                              ? t("unreal.buildingBridgeShort")
+                              : t(
+                                  project.pluginInstalled
+                                    ? "unreal.repairBridge"
+                                    : "unreal.installBridge",
+                                )}
                           </Button>
                         ) : (
                           <Button
                             size="sm"
                             disabled={
-                              busy ||
+                              busyProject !== null ||
                               !engine ||
                               connected ||
                               !bridge?.listening ||
@@ -416,6 +437,7 @@ export function UnrealPage({
                           variant="ghost"
                           size="icon-compact"
                           title={t("unreal.removeProject")}
+                          disabled={busyProject !== null}
                           aria-label={t("unreal.removeProject")}
                           onClick={() => void removeProject(project)}
                         >

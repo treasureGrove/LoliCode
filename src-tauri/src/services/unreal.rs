@@ -22,6 +22,8 @@ const UAL_ARCHIVE_PREFIX: &str =
 const MAX_ARCHIVE_BYTES: usize = 96 * 1024 * 1024;
 const MAX_PLUGIN_BYTES: u64 = 384 * 1024 * 1024;
 
+mod plugin;
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UnrealProject {
@@ -31,6 +33,8 @@ pub struct UnrealProject {
     pub engine_association: Option<String>,
     pub plugin_installed: bool,
     pub plugin_enabled: bool,
+    #[serde(default)]
+    pub plugin_ready: bool,
     pub added_at: u64,
 }
 
@@ -94,6 +98,7 @@ fn canonical_project_file(path: &str) -> Result<(PathBuf, PathBuf), String> {
     let file = selected
         .canonicalize()
         .map_err(|_| "uproject 文件不存在或无法访问")?;
+    let file = editor_path(&file);
     if !file.is_file() {
         return Err("uproject 必须是普通文件".into());
     }
@@ -118,6 +123,8 @@ fn project_from_file(id: String, file: &Path, added_at: u64) -> Result<UnrealPro
                 plugin["Name"] == "UnrealAgentLink" && plugin["Enabled"].as_bool() == Some(true)
             })
         });
+    let plugin_ready = select_engine(&discover_engines(), raw["EngineAssociation"].as_str())
+        .is_some_and(|engine| plugin::is_ready(&plugin_path, engine));
     Ok(UnrealProject {
         id,
         name: file
@@ -129,6 +136,7 @@ fn project_from_file(id: String, file: &Path, added_at: u64) -> Result<UnrealPro
         engine_association: raw["EngineAssociation"].as_str().map(str::to_string),
         plugin_installed,
         plugin_enabled,
+        plugin_ready,
         added_at,
     })
 }
@@ -284,6 +292,9 @@ fn engine_from_path(path: &Path, source: &str) -> Option<UnrealEngine> {
     } else {
         path
     };
+    // .NET AutomationTool cannot resolve assemblies through a Windows verbatim
+    // path (\\?\...). UE and its build tools need the ordinary native form.
+    let engine_root = editor_path(engine_root);
     let build_version = engine_root.join("Engine/Build/Build.version");
     let manifest: Value = serde_json::from_slice(&fs::read(build_version).ok()?).ok()?;
     let version = format!(
@@ -310,12 +321,26 @@ fn engine_from_path(path: &Path, source: &str) -> Option<UnrealEngine> {
 }
 
 fn path_key(path: &Path) -> String {
-    let value = path.to_string_lossy().replace('\\', "/");
+    let value = editor_path(path).to_string_lossy().replace('\\', "/");
     if cfg!(windows) {
         value.to_lowercase()
     } else {
         value
     }
+}
+
+fn editor_path(path: &Path) -> PathBuf {
+    #[cfg(windows)]
+    {
+        let value = path.to_string_lossy();
+        if let Some(unc) = value.strip_prefix(r"\\?\UNC\") {
+            return PathBuf::from(format!(r"\\{unc}"));
+        }
+        if let Some(value) = value.strip_prefix(r"\\?\") {
+            return PathBuf::from(value);
+        }
+    }
+    path.to_path_buf()
 }
 
 pub fn launch_target(state: &AppState, id: &str) -> Result<(UnrealProject, UnrealEngine), String> {
@@ -356,75 +381,13 @@ fn select_engine<'a>(
 }
 
 pub async fn install_plugin(state: &AppState, id: &str) -> Result<UnrealProject, String> {
-    let store = read_store(state)?;
-    let saved = store
-        .projects
-        .into_iter()
-        .find(|project| project.id == id)
-        .ok_or("请选择已添加的虚幻工程")?;
-    let (project_file, project_root) = canonical_project_file(&saved.path)?;
-    let destination = project_root.join("Plugins/UnrealAgentLink");
-    if destination.join("UnrealAgentLink.uplugin").is_file() {
-        enable_plugin_in_project(&project_file)?;
-        return project_from_file(saved.id, &project_file, saved.added_at);
+    let (project, engine) = launch_target(state, id)?;
+    if lolicode_agent::native::unreal::has_connection_for_project(Path::new(&project.path)).await {
+        return Err("请先保存并关闭此工程的 Unreal Editor，再安装或修复桥接插件".into());
     }
-    if destination.exists() {
-        return Err(
-            "Plugins/UnrealAgentLink 已存在，但缺少有效插件描述文件；为保护现有文件，没有覆盖它"
-                .into(),
-        );
-    }
-
-    let response = reqwest::Client::builder()
-        .connect_timeout(std::time::Duration::from_secs(15))
-        .timeout(std::time::Duration::from_secs(90))
-        .build()
-        .map_err(|_| "无法初始化插件下载")?
-        .get(UAL_ARCHIVE_URL)
-        .send()
-        .await
-        .map_err(|error| format!("下载 UnrealAgentLink 失败：{error}"))?;
-    if !response.status().is_success() {
-        return Err(format!(
-            "下载 UnrealAgentLink 返回 HTTP {}",
-            response.status()
-        ));
-    }
-    if response
-        .content_length()
-        .is_some_and(|size| size > MAX_ARCHIVE_BYTES as u64)
-    {
-        return Err("UnrealAgentLink 压缩包超过 96 MiB，已停止下载".into());
-    }
-    let bytes = response.bytes().await.map_err(|_| "插件压缩包下载中断")?;
-    if bytes.len() > MAX_ARCHIVE_BYTES {
-        return Err("UnrealAgentLink 压缩包超过 96 MiB，已停止安装".into());
-    }
-
-    let staging = project_root.join("Plugins").join(format!(
-        ".UnrealAgentLink-{}.staging",
-        Uuid::new_v4().simple()
-    ));
-    let staging_for_extract = staging.clone();
-    let archive = bytes.to_vec();
-    let extracted =
-        tokio::task::spawn_blocking(move || extract_plugin_archive(&archive, &staging_for_extract))
-            .await
-            .map_err(|_| "插件解压任务未完成")?;
-    if let Err(error) = extracted {
-        let _ = fs::remove_dir_all(&staging);
-        return Err(error);
-    }
-    fs::create_dir_all(destination.parent().ok_or("插件安装路径无效")?)
-        .map_err(|_| "无法创建项目 Plugins 目录")?;
-    fs::rename(&staging, &destination)
-        .map_err(|_| "无法将插件原子安装到项目；暂存目录已保留以便诊断")?;
-
-    if let Err(error) = enable_plugin_in_project(&project_file) {
-        let _ = fs::remove_dir_all(&destination);
-        return Err(error);
-    }
-    project_from_file(saved.id, &project_file, saved.added_at)
+    let (file, root) = canonical_project_file(&project.path)?;
+    plugin::install(&file, &root, &engine).await?;
+    project_from_file(project.id, &file, project.added_at)
 }
 
 fn extract_plugin_archive(bytes: &[u8], staging: &Path) -> Result<(), String> {
@@ -594,6 +557,128 @@ fn now_ms() -> u64 {
 mod tests {
     use super::*;
     use tempfile::tempdir;
+
+    /// Explicit opt-in: builds the real upstream plugin and launches only a
+    /// newly created, isolated project. Never uses the desktop user's database.
+    #[tokio::test]
+    #[ignore = "requires an installed Unreal Engine and C++ toolchain"]
+    async fn live_plugin_build_pair_and_read_command() -> Result<(), String> {
+        let root = PathBuf::from(
+            env::var("LOLICODE_UE_LIVE_ROOT")
+                .map_err(|_| "Set LOLICODE_UE_LIVE_ROOT to a fresh acceptance directory")?,
+        );
+        let directory = root.join("Game");
+        let reuse = env::var("LOLICODE_UE_LIVE_REUSE").as_deref() == Ok("1");
+        if !reuse {
+            fs::create_dir(&directory).map_err(|_| "Acceptance Game directory must not exist")?;
+        }
+        let engines = discover_engines();
+        let engine = engines.first().ok_or("No Unreal Engine found")?;
+        let association = engine
+            .version
+            .split('.')
+            .take(2)
+            .collect::<Vec<_>>()
+            .join(".");
+        let file = directory.join("LoliCodeBridgeAcceptance.uproject");
+        if reuse {
+            let fixture: Value =
+                serde_json::from_slice(&fs::read(&file).map_err(|e| e.to_string())?)
+                    .map_err(|e| e.to_string())?;
+            assert_eq!(
+                fixture["Description"],
+                "Isolated LoliCode bridge acceptance"
+            );
+        } else {
+            fs::write(&file,json!({"FileVersion":3,"EngineAssociation":association,"Description":"Isolated LoliCode bridge acceptance"}).to_string()).map_err(|e|e.to_string())?;
+        }
+        let state = AppState::new(std::sync::Arc::new(
+            crate::database::Database::memory().map_err(|e| e.to_string())?,
+        ));
+        let project = add_project(&state, file.to_str().ok_or("Invalid fixture path")?)?;
+        if !reuse {
+            assert!(!project.plugin_ready);
+        }
+        let installed = install_plugin(&state, &project.id).await?;
+        assert!(installed.plugin_ready && installed.plugin_enabled);
+        assert!(directory.join("Plugins/UnrealAgentLink/LICENSE").is_file());
+        assert!(file.with_extension("uproject.lolicode.bak").is_file());
+        let modules = directory
+            .join("Plugins/UnrealAgentLink/Binaries")
+            .join(if cfg!(windows) {
+                "Win64"
+            } else if cfg!(target_os = "macos") {
+                "Mac"
+            } else {
+                "Linux"
+            })
+            .join("UnrealEditor.modules");
+        let before = fs::metadata(&modules)
+            .map_err(|e| e.to_string())?
+            .modified()
+            .map_err(|e| e.to_string())?;
+        install_plugin(&state, &project.id).await?;
+        assert_eq!(fs::metadata(&modules).unwrap().modified().unwrap(), before);
+        let (token, url) = lolicode_agent::native::unreal::prepare_editor_launch(&file).await?;
+        let executable = if cfg!(windows) {
+            Path::new(&engine.editor_executable).with_file_name("UnrealEditor-Cmd.exe")
+        } else {
+            PathBuf::from(&engine.editor_executable)
+        };
+        let log = fs::File::create(root.join("editor.log")).map_err(|e| e.to_string())?;
+        let mut command = tokio::process::Command::new(executable);
+        command
+            .arg(&file)
+            .arg(format!("-UALServer={url}"))
+            .args([
+                "-unattended",
+                "-nullrhi",
+                "-nosplash",
+                "-nosound",
+                "-NoLiveCoding",
+            ])
+            .stdin(std::process::Stdio::null())
+            .stdout(log.try_clone().map_err(|e| e.to_string())?)
+            .stderr(log)
+            .kill_on_drop(true);
+        #[cfg(windows)]
+        command.creation_flags(0x08000000);
+        let mut editor = command.spawn().map_err(|e| e.to_string())?;
+        let connected = tokio::time::timeout(std::time::Duration::from_secs(240), async {
+            loop {
+                if lolicode_agent::native::unreal::has_connection_for_project(&file).await {
+                    return Ok::<(), String>(());
+                }
+                if let Some(status) = editor.try_wait().map_err(|e| e.to_string())? {
+                    return Err(format!("Isolated editor exited: {status}; see editor.log"));
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+            }
+        })
+        .await
+        .map_err(|_| "Isolated editor did not pair within 4 minutes; see editor.log")?;
+        connected?;
+        let (_cancel, receiver) = tokio::sync::watch::channel(false);
+        let info = lolicode_agent::native::unreal::request(
+            &directory,
+            "system.get_project_info",
+            &json!({}),
+            receiver,
+        )
+        .await?;
+        assert_eq!(info["project_name"], "LoliCodeBridgeAcceptance");
+        assert_eq!(info["ok"], true);
+        let _ = editor.kill().await;
+        lolicode_agent::native::unreal::cancel_editor_launch(&token);
+        let proof = json!({"passed":true,"engine":engine.version,"upstream":UAL_REVISION,"compiledAndBuildIdVerified":true,"repeatInstallDidNotRebuild":true,"realEditorPaired":true,"projectInfoRead":true,"projectDirectoryAnnouncementAccepted":true,"userDatabaseRead":false});
+        fs::write(
+            root.join("result.json"),
+            serde_json::to_vec_pretty(&proof).unwrap(),
+        )
+        .map_err(|e| e.to_string())?;
+        println!("{proof}");
+        Ok(())
+    }
 
     #[test]
     fn parallel_project_library_updates_keep_every_registered_project() {

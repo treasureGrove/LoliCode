@@ -4981,5 +4981,12 @@
     "bundled": "使用應用程式內建介面",
     "scope": "僅更新介面與互動；原生功能仍透過安裝包更新",
     "recover": "重新啟動並還原可用介面"
+  },
+  "unreal": {
+    "repairBridge": "修復並啟用橋接",
+    "pluginNeedsBuild": "模組尚未為目前引擎編譯，或版本不符",
+    "buildingBridge": "正在為此引擎編譯並驗證外掛，首次可能需要數分鐘；請保持編輯器關閉。",
+    "buildingBridgeShort": "正在準備橋接…",
+    "restartEditor": "外掛已編譯並啟用。請從本頁啟動編輯器以完成安全配對；直接開啟工程不會自動連接 LoliCode。原工程已備份為 .uproject.lolicode.bak。"
   }
 }

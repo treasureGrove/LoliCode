@@ -4240,7 +4240,7 @@
     "launchStarted": "正在启动 {{name}}",
     "launchFailed": "启动 Unreal Editor 失败",
     "pluginInstalled": "已为 {{name}} 安装并启用编辑器桥",
-    "restartEditor": "请重新启动 Unreal Editor 后连接生效；原工程文件备份为 .uproject.lolicode.bak。",
+    "restartEditor": "插件已编译并启用。请从本页启动编辑器以完成安全配对；直接打开工程不会自动连接 LoliCode。原工程文件已备份为 .uproject.lolicode.bak。",
     "pluginInstallFailed": "安装编辑器桥失败",
     "projectRemoved": "已从 LoliCode 移除 {{name}}",
     "removeFailed": "移除工程失败",
@@ -4273,7 +4273,11 @@
     "removeProject": "从工程库移除",
     "howItWorks": "桥接方式与权限",
     "howItWorksHint": "编辑器桥基于 UnrealAgentLink 的 MIT 许可插件，固定使用已审阅的开源版本。桥只监听 127.0.0.1，并通过本次启动的短期配对令牌验证编辑器；仅为当前工程开放一组经过筛选的读取与修改命令。任意 Python、控制台命令、退出编辑器和插件管理暂未开放。",
-    "configureModels": "配置模型与渠道"
+    "configureModels": "配置模型与渠道",
+    "repairBridge": "修复并启用桥",
+    "pluginNeedsBuild": "模块尚未为当前引擎编译，或版本不匹配",
+    "buildingBridge": "正在为此引擎编译并验证插件，首次可能需要几分钟；请保持编辑器关闭。",
+    "buildingBridgeShort": "正在准备桥…"
   },
   "appsPage": {
     "showInSidebar": "在侧栏显示 {{name}}",
