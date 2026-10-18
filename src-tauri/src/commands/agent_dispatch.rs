@@ -742,6 +742,7 @@ pub async fn list_agent_native_capabilities(app: AppHandle) -> Result<Value, Str
     // generic JS-plugin/MCP flags remain false until those runtimes exist.
     value["features"]["cliPlugins"] = json!(true);
     value["features"]["pluginMarketplace"] = json!(true);
+    value["features"]["remote"] = json!(true);
     Ok(value)
 }
 #[tauri::command(rename_all = "camelCase")]
@@ -777,7 +778,9 @@ pub async fn run_agent_saved_workflow(
     }
     let project_path = snapshot.session.project_path.clone();
     check_project(&app, &project_path)?;
-    let prompt = crate::services::agent_workflows::workflow_prompt(
+    let remote = app.state::<InprocessAgentState>().remote_projects(&app.state::<AppState>()).await;
+    let prompt = crate::services::agent_workflows::workflow_prompt_with_remote(
+        &remote,
         &project_path,
         &name,
         &scope,
@@ -805,7 +808,9 @@ pub async fn run_agent_saved_workflow(
 }
 #[tauri::command]
 pub async fn get_agent_native_activity(app: AppHandle) -> Result<Value, String> {
-    native(&app, "activity", json!({}), false).await
+    let mut value: Value = native(&app, "activity", json!({}), false).await?;
+    value["features"]["remote"] = json!(true);
+    Ok(value)
 }
 #[tauri::command(rename_all = "camelCase")]
 pub async fn invoke_agent_native_service(
@@ -855,13 +860,9 @@ pub async fn invoke_agent_remote(
     method: String,
     args: Option<Vec<Value>>,
 ) -> Result<Value, String> {
-    native(
-        &app,
-        "remote",
-        json!({"method":method,"args":args.unwrap_or_default()}),
-        true,
-    )
-    .await
+    let state = app.state::<AppState>();
+    let remote = app.state::<InprocessAgentState>().remote_projects(&state).await;
+    remote.invoke(&method, args.unwrap_or_default()).await
 }
 
 #[tauri::command]

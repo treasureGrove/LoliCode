@@ -118,10 +118,15 @@ beforeEach(() => {
     .mockReset()
     .mockImplementation(async (method) =>
       method === "list"
-        ? []
+        ? { connections: [], projects: [] }
         : method === "listWSL"
-          ? [{ name: "Ubuntu" }]
-          : { id: "remote-owned", kind: "ssh", state: "connected" },
+          ? ["Ubuntu"]
+          : {
+              id: "remote-owned",
+              name: "Owned SSH",
+              target: { kind: "ssh", host: "owned-alias" },
+              enabled: true,
+            },
     );
   vi.mocked(agentApi.createSession).mockReset().mockResolvedValue(session);
   vi.mocked(agentApi.runSavedWorkflow).mockReset().mockResolvedValue(session);
@@ -580,7 +585,7 @@ describe("native workflow / automation / remote entry", () => {
     let finish!: (value: unknown) => void;
     vi.mocked(agentApi.remote).mockImplementation(async (method) =>
       method === "list"
-        ? []
+        ? { connections: [], projects: [] }
         : new Promise((resolve) => {
             finish = resolve;
           }),
@@ -593,21 +598,21 @@ describe("native workflow / automation / remote entry", () => {
     fireEvent.change(screen.getByLabelText("SSH 主机或别名"), {
       target: { value: "owned-alias" },
     });
-    fireEvent.change(screen.getByLabelText("SSH 密码"), {
-      target: { value: "owned-private-password" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "连接环境" }));
+    expect(screen.queryByLabelText("SSH 密码")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "验证并保存连接" }));
     await flush();
     view.rerender(<AgentOperationsPanel {...options} open={false} />);
     await flush();
     view.rerender(<AgentOperationsPanel {...options} open />);
     await flush();
-    expect(screen.getByRole("button", { name: "连接环境" })).toBeDisabled();
-    expect(JSON.stringify(localStorage)).not.toContain(
-      "owned-private-password",
-    );
+    expect(screen.getByRole("button", { name: "正在处理…" })).toBeDisabled();
     await act(async () =>
-      finish({ id: "remote-owned", kind: "ssh", state: "connected" }),
+      finish({
+        id: "remote-owned",
+        name: "Owned SSH",
+        target: { kind: "ssh", host: "owned-alias" },
+        enabled: true,
+      }),
     );
     await flush();
     expect(
@@ -615,322 +620,103 @@ describe("native workflow / automation / remote entry", () => {
         .mocked(agentApi.remote)
         .mock.calls.filter(([method]) => method === "connect"),
     ).toHaveLength(1);
+    expect(localStorage.length).toBe(0);
   });
-  it("preserves SSH aliases and native model options, and responds to remote permission and multi-select questions", async () => {
-    let permissions = true;
-    let questions = true;
-    let lastRequest = "";
-    let firstTransportFailure = false;
-    let firstStopFailure = false;
-    let completeSend: (() => void) | undefined;
-    let heldSend = false;
-    vi.mocked(agentApi.remote).mockImplementation(async (method) =>
-      method === "list"
-        ? [{ id: "remote-owned", kind: "ssh", state: "connected" }]
-        : { id: "remote-owned", kind: "ssh", state: "connected" },
-    );
-    vi.mocked(agentApi.native).mockImplementation(
-      async (_service, method, args) => {
-        if (method === "listSavedWorkflows")
-          return { workflows: [], invalid: [] };
-        if (method === "listSavedWorkflowRuns") return { runs: [] };
-        if (method === "sendPrompt") {
-          if (firstTransportFailure) {
-            firstTransportFailure = false;
-            throw new Error("remote response lost");
-          }
-          if (heldSend)
-            await new Promise<void>((resolve) => {
-              completeSend = resolve;
-            });
-          lastRequest = (args?.[0] as { traceId: string }).traceId;
-          return undefined;
-        }
-        if (method === "readSessionMessages")
-          return lastRequest
-            ? [
-                {
-                  info: {
-                    role: "user",
-                    messageId: "different-native-message-id",
-                    anchor: { sourceCommandId: lastRequest },
-                  },
-                },
-              ]
-            : [];
-        if (method === "stopGeneration") {
-          if (firstStopFailure) {
-            firstStopFailure = false;
-            throw new Error("stop response lost");
-          }
-          return true;
-        }
-        if (method === "initialize") return { available: true };
-        if (method === "getView")
-          return {
-            providers: [
-              {
-                providerId: "remote-provider",
-                providerName: "Remote Fixture",
-                models: [
-                  {
-                    modelId: "source/model",
-                    config: {
-                      optionSpecs: {
-                        reasoningLevel: {
-                          values: ["low", "high"],
-                          default: "high",
-                        },
-                      },
-                    },
-                  },
-                ],
-              },
-            ],
-          };
-        if (method === "listTasks")
-          return [{ taskId: "task-owned", title: "Remote task" }];
-        if (method === "createTask") return { taskId: "task-owned" };
-        if (method === "getTaskSnapshot")
-          return {
-            meta: {
-              taskId: "task-owned",
-              title: "Remote task",
-              status: permissions || questions ? "running" : "completed",
-            },
-            messages: [
-              {
-                id: "native-message-id",
-                role: "assistant",
-                content: "真实远程快照 fixture",
-              },
-            ],
-            runtime: {
-              pendingPermissions: permissions
-                ? [
-                    {
-                      requestId: "perm-owned",
-                      traceId: "turn-owned",
-                      description: "允许读取远端文件？",
-                      raw: {
-                        input: {
-                          command: "node --version",
-                          cwd: "/owned/project",
-                          apiKey: "not-a-display-field",
-                        },
-                      },
-                      options: [
-                        {
-                          optionId: "once",
-                          name: "原生允许一次",
-                          response: { behavior: "allow" },
-                        },
-                      ],
-                    },
-                  ]
-                : [],
-              pendingElicitations: questions
-                ? [
-                    {
-                      requestId: "question-owned",
-                      traceId: "turn-owned",
-                      message: "选择检查项",
-                      questions: [
-                        {
-                          question: "检查哪些文件？",
-                          multiSelect: true,
-                          options: [
-                            { value: "src", label: "源码" },
-                            { value: "tests", label: "测试" },
-                          ],
-                        },
-                      ],
-                    },
-                  ]
-                : [],
-            },
-          };
-        if (method === "respondPermission") {
-          permissions = false;
-          return true;
-        }
-        if (method === "respondElicitation") {
-          questions = false;
-          return true;
-        }
-        return {};
-      },
-    );
-    render(<AgentOperationsPanel {...props()} />);
+
+  it("opens SSH projects in the main workbench without initializing a second Agent service", async () => {
+    const connection = {
+      id: "remote-owned",
+      name: "Owned SSH",
+      target: { kind: "ssh", host: "owned-alias" },
+      enabled: true,
+    };
+    const remoteProject = {
+      id: "owned-project",
+      connectionId: connection.id,
+      name: "site",
+      root: "/home/dev/site",
+      path: "D:/private/anchors/owned-project",
+    };
+    vi.mocked(agentApi.remote).mockImplementation(async (method) => {
+      if (method === "list")
+        return { connections: [connection], projects: [remoteProject] };
+      if (method === "openProject") return remoteProject;
+      return connection;
+    });
+    const onOpenProject = vi.fn();
+    const options = { ...props(), onOpenProject };
+    render(<AgentOperationsPanel {...options} />);
     await flush();
     fireEvent.click(screen.getByRole("tab", { name: "SSH / WSL" }));
     await flush();
-    fireEvent.change(screen.getByLabelText("SSH 主机或别名"), {
-      target: { value: "owned-alias" },
+    fireEvent.change(screen.getByLabelText("远程项目目录"), {
+      target: { value: "/home/dev/site" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "连接环境" }));
+    fireEvent.click(screen.getByRole("button", { name: "在工作台打开" }));
     await flush();
-    const target = vi
-      .mocked(agentApi.remote)
-      .mock.calls.find(([method]) => method === "connect")?.[1]?.[0] as {
-      target: Record<string, unknown>;
+    expect(agentApi.remote).toHaveBeenCalledWith("openProject", [
+      connection.id,
+      "/home/dev/site",
+    ]);
+    expect(onOpenProject).toHaveBeenCalledWith(remoteProject.path);
+    expect(options.onOpenChange).toHaveBeenCalledWith(false);
+    expect(
+      vi
+        .mocked(agentApi.native)
+        .mock.calls.some(
+          ([service, method]) =>
+            service === "IZCodeTaskService" || method === "initialize",
+        ),
+    ).toBe(false);
+    expect(screen.queryByText("远程任务")).not.toBeInTheDocument();
+  });
+
+  it("keeps disconnected projects visible, supports explicit reconnect and manual WSL names after discovery fails", async () => {
+    const connection = {
+      id: "remote-owned",
+      name: "Owned SSH",
+      target: { kind: "ssh", host: "owned-alias" },
+      enabled: false,
     };
-    expect(target.target).toEqual({
-      kind: "ssh",
-      host: "owned-alias",
-      sshConfigAlias: "owned-alias",
+    vi.mocked(agentApi.remote).mockImplementation(async (method) => {
+      if (method === "list")
+        return {
+          connections: [connection],
+          projects: [
+            {
+              id: "p",
+              connectionId: connection.id,
+              name: "site",
+              root: "/home/dev/site",
+              path: "D:/private/anchors/p",
+            },
+          ],
+        };
+      if (method === "listWSL") throw new Error("WSL 环境未就绪");
+      if (method === "reconnect") {
+        connection.enabled = true;
+        return connection;
+      }
+      return connection;
     });
-    fireEvent.change(screen.getByLabelText("远程工作目录"), {
-      target: { value: "C:\\not-supported" },
+    render(
+      <AgentOperationsPanel
+        {...props()}
+        onOpenProject={vi.fn()}
+        initialTab="remote"
+      />,
+    );
+    await flush();
+    expect(screen.getByRole("button", { name: "打开工程" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "重新连接" }));
+    await flush();
+    expect(agentApi.remote).toHaveBeenCalledWith("reconnect", [connection.id]);
+    expect(screen.getByRole("button", { name: "打开工程" })).toBeEnabled();
+    fireEvent.change(screen.getByLabelText("远程连接类型"), {
+      target: { value: "wsl" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "打开远程项目" }));
     await flush();
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      "暂不支持 Windows 远端",
-    );
-    expect(agentApi.native).not.toHaveBeenCalledWith(
-      "IZCodeAgentService",
-      "initialize",
-      expect.anything(),
-      expect.anything(),
-    );
-    fireEvent.change(screen.getByLabelText("远程工作目录"), {
-      target: { value: "/owned/project" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "打开远程项目" }));
-    await flush();
-    fireEvent.click(screen.getByRole("button", { name: "新建远程会话" }));
-    await flush();
-    expect(
-      screen.getByText("尚未发送的远程草稿，首次发送后保存。"),
-    ).toBeInTheDocument();
-    expect(
-      vi
-        .mocked(agentApi.native)
-        .mock.calls.filter(([, method]) => method === "getTaskSnapshot"),
-    ).toHaveLength(0);
-    fireEvent.change(screen.getByLabelText("远程任务内容"), {
-      target: { value: "bootstrap input" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "发送到远程会话" }));
-    await flush();
-    expect(agentApi.native).toHaveBeenCalledWith(
-      "IZCodeTaskService",
-      "createTask",
-      [
-        {
-          workspacePath: "/owned/project",
-          mode: "build",
-          v4Create: true,
-          deferPersistenceUntilFirstPrompt: true,
-          modelSelection: {
-            providerId: "remote-provider",
-            modelId: "source/model",
-            options: { reasoningLevel: "high" },
-          },
-        },
-      ],
-      { remoteId: "remote-owned" },
-    );
-    expect(screen.getByText("真实远程快照 fixture")).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        (_, node) =>
-          node?.tagName === "PRE" &&
-          node.textContent ===
-            "命令\nnode --version\n\n工作目录\n/owned/project",
-      ),
-    ).toBeInTheDocument();
-    expect(screen.queryByText(/not-a-display-field/)).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "原生允许一次" }));
-    await flush();
-    expect(agentApi.native).toHaveBeenCalledWith(
-      "IZCodeTaskService",
-      "respondPermission",
-      [
-        {
-          taskId: "task-owned",
-          workspacePath: "/owned/project",
-          requestId: "perm-owned",
-          runId: "turn-owned",
-          optionId: "once",
-          response: { behavior: "allow" },
-        },
-      ],
-      { remoteId: "remote-owned" },
-    );
-    fireEvent.click(screen.getByRole("checkbox", { name: /：源码$/ }));
-    fireEvent.click(screen.getByRole("checkbox", { name: /：测试$/ }));
-    fireEvent.click(screen.getByRole("button", { name: "提交答案" }));
-    await flush();
-    expect(agentApi.native).toHaveBeenCalledWith(
-      "IZCodeTaskService",
-      "respondElicitation",
-      [
-        expect.objectContaining({
-          requestId: "question-owned",
-          action: "accept",
-          content: { answer_0: ["src", "tests"] },
-        }),
-      ],
-      { remoteId: "remote-owned" },
-    );
-    firstTransportFailure = true;
-    fireEvent.change(screen.getByLabelText("远程任务内容"), {
-      target: { value: "first input" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "发送到远程会话" }));
-    await flush();
-    expect(screen.getByRole("alert")).toHaveTextContent("remote response lost");
-    fireEvent.click(screen.getByRole("button", { name: "发送到远程会话" }));
-    await flush();
-    const sends = vi
-      .mocked(agentApi.native)
-      .mock.calls.filter(
-        ([, method, args]) =>
-          method === "sendPrompt" &&
-          (args?.[0] as { content: string }).content === "first input",
-      );
-    expect(sends).toHaveLength(2);
-    expect(sends[1][2]).toEqual(sends[0][2]);
-    await tick();
-    expect(
-      localStorage.getItem(
-        'lolicode.remote-input:["remote-owned","/owned/project","task-owned"]',
-      ),
-    ).toBeNull();
-    fireEvent.change(screen.getByLabelText("远程任务内容"), {
-      target: { value: "second input" },
-    });
-    heldSend = true;
-    firstStopFailure = true;
-    fireEvent.click(screen.getByRole("button", { name: "发送到远程会话" }));
-    await flush();
-    expect(
-      screen.getByRole("button", { name: "发送到远程会话" }),
-    ).toBeDisabled();
-    fireEvent.click(screen.getByRole("button", { name: "停止远程任务" }));
-    await flush();
-    expect(agentApi.native).toHaveBeenCalledWith(
-      "IZCodeTaskService",
-      "stopGeneration",
-      [{ taskId: "task-owned", workspacePath: "/owned/project" }],
-      { remoteId: "remote-owned" },
-    );
-    await tick();
-    const receiptKey =
-      'lolicode.remote-input:["remote-owned","/owned/project","task-owned"]';
-    expect(
-      JSON.parse(localStorage.getItem(receiptKey) || "null"),
-    ).toMatchObject({ stopRequested: true, stopAcknowledged: false });
-    await act(async () => completeSend?.());
-    await flush();
-    await tick();
-    expect(
-      vi
-        .mocked(agentApi.native)
-        .mock.calls.filter(([, method]) => method === "stopGeneration"),
-    ).toHaveLength(2);
-    expect(localStorage.getItem(receiptKey)).toBeNull();
+    expect(screen.getByRole("alert")).toHaveTextContent("WSL 环境未就绪");
+    expect(screen.getByLabelText("WSL 发行版")).toBeEnabled();
   });
 });

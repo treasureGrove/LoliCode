@@ -9,6 +9,7 @@ export interface AgentFilePreview {
   dataUrl?: string;
   truncated: boolean;
   sizeBytes: number;
+  remote?: boolean;
 }
 
 export const agentFilesApi = {

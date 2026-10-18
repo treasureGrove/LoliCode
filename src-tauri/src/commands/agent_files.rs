@@ -6,7 +6,7 @@ use std::{
     io::Read,
     path::{Path, PathBuf},
 };
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 use tauri_plugin_opener::OpenerExt;
 
 const MAX_BYTES: u64 = 10 * 1024 * 1024;
@@ -15,6 +15,13 @@ const MAX_TEXT_BYTES: usize = 2 * 1024 * 1024;
 /// Open a selected agent project directory in the system file manager.
 #[tauri::command]
 pub async fn open_agent_project_directory(app: AppHandle, path: String) -> Result<(), String> {
+    let remote = app
+        .state::<crate::services::inprocess_agent::InprocessAgentState>()
+        .remote_projects(&app.state::<crate::store::AppState>())
+        .await;
+    if remote.owns(Path::new(&path)) {
+        return Err("这是远程工程，请在 SSH / WSL 中管理连接；不会打开本地占位目录".into());
+    }
     let directory = tokio::task::spawn_blocking(move || {
         let path = PathBuf::from(path);
         if !path.is_absolute() {
@@ -49,6 +56,7 @@ pub struct AgentFilePreview {
     data_url: Option<String>,
     truncated: bool,
     size_bytes: u64,
+    remote: bool,
 }
 
 fn resolve(project: &Path, value: &str) -> Result<(PathBuf, PathBuf), String> {
@@ -138,13 +146,24 @@ fn read_preview(project: &Path, value: &str) -> Result<AgentFilePreview, String>
     if bytes.len() as u64 > MAX_BYTES {
         return Err("文件超过预览大小限制".into());
     }
+    let relative = path
+        .strip_prefix(&root)
+        .unwrap_or(&path)
+        .to_string_lossy()
+        .replace('\\', "/");
+    preview_bytes(&relative, bytes, metadata.len(), false)
+}
+
+pub(crate) fn preview_bytes(
+    path_string: &str,
+    mut bytes: Vec<u8>,
+    size: u64,
+    remote: bool,
+) -> Result<AgentFilePreview, String> {
+    let path = Path::new(path_string);
     let mut result = AgentFilePreview {
         kind: "text",
-        path: path
-            .strip_prefix(&root)
-            .unwrap_or(&path)
-            .to_string_lossy()
-            .replace('\\', "/"),
+        path: path_string.to_owned(),
         name: path
             .file_name()
             .unwrap_or_default()
@@ -154,12 +173,18 @@ fn read_preview(project: &Path, value: &str) -> Result<AgentFilePreview, String>
         content: None,
         data_url: None,
         truncated: false,
-        size_bytes: metadata.len(),
+        size_bytes: size,
+        remote,
     };
     if let Some(mime) = super::agent_images::image_media_type(&bytes) {
         result.kind = "image";
         result.mime_type = mime.into();
-        result.data_url = Some(format!("data:{mime};base64,{}", STANDARD.encode(&bytes)));
+        let encoded = STANDARD.encode(&bytes);
+        result.data_url = Some(if remote {
+            crate::services::remote_agent_tools::image_data_url(&encoded)?
+        } else {
+            format!("data:{mime};base64,{encoded}")
+        });
         return Ok(result);
     }
     let html = path
@@ -195,6 +220,15 @@ pub async fn preview_agent_file(
     path: String,
 ) -> Result<AgentFilePreview, String> {
     let project = super::agent_dispatch::session_project(&app, &session_id).await?;
+    let remote = app
+        .state::<crate::services::inprocess_agent::InprocessAgentState>()
+        .remote_projects(&app.state::<crate::store::AppState>())
+        .await;
+    if remote.owns(Path::new(&project)) {
+        let (path, bytes) = remote.preview_bytes(Path::new(&project), &path).await?;
+        let size = bytes.len() as u64;
+        return preview_bytes(&path, bytes, size, true);
+    }
     tokio::task::spawn_blocking(move || read_preview(Path::new(&project), &path))
         .await
         .map_err(|_| "文件预览未完成，请重试".to_string())?
@@ -252,6 +286,16 @@ pub async fn open_agent_path(
         return Err("无法识别文件操作".into());
     }
     let project = super::agent_dispatch::session_project(&app, &session_id).await?;
+    let remote = app
+        .state::<crate::services::inprocess_agent::InprocessAgentState>()
+        .remote_projects(&app.state::<crate::store::AppState>())
+        .await;
+    if remote.owns(Path::new(&project)) {
+        return Err(
+            "这是远程文件，可在右侧预览或通过主 Agent 编辑；不能用本机文件管理器打开远端路径"
+                .into(),
+        );
+    }
     let (root, target) = resolve_action(Path::new(&project), &path, &action)?;
     if action == "directory" || target.is_dir() {
         let directory = if target.is_dir() {
@@ -348,6 +392,36 @@ fn safe_viewer(root: &Path, path: &Path) -> Result<bool, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn remote_previews_require_decodable_rasters_and_preserve_text_without_numbering() {
+        let bad_png = b"\x89PNG\r\n\x1a\ntruncated".to_vec();
+        assert!(preview_bytes("bad.png", bad_png, 17, true).is_err());
+        let html = "<h1>远程预览</h1>\r\n<script>not executed here</script>";
+        let preview = preview_bytes(
+            "index.html",
+            html.as_bytes().to_vec(),
+            html.len() as u64,
+            true,
+        )
+        .unwrap();
+        assert!(preview.remote);
+        assert_eq!(preview.kind, "html");
+        assert_eq!(preview.content.as_deref(), Some(html));
+        let mut image = Vec::new();
+        {
+            let mut encoder = png::Encoder::new(&mut image, 1, 1);
+            encoder.set_color(png::ColorType::Rgba);
+            let mut writer = encoder.write_header().unwrap();
+            writer.write_image_data(&[255, 128, 0, 255]).unwrap();
+            writer.finish().unwrap();
+        }
+        let length = image.len() as u64;
+        assert!(preview_bytes("image.png", image, length, true)
+            .unwrap()
+            .data_url
+            .unwrap()
+            .starts_with("data:image/png;base64,"));
+    }
     #[test]
     fn real_project_html_images_and_source_are_typed_without_asset_access() {
         let dir = tempfile::tempdir().unwrap();

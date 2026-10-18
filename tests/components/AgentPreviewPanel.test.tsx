@@ -33,17 +33,41 @@ const file = (values: Partial<AgentFilePreview> = {}): AgentFilePreview => ({
   ...values,
 });
 beforeEach(() => {
-  vi.mocked(invoke)
-    .mockReset()
-    .mockResolvedValue({
-      dataUrl: "data:image/png;base64,aGVsbG8=",
-      mediaType: "image/png",
-    });
+  vi.mocked(invoke).mockReset().mockResolvedValue({
+    dataUrl: "data:image/png;base64,aGVsbG8=",
+    mediaType: "image/png",
+  });
   vi.mocked(agentFilesApi.preview).mockReset().mockResolvedValue(file());
   vi.mocked(agentFilesApi.open).mockReset().mockResolvedValue();
 });
 
 describe("Agent file previews", () => {
+  it("previews remote HTML through the same isolated renderer and never invokes local open actions", async () => {
+    vi.mocked(agentFilesApi.preview).mockResolvedValue(
+      file({
+        kind: "html",
+        name: "remote.html",
+        remote: true,
+        content: "<h1>Remote content</h1><script>doNotRun()</script>",
+      }),
+    );
+    render(
+      <AgentPreviewPanel
+        sessionId="lc:remote"
+        path="remote.html"
+        onClose={vi.fn()}
+      />,
+    );
+    await screen.findByText(/远程文件以只读方式预览/);
+    expect(screen.getByRole("button", { name: "打开预览文件" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "打开预览所在文件夹" }),
+    ).toBeDisabled();
+    const frame = document.querySelector("iframe")!;
+    expect(frame.getAttribute("sandbox")).not.toContain("allow-scripts");
+    expect(frame.getAttribute("srcdoc")).not.toContain("doNotRun");
+    expect(agentFilesApi.open).not.toHaveBeenCalled();
+  });
   it("does not read a file until the user submits its path", async () => {
     render(
       <AgentPreviewPanel sessionId="lc:session" path="" onClose={vi.fn()} />,

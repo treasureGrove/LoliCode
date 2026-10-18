@@ -29,6 +29,8 @@ export function AgentOperationsPanel({
   working,
   onSession,
   onCompose,
+  onOpenProject,
+  initialTab,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -37,10 +39,15 @@ export function AgentOperationsPanel({
   working: boolean;
   onSession: (session: AgentSession) => void;
   onCompose: (text: string) => void;
+  onOpenProject?: (path: string) => void | Promise<void>;
+  initialTab?: "workflows" | "automation" | "remote";
 }) {
   const [tab, setTab] = useState<"workflows" | "automation" | "remote">(
     "workflows",
   );
+  useEffect(() => {
+    if (open && initialTab) setTab(initialTab);
+  }, [open, initialTab]);
   const windowControls = useContext(WindowControlsContext);
   const [activity, setActivity] = useState<AgentNativeActivity | null>(null);
   const [capabilityError, setCapabilityError] = useState<string | null>(null);
@@ -157,14 +164,20 @@ export function AgentOperationsPanel({
             supported(tab) &&
             (tab === "remote" ? (
               <AgentRemotePanel
-                catalog={catalog}
-                projectOpen={Boolean(projectPath)}
+                onOpenProject={
+                  onOpenProject
+                    ? async (path) => {
+                        onOpenChange(false);
+                        await onOpenProject(path);
+                      }
+                    : undefined
+                }
               />
             ) : !projectPath ? (
               <p className="wb-extension-hint">
                 {tab === "workflows"
-                  ? "请先在工作台打开一个本地项目，再管理或运行该项目的工作流。"
-                  : "自动化任务按本地项目保存。请先在工作台打开一个本地项目。"}
+                  ? "请先在工作台打开一个项目，再管理或运行该项目的工作流。"
+                  : "自动化任务按项目保存。请先在工作台打开一个项目。"}
               </p>
             ) : tab === "workflows" ? (
               <AgentWorkflowPanel

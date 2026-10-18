@@ -44,6 +44,7 @@ export interface AgentCatalog {
 export interface AgentWorkspace {
   path: string;
   name: string;
+  remote?: { connectionName: string; root: string; kind: "ssh" | "wsl" };
 }
 
 export interface AgentProject extends AgentWorkspace {

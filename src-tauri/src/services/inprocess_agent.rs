@@ -83,7 +83,7 @@ impl InprocessAgentState {
         }).await.clone()
     }
 
-    async fn validate_remote_project(&self, state: &AppState, path: &Path) -> Result<Option<String>, String> {
+    async fn validate_remote_project(&self, state: &AppState, path: &Path) -> Result<Option<super::agent_host::RemoteWorkspace>, String> {
         let remote = self.remote_projects(state).await;
         if !remote.owns(path) { return Ok(None); }
         let resolved = remote.resolve(path)?;
@@ -92,7 +92,10 @@ impl InprocessAgentState {
         if checked["root"].as_str() != Some(&resolved.project.root) {
             return Err("远程项目目录已改变，请在 SSH / WSL 中重新选择项目".into());
         }
-        Ok(Some(format!("{} · {}", resolved.connection.name, resolved.project.name)))
+        Ok(Some(super::agent_host::RemoteWorkspace {
+            connection_name: resolved.connection.name, root: resolved.project.root,
+            kind: match resolved.connection.target { super::remote_transport::RemoteTarget::Ssh{..} => "ssh", super::remote_transport::RemoteTarget::Wsl{..} => "wsl" }.into(),
+        }))
     }
 
     pub async fn bind_background_project(
@@ -378,7 +381,10 @@ impl InprocessAgentState {
         {
             return Err("返回项目与所选目录不一致".into());
         }
-        if let Some(name) = remote_name { result.workspace.name = name; }
+        if let Some(remote) = remote_name {
+            result.workspace.name = format!("{} · {}",remote.connection_name,remote.root.rsplit('/').next().filter(|s|!s.is_empty()).unwrap_or("/"));
+            result.workspace.remote = Some(remote);
+        }
         let mut navigation = preferences::load(&state.db)?;
         let key = preferences::path_key(&result.workspace.path);
         let pinned = navigation.projects.get(&key).is_some_and(|p| p.pinned);

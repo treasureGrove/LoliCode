@@ -71,3 +71,8 @@ C:/Users/admin/.cargo/bin/cargo.exe run --manifest-path src-tauri/Cargo.toml --f
 成功证据包括实际远端 JS 回读、本体累计差异及存储重开保留、真实 PNG 作为视觉输入进入下一次模型请求、仅写入发生一次范围明确的权限确认、本体打断后 `/proc` 确认测试命令停止、断开保留绑定但拒绝执行，以及安全清理成功。初次验收错误要求只读调用也弹权限，修正脚本期望后重验通过；失败证据未覆盖。
 
 `lolicode_remote_transport_acceptance` 另做传输全量回归，`remote-host-transport-regression.json` 验证远端规范根目录被 symlink 重定向时，修改在写入前拒绝，原文件仍保留；其他读写、并发 CAS、超时、取消、断线和图片字节回归仍通过。以上不能替代远程 UI/IPC、预览、工作流与自动化耦合、WSL 或真实模型选择工具；完整功能保持未通过，见[持续验收](continuous-acceptance.md)。
+
+
+### 远程入口、预览与工作流扩展
+
+同一 lolicode_remote_agent_acceptance 命令现增加连接去重、远端项目工作流 CRUD/CAS/原文保留、生产 workflow_prompt 与运行回执无重放，以及远程 JS/PNG 预览和根目录范围验证。最新独立证据为 release/acceptance/remote-ui-real-ssh.json，passed=true、cleanupConfirmed=true；真实 SSH，5 次本地确定性模型请求，0 次外部提供商请求。远程页面已经接入桌面，预览和本地打开动作按远端身份区分；上述命令没有操作桌面按钮/IPC，也没有触发远程定时/闲时任务或验证真实 WSL，不能据此标记完整 A11 通过。

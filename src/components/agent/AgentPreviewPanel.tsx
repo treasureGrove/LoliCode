@@ -163,8 +163,12 @@ export function AgentPreviewPanel({
           <button
             type="button"
             aria-label="打开预览文件"
-            title="在默认应用中打开"
-            disabled={!requestedPath}
+            title={
+              preview?.remote
+                ? "远程文件可在此预览或通过主 Agent 编辑"
+                : "在默认应用中打开"
+            }
+            disabled={!requestedPath || preview?.remote}
             onClick={() => void open("file")}
           >
             <ExternalLink size={15} />
@@ -172,8 +176,12 @@ export function AgentPreviewPanel({
           <button
             type="button"
             aria-label="打开预览所在文件夹"
-            title="打开所在文件夹"
-            disabled={!requestedPath}
+            title={
+              preview?.remote
+                ? "远程目录请通过 SSH / WSL 管理"
+                : "打开所在文件夹"
+            }
+            disabled={!requestedPath || preview?.remote}
             onClick={() => void open("directory")}
           >
             <FolderOpen size={15} />
@@ -244,7 +252,9 @@ export function AgentPreviewPanel({
             <ChevronDown size={11} aria-hidden="true" />
           </summary>
           <p className="wb-preview-note">
-            静态预览不执行脚本或加载外部依赖；交互页面可打开文件在浏览器中运行。
+            {preview?.remote
+              ? "远程文件以只读方式预览，不执行脚本或加载外部依赖；可通过主 Agent 编辑。"
+              : "静态预览不执行脚本或加载外部依赖；交互页面可打开文件在浏览器中运行。"}
           </p>
         </details>
       </div>

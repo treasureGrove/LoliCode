@@ -375,6 +375,79 @@ def walk_files(root_fd, recursive):
             os.close(fd)
 
 
+def workflow_operation(root, root_fd, operation, args):
+    fields(args, ('name', 'document', 'expectedDocument', 'overwrite'))
+    name = args.get('name')
+    if operation != 'workflow_list':
+        name = text(name, 160, True)
+        if name in ('.', '..') or any(ch in name for ch in '/\\:') or any(ord(ch) < 32 for ch in name):
+            reject('INVALID_REQUEST')
+    parts = ['.zcode', 'workflows']
+    if operation == 'workflow_save':
+        text(args.get('document'), 256 * 1024, True)
+        if args.get('overwrite') is True:
+            text(args.get('expectedDocument'), 256 * 1024)
+        elif 'expectedDocument' in args or args.get('overwrite', False) is not False:
+            reject('INVALID_REQUEST')
+        # Create only the fixed workflow directories, never arbitrary paths.
+        fd = os.dup(root_fd)
+        try:
+            for component in parts:
+                checkpoint()
+                try:
+                    os.mkdir(component, mode=0o700, dir_fd=fd)
+                except FileExistsError:
+                    pass
+                child = os.open(component, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+                os.close(fd)
+                fd = child
+        finally:
+            os.close(fd)
+        replace_file(root, root_fd, parts + [name + '.md'], 'write_file', {'content': args['document'], 'expected_content': args.get('expectedDocument')})
+        return {'ok': True}
+    try:
+        fd = directory(root_fd, parts)
+    except FileNotFoundError:
+        if operation == 'workflow_list':
+            return {'documents': [], 'truncated': False}
+        raise
+    try:
+        if operation == 'workflow_list':
+            documents = []
+            size = 0
+            truncated = False
+            for parent_fd, basename, _, kind in walk_files(fd, False):
+                if kind != 'file' or not basename.endswith('.md'):
+                    continue
+                if len(documents) >= 200:
+                    truncated = True
+                    break
+                try:
+                    data, _ = file_bytes(parent_fd, basename, 256 * 1024)
+                    entry = {'name': basename[:-3], 'document': utf8(data)}
+                except (Rejected, OSError):
+                    entry = {'name': basename[:-3], 'error': '文件无法读取、不是 UTF-8 或超过 256 KiB'}
+                size += len(json.dumps(entry, ensure_ascii=True).encode('ascii'))
+                if size > 4 * 1024 * 1024:
+                    truncated = True
+                    break
+                documents.append(entry)
+            return {'documents': documents, 'truncated': truncated}
+        if operation == 'workflow_read':
+            data, _ = file_bytes(fd, name + '.md', 256 * 1024)
+            return {'document': utf8(data)}
+        if operation == 'workflow_delete':
+            with write_lock(root, parts + [name + '.md']):
+                file_bytes(fd, name + '.md', 256 * 1024)
+                checkpoint()
+                os.unlink(name + '.md', dir_fd=fd)
+                os.fsync(fd)
+            return {'ok': True}
+        reject('UNKNOWN_OPERATION')
+    finally:
+        os.close(fd)
+
+
 def project_operation(request):
     operation = request['operation']
     root = text(request.get('root'), 4096, True)
@@ -389,10 +462,14 @@ def project_operation(request):
     root_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     try:
         args = request.get('args', {})
+        if operation in ('workflow_list', 'workflow_read', 'workflow_save', 'workflow_delete'):
+            checkpoint()
+            return workflow_operation(root, root_fd, operation, args)
         choices = {
             'open_project': ((), ()),
             'read_file': (('path', 'offset', 'limit'), ('path',)),
             'view_image': (('path',), ('path',)),
+            'preview_file': (('path',), ('path',)),
             'list_files': (('path', 'recursive'), ()),
             'search_files': (('path', 'pattern', 'max_results'), ('pattern',)),
             'write_file': (('path', 'content', 'expected_content'), ('path', 'content', 'expected_content')),
@@ -410,9 +487,11 @@ def project_operation(request):
         parts = path_parts(args.get('path', '.'))
         if operation in ('write_file', 'apply_patch'):
             return replace_file(root, root_fd, parts, operation, args)
-        if operation in ('read_file', 'view_image'):
+        if operation in ('read_file', 'view_image', 'preview_file'):
             with parent(root_fd, parts) as (fd, name):
-                data, _ = file_bytes(fd, name, MAX_IMAGE if operation == 'view_image' else MAX_FILE)
+                data, _ = file_bytes(fd, name, MAX_FILE if operation == 'read_file' else MAX_IMAGE)
+            if operation == 'preview_file':
+                return {'base64': base64.b64encode(data).decode('ascii'), 'size': len(data)}
             if operation == 'view_image':
                 return {'imageBase64': base64.b64encode(data).decode('ascii'), 'fileChanges': []}
             value = utf8(data)

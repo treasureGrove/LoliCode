@@ -95,6 +95,8 @@ pub mod agent_test_support {
     };
     pub use crate::services::agent_workflows::{
         invoke_file_service as workflow_files, record_run_in_db, workflow_prompt,
+        invoke_remote_file_service as remote_workflow_files,
+        workflow_prompt_with_remote as remote_workflow_prompt,
     };
     pub use crate::services::remote_transport;
     pub use crate::services::remote_agent_tools::DesktopToolHost;

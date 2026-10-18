@@ -29,7 +29,7 @@ const TOOLS: &[&str] = &[
 const MAX_FILE: usize = 1024 * 1024;
 const MAX_IMAGE: usize = 5 * 1024 * 1024;
 
-fn relative(value: &str) -> Result<String, String> {
+pub(crate) fn relative(value: &str) -> Result<String, String> {
     if value.is_empty()
         || value.len() > 4096
         || value.starts_with('/')

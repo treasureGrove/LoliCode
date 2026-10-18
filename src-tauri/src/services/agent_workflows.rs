@@ -1,3 +1,4 @@
+use super::remote_projects::RemoteProjects;
 use crate::services::inprocess_agent::InprocessAgentState;
 use lolicode_agent::AgentStatus;
 use serde::{Deserialize, Serialize};
@@ -5,6 +6,7 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::path::PathBuf;
 use std::sync::OnceLock;
+use std::{path::Path, sync::Arc};
 use tauri::{AppHandle, Manager};
 use tokio::sync::Mutex;
 
@@ -430,12 +432,138 @@ pub async fn invoke_file_service(method: &str, args: Vec<Value>) -> Result<Value
     }
 }
 
+pub async fn invoke_remote_file_service(
+    remote: &Arc<RemoteProjects>,
+    method: &str,
+    args: Vec<Value>,
+) -> Result<Value, String> {
+    let params = request(&args)?;
+    let project = params["workspacePath"]
+        .as_str()
+        .ok_or("缺少远程工作区路径")?;
+    let binding = remote.resolve(Path::new(project))?;
+    if scope(params)? != "project" {
+        return Err("远程文件服务只处理项目工作流".into());
+    }
+    let dir = format!(
+        "{}/.zcode/workflows",
+        binding.project.root.trim_end_matches('/')
+    );
+    let name = if method == "listSavedWorkflows" {
+        String::new()
+    } else {
+        normalized_name(params["name"].as_str().ok_or("缺少工作流名称")?)?
+    };
+    let path = format!("{dir}/{name}.md");
+    let (_stop, cancel) = tokio::sync::watch::channel(false);
+    match method {
+        "listSavedWorkflows" => {
+            let reply = remote
+                .call(Path::new(project), "workflow_list", json!({}), cancel)
+                .await?;
+            let entries = reply["documents"]
+                .as_array()
+                .filter(|e| e.len() <= MAX_WORKFLOWS)
+                .ok_or("远程工作流目录回执无效")?;
+            let mut workflows = Vec::new();
+            let mut invalid_files = Vec::new();
+            for entry in entries {
+                let raw_name = entry["name"].as_str().ok_or("远程工作流名称无效")?;
+                let name = match normalized_name(raw_name) {
+                    Ok(name) => name,
+                    Err(reason) => {
+                        invalid_files
+                            .push(json!({"path":format!("{dir}/{raw_name}.md"),"reason":reason}));
+                        continue;
+                    }
+                };
+                let path = format!("{dir}/{name}.md");
+                match entry["document"].as_str().ok_or("文件无法读取、不是 UTF-8 或超过大小限制".to_string()).and_then(|d| parse_document(d,name,path.clone(),"project".into())) {
+                    Ok(w) => workflows.push(json!({"name":w.name,"description":w.meta["description"],"whenToUse":w.meta["whenToUse"],"args":w.meta["args"],"scope":"project","path":w.path})),
+                    Err(e) => invalid_files.push(json!({"path":path,"reason":e})),
+                }
+            }
+            if reply["truncated"] == true {
+                invalid_files.push(json!({"path":dir,"reason":"远程工作流目录超过数量或总大小限制，当前仅显示部分文件"}));
+            }
+            workflows.sort_by(|a, b| a["name"].as_str().cmp(&b["name"].as_str()));
+            Ok(json!({"workflows":workflows,"invalid":invalid_files,"dir":dir}))
+        }
+        "getSavedWorkflow" => {
+            let reply = remote
+                .call(
+                    Path::new(project),
+                    "workflow_read",
+                    json!({"name":name}),
+                    cancel,
+                )
+                .await?;
+            let document = reply["document"]
+                .as_str()
+                .filter(|s| s.len() <= MAX_WORKFLOW_BYTES as usize)
+                .ok_or("远程工作流内容无效")?;
+            match parse_document(document, name, path, "project".into()) {
+                Ok(w) => Ok(
+                    json!({"ok":true,"name":w.name,"path":w.path,"scope":w.scope,"meta":w.meta,"script":w.script,"document":w.document}),
+                ),
+                Err(e) => Ok(invalid(&e)),
+            }
+        }
+        "saveSavedWorkflow" => {
+            let document = params["document"]
+                .as_str()
+                .filter(|s| s.len() <= MAX_WORKFLOW_BYTES as usize)
+                .ok_or("工作流内容为空或超过 256 KiB")?;
+            parse_document(document, name.clone(), path.clone(), "project".into())?;
+            let mut input = json!({"name":name,"document":document});
+            if params["overwrite"].as_bool() == Some(true) {
+                let base = params["expectedDocument"]
+                    .as_str()
+                    .filter(|s| s.len() <= MAX_WORKFLOW_BYTES as usize)
+                    .ok_or("覆盖远程工作流需要先读取原文，请重新加载")?;
+                input["overwrite"] = json!(true);
+                input["expectedDocument"] = json!(base);
+            }
+            remote
+                .call(Path::new(project), "workflow_save", input, cancel)
+                .await?;
+            Ok(json!({"ok":true,"name":name,"path":path}))
+        }
+        "deleteSavedWorkflow" => {
+            remote
+                .call(
+                    Path::new(project),
+                    "workflow_delete",
+                    json!({"name":name}),
+                    cancel,
+                )
+                .await?;
+            Ok(json!({"ok":true,"path":path}))
+        }
+        _ => Err("此远程工作流功能暂不可用".into()),
+    }
+}
+
 pub async fn invoke_service(
     app: &AppHandle,
     method: &str,
     args: Vec<Value>,
 ) -> Result<Value, String> {
     if method != "listSavedWorkflowRuns" {
+        let params = request(&args)?;
+        if scope(params)? == "project" {
+            let state = app.state::<crate::store::AppState>();
+            let remote = app
+                .state::<InprocessAgentState>()
+                .remote_projects(&state)
+                .await;
+            if params["workspacePath"]
+                .as_str()
+                .is_some_and(|p| remote.owns(Path::new(p)))
+            {
+                return invoke_remote_file_service(&remote, method, args).await;
+            }
+        }
         return invoke_file_service(method, args).await;
     }
     let params = request(&args)?;
@@ -519,6 +647,37 @@ pub async fn workflow_prompt(
     let request = json!({"workspacePath":project_path,"scope":scope});
     let (root, scope) = workflow_root(&request)?;
     let workflow = load_workflow(root, name, scope).await?;
+    render_prompt(&workflow, args)
+}
+
+pub async fn workflow_prompt_with_remote(
+    remote: &Arc<RemoteProjects>,
+    project_path: &str,
+    name: &str,
+    scope: &str,
+    args: &Value,
+) -> Result<String, String> {
+    if !remote.owns(Path::new(project_path)) || scope == "global" {
+        return workflow_prompt(project_path, name, scope, args).await;
+    }
+    if scope != "project" {
+        return Err("工作流范围无效".into());
+    }
+    let loaded = invoke_remote_file_service(
+        remote,
+        "getSavedWorkflow",
+        vec![json!({"workspacePath":project_path,"scope":scope,"name":name})],
+    )
+    .await?;
+    if loaded["ok"] != true {
+        return Err("远程工作流格式无效，请先编辑修复".into());
+    }
+    let workflow = parse_document(
+        loaded["document"].as_str().ok_or("远程工作流内容无效")?,
+        normalized_name(name)?,
+        loaded["path"].as_str().unwrap_or_default().into(),
+        scope.into(),
+    )?;
     render_prompt(&workflow, args)
 }
 

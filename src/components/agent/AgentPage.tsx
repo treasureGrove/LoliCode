@@ -455,6 +455,9 @@ export function AgentPage({
   >("skills");
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [operationsOpen, setOperationsOpen] = useState(false);
+  const [operationsTab, setOperationsTab] = useState<"workflows" | "remote">(
+    "workflows",
+  );
   const [showArchived, setShowArchived] = useState(false);
   const [projects, setProjects] = useState<AgentProject[]>([]);
   const [permissionMode, setPermissionMode] =
@@ -2252,7 +2255,10 @@ export function AgentPage({
             </button>
             <button
               className="wb-nav-button"
-              onClick={() => setOperationsOpen(true)}
+              onClick={() => {
+                setOperationsTab("workflows");
+                setOperationsOpen(true);
+              }}
             >
               <Workflow />
               工作流与自动化
@@ -2580,10 +2586,23 @@ export function AgentPage({
             <button
               type="button"
               className="wb-titlebar-project"
-              title={`打开项目文件夹：${workspace.path}`}
-              aria-label={`打开项目文件夹：${workspace.path}`}
+              title={
+                workspace.remote
+                  ? `管理远程项目：${workspace.remote.root}`
+                  : `打开项目文件夹：${workspace.path}`
+              }
+              aria-label={
+                workspace.remote
+                  ? `管理远程项目：${workspace.remote.root}`
+                  : `打开项目文件夹：${workspace.path}`
+              }
               onClick={(event) => {
                 event.stopPropagation();
+                if (workspace.remote) {
+                  setOperationsTab("remote");
+                  setOperationsOpen(true);
+                  return;
+                }
                 void agentApi
                   .openProjectDirectory(workspace.path)
                   .catch((cause) =>
@@ -3278,9 +3297,11 @@ export function AgentPage({
       <AgentOperationsPanel
         open={operationsOpen}
         onOpenChange={setOperationsOpen}
+        initialTab={operationsTab}
         projectPath={workspace?.path}
         catalog={catalog}
         working={working}
+        onOpenProject={openProject}
         onSession={(session) => {
           if (
             !mounted.current ||

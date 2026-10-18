@@ -11,6 +11,16 @@ use std::path::{Path, PathBuf};
 pub struct AgentWorkspace {
     pub path: String,
     pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remote: Option<RemoteWorkspace>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteWorkspace {
+    pub connection_name: String,
+    pub root: String,
+    pub kind: String,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -56,6 +66,7 @@ pub(crate) fn canonical_project(path: &str) -> Result<PathBuf, String> {
 #[cfg(any(test, feature = "test-hooks"))]
 pub(crate) fn workspace(path: &Path) -> AgentWorkspace {
     AgentWorkspace {
+        remote: None,
         name: path
             .file_name()
             .and_then(|n| n.to_str())

@@ -211,50 +211,54 @@ impl RemoteTarget {
                 }
             }
         };
-        // Avoid accidental SendEnv/WSLENV propagation of provider API keys from
-        // the desktop's environment. Preserve only OS launch, home, locale and
-        // the existing local SSH-agent socket needed for authentication.
-        command.env_clear();
-        for (name, value) in std::env::vars_os() {
-            if matches!(
-                name.to_string_lossy().to_ascii_uppercase().as_str(),
-                "PATH"
-                    | "HOME"
-                    | "USERPROFILE"
-                    | "HOMEDRIVE"
-                    | "HOMEPATH"
-                    | "APPDATA"
-                    | "LOCALAPPDATA"
-                    | "SYSTEMROOT"
-                    | "WINDIR"
-                    | "TEMP"
-                    | "TMP"
-                    | "SSH_AUTH_SOCK"
-                    | "SSH_AGENT_PID"
-                    | "LANG"
-                    | "LC_ALL"
-                    | "USERNAME"
-                    | "USERDOMAIN"
-                    | "USERDNSDOMAIN"
-                    | "COMPUTERNAME"
-                    | "SYSTEMDRIVE"
-                    | "COMSPEC"
-                    | "PROGRAMDATA"
-                    | "ALLUSERSPROFILE"
-                    | "OS"
-            ) {
-                command.env(name, value);
-            }
-        }
-        command
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .kill_on_drop(true);
-        #[cfg(target_os = "windows")]
-        command.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        prepare_command(&mut command);
         Ok(command)
     }
+}
+
+fn prepare_command(command: &mut Command) {
+    // Avoid accidental SendEnv/WSLENV propagation of provider API keys from
+    // the desktop's environment. Preserve only OS launch, home, locale and
+    // the existing local SSH-agent socket needed for authentication.
+    command.env_clear();
+    for (name, value) in std::env::vars_os() {
+        if matches!(
+            name.to_string_lossy().to_ascii_uppercase().as_str(),
+            "PATH"
+                | "HOME"
+                | "USERPROFILE"
+                | "HOMEDRIVE"
+                | "HOMEPATH"
+                | "APPDATA"
+                | "LOCALAPPDATA"
+                | "SYSTEMROOT"
+                | "WINDIR"
+                | "TEMP"
+                | "TMP"
+                | "SSH_AUTH_SOCK"
+                | "SSH_AGENT_PID"
+                | "LANG"
+                | "LC_ALL"
+                | "USERNAME"
+                | "USERDOMAIN"
+                | "USERDNSDOMAIN"
+                | "COMPUTERNAME"
+                | "SYSTEMDRIVE"
+                | "COMSPEC"
+                | "PROGRAMDATA"
+                | "ALLUSERSPROFILE"
+                | "OS"
+        ) {
+            command.env(name, value);
+        }
+    }
+    command
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
+    #[cfg(target_os = "windows")]
+    command.creation_flags(0x08000000); // CREATE_NO_WINDOW
 }
 
 fn system_program(name: &str) -> Result<PathBuf, RemoteError> {
@@ -310,6 +314,89 @@ fn python_script() -> Result<&'static str, RemoteError> {
     );
     let _ = SCRIPT.set(script);
     Ok(SCRIPT.get().expect("initialized remote helper"))
+}
+
+fn parse_wsl_names(bytes: &[u8]) -> Result<Vec<String>, RemoteError> {
+    let decoded = if bytes.starts_with(&[0xff, 0xfe])
+        || bytes.ends_with(&[b'\n', 0])
+        || bytes.ends_with(&[b'\r', 0])
+    {
+        let bytes = bytes.strip_prefix(&[0xff, 0xfe]).unwrap_or(bytes);
+        if bytes.len() % 2 != 0 {
+            return Err(invalid());
+        }
+        String::from_utf16(
+            &bytes
+                .chunks_exact(2)
+                .map(|b| u16::from_le_bytes([b[0], b[1]]))
+                .collect::<Vec<_>>(),
+        )
+        .map_err(|_| invalid())?
+    } else {
+        String::from_utf8(bytes.to_vec()).map_err(|_| invalid())?
+    };
+    let mut names = Vec::new();
+    for line in decoded
+        .trim_start_matches('\u{feff}')
+        .lines()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        if line.len() > 256
+            || line.starts_with('-')
+            || line.chars().any(char::is_control)
+            || names.len() >= 100
+        {
+            return Err(invalid());
+        }
+        if !names.iter().any(|n| n == line) {
+            names.push(line.to_string());
+        }
+    }
+    Ok(names)
+}
+
+pub async fn list_wsl_distributions() -> Result<Vec<String>, RemoteError> {
+    #[cfg(not(target_os = "windows"))]
+    {
+        return Err(failure(
+            RemoteErrorKind::Unsupported,
+            "WSL 仅适用于 Windows 桌面。",
+        ));
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let mut command = Command::new(system_program("wsl")?);
+        command.args(["--list", "--quiet"]);
+        prepare_command(&mut command);
+        let mut child = command
+            .spawn()
+            .map_err(|_| failure(RemoteErrorKind::Unavailable, "无法启动 WSL。"))?;
+        drop(child.stdin.take());
+        let stdout = child.stdout.take().expect("piped stdout");
+        let stderr = child.stderr.take().expect("piped stderr");
+        let result = tokio::time::timeout(Duration::from_secs(10), async {
+            tokio::try_join!(
+                bounded_read(stdout, 64 * 1024),
+                bounded_read(stderr, MAX_STDERR),
+                async {
+                    child
+                        .wait()
+                        .await
+                        .map_err(|_| failure(RemoteErrorKind::Unavailable, "WSL 检查未完成。"))
+                }
+            )
+        })
+        .await;
+        match result {
+            Ok(Ok((out, _, status))) if status.success() => parse_wsl_names(&out),
+            _ => {
+                let _ = child.kill().await;
+                let _ = child.wait().await;
+                Err(failure(RemoteErrorKind::Unavailable, "无法列出 WSL 发行版。请先在 Windows 终端确认 wsl --list --quiet 可用；也可手动填写已安装的发行版名称。"))
+            }
+        }
+    }
 }
 
 async fn bounded_read(
@@ -426,7 +513,10 @@ fn connection_error(stderr: &[u8]) -> Option<RemoteError> {
 }
 
 fn mutation(operation: &str) -> bool {
-    matches!(operation, "run_command" | "write_file" | "apply_patch")
+    matches!(
+        operation,
+        "run_command" | "write_file" | "apply_patch" | "workflow_save" | "workflow_delete"
+    )
 }
 
 pub async fn call(
@@ -448,6 +538,11 @@ pub async fn call(
             | "open_project"
             | "read_file"
             | "view_image"
+            | "preview_file"
+            | "workflow_list"
+            | "workflow_read"
+            | "workflow_save"
+            | "workflow_delete"
             | "list_files"
             | "search_files"
             | "write_file"
@@ -598,6 +693,21 @@ pub async fn call(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn wsl_names_decode_utf16_without_creating_help_or_mojibake_entries() {
+        let names = "Ubuntu\r\n开发环境\r\nUbuntu\r\n";
+        let bytes: Vec<u8> = [0xff, 0xfe]
+            .into_iter()
+            .chain(names.encode_utf16().flat_map(u16::to_le_bytes))
+            .collect();
+        assert_eq!(parse_wsl_names(&bytes).unwrap(), vec!["Ubuntu", "开发环境"]);
+        assert_eq!(
+            parse_wsl_names(b"Ubuntu\nDebian\n").unwrap(),
+            vec!["Ubuntu", "Debian"]
+        );
+        assert!(parse_wsl_names(&[0xff, 0xfe, 0x41]).is_err());
+        assert!(parse_wsl_names(b"Bad\0name").is_err());
+    }
     use super::*;
 
     #[test]

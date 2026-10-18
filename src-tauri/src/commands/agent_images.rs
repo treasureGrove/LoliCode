@@ -4,7 +4,7 @@ use base64::{engine::general_purpose::STANDARD, Engine};
 use serde::Serialize;
 use std::io::Read;
 use std::path::Path;
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 
 const MAX_IMAGE_BYTES: u64 = 10 * 1024 * 1024;
 
@@ -22,6 +22,25 @@ pub async fn get_agent_image(
     path: String,
 ) -> Result<AgentImage, String> {
     let project = super::agent_dispatch::session_project(&app, &session_id).await?;
+    let remote = app
+        .state::<crate::services::inprocess_agent::InprocessAgentState>()
+        .remote_projects(&app.state::<crate::store::AppState>())
+        .await;
+    if remote.owns(Path::new(&project)) {
+        let (_, bytes) = remote.preview_bytes(Path::new(&project), &path).await?;
+        let data_url =
+            crate::services::remote_agent_tools::image_data_url(&STANDARD.encode(bytes))?;
+        let media_type = data_url
+            .split_once(';')
+            .ok_or("图片格式无效")?
+            .0
+            .trim_start_matches("data:")
+            .to_string();
+        return Ok(AgentImage {
+            data_url,
+            media_type,
+        });
+    }
     tokio::task::spawn_blocking(move || load_project_image(Path::new(&project), &path))
         .await
         .map_err(|_| "图片读取未完成，请重试".to_string())?

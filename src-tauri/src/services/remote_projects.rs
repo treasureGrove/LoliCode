@@ -79,6 +79,71 @@ fn unavailable() -> String {
 }
 
 impl RemoteProjects {
+    pub async fn preview_bytes(
+        self: &Arc<Self>,
+        anchor: &Path,
+        path: &str,
+    ) -> Result<(String, Vec<u8>), String> {
+        use base64::{engine::general_purpose::STANDARD, Engine as _};
+        let binding = self.resolve(anchor)?;
+        let relative = if path.starts_with('/') {
+            path.strip_prefix(&(binding.project.root.trim_end_matches('/').to_string() + "/"))
+                .ok_or("此文件位于远程工程之外")?
+        } else {
+            path
+        };
+        let relative = super::remote_agent_tools::relative(relative)?;
+        if relative == "." {
+            return Err("请选择远程工程内的文件".into());
+        }
+        let (_stop, cancel) = watch::channel(false);
+        let receipt = self
+            .call(anchor, "preview_file", json!({"path":relative}), cancel)
+            .await?;
+        let encoded = receipt["base64"]
+            .as_str()
+            .filter(|s| s.len() <= (5 * 1024 * 1024 + 2) / 3 * 4)
+            .ok_or("远程文件超过预览限制")?;
+        let bytes = STANDARD.decode(encoded).map_err(|_| "远程文件回执无效")?;
+        if bytes.len() > 5 * 1024 * 1024 || receipt["size"].as_u64() != Some(bytes.len() as u64) {
+            return Err("远程文件大小与回执不符".into());
+        }
+        Ok((relative, bytes))
+    }
+    pub async fn invoke(self: &Arc<Self>, method: &str, args: Vec<Value>) -> Result<Value, String> {
+        match (method, args.as_slice()) {
+            ("list", []) => self.list(),
+            ("listWSL", []) => remote_transport::list_wsl_distributions()
+                .await
+                .map(|names| json!(names))
+                .map_err(|e| e.to_string()),
+            ("connect", [input]) => {
+                #[derive(Deserialize)]
+                #[serde(rename_all = "camelCase", deny_unknown_fields)]
+                struct Connect {
+                    name: String,
+                    target: RemoteTarget,
+                }
+                let input: Connect = serde_json::from_value(input.clone())
+                    .map_err(|_| "远程连接参数无效；仅支持 SSH 配置/密钥文件或 WSL，不接收密码")?;
+                let c = self.connect(input.name, input.target).await?;
+                serde_json::to_value(c).map_err(|_| "连接记录编码失败".into())
+            }
+            ("reconnect", [Value::String(id)]) => serde_json::to_value(self.reconnect(id).await?)
+                .map_err(|_| "连接记录编码失败".into()),
+            ("disconnect", [Value::String(id)]) => {
+                self.disconnect(id)?;
+                Ok(json!({"ok":true}))
+            }
+            ("openProject", [Value::String(id), Value::String(root)]) => {
+                let project = self.attach(id, root).await?;
+                Ok(
+                    json!({"path":self.anchor(&project),"name":project.name,"root":project.root,"connectionId":project.connection_id}),
+                )
+            }
+            _ => Err("远程操作或参数无效".into()),
+        }
+    }
     pub fn new(db: Arc<Database>, anchors: PathBuf) -> Self {
         Self {
             db,
@@ -197,12 +262,37 @@ impl RemoteProjects {
             return Err("请输入不超过 128 字节的连接名称".into());
         }
         target.validate().map_err(|e| e.to_string())?;
+        let target_hash = fingerprint(&target)?;
+        let previous = {
+            let _gate = self.gate.lock().map_err(|_| "远程状态不可用")?;
+            self.load()?
+                .connections
+                .values()
+                .find(|c| c.name == name && fingerprint(&c.target).is_ok_and(|h| h == target_hash))
+                .map(|c| (c.id.clone(), c.revision))
+        };
         let (_tx, cancel) = watch::channel(false);
         remote_transport::call(&target, "probe", None, json!({}), cancel)
             .await
             .map_err(|e| e.to_string())?;
         let _gate = self.gate.lock().map_err(|_| "远程状态不可用")?;
         let mut store = self.load()?;
+        if let Some(existing) = store
+            .connections
+            .values()
+            .find(|c| c.name == name && fingerprint(&c.target).is_ok_and(|h| h == target_hash))
+        {
+            if !existing.enabled
+                || previous
+                    .as_ref()
+                    .is_some_and(|(id, rev)| id != &existing.id || *rev != existing.revision)
+            {
+                return Err("连接状态已改变，请选择已保存的连接并重新连接".into());
+            }
+            // A retry after a lost response or concurrent submission reuses
+            // the same identity instead of creating duplicate connections.
+            return Ok(existing.clone());
+        }
         if store.connections.len() >= 100 {
             return Err("最多保存 100 个远程连接".into());
         }
@@ -446,6 +536,35 @@ pub(crate) fn fixture(db: Arc<Database>, anchors: PathBuf) -> (Arc<RemoteProject
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[tokio::test]
+    async fn public_remote_dispatch_rejects_passwords_unknown_actions_and_bad_roots_before_network()
+    {
+        let dir = tempfile::tempdir().unwrap();
+        let (service, _) = fixture(
+            Arc::new(Database::memory().unwrap()),
+            dir.path().join("anchors"),
+        );
+        assert!(service.invoke("connect",vec![json!({"name":"invalid","target":{"kind":"ssh","host":"fixture.invalid","password":"never-send"}})]).await.is_err());
+        assert!(service
+            .invoke("execute", vec![json!({"command":"no"})])
+            .await
+            .is_err());
+        assert!(service
+            .invoke("openProject", vec![json!("missing"), json!("../outside")])
+            .await
+            .is_err());
+        assert!(service
+            .invoke("list", vec![json!({"extra":true})])
+            .await
+            .is_err());
+        assert_eq!(
+            service.invoke("list", vec![]).await.unwrap()["connections"]
+                .as_array()
+                .unwrap()
+                .len(),
+            1
+        );
+    }
 
     #[test]
     fn anchors_reopen_and_disconnect_preserves_binding_but_revokes_pending_flights() {
