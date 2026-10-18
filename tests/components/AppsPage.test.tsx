@@ -39,6 +39,9 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/api", () => ({ settingsApi: mocks }));
+vi.mock("@/components/apps/LocalAgentTools", () => ({
+  LocalAgentTools: () => <div>国产 Agent 管理</div>,
+}));
 vi.mock("@/lib/api/providers", () => ({
   providersApi: {
     getClaudeDesktopStatus: async () => ({ supported: true, configured: true }),

@@ -162,7 +162,7 @@ describe("UsageDashboard (smoke)", () => {
 
     // 供应商：汇总速度 92000 / 1000 s = 92 tok/s
     await user.click(screen.getByRole("tab", { name: "usage.tabs.providers" }));
-    const providerRow = (await screen.findByText("DeepSeek")).closest("tr")!;
+    const providerRow = await screen.findByRole("row", { name: /DeepSeek/ });
     expect(within(providerRow).getByText("92")).toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "usage.tabs.models" }));

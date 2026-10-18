@@ -259,6 +259,16 @@ describe("UsageDashboard", () => {
     );
   });
 
+  it("uses the bundled ZCode icon in the agent filter", () => {
+    renderDashboard();
+    const button = screen.getByRole("button", { name: "ZCode" });
+    expect(button.querySelector("img")).toHaveAttribute("alt", "ZCode");
+    expect(button.querySelector("img")?.getAttribute("src")).toContain(
+      "zcode.png",
+    );
+    expect(button).not.toHaveTextContent(/^Z$/);
+  });
+
   it("filters by provider and lists request counts", async () => {
     const user = userEvent.setup();
     renderDashboard();

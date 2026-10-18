@@ -52,6 +52,8 @@ import { ToolInstallRow } from "@/components/settings/ToolInstallRow";
 import { ToolErrorMessage } from "@/components/settings/ToolErrorMessage";
 import { ToolUninstallConfirmDialog } from "./ToolUninstallConfirmDialog";
 import { ManualUninstallDialog } from "./ManualUninstallDialog";
+import { LocalAgentTools } from "./LocalAgentTools";
+import type { LocalAgentId } from "@/lib/api/local-agent-tools";
 import {
   ENV_BADGE_CONFIG,
   ONE_CLICK_INSTALL_COMMANDS,
@@ -107,7 +109,14 @@ function formatCheckedAt(timestamp: number, locale: string): string {
 export function AppsPage({
   simpleMode = false,
   embedded = false,
-}: { simpleMode?: boolean; embedded?: boolean } = {}) {
+  onConfigureLocalAgent,
+  configureLocalAgentDisabled = false,
+}: {
+  simpleMode?: boolean;
+  embedded?: boolean;
+  onConfigureLocalAgent?: (target: LocalAgentId) => void;
+  configureLocalAgentDisabled?: boolean;
+} = {}) {
   const { t, i18n } = useTranslation();
   const tools = useToolManagement();
   const { settings, updateSettings, autoSaveSettings } = useSettings();
@@ -301,6 +310,10 @@ export function AppsPage({
         )}
       >
         <div className={embedded ? "pb-2" : "px-6 pb-10 pt-4"}>
+          <LocalAgentTools
+            onConfigure={onConfigureLocalAgent}
+            configureDisabled={configureLocalAgentDisabled}
+          />
           <div className="flex h-8 items-center px-4 text-caption font-medium text-fg-2">
             <span className="flex-1">{t("appsPage.columnApp")}</span>
             <span className="w-[168px] text-end">

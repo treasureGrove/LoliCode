@@ -236,6 +236,11 @@ fn choose(directory: &Path, base: &str) -> Result<PathBuf, AppError> {
     }
     Ok(if json.exists() { json } else { jsonc })
 }
+/// Read-only discovery for local tool management; never reads credentials.
+pub fn config_paths(target: &str) -> Result<Vec<PathBuf>, AppError> {
+    paths(target, &Locations::system())
+}
+
 fn paths(target: &str, locations: &Locations) -> Result<Vec<PathBuf>, AppError> {
     valid_path(&locations.home)?;
     match target {

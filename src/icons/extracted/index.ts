@@ -2,6 +2,7 @@
 // Update entries deliberately; automatic regeneration is intentionally unsupported.
 
 import _88api from "./88api.png";
+import _zcode from "./zcode.png";
 import _a6api from "./a6-icon.png";
 import _apikeyfun from "./apikeyfun.png";
 import _apinebula from "./apinebula_icon.png";
@@ -136,10 +137,10 @@ Object.assign(icons, {
   cursor:
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"><path d="M5 3.5v16l4.5-4.1 3.1 5.1 2.8-1.7-3.1-5.1 6.1-.8L5 3.5Z" fill="currentColor"/><path d="m5 3.5 13.4 9.4-6.1.8 3.1 5.1-2.8 1.7-3.1-5.1L5 19.5v-16Z" stroke="white" stroke-width="1.2" stroke-linejoin="round"/></svg>',
   workbuddy: icons.tencent,
-  zcode: icons.zhipu,
 });
 
 export const iconUrls: Record<string, string> = {
+  zcode: _zcode,
   "88api": _88api,
   a6api: _a6api,
   apikeyfun: _apikeyfun,

@@ -1007,7 +1007,8 @@ export const iconMetadata: Record<string, IconMetadata> = {
     displayName: "ZCode",
     category: "tool",
     keywords: ["zcode", "z code", "zhipu", "agent"],
-    defaultColor: "#3859FF",
+    shape: "tile",
+    defaultColor: "currentColor",
   },
 };
 

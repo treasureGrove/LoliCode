@@ -20,16 +20,22 @@ export const CHANNEL_TARGET_NAMES: Record<ChannelTarget, string> = {
   mimocode: "MiMo Code",
 };
 
-export function ChannelTargetGlyph({ app }: { app: ChannelTarget }) {
+export function ChannelTargetGlyph({
+  app,
+  size = 18,
+}: {
+  app: ChannelTarget;
+  size?: number;
+}) {
   if (APP_IDS.includes(app as AppId))
-    return <AppGlyph app={app as AppId} size={18} />;
+    return <AppGlyph app={app as AppId} size={size} />;
 
   if (app === "deepseek-harness")
     return (
       <ProviderIcon
         icon="deepseek"
         name="DeepSeek Harness"
-        size={18}
+        size={size}
         showFallback={false}
       />
     );
@@ -38,7 +44,7 @@ export function ChannelTargetGlyph({ app }: { app: ChannelTarget }) {
       <ProviderIcon
         icon="xiaomimimo"
         name="MiMo"
-        size={18}
+        size={size}
         showFallback={false}
       />
     );
@@ -48,11 +54,11 @@ export function ChannelTargetGlyph({ app }: { app: ChannelTarget }) {
       <ProviderIcon
         icon="workbuddy"
         name="WorkBuddy"
-        size={18}
+        size={size}
         showFallback={false}
       />
     );
   return (
-    <ProviderIcon icon="zcode" name="ZCode" size={18} showFallback={false} />
+    <ProviderIcon icon="zcode" name="ZCode" size={size} showFallback={false} />
   );
 }

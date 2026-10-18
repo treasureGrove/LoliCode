@@ -58,6 +58,11 @@ import { RequestDetailPanel } from "./RequestDetailPanel";
 import { UsageDataSourcesSheet } from "./UsageDataSourcesSheet";
 import { UsageDateRangePicker } from "./UsageDateRangePicker";
 import { UsageHeatmap } from "./UsageHeatmap";
+import { ChannelTargetGlyph } from "@/components/channels/channelTargets";
+import {
+  LOCAL_AGENT_IDS,
+  type LocalAgentId,
+} from "@/lib/api/local-agent-tools";
 import { fmtInt, formatRelativeTime, getLocaleFromLanguage } from "./format";
 import { getUsageProviderLabel, usageProviderTitle } from "./providerLabel";
 
@@ -76,10 +81,6 @@ const normalizeRefreshInterval = (value: number | undefined) =>
 const STATUS_CODE_OPTIONS = [200, 400, 401, 429, 500] as const;
 const USAGE_APP_ABBREVIATIONS: Partial<Record<AppType, string>> = {
   "channel-gateway": "GW",
-  workbuddy: "WB",
-  "deepseek-harness": "DSH",
-  zcode: "Z",
-  mimocode: "Mi",
   tavern: "酒",
 };
 
@@ -557,6 +558,8 @@ export function UsageDashboard({
               >
                 {app === "lolicode" ? (
                   <Bot className="h-4 w-4" aria-hidden="true" />
+                ) : LOCAL_AGENT_IDS.some((id) => id === app) ? (
+                  <ChannelTargetGlyph app={app as LocalAgentId} size={16} />
                 ) : isManagedApp ? (
                   <AppGlyph
                     app={app as keyof typeof APP_DISPLAY_NAME}

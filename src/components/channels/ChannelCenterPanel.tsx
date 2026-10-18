@@ -1080,7 +1080,31 @@ export function ChannelCenterPanel({
               {toolsOpen ? "收起工具管理" : "展开工具管理"}
             </Button>
           </div>
-          {toolsOpen && <AppsPage embedded simpleMode />}
+          {toolsOpen && (
+            <AppsPage
+              embedded
+              simpleMode
+              configureLocalAgentDisabled={disabled || conflict || formTouched}
+              onConfigureLocalAgent={(target) => {
+                if (!snapshot.targets.includes(target)) {
+                  updateSnapshot({
+                    ...snapshot,
+                    targets: [...snapshot.targets, target],
+                  });
+                }
+                setNotice(
+                  `已选择 ${CHANNEL_TARGET_NAMES[target]}，请在下方确认配置目标并点击“一键配置”；本次选择不会直接改动外部工具。`,
+                );
+                document
+                  .getElementById("channel-target-heading")
+                  ?.scrollIntoView?.({
+                    block: "center",
+                    behavior: reducedMotion ? "auto" : "smooth",
+                  });
+                document.getElementById(`channel-target-${target}`)?.focus();
+              }}
+            />
+          )}
         </section>
 
         <section className={CARD} aria-labelledby="channel-target-heading">
@@ -1106,6 +1130,7 @@ export function ChannelCenterPanel({
                 data-selected={snapshot.targets.includes(app)}
               >
                 <Checkbox
+                  id={`channel-target-${app}`}
                   aria-label={CHANNEL_TARGET_NAMES[app]}
                   checked={snapshot.targets.includes(app)}
                   disabled={disabled}
