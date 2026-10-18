@@ -2,6 +2,8 @@
 
 2026-10-18 已上线 Windows x64 正式版。4.0.20 的默认检查地址、官网正式清单与 GitHub Latest 都已指向 4.0.21；历史 RC1／RC2 的附件和独立清单保留。
 
+实际操作请使用[逐项人工验收清单](../acceptance/LoliCode-4.0.21-验收清单.md)，其中包含操作、预期结果、待条件事项和问题反馈模板。
+
 - [官网](https://lolicode.com/)
 - [安装版：自动选线](https://lolicode.com/downloads/releases/4.0.21/LoliCode-4.0.21-Windows-x64-Setup.exe)
 - [便携版：自动选线](https://lolicode.com/downloads/releases/4.0.21/LoliCode-Portable.zip)
