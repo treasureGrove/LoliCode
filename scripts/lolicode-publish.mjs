@@ -18,7 +18,7 @@ import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { verifyRelease } from "./lolicode-release.mjs";
+import { parseVersion, verifyRelease } from "./lolicode-release.mjs";
 import { verifySignatureFile } from "./lolicode-updater-signature.mjs";
 
 export const REMOTE_NAMESPACE = "/www/wwwroot/tools.treasuregrove.art/lolicode";
@@ -106,6 +106,10 @@ export async function preparePublishPlan(options) {
   const release = JSON.parse(
     readFileSync(path.join(directory, "release-manifest.json"), "utf8"),
   );
+  if (parseVersion(release.version).pre.length)
+    throw new Error(
+      "Stable latest.json cannot publish a prerelease; use a separate candidate feed.",
+    );
   if (
     release.latestURL !== `${PUBLIC_NAMESPACE}/updates/latest.json` ||
     release.releaseBaseURL.replace(/\/$/, "") !== `${PUBLIC_NAMESPACE}/releases`

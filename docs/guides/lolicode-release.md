@@ -2,9 +2,9 @@
 
 本流程是 LoliCode 自己的发布链路，不复用 CCSwitch 的公钥、更新地址、GitHub workflow 或下载站清单。`scripts/lolicode-release.mjs` 仅在本地产生并验证发布目录，不上传文件，不读取私钥或 `.env`。
 
-当前已公开版本为 **4.0.20**，见[本次交付记录](lolicode-4.0.20-delivery.md)。公开分发目前是 **Windows x64 NSIS 安装版与便携 ZIP**；macOS 和 Linux 是产品目标，尚未发布对应安装包。真实发布结果记录在每版交付文档中，不能用待发布清单替代发布证据。
+当前正式更新版本为 **4.0.21**，见[本次交付记录](lolicode-4.0.21-delivery.md)。公开分发目前是 **Windows x64 NSIS 安装版与便携 ZIP**；macOS 和 Linux 是产品目标，尚未发布对应安装包。真实发布结果记录在每版交付文档中，不能用待发布清单替代发布证据。
 
-另有 **4.0.21-rc.1 测试候选版**，见[候选交付记录](lolicode-4.0.21-rc.1-delivery.md)。候选附件与独立清单已公开并验签，正式 `latest.json` 与 GitHub Latest 继续保持 4.0.20；实际覆盖安装、数据保留及其余未完成能力仍需继续验收。
+历史 **4.0.21-rc.1／rc.2 测试候选版**保留独立清单和原附件；测试版公开不能算正式更新上线。4.0.21 已同步正式 latest、官网和 GitHub Latest，并验证旧版默认源下载验签。真实用户账号、界面热更新 WebView 与其余功能场景仍按持续验收范围跟进。
 
 - 产品下载：[lolicode.com](https://lolicode.com/)，工具站保留兼容入口。
 - 社区账户：[社区](https://lolicode.com/all)，独立于模型渠道授权。
@@ -161,3 +161,19 @@ node scripts/lolicode-publish.mjs `
 2026-10-14 已上线 [LoliCode 下载页](https://tools.treasuregrove.art/lolicode/) 与 [更新清单](https://tools.treasuregrove.art/lolicode/updates/latest.json)。安装器 87020838 字节，SHA256 为 `57b239e7cfda94c6668050d2534da6938034bc6dc32653da6226c41eef74fae7`；便携包 117787171 字节，SHA256 为 `15a7f5bb7bf2360cb3c853a91041c5b7c70d31bdf9a533956485b4952abe9e2d`。正式安装器的签名通过验证，改动一字节的副本被拒绝。
 
 发布器完成真实 SCP、远端哈希校验和公网完整下载复验后，最后原子发布清单。官方 updater SDK 另通过隔离 MockRuntime 下载公开候选地址的安装器并验签；随后使用应用默认配置的更新地址仅检查，成功识别 4.0.13。两阶段验证没有伪装成一次默认地址下载，也没有执行安装器或修改用户状态。真实桌面原地安装与重启尚未演练；首次 bootstrap 仍需手动安装。证据见 `docs/images/lolicode/updates/` 和交付目录的 `build-manifest.json`。
+
+## 正式交付的最后一道检查
+
+GitHub 有新包不能单独作为交付完成依据。版本文件与源码冻结后，先上传不可变包，核对公网字节和签名，再验证独立候选清单，最后原子提升正式清单。关于页说明正式通道，RC 单独下载；本地与远端发布器都会拒绝将 prerelease 写入正式 latest。
+
+正式提升后必须运行：
+
+```powershell
+node scripts/lolicode-verify-delivery.mjs --release-dir <本轮准备目录/version> --public-key-file src-tauri/updater.pub --tauri-config <冻结配置> --output <新的验收回执.json>
+```
+
+该检查会重新验本地实际包的签名、两个正式清单的版本与一致性、GitHub Latest 及文件 digest，并从官网入口完整下载三份文件对比 SHA256／长度。正式源仍旧、错版本、签名变化、错误镜像或网页入口失配均不能通过。它不会安装；仍要另行用官方 updater SDK 从上一版检查/下载/验签，并检查新版本自查无重复更新。首次安装、覆盖安装与数据迁移也需要各自独立的证据。
+
+`scripts/lolicode-download-router.py` 支持明确列出的多个稳定版本，每版仅安装器、签名和便携包；它不代理正文、不接受任意上游。部署时发布新配置与 Nginx exact 路由，保留旧版入口；短 HEAD 健康检查失败选同版本 GitHub，服务不可用时 Nginx 有固定 GitHub 兜底。运行中断后的跨来源续传仍不支持。
+
+真实 NSIS 安装版的主程序与便携主程序有 Tauri 安装类型标记差异：`__TAURI_BUNDLE_TYPE_VAR_UNK` 变为 `__TAURI_BUNDLE_TYPE_VAR_NSS`。验收只允许这一个精确标记的 3 字节变化，再比对完整预期哈希；不能直接忽略其他字节差异。依据[上游实现](https://github.com/tauri-apps/tauri/commit/232265c70e1c213bbb3f84b5541ddc07d330fce1)和本机锁定的 tauri-utils 平台模块。

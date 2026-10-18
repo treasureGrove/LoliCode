@@ -76,7 +76,8 @@ def main(phase, spec):
     if not re.fullmatch(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', stage_id):
         raise ValueError('Invalid staging ID.')
     release_version = spec['version']
-    version(release_version)
+    if version(release_version)[1]:
+        raise ValueError('Stable latest.json cannot publish a prerelease')
     if spec['namespace'] != str(ROOT):
         raise ValueError('Publishing outside LoliCode is forbidden.')
     no_symlink(ROOT)

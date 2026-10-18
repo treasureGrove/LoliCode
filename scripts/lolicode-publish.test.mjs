@@ -34,7 +34,7 @@ import {
 } from "./lolicode-publish.mjs";
 
 const wrap = (value) => Buffer.from(value).toString("base64");
-async function fixture() {
+async function fixture(version = "4.0.13") {
   const root = mkdtempSync(path.join(os.tmpdir(), "lolicode-publish-test-"));
   const { publicKey, privateKey } = generateKeyPairSync("ed25519");
   const keyId = randomBytes(8),
@@ -64,7 +64,7 @@ async function fixture() {
     config,
     JSON.stringify({
       productName: "LoliCode",
-      version: "4.0.13",
+      version,
       bundle: { createUpdaterArtifacts: true },
       plugins: {
         updater: {
@@ -79,7 +79,7 @@ async function fixture() {
     signature: signatureFile,
     "public-key-file": pub,
     "tauri-config": config,
-    version: "4.0.13",
+    version,
     "current-version": "4.0.12",
     "base-url": `${PUBLIC_NAMESPACE}/releases`,
     "latest-url": `${PUBLIC_NAMESPACE}/updates/latest.json`,
@@ -127,6 +127,20 @@ function transport(f, failure) {
     },
   };
 }
+
+test("stable publication rejects a correctly signed RC before any network mutation", async () => {
+  const f = await fixture("4.0.13-rc.1");
+  try {
+    const remote = transport(f);
+    await assert.rejects(
+      publishRelease(f.options, remote),
+      /cannot publish a prerelease/,
+    );
+    assert.deepEqual(remote.events, []);
+  } finally {
+    f.clean();
+  }
+});
 
 test("publication download timeout accepts only a bounded positive integer and defaults to two hours", () => {
   const args = [
