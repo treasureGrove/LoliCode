@@ -224,8 +224,9 @@ export interface UsageRangeSelection {
  * Desktop's full usage. The backend collapses `claude-desktop → claude` in
  * every dashboard query (see `folded_app_type_sql`).
  * LoliCode and the desktop-agent importers have their own buckets. Unattributed
- * channel-gateway traffic remains separate because older Grok Build and Agent
- * requests shared that route and cannot be distinguished from stored rows.
+ * channel-gateway traffic remains separate when its origin cannot be proved.
+ * Completed native-agent ledger entries can recover uniquely matching old
+ * gateway rows as LoliCode usage; ambiguous history stays in the gateway bucket.
  * `opencode` and `pi` have no proxy handler; their usage reaches this
  * dashboard through session importers. `openclaw` / `hermes` appear only as
  * managed apps elsewhere.

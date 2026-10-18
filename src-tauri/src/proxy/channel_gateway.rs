@@ -1811,6 +1811,80 @@ mod tests {
         upstream_task.abort();
     }
 
+    #[tokio::test]
+    async fn native_lolicode_streamed_requests_are_billed_once_under_the_app_and_channel() {
+        use super::super::{server::ProxyServer, types::ProxyConfig};
+        use crate::database::Database;
+        use std::sync::{Arc,atomic::{AtomicUsize,Ordering}};
+        let sequence=Arc::new(AtomicUsize::new(0));
+        let capture=move |request:Request| {
+            let id=sequence.fetch_add(1,Ordering::SeqCst);
+            async move {
+                let path=request.uri().path();
+                if path.ends_with("/chat/completions") {
+                    let sse=format!("data: {}\n\ndata: {}\n\ndata: [DONE]\n\n",
+                        json!({"id":format!("chat_{id}"),"model":"meter-model","choices":[{"index":0,"delta":{"content":"ok"},"finish_reason":"stop"}]}),
+                        json!({"id":format!("chat_{id}"),"model":"meter-model","choices":[],"usage":{"prompt_tokens":100,"completion_tokens":10,"prompt_tokens_details":{"cached_tokens":20}}}));
+                    Response::builder().header("content-type","text/event-stream").body(axum::body::Body::from(sse)).unwrap()
+                } else if path.ends_with("/responses") {
+                    Json(json!({"id":format!("resp_{id}"),"object":"response","model":"meter-model","status":"completed",
+                        "output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"ok"}]}],
+                        "usage":{"input_tokens":100,"output_tokens":10,"input_tokens_details":{"cached_tokens":20}}})).into_response()
+                } else {
+                    Json(json!({"id":format!("msg_{id}"),"type":"message","role":"assistant","model":"meter-model",
+                        "content":[{"type":"text","text":"ok"}],"stop_reason":"end_turn",
+                        "usage":{"input_tokens":80,"output_tokens":10,"cache_read_input_tokens":20,"cache_creation_input_tokens":0}})).into_response()
+                }
+            }
+        };
+        let upstream=axum::Router::new()
+            .route("/v1/chat/completions",axum::routing::post(capture.clone()))
+            .route("/v1/responses",axum::routing::post(capture.clone()))
+            .route("/v1/messages",axum::routing::post(capture));
+        let listener=tokio::net::TcpListener::bind(("127.0.0.1",0)).await.unwrap();
+        let address=listener.local_addr().unwrap();
+        let task=tokio::spawn(async move {axum::serve(listener,upstream).await.unwrap();});
+        let db=Arc::new(Database::memory().unwrap());
+        {
+            let conn=db.conn.lock().unwrap();
+            conn.execute("INSERT INTO model_pricing(model_id,display_name,input_cost_per_million,output_cost_per_million,cache_read_cost_per_million,cache_creation_cost_per_million)
+                VALUES('meter-model','Meter model','1','2','0.5','1.25')",[]).unwrap();
+        }
+        let token=channel_center::gateway_token(&db).unwrap();
+        let proxy=ProxyServer::new(ProxyConfig {listen_port:0,..Default::default()},db.clone(),None);
+        let info=proxy.start().await.unwrap();
+        let base=gateway_catalog_base_url(&info.address,info.port,42).unwrap();
+        let base=catalog_client_base_url(&base,"lolicode").unwrap();
+        let client=reqwest::Client::builder().no_proxy().build().unwrap();
+        let mut source=source();
+        source.base_url=format!("http://{address}/v1"); source.models.truncate(1); source.models[0].id="meter-model".into();
+        for (index,protocol) in ["openai_chat","anthropic","openai_responses"].into_iter().enumerate() {
+            source.protocol=protocol.into();
+            db.set_setting("channel_center_catalog_42",&serde_json::to_string(&ChannelCenterSnapshot {channels:vec![source.clone()],..Default::default()}).unwrap()).unwrap();
+            let response=client.post(format!("{base}/chat/completions")).bearer_auth(&token)
+                .json(&json!({"model":"test/meter-model","messages":[{"role":"user","content":"hello"}],"stream":true,"stream_options":{"include_usage":true}}))
+                .send().await.unwrap();
+            assert!(response.status().is_success(),"{protocol}: {}",response.text().await.unwrap());
+            assert!(response.text().await.unwrap().contains("ok"));
+            tokio::time::timeout(std::time::Duration::from_secs(5),async {
+                loop {
+                    if db.get_usage_summary(None,None,Some("lolicode"),None,None).unwrap().total_requests == (index+1) as u64 {break;}
+                    tokio::task::yield_now().await;
+                }
+            }).await.unwrap();
+        }
+        let own=db.get_usage_summary(None,None,Some("lolicode"),None,None).unwrap();
+        assert_eq!(own.total_requests,3); assert_eq!(own.total_input_tokens,240);
+        assert_eq!(own.total_output_tokens,30); assert_eq!(own.total_cache_read_tokens,60);
+        assert_eq!(own.real_total_tokens,330); assert_eq!(own.total_cost,"0.000330");
+        let channels=db.get_provider_stats(None,None,Some("lolicode"),None,None).unwrap();
+        assert_eq!(channels.len(),1); assert_eq!(channels[0].provider_id,"channel-test");
+        assert_eq!(channels[0].request_count,3); assert_eq!(channels[0].total_tokens,330);
+        assert_eq!(db.get_usage_summary(None,None,Some("channel-gateway"),None,None).unwrap().total_requests,0);
+        assert_eq!(db.get_usage_summary(None,None,None,None,None).unwrap().total_requests,3);
+        proxy.stop().await.unwrap(); task.abort();
+    }
+
     #[test]
     fn chat_bridge_preserves_tool_results_and_images_and_rejects_unsupported_fields() {
         let input = json!({"model":"m","messages":[

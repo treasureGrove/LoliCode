@@ -136,6 +136,11 @@ fn merge_sync_step(
 /// 手动同步和 Codex 重建共享，避免 tokio Mutex 重入。
 pub fn sync_all_unlocked(db: &Database) -> SessionSyncResult {
     let mut result = SessionSyncResult::default();
+    merge_sync_step(
+        &mut result,
+        "LoliCode",
+        super::session_usage_lolicode::sync_lolicode_usage(db),
+    );
     merge_sync_step(&mut result, "Claude", sync_claude_session_logs(db));
     merge_sync_step(
         &mut result,
