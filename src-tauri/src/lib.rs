@@ -97,6 +97,9 @@ pub mod agent_test_support {
         invoke_file_service as workflow_files, record_run_in_db, workflow_prompt,
     };
     pub use crate::services::remote_transport;
+    pub use crate::services::remote_agent_tools::DesktopToolHost;
+    pub use crate::services::remote_projects::RemoteProjects;
+    pub use crate::services::agent_applications::DesktopApplicationTools;
     pub use crate::services::resource_updates::{Envelope as ResourceEnvelope, ResourceStore};
     pub use crate::services::zhipu_login::acceptance_secret_read_only as glm_acceptance_secret;
     pub use crate::services::{

@@ -28,6 +28,7 @@ fn cleanup_failure(message: &str) -> String {
     format!("{CLEANUP_UNCERTAIN_PREFIX}{message}")
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ToolInspection {
     pub action: String,
     pub resources: Vec<String>,

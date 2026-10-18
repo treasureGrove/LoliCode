@@ -59,3 +59,15 @@ C:/Users/admin/.cargo/bin/cargo.exe run --manifest-path src-tauri/Cargo.toml --f
 - 两个任务都是单次任务。再次运行调度检查无新领取、无新模型调用，只有两条运行记录。用量分别为 4,687 tokens（缓存读取 2,944）与 1,466 tokens（缓存读取 0），零和未知保持不同含义；此处不推断订阅收费金额。
 
 脱敏证据为 `release/acceptance/glm-supplemental-automation.json`，合计 4 次真实模型请求，预算上限 8 次、每次最大输出 4096 tokens。调试中的检查间隔为一秒；未验证桌面 worker 的十五秒周期、真实按钮/IPC、跨进程自动化数据库恢复、全部权限取消路径或 SSH/WSL，相关完整范围仍保持待验收。
+
+## 真实 SSH 与主 Agent 工具宿主（无外部模型）
+
+```powershell
+C:/Users/admin/.cargo/bin/cargo.exe run --manifest-path src-tauri/Cargo.toml --features test-hooks --example lolicode_remote_agent_acceptance -- --ssh-config-alias tools --out D:/projectGithub/TAI-Switch/release/acceptance/remote-host-real-native-ssh-v2.json
+```
+
+此入口必须由操作者明确选择已授权 SSH alias。它真实连接 Linux，只操作 nonce 标记的独立 `/tmp/lolicode-native-remote-*` 工程；本机数据库、占位目录与 NativeEngine 存储都是临时的。生产 `RemoteProjects` 和 `DesktopToolHost` 经同一个 NativeEngine 完成读取、修改、图片、权限和打断链路；远端不部署另一套 Agent。用本机有界 SSE 模型确定工具顺序，5 次本机模型请求、0 次外部模型请求，不使用 GLM 或 testkey。
+
+成功证据包括实际远端 JS 回读、本体累计差异及存储重开保留、真实 PNG 作为视觉输入进入下一次模型请求、仅写入发生一次范围明确的权限确认、本体打断后 `/proc` 确认测试命令停止、断开保留绑定但拒绝执行，以及安全清理成功。初次验收错误要求只读调用也弹权限，修正脚本期望后重验通过；失败证据未覆盖。
+
+`lolicode_remote_transport_acceptance` 另做传输全量回归，`remote-host-transport-regression.json` 验证远端规范根目录被 symlink 重定向时，修改在写入前拒绝，原文件仍保留；其他读写、并发 CAS、超时、取消、断线和图片字节回归仍通过。以上不能替代远程 UI/IPC、预览、工作流与自动化耦合、WSL 或真实模型选择工具；完整功能保持未通过，见[持续验收](continuous-acceptance.md)。

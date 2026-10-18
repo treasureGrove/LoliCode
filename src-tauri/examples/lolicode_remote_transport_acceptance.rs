@@ -141,6 +141,13 @@ mod acceptance {
             expected_error(&target,"write_file",&root,json!({"path":"escape/never-created","content":"no","expected_content":null}),RemoteErrorKind::Permission).await?;
             expected_error(&target,"read_file",&root,json!({"path":"bounded-fifo"}),RemoteErrorKind::InvalidInput).await?;
             proof["checks"]["traversalSymlinkAndFifoRejected"]=json!(true);
+            // A canonical project root that is later replaced by a symlink
+            // must not silently redirect an already approved file operation.
+            command(&target,&root,python("from pathlib import Path;p=Path('selected-root');p.mkdir();(p/'kept.txt').write_text('preserved');p.rename('moved-root');p.symlink_to('moved-root',target_is_directory=True)")).await?;
+            expected_error(&target,"write_file",&format!("{root}/selected-root"),json!({"path":"kept.txt","content":"must-not-write","expected_content":"preserved"}),RemoteErrorKind::Conflict).await?;
+            let preserved=rpc(&target,"read_file",Some(&format!("{root}/moved-root")),json!({"path":"kept.txt"})).await?;
+            ensure!(preserved["text"].as_str().is_some_and(|s|s.contains("preserved")),"retargeted root changed the real file");
+            proof["checks"]["canonicalRootSymlinkRetargetRejectedBeforeWrite"]=json!(true);
             let (_left_owner,left_cancel)=watch::channel(false);let (_right_owner,right_cancel)=watch::channel(false);
             let (left,right)=tokio::join!(remote_transport::call(&target,"write_file",Some(&root),json!({"path":path,"content":"LEFT","expected_content":after}),left_cancel),remote_transport::call(&target,"write_file",Some(&root),json!({"path":path,"content":"RIGHT","expected_content":after}),right_cancel));
             ensure!(usize::from(left.is_ok())+usize::from(right.is_ok())==1,"concurrent stale save overwrote a winner");

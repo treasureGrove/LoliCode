@@ -380,7 +380,12 @@ def project_operation(request):
     root = text(request.get('root'), 4096, True)
     if not root.startswith('/') or any(ord(ch) < 32 for ch in root):
         reject('INVALID_REQUEST')
-    root = os.path.realpath(root)
+    canonical = os.path.realpath(root)
+    # A previously selected canonical root must not silently follow a newly
+    # inserted symlink to a different project after permission was granted.
+    if operation != 'open_project' and canonical != root:
+        reject('CONFLICT')
+    root = canonical
     root_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     try:
         args = request.get('args', {})

@@ -21,6 +21,7 @@ pub struct InprocessAgentState {
     engine: RwLock<Option<NativeEngine>>,
     binding: RwLock<Option<AgentOpenProject>>,
     extensions: OnceCell<Arc<InprocessExtensionStore>>,
+    remote: OnceCell<Arc<super::remote_projects::RemoteProjects>>,
     skill_snapshot: RwLock<Option<SkillSnapshot>>,
 }
 
@@ -53,7 +54,11 @@ impl InprocessAgentState {
         }
         let engine =
             NativeEngine::open(crate::config::get_app_config_dir().join("agent/native")).await?;
-        engine.set_application_tools(Arc::new(super::agent_applications::DesktopApplicationTools(app.state::<AppState>().inner().clone()))).await;
+        let state = app.state::<AppState>();
+        let remote = self.remote_projects(&state).await;
+        engine.set_application_tools(Arc::new(super::remote_agent_tools::DesktopToolHost {
+            local: super::agent_applications::DesktopApplicationTools(state.inner().clone()), remote,
+        })).await;
         let mut bundled = app
             .path()
             .resource_dir()
@@ -72,6 +77,24 @@ impl InprocessAgentState {
         Ok(engine)
     }
 
+    pub async fn remote_projects(&self, state: &AppState) -> Arc<super::remote_projects::RemoteProjects> {
+        self.remote.get_or_init(|| async {
+            Arc::new(super::remote_projects::RemoteProjects::new(state.db.clone(), crate::config::get_app_config_dir().join("agent/remote-workspaces")))
+        }).await.clone()
+    }
+
+    async fn validate_remote_project(&self, state: &AppState, path: &Path) -> Result<Option<String>, String> {
+        let remote = self.remote_projects(state).await;
+        if !remote.owns(path) { return Ok(None); }
+        let resolved = remote.resolve(path)?;
+        let (_stop, cancel) = tokio::sync::watch::channel(false);
+        let checked = remote.call(path, "open_project", json!({}), cancel).await?;
+        if checked["root"].as_str() != Some(&resolved.project.root) {
+            return Err("远程项目目录已改变，请在 SSH / WSL 中重新选择项目".into());
+        }
+        Ok(Some(format!("{} · {}", resolved.connection.name, resolved.project.name)))
+    }
+
     pub async fn bind_background_project(
         &self,
         app: &tauri::AppHandle,
@@ -79,11 +102,15 @@ impl InprocessAgentState {
         path: String,
         accounts: Vec<(String, String)>,
     ) -> Result<AgentCatalog, String> {
+        let remote = self.remote_projects(state).await;
+        let remote_requested = remote.owns(Path::new(&path));
         let path = tokio::task::spawn_blocking(move || canonical_project(&path))
             .await
             .map_err(|_| "项目目录检查未完成")??;
+        if remote_requested && !remote.owns(&path) { return Err("远程项目标识指向了其他目录，请检查应用数据；此次打开已取消".into()); }
         let _guard = self.lifecycle.lock().await;
         let engine = self.start_locked(app).await?;
+        self.validate_remote_project(state, &path).await?;
         let prepared = prepare_native_binding(state, &accounts).await?;
         let catalog = prepared.catalog.clone();
         engine
@@ -322,11 +349,15 @@ impl InprocessAgentState {
         accounts: Vec<(String, String)>,
         _refresh: bool,
     ) -> Result<AgentOpenProject, String> {
+        let remote = self.remote_projects(state).await;
+        let remote_requested = remote.owns(Path::new(&path));
         let path = tokio::task::spawn_blocking(move || canonical_project(&path))
             .await
             .map_err(|_| "项目目录检查未完成")??;
+        if remote_requested && !remote.owns(&path) { return Err("远程项目标识指向了其他目录，请检查应用数据；此次打开已取消".into()); }
         let _guard = self.lifecycle.lock().await;
         let engine = self.start_locked(app).await?;
+        let remote_name = self.validate_remote_project(state, &path).await?;
         let prepared = prepare_native_binding(state, &accounts).await?;
         let catalog = serde_json::to_value(&prepared.catalog).map_err(|_| "渠道目录编码失败")?;
         let mut result: AgentOpenProject = serde_json::from_value(
@@ -347,6 +378,7 @@ impl InprocessAgentState {
         {
             return Err("返回项目与所选目录不一致".into());
         }
+        if let Some(name) = remote_name { result.workspace.name = name; }
         let mut navigation = preferences::load(&state.db)?;
         let key = preferences::path_key(&result.workspace.path);
         let pinned = navigation.projects.get(&key).is_some_and(|p| p.pinned);

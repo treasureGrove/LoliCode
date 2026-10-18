@@ -791,7 +791,7 @@ impl NativeEngine {
             if *cancel.borrow() {
                 return Err(inference::CANCELLED.into());
             }
-            let (history, summary, project, mode, model, context, effort, system) = {
+            let (history, summary, project, mode, model, context, effort, mut system) = {
                 let state = entry.lock().await;
                 let session = &state.stored.snapshot.session;
                 let project = PathBuf::from(&session.project_path);
@@ -810,9 +810,14 @@ impl NativeEngine {
             };
             let remembered = memory.context(&project_key(&project));
             let applications = self.inner.applications.read().await.clone();
-            let mut schemas = tools::schemas();
-            if let Some(host) = &applications { schemas.extend(host.schemas()); }
-            if applications.as_ref().is_some_and(|host| host.allows_unreal()) && super::unreal::has_connection_for_project(&project).await {
+            let project_schemas = applications.as_ref().and_then(|host| host.project_schemas(&project));
+            let replaces_local = project_schemas.is_some();
+            let mut schemas = project_schemas.unwrap_or_else(tools::schemas);
+            if let Some(host) = &applications {
+                if !replaces_local { schemas.extend(host.schemas()); }
+                if let Some(note) = host.project_context(&project) { system.push('\n'); system.push_str(&note); }
+            }
+            if !replaces_local && applications.as_ref().is_some_and(|host| host.allows_unreal()) && super::unreal::has_connection_for_project(&project).await {
                 schemas.extend(super::unreal::schemas());
             }
             schemas.extend(internal_schemas());
@@ -964,7 +969,9 @@ impl NativeEngine {
                 } else {
                     let hosted = applications.as_ref().and_then(|host| host.inspect(&project, &call.name, &input));
                     let is_hosted = hosted.is_some();
-                    let inspection = if call.name == "unreal_editor_command" &&
+                    let inspection = if replaces_local && !is_hosted {
+                        Err("当前项目的工具没有可用的远程执行接口，此次操作未执行。".into())
+                    } else if call.name == "unreal_editor_command" &&
                         !applications.as_ref().is_some_and(|host| host.allows_unreal()) {
                         Err("请先在应用中心添加虚幻工作台".into())
                     } else { hosted.unwrap_or_else(|| tools::inspect(&project, &call.name, &input)) };
@@ -989,8 +996,14 @@ impl NativeEngine {
                                 )
                                 .await?;
                                 if is_hosted {
-                                    applications.as_ref().expect("inspected host").execute(&project, &call.name, &input, cancel.clone()).await
-                                        .map(|text| tools::ToolOutput { text, image_data_url: None, diffs: Vec::new(), file_changes: Vec::new() })
+                                    let host = applications.as_ref().expect("inspected host");
+                                    // Approval belongs to the inspected target and resources.
+                                    // A connection/app change while waiting cannot reuse it.
+                                    match host.inspect(&project, &call.name, &input) {
+                                        Some(Ok(current)) if current == inspection => host.execute_output(&project, &call.name, &input, cancel.clone()).await,
+                                        Some(Err(error)) => Err(error),
+                                        _ => Err("工具目标或权限范围已经改变，此次操作未执行，请重新确认。".into()),
+                                    }
                                 } else if call.name == "unreal_editor_command" && !applications.as_ref().is_some_and(|host| host.allows_unreal()) {
                                     Err("虚幻工作台已移除，此次操作未执行".into())
                                 } else {

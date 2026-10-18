@@ -1393,3 +1393,111 @@ async fn application_tools_use_engine_permissions_and_revocation() {
         engine.shutdown().await.unwrap();
     }
 }
+
+struct RemoteHostFixture {
+    target: std::sync::atomic::AtomicUsize,
+    executions: std::sync::atomic::AtomicUsize,
+}
+impl applications::ApplicationTools for RemoteHostFixture {
+    fn schemas(&self) -> Vec<Value> {
+        vec![json!({"type":"function","function":{"name":"local_domain_only"}})]
+    }
+    fn project_schemas(&self, _: &std::path::Path) -> Option<Vec<Value>> {
+        Some(applications::core_tool_schemas())
+    }
+    fn project_context(&self, _: &std::path::Path) -> Option<String> {
+        Some("REMOTE_FIXTURE: tools operate on the remote project, never on the private local anchor.".into())
+    }
+    fn inspect(&self, _: &std::path::Path, name: &str, _: &Value) -> Option<Result<applications::ToolInspection, String>> {
+        if name != "write_file" { return None; }
+        Some(Ok(applications::ToolInspection {
+            action: "remote-edit".into(),
+            resources: vec![format!("remote-target-{}/remote.txt", self.target.load(std::sync::atomic::Ordering::SeqCst))],
+            description: "Edit remote fixture".into(), mutating: true, requires_approval: true, dangerous: false,
+        }))
+    }
+    fn execute<'a>(&'a self, _: &'a std::path::Path, _: &'a str, _: &'a Value, _: tokio::sync::watch::Receiver<bool>) -> applications::ApplicationResult<'a> {
+        Box::pin(async { panic!("structured outputs must not be reduced to text") })
+    }
+    fn execute_output<'a>(&'a self, _: &'a std::path::Path, _: &'a str, _: &'a Value, cancel: tokio::sync::watch::Receiver<bool>) -> applications::ApplicationOutput<'a> {
+        Box::pin(async move {
+            if *cancel.borrow() { return Err("任务已停止".into()); }
+            self.executions.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Ok(applications::ToolOutput {
+                text: "REMOTE_RECEIPT_ONLY".into(),
+                image_data_url: Some("data:image/png;base64,REMOTE_IMAGE_FIXTURE".into()),
+                diffs: vec![],
+                file_changes: vec![applications::FileChange { path: "remote.txt".into(), before: Some("PRIVATE_BEFORE_SNAPSHOT".into()), after: Some("PRIVATE_AFTER_SNAPSHOT".into()) }],
+            })
+        })
+    }
+}
+
+#[tokio::test]
+async fn hosted_structured_results_preserve_private_diffs_and_model_images() {
+    let fake = Fake::start(|input| {
+        if last_tool(input).is_none() { tool("write_file", json!({"path":"remote.txt","content":"ignored","expected_content":null})) }
+        else { text("REMOTE_TASK_FINISHED") }
+    }).await;
+    let (data, project, engine, id) = setup(&fake).await;
+    let host = Arc::new(RemoteHostFixture { target: 1.into(), executions: 0.into() });
+    engine.set_application_tools(host.clone()).await;
+    send(&engine, &id, "remote-structured", "Edit the remote file").await;
+    let result = wait(&engine, &id, |v| v["status"] == "idle").await;
+    assert_eq!(host.executions.load(std::sync::atomic::Ordering::SeqCst), 1);
+    assert!(!project.path().join("remote.txt").exists(), "no write may hit the local anchor");
+    assert_eq!(result["diffs"][0]["path"], "remote.txt");
+    assert!(result["diffs"].to_string().contains("PRIVATE_AFTER_SNAPSHOT"));
+    {
+        let requests = fake.requests.lock().unwrap();
+        let next = requests.last().unwrap();
+        assert!(next["messages"][0]["content"].as_str().unwrap().contains("REMOTE_FIXTURE"));
+        assert!(next["messages"].to_string().contains("REMOTE_IMAGE_FIXTURE"));
+        assert!(next["messages"].to_string().contains("REMOTE_RECEIPT_ONLY"));
+        assert!(!next["messages"].to_string().contains("PRIVATE_BEFORE_SNAPSHOT"));
+        assert!(!next["messages"].to_string().contains("PRIVATE_AFTER_SNAPSHOT"));
+        assert!(!next["tools"].to_string().contains("local_domain_only"));
+        assert!(next["tools"].to_string().contains("ask_user"));
+    }
+    engine.shutdown().await.unwrap();
+    let reopened = NativeEngine::open(data.path().into()).await.unwrap();
+    assert_eq!(snapshot(&reopened, &id).await["diffs"], result["diffs"], "remote cumulative diffs survive a real store reopen");
+    reopened.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn hosted_approval_cannot_be_reused_after_target_change() {
+    let fake = Fake::start(|input| {
+        if last_tool(input).is_none() { tool("write_file", json!({"path":"remote.txt","content":"x","expected_content":null})) }
+        else { text("RETARGET_CHECK_FINISHED") }
+    }).await;
+    let (_data, project, engine, id) = setup(&fake).await;
+    let host = Arc::new(RemoteHostFixture { target: 1.into(), executions: 0.into() });
+    engine.set_application_tools(host.clone()).await;
+    engine.call("updateSession", json!({"sessionId":id,"permissionMode":"ask"})).await.unwrap();
+    send(&engine, &id, "remote-retarget", "Edit the remote file").await;
+    let pending = wait(&engine, &id, |v| v["status"] == "waiting_permission").await;
+    host.target.store(2, std::sync::atomic::Ordering::SeqCst);
+    engine.call("replyPermission", json!({"sessionId":id,"requestId":pending["permissions"][0]["id"],"decision":"once"})).await.unwrap();
+    let result = wait(&engine, &id, |v| v["status"] == "idle").await;
+    assert_eq!(host.executions.load(std::sync::atomic::Ordering::SeqCst), 0);
+    assert!(result.to_string().contains("工具目标或权限范围已经改变"));
+    assert!(!project.path().join("remote.txt").exists());
+    engine.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn project_tool_replacement_fails_closed_for_unhandled_local_tools() {
+    let fake = Fake::start(|input| {
+        if last_tool(input).is_none() { tool("read_file", json!({"path":"private-local.txt"})) }
+        else { text("NO_LOCAL_FALLBACK") }
+    }).await;
+    let (_data, project, engine, id) = setup(&fake).await;
+    std::fs::write(project.path().join("private-local.txt"), "LOCAL_ANCHOR_SECRET").unwrap();
+    engine.set_application_tools(Arc::new(RemoteHostFixture { target: 1.into(), executions: 0.into() })).await;
+    send(&engine, &id, "no-fallback", "Read a remote file").await;
+    let result = wait(&engine, &id, |v| v["status"] == "idle").await;
+    assert!(result.to_string().contains("没有可用的远程执行接口"));
+    assert!(!fake.requests.lock().unwrap().last().unwrap()["messages"].to_string().contains("LOCAL_ANCHOR_SECRET"));
+    engine.shutdown().await.unwrap();
+}
