@@ -155,8 +155,15 @@ test("native binaries, traversal, linked roots and non-official transport are re
     "https://evil.invalid/lolicode/renderer/1.zip",
     "https://tools.treasuregrove.art/lolicode/renderer/../private.zip",
     "https://tools.treasuregrove.art/lolicode/renderer/1.zip?q=1",
+    "https://pub-250df9737586416fbd6e8cb0a843b249.r2.dev/lolicode/releases/renderer.zip",
+    "https://pub-250df9737586416fbd6e8cb0a843b249.r2.dev.evil.invalid/lolicode/renderer/1.zip",
   ])
     assert.throws(() => officialRendererURL(url));
+  assert.doesNotThrow(() =>
+    officialRendererURL(
+      "https://pub-250df9737586416fbd6e8cb0a843b249.r2.dev/lolicode/renderer/1/renderer.zip",
+    ),
+  );
   await writeFile(path.join(f.source, "native.exe"), "native");
   await assert.rejects(prepareRendererPack(f.options));
   await rm(path.join(f.source, "native.exe"));

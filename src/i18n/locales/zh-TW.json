@@ -970,6 +970,7 @@
     "updateTo": "更新至 v{{version}}",
     "updating": "更新中...",
     "checking": "檢查中...",
+    "stableUpdateChannel": "正式更新通道 · 測試版單獨下載",
     "upToDate": "已是最新",
     "aboutHint": "檢視版本資訊與更新狀態。",
     "portableMode": "目前為可攜版，更新需手動下載。",

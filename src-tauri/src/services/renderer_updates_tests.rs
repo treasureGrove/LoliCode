@@ -162,12 +162,18 @@ fn strict_paths_and_official_transport_do_not_expand_native_permissions() {
         "https://tools.treasuregrove.art/lolicode/resources/1.zip",
         "https://user:pass@tools.treasuregrove.art/lolicode/renderer/1.zip",
         "https://tools.treasuregrove.art/lolicode/renderer/1.zip?q=1",
+        "https://pub-250df9737586416fbd6e8cb0a843b249.r2.dev/lolicode/releases/renderer.zip",
+        "https://pub-250df9737586416fbd6e8cb0a843b249.r2.dev.evil.example/lolicode/renderer/1.zip",
     ] {
         assert!(official_url(url).is_err());
     }
     assert!(
         official_url("https://tools.treasuregrove.art/lolicode/renderer/1/renderer.zip").is_ok()
     );
+    assert!(official_url(
+        "https://pub-250df9737586416fbd6e8cb0a843b249.r2.dev/lolicode/renderer/1/renderer.zip"
+    )
+    .is_ok());
     assert!(digest(&native_contract()));
     println!("renderer-native-contract={}", native_contract());
 }

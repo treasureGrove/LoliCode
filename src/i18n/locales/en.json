@@ -972,6 +972,7 @@
     "updateTo": "Update to v{{version}}",
     "updating": "Updating...",
     "checking": "Checking...",
+    "stableUpdateChannel": "Stable updates · test builds are separate downloads",
     "upToDate": "Up to Date",
     "aboutHint": "View version information and update status.",
     "portableMode": "Portable mode: updates require manual download.",

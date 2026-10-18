@@ -1,0 +1,33 @@
+{
+  "version": "4.0.21",
+  "items": [
+    {
+      "type": "new",
+      "zh": "加入签名界面热更新，支持下次启动生效和异常回退",
+      "zh-TW": "加入簽名介面熱更新，支援下次啟動生效與異常復原",
+      "en": "Add signed interface updates with activation on restart and automatic recovery",
+      "ja": "署名付き画面更新と再起動時の適用・異常時の復元に対応"
+    },
+    {
+      "type": "fix",
+      "zh": "更新前备份数据库，修复自定义数据路径恢复与配置保护",
+      "zh-TW": "更新前備份資料庫，修復自訂資料路徑復原與設定保護",
+      "en": "Back up data before updates and recover unavailable custom data paths",
+      "ja": "更新前にデータをバックアップしカスタム保存先を復元"
+    },
+    {
+      "type": "improve",
+      "zh": "接通正式更新交付，支持本地图片与界面资源独立更新",
+      "zh-TW": "接通正式更新交付，支援本機圖片與介面資源獨立更新",
+      "en": "Connect stable delivery and independent local artwork and interface updates",
+      "ja": "安定版の配信とローカル画像・画面の個別更新を接続"
+    },
+    {
+      "type": "fix",
+      "zh": "完善 SSH 项目、工作流、定时任务与取消状态恢复",
+      "zh-TW": "完善 SSH 專案、工作流程、排程任務與取消狀態復原",
+      "en": "Improve SSH projects, workflows, scheduling and cancellation recovery",
+      "ja": "SSHプロジェクト・処理手順・定時処理・取消状態を改善"
+    }
+  ]
+}

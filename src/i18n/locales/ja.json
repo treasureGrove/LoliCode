@@ -970,6 +970,7 @@
     "updateTo": "v{{version}} に更新",
     "updating": "更新中...",
     "checking": "確認中...",
+    "stableUpdateChannel": "安定版の更新 · テスト版は個別ダウンロード",
     "upToDate": "最新バージョンです",
     "aboutHint": "バージョン情報と更新状況を表示します。",
     "portableMode": "ポータブルモード: 更新は手動ダウンロードが必要です。",

@@ -30,6 +30,18 @@ pub struct RendererStatus {
     pub state: PackView,
 }
 impl RendererHost {
+    /// Acceptance-only constructor: the caller supplies its isolated store.
+    /// Does not resolve any application paths, database or account state.
+    #[cfg(feature = "test-hooks")]
+    pub fn isolated(store: Arc<RendererStore>) -> Arc<Self> {
+        let host = Arc::new(Self::default());
+        let _ = host.session.set(Session {
+            boot: store.begin_boot(),
+            store: Some(store),
+            development: false,
+        });
+        host
+    }
     pub fn store(&self) -> Result<Arc<RendererStore>, String> {
         self.session
             .get()

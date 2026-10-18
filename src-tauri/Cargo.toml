@@ -1,6 +1,6 @@
 [package]
 name = "tai-switch"
-version = "4.0.21-rc.2"
+version = "4.0.21"
 description = "LoliCode desktop coding agent with shared model channels"
 authors = ["Jason Young"]
 license = "MIT"
@@ -135,4 +135,8 @@ tempfile = "3"
 
 [[example]]
 name = "lolicode_resource_acceptance"
+required-features = ["test-hooks"]
+
+[[example]]
+name = "lolicode_renderer_acceptance"
 required-features = ["test-hooks"]

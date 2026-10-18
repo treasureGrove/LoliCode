@@ -6,7 +6,7 @@
 
 设置 → 关于 → 界面与交互更新中，检查并下载对应版本。下载只暂存整份前端，不替换正在运行的文件；任务结束、编辑内容保存后，点击重启应用。此过程不运行安装器。下次正常启动也会应用已暂存版本。
 
-开发环境继续使用 Vite HMR。正式应用启动只读本地缓存，不自动请求网络；没有缓存时使用应用内置界面。图片装饰更新是单独的 `lolicode-resources` 协议，仍只接受原有四张 PNG，不可用来加载脚本。
+开发环境继续使用 Vite HMR。正式应用启动只读本地缓存，不自动请求网络；没有缓存时使用应用内置界面。图片装饰更新是单独的 `lolicode-presentation` 协议，仍只接受原有四张 PNG，不可用来加载脚本。
 
 支持前端 JS/CSS、HTML 入口、字体与配套图片。Rust、本地 Agent 引擎、数据库结构、系统权限和原生依赖的变化仍需应用安装包更新。
 
@@ -25,7 +25,7 @@
 
 清单绑定精确原生版本与编译时指纹。指纹使用域分隔、长度编码和 LF 规范化，涵盖桌面/Agent Rust 源码、构建脚本、Cargo 配置与桌面依赖锁、Tauri 配置及 capabilities。Rust 构建器与 Node 发布脚本使用相同算法。原生输入变更后不能将新界面包用于旧指纹；发布须使用原生安装包对应的冻结源码，单独修改前端。
 
-包只从官网专用 HTTPS 目录下载，不跟随重定向，不修改 CSP 或 IPC 权限。当前检查地址为 `https://tools.treasuregrove.art/lolicode/renderer/latest.json`，未发布时 404 表示没有界面更新。
+包只从官网专用 HTTPS 目录或既有 R2 公共域的 `/lolicode/renderer/` 目录下载，不跟随重定向，不修改 CSP 或 IPC 权限。其他 R2 域名、安装包目录、相似域名和查询参数不会被接受。原生下载器使用产品 User-Agent。默认检查地址仍为 `https://tools.treasuregrove.art/lolicode/renderer/latest.json`，未发布时 404 表示没有界面更新。
 
 1. 在原生版本对应的冻结源码上构建前端：`pnpm build:renderer`。
 2. 使用 `scripts/lolicode-renderer-pack.mjs prepare`，指定绝对路径的 `--source`（dist）、新的 `--output`、递增整数 `--version` 和官网目录内的 `--archive-url`。
@@ -33,4 +33,12 @@
 4. 用 `finalize --directory <目录> --signature <签名文件> --public-key <公钥.pub>` 校验签名、公钥与实际 ZIP，生成 `latest.json`。发布目录和清单禁止覆盖。
 5. 先发布不可变 ZIP，再发布检查清单。测试实际桌面启动、应用和回退后，才能更新公开清单。
 
-本轮仅在隔离目录生成包和使用合成签名夹具；没有发布可执行界面包，也没有改动稳定清单、RC2 附件或用户更新缓存。单元与组件测试不替代实际安装版的端到端验收。
+## 独立候选验收
+
+`lolicode_renderer_acceptance` 示例仅在 `test-hooks` 下构建，需同时启用 `tauri/test`。它只使用新建、绝对路径、名为 `renderer-acceptance-<UUID>` 的独立缓存；重开时核对所有权记录。`stage` 接受明确的候选 HTTPS 清单或本地签名目录，默认产品 IPC 不接受自定义 feed。
+
+通过多个独立进程分别运行 `stage`、`confirm`、`boot`、`rollback`、`boot`，检查暂存、确认、重开与恢复。`confirm` 使用生产 `confirm_renderer_boot` IPC，`rollback` 使用生产回退 IPC，资源通过 Tauri 的 AssetResolver 和原生 CSP 处理。另行检查未确认启动、已确认缓存被修改时的下次启动回退。此示例的 MockRuntime 没有 WebView，回退端使用明确标记的内置对照 HTML；不能将其说成真实桌面渲染、正式安装器运行或真实账户数据连续性验收。
+
+2026-10-18 已将实际 dist 的 41 文件整包用发行公钥对应的密钥签名，并上传到原 R2 桶的独立 candidates 前缀。原生下载器从公网获取 14,576,742 字节包并验签、逐文件校验，随后通过上述跨进程 Tauri 解析/IPC/回退检查。该候选只适配对应未发布源码指纹，不适配已公开 RC2；默认界面清单、稳定安装清单和 RC2 附件没有更新，用户缓存也没有修改。
+
+非交互签名通过现有 Tauri CLI 的 `--private-key-path` 使用配置好的密钥文件；空密码显式传 `--password=`，不将密钥字串放进命令行或日志。Tauri CLI 对未传密码与传入空密码有不同处理，见[对应版本的官方签名辅助实现](https://github.com/tauri-apps/tauri/blob/tauri-cli-v2.10.1/crates/tauri-cli/src/helpers/updater_signature.rs)。签名完成后仍需运行 finalize 验证嵌入公钥与实际归档，不能以签名命令退出成功代替包校验。

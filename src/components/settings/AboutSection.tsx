@@ -252,6 +252,11 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-body font-semibold text-fg-1">
             {t("nav.softwareUpdates", { defaultValue: "软件更新" })}
+            <span className="ml-2 text-caption font-normal text-fg-2">
+              {t("settings.stableUpdateChannel", {
+                defaultValue: "正式更新通道 · 测试版单独下载",
+              })}
+            </span>
           </h2>
           <div className="flex flex-wrap gap-2">
             <Button

@@ -119,6 +119,8 @@ pub mod agent_test_support {
     pub use crate::services::remote_projects::RemoteProjects;
     pub use crate::services::agent_applications::DesktopApplicationTools;
     pub use crate::services::resource_updates::{Envelope as ResourceEnvelope, ResourceStore};
+    pub use crate::services::renderer_updates::{native_contract as renderer_native_contract, Envelope as RendererEnvelope, RendererStore};
+    pub use crate::services::renderer_host::{wrap as wrap_renderer_assets, RendererHost};
     pub use crate::services::zhipu_login::acceptance_secret_read_only as glm_acceptance_secret;
     pub use crate::services::{
         agent::{AgentState, AgentWorkspace},

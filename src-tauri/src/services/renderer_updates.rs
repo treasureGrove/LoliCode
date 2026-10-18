@@ -126,6 +126,9 @@ pub fn official_url(raw: &str) -> Result<(), String> {
     let valid = match u.host_str() {
         Some("tools.treasuregrove.art") => u.path().starts_with("/lolicode/renderer/"),
         Some("lolicode.com") => u.path().starts_with("/downloads/renderer/"),
+        Some("pub-250df9737586416fbd6e8cb0a843b249.r2.dev") => {
+            u.path().starts_with("/lolicode/renderer/")
+        }
         _ => false,
     };
     if !valid
@@ -560,7 +563,16 @@ impl RendererStore {
         )
     }
     pub async fn download(&self) -> Result<(Envelope, Vec<u8>), String> {
-        let e = fetch_envelope()
+        self.download_feed(FEED).await
+    }
+    /// Explicit candidate feeds are exposed only to isolated acceptance tools,
+    /// never to IPC or application preferences.
+    #[cfg(feature = "test-hooks")]
+    pub async fn download_candidate(&self, feed: &str) -> Result<(Envelope, Vec<u8>), String> {
+        self.download_feed(feed).await
+    }
+    async fn download_feed(&self, feed: &str) -> Result<(Envelope, Vec<u8>), String> {
+        let e = fetch_envelope_at(feed)
             .await?
             .ok_or("尚未发布适合当前应用的界面更新")?;
         let (m, _) = self.inspect(&e)?;
@@ -577,6 +589,10 @@ impl RendererStore {
 async fn download(url: &str, limit: usize) -> Result<Option<Vec<u8>>, String> {
     official_url(url)?;
     let client = reqwest::Client::builder()
+        .user_agent(concat!(
+            "LoliCode-Interface-Updater/",
+            env!("CARGO_PKG_VERSION")
+        ))
         .connect_timeout(std::time::Duration::from_secs(10))
         .timeout(std::time::Duration::from_secs(90))
         .redirect(reqwest::redirect::Policy::none())
@@ -604,7 +620,10 @@ async fn download(url: &str, limit: usize) -> Result<Option<Vec<u8>>, String> {
     Ok(Some(bytes))
 }
 async fn fetch_envelope() -> Result<Option<Envelope>, String> {
-    download(FEED, MAX_MANIFEST * 3)
+    fetch_envelope_at(FEED).await
+}
+async fn fetch_envelope_at(feed: &str) -> Result<Option<Envelope>, String> {
+    download(feed, MAX_MANIFEST * 3)
         .await?
         .map(|b| serde_json::from_slice(&b).map_err(|_| "界面更新清单无效".into()))
         .transpose()

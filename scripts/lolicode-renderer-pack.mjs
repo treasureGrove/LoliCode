@@ -47,7 +47,9 @@ export function officialRendererURL(raw) {
       (u.hostname === "tools.treasuregrove.art" &&
         u.pathname.startsWith("/lolicode/renderer/")) ||
       (u.hostname === "lolicode.com" &&
-        u.pathname.startsWith("/downloads/renderer/"))
+        u.pathname.startsWith("/downloads/renderer/")) ||
+      (u.hostname === "pub-250df9737586416fbd6e8cb0a843b249.r2.dev" &&
+        u.pathname.startsWith("/lolicode/renderer/"))
     )
   )
     throw Error("Not an official renderer URL");
