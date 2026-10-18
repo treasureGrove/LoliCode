@@ -1,6 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { AgentCatalog } from "@/types/agent";
 
+export const TAVERN_PRESETS_KEY = ["tavern", "presets"] as const;
+
 export interface TavernCharacter {
   id: string;
   name: string;
@@ -44,6 +46,17 @@ export interface TavernSnapshot {
   stories: TavernStory[];
 }
 
+export interface TavernPreset {
+  id: string;
+  name: string;
+  work: string;
+  tagline: string;
+  kind: "original" | "fan";
+  tags: string[];
+  firstMes: string;
+  added: boolean;
+}
+
 export interface TavernContextPreview {
   preHistory: string;
   postHistory: string;
@@ -54,6 +67,9 @@ export interface TavernContextPreview {
 
 export const tavernApi = {
   getSnapshot: () => invoke<TavernSnapshot>("get_tavern_snapshot"),
+  getPresets: () => invoke<TavernPreset[]>("get_tavern_presets"),
+  addPreset: (presetId: string) =>
+    invoke<TavernCharacter>("add_tavern_preset", { presetId }),
   getCatalog: () => invoke<AgentCatalog>("get_tavern_catalog"),
   importCharacter: (path: string) =>
     invoke<TavernCharacter>("import_tavern_character", { path }),

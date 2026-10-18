@@ -5,6 +5,27 @@ use crate::{
 use tauri::State;
 
 #[tauri::command]
+pub fn get_tavern_presets(state: State<'_, AppState>) -> Result<Vec<tavern::TavernPreset>, String> {
+    crate::services::builtin_apps::require(
+        &state.db,
+        crate::services::builtin_apps::BuiltinApp::Tavern,
+    )?;
+    tavern::preset_catalog(&state)
+}
+
+#[tauri::command]
+pub fn add_tavern_preset(
+    state: State<'_, AppState>,
+    preset_id: String,
+) -> Result<tavern::TavernCharacter, String> {
+    crate::services::builtin_apps::require(
+        &state.db,
+        crate::services::builtin_apps::BuiltinApp::Tavern,
+    )?;
+    tavern::add_preset(&state, &preset_id)
+}
+
+#[tauri::command]
 pub fn get_tavern_snapshot(state: State<'_, AppState>) -> Result<tavern::TavernSnapshot, String> {
     crate::services::builtin_apps::require(
         &state.db,

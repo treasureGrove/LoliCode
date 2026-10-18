@@ -26,7 +26,14 @@ import {
 import { AppPageHeader } from "@/components/shell/AppPageHeader";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/lib/toast";
-import { tavernApi, type TavernStory } from "@/lib/api/tavern";
+import {
+  tavernApi,
+  TAVERN_PRESETS_KEY,
+  type TavernStory,
+  type TavernSnapshot,
+} from "@/lib/api/tavern";
+import { TavernPresetGallery } from "./TavernPresetGallery";
+import companion from "@/assets/atelier/companion.png";
 import { cn } from "@/lib/utils";
 
 const TAVERN_QUERY_KEY = ["tavern", "snapshot"] as const;
@@ -64,6 +71,7 @@ export function TavernPage({ onOpenChannels }: { onOpenChannels: () => void }) {
   const [sending, setSending] = useState(false);
   const [importing, setImporting] = useState(false);
   const [showContext, setShowContext] = useState(false);
+  const [showPresets, setShowPresets] = useState(false);
   const messageEndRef = useRef<HTMLDivElement>(null);
 
   const snapshot = useQuery({
@@ -182,6 +190,38 @@ export function TavernPage({ onOpenChannels }: { onOpenChannels: () => void }) {
     }
   };
 
+  const startPreset = async (presetId: string) => {
+    if (sending || selectedStory?.isGenerating)
+      throw new Error(t("tavern.presets.busy"));
+    await queryClient.ensureQueryData({
+      queryKey: TAVERN_QUERY_KEY,
+      queryFn: tavernApi.getSnapshot,
+    });
+    const character = await tavernApi.addPreset(presetId);
+    // Keep the successfully added card even if creating the story fails.
+    await queryClient.cancelQueries({ queryKey: TAVERN_QUERY_KEY });
+    queryClient.setQueryData<TavernSnapshot>(TAVERN_QUERY_KEY, (current) => ({
+      characters: [
+        character,
+        ...(current?.characters ?? []).filter(
+          (item) => item.id !== character.id,
+        ),
+      ],
+      stories: current?.stories ?? [],
+    }));
+    void queryClient.invalidateQueries({ queryKey: TAVERN_PRESETS_KEY });
+    const story = await tavernApi.createStory(character.id);
+    await queryClient.cancelQueries({ queryKey: TAVERN_QUERY_KEY });
+    queryClient.setQueryData<TavernSnapshot>(TAVERN_QUERY_KEY, (current) => ({
+      characters: current?.characters ?? [character],
+      stories: upsertStory(current?.stories ?? [], story),
+    }));
+    setCharacterId(character.id);
+    setStoryId(story.id);
+    setShowContext(false);
+    setDraft("");
+  };
+
   const deleteStory = async () => {
     if (!selectedStory || selectedStory.isGenerating) return;
     try {
@@ -243,6 +283,10 @@ export function TavernPage({ onOpenChannels }: { onOpenChannels: () => void }) {
   const locale = i18n.resolvedLanguage ?? i18n.language;
   const modelOptions = catalog.data?.models ?? [];
   const storyCharacter = selectedCharacter ?? selectedStoryCharacter;
+  const avatarUrl =
+    selectedCharacter?.id === "builtin:sillyloli"
+      ? companion
+      : avatar.data?.dataUrl;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -251,18 +295,24 @@ export function TavernPage({ onOpenChannels }: { onOpenChannels: () => void }) {
         title={t("tavern.title")}
         subtitle={t("tavern.subtitle")}
         actions={
-          <Button
-            variant="outline"
-            onClick={() => void importCharacter()}
-            disabled={importing}
-          >
-            {importing ? (
-              <LoaderCircle className="h-4 w-4 animate-spin" />
-            ) : (
-              <Upload className="h-4 w-4" />
-            )}
-            {t("tavern.importCard")}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button onClick={() => setShowPresets(true)}>
+              <BookHeart className="h-4 w-4" />
+              {t("tavern.presets.title")}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => void importCharacter()}
+              disabled={importing}
+            >
+              {importing ? (
+                <LoaderCircle className="h-4 w-4 animate-spin" />
+              ) : (
+                <Upload className="h-4 w-4" />
+              )}
+              {t("tavern.importCard")}
+            </Button>
+          </div>
         }
       />
 
@@ -312,11 +362,16 @@ export function TavernPage({ onOpenChannels }: { onOpenChannels: () => void }) {
                     )}
                   >
                     <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border bg-subtle text-fg-2">
-                      {character.hasAvatar &&
-                      character.id === selectedCharacter?.id &&
-                      avatar.data ? (
+                      {character.id === "builtin:sillyloli" ||
+                      (character.hasAvatar &&
+                        character.id === selectedCharacter?.id &&
+                        avatarUrl) ? (
                         <img
-                          src={avatar.data.dataUrl}
+                          src={
+                            character.id === "builtin:sillyloli"
+                              ? companion
+                              : avatarUrl
+                          }
                           alt=""
                           className="h-full w-full object-cover"
                         />
@@ -331,7 +386,9 @@ export function TavernPage({ onOpenChannels }: { onOpenChannels: () => void }) {
                         {character.name}
                       </span>
                       <span className="block truncate text-xs text-fg-3">
-                        {character.sourceFormat}
+                        {character.sourceFormat === "builtin"
+                          ? t("tavern.presets.builtin")
+                          : character.sourceFormat}
                       </span>
                     </span>
                     {character.id === characterId && (
@@ -405,7 +462,9 @@ export function TavernPage({ onOpenChannels }: { onOpenChannels: () => void }) {
                 <p className="truncate text-xs text-fg-3">
                   {selectedStory
                     ? storyCharacter.name
-                    : storyCharacter.sourceFormat}
+                    : storyCharacter.sourceFormat === "builtin"
+                      ? t("tavern.presets.builtin")
+                      : storyCharacter.sourceFormat}
                   {storyCharacter.creator ? ` · ${storyCharacter.creator}` : ""}
                 </p>
               )}
@@ -537,9 +596,9 @@ export function TavernPage({ onOpenChannels }: { onOpenChannels: () => void }) {
             {!selectedStory ? (
               <div className="flex h-full min-h-[300px] flex-col items-center justify-center text-center">
                 <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-border bg-subtle text-action-text">
-                  {selectedCharacter?.hasAvatar && avatar.data ? (
+                  {avatarUrl ? (
                     <img
-                      src={avatar.data.dataUrl}
+                      src={avatarUrl}
                       alt=""
                       className="h-full w-full rounded-2xl object-cover"
                     />
@@ -561,14 +620,20 @@ export function TavernPage({ onOpenChannels }: { onOpenChannels: () => void }) {
                     {t("tavern.newStory")}
                   </Button>
                 ) : (
-                  <Button
-                    className="mt-5"
-                    onClick={() => void importCharacter()}
-                    disabled={importing}
-                  >
-                    <Upload className="h-4 w-4" />
-                    {t("tavern.importCard")}
-                  </Button>
+                  <div className="mt-5 flex flex-wrap justify-center gap-2">
+                    <Button onClick={() => setShowPresets(true)}>
+                      <BookHeart className="h-4 w-4" />
+                      {t("tavern.presets.choose")}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => void importCharacter()}
+                      disabled={importing}
+                    >
+                      <Upload className="h-4 w-4" />
+                      {t("tavern.importCard")}
+                    </Button>
+                  </div>
                 )}
               </div>
             ) : selectedStory.messages.length === 0 ? (
@@ -593,11 +658,10 @@ export function TavernPage({ onOpenChannels }: { onOpenChannels: () => void }) {
                       )}
                     >
                       {message.role === "assistant" &&
-                      storyCharacter?.hasAvatar &&
                       selectedStoryCharacter?.id === selectedCharacter?.id &&
-                      avatar.data ? (
+                      avatarUrl ? (
                         <img
-                          src={avatar.data.dataUrl}
+                          src={avatarUrl}
                           alt=""
                           className="h-full w-full object-cover"
                         />
@@ -698,6 +762,12 @@ export function TavernPage({ onOpenChannels }: { onOpenChannels: () => void }) {
           </div>
         </section>
       </div>
+      <TavernPresetGallery
+        open={showPresets}
+        onOpenChange={setShowPresets}
+        onStart={startPreset}
+        busy={sending || Boolean(selectedStory?.isGenerating)}
+      />
     </div>
   );
 }

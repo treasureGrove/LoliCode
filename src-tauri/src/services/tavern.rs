@@ -27,6 +27,9 @@ const MAX_HISTORY_MESSAGES: usize = 60;
 const MAX_MODEL_RESPONSE_BYTES: usize = 8 * 1024 * 1024;
 const WORLD_INFO_BUDGET_CHARS: usize = 12_000;
 
+mod presets;
+pub use presets::{add_preset, preset_catalog, TavernPreset};
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TavernCharacter {
@@ -246,7 +249,29 @@ pub fn import_character(state: &AppState, path: &str) -> Result<TavernCharacter,
     } else {
         None
     };
-    let card = TavernCharacter {
+    let card = character_from_data(id, data, source_format, avatar_relative_path.is_some())?;
+    let _write = store_gate().lock().map_err(|_| "酒馆存储繁忙，请重试")?;
+    let mut store = read_store(state)?;
+    store.characters.push(StoredCharacter {
+        card: card.clone(),
+        raw_data,
+        avatar_relative_path,
+    });
+    write_store(state, &store)?;
+    Ok(card)
+}
+
+fn character_from_data(
+    id: String,
+    data: &Value,
+    source_format: String,
+    has_avatar: bool,
+) -> Result<TavernCharacter, String> {
+    let name = string_field(data, "name").trim().to_string();
+    if name.is_empty() {
+        return Err("角色卡缺少角色名称，原有角色没有改动".into());
+    }
+    Ok(TavernCharacter {
         id,
         name,
         description: string_field(data, "description"),
@@ -261,18 +286,9 @@ pub fn import_character(state: &AppState, path: &str) -> Result<TavernCharacter,
         creator: string_field(data, "creator"),
         character_version: string_field(data, "character_version"),
         source_format,
-        has_avatar: avatar_relative_path.is_some(),
+        has_avatar,
         imported_at: now_ms(),
-    };
-    let _write = store_gate().lock().map_err(|_| "酒馆存储繁忙，请重试")?;
-    let mut store = read_store(state)?;
-    store.characters.push(StoredCharacter {
-        card: card.clone(),
-        raw_data,
-        avatar_relative_path,
-    });
-    write_store(state, &store)?;
-    Ok(card)
+    })
 }
 
 pub fn avatar(state: &AppState, character_id: &str) -> Result<TavernAvatar, String> {

@@ -1875,6 +1875,8 @@ pub fn run() {
             commands::list_builtin_apps,
             commands::set_builtin_app_enabled,
             commands::get_tavern_snapshot,
+            commands::get_tavern_presets,
+            commands::add_tavern_preset,
             commands::import_tavern_character,
             commands::get_tavern_avatar,
             commands::get_tavern_catalog,
