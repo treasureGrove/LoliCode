@@ -12,6 +12,7 @@ import {
   X,
 } from "lucide-react";
 import { ResourceUpdatesSection } from "./ResourceUpdatesSection";
+import { RendererUpdatesSection } from "./RendererUpdatesSection";
 import { Button } from "@/components/ui/button";
 import { useTranslation } from "react-i18next";
 import { toast } from "@/lib/toast";
@@ -243,6 +244,7 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
         </div>
       </div>
       <ResourceUpdatesSection />
+      <RendererUpdatesSection />
       <section
         aria-label={t("nav.softwareUpdates", { defaultValue: "软件更新" })}
         className="space-y-3 px-5 py-4"

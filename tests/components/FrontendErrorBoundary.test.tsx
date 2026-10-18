@@ -3,6 +3,9 @@ const reportFrontendError = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/frontendLogger", () => ({
   reportFrontendError,
 }));
+vi.mock("@/lib/api/renderer-updates", () => ({
+  rendererUpdatesApi: { local: vi.fn().mockResolvedValue({ runningId: null }) },
+}));
 
 import { render, screen } from "@testing-library/react";
 import { FrontendErrorBoundary } from "@/components/FrontendErrorBoundary";

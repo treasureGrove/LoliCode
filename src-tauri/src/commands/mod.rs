@@ -102,3 +102,5 @@ pub use builtin_apps::*;
 
 mod resource_updates;
 pub use resource_updates::*;
+mod renderer_updates;
+pub use renderer_updates::*;

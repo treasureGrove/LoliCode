@@ -91,3 +91,6 @@ pub mod builtin_apps;
 pub mod agent_applications;
 
 pub mod resource_updates;
+
+pub mod renderer_updates;
+pub mod renderer_host;

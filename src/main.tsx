@@ -32,6 +32,7 @@ import { initializeWindowActivity } from "@/lib/windowActivity";
 import { initializeInputModality } from "@/lib/inputModality";
 import { ResourcePackProvider } from "@/components/shell/ResourcePackProvider";
 import { InterfaceAppearanceRoot } from "@/components/shell/InterfaceAppearanceRoot";
+import { RendererBootHealth } from "@/components/shell/RendererBootHealth";
 import {
   applyInterfaceAppearance,
   parseInterfaceAppearance,
@@ -176,6 +177,7 @@ async function bootstrap() {
                   <InterfaceAppearanceRoot />
                   <ResourcePackProvider>
                     <App />
+                    <RendererBootHealth />
                   </ResourcePackProvider>
                 </TooltipProvider>
               </MotionConfig>

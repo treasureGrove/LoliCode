@@ -3,6 +3,7 @@ import { RefreshCw, TriangleAlert } from "lucide-react";
 import i18n from "@/i18n";
 import { reportFrontendError } from "@/lib/frontendLogger";
 import { Button } from "@/components/ui/button";
+import { RendererRecoveryButton } from "@/components/shell/RendererRecoveryButton";
 
 interface FrontendErrorBoundaryState {
   hasError: boolean;
@@ -59,6 +60,7 @@ export class FrontendErrorBoundary extends React.Component<
               defaultValue: "重新加载界面",
             })}
           </Button>
+          <RendererRecoveryButton />
         </section>
       </main>
     );

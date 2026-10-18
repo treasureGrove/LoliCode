@@ -79,7 +79,18 @@ fn document_override(document: &Map<String, Value>) -> Result<Option<PathBuf>, A
     }
 }
 
-/// 从 Store 刷新 app_config_dir 覆盖值并更新缓存
+/// Read the strict selector without changing the cached database location.
+pub(crate) fn read_app_config_dir_override(
+    app: &tauri::AppHandle,
+) -> Result<Option<PathBuf>, AppError> {
+    let _guard = PATH_STORE_WRITE
+        .lock()
+        .map_err(|e| AppError::Lock(e.to_string()))?;
+    document_override(&read_path_document(&path_store_path(app)?)?)
+}
+
+/// Refresh the selector only during normal startup; early asset selection must
+/// not mutate the database-path cache or create a replacement profile.
 pub fn refresh_app_config_dir_override(
     app: &tauri::AppHandle,
 ) -> Result<Option<PathBuf>, AppError> {

@@ -1,4 +1,6 @@
+mod native_contract;
 fn main() {
+    native_contract::emit();
     tauri_build::build();
 
     // Windows: Embed Common Controls v6 manifest for test binaries

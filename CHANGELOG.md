@@ -4,6 +4,8 @@ LoliCode release information is maintained independently in this repository. Pub
 
 ## Unreleased
 
+- Add signed whole-interface update staging, native-build compatibility checks, a Tauri asset provider and next-boot health confirmation/rollback. Settings expose checking, staging and an idle-only restart; error recovery can restore a usable interface. Native changes still require an application update. This is not included in the published RC2; actual packaged application/update acceptance remains pending.
+
 ## [4.0.21-rc.2] — candidate preparation, 2026-10-18
 
 - Keep acknowledged remote cancellation as a cancelled native command instead of an error. Recovering automation history reattaches monitoring to an already running session without replaying it or prematurely marking it failed. Real SSH acceptance exercises clock/idle triggers, remote process cancellation, scope isolation and separate-process receipt persistence.

@@ -1864,6 +1864,12 @@ pub fn run() {
             commands::install_resource_update,
             commands::confirm_resource_pack,
             commands::rollback_resource_pack,
+            commands::get_renderer_status,
+            commands::check_renderer_update,
+            commands::install_renderer_update,
+            commands::confirm_renderer_boot,
+            commands::rollback_renderer_update,
+            commands::restart_renderer,
             commands::list_builtin_apps,
             commands::set_builtin_app_enabled,
             commands::get_tavern_snapshot,
@@ -2018,8 +2024,12 @@ pub fn run() {
             commands::is_lightweight_mode,
         ]);
 
+    let renderer_host = std::sync::Arc::new(services::renderer_host::RendererHost::default());
+    let mut context = tauri::generate_context!();
+    services::renderer_host::wrap(&mut context, renderer_host.clone());
     let app = builder
-        .build(tauri::generate_context!())
+        .plugin(services::renderer_host::plugin(renderer_host))
+        .build(context)
         .expect("error while running tauri application");
 
     app.run(|app_handle, event| {

@@ -35,6 +35,27 @@ vi.mock("@/lib/api/resource-updates", () => ({
     }),
   },
 }));
+vi.mock("@/lib/api/renderer-updates", () => ({
+  rendererStatusKey: ["renderer-update-status"],
+  rendererUpdatesApi: {
+    local: async () => ({
+      runningId: null,
+      runningVersion: null,
+      bootTicket: null,
+      development: true,
+      warning: null,
+      state: {
+        activeId: null,
+        activeVersion: null,
+        stagedVersion: null,
+        restartRequired: false,
+        pendingConfirmation: false,
+        highestVersion: 0,
+        canRollback: false,
+      },
+    }),
+  },
+}));
 
 const mocks = vi.hoisted(() => ({
   check: vi.fn(),

@@ -4990,5 +4990,20 @@
     "none": "No new resources available; using local assets",
     "applying": "Validating images; failures restore local assets",
     "restored": "Restored previous or bundled assets"
+  },
+  "rendererUpdates": {
+    "title": "Interface updates",
+    "check": "Check interface updates",
+    "install": "Download interface {{version}}",
+    "rollback": "Roll back interface",
+    "restart": "Restart when idle",
+    "none": "No interface update is available for this application build.",
+    "staged": "Update staged for the next restart. Current tasks and interface stay running.",
+    "unsaved": "Save your changes before restarting the application.",
+    "development": "Development mode uses Vite hot reload",
+    "current": "Interface version {{version}}",
+    "bundled": "Using bundled interface",
+    "scope": "Interface and interaction updates only; native changes require an app update",
+    "recover": "Restart and recover interface"
   }
 }
