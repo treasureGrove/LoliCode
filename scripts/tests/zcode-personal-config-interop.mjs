@@ -91,10 +91,12 @@ const resolution = new ProviderConfigResolver().resolve({
   personalProviders: parsed.providers, personalModels: parsed.models,
   accountProviders: ProviderConfigMap.empty(), personalProviderOrder: parsed.providerOrder,
 });
-assert(resolution.registryProviders.some(value => value.providerId === 'lolicode'), 'generated provider must be executable');
+const managedId = parsed.defaultModelSelection.providerId;
+assert(/^lolicode(?:-managed(?:-\\d+)?)?$/.test(managedId));
+assert(resolution.registryProviders.some(value => value.providerId === managedId), 'generated provider must be executable');
 const registry = new ProviderRegistry(resolution.registryProviders);
 assert.equal(registry.validateSelection(parsed.defaultModelSelection).ok, true, 'configured default must be selectable');
-const model = registry.getModel('lolicode', 'channel/model');
+const model = registry.getModel(managedId, 'channel/model');
 assert(model);
 const body = compileModelOptionMaps(model.config.optionSpecs).apply({ model: 'channel/model' }, { reasoningLevel: 'medium', maxOutputTokens: 4096 });
 assert.equal(body.reasoning_effort, 'medium');
@@ -126,7 +128,7 @@ console.log('UPSTREAM_ZCODE_PERSONAL_OK');
       "--manifest-path",
       "src-tauri/Cargo.toml",
       "--lib",
-      "external_zcode_personal_updates_the_real_shared_file_without_touching_legacy_configs",
+      "external_zcode_",
     ],
     {
       cwd: repository,

@@ -13,6 +13,35 @@ fn parsed(path: &Path) -> Value {
     json5::from_str(&fs::read_to_string(path).unwrap()).unwrap()
 }
 
+fn assert_zcode_personal_reader(path: &Path) {
+    // Optional acceptance against the pinned upstream decoder (provided as a
+    // bundled Node script). Normal Rust tests need no Node/dependency install.
+    if let Some(decoder) = std::env::var_os("LOLICODE_ZCODE_DECODER") {
+        use std::io::Write;
+        use std::process::{Command, Stdio};
+        let mut child = Command::new("node")
+            .arg(decoder)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        child
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(&fs::read(path).unwrap())
+            .unwrap();
+        let output = child.wait_with_output().unwrap();
+        assert!(
+            output.status.success(),
+            "upstream decoder rejected synthetic fixture: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(String::from_utf8_lossy(&output.stdout).contains("UPSTREAM_ZCODE_PERSONAL_OK"));
+    }
+}
+
 #[test]
 fn external_workbuddy_adds_models_without_erasing_user_entries_and_updates_only_its_owned_entries()
 {
@@ -136,8 +165,18 @@ fn external_zcode_unknown_efforts_emit_no_reasoning_parameter_and_foreign_rules_
         .push(json!({"providerId":"lolicode","modelId":"user-owned","config":{}}));
     let before = foreign.to_string();
     write(&collision_path, &before);
-    assert!(apply_at("zcode", &source(), "channel/model", collision.path()).is_err());
-    assert_eq!(fs::read_to_string(collision_path).unwrap(), before);
+    apply_at("zcode", &source(), "channel/model", collision.path()).unwrap();
+    let applied = parsed(&collision_path);
+    assert!(applied["config"]["modelConfigRules"]["providerModelRules"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|rule| rule == &json!({"providerId":"lolicode","modelId":"user-owned","config":{}})));
+    assert_eq!(
+        applied["config"]["defaultModelSelection"]["providerId"],
+        "lolicode-managed"
+    );
+    assert_zcode_personal_reader(&collision_path);
 }
 
 #[test]
@@ -174,32 +213,7 @@ fn external_zcode_personal_updates_the_real_shared_file_without_touching_legacy_
             ["reasoningLevel"],
         json!({"values":["medium","high"],"map":"{\"reasoning_effort\": reasoningLevel}"})
     );
-    // Optional acceptance against the pinned upstream decoder (provided as a
-    // bundled Node script). Normal Rust tests need no Node/dependency install.
-    if let Some(decoder) = std::env::var_os("LOLICODE_ZCODE_DECODER") {
-        use std::io::Write;
-        use std::process::{Command, Stdio};
-        let mut child = Command::new("node")
-            .arg(decoder)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .unwrap();
-        child
-            .stdin
-            .take()
-            .unwrap()
-            .write_all(&fs::read(&path).unwrap())
-            .unwrap();
-        let output = child.wait_with_output().unwrap();
-        assert!(
-            output.status.success(),
-            "upstream decoder rejected synthetic fixture: {}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-        assert!(String::from_utf8_lossy(&output.stdout).contains("UPSTREAM_ZCODE_PERSONAL_OK"));
-    }
+    assert_zcode_personal_reader(&path);
     applied["config"]["providerConfigRules"]["providerRules"]
         .as_array_mut()
         .unwrap()
@@ -229,8 +243,44 @@ fn external_zcode_personal_updates_the_real_shared_file_without_touching_legacy_
         ["contextWindow"] = json!(9999);
     let before = serde_json::to_string_pretty(&edited).unwrap();
     fs::write(&path, &before).unwrap();
-    assert!(apply_at("zcode", &rotated, "channel/model", directory.path()).is_err());
-    assert_eq!(fs::read_to_string(&path).unwrap(), before);
+    apply_at("zcode", &rotated, "channel/model", directory.path()).unwrap();
+    let applied = parsed(&path);
+    assert_eq!(
+        applied["config"]["modelConfigRules"]["providerModelRules"][1],
+        edited["config"]["modelConfigRules"]["providerModelRules"][1]
+    );
+    assert_eq!(
+        applied["config"]["defaultModelSelection"]["providerId"],
+        "lolicode-managed"
+    );
+    assert_zcode_personal_reader(&path);
+    assert!(
+        apply_at("zcode", &rotated, "channel/model", directory.path())
+            .unwrap()
+            .backups
+            .is_empty()
+    );
+    let mut custom = parsed(&path);
+    custom["config"]["providerConfigRules"]["providerRules"][2]["providerName"] =
+        json!("My customized provider");
+    write(&path, &custom.to_string());
+    apply_at("zcode", &rotated, "channel/model", directory.path()).unwrap();
+    let next = parsed(&path);
+    assert_eq!(
+        next["config"]["providerConfigRules"]["providerRules"][2],
+        custom["config"]["providerConfigRules"]["providerRules"][2]
+    );
+    assert_eq!(
+        next["config"]["defaultModelSelection"]["providerId"],
+        "lolicode-managed-2"
+    );
+    assert_zcode_personal_reader(&path);
+    assert!(
+        apply_at("zcode", &rotated, "channel/model", directory.path())
+            .unwrap()
+            .backups
+            .is_empty()
+    );
 }
 
 #[test]
@@ -341,9 +391,12 @@ fn external_collisions_dynamic_provider_blocks_and_invalid_sources_never_overwri
     let desktop = directory.path().join(".zcode/v2/config.json");
     let original = "{\"provider\":{\"lolicode\":{\"kind\":\"openai\",\"options\":{\"apiKey\":\"USER-OWNED\"}}}}";
     write(&desktop, original);
-    assert!(apply_at("zcode", &source(), "channel/model", directory.path()).is_err());
-    assert_eq!(fs::read_to_string(&desktop).unwrap(), original);
-    assert!(!directory.path().join(".zcode/cli/config.json").exists());
+    apply_at("zcode", &source(), "channel/model", directory.path()).unwrap();
+    assert_eq!(
+        parsed(&desktop)["provider"]["lolicode"],
+        json!({"kind":"openai","options":{"apiKey":"USER-OWNED"}})
+    );
+    assert_eq!(parsed(&desktop)["model"], "lolicode-managed/channel/model");
     let dsh_path = directory.path().join(".dsh/profiles/web/cordis.patch.yml");
     let dynamic = "- id: llm-pi-ai\n  config:\n    providers: !!js () => ({ userOwned: true })\n";
     write(&dsh_path, dynamic);
@@ -461,4 +514,236 @@ fn external_managed_provider_manual_edits_are_not_overwritten() {
     fs::write(&path, &before).unwrap();
     assert!(apply_at("mimocode", &source(), "channel/model", directory.path()).is_err());
     assert_eq!(fs::read(&path).unwrap(), before);
+}
+
+#[test]
+fn external_zcode_legacy_collision_reserves_one_provider_and_reuses_it_on_rotation() {
+    let directory = tempdir().unwrap();
+    let path = directory.path().join(".zcode/v2/config.json");
+    let original = json!({"provider":{"lolicode":{"kind":"openai","options":{"apiKey":"synthetic-user-owned"}}},
+        "enabled_providers":["lolicode"],"disabled_providers":["lolicode","other"]});
+    write(&path, &original.to_string());
+    let first = apply_at("zcode", &source(), "channel/model", directory.path()).unwrap();
+    assert!(first.message.contains("独立"));
+    let mut changed = source();
+    changed.api_key = "rotated-synthetic-lease".into();
+    apply_at("zcode", &changed, "channel/model", directory.path()).unwrap();
+    let value = parsed(&path);
+    assert_eq!(value["provider"].as_object().unwrap().len(), 2);
+    assert_eq!(
+        value["provider"]["lolicode"],
+        original["provider"]["lolicode"]
+    );
+    assert_eq!(
+        value["provider"]["lolicode-managed"]["options"]["apiKey"],
+        changed.api_key
+    );
+    assert_eq!(
+        value["enabled_providers"],
+        json!(["lolicode", "lolicode-managed"])
+    );
+    assert_eq!(value["disabled_providers"], original["disabled_providers"]);
+    assert!(
+        apply_at("zcode", &changed, "channel/model", directory.path())
+            .unwrap()
+            .backups
+            .is_empty()
+    );
+}
+
+#[test]
+fn external_zcode_missing_ledger_preserves_imported_personal_rules_and_does_not_accumulate_providers(
+) {
+    let directory = tempdir().unwrap();
+    let path = directory.path().join(".zcode/v2/provider_config.json");
+    write(&path, &modern_zcode().to_string());
+    apply_at("zcode", &source(), "channel/model", directory.path()).unwrap();
+    let before = parsed(&path);
+    fs::remove_file(
+        directory
+            .path()
+            .join(".tai-switch/external-model-config/zcode.json"),
+    )
+    .unwrap();
+    let mut changed = source();
+    changed.api_key = "new-synthetic-session-lease".into();
+    apply_at("zcode", &changed, "channel/model", directory.path()).unwrap();
+    let value = parsed(&path);
+    let providers = value["config"]["providerConfigRules"]["providerRules"]
+        .as_array()
+        .unwrap();
+    assert_eq!(providers.len(), 3);
+    assert_eq!(
+        providers[1],
+        before["config"]["providerConfigRules"]["providerRules"][1]
+    );
+    assert_eq!(
+        value["config"]["modelConfigRules"]["providerModelRules"][1],
+        before["config"]["modelConfigRules"]["providerModelRules"][1]
+    );
+    assert_eq!(
+        value["config"]["defaultModelSelection"]["providerId"],
+        "lolicode-managed"
+    );
+    assert_zcode_personal_reader(&path);
+    assert!(
+        apply_at("zcode", &changed, "channel/model", directory.path())
+            .unwrap()
+            .backups
+            .is_empty()
+    );
+}
+
+#[test]
+fn external_zcode_normalized_json_and_rule_order_do_not_look_like_user_edits() {
+    fn reverse_keys(value: &Value) -> Value {
+        match value {
+            Value::Object(map) => Value::Object(
+                map.iter()
+                    .rev()
+                    .map(|(key, value)| (key.clone(), reverse_keys(value)))
+                    .collect(),
+            ),
+            Value::Array(array) => Value::Array(array.iter().map(reverse_keys).collect()),
+            _ => value.clone(),
+        }
+    }
+    let directory = tempdir().unwrap();
+    let path = directory.path().join(".zcode/v2/provider_config.json");
+    write(&path, &modern_zcode().to_string());
+    let mut channel = source();
+    let mut second = channel.models[0].clone();
+    second.id = "channel/second".into();
+    channel.models.push(second);
+    apply_at("zcode", &channel, "channel/model", directory.path()).unwrap();
+    let mut normalized = reverse_keys(&parsed(&path));
+    normalized["config"]["modelConfigRules"]["providerModelRules"]
+        .as_array_mut()
+        .unwrap()
+        .reverse();
+    write(&path, &normalized.to_string());
+    channel.api_key = "rotated-synthetic-lease".into();
+    apply_at("zcode", &channel, "channel/model", directory.path()).unwrap();
+    let value = parsed(&path);
+    assert_eq!(
+        value["config"]["providerConfigRules"]["providerRules"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    assert_eq!(
+        value["config"]["defaultModelSelection"]["providerId"],
+        "lolicode"
+    );
+}
+
+#[test]
+fn external_zcode_accepts_ownership_hashes_from_the_previous_adapter() {
+    for modern in [false, true] {
+        let directory = tempdir().unwrap();
+        let path = directory.path().join(if modern {
+            ".zcode/v2/provider_config.json"
+        } else {
+            ".zcode/v2/config.json"
+        });
+        if modern {
+            write(&path, &modern_zcode().to_string());
+        }
+        apply_at("zcode", &source(), "channel/model", directory.path()).unwrap();
+        let value = parsed(&path);
+        let owned = if modern {
+            json!({"provider":value["config"]["providerConfigRules"]["providerRules"][1],
+                "models":[value["config"]["modelConfigRules"]["providerModelRules"][1]],"manualModels":[]})
+        } else {
+            value["provider"]["lolicode"].clone()
+        };
+        let ledger_path = directory
+            .path()
+            .join(".tai-switch/external-model-config/zcode.json");
+        let mut ledger = parsed(&ledger_path);
+        ledger["files"][path.to_string_lossy().as_ref()]["lolicode"] =
+            json!(json_digest(&owned).unwrap());
+        write(&ledger_path, &ledger.to_string());
+        let mut rotated = source();
+        rotated.api_key = "new-synthetic-lease".into();
+        apply_at("zcode", &rotated, "channel/model", directory.path()).unwrap();
+        let updated = parsed(&path);
+        if modern {
+            assert_eq!(
+                updated["config"]["defaultModelSelection"]["providerId"],
+                "lolicode"
+            );
+            assert_eq!(
+                updated["config"]["providerConfigRules"]["providerRules"]
+                    .as_array()
+                    .unwrap()
+                    .len(),
+                2
+            );
+        } else {
+            assert_eq!(updated["model"], "lolicode/channel/model");
+            assert_eq!(updated["provider"].as_object().unwrap().len(), 1);
+        }
+    }
+}
+
+#[test]
+fn external_dsh_single_line_maps_convert_safely_and_repeat_without_yaml_errors() {
+    for config in [
+        "  config: {providers: {mine: {api: openai-completions, name: 'model #one', description: 'It''s a \"quoted\" !!js *text &text', headers: {Authorization: synthetic-only}}}, retry: 2} # keep config !!js *comment &comment\n",
+        "  config:\n    providers: {mine: {api: openai-completions, name: \"model #one\", headers: {Authorization: synthetic-only}}} # keep providers\n    retry: 2\n",
+    ] {
+        for newline in ["\n", "\r\n"] {
+            let directory = tempdir().unwrap();
+            let path = directory.path().join(".dsh/profiles/web/cordis.patch.yml");
+            let original = format!("# keep composition\n- id: llm-pi-ai\n{config}- id: footer\n  config:\n    retry: !!js process.env.NEVER_EXECUTE\n").replace('\n',newline);
+            let expected = yaml(&original).unwrap();
+            write(&path, &original);
+            apply_at("deepseek-harness", &source(), "channel/model", directory.path()).unwrap();
+            let next = fs::read_to_string(&path).unwrap();
+            assert!(next.contains("# keep config") || next.contains("# keep providers"));
+            assert!(next.contains(&format!("    retry: !!js process.env.NEVER_EXECUTE{newline}")));
+            if newline == "\r\n" { assert!(!next.replace("\r\n", "").contains('\n')); }
+            let mut actual = yaml(&next).unwrap();
+            actual[0]["config"]["providers"].as_mapping_mut().unwrap().remove(serde_yaml::Value::String("lolicode".into()));
+            assert_eq!(actual, expected);
+            assert!(apply_at("deepseek-harness", &source(), "channel/model", directory.path()).unwrap().backups.is_empty());
+        }
+    }
+}
+
+#[test]
+fn external_dsh_dynamic_inline_maps_and_parse_errors_do_not_write_or_expose_values() {
+    let directory = tempdir().unwrap();
+    let path = directory.path().join(".dsh/profiles/web/cordis.patch.yml");
+    for raw in [
+        "- id: llm-pi-ai\n  config: {providers: {mine: !!js process.env.NEVER_EXECUTE}}\n",
+        "- id: llm-pi-ai\n  config: {providers: {mine: !custom process.env.NEVER_EXECUTE}}\n",
+        "- id: llm-pi-ai\n  config: {providers: &routes {mine: {name: keep}}}\n",
+        "- id: routes\n  config: &routes {mine: {name: keep}}\n- id: llm-pi-ai\n  config: {providers: *routes}\n",
+    ] {
+        write(&path, raw);
+        assert!(apply_at(
+            "deepseek-harness",
+            &source(),
+            "channel/model",
+            directory.path()
+        )
+        .is_err());
+        assert_eq!(fs::read_to_string(&path).unwrap(), raw);
+    }
+    let malformed = "- id: llm-pi-ai\n  config: {apiKey: synthetic-sensitive-value\n";
+    write(&path, malformed);
+    let error = apply_at(
+        "deepseek-harness",
+        &source(),
+        "channel/model",
+        directory.path(),
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(error.contains("行") && error.contains("列"));
+    assert!(!error.contains("synthetic-sensitive-value"));
+    assert_eq!(fs::read_to_string(path).unwrap(), malformed);
 }

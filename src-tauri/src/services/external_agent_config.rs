@@ -338,6 +338,77 @@ fn owned(
     }
     Ok(())
 }
+
+// ZCode may import legacy providers into its Personal file or rewrite object
+// ordering. Missing ownership is not permission to replace that configuration:
+// reserve a separate provider and retain it in our ledger for later applies.
+fn zcode_fingerprint(value: &Value) -> Result<String, AppError> {
+    fn ordered(value: &Value) -> Value {
+        match value {
+            Value::Object(map) => {
+                let mut keys = map.keys().collect::<Vec<_>>();
+                keys.sort_unstable();
+                Value::Object(
+                    keys.into_iter()
+                        .map(|key| (key.clone(), ordered(&map[key])))
+                        .collect(),
+                )
+            }
+            Value::Array(array) => Value::Array(array.iter().map(ordered).collect()),
+            _ => value.clone(),
+        }
+    }
+    let mut value = value.clone();
+    // Personal rule arrays are keyed by model ID; their source order is not
+    // configuration. The explicit modelOrder inside the provider still is.
+    if value.get("provider").is_some() {
+        for key in ["models", "manualModels"] {
+            if let Some(array) = value.get_mut(key).and_then(Value::as_array_mut) {
+                array.sort_by(|a, b| a["modelId"].as_str().cmp(&b["modelId"].as_str()));
+            }
+        }
+    }
+    json_digest(&ordered(&value))
+}
+
+fn zcode_provider_key(
+    existing: &BTreeMap<String, Value>,
+    ownership: &BTreeMap<String, String>,
+) -> Result<String, AppError> {
+    let managed = |id: &str| {
+        id == "lolicode"
+            || id == "lolicode-managed"
+            || id
+                .strip_prefix("lolicode-managed-")
+                .is_some_and(|suffix| suffix.parse::<u32>().is_ok())
+    };
+    for (key, hash) in ownership.iter().filter(|(key, _)| managed(key)) {
+        if let Some(value) = existing.get(key) {
+            if *hash == zcode_fingerprint(value)? || *hash == json_digest(value)? {
+                return Ok(key.clone());
+            }
+        }
+    }
+    for suffix in 0..10000 {
+        let key = match suffix {
+            0 => "lolicode".to_owned(),
+            1 => "lolicode-managed".to_owned(),
+            _ => format!("lolicode-managed-{suffix}"),
+        };
+        if !existing.contains_key(&key) {
+            return Ok(key);
+        }
+    }
+    Err(fail("ZCode 已有过多同名配置，原配置未修改"))
+}
+
+fn zcode_provider_name(key: &str) -> String {
+    if key == "lolicode" {
+        "LoliCode".into()
+    } else {
+        format!("LoliCode · {key}")
+    }
+}
 fn model_value(model: &ChannelModel) -> Value {
     let mut value = json!({"id":model.id,"name":model.name.as_deref().unwrap_or(&model.id),"tool_call":model.supports_tools != Some(false)});
     if let Some(context) = model.context_limit {
@@ -386,10 +457,24 @@ fn json_config(
             .entry("provider")
             .or_insert_with(|| json!({})),
     )?;
-    owned(providers.get("lolicode"), "lolicode", ownership)?;
-    let next = provider(source, models, zcode);
-    providers.insert("lolicode".into(), next.clone());
-    let route = format!("lolicode/{default_route}");
+    let provider_key = if zcode {
+        zcode_provider_key(
+            &providers
+                .iter()
+                .map(|(key, value)| (key.clone(), value.clone()))
+                .collect(),
+            ownership,
+        )?
+    } else {
+        owned(providers.get("lolicode"), "lolicode", ownership)?;
+        "lolicode".into()
+    };
+    let mut next = provider(source, models, zcode);
+    if zcode {
+        next["name"] = json!(zcode_provider_name(&provider_key));
+    }
+    providers.insert(provider_key.clone(), next.clone());
+    let route = format!("{provider_key}/{default_route}");
     if zcode && cli {
         match value.get("model") {
             Some(Value::Object(existing))
@@ -411,20 +496,27 @@ fn json_config(
         let enabled = enabled
             .as_array_mut()
             .ok_or_else(|| fail("enabled_providers 必须是数组"))?;
-        if !enabled.iter().any(|entry| entry == "lolicode") {
-            enabled.push(json!("lolicode"));
+        if !enabled.iter().any(|entry| entry == &provider_key) {
+            enabled.push(json!(provider_key));
         }
     }
     if let Some(disabled) = value.get_mut("disabled_providers") {
         disabled
             .as_array_mut()
             .ok_or_else(|| fail("disabled_providers 必须是数组"))?
-            .retain(|entry| entry != "lolicode");
+            .retain(|entry| entry != &provider_key);
     }
     document.apply(&value)?;
     Ok((
         document.validated_source()?.into_bytes(),
-        BTreeMap::from([("lolicode".into(), json_digest(&next)?)]),
+        BTreeMap::from([(
+            provider_key,
+            if zcode {
+                zcode_fingerprint(&next)?
+            } else {
+                json_digest(&next)?
+            },
+        )]),
     ))
 }
 
@@ -546,7 +638,7 @@ fn validate_zcode_personal(value: &Value) -> Result<(), AppError> {
     Ok(())
 }
 
-fn zcode_model_rule(model: &ChannelModel) -> Value {
+fn zcode_model_rule(model: &ChannelModel, provider_key: &str) -> Value {
     let mut config = json!({});
     if let Some(context) = model.context_limit {
         config["properties"]["contextWindow"] = json!(context);
@@ -577,7 +669,7 @@ fn zcode_model_rule(model: &ChannelModel) -> Value {
         // publishes no effort levels. This option emits no wire parameter.
         json!({"values":["default"],"map":"{}"})
     };
-    json!({"providerId":"lolicode","modelId":model.id,"config":config})
+    json!({"providerId":provider_key,"modelId":model.id,"config":config})
 }
 
 fn zcode_personal(
@@ -596,50 +688,61 @@ fn zcode_personal(
     let providers = value["config"]["providerConfigRules"]["providerRules"]
         .as_array()
         .unwrap();
-    let provider = providers
-        .iter()
-        .find(|rule| rule["providerId"] == "lolicode");
     let rule_group = &value["config"]["modelConfigRules"];
-    let old_smart: Vec<_> = rule_group["providerModelRules"]
-        .as_array()
-        .unwrap()
+    let mut existing = BTreeMap::new();
+    let mut ids = BTreeSet::new();
+    for rule in providers
         .iter()
-        .filter(|rule| rule["providerId"] == "lolicode")
-        .cloned()
-        .collect();
-    let old_manual: Vec<_> = rule_group["manualProviderModelRules"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter(|rule| rule["providerId"] == "lolicode")
-        .cloned()
-        .collect();
-    let old = if provider.is_some() || !old_smart.is_empty() || !old_manual.is_empty() {
-        Some(json!({"provider":provider,"models":old_smart,"manualModels":old_manual}))
-    } else {
-        None
-    };
-    owned(old.as_ref(), "lolicode", ownership)?;
+        .chain(rule_group["providerModelRules"].as_array().unwrap())
+        .chain(rule_group["manualProviderModelRules"].as_array().unwrap())
+    {
+        ids.insert(rule["providerId"].as_str().unwrap().to_owned());
+    }
+    for id in ids {
+        let provider = providers.iter().find(|rule| rule["providerId"] == id);
+        let smart: Vec<_> = rule_group["providerModelRules"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|rule| rule["providerId"] == id)
+            .cloned()
+            .collect();
+        let manual: Vec<_> = rule_group["manualProviderModelRules"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|rule| rule["providerId"] == id)
+            .cloned()
+            .collect();
+        existing.insert(
+            id,
+            json!({"provider":provider,"models":smart,"manualModels":manual}),
+        );
+    }
+    let provider_key = zcode_provider_key(&existing, ownership)?;
     let ids = models
         .iter()
         .map(|model| model.id.clone())
         .collect::<Vec<_>>();
-    let next_provider = json!({"providerId":"lolicode","providerName":"LoliCode","enabled":true,"config":{
+    let next_provider = json!({"providerId":provider_key,"providerName":zcode_provider_name(&provider_key),"enabled":true,"config":{
         "group":"standard-personal","access":{"type":"api-key","apiKey":source.api_key},
         "api":{"type":"openai-chat-completions","baseUrl":source.base_url.trim_end_matches('/')},
         "personalModelIds":ids,"modelOrder":ids}});
-    let next_models = models.iter().map(zcode_model_rule).collect::<Vec<_>>();
+    let next_models = models
+        .iter()
+        .map(|model| zcode_model_rule(model, &provider_key))
+        .collect::<Vec<_>>();
     let next_owned = json!({"provider":next_provider,"models":next_models,"manualModels":[]});
     let providers = value["config"]["providerConfigRules"]["providerRules"]
         .as_array_mut()
         .unwrap();
-    providers.retain(|rule| rule["providerId"] != "lolicode");
+    providers.retain(|rule| rule["providerId"] != provider_key);
     providers.push(next_provider);
     for group in ["providerModelRules", "manualProviderModelRules"] {
         value["config"]["modelConfigRules"][group]
             .as_array_mut()
             .unwrap()
-            .retain(|rule| rule["providerId"] != "lolicode");
+            .retain(|rule| rule["providerId"] != provider_key);
     }
     value["config"]["modelConfigRules"]["providerModelRules"]
         .as_array_mut()
@@ -647,8 +750,8 @@ fn zcode_personal(
         .extend(next_models);
     if let Some(order) = value["config"].get_mut("providerOrder") {
         let order = order.as_array_mut().unwrap();
-        if !order.iter().any(|id| id == "lolicode") {
-            order.push(json!("lolicode"));
+        if !order.iter().any(|id| id == &provider_key) {
+            order.push(json!(provider_key));
         }
     }
     let model = models
@@ -667,13 +770,12 @@ fn zcode_personal(
                 .or_else(|| efforts.first().map(String::as_str))
         })
         .unwrap_or("default");
-    value["config"]["defaultModelSelection"] =
-        json!({"providerId":"lolicode","modelId":default_route,"options":{"reasoningLevel":level}});
+    value["config"]["defaultModelSelection"] = json!({"providerId":provider_key,"modelId":default_route,"options":{"reasoningLevel":level}});
     validate_zcode_personal(&value)?;
     document.apply(&value)?;
     Ok((
         document.validated_source()?.into_bytes(),
-        BTreeMap::from([("lolicode".into(), json_digest(&next_owned)?)]),
+        BTreeMap::from([(provider_key, zcode_fingerprint(&next_owned)?)]),
     ))
 }
 
@@ -744,7 +846,17 @@ fn workbuddy(
 }
 
 fn yaml(raw: &str) -> Result<serde_yaml::Value, AppError> {
-    serde_yaml::from_str(raw).map_err(|_| fail("DSH YAML 无法安全解析，未执行任何标签或修改原配置"))
+    parse_yaml(raw, "DSH YAML 无法安全解析")
+}
+
+fn parse_yaml(raw: &str, phase: &str) -> Result<serde_yaml::Value, AppError> {
+    serde_yaml::from_str(raw).map_err(|error| {
+        let position = error
+            .location()
+            .map(|p| format!("（第 {} 行，第 {} 列）", p.line(), p.column()))
+            .unwrap_or_default();
+        fail(&format!("{phase}{position}，未执行任何标签或修改原配置"))
+    })
 }
 fn yaml_key(line: &str, indent: usize, key: &str) -> bool {
     let without_newline = line.trim_end_matches(['\r', '\n']);
@@ -771,6 +883,100 @@ fn section_end(lines: &[&str], start: usize, indent: usize, end: usize) -> usize
                 && lines[*index].len() - lines[*index].trim_start_matches(' ').len() <= indent
         })
         .unwrap_or(end)
+}
+
+fn yaml_flow_block(
+    line: &str,
+    indent: usize,
+    key: &str,
+    value: &serde_yaml::Value,
+    newline: &str,
+) -> Result<Option<String>, AppError> {
+    if !yaml_key(line, indent, key) || !value.is_mapping() {
+        return Ok(None);
+    }
+    let line = line.trim_end_matches(['\r', '\n']);
+    let prefix = [
+        format!("{key}:"),
+        format!("\"{key}\":"),
+        format!("'{key}':"),
+    ]
+    .into_iter()
+    .find(|prefix| line[indent..].starts_with(prefix))
+    .unwrap();
+    let offset = indent + prefix.len();
+    let text = &line[offset..];
+    if !text.trim_start().starts_with('{') {
+        return Ok(None);
+    }
+    let mut quote = None;
+    let mut escaped = false;
+    let mut chars = text.char_indices().peekable();
+    let mut comment = text.len();
+    let mut source_operators = false;
+    while let Some((index, ch)) = chars.next() {
+        if quote == Some('"') && escaped {
+            escaped = false;
+            continue;
+        }
+        if quote == Some('"') && ch == '\\' {
+            escaped = true;
+            continue;
+        }
+        if quote == Some(ch) {
+            if ch == '\'' && chars.peek().is_some_and(|(_, next)| *next == '\'') {
+                chars.next();
+            } else {
+                quote = None;
+            }
+        } else if quote.is_none() {
+            let before = text[..index].chars().next_back();
+            let boundary = before.is_none_or(|ch| ch.is_whitespace() || ",:[{".contains(ch));
+            if boundary && matches!(ch, '!' | '&' | '*') {
+                source_operators = true;
+            }
+            if (ch == '\'' || ch == '"') && boundary {
+                quote = Some(ch);
+            }
+            if ch == '#' && before.is_none_or(char::is_whitespace) {
+                comment = index;
+                break;
+            }
+        }
+    }
+    if !text[..comment].trim_end().ends_with('}') {
+        return Ok(None);
+    }
+    fn tagged(value: &serde_yaml::Value) -> bool {
+        match value {
+            serde_yaml::Value::Tagged(_) => true,
+            serde_yaml::Value::Mapping(map) => {
+                map.iter().any(|(key, value)| tagged(key) || tagged(value))
+            }
+            serde_yaml::Value::Sequence(seq) => seq.iter().any(tagged),
+            _ => false,
+        }
+    }
+    // serde_yaml::Value can discard unknown global tags and resolve aliases.
+    // Check raw unquoted operators as well as the parsed tree before encoding.
+    // Unrelated tagged plugins remain byte-for-byte intact.
+    if source_operators || tagged(value) {
+        return Err(fail(
+            "DSH 行内映射含标签或锚点引用，已保留原配置；请先在 DSH 转为分行配置",
+        ));
+    }
+    let encoded =
+        serde_yaml::to_string(value).map_err(|_| fail("DSH 行内映射无法转换，原配置未修改"))?;
+    let comment = if comment < text.len() {
+        format!(" {}", &text[comment..])
+    } else {
+        String::new()
+    };
+    let body = encoded
+        .lines()
+        .map(|line| format!("{}{line}{newline}", " ".repeat(indent + 2)))
+        .collect::<String>();
+    Ok(Some(format!("{}{comment}{newline}{body}", &line[..offset])))
 }
 fn dsh(
     raw: Option<&[u8]>,
@@ -866,6 +1072,18 @@ fn dsh(
         }
         let (from, to, insertion) = if let Some(config_line) = configs.first().copied() {
             let config_end = section_end(&lines, config_line, 2, end);
+            if let Some(block) = yaml_flow_block(lines[config_line], 2, "config", config, newline)?
+            {
+                let normalized = format!(
+                    "{}{block}{}",
+                    lines[..config_line].concat(),
+                    lines[config_line + 1..].concat()
+                );
+                if parse_yaml(&normalized, "DSH 行内配置转换后无法校验")? != root {
+                    return Err(fail("DSH 行内配置转换校验失败，原文件未修改"));
+                }
+                return dsh(Some(normalized.as_bytes()), source, models, ownership);
+            }
             let provider_lines = (config_line + 1..config_end)
                 .filter(|line| yaml_key(lines[*line], 4, "providers"))
                 .collect::<Vec<_>>();
@@ -874,6 +1092,20 @@ fn dsh(
             }
             if let Some(provider_line) = provider_lines.first().copied() {
                 let provider_end = section_end(&lines, provider_line, 4, config_end);
+                if let Some(block) =
+                    yaml_flow_block(lines[provider_line], 4, "providers", providers, newline)?
+                {
+                    let normalized = format!(
+                        "{}{block}{}",
+                        lines[..provider_line].concat(),
+                        lines[provider_line + 1..].concat()
+                    );
+                    if parse_yaml(&normalized, "DSH 行内提供商转换后无法校验")? != root
+                    {
+                        return Err(fail("DSH 行内提供商转换校验失败，原文件未修改"));
+                    }
+                    return dsh(Some(normalized.as_bytes()), source, models, ownership);
+                }
                 let own_lines = (provider_line + 1..provider_end)
                     .filter(|line| yaml_key(lines[*line], 6, "lolicode"))
                     .collect::<Vec<_>>();
@@ -935,7 +1167,7 @@ fn dsh(
         }
         format!("{raw}{}- id: llm-pi-ai{newline}  name: '@deepseek-ai/dsh-llm-pi-ai'{newline}  config:{newline}    providers:{newline}{provider_block}", if raw.is_empty() || raw.ends_with('\n') { "" } else { newline })
     };
-    let verified = yaml(&result)?;
+    let verified = parse_yaml(&result, "DSH 生成配置无法校验")?;
     let mut expected = root;
     let entries = expected.as_sequence_mut().unwrap();
     if let Some(index) = matching.first() {
@@ -1029,6 +1261,7 @@ fn apply_inner(
         ..Default::default()
     };
     let mut plans = Vec::new();
+    let mut independent_zcode = false;
     for path in &configs {
         let before = read(path)?;
         let key = path.to_string_lossy().into_owned();
@@ -1055,6 +1288,7 @@ fn apply_inner(
         if after.len() as u64 > LIMIT {
             return Err(fail("生成的配置超过容量上限，未修改原文件"));
         }
+        independent_zcode |= target == "zcode" && own.keys().any(|key| key != "lolicode");
         ownership.files.insert(key, own);
         if before.as_deref() != Some(after.as_slice()) {
             plans.push(Planned {
@@ -1159,7 +1393,9 @@ fn apply_inner(
             .map(|path| path.to_string_lossy().into_owned())
             .collect(),
         backups,
-        message: if target == "workbuddy" || target == "deepseek-harness" {
+        message: if independent_zcode {
+            "已使用独立的 LoliCode 托管提供商，保留原有同名或已修改配置；请重新打开目标应用或新建会话。"
+        } else if target == "workbuddy" || target == "deepseek-harness" {
             "已添加 LoliCode 模型；请在目标应用中选择模型，现有会话保持原选择。"
         } else {
             "已添加 LoliCode 模型并设置默认模型；请重新打开目标应用或新建会话。"
