@@ -333,6 +333,17 @@ async fn automation_native_receipts_distinguish_success_stop_failure_and_restart
         let status = receipt(&engine, id, &request).await;
         let (outcome, _) = terminal_outcome(Some(&status), false, &snapshot);
         assert_eq!(outcome, expected);
+        if expected == "failed" {
+            let (outcome, error) = terminal_outcome(Some(&status), true, &snapshot);
+            assert_eq!(
+                outcome, "failed",
+                "a concurrent stop request cannot hide a failed native receipt"
+            );
+            assert_eq!(
+                error, snapshot.error,
+                "retain the actual failure instead of claiming confirmed cleanup"
+            );
+        }
         if expected == "succeeded" {
             success_id = id.into();
             engine
@@ -363,4 +374,122 @@ async fn automation_native_receipts_distinguish_success_stop_failure_and_restart
     );
     restored.shutdown().await.unwrap();
     println!("AUTOMATION_NATIVE_ACCEPTANCE_OK: success, cancellation, HTTP failure, durable restart and idempotent resend");
+}
+
+#[tokio::test]
+async fn automation_recovery_reattaches_live_run_and_scoped_cancel_persists_terminal_receipt() {
+    let data = tempfile::tempdir().unwrap();
+    let project = tempfile::tempdir().unwrap();
+    let other = tempfile::tempdir().unwrap();
+    let path =
+        crate::services::agent_host::canonical_project(&project.path().to_string_lossy()).unwrap();
+    let wrong =
+        crate::services::agent_host::canonical_project(&other.path().to_string_lossy()).unwrap();
+    let db = Arc::new(crate::database::Database::memory().unwrap());
+    let mut registered = preferences::Preferences::default();
+    for dir in [&path, &wrong] {
+        registered.projects.insert(
+            preferences::path_key(&dir.to_string_lossy()),
+            AgentProject {
+                path: dir.to_string_lossy().into_owned(),
+                name: "isolated recovery".into(),
+                pinned: false,
+                last_opened_at: now_ms(),
+            },
+        );
+    }
+    preferences::save(&db, &registered).unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move {
+        axum::serve(
+            listener,
+            axum::Router::new().route("/v1/chat/completions", post(upstream)),
+        )
+        .await
+        .unwrap();
+    });
+    let engine = NativeEngine::open(data.path().into()).await.unwrap();
+    let catalog: AgentCatalog = serde_json::from_value(json!({"revision":1,"models":[{"id":"lolicode/owned/fixture","providerId":"lolicode","modelId":"owned/fixture","name":"Fixture","channelName":"Owned"}],"defaultModel":"lolicode/owned/fixture","excludedSources":[]})).unwrap();
+    let runtime: Arc<dyn AutomationRuntime> = Arc::new(NativeAutomationFixture {
+        engine: engine.clone(),
+        catalog,
+        gateway: NativeGateway {
+            base_url: format!("http://{address}/v1"),
+            bearer_token: "owned-loopback-only".into(),
+        },
+    });
+    create_saved_job(&db,&json!({"workspacePath":path,"title":"Owned recovery","prompt":"OWNED_WAIT","trigger":"schedule","cronExpr":"0 * * * *","recurring":false,"mode":"guarded","modelSelection":{"providerId":"lolicode","modelId":"owned/fixture"}})).await.unwrap();
+    let mut store = load(&db).unwrap();
+    let job = store.jobs[0].clone();
+    let run = create_run(&mut store, &job.automation_id);
+    save(&db, &store).unwrap();
+    let session = dispatch_run(runtime.clone(), db.clone(), job, run.clone())
+        .await
+        .unwrap();
+    assert_eq!(
+        receipt(&engine, &session, &format!("automation:{}", run.run_id)).await,
+        "accepted"
+    );
+    recover_runs_runtime(runtime.clone(), db.clone()).await;
+    assert!(
+        active(&load(&db).unwrap().runs[0]),
+        "recovery must not finish an already live native flight"
+    );
+    assert!(cancel_run_runtime(
+        runtime.clone(),
+        db.clone(),
+        &run.run_id,
+        &wrong.to_string_lossy()
+    )
+    .await
+    .is_err());
+    assert!(
+        !load(&db).unwrap().runs[0].cancel_requested,
+        "wrong scope must not persist cancellation"
+    );
+    cancel_run_runtime(
+        runtime.clone(),
+        db.clone(),
+        &run.run_id,
+        &path.to_string_lossy(),
+    )
+    .await
+    .unwrap();
+    settled(&engine, &session).await;
+    tokio::time::timeout(Duration::from_secs(6), async {
+        loop {
+            if !active(&load(&db).unwrap().runs[0]) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let persisted = load(&db).unwrap();
+    assert_eq!(persisted.runs[0].outcome.as_deref(), Some("stopped"));
+    let before = serde_json::to_value(&persisted.runs[0]).unwrap();
+    assert_eq!(
+        cancel_run_runtime(
+            runtime.clone(),
+            db.clone(),
+            &run.run_id,
+            &path.to_string_lossy()
+        )
+        .await
+        .unwrap()["status"],
+        "finished"
+    );
+    recover_runs_runtime(runtime, db.clone()).await;
+    assert_eq!(
+        serde_json::to_value(&load(&db).unwrap().runs[0]).unwrap(),
+        before
+    );
+    assert_eq!(
+        receipt(&engine, &session, &format!("automation:{}", run.run_id)).await,
+        "cancelled"
+    );
+    engine.shutdown().await.unwrap();
+    server.abort();
 }

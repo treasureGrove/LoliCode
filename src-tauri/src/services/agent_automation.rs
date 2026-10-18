@@ -706,11 +706,13 @@ fn terminal_outcome(
     if command == Some("completed") {
         return ("succeeded".into(), None);
     }
-    if command == Some("cancelled") || cancel_requested {
+    if command == Some("cancelled") {
         return ("stopped".into(), None);
     }
     let error = snapshot.error.clone().unwrap_or_else(|| {
-        if command.is_none() {
+        if cancel_requested {
+            "已请求停止，但未收到已停止的命令回执；请核对已有结果后继续".into()
+        } else if command.is_none() {
             "此任务尚未被 Agent 接收，可重试运行".into()
         } else {
             "任务未完整结束；已保留会话，可打开后继续".into()
@@ -1122,39 +1124,13 @@ pub async fn invoke(app: &AppHandle, method: &str, args: Vec<Value>) -> Result<V
         "cancelRun" => {
             let id = arg(&args, 0, "运行编号")?.as_str().ok_or("运行编号无效")?;
             let workspace = workspace_from_scope(args.get(1))?;
-            registered_project(&state, &workspace)?;
-            let session = {
-                let _guard = mutation_lock().lock().await;
-                let mut store = load(&state.db)?;
-                let record = store
-                    .runs
-                    .iter()
-                    .find(|run| run.run_id == id)
-                    .ok_or("运行记录不存在")?;
-                let job = store
-                    .jobs
-                    .iter()
-                    .find(|job| job.automation_id == record.automation_id)
-                    .ok_or("自动化任务不存在")?;
-                ensure_job_scope(job, &workspace)?;
-                let record = store.runs.iter_mut().find(|run| run.run_id == id).unwrap();
-                if !active(record) {
-                    return Ok(json!({"status":"finished"}));
-                }
-                record.cancel_requested = true;
-                let session = record.session_id.clone();
-                if session.is_none() {
-                    record.outcome = Some("stopped".into());
-                    record.dispatch_status = "cancelled".into();
-                    record.finished_at = Some(now_ms());
-                }
-                save(&state.db, &store)?;
-                session
-            };
-            if let Some(session) = session {
-                state_cancel(app, &session).await?;
-            }
-            Ok(json!({"status":"stopping"}))
+            cancel_run_runtime(
+                Arc::new(DesktopAutomationRuntime(app.clone())),
+                state.db.clone(),
+                id,
+                &workspace,
+            )
+            .await
         }
         "idleStatus" => {
             let idle = system_idle_ms().await;
@@ -1221,11 +1197,50 @@ pub async fn invoke(app: &AppHandle, method: &str, args: Vec<Value>) -> Result<V
     }
 }
 
-async fn state_cancel(app: &AppHandle, session_id: &str) -> Result<(), String> {
-    app.state::<InprocessAgentState>()
-        .call::<Value>("interruptSession", json!({"sessionId":session_id}), false)
-        .await
-        .map(|_| ())
+/// Stop through the same native runtime for local and remote automations.
+/// Persist cancellation before interrupting, so a lost acknowledgement never
+/// turns a pending cancellation into an automatic resend.
+pub async fn cancel_run_runtime(
+    runtime: Arc<dyn AutomationRuntime>,
+    db: Arc<crate::database::Database>,
+    id: &str,
+    workspace: &str,
+) -> Result<Value, String> {
+    registered_project_in_db(&db, workspace)?;
+    let session = {
+        let _guard = mutation_lock().lock().await;
+        let mut store = load(&db)?;
+        let record = store
+            .runs
+            .iter()
+            .find(|run| run.run_id == id)
+            .ok_or("运行记录不存在")?;
+        let job = store
+            .jobs
+            .iter()
+            .find(|job| job.automation_id == record.automation_id)
+            .ok_or("自动化任务不存在")?;
+        ensure_job_scope(job, workspace)?;
+        let record = store.runs.iter_mut().find(|run| run.run_id == id).unwrap();
+        if !active(record) {
+            return Ok(json!({"status":"finished"}));
+        }
+        record.cancel_requested = true;
+        let session = record.session_id.clone();
+        if session.is_none() {
+            record.outcome = Some("stopped".into());
+            record.dispatch_status = "cancelled".into();
+            record.finished_at = Some(now_ms());
+        }
+        save(&db, &store)?;
+        session
+    };
+    if let Some(session) = session {
+        runtime
+            .call("interruptSession", json!({"sessionId":session}), false)
+            .await?;
+    }
+    Ok(json!({"status":"stopping"}))
 }
 
 fn claim_due(
@@ -1382,10 +1397,31 @@ pub async fn scheduler_tick_runtime(
 }
 
 async fn recover_interrupted_runs(app: &AppHandle) {
+    let db = app.state::<AppState>().db.clone();
+    match load(&db) {
+        Ok(store) if !store.runs.iter().any(active) => return,
+        Err(error) => {
+            log::warn!("自动化运行记录恢复失败：{error}");
+            return;
+        }
+        _ => {}
+    }
+    if let Err(error) = app.state::<InprocessAgentState>().ensure_started(app).await {
+        log::warn!("自动化恢复启动失败：{error}");
+        // The runtime will report the unavailable carrier below; records remain
+        // terminal and never replay a model request on startup.
+    }
+    recover_runs_runtime(Arc::new(DesktopAutomationRuntime(app.clone())), db).await;
+}
+
+/// Reconcile persisted receipts after opening the native store; never dispatch.
+pub async fn recover_runs_runtime(
+    runtime: Arc<dyn AutomationRuntime>,
+    db: Arc<crate::database::Database>,
+) {
     let runs = {
         let _guard = mutation_lock().lock().await;
-        let state = app.state::<AppState>();
-        match load(&state.db) {
+        match load(&db) {
             Ok(store) => store
                 .runs
                 .into_iter()
@@ -1402,36 +1438,50 @@ async fn recover_interrupted_runs(app: &AppHandle) {
         return;
     }
 
-    let carrier = app.state::<InprocessAgentState>();
-    if let Err(error) = carrier.ensure_started(app).await {
-        let db = app.state::<AppState>().db.clone();
-        for (run_id, _, _) in runs {
-            let detail = format!("应用重启后无法恢复运行记录：{error}");
-            let _ = update_run(&db, &run_id, |run| {
-                run.dispatch_status = "failed_to_dispatch".into();
-                run.outcome = Some("failed".into());
-                run.error = Some(detail);
-                run.finished_at = Some(now_ms());
-            })
-            .await;
-        }
-        return;
-    }
-
-    let db = app.state::<AppState>().db.clone();
     for (run_id, session_id, cancel_requested) in runs {
         let result: Result<AgentSnapshot, String> = match session_id.as_deref() {
-            Some(session_id) => {
-                carrier
-                    .call("getSession", json!({"sessionId":session_id}), false)
-                    .await
-            }
+            Some(session_id) => runtime
+                .call("getSession", json!({"sessionId":session_id}), false)
+                .await
+                .and_then(|value| {
+                    serde_json::from_value(value).map_err(|_| "自动化会话状态无效".to_string())
+                }),
             None => Err("会话尚未创建".into()),
         };
+        // A recovered carrier may already own a live flight (for example,
+        // foreground startup racing the worker). Reattach monitoring instead of
+        // falsely recording failure or replaying the prompt.
+        if result.as_ref().is_ok_and(|snapshot| {
+            matches!(
+                snapshot.status,
+                AgentStatus::Running
+                    | AgentStatus::WaitingPermission
+                    | AgentStatus::WaitingQuestion
+            )
+        }) {
+            if let Some(id) = session_id {
+                if cancel_requested {
+                    if runtime
+                        .call("interruptSession", json!({"sessionId":id}), false)
+                        .await
+                        .is_err()
+                    {
+                        // Keep cancellation pending for the next recovery attempt.
+                        continue;
+                    }
+                }
+                let runtime = runtime.clone();
+                let db = db.clone();
+                tauri::async_runtime::spawn(async move {
+                    monitor_run(runtime, db, run_id, id).await;
+                });
+                continue;
+            }
+        }
         let (dispatch_status, outcome, error) = match result {
             Ok(snapshot) => {
                 let command = match session_id.as_deref() {
-                    Some(id) => command_status(&DesktopAutomationRuntime(app.clone()), id, &run_id)
+                    Some(id) => command_status(runtime.as_ref(), id, &run_id)
                         .await
                         .ok()
                         .flatten(),

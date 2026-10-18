@@ -84,10 +84,25 @@ pub use store::AppState;
 /// desktop account storage or exposing its internal configuration over IPC.
 #[cfg(feature = "test-hooks")]
 pub mod agent_test_support {
+    /// Explicit isolated SQLite path for restart acceptance; never resolves the
+    /// user's application directory or seeds account/provider configuration.
+    pub fn isolated_database(path: &std::path::Path) -> Result<crate::Database, crate::error::AppError> {
+        let conn = rusqlite::Connection::open(path)
+            .map_err(|e| crate::error::AppError::Database(e.to_string()))?;
+        conn.execute("PRAGMA foreign_keys = ON", [])
+            .map_err(|e| crate::error::AppError::Database(e.to_string()))?;
+        let db = crate::Database {
+            conn: std::sync::Mutex::new(conn),
+            log_count_cache: std::sync::Mutex::new(None),
+        };
+        db.create_tables()?;
+        Ok(db)
+    }
     pub use crate::proxy::providers::codex_oauth_auth::CodexOAuthManager;
     pub use crate::services::agent_automation::{
         create_saved_job as create_automation, scheduler_tick_runtime as automation_tick,
         system_idle_ms as automation_system_idle_ms, AutomationRuntime,
+        cancel_run_runtime as cancel_automation_run, recover_runs_runtime as recover_automation_runs,
     };
     pub use crate::services::agent_preferences::{
         load as load_workspace_preferences, path_key as workspace_path_key,

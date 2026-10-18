@@ -18,6 +18,17 @@ use tokio::sync::watch;
 const KEY: &str = "lolicode_remote_projects_v1";
 const MAX_STORE: usize = 1024 * 1024;
 
+// Native tools use this exact cancellation sentinel. Normalize only a typed,
+// acknowledged remote cancellation; transport failure and uncertain cleanup
+// must retain their errors even when the user has also pressed Stop.
+fn native_tool_error(error: remote_transport::RemoteError) -> String {
+    if error.kind == remote_transport::RemoteErrorKind::Cancelled {
+        "任务已停止".into()
+    } else {
+        error.to_string()
+    }
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct RemoteConnection {
@@ -471,11 +482,11 @@ impl RemoteProjects {
         tokio::pin!(rpc);
         loop {
             tokio::select! {
-                result = &mut rpc => return result.map_err(|e| e.to_string()),
+                result = &mut rpc => return result.map_err(native_tool_error),
                 changed = cancel.changed() => {
                     if changed.is_err() || *cancel.borrow() {
                         if let Ok(gate) = self.gate.lock() { if let Some((_, tx)) = gate.flights.get(&flight.id) { let _ = tx.send(true); } }
-                        return rpc.await.map_err(|e| e.to_string());
+                        return rpc.await.map_err(native_tool_error);
                     }
                 }
             }
@@ -536,6 +547,34 @@ pub(crate) fn fixture(db: Arc<Database>, anchors: PathBuf) -> (Arc<RemoteProject
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn acknowledged_remote_cancel_matches_native_sentinel_without_hiding_uncertainty() {
+        use remote_transport::{RemoteError, RemoteErrorKind};
+        assert_eq!(
+            native_tool_error(RemoteError {
+                kind: RemoteErrorKind::Cancelled,
+                message: "远程任务已停止。"
+            }),
+            "任务已停止"
+        );
+        for kind in [
+            RemoteErrorKind::Unavailable,
+            RemoteErrorKind::Timeout,
+            RemoteErrorKind::CleanupUncertain,
+        ] {
+            let error = native_tool_error(RemoteError {
+                kind,
+                message: "保留失败",
+            });
+            assert_ne!(error, "任务已停止");
+            assert_eq!(
+                error.starts_with("[cleanup_uncertain]"),
+                kind == RemoteErrorKind::CleanupUncertain
+            );
+        }
+    }
+
     #[tokio::test]
     async fn public_remote_dispatch_rejects_passwords_unknown_actions_and_bad_roots_before_network()
     {

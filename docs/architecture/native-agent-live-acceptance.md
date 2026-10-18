@@ -76,3 +76,14 @@ C:/Users/admin/.cargo/bin/cargo.exe run --manifest-path src-tauri/Cargo.toml --f
 ### 远程入口、预览与工作流扩展
 
 同一 lolicode_remote_agent_acceptance 命令现增加连接去重、远端项目工作流 CRUD/CAS/原文保留、生产 workflow_prompt 与运行回执无重放，以及远程 JS/PNG 预览和根目录范围验证。最新独立证据为 release/acceptance/remote-ui-real-ssh.json，passed=true、cleanupConfirmed=true；真实 SSH，5 次本地确定性模型请求，0 次外部提供商请求。远程页面已经接入桌面，预览和本地打开动作按远端身份区分；上述命令没有操作桌面按钮/IPC，也没有触发远程定时/闲时任务或验证真实 WSL，不能据此标记完整 A11 通过。
+
+
+## 真实 SSH 定时、闲时与取消（无外部提供商）
+
+```powershell
+C:/Users/admin/.cargo/bin/cargo.exe run --manifest-path src-tauri/Cargo.toml --features test-hooks --example lolicode_remote_automation_acceptance -- --ssh-config-alias tools --out D:/projectGithub/TAI-Switch/release/acceptance/remote-automation-real-ssh-v3.json
+```
+
+此命令真实连接已授权 SSH alias，只写独立 nonce 工程和临时 SQLite/本体目录。实际等待下一分钟计划、读取当前 Windows 输入闲置时间，不修改 nextRunAt 或合成用户输入；生产调度器通过同一个 NativeEngine 的远程工具写入两份标记并回读。第三个远程进程由生产取消入口停止，/proc 确认退出。前台另选本地项目，范围隔离和跨工程取消拒绝均通过；本地确定性模型合计 5 次请求，无外部模型或凭据。
+
+独立子进程重开 SQLite 和本体存储，三条记录与命令为 succeeded/completed、succeeded/completed、stopped/cancelled，不绑定模型网关、不重放。此处是已完成/停止回执的实际重开，未证明应用强杀期间的远程进程回收。首两次揭露的取消文案/哨兵不一致已修正并另存通过记录，原失败保留。详见持续验收记录；指定 testkey、真实桌面按钮、WSL、异常断线与强杀场景保持待验证。
