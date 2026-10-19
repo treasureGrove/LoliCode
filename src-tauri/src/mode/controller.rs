@@ -6294,7 +6294,7 @@ model_provider = "c"
         assert_eq!(stacked["priority"], 2);
         assert_eq!(stacked["display_name"], "DeepSeek V4 Pro（DEEPSEEK）");
         // DeepSeek 官方目录的 "3000" 不带过来，窗口按它自己的行算。
-        assert_eq!(stacked["comp_hash"], "cc-switch");
+        assert_eq!(stacked["comp_hash"], "lolicode");
         let window = stacked["context_window"].as_u64().unwrap();
         assert_eq!(
             stacked["auto_compact_token_limit"].as_u64(),

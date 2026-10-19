@@ -22,7 +22,7 @@ use super::reasoning_bridge::{
     anthropic_block_from_openai_reasoning_item, openai_reasoning_item_from_anthropic_block,
 };
 
-pub(crate) const TOOL_RESULT_ERROR_MARKER: &str = "[cc-switch:tool-result-error]";
+pub(crate) const TOOL_RESULT_ERROR_MARKER: &str = "[lolicode:tool-result-error]";
 
 /// OpenAI Responses API 拒绝 `max_output_tokens` 小于 16。Anthropic 侧的合法
 /// 小预算探测请求（如 Claude Desktop 的模型可用性探测发 `max_tokens=1`）
@@ -3994,7 +3994,7 @@ mod tests {
             .filter_map(|part| part.get("text").and_then(Value::as_str))
             .all(|text| !text.contains("STRING_RESPONSES_SENTINEL")));
         let serialized = result.to_string();
-        assert!(serialized.contains("[cc-switch: omitted 20000 bytes]"));
+        assert!(serialized.contains("[lolicode: omitted 20000 bytes]"));
         assert!(!serialized.contains(&"A".repeat(64)));
     }
 
@@ -4661,7 +4661,7 @@ mod tests {
         assert_eq!(thinking["type"], "thinking");
         assert!(thinking["signature"]
             .as_str()
-            .is_some_and(|value| value.starts_with("ccswitch-openai-reasoning-v1:")));
+            .is_some_and(|value| value.starts_with("lolicode-openai-reasoning-v1:")));
 
         let replay = anthropic_to_responses(
             json!({

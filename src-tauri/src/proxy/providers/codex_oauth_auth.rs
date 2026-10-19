@@ -64,7 +64,7 @@ const DEVICE_CODE_DEFAULT_EXPIRES_IN: u64 = 900;
 const POLLING_SAFETY_MARGIN_SECS: u64 = 3;
 
 /// User-Agent
-const CODEX_USER_AGENT: &str = "cc-switch-codex-oauth";
+const CODEX_USER_AGENT: &str = "lolicode-codex-oauth";
 
 // Shared by model discovery and generation: ChatGPT gates models by this
 // client identity. GPT-6.1 Sol enters the ChatGPT-account catalog at 0.159.0.

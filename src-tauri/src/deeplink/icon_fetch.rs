@@ -332,7 +332,7 @@ async fn fetch_unbounded(raw_url: &str) -> Result<String, String> {
             .redirect(reqwest::redirect::Policy::none())
             .referer(false)
             .resolve_to_addrs(&domain, &addrs)
-            .user_agent(concat!("CC-Switch/", env!("CARGO_PKG_VERSION")))
+            .user_agent(concat!("LoliCode/", env!("CARGO_PKG_VERSION")))
             .build()
             .map_err(|e| format!("failed to build client: {}", describe_request_error(e)))?;
         let mut response = client

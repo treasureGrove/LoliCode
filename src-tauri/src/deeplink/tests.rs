@@ -7,6 +7,15 @@ use super::provider::parse_and_merge_config;
 use super::utils::{infer_homepage_from_endpoint, validate_url};
 use super::DeepLinkImportRequest;
 use crate::AppType;
+
+#[test]
+fn lolicode_import_links_keep_legacy_links_compatible() {
+    for scheme in ["lolicode", "ccswitch"] {
+        let request = parse_deeplink_url(&format!("{scheme}://v1/import?resource=provider&app=claude&name=Test&endpoint=https%3A%2F%2Fapi.example.com&apiKey=synthetic-key")).unwrap();
+        assert_eq!(request.name.as_deref(), Some("Test"));
+        assert_eq!(request.api_key.as_deref(), Some("synthetic-key"));
+    }
+}
 use crate::{store::AppState, Database};
 use base64::prelude::*;
 use std::{env, ffi::OsString, sync::Arc};

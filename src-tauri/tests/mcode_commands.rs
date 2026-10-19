@@ -1,4 +1,4 @@
-use cc_switch_lib::{AppType, Prompt, PromptService, Provider, ProviderService};
+use lolicode_lib::{AppType, Prompt, PromptService, Provider, ProviderService};
 use serde_json::json;
 use std::fs;
 

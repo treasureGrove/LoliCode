@@ -27,9 +27,9 @@ const ppioChatCompletionsEndpoint = `${ppioOpenAiEndpoint}/chat/completions`;
 const ppioModelsEndpoint = `${ppioOpenAiEndpoint}/models`;
 const ppioBrandFields = {
   websiteUrl: "https://ppio.com",
-  apiKeyUrl: "https://ppio.com/activity/ccswitch",
+  apiKeyUrl: "https://ppio.com/",
   category: "aggregator",
-  isPartner: true,
+  isPartner: false,
   partnerPromotionKey: "ppio",
   icon: "ppio",
   iconColor: "#2874FF",
@@ -201,7 +201,7 @@ describe("PPIO provider presets", () => {
     const pi = getPpioPreset(piProviderPresets)!;
     expect(pi).toMatchObject({
       ...ppioBrandFields,
-      providerKey: "cc-switch-ppio",
+      providerKey: "lolicode-ppio",
       settingsConfig: {
         name: "PPIO",
         baseUrl: ppioOpenAiEndpoint,

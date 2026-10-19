@@ -16,7 +16,48 @@
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use serde_json::{json, Value};
 
-pub(crate) const OPENAI_REASONING_ITEM_PREFIX: &str = "ccswitch-openai-reasoning-v1:";
+pub(crate) const OPENAI_REASONING_ITEM_PREFIX: &str = "lolicode-openai-reasoning-v1:";
+
+#[cfg(test)]
+mod branding_compat_tests {
+    use super::*;
+    use crate::proxy::providers::{codex_compaction, transform_codex_anthropic};
+    #[test]
+    fn lolicode_gateway_replays_previous_brand_reasoning_and_compaction() {
+        let reasoning =
+            json!({"type":"reasoning","summary":[],"encrypted_content":"upstream-cipher"});
+        let encoded = encode_openai_reasoning_item(&reasoning).unwrap();
+        assert!(encoded.starts_with("lolicode-"));
+        assert_eq!(
+            decode_openai_reasoning_item(&encoded.replacen("lolicode-", "ccswitch-", 1)),
+            Some(reasoning)
+        );
+        let thinking =
+            json!({"type":"thinking","thinking":"retained","signature":"synthetic-signature"});
+        let encoded =
+            transform_codex_anthropic::encode_anthropic_thinking_block(&thinking).unwrap();
+        assert!(encoded.starts_with("lolicode-"));
+        assert_eq!(
+            transform_codex_anthropic::decode_anthropic_thinking_block(&encoded.replacen(
+                "lolicode-",
+                "ccswitch-",
+                1
+            )),
+            Some(thinking)
+        );
+        let encoded = codex_compaction::encode_compaction_summary("retained summary");
+        assert!(encoded.starts_with("lolicode-"));
+        assert_eq!(
+            codex_compaction::decode_compaction_summary(&encoded.replacen(
+                "lolicode-",
+                "ccswitch-",
+                1
+            ))
+            .as_deref(),
+            Some("retained summary")
+        );
+    }
+}
 
 /// The only fields safe to send back as a `reasoning` input item:
 /// `encrypted_content` is the stateless-replay payload, `id`/`summary` are
@@ -62,7 +103,9 @@ pub(crate) fn encode_openai_reasoning_item(item: &Value) -> Option<String> {
 }
 
 pub(crate) fn decode_openai_reasoning_item(encoded: &str) -> Option<Value> {
-    let payload = encoded.strip_prefix(OPENAI_REASONING_ITEM_PREFIX)?;
+    let payload = encoded
+        .strip_prefix(OPENAI_REASONING_ITEM_PREFIX)
+        .or_else(|| encoded.strip_prefix("ccswitch-openai-reasoning-v1:"))?;
     let bytes = URL_SAFE_NO_PAD.decode(payload).ok()?;
     let item: Value = serde_json::from_slice(&bytes).ok()?;
     (item.get("type").and_then(Value::as_str) == Some("reasoning"))

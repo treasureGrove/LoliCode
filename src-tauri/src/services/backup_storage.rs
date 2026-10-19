@@ -106,7 +106,8 @@ fn categories() -> Vec<Category> {
             name == "config.json.migrated"
         }),
         files("legacyDbUpgrade", app_dir.clone(), |name| {
-            name.starts_with("cc-switch.db.") && name.contains("-backup-")
+            (name.starts_with("cc-switch.db.") || name.starts_with("lolicode.db."))
+                && name.contains("-backup-")
         }),
         whole("legacyToolSearch", app_dir.join("toolsearch-backups")),
     ]

@@ -1,7 +1,7 @@
 //! Production renderer downloader/store/Tauri resolver and IPC acceptance.
 //! Uses an explicitly created private cache across separate process launches.
 //! MockRuntime has no WebView or installer: this does not prove GUI rendering.
-use cc_switch_lib::agent_test_support::{
+use lolicode_lib::agent_test_support::{
     renderer_native_contract, wrap_renderer_assets, RendererEnvelope, RendererHost, RendererStore,
 };
 use serde_json::{json, Value};
@@ -131,9 +131,9 @@ async fn main() -> Result<(), String> {
     let app = tauri::test::mock_builder()
         .manage(host.clone())
         .invoke_handler(tauri::generate_handler![
-            cc_switch_lib::get_renderer_status,
-            cc_switch_lib::confirm_renderer_boot,
-            cc_switch_lib::rollback_renderer_update
+            lolicode_lib::get_renderer_status,
+            lolicode_lib::confirm_renderer_boot,
+            lolicode_lib::rollback_renderer_update
         ])
         .build(context)
         .map_err(|_| "Tauri resolver construction failed")?;

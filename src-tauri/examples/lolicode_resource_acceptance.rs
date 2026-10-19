@@ -1,6 +1,6 @@
 //! Private-cache acceptance of the actual signed presentation package.
 //! Never reads the user's database, installs an application or changes settings.
-use cc_switch_lib::agent_test_support::{ResourceEnvelope as Envelope, ResourceStore};
+use lolicode_lib::agent_test_support::{ResourceEnvelope as Envelope, ResourceStore};
 use serde_json::json;
 
 #[tokio::main]

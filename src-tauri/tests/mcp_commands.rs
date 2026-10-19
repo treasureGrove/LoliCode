@@ -3,7 +3,7 @@ use std::fs;
 
 use serde_json::json;
 
-use cc_switch_lib::{
+use lolicode_lib::{
     get_claude_mcp_path, get_claude_mcp_status, get_claude_settings_path, get_grok_config_path,
     import_default_config_test_hook, read_claude_mcp_config, update_settings, AppError,
     AppSettings, AppType, McpApps, McpServer, McpService, MultiAppConfig, ProviderService,
@@ -887,7 +887,7 @@ fn set_mcp_enabled_for_codex_writes_live_config() {
         "server should have Codex app enabled after toggle"
     );
 
-    let toml_path = cc_switch_lib::get_codex_config_path();
+    let toml_path = lolicode_lib::get_codex_config_path();
     assert!(
         toml_path.exists(),
         "enabling server should trigger sync to ~/.codex/config.toml"

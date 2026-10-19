@@ -56,7 +56,9 @@ pub use codex_config::{
 };
 pub use commands::open_provider_terminal;
 pub use commands::*;
-pub use config::{get_claude_mcp_path, get_claude_settings_path, read_json_file};
+pub use config::{
+    get_claude_mcp_path, get_claude_settings_path, get_database_path, read_json_file,
+};
 pub use database::{Database, Profile};
 pub use deeplink::{import_provider_from_deeplink, parse_deeplink_url, DeepLinkImportRequest};
 pub use error::AppError;
@@ -86,7 +88,9 @@ pub use store::AppState;
 pub mod agent_test_support {
     /// Explicit isolated SQLite path for restart acceptance; never resolves the
     /// user's application directory or seeds account/provider configuration.
-    pub fn isolated_database(path: &std::path::Path) -> Result<crate::Database, crate::error::AppError> {
+    pub fn isolated_database(
+        path: &std::path::Path,
+    ) -> Result<crate::Database, crate::error::AppError> {
         let conn = rusqlite::Connection::open(path)
             .map_err(|e| crate::error::AppError::Database(e.to_string()))?;
         conn.execute("PRAGMA foreign_keys = ON", [])
@@ -99,28 +103,29 @@ pub mod agent_test_support {
         Ok(db)
     }
     pub use crate::proxy::providers::codex_oauth_auth::CodexOAuthManager;
+    pub use crate::services::agent_applications::DesktopApplicationTools;
     pub use crate::services::agent_automation::{
-        create_saved_job as create_automation, scheduler_tick_runtime as automation_tick,
+        cancel_run_runtime as cancel_automation_run, create_saved_job as create_automation,
+        recover_runs_runtime as recover_automation_runs, scheduler_tick_runtime as automation_tick,
         system_idle_ms as automation_system_idle_ms, AutomationRuntime,
-        cancel_run_runtime as cancel_automation_run, recover_runs_runtime as recover_automation_runs,
     };
     pub use crate::services::agent_preferences::{
         load as load_workspace_preferences, path_key as workspace_path_key,
         save as save_workspace_preferences, AgentProject,
     };
     pub use crate::services::agent_workflows::{
-        invoke_file_service as workflow_files, record_run_in_db, workflow_prompt,
-        invoke_remote_file_service as remote_workflow_files,
-        workflow_prompt_with_remote as remote_workflow_prompt,
+        invoke_file_service as workflow_files, invoke_remote_file_service as remote_workflow_files,
+        record_run_in_db, workflow_prompt, workflow_prompt_with_remote as remote_workflow_prompt,
     };
     pub use crate::services::inprocess_extensions::InprocessExtensionStore;
-    pub use crate::services::remote_transport;
     pub use crate::services::remote_agent_tools::DesktopToolHost;
     pub use crate::services::remote_projects::RemoteProjects;
-    pub use crate::services::agent_applications::DesktopApplicationTools;
-    pub use crate::services::resource_updates::{Envelope as ResourceEnvelope, ResourceStore};
-    pub use crate::services::renderer_updates::{native_contract as renderer_native_contract, Envelope as RendererEnvelope, RendererStore};
+    pub use crate::services::remote_transport;
     pub use crate::services::renderer_host::{wrap as wrap_renderer_assets, RendererHost};
+    pub use crate::services::renderer_updates::{
+        native_contract as renderer_native_contract, Envelope as RendererEnvelope, RendererStore,
+    };
+    pub use crate::services::resource_updates::{Envelope as ResourceEnvelope, ResourceStore};
     pub use crate::services::zhipu_login::acceptance_secret_read_only as glm_acceptance_secret;
     pub use crate::services::{
         agent::{AgentState, AgentWorkspace},
@@ -328,7 +333,7 @@ fn handle_deeplink_url(
     focus_main_window: bool,
     source: &str,
 ) -> bool {
-    if !url_str.starts_with("ccswitch://") {
+    if !url_str.starts_with("lolicode://") && !url_str.starts_with("ccswitch://") {
         return false;
     }
 
@@ -541,7 +546,7 @@ pub fn run() {
                 },
             );
 
-            // 初始化日志（输出到 <app_config_dir>/logs/cc-switch.log）
+            // 初始化日志（输出到 <app_config_dir>/logs/lolicode.log）
             {
                 use tauri_plugin_log::{RotationStrategy, Target, TargetKind, TimezoneStrategy};
 
@@ -566,7 +571,7 @@ pub fn run() {
                             Target::new(TargetKind::Stdout),
                             Target::new(TargetKind::Folder {
                                 path: log_dir,
-                                file_name: Some("cc-switch".into()),
+                                file_name: Some("lolicode".into()),
                             }),
                         ])
                         // KeepSome(4) 保留 4 个轮转归档，加上当前文件最多约 100 MiB。
@@ -648,7 +653,7 @@ pub fn run() {
 
             // 初始化数据库
             let app_config_dir = crate::config::get_app_config_dir();
-            let db_path = app_config_dir.join("cc-switch.db");
+            let db_path = crate::config::database_path_in(&app_config_dir);
             let json_path = app_config_dir.join("config.json");
 
             // 检查是否需要从 config.json 迁移到 SQLite
@@ -1174,12 +1179,17 @@ pub fn run() {
                 #[cfg(target_os = "linux")]
                 {
                     // Use Tauri's path API to get correct path (includes app identifier)
-                    // tauri-plugin-deep-link writes to: ~/.local/share/com.ccswitch.desktop/applications/cc-switch-handler.desktop
-                    // Only register if .desktop file doesn't exist to avoid overwriting user customizations
+                    // The plugin names the handler after the current executable.
+                    // Preserve user customizations when that handler already exists.
                     let should_register = app
                         .path()
                         .data_dir()
-                        .map(|d| !d.join("applications/cc-switch-handler.desktop").exists())
+                        .ok()
+                        .zip(tauri::utils::platform::current_exe().ok())
+                        .and_then(|(directory, binary)| {
+                            let name = binary.file_name()?.to_string_lossy();
+                            Some(!directory.join("applications").join(format!("{name}-handler.desktop")).exists())
+                        })
                         .unwrap_or(true);
 
                     if should_register {
@@ -2381,7 +2391,7 @@ fn show_database_init_error_dialog(
             您的数据尚未丢失，应用不会自动删除数据库文件。\n\
             常见原因包括：数据库版本过新、文件损坏、权限不足、磁盘空间不足等。\n\n\
             建议：\n\
-            1) 先备份整个配置目录（包含 cc-switch.db）\n\
+            1) 先备份整个配置目录（包含上述数据库文件）\n\
             2) 如果提示“数据库版本过新”，请升级到更新版本\n\
             3) 如果刚升级出现异常，可回退旧版本导出/备份后再升级\n\n\
             点击「重试」重新尝试初始化\n\
@@ -2395,7 +2405,7 @@ fn show_database_init_error_dialog(
             Your data is NOT lost - the app will not delete the database automatically.\n\
             Common causes include: newer database version, corrupted file, permission issues, or low disk space.\n\n\
             Suggestions:\n\
-            1) Back up the entire config directory (including cc-switch.db)\n\
+            1) Back up the entire config directory (including the database shown above)\n\
             2) If you see “database version is newer”, please upgrade LoliCode\n\
             3) If this happened right after upgrading, consider rolling back to export/backup then upgrade again\n\n\
             Click 'Retry' to attempt initialization again\n\

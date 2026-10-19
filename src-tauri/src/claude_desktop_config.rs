@@ -18,7 +18,7 @@ use crate::mode::state::{self, PendingTarget};
 use crate::provider::{ClaudeDesktopMode, Provider};
 
 pub const PROFILE_ID: &str = "00000000-0000-4000-8000-000000157210";
-pub const PROFILE_NAME: &str = "CC Switch";
+pub const PROFILE_NAME: &str = "LoliCode";
 
 #[cfg(any(target_os = "macos", windows, target_os = "linux", test))]
 const CONFIG_FILE: &str = "claude_desktop_config.json";

@@ -353,7 +353,7 @@ impl OmoService {
         let current_contents = Self::snapshot_config_file(path)?;
         if current_contents.as_deref() != expected_contents {
             return Err(AppError::Config(format!(
-                "Config changed after CC Switch wrote it; refusing to roll back {}",
+                "Config changed after LoliCode wrote it; refusing to roll back {}",
                 path.display()
             )));
         }

@@ -19,7 +19,7 @@ mod live {
         routing::post,
         Json, Router,
     };
-    use cc_switch_lib::{
+    use lolicode_lib::{
         agent_test_support::{
             channel_center::{self, ChannelCenterSnapshot},
             CodexOAuthManager, UsageCache,
@@ -534,7 +534,7 @@ mod live {
         project: &Path,
         requests: &AtomicUsize,
     ) -> Result<Value> {
-        use cc_switch_lib::agent_test_support::{
+        use lolicode_lib::agent_test_support::{
             record_run_in_db, workflow_files, workflow_prompt,
         };
         let name = "isolated-glm-math-check";
@@ -636,7 +636,7 @@ mod live {
         catalog: channel_center::AgentCatalog,
         gateway: NativeGateway,
     }
-    impl cc_switch_lib::agent_test_support::AutomationRuntime for AutomationAcceptanceRuntime {
+    impl lolicode_lib::agent_test_support::AutomationRuntime for AutomationAcceptanceRuntime {
         fn bind_project<'a>(
             &'a self,
             path: &'a str,
@@ -679,7 +679,7 @@ mod live {
         catalog: &Value,
         gateway: &NativeGateway,
     ) -> Result<Value> {
-        use cc_switch_lib::agent_test_support::{
+        use lolicode_lib::agent_test_support::{
             automation_system_idle_ms, automation_tick, create_automation,
             load_workspace_preferences, save_workspace_preferences, workspace_path_key,
             AgentProject, AutomationRuntime,
@@ -872,7 +872,7 @@ mod live {
     }
 
     async fn tavern_acceptance(state: &AppState, project: &Path) -> Result<Value> {
-        use cc_switch_lib::agent_test_support::{builtin_apps_test, tavern_test as tavern};
+        use lolicode_lib::agent_test_support::{builtin_apps_test, tavern_test as tavern};
         builtin_apps_test::set_enabled(&state.db, builtin_apps_test::BuiltinApp::Tavern, true)
             .map_err(|error| anyhow!(error))?;
         let card_path = project.join("tavern-card.json");
@@ -940,7 +940,7 @@ mod live {
         root: &Path,
         requests: &AtomicUsize,
     ) -> Result<Value> {
-        use cc_switch_lib::agent_test_support::InprocessExtensionStore;
+        use lolicode_lib::agent_test_support::InprocessExtensionStore;
         let bundled = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/agent/extensions");
         let store = InprocessExtensionStore::new(root.into(), bundled)?;
         store
@@ -1214,7 +1214,7 @@ mod live {
             .account_id
             .as_deref()
             .context("managed account reference missing")?;
-        let key = cc_switch_lib::agent_test_support::glm_acceptance_secret(account)
+        let key = lolicode_lib::agent_test_support::glm_acceptance_secret(account)
             .await
             .map_err(|_| {
                 anyhow!("authorized GLM credential resolution unavailable without writes")

@@ -22,7 +22,7 @@ use bytes::Bytes;
 use futures::stream::{Stream, StreamExt};
 use serde_json::{json, Value};
 
-pub(crate) const CCSWITCH_COMPACTION_PREFIX: &str = "ccswitch-compaction-v1:";
+pub(crate) const CCSWITCH_COMPACTION_PREFIX: &str = "lolicode-compaction-v1:";
 
 /// CC Switch 自己包装进 `encrypted_content` 的内容都以它开头，官方后端一律解不开。
 const CCSWITCH_ENVELOPE_PREFIX: &str = "ccswitch-";
@@ -75,13 +75,16 @@ pub(crate) fn encode_compaction_summary(summary: &str) -> String {
 
 /// 解开 CC Switch 包装的摘要；别家密文或损坏的内容返回 None。
 pub(crate) fn decode_compaction_summary(encrypted_content: &str) -> Option<String> {
-    let encoded = encrypted_content.strip_prefix(CCSWITCH_COMPACTION_PREFIX)?;
+    let encoded = encrypted_content
+        .strip_prefix(CCSWITCH_COMPACTION_PREFIX)
+        .or_else(|| encrypted_content.strip_prefix("ccswitch-compaction-v1:"))?;
     let bytes = URL_SAFE_NO_PAD.decode(encoded).ok()?;
     String::from_utf8(bytes).ok()
 }
 
 fn is_ccswitch_envelope(encrypted_content: &str) -> bool {
-    encrypted_content.starts_with(CCSWITCH_ENVELOPE_PREFIX)
+    encrypted_content.starts_with("lolicode-")
+        || encrypted_content.starts_with(CCSWITCH_ENVELOPE_PREFIX)
 }
 
 fn compaction_encrypted_content(item: &Value) -> Option<&str> {

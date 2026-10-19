@@ -12,7 +12,7 @@ mod smoke {
     use axum::{
         body::Body, extract::State, http::header, response::Response, routing::post, Json, Router,
     };
-    use cc_switch_lib::{
+    use lolicode_lib::{
         agent_test_support::{
             channel_center::{AgentCatalog, AgentCatalogModel},
             AgentState,

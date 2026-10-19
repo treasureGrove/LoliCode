@@ -540,7 +540,7 @@ fn upsert_pi_prompt(state: &AppState, id: &str, prompt: Prompt) -> Result<(), Ap
 
     if requested_active && !was_active {
         return Err(AppError::Conflict(
-            "Pi AGENTS.md changed outside CC Switch; reload before editing it".to_string(),
+            "Pi AGENTS.md changed outside LoliCode; reload before editing it".to_string(),
         ));
     }
 

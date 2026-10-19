@@ -65,7 +65,8 @@ export function AppDataRecovery({
         </div>
         <p className="text-sm leading-6 text-muted-foreground">
           如果数据盘或同步目录暂时未连接，请先连接后重启。也可以选择包含{" "}
-          <code>cc-switch.db</code>（或旧版 <code>config.json</code>
+          <code>lolicode.db</code>（兼容旧版 <code>cc-switch.db</code> 或{" "}
+          <code>config.json</code>
           ）的原数据目录。
         </p>
         {invalidConfiguration && (

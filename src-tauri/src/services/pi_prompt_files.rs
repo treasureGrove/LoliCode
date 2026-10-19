@@ -285,7 +285,7 @@ fn ensure_revision(path: &Path, expected: &str, label: &str) -> Result<(), AppEr
         Ok(())
     } else {
         Err(AppError::Conflict(format!(
-            "{label} changed outside CC Switch: {}",
+            "{label} changed outside LoliCode: {}",
             path.display()
         )))
     }

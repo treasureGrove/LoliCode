@@ -2330,7 +2330,7 @@ impl RequestForwarder {
         let opencode_fallback_user_agent =
             if custom_user_agent.is_none() && is_opencode_upstream(upstream_host.as_deref()) {
                 Some(http::HeaderValue::from_static(concat!(
-                    "cc-switch/",
+                    "lolicode/",
                     env!("CARGO_PKG_VERSION")
                 )))
             } else {

@@ -9,7 +9,7 @@ fn main() {
 mod acceptance {
     use anyhow::{anyhow, ensure, Context, Result};
     use axum::{body::Body, response::Response, routing::post, Json};
-    use cc_switch_lib::{agent_test_support::*, AppState, Database};
+    use lolicode_lib::{agent_test_support::*, AppState, Database};
     use chrono::Timelike;
     use lolicode_agent::native::{NativeEngine, NativeGateway};
     use serde_json::{json, Value};

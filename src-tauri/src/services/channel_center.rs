@@ -1422,7 +1422,7 @@ fn aggregate_source(
         .collect();
     ChannelSource {
         id: "gateway".into(),
-        name: "LoliCode 聚合".into(),
+        name: "LoliCode Gateway".into(),
         base_url: base_url.into(),
         api_key: token.into(),
         auth_kind: "api_key".into(),
@@ -1485,7 +1485,7 @@ pub(crate) fn gateway_provider(
             let mut doc = toml_edit::DocumentMut::new();
             doc["model_provider"] = toml_edit::value("custom");
             doc["model"] = toml_edit::value(default);
-            doc["model_providers"]["custom"]["name"] = toml_edit::value("LoliCode 聚合");
+            doc["model_providers"]["custom"]["name"] = toml_edit::value("LoliCode Gateway");
             doc["model_providers"]["custom"]["base_url"] =
                 toml_edit::value(source.base_url.as_str());
             doc["model_providers"]["custom"]["wire_api"] = toml_edit::value("responses");

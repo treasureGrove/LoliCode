@@ -350,7 +350,7 @@ fn run_tool_lifecycle_silently(command_line: &str, _label: &str) -> Result<(), S
 fn run_tool_lifecycle_silently(command_line: &str, label: &str) -> Result<(), String> {
     // 每次调用使用独立目录，避免同进程并发升级时覆盖或删除另一工具的脚本。
     let script_dir = tempfile::Builder::new()
-        .prefix("cc_switch_lifecycle_")
+        .prefix("lolicode_lifecycle_")
         .tempdir()
         .map_err(|e| format!("创建批处理目录失败: {e}"))?;
     let bat_file = script_dir.path().join(format!("{label}.bat"));
@@ -1329,7 +1329,7 @@ async fn fetch_github_latest_version(client: &reqwest::Client, repo: &str) -> Op
     let url = format!("https://api.github.com/repos/{repo}/releases/latest");
     let resp = client
         .get(&url)
-        .header("User-Agent", "cc-switch")
+        .header("User-Agent", "LoliCode")
         .header("Accept", "application/vnd.github+json")
         .timeout(LATEST_PROBE_TIMEOUT)
         .send()
@@ -1422,7 +1422,7 @@ static VERSION_RE: Lazy<Regex> =
 /// `/etc/bash.bashrc` 的 sudo 提示、nvm 的 `Using Node vX.Y.Z` 等）输出都在它前面，
 /// 解析时只看它之后的内容（#7347）。
 #[cfg_attr(not(windows), allow(dead_code))]
-const VERSION_PROBE_SENTINEL: &str = "__CCSWITCH_VERSION__";
+const VERSION_PROBE_SENTINEL: &str = "__LOLICODE_VERSION__";
 
 /// 版本探测交给用户 shell 执行的命令：先打哨兵，再跑 `--version`。
 /// 不含单引号，可以直接嵌进外层 `'...'`。
@@ -4623,7 +4623,7 @@ fn launch_macos_terminal(config_file: &std::path::Path, cwd: Option<&Path>) -> R
     let final_cd_command = build_final_shell_cd_command(&shell, cwd);
 
     let temp_dir = std::env::temp_dir();
-    let script_file = temp_dir.join(format!("cc_switch_launcher_{}.sh", std::process::id()));
+    let script_file = temp_dir.join(format!("lolicode_launcher_{}.sh", std::process::id()));
     let config_path = config_file.to_string_lossy();
     let provider_command = build_provider_command_line(&shell, &config_path, cwd);
 
@@ -5028,7 +5028,7 @@ fn launch_linux_terminal(config_file: &std::path::Path, cwd: Option<&Path>) -> R
 
     // Create temp script file
     let temp_dir = std::env::temp_dir();
-    let script_file = temp_dir.join(format!("cc_switch_launcher_{}.sh", std::process::id()));
+    let script_file = temp_dir.join(format!("lolicode_launcher_{}.sh", std::process::id()));
     let config_path = config_file.to_string_lossy();
     let provider_command = build_provider_command_line(&shell, &config_path, cwd);
 
@@ -5129,7 +5129,7 @@ fn launch_windows_terminal(
     let preferred = crate::settings::get_preferred_terminal();
     let terminal = preferred.as_deref().unwrap_or("cmd");
 
-    let bat_file = temp_dir.join(format!("cc_switch_claude_{}.bat", std::process::id()));
+    let bat_file = temp_dir.join(format!("lolicode_claude_{}.bat", std::process::id()));
     // 配置文件和 .bat 同在 temp_dir（%TEMP% 含用户名），用 %~dp0 引用：目录由 cmd
     // 运行时展开，不进 .bat 字节，非 ASCII 用户名下也不会乱码（#8034）。
     let config_name = config_file
@@ -5205,7 +5205,7 @@ fn is_windows_unc_path(path: &str) -> bool {
 
 /// 非 ASCII 的项目目录经这个环境变量传给 Claude 启动 .bat。
 #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
-const WINDOWS_CWD_ENV: &str = "CC_SWITCH_INTERNAL_CWD";
+const WINDOWS_CWD_ENV: &str = "LOLICODE_INTERNAL_CWD";
 
 /// 生成切到项目目录的 .bat 行，第二项是需要给启动进程设置的 `WINDOWS_CWD_ENV` 值。
 ///
@@ -5301,15 +5301,15 @@ pub(crate) fn launch_terminal_running(command_line: &str, label: &str) -> Result
 
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     let (script_file, script_content) = {
-        let file = temp_dir.join(format!("cc_switch_{}_{}.sh", label, pid));
+        let file = temp_dir.join(format!("lolicode_{}_{}.sh", label, pid));
         let content = format!(
             r#"#!/usr/bin/env sh
 trap 'rm -f "{script_path}"' EXIT
-echo "[cc-switch] Starting: {label}"
+echo "[LoliCode] Starting: {label}"
 echo ""
 {cmd}
 echo ""
-echo "[cc-switch] Command exited. Press Enter to close."
+echo "[LoliCode] Command exited. Press Enter to close."
 read -r _
 "#,
             script_path = file.display(),
@@ -5428,9 +5428,9 @@ read -r _
         let preferred = crate::settings::get_preferred_terminal();
         let terminal = preferred.as_deref().unwrap_or("cmd");
 
-        let bat_file = temp_dir.join(format!("cc_switch_{}_{}.bat", label, pid));
+        let bat_file = temp_dir.join(format!("lolicode_{}_{}.bat", label, pid));
         let content = format!(
-            "@echo off\r\necho [cc-switch] Starting: {label}\r\necho.\r\n{cmd}\r\necho.\r\necho [cc-switch] Command exited. Press any key to close.\r\npause >nul\r\ndel \"%~f0\" >nul 2>&1\r\n",
+            "@echo off\r\necho [LoliCode] Starting: {label}\r\necho.\r\n{cmd}\r\necho.\r\necho [LoliCode] Command exited. Press any key to close.\r\npause >nul\r\ndel \"%~f0\" >nul 2>&1\r\n",
             label = label,
             cmd = command_line,
         );
@@ -5687,11 +5687,11 @@ mod tests {
         std::fs::create_dir_all(&node_dir).unwrap();
         std::fs::write(
             npm_dir.join("npm.cmd"),
-            "@echo off\r\ncmd /D /C cc_switch_lifecycle_test_node.cmd\r\nexit /b %errorlevel%\r\n",
+            "@echo off\r\ncmd /D /C lolicode_lifecycle_test_node.cmd\r\nexit /b %errorlevel%\r\n",
         )
         .unwrap();
         std::fs::write(
-            node_dir.join("cc_switch_lifecycle_test_node.cmd"),
+            node_dir.join("lolicode_lifecycle_test_node.cmd"),
             "@echo restored-user-path\r\n@exit /b 0\r\n",
         )
         .unwrap();
@@ -5961,24 +5961,24 @@ mod tests {
     fn version_probe_sentinel_drops_shell_startup_output() {
         assert_eq!(
             version_probe_payload("claude"),
-            "echo __CCSWITCH_VERSION__; claude --version"
+            "echo __LOLICODE_VERSION__; claude --version"
         );
 
         // Ubuntu 的 update-motd 在当天第一个交互式 login shell 里打印 MOTD，
         // 整段取第一个版本号会拿到 24.04.4（#7347）
-        let motd = "Welcome to Ubuntu 24.04.4 LTS (GNU/Linux 6.6.87.2-microsoft-standard-WSL2 x86_64)\n\n * Documentation:  https://help.ubuntu.com\n__CCSWITCH_VERSION__\n2.1.270 (Claude Code)";
+        let motd = "Welcome to Ubuntu 24.04.4 LTS (GNU/Linux 6.6.87.2-microsoft-standard-WSL2 x86_64)\n\n * Documentation:  https://help.ubuntu.com\n__LOLICODE_VERSION__\n2.1.270 (Claude Code)";
         assert_eq!(after_version_sentinel(motd), "2.1.270 (Claude Code)");
 
         // 兜底链 `-lic || -lc || -c` 会多次打印哨兵：取最后一次之后
-        let chained = "__CCSWITCH_VERSION__\nbash: warning\n__CCSWITCH_VERSION__\n1.2.3";
+        let chained = "__LOLICODE_VERSION__\nbash: warning\n__LOLICODE_VERSION__\n1.2.3";
         assert_eq!(after_version_sentinel(chained), "1.2.3");
 
         // OSC 序列没有换行、直接粘在哨兵前面（地址取自 RFC 5737 文档保留段）
-        let glued = "\x1b]1337;RemoteHost=user@198.51.100.23\x07__CCSWITCH_VERSION__\n0.154.0";
+        let glued = "\x1b]1337;RemoteHost=user@198.51.100.23\x07__LOLICODE_VERSION__\n0.154.0";
         assert_eq!(after_version_sentinel(glued), "0.154.0");
 
         // 版本打在 stderr 的工具：哨兵之后为空，调用方回退到 stderr
-        assert_eq!(after_version_sentinel("__CCSWITCH_VERSION__\n"), "");
+        assert_eq!(after_version_sentinel("__LOLICODE_VERSION__\n"), "");
 
         // 没有哨兵（shell 在执行载荷前就失败）：原样返回，行为不变
         assert_eq!(
@@ -9007,7 +9007,7 @@ mod tests {
     #[cfg(target_os = "macos")]
     #[test]
     fn iterm2_applescript_cold_start_avoids_current_window_before_one_exists() {
-        let script = build_macos_iterm2_applescript(Path::new("/tmp/cc_switch_launcher.sh"));
+        let script = build_macos_iterm2_applescript(Path::new("/tmp/lolicode_launcher.sh"));
 
         let cold_start_branch = script
             .split("else\n        activate")
@@ -9026,7 +9026,7 @@ mod tests {
     #[cfg(target_os = "macos")]
     #[test]
     fn iterm2_applescript_keeps_new_tab_behavior_for_existing_windows() {
-        let script = build_macos_iterm2_applescript(Path::new("/tmp/cc_switch_launcher.sh"));
+        let script = build_macos_iterm2_applescript(Path::new("/tmp/lolicode_launcher.sh"));
 
         let running_branch = script
             .split("if was_running then")
@@ -9045,7 +9045,7 @@ mod tests {
     #[cfg(target_os = "macos")]
     #[test]
     fn terminal_applescript_cold_start_uses_launch_before_do_script() {
-        let script = build_macos_terminal_applescript(Path::new("/tmp/cc_switch_launcher.sh"));
+        let script = build_macos_terminal_applescript(Path::new("/tmp/lolicode_launcher.sh"));
 
         assert!(
             script.contains(r#"set was_running to application "Terminal" is running"#),
@@ -9066,7 +9066,7 @@ mod tests {
             "already-running branch should use bare do script:\n{script}"
         );
         assert!(
-            script.contains(r#"set launcher_script to "exec sh '/tmp/cc_switch_launcher.sh'""#),
+            script.contains(r#"set launcher_script to "exec sh '/tmp/lolicode_launcher.sh'""#),
             "Terminal should replace the auto-created shell:\n{script}"
         );
     }
@@ -9075,8 +9075,8 @@ mod tests {
     #[test]
     fn otty_launcher_command_executes_the_temporary_script() {
         assert_eq!(
-            build_macos_dash_c_command(Path::new("/tmp/cc_switch_launcher.sh")),
-            "exec sh '/tmp/cc_switch_launcher.sh'"
+            build_macos_dash_c_command(Path::new("/tmp/lolicode_launcher.sh")),
+            "exec sh '/tmp/lolicode_launcher.sh'"
         );
     }
 
@@ -9096,7 +9096,7 @@ mod tests {
     #[cfg(target_os = "macos")]
     #[test]
     fn terminal_applescript_does_not_hijack_restored_windows() {
-        let script = build_macos_terminal_applescript(Path::new("/tmp/cc_switch_launcher.sh"));
+        let script = build_macos_terminal_applescript(Path::new("/tmp/lolicode_launcher.sh"));
         assert!(
             !script.contains(" in window 1"),
             "should not inject into an existing/restored Terminal window:\n{script}"
@@ -9111,11 +9111,11 @@ mod tests {
     #[cfg(target_os = "macos")]
     #[test]
     fn ghostty_applescript_cold_start_uses_initial_command() {
-        let script = build_macos_ghostty_applescript(Path::new("/tmp/cc_switch_launcher.sh"));
+        let script = build_macos_ghostty_applescript(Path::new("/tmp/lolicode_launcher.sh"));
 
         // Warm launches execute through the AppleScript command property, not `open -na ... -e`.
         assert!(
-            script.contains(r#"set launcher_command to "sh '/tmp/cc_switch_launcher.sh'""#),
+            script.contains(r#"set launcher_command to "sh '/tmp/lolicode_launcher.sh'""#),
             "missing launcher_command:\n{script}"
         );
         assert!(script.contains("if was_running then"));
@@ -9154,8 +9154,8 @@ mod tests {
     #[test]
     fn dash_c_command_wraps_script_path_inside_quoted_arg() {
         // The script path must stay inside the `-c` string, not as a bare argv.
-        let s = build_macos_dash_c_command(Path::new("/tmp/cc_switch_launcher_1.sh"));
-        assert_eq!(s, "exec sh '/tmp/cc_switch_launcher_1.sh'");
+        let s = build_macos_dash_c_command(Path::new("/tmp/lolicode_launcher_1.sh"));
+        assert_eq!(s, "exec sh '/tmp/lolicode_launcher_1.sh'");
 
         // Spaces and single quotes must stay shell-safe too.
         let s2 = build_macos_dash_c_command(Path::new("/Users/me/it's dir/x.sh"));
@@ -9227,12 +9227,12 @@ mod tests {
         assert!(command.is_ascii(), "batch line must stay ASCII: {command}");
         assert_eq!(
             command,
-            "cd /d \"%CC_SWITCH_INTERNAL_CWD%\" || exit /b 1\r\nset \"CC_SWITCH_INTERNAL_CWD=\"\r\n"
+            "cd /d \"%LOLICODE_INTERNAL_CWD%\" || exit /b 1\r\nset \"LOLICODE_INTERNAL_CWD=\"\r\n"
         );
         assert_eq!(env.as_deref(), Some(path));
 
         let (unc_command, unc_env) = build_windows_cwd_command_str(r"\\server\共享\repo");
-        assert!(unc_command.starts_with("pushd \"%CC_SWITCH_INTERNAL_CWD%\" || exit /b 1\r\n"));
+        assert!(unc_command.starts_with("pushd \"%LOLICODE_INTERNAL_CWD%\" || exit /b 1\r\n"));
         assert_eq!(unc_env.as_deref(), Some(r"\\server\共享\repo"));
     }
 }

@@ -2,13 +2,16 @@ import { useCallback, useState } from "react";
 import type { AppId } from "@/lib/api/types";
 import { SKILLS_APP_IDS } from "@/config/appConfig";
 import { useToggleSkillApp } from "@/hooks/useSkills";
+import { readMigratedStorage } from "@/lib/storageMigration";
 
-const STORAGE_KEY = "cc-switch:skills:install-to";
+const STORAGE_KEY = "lolicode:skills:install-to";
 const DEFAULT_TARGETS: AppId[] = ["claude", "codex"];
 
 function readStored(): AppId[] | null {
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw = readMigratedStorage(STORAGE_KEY, [
+      "cc-switch:skills:install-to",
+    ]);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return null;

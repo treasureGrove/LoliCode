@@ -6,6 +6,7 @@ import React, {
   useState,
 } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { readMigratedStorage } from "@/lib/storageMigration";
 
 type Theme = "light" | "dark" | "system";
 
@@ -49,14 +50,17 @@ function applyColorScheme(isDark: boolean) {
 export function ThemeProvider({
   children,
   defaultTheme = "system",
-  storageKey = "cc-switch-theme",
+  storageKey = "lolicode-theme",
 }: ThemeProviderProps) {
   const getInitialTheme = () => {
     if (typeof window === "undefined") {
       return defaultTheme;
     }
 
-    const stored = window.localStorage.getItem(storageKey) as Theme | null;
+    const stored = readMigratedStorage(
+      storageKey,
+      storageKey === "lolicode-theme" ? ["cc-switch-theme"] : [],
+    ) as Theme | null;
     if (stored === "light" || stored === "dark" || stored === "system") {
       return stored;
     }

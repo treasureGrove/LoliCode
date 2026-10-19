@@ -25,7 +25,7 @@ pub(crate) use super::webdav_sync::archive::{
 
 /// Wire-format identifier stored in remote manifests.
 /// Retains historic "webdav" naming for backward compatibility with existing remotes.
-pub(crate) const PROTOCOL_FORMAT: &str = "cc-switch-webdav-sync";
+pub(crate) const PROTOCOL_FORMAT: &str = "lolicode-webdav-sync";
 pub(crate) const PROTOCOL_VERSION: u32 = 2;
 pub(crate) const DB_COMPAT_VERSION: u32 = 6;
 pub(crate) const LEGACY_DB_COMPAT_VERSION: u32 = 5;
@@ -235,7 +235,7 @@ pub(crate) fn validate_manifest_compat(
     manifest: &SyncManifest,
     layout: RemoteLayout,
 ) -> Result<(), AppError> {
-    if manifest.format != PROTOCOL_FORMAT {
+    if manifest.format != PROTOCOL_FORMAT && manifest.format != "cc-switch-webdav-sync" {
         return Err(localized(
             "sync.manifest_format_incompatible",
             format!("远端 manifest 格式不兼容: {}", manifest.format),
@@ -599,6 +599,17 @@ mod tests {
     fn validate_manifest_compat_accepts_supported_manifest() {
         let manifest = manifest_with(PROTOCOL_FORMAT, PROTOCOL_VERSION, Some(DB_COMPAT_VERSION));
         assert!(validate_manifest_compat(&manifest, RemoteLayout::Current).is_ok());
+    }
+
+    #[test]
+    fn lolicode_sync_reads_previous_brand_manifests() {
+        assert_eq!(PROTOCOL_FORMAT, "lolicode-webdav-sync");
+        let old = manifest_with(
+            "cc-switch-webdav-sync",
+            PROTOCOL_VERSION,
+            Some(DB_COMPAT_VERSION),
+        );
+        assert!(validate_manifest_compat(&old, RemoteLayout::Current).is_ok());
     }
 
     #[test]

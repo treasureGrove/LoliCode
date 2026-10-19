@@ -757,7 +757,7 @@ describe("PiProviderForm", () => {
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
     expect(onSubmit.mock.calls[0][0]).toMatchObject({
-      providerKey: "cc-switch-kimi",
+      providerKey: "lolicode-kimi",
       name: "Kimi",
       presetCategory: "cn_official",
     });

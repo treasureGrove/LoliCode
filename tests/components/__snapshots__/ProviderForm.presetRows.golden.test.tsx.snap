@@ -112,7 +112,7 @@ exports[`ProviderForm 预设新增行金标 > claude > Kimi For Coding 1`] = `
         "CLAUDE_CODE_MAX_CONTEXT_TOKENS": "262144",
       },
     },
-    "websiteUrl": "https://www.kimi.com/code/?aff=cc-switch",
+    "websiteUrl": "https://www.kimi.com/code/",
   },
 }
 `;

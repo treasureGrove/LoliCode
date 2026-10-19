@@ -12,7 +12,7 @@ fn main() {
 #[cfg(feature = "test-hooks")]
 mod live {
     use anyhow::{anyhow, bail, ensure, Context, Result};
-    use cc_switch_lib::{
+    use lolicode_lib::{
         agent_test_support::{
             channel_center::{
                 self, AgentCatalog, ChannelCenterSnapshot, ChannelModel, ChannelSource,

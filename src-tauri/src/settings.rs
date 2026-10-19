@@ -106,6 +106,11 @@ pub struct WebDavSyncStatus {
 }
 
 fn default_remote_root() -> String {
+    "lolicode-sync".to_string()
+}
+// Old saved sync objects that omitted this field already target the old remote
+// directory. Preserve that destination; fresh settings use the product default.
+fn legacy_remote_root() -> String {
     "cc-switch-sync".to_string()
 }
 fn default_profile() -> String {
@@ -126,7 +131,7 @@ pub struct WebDavSyncSettings {
     pub username: String,
     #[serde(default)]
     pub password: String,
-    #[serde(default = "default_remote_root")]
+    #[serde(default = "legacy_remote_root")]
     pub remote_root: String,
     #[serde(default = "default_profile")]
     pub profile: String,
@@ -205,7 +210,7 @@ pub struct S3SyncSettings {
     pub secret_access_key: String,
     #[serde(default)]
     pub endpoint: String,
-    #[serde(default = "default_remote_root")]
+    #[serde(default = "legacy_remote_root")]
     pub remote_root: String,
     #[serde(default = "default_profile")]
     pub profile: String,

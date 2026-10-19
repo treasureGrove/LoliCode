@@ -6,7 +6,7 @@ fn main() {
         .skip(1)
         .any(|arg| arg == "--check-agent-runtime")
     {
-        std::process::exit(cc_switch_lib::check_builtin_agent_runtime());
+        std::process::exit(lolicode_lib::check_builtin_agent_runtime());
     }
     // 在 Linux 上设置 WebKit 环境变量以解决 DMA-BUF 渲染问题
     // 某些 Linux 系统（如 Debian 13.2、Nvidia GPU）上 WebKitGTK 的 DMA-BUF 渲染器可能导致白屏/黑屏
@@ -30,12 +30,14 @@ fn main() {
         // resize 后黑屏；改回原生 Wayland 即可解决，且该崩溃在 WebKitGTK 2.52 上已不复现。
         // 由于该钩子会覆盖用户预设的 GDK_BACKEND，这里提供一个钩子不会触碰的逃生开关：
         // 设置 CC_SWITCH_GDK_BACKEND=wayland 即可强制覆盖，默认行为保持不变（零回归）。
-        if let Ok(backend) = std::env::var("CC_SWITCH_GDK_BACKEND") {
+        if let Ok(backend) = std::env::var("LOLICODE_GDK_BACKEND")
+            .or_else(|_| std::env::var("CC_SWITCH_GDK_BACKEND"))
+        {
             if !backend.is_empty() {
                 std::env::set_var("GDK_BACKEND", backend);
             }
         }
     }
 
-    cc_switch_lib::run();
+    lolicode_lib::run();
 }

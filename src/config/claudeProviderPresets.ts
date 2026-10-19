@@ -99,7 +99,7 @@ export const providerPresets: ProviderPreset[] = [
     regionKey: "cn",
     primePartner: true,
     websiteUrl:
-      "https://platform.kimi.com?track_id=track-7cf2b91dcde043eda6ef9a95951a042c&aff=cc-switch",
+      "https://platform.kimi.com?track_id=track-7cf2b91dcde043eda6ef9a95951a042c",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://api.moonshot.cn/anthropic",
@@ -122,7 +122,7 @@ export const providerPresets: ProviderPreset[] = [
     planKey: "payg",
     regionKey: "intl",
     websiteUrl:
-      "https://platform.kimi.ai?track_id=track-674ed6e2af924a5682a87421f7cf753a&aff=cc-switch",
+      "https://platform.kimi.ai?track_id=track-674ed6e2af924a5682a87421f7cf753a",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://api.moonshot.ai/anthropic",
@@ -144,7 +144,7 @@ export const providerPresets: ProviderPreset[] = [
     planKey: "coding",
     regionKey: "cn",
     primePartner: true,
-    websiteUrl: "https://www.kimi.com/code/?aff=cc-switch",
+    websiteUrl: "https://www.kimi.com/code/",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://api.kimi.com/coding/",
@@ -170,7 +170,7 @@ export const providerPresets: ProviderPreset[] = [
     family: "kimi",
     planKey: "coding",
     regionKey: "intl",
-    websiteUrl: "https://www.kimi.ai/code?aff=cc-switch",
+    websiteUrl: "https://www.kimi.ai/code",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://api.kimi.ai/coding/",
@@ -190,7 +190,7 @@ export const providerPresets: ProviderPreset[] = [
   {
     name: "PackyCode",
     websiteUrl: "https://www.packyapi.ai",
-    apiKeyUrl: "https://www.packyapi.ai/register?aff=cc-switch",
+    apiKeyUrl: "https://www.packyapi.ai/register",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://www.packyapi.ai",
@@ -205,7 +205,7 @@ export const providerPresets: ProviderPreset[] = [
       "https://www.packyapi.com",
     ],
     category: "third_party",
-    isPartner: true, // 合作伙伴
+    isPartner: false, // 合作伙伴
     partnerPromotionKey: "packycode", // 促销信息 i18n key
     icon: "packycode",
   },
@@ -220,7 +220,7 @@ export const providerPresets: ProviderPreset[] = [
       },
     },
     category: "aggregator",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "zetaapi",
     icon: "zetaapi",
   },
@@ -236,7 +236,7 @@ export const providerPresets: ProviderPreset[] = [
     },
     endpointCandidates: ["https://apinebula.ai"],
     category: "third_party",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "apinebula",
     icon: "apinebula",
   },
@@ -252,7 +252,7 @@ export const providerPresets: ProviderPreset[] = [
     },
     endpointCandidates: ["https://api.aicodemirror.ai/api/claudecode"],
     category: "third_party",
-    isPartner: true, // 合作伙伴
+    isPartner: false, // 合作伙伴
     partnerPromotionKey: "aicodemirror", // 促销信息 i18n key
     icon: "aicodemirror",
     iconColor: "#000000",
@@ -269,7 +269,7 @@ export const providerPresets: ProviderPreset[] = [
       },
     },
     category: "third_party",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "patewayai",
     icon: "pateway",
   },
@@ -285,7 +285,7 @@ export const providerPresets: ProviderPreset[] = [
       },
     },
     category: "aggregator",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "fenno",
     icon: "fenno",
   },
@@ -301,14 +301,14 @@ export const providerPresets: ProviderPreset[] = [
     },
     endpointCandidates: ["https://runapi.host", "https://runapi.co"],
     category: "aggregator",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "runapi",
     icon: "runapi",
   },
   {
     name: "OpenModel",
     websiteUrl: "https://www.openmodel.ai",
-    apiKeyUrl: "https://www.openmodel.ai?ref=cc-switch",
+    apiKeyUrl: "https://www.openmodel.ai",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://api.openmodel.ai",
@@ -316,7 +316,7 @@ export const providerPresets: ProviderPreset[] = [
       },
     },
     category: "aggregator",
-    isPartner: true,
+    isPartner: false,
     icon: "openmodel",
   },
   {
@@ -335,14 +335,14 @@ export const providerPresets: ProviderPreset[] = [
       },
     },
     category: "aggregator",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "shengsuanyun",
     icon: "shengsuanyun",
   },
   {
     name: "AIGoCode",
     websiteUrl: "https://aigocode.app",
-    apiKeyUrl: "https://aigocode.app/invite/CC-SWITCH",
+    apiKeyUrl: "https://aigocode.app/",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://api.aigocode.app",
@@ -352,7 +352,7 @@ export const providerPresets: ProviderPreset[] = [
     // 请求地址候选（用于地址管理/测速）
     endpointCandidates: ["https://api.aigocode.app"],
     category: "third_party",
-    isPartner: true, // 合作伙伴
+    isPartner: false, // 合作伙伴
     partnerPromotionKey: "aigocode", // 促销信息 i18n key
     icon: "aigocode",
     iconColor: "#5B7FFF",
@@ -370,14 +370,14 @@ export const providerPresets: ProviderPreset[] = [
     },
     endpointCandidates: ["https://api.qnaigc.com", "https://api.modelink.ai"],
     category: "aggregator",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "qiniu",
     icon: "qiniu",
   },
   {
     name: "AICoding",
     websiteUrl: "https://aicoding.inc",
-    apiKeyUrl: "https://aicoding.inc/i/CCSWITCH",
+    apiKeyUrl: "https://aicoding.inc/",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://api.aicoding.inc",
@@ -386,7 +386,7 @@ export const providerPresets: ProviderPreset[] = [
     },
     endpointCandidates: ["https://api.aicoding.inc"],
     category: "third_party",
-    isPartner: true, // 合作伙伴
+    isPartner: false, // 合作伙伴
     partnerPromotionKey: "aicoding", // 促销信息 i18n key
     icon: "aicoding",
     iconColor: "#000000",
@@ -402,7 +402,7 @@ export const providerPresets: ProviderPreset[] = [
       },
     },
     category: "aggregator",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "subrouter",
     icon: "subrouter",
   },
@@ -432,7 +432,7 @@ export const providerPresets: ProviderPreset[] = [
       "https://api.baiduqianfan.ai/anthropic/tokenplan/team",
     ],
     category: "aggregator",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "fluxa",
     icon: "fluxa",
   },
@@ -448,14 +448,14 @@ export const providerPresets: ProviderPreset[] = [
     },
     endpointCandidates: ["https://api.88api.ai", "https://88api.ai"],
     category: "aggregator",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "88api",
     icon: "88api",
   },
   {
     name: "APIKEY.FUN",
     websiteUrl: "https://apikey.fan",
-    apiKeyUrl: "https://apikey.fan/register?aff=CCSwitch",
+    apiKeyUrl: "https://apikey.fan/register",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://api.apikey.fan",
@@ -468,7 +468,7 @@ export const providerPresets: ProviderPreset[] = [
       "https://slb.apikey.fun",
     ],
     category: "third_party",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "apikeyfun",
     icon: "apikeyfun",
   },
@@ -488,7 +488,7 @@ export const providerPresets: ProviderPreset[] = [
       "https://cdn.9527.codes",
     ],
     category: "aggregator",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "9527code",
     icon: "9527code",
   },
@@ -503,7 +503,7 @@ export const providerPresets: ProviderPreset[] = [
       },
     },
     category: "aggregator",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "claudeapi",
     icon: "claudeapi",
   },
@@ -518,7 +518,7 @@ export const providerPresets: ProviderPreset[] = [
       },
     },
     category: "aggregator",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "code0",
     icon: "code0",
   },
@@ -526,7 +526,7 @@ export const providerPresets: ProviderPreset[] = [
     name: "TeamoRouter",
     websiteUrl: "https://teamorouter.cn",
     apiKeyUrl:
-      "https://teamorouter.cn/?utm_source=cc_switch&utm_medium=referral&utm_campaign=ai_directory",
+      "https://teamorouter.cn/?utm_medium=referral&utm_campaign=ai_directory",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://api.teamorouter.cn",
@@ -534,7 +534,7 @@ export const providerPresets: ProviderPreset[] = [
       },
     },
     category: "aggregator",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "teamorouter",
     endpointCandidates: [
       "https://api.teamorouter.cn",
@@ -545,7 +545,7 @@ export const providerPresets: ProviderPreset[] = [
   {
     name: "PPIO",
     websiteUrl: "https://ppio.com",
-    apiKeyUrl: "https://ppio.com/activity/ccswitch",
+    apiKeyUrl: "https://ppio.com/",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://api.ppio.com/anthropic",
@@ -557,7 +557,7 @@ export const providerPresets: ProviderPreset[] = [
       },
     },
     category: "aggregator",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "ppio",
     endpointCandidates: ["https://api.ppio.com/anthropic"],
     modelsUrl: "https://api.ppio.com/openai/v1/models",
@@ -575,7 +575,7 @@ export const providerPresets: ProviderPreset[] = [
       },
     },
     category: "third_party",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "claudecn",
     icon: "claudecn",
   },
@@ -584,9 +584,9 @@ export const providerPresets: ProviderPreset[] = [
     family: "volcengine",
     planKey: "agentPlan",
     websiteUrl:
-      "https://www.volcengine.com/activity/agentplan?ac=MMAP8JTTCAQ2&rc=6J6FV5N2&utm_source=OWO&utm_medium=devrel-1&utm_campaign=hw&utm_term=ccswitch&utm_content=hw",
+      "https://www.volcengine.com/activity/agentplan?ac=MMAP8JTTCAQ2&rc=6J6FV5N2&utm_source=OWO&utm_medium=devrel-1&utm_campaign=hw&utm_content=hw",
     apiKeyUrl:
-      "https://www.volcengine.com/activity/agentplan?ac=MMAP8JTTCAQ2&rc=6J6FV5N2&utm_source=OWO&utm_medium=devrel-1&utm_campaign=hw&utm_term=ccswitch&utm_content=hw",
+      "https://www.volcengine.com/activity/agentplan?ac=MMAP8JTTCAQ2&rc=6J6FV5N2&utm_source=OWO&utm_medium=devrel-1&utm_campaign=hw&utm_content=hw",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://ark.cn-beijing.volces.com/api/plan",
@@ -598,7 +598,7 @@ export const providerPresets: ProviderPreset[] = [
       },
     },
     category: "cn_official",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "volcengine_agentplan",
     icon: "huoshan",
     iconColor: "#3370FF",
@@ -608,9 +608,9 @@ export const providerPresets: ProviderPreset[] = [
     family: "volcengine",
     planKey: "codingPlan",
     websiteUrl:
-      "https://www.volcengine.com/activity/codingplan?ac=MMAP8JTTCAQ2&rc=6J6FV5N2&utm_campaign=hw&utm_content=ccswitch&utm_medium=devrel_tool_web&utm_source=OWO&utm_term=ccswitch",
+      "https://www.volcengine.com/activity/codingplan?ac=MMAP8JTTCAQ2&rc=6J6FV5N2&utm_campaign=hw&utm_medium=devrel_tool_web&utm_source=OWO",
     apiKeyUrl:
-      "https://www.volcengine.com/activity/codingplan?ac=MMAP8JTTCAQ2&rc=6J6FV5N2&utm_campaign=hw&utm_content=ccswitch&utm_medium=devrel_tool_web&utm_source=OWO&utm_term=ccswitch",
+      "https://www.volcengine.com/activity/codingplan?ac=MMAP8JTTCAQ2&rc=6J6FV5N2&utm_campaign=hw&utm_medium=devrel_tool_web&utm_source=OWO",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://ark.cn-beijing.volces.com/api/coding",
@@ -622,7 +622,7 @@ export const providerPresets: ProviderPreset[] = [
       },
     },
     category: "cn_official",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "volcengine_codingplan",
     icon: "huoshan",
     iconColor: "#3370FF",
@@ -630,9 +630,9 @@ export const providerPresets: ProviderPreset[] = [
   {
     name: "BytePlus",
     websiteUrl:
-      "https://www.byteplus.com/en/product/modelark?utm_campaign=hw&utm_content=ccswitch&utm_medium=devrel_tool_web&utm_source=OWO&utm_term=ccswitch",
+      "https://www.byteplus.com/en/product/modelark?utm_campaign=hw&utm_medium=devrel_tool_web&utm_source=OWO",
     apiKeyUrl:
-      "https://www.byteplus.com/en/product/modelark?utm_campaign=hw&utm_content=ccswitch&utm_medium=devrel_tool_web&utm_source=OWO&utm_term=ccswitch",
+      "https://www.byteplus.com/en/product/modelark?utm_campaign=hw&utm_medium=devrel_tool_web&utm_source=OWO",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL:
@@ -645,7 +645,7 @@ export const providerPresets: ProviderPreset[] = [
       },
     },
     category: "cn_official",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "byteplus",
     icon: "byteplus",
     iconColor: "#3370FF",
@@ -656,9 +656,9 @@ export const providerPresets: ProviderPreset[] = [
     planKey: "payg",
     nameKey: "providerForm.presets.doubaoseed",
     websiteUrl:
-      "https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey?apikey=%7B%7D&utm_campaign=hw&utm_content=ccswitch&utm_medium=devrel_tool_web&utm_source=OWO&utm_term=ccswitch",
+      "https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey?apikey=%7B%7D&utm_campaign=hw&utm_medium=devrel_tool_web&utm_source=OWO",
     apiKeyUrl:
-      "https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey?apikey=%7B%7D&utm_campaign=hw&utm_content=ccswitch&utm_medium=devrel_tool_web&utm_source=OWO&utm_term=ccswitch",
+      "https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey?apikey=%7B%7D&utm_campaign=hw&utm_medium=devrel_tool_web&utm_source=OWO",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://ark.cn-beijing.volces.com/api/compatible",
@@ -670,7 +670,7 @@ export const providerPresets: ProviderPreset[] = [
       },
     },
     category: "cn_official",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "doubaoseed",
     icon: "doubao",
     iconColor: "#3370FF",
@@ -692,7 +692,7 @@ export const providerPresets: ProviderPreset[] = [
       },
     },
     category: "aggregator",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "siliconflow",
     icon: "siliconflow",
     iconColor: "#6E29F6",
@@ -714,7 +714,7 @@ export const providerPresets: ProviderPreset[] = [
       },
     },
     category: "aggregator",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "siliconflow",
     icon: "siliconflow",
     iconColor: "#000000",
@@ -730,7 +730,7 @@ export const providerPresets: ProviderPreset[] = [
       },
     },
     category: "aggregator",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "a6api",
     icon: "a6api",
   },
@@ -741,7 +741,7 @@ export const providerPresets: ProviderPreset[] = [
     nameKey: "providerForm.presets.ucloud",
     websiteUrl: "https://www.compshare.cn",
     apiKeyUrl:
-      "https://www.compshare.cn/coding-plan?ytag=GPU_YY_YX_git_cc-switch",
+      "https://www.compshare.cn/coding-plan",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://api.modelverse.cn",
@@ -750,7 +750,7 @@ export const providerPresets: ProviderPreset[] = [
     },
     endpointCandidates: ["https://api.modelverse.cn"],
     category: "aggregator",
-    isPartner: true, // 合作伙伴
+    isPartner: false, // 合作伙伴
     partnerPromotionKey: "ucloud", // 促销信息 i18n key
     icon: "ucloud",
     iconColor: "#000000",
@@ -762,7 +762,7 @@ export const providerPresets: ProviderPreset[] = [
     nameKey: "providerForm.presets.ucloudCoding",
     websiteUrl: "https://www.compshare.cn",
     apiKeyUrl:
-      "https://www.compshare.cn/coding-plan?ytag=GPU_YY_YX_git_cc-switch",
+      "https://www.compshare.cn/coding-plan",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://cp.compshare.cn",
@@ -771,7 +771,7 @@ export const providerPresets: ProviderPreset[] = [
     },
     endpointCandidates: ["https://cp.compshare.cn"],
     category: "aggregator",
-    isPartner: true, // 合作伙伴
+    isPartner: false, // 合作伙伴
     partnerPromotionKey: "ucloud", // 促销信息 i18n key（复用）
     icon: "ucloud",
     iconColor: "#000000",
@@ -787,7 +787,7 @@ export const providerPresets: ProviderPreset[] = [
       },
     },
     category: "aggregator",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "ccsub",
     icon: "ccsub",
   },
@@ -807,7 +807,7 @@ export const providerPresets: ProviderPreset[] = [
       "https://node-cf.sssaicodeapi.com/api",
     ],
     category: "third_party",
-    isPartner: true, // 合作伙伴
+    isPartner: false, // 合作伙伴
     partnerPromotionKey: "sssaicode", // 促销信息 i18n key
     icon: "sssaicode",
     iconColor: "#000000",
@@ -815,7 +815,7 @@ export const providerPresets: ProviderPreset[] = [
   {
     name: "SoleAPI",
     websiteUrl: "https://soleapi.com",
-    apiKeyUrl: "https://soleapi.com/r/ccswitch",
+    apiKeyUrl: "https://soleapi.com",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://soleapi.com",
@@ -824,7 +824,7 @@ export const providerPresets: ProviderPreset[] = [
     },
     endpointCandidates: ["https://soleapi.com"],
     category: "aggregator",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "soleapi",
     icon: "soleapi",
   },
@@ -840,7 +840,7 @@ export const providerPresets: ProviderPreset[] = [
     },
     endpointCandidates: ["https://www.micuapi.ai"],
     category: "third_party",
-    isPartner: true, // 合作伙伴
+    isPartner: false, // 合作伙伴
     partnerPromotionKey: "micu", // 促销信息 i18n key
     icon: "micu",
     iconColor: "#000000",
@@ -848,7 +848,7 @@ export const providerPresets: ProviderPreset[] = [
   {
     name: "RightCode",
     websiteUrl: "https://www.rightapi.ai",
-    apiKeyUrl: "https://www.rightapi.ai/register?aff=CCSWITCH",
+    apiKeyUrl: "https://www.rightapi.ai/register",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://www.rightapi.ai/claude",
@@ -856,7 +856,7 @@ export const providerPresets: ProviderPreset[] = [
       },
     },
     category: "third_party",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "rightcode",
     icon: "rc",
     iconColor: "#E96B2C",
@@ -864,7 +864,7 @@ export const providerPresets: ProviderPreset[] = [
   {
     name: "Cubence",
     websiteUrl: "https://cubence.com",
-    apiKeyUrl: "https://cubence.com/signup?code=CCSWITCH&source=ccs",
+    apiKeyUrl: "https://cubence.com/signup",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://api.cubence.com",
@@ -878,7 +878,7 @@ export const providerPresets: ProviderPreset[] = [
       "https://api-bwg.cubence.com",
     ],
     category: "third_party",
-    isPartner: true, // 合作伙伴
+    isPartner: false, // 合作伙伴
     partnerPromotionKey: "cubence", // 促销信息 i18n key
     icon: "cubence",
     iconColor: "#000000",
@@ -886,7 +886,7 @@ export const providerPresets: ProviderPreset[] = [
   {
     name: "CrazyRouter",
     websiteUrl: "https://www.crazyrouter.com",
-    apiKeyUrl: "https://www.crazyrouter.com/register?aff=OZcm&ref=cc-switch",
+    apiKeyUrl: "https://www.crazyrouter.com/register?aff=OZcm",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://cn.crazyrouter.com",
@@ -895,7 +895,7 @@ export const providerPresets: ProviderPreset[] = [
     },
     endpointCandidates: ["https://cn.crazyrouter.com"],
     category: "third_party",
-    isPartner: true, // 合作伙伴
+    isPartner: false, // 合作伙伴
     partnerPromotionKey: "crazyrouter", // 促销信息 i18n key
     icon: "crazyrouter",
     iconColor: "#000000",
@@ -913,7 +913,7 @@ export const providerPresets: ProviderPreset[] = [
     // 请求地址候选（用于地址管理/测速），用户可自行选择/覆盖
     endpointCandidates: ["https://www.dmxapi.cn", "https://api.dmxapi.cn"],
     category: "aggregator",
-    isPartner: true, // 合作伙伴
+    isPartner: false, // 合作伙伴
     partnerPromotionKey: "dmxapi", // 促销信息 i18n key
     icon: "dmxapi",
   },
@@ -922,7 +922,7 @@ export const providerPresets: ProviderPreset[] = [
     family: "sudocode",
     websiteUrl: "https://sudocode.chat",
     apiKeyUrl:
-      "https://sudocode.chat/sign-up?aff=CC-SWITCH&utm_source=cc-switch&utm_medium=sponsor&utm_campaign=ccswitch",
+      "https://sudocode.chat/sign-up?&utm_medium=sponsor",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://api.sudocode.chat",
@@ -934,7 +934,7 @@ export const providerPresets: ProviderPreset[] = [
       "https://api.sudorelay.com",
     ],
     category: "third_party",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "sudocode",
     icon: "sudocode",
   },
@@ -951,7 +951,7 @@ export const providerPresets: ProviderPreset[] = [
     },
     endpointCandidates: ["https://sudocode.us", "https://sudocode.run"],
     category: "third_party",
-    isPartner: true,
+    isPartner: false,
     icon: "sudocode-us",
   },
   {
@@ -968,7 +968,7 @@ export const providerPresets: ProviderPreset[] = [
     },
     endpointCandidates: ["https://apicdn.xycai.us", "https://apicdn.xyc.ai"],
     category: "aggregator",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "xycai",
     icon: "xycai",
   },

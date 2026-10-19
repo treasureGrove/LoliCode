@@ -9,7 +9,7 @@ fn main() {
 #[cfg(feature = "test-hooks")]
 mod acceptance {
     use anyhow::{anyhow, ensure, Context, Result};
-    use cc_switch_lib::agent_test_support::remote_transport::{
+    use lolicode_lib::agent_test_support::remote_transport::{
         self, RemoteErrorKind, RemoteTarget,
     };
     use serde_json::{json, Value};

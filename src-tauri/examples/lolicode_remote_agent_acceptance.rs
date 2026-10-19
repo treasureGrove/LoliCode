@@ -9,7 +9,7 @@ fn main() {
 #[cfg(feature = "test-hooks")]
 mod acceptance {
     use anyhow::{anyhow, ensure, Context, Result};
-    use cc_switch_lib::{
+    use lolicode_lib::{
         agent_test_support::{
             remote_transport::{self, RemoteTarget},
             DesktopApplicationTools, DesktopToolHost, RemoteProjects,
@@ -230,7 +230,7 @@ mod acceptance {
             ensure!(listed["connections"].as_array().is_some_and(|c|c.len()==1),"saved connection missing or duplicated");
             let document="---\r\n# preserve source\r\ndescription: Remote review\r\ncustom: kept\r\nargs:\r\n  count:\r\n    type: number\r\n    default: 2\r\n---\r\nRead main.js, fix subtraction into addition, then inspect sample.png.\r\n";
             let params=json!({"workspacePath":anchor,"scope":"project","name":"remote-review","document":document});
-            use cc_switch_lib::agent_test_support::{remote_workflow_files,remote_workflow_prompt,record_run_in_db};
+            use lolicode_lib::agent_test_support::{remote_workflow_files,remote_workflow_prompt,record_run_in_db};
             remote_workflow_files(&remotes,"saveSavedWorkflow",vec![params.clone()]).await.map_err(|e|anyhow!(e))?;
             let loaded=remote_workflow_files(&remotes,"getSavedWorkflow",vec![params.clone()]).await.map_err(|e|anyhow!(e))?;
             ensure!(loaded["document"]==document && loaded["meta"]["custom"]=="kept","remote workflow source was not preserved");

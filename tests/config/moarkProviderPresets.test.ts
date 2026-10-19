@@ -187,7 +187,7 @@ describe("MoArk (模力方舟) provider presets", () => {
     expect(preset?.apiKeyUrl).toBe(API_KEY_URL);
     expect(preset?.category).toBe("aggregator");
     expect(preset?.icon).toBe("moark");
-    expect(preset?.providerKey).toBe("cc-switch-moark");
+    expect(preset?.providerKey).toBe("lolicode-moark");
     expect(preset?.settingsConfig.baseUrl).toBe("https://api.moark.com/v1");
     expect(preset?.settingsConfig.api).toBe("openai-completions");
     expect(preset?.settingsConfig.apiKey).toBe("");

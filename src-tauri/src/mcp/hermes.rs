@@ -534,7 +534,7 @@ mod tests {
         assert_eq!(merged["headers"]["X-Trace"], "abc");
         assert_eq!(
             merged["auth"], "oauth",
-            "auth declaration must survive CC Switch round-trip"
+            "auth declaration must survive LoliCode round-trip"
         );
     }
 

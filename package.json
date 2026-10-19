@@ -24,7 +24,7 @@
     "prepare:agent-assets": "node scripts/prepare-agent-assets.mjs"
   },
   "keywords": [],
-  "author": "Jason Young",
+  "author": "LoliCode contributors",
   "license": "MIT",
   "packageManager": "pnpm@10.12.3",
   "devDependencies": {

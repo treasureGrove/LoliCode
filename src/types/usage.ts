@@ -271,7 +271,7 @@ export const KNOWN_APP_TYPES: ReadonlyArray<AppType> = [
 /** Human-readable labels for usage sources that are not in the managed-app registry. */
 export const USAGE_APP_LABELS: Partial<Record<AppType, string>> = {
   lolicode: "LoliCode",
-  "channel-gateway": "Channel Gateway",
+  "channel-gateway": "LoliCode Gateway",
   workbuddy: "WorkBuddy",
   "deepseek-harness": "DeepSeek Harness",
   zcode: "ZCode",

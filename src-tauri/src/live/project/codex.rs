@@ -27,7 +27,7 @@ pub const OFFICIAL_PROXY_ROUTE_ID: &str = "cc-switch-official";
 /// 把内置 openai 改道到别的地址的顶层键。
 const OPENAI_BASE_URL: &str = "openai_base_url";
 /// CC Switch 生成的模型目录文件名。
-pub const CATALOG_FILENAME: &str = "cc-switch-model-catalog.json";
+pub const CATALOG_FILENAME: &str = "lolicode-model-catalog.json";
 pub use super::claude::PROXY_TOKEN_PLACEHOLDER;
 /// `web_search` 的禁用值。
 pub const WEB_SEARCH_DISABLED: &str = "disabled";
@@ -563,7 +563,10 @@ fn put_value(table: &mut dyn TableLike, key: &str, value: &TomlValue) {
 }
 
 fn is_cc_switch_catalog(value: &str) -> bool {
-    Path::new(value).file_name().and_then(|name| name.to_str()) == Some(CATALOG_FILENAME)
+    Path::new(value)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| matches!(name, CATALOG_FILENAME | "cc-switch-model-catalog.json"))
 }
 
 /// 去掉行里自己指定的模型目录指针（[`row_catalog_pointer`]），其余内容原样；行里没有时为

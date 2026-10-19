@@ -105,10 +105,10 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
     family: "kimi",
     planKey: "payg",
     regionKey: "cn",
-    providerKey: "cc-switch-kimi",
+    providerKey: "lolicode-kimi",
     websiteUrl:
-      "https://platform.kimi.com?track_id=track-7cf2b91dcde043eda6ef9a95951a042c&aff=cc-switch",
-    apiKeyUrl: "https://platform.kimi.com/console/api-keys?aff=cc-switch",
+      "https://platform.kimi.com?track_id=track-7cf2b91dcde043eda6ef9a95951a042c",
+    apiKeyUrl: "https://platform.kimi.com/console/api-keys",
     settingsConfig: {
       name: "Kimi",
       baseUrl: "https://api.moonshot.cn/v1",
@@ -145,10 +145,10 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
     family: "kimi",
     planKey: "payg",
     regionKey: "intl",
-    providerKey: "cc-switch-kimi-global",
+    providerKey: "lolicode-kimi-global",
     websiteUrl:
-      "https://platform.kimi.ai?track_id=track-674ed6e2af924a5682a87421f7cf753a&aff=cc-switch",
-    apiKeyUrl: "https://platform.kimi.ai/console/api-keys?aff=cc-switch",
+      "https://platform.kimi.ai?track_id=track-674ed6e2af924a5682a87421f7cf753a",
+    apiKeyUrl: "https://platform.kimi.ai/console/api-keys",
     settingsConfig: {
       name: "Kimi",
       baseUrl: "https://api.moonshot.ai/v1",
@@ -183,9 +183,9 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
     family: "kimi",
     planKey: "coding",
     regionKey: "cn",
-    providerKey: "cc-switch-kimi-for-coding",
-    websiteUrl: "https://www.kimi.com/code/?aff=cc-switch",
-    apiKeyUrl: "https://platform.kimi.com/console/api-keys?aff=cc-switch",
+    providerKey: "lolicode-kimi-for-coding",
+    websiteUrl: "https://www.kimi.com/code/",
+    apiKeyUrl: "https://platform.kimi.com/console/api-keys",
     settingsConfig: {
       name: "Kimi For Coding",
       baseUrl: "https://api.kimi.com/coding",
@@ -210,9 +210,9 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
     family: "kimi",
     planKey: "coding",
     regionKey: "intl",
-    providerKey: "cc-switch-kimi-for-coding-global",
-    websiteUrl: "https://www.kimi.ai/code?aff=cc-switch",
-    apiKeyUrl: "https://www.kimi.ai/code?aff=cc-switch",
+    providerKey: "lolicode-kimi-for-coding-global",
+    websiteUrl: "https://www.kimi.ai/code",
+    apiKeyUrl: "https://www.kimi.ai/code",
     settingsConfig: {
       name: "Kimi For Coding",
       baseUrl: "https://api.kimi.ai/coding",
@@ -232,9 +232,9 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
   },
   {
     name: "PackyCode",
-    providerKey: "cc-switch-packy-code",
+    providerKey: "lolicode-packy-code",
     websiteUrl: "https://www.packyapi.ai",
-    apiKeyUrl: "https://www.packyapi.ai/register?aff=cc-switch",
+    apiKeyUrl: "https://www.packyapi.ai/register",
     settingsConfig: {
       name: "PackyCode",
       baseUrl: "https://www.packyapi.ai",
@@ -252,13 +252,13 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
       ],
     },
     category: "third_party",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "packycode",
     icon: "packycode",
   },
   {
     name: "ZetaAPI",
-    providerKey: "cc-switch-zeta-api",
+    providerKey: "lolicode-zeta-api",
     websiteUrl: "https://zetaapi.ai",
     apiKeyUrl: "https://zetaapi.ai/go/u117",
     settingsConfig: {
@@ -273,13 +273,13 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
       ],
     },
     category: "aggregator",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "zetaapi",
     icon: "zetaapi",
   },
   {
     name: "APINebula",
-    providerKey: "cc-switch-apinebula",
+    providerKey: "lolicode-apinebula",
     websiteUrl: "https://apinebula.ai",
     apiKeyUrl: "https://apinebula.ai/VjM74M",
     settingsConfig: {
@@ -295,13 +295,13 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
       ],
     },
     category: "third_party",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "apinebula",
     icon: "apinebula",
   },
   {
     name: "AICodeMirror",
-    providerKey: "cc-switch-aicode-mirror",
+    providerKey: "lolicode-aicode-mirror",
     websiteUrl: "https://www.aicodemirror.ai",
     apiKeyUrl: "https://www.aicodemirror.ai/register?invitecode=9915W3",
     settingsConfig: {
@@ -319,14 +319,14 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
       ],
     },
     category: "third_party",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "aicodemirror",
     icon: "aicodemirror",
     iconColor: "#000000",
   },
   {
     name: "FennoAI",
-    providerKey: "cc-switch-fenno-ai",
+    providerKey: "lolicode-fenno-ai",
     websiteUrl: "https://api.fenno.ai",
     apiKeyUrl:
       "https://api.fenno.ai/register?redirect=/purchase?tab=subscription%26group=16&aff=P9MR3D3PLCNL",
@@ -342,13 +342,13 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
       ],
     },
     category: "aggregator",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "fenno",
     icon: "fenno",
   },
   {
     name: "RunAPI",
-    providerKey: "cc-switch-run-api",
+    providerKey: "lolicode-run-api",
     websiteUrl: "https://runapi.co",
     apiKeyUrl: "https://runapi.co/register?aff=iOKB",
     settingsConfig: {
@@ -371,15 +371,15 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
       ],
     },
     category: "aggregator",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "runapi",
     icon: "runapi",
   },
   {
     name: "OpenModel",
-    providerKey: "cc-switch-open-model",
+    providerKey: "lolicode-open-model",
     websiteUrl: "https://www.openmodel.ai",
-    apiKeyUrl: "https://www.openmodel.ai?ref=cc-switch",
+    apiKeyUrl: "https://www.openmodel.ai",
     settingsConfig: {
       name: "OpenModel",
       baseUrl: "https://api.openmodel.ai",
@@ -394,13 +394,13 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
       ],
     },
     category: "aggregator",
-    isPartner: true,
+    isPartner: false,
     icon: "openmodel",
   },
   {
     name: "Shengsuanyun",
     nameKey: "providerForm.presets.shengsuanyun",
-    providerKey: "cc-switch-shengsuanyun",
+    providerKey: "lolicode-shengsuanyun",
     websiteUrl: "https://www.shengsuanyun.com/?from=CH_4HHXMRYF",
     apiKeyUrl: "https://www.shengsuanyun.com/?from=CH_4HHXMRYF",
     settingsConfig: {
@@ -424,15 +424,15 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
       ],
     },
     category: "aggregator",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "shengsuanyun",
     icon: "shengsuanyun",
   },
   {
     name: "AIGoCode",
-    providerKey: "cc-switch-aigo-code",
+    providerKey: "lolicode-aigo-code",
     websiteUrl: "https://aigocode.app",
-    apiKeyUrl: "https://aigocode.app/invite/CC-SWITCH",
+    apiKeyUrl: "https://aigocode.app/",
     settingsConfig: {
       name: "AIGoCode",
       baseUrl: "https://api.aigocode.app",
@@ -448,7 +448,7 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
       ],
     },
     category: "third_party",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "aigocode",
     icon: "aigocode",
     iconColor: "#5B7FFF",
@@ -456,7 +456,7 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
   {
     name: "Qiniu",
     nameKey: "providerForm.presets.qiniu",
-    providerKey: "cc-switch-qiniu",
+    providerKey: "lolicode-qiniu",
     websiteUrl: "https://s.qiniu.com/nMvAvy",
     apiKeyUrl: "https://s.qiniu.com/nMvAvy",
     settingsConfig: {
@@ -474,15 +474,15 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
       ],
     },
     category: "aggregator",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "qiniu",
     icon: "qiniu",
   },
   {
     name: "AICoding",
-    providerKey: "cc-switch-aicoding",
+    providerKey: "lolicode-aicoding",
     websiteUrl: "https://aicoding.inc",
-    apiKeyUrl: "https://aicoding.inc/i/CCSWITCH",
+    apiKeyUrl: "https://aicoding.inc/",
     settingsConfig: {
       name: "AICoding",
       baseUrl: "https://api.aicoding.inc",
@@ -498,14 +498,14 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
       ],
     },
     category: "third_party",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "aicoding",
     icon: "aicoding",
     iconColor: "#000000",
   },
   {
     name: "SubRouter",
-    providerKey: "cc-switch-sub-router",
+    providerKey: "lolicode-sub-router",
     websiteUrl: "https://subrouter.ai",
     apiKeyUrl: "https://subrouter.ai/register?aff=l3ri",
     settingsConfig: {
@@ -521,7 +521,7 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
       ],
     },
     category: "aggregator",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "subrouter",
     icon: "subrouter",
   },
@@ -537,7 +537,7 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
   // 有、国际 team 部署未实测，与 Codex 侧不声明 codexChatReasoning 同理
   {
     name: "FluxA Token Plan",
-    providerKey: "cc-switch-fluxa-token-plan",
+    providerKey: "lolicode-fluxa-token-plan",
     websiteUrl: "https://agentmarket.fluxapay.xyz/",
     apiKeyUrl: "https://agentmarket.fluxapay.xyz/marketplace/tokenplans",
     settingsConfig: {
@@ -560,13 +560,13 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
       ],
     },
     category: "aggregator",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "fluxa",
     icon: "fluxa",
   },
   {
     name: "88API",
-    providerKey: "cc-switch-88api",
+    providerKey: "lolicode-88api",
     websiteUrl: "https://88api.ai",
     apiKeyUrl: "https://88api.ai/sign-up?aff=HSGY",
     settingsConfig: {
@@ -584,15 +584,15 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
       ],
     },
     category: "aggregator",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "88api",
     icon: "88api",
   },
   {
     name: "APIKEY.FUN",
-    providerKey: "cc-switch-apikey-fun",
+    providerKey: "lolicode-apikey-fun",
     websiteUrl: "https://apikey.fan",
-    apiKeyUrl: "https://apikey.fan/register?aff=CCSwitch",
+    apiKeyUrl: "https://apikey.fan/register",
     settingsConfig: {
       name: "APIKEY.FUN",
       baseUrl: "https://api.apikey.fan",
@@ -611,13 +611,13 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
       ],
     },
     category: "third_party",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "apikeyfun",
     icon: "apikeyfun",
   },
   {
     name: "9527CODE",
-    providerKey: "cc-switch-9527-code",
+    providerKey: "lolicode-9527-code",
     websiteUrl: "https://9527.codes",
     apiKeyUrl: "https://9527.codes/register?aff=e5zI",
     settingsConfig: {
@@ -640,13 +640,13 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
       ],
     },
     category: "aggregator",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "9527code",
     icon: "9527code",
   },
   {
     name: "Code0",
-    providerKey: "cc-switch-code0",
+    providerKey: "lolicode-code0",
     websiteUrl: "https://code0.ai",
     apiKeyUrl: "https://code0.ai/agent/register/B2XHxGjGmRvqgznY",
     settingsConfig: {
@@ -662,16 +662,16 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
       ],
     },
     category: "aggregator",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "code0",
     icon: "code0",
   },
   {
     name: "TeamoRouter",
-    providerKey: "cc-switch-teamo-router",
+    providerKey: "lolicode-teamo-router",
     websiteUrl: "https://teamorouter.cn",
     apiKeyUrl:
-      "https://teamorouter.cn/?utm_source=cc_switch&utm_medium=referral&utm_campaign=ai_directory",
+      "https://teamorouter.cn/?utm_medium=referral&utm_campaign=ai_directory",
     settingsConfig: {
       name: "TeamoRouter",
       baseUrl: "https://api.teamorouter.cn/v1",
@@ -684,15 +684,15 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
       ],
     },
     category: "aggregator",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "teamorouter",
     icon: "teamorouter",
   },
   {
     name: "PPIO",
-    providerKey: "cc-switch-ppio",
+    providerKey: "lolicode-ppio",
     websiteUrl: "https://ppio.com",
-    apiKeyUrl: "https://ppio.com/activity/ccswitch",
+    apiKeyUrl: "https://ppio.com/",
     settingsConfig: {
       name: "PPIO",
       baseUrl: "https://api.ppio.com/openai/v1",
@@ -712,14 +712,14 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
       ],
     },
     category: "aggregator",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "ppio",
     icon: "ppio",
     iconColor: "#2874FF",
   },
   {
     name: "ClaudeCN",
-    providerKey: "cc-switch-claude-cn",
+    providerKey: "lolicode-claude-cn",
     websiteUrl: "https://claudecn.top",
     apiKeyUrl: "https://claudecn.ai/register?aff=HEL9",
     settingsConfig: {
@@ -742,7 +742,7 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
       ],
     },
     category: "third_party",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "claudecn",
     icon: "claudecn",
   },
@@ -750,11 +750,11 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
     name: "火山 Agent Plan",
     family: "volcengine",
     planKey: "agentPlan",
-    providerKey: "cc-switch-agentplan",
+    providerKey: "lolicode-agentplan",
     websiteUrl:
-      "https://www.volcengine.com/activity/agentplan?ac=MMAP8JTTCAQ2&rc=6J6FV5N2&utm_source=OWO&utm_medium=devrel-1&utm_campaign=hw&utm_term=ccswitch&utm_content=hw",
+      "https://www.volcengine.com/activity/agentplan?ac=MMAP8JTTCAQ2&rc=6J6FV5N2&utm_source=OWO&utm_medium=devrel-1&utm_campaign=hw&utm_content=hw",
     apiKeyUrl:
-      "https://www.volcengine.com/activity/agentplan?ac=MMAP8JTTCAQ2&rc=6J6FV5N2&utm_source=OWO&utm_medium=devrel-1&utm_campaign=hw&utm_term=ccswitch&utm_content=hw",
+      "https://www.volcengine.com/activity/agentplan?ac=MMAP8JTTCAQ2&rc=6J6FV5N2&utm_source=OWO&utm_medium=devrel-1&utm_campaign=hw&utm_content=hw",
     settingsConfig: {
       name: "火山 Agent Plan",
       baseUrl: "https://ark.cn-beijing.volces.com/api/plan/v3",
@@ -767,7 +767,7 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
       ],
     },
     category: "cn_official",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "volcengine_agentplan",
     icon: "huoshan",
     iconColor: "#3370FF",
@@ -776,11 +776,11 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
     name: "火山 Coding Plan",
     family: "volcengine",
     planKey: "codingPlan",
-    providerKey: "cc-switch-codingplan",
+    providerKey: "lolicode-codingplan",
     websiteUrl:
-      "https://www.volcengine.com/activity/codingplan?ac=MMAP8JTTCAQ2&rc=6J6FV5N2&utm_campaign=hw&utm_content=ccswitch&utm_medium=devrel_tool_web&utm_source=OWO&utm_term=ccswitch",
+      "https://www.volcengine.com/activity/codingplan?ac=MMAP8JTTCAQ2&rc=6J6FV5N2&utm_campaign=hw&utm_medium=devrel_tool_web&utm_source=OWO",
     apiKeyUrl:
-      "https://www.volcengine.com/activity/codingplan?ac=MMAP8JTTCAQ2&rc=6J6FV5N2&utm_campaign=hw&utm_content=ccswitch&utm_medium=devrel_tool_web&utm_source=OWO&utm_term=ccswitch",
+      "https://www.volcengine.com/activity/codingplan?ac=MMAP8JTTCAQ2&rc=6J6FV5N2&utm_campaign=hw&utm_medium=devrel_tool_web&utm_source=OWO",
     settingsConfig: {
       name: "火山 Coding Plan",
       baseUrl: "https://ark.cn-beijing.volces.com/api/coding/v3",
@@ -793,18 +793,18 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
       ],
     },
     category: "cn_official",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "volcengine_codingplan",
     icon: "huoshan",
     iconColor: "#3370FF",
   },
   {
     name: "BytePlus",
-    providerKey: "cc-switch-byte-plus",
+    providerKey: "lolicode-byte-plus",
     websiteUrl:
-      "https://www.byteplus.com/en/product/modelark?utm_campaign=hw&utm_content=ccswitch&utm_medium=devrel_tool_web&utm_source=OWO&utm_term=ccswitch",
+      "https://www.byteplus.com/en/product/modelark?utm_campaign=hw&utm_medium=devrel_tool_web&utm_source=OWO",
     apiKeyUrl:
-      "https://www.byteplus.com/en/product/modelark?utm_campaign=hw&utm_content=ccswitch&utm_medium=devrel_tool_web&utm_source=OWO&utm_term=ccswitch",
+      "https://www.byteplus.com/en/product/modelark?utm_campaign=hw&utm_medium=devrel_tool_web&utm_source=OWO",
     settingsConfig: {
       name: "BytePlus",
       baseUrl: "https://ark.ap-southeast.bytepluses.com/api/coding/v3",
@@ -817,7 +817,7 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
       ],
     },
     category: "cn_official",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "byteplus",
     icon: "byteplus",
     iconColor: "#3370FF",
@@ -827,11 +827,11 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
     family: "volcengine",
     planKey: "payg",
     nameKey: "providerForm.presets.doubaoseed",
-    providerKey: "cc-switch-dou-bao-seed",
+    providerKey: "lolicode-dou-bao-seed",
     websiteUrl:
-      "https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey?apikey=%7B%7D&utm_campaign=hw&utm_content=ccswitch&utm_medium=devrel_tool_web&utm_source=OWO&utm_term=ccswitch",
+      "https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey?apikey=%7B%7D&utm_campaign=hw&utm_medium=devrel_tool_web&utm_source=OWO",
     apiKeyUrl:
-      "https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey?apikey=%7B%7D&utm_campaign=hw&utm_content=ccswitch&utm_medium=devrel_tool_web&utm_source=OWO&utm_term=ccswitch",
+      "https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey?apikey=%7B%7D&utm_campaign=hw&utm_medium=devrel_tool_web&utm_source=OWO",
     settingsConfig: {
       name: "Volcengine Doubao",
       baseUrl: "https://ark.cn-beijing.volces.com/api/v3",
@@ -844,14 +844,14 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
       ],
     },
     category: "cn_official",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "doubaoseed",
     icon: "doubao",
     iconColor: "#3370FF",
   },
   {
     name: "A6API",
-    providerKey: "cc-switch-a6-api",
+    providerKey: "lolicode-a6-api",
     websiteUrl: "https://www.a6api.com",
     apiKeyUrl: "https://a6api.com/register?aff=AqNr",
     settingsConfig: {
@@ -867,13 +867,13 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
       ],
     },
     category: "aggregator",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "a6api",
     icon: "a6api",
   },
   {
     name: "CCSub",
-    providerKey: "cc-switch-ccsub",
+    providerKey: "lolicode-ccsub",
     websiteUrl: "https://www.ccsub.net",
     apiKeyUrl: "https://www.ccsub.net/register?ref=Y6Z8DXEA",
     settingsConfig: {
@@ -888,13 +888,13 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
       ],
     },
     category: "aggregator",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "ccsub",
     icon: "ccsub",
   },
   {
     name: "SSSAiCode",
-    providerKey: "cc-switch-sssai-code",
+    providerKey: "lolicode-sssai-code",
     websiteUrl: "https://sssaicodeapi.com",
     apiKeyUrl: "https://sssaicodeapi.com/register?ref=DCP0SM",
     settingsConfig: {
@@ -912,16 +912,16 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
       ],
     },
     category: "third_party",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "sssaicode",
     icon: "sssaicode",
     iconColor: "#000000",
   },
   {
     name: "SoleAPI",
-    providerKey: "cc-switch-sole-api",
+    providerKey: "lolicode-sole-api",
     websiteUrl: "https://soleapi.com",
-    apiKeyUrl: "https://soleapi.com/r/ccswitch",
+    apiKeyUrl: "https://soleapi.com",
     settingsConfig: {
       name: "SoleAPI",
       baseUrl: "https://soleapi.com",
@@ -940,13 +940,13 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
       ],
     },
     category: "aggregator",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "soleapi",
     icon: "soleapi",
   },
   {
     name: "Micu",
-    providerKey: "cc-switch-micu",
+    providerKey: "lolicode-micu",
     websiteUrl: "https://www.micuapi.ai",
     apiKeyUrl: "https://www.micuapi.ai/register?aff=aOYQ",
     settingsConfig: {
@@ -964,16 +964,16 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
       ],
     },
     category: "third_party",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "micu",
     icon: "micu",
     iconColor: "#000000",
   },
   {
     name: "RightCode",
-    providerKey: "cc-switch-right-code",
+    providerKey: "lolicode-right-code",
     websiteUrl: "https://www.rightapi.ai",
-    apiKeyUrl: "https://www.rightapi.ai/register?aff=CCSWITCH",
+    apiKeyUrl: "https://www.rightapi.ai/register",
     settingsConfig: {
       name: "RightCode",
       baseUrl: "https://www.rightapi.ai/codex/v1",
@@ -986,16 +986,16 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
       ],
     },
     category: "third_party",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "rightcode",
     icon: "rc",
     iconColor: "#E96B2C",
   },
   {
     name: "Cubence",
-    providerKey: "cc-switch-cubence",
+    providerKey: "lolicode-cubence",
     websiteUrl: "https://cubence.com",
-    apiKeyUrl: "https://cubence.com/signup?code=CCSWITCH&source=ccs",
+    apiKeyUrl: "https://cubence.com/signup",
     settingsConfig: {
       name: "Cubence",
       baseUrl: "https://api.cubence.com",
@@ -1011,16 +1011,16 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
       ],
     },
     category: "third_party",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "cubence",
     icon: "cubence",
     iconColor: "#000000",
   },
   {
     name: "CrazyRouter",
-    providerKey: "cc-switch-crazy-router",
+    providerKey: "lolicode-crazy-router",
     websiteUrl: "https://www.crazyrouter.com",
-    apiKeyUrl: "https://www.crazyrouter.com/register?aff=OZcm&ref=cc-switch",
+    apiKeyUrl: "https://www.crazyrouter.com/register?aff=OZcm",
     settingsConfig: {
       name: "CrazyRouter",
       baseUrl: "https://cn.crazyrouter.com",
@@ -1037,14 +1037,14 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
       ],
     },
     category: "third_party",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "crazyrouter",
     icon: "crazyrouter",
     iconColor: "#000000",
   },
   {
     name: "DMXAPI",
-    providerKey: "cc-switch-dmxapi",
+    providerKey: "lolicode-dmxapi",
     websiteUrl: "https://www.dmxapi.cn",
     apiKeyUrl: "https://www.dmxapi.cn",
     settingsConfig: {
@@ -1062,17 +1062,17 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
       ],
     },
     category: "aggregator",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "dmxapi",
     icon: "dmxapi",
   },
   {
     name: "SudoCode.chat",
     family: "sudocode",
-    providerKey: "cc-switch-sudo-code-chat",
+    providerKey: "lolicode-sudo-code-chat",
     websiteUrl: "https://sudocode.chat",
     apiKeyUrl:
-      "https://sudocode.chat/sign-up?aff=CC-SWITCH&utm_source=cc-switch&utm_medium=sponsor&utm_campaign=ccswitch",
+      "https://sudocode.chat/sign-up?&utm_medium=sponsor",
     settingsConfig: {
       name: "SudoCode.chat",
       baseUrl: "https://api.sudocode.chat/v1",
@@ -1088,14 +1088,14 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
       ],
     },
     category: "third_party",
-    isPartner: true,
+    isPartner: false,
     partnerPromotionKey: "sudocode",
     icon: "sudocode",
   },
   {
     name: "SudoCode.us",
     family: "sudocode",
-    providerKey: "cc-switch-sudo-code-us",
+    providerKey: "lolicode-sudo-code-us",
     websiteUrl: "https://sudocode.us",
     apiKeyUrl: "https://sudocode.us",
     settingsConfig: {
@@ -1112,12 +1112,12 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
       ],
     },
     category: "third_party",
-    isPartner: true,
+    isPartner: false,
     icon: "sudocode-us",
   },
   {
     name: "Amux",
-    providerKey: "cc-switch-amux",
+    providerKey: "lolicode-amux",
     websiteUrl: "https://amux.ai",
     apiKeyUrl: "https://amux.ai",
     settingsConfig: {
@@ -1137,7 +1137,7 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
   },
   {
     name: "AtlasCloud",
-    providerKey: "cc-switch-atlas-cloud",
+    providerKey: "lolicode-atlas-cloud",
     websiteUrl: "https://www.atlascloud.ai/console/coding-plan",
     apiKeyUrl: "https://www.atlascloud.ai/console/coding-plan",
     settingsConfig: {
@@ -1157,7 +1157,7 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
   },
   {
     name: "Soshow",
-    providerKey: "cc-switch-soshow",
+    providerKey: "lolicode-soshow",
     websiteUrl: "https://aimarket.so-show.com",
     apiKeyUrl: "https://aimarket.so-show.com/workbench/access-key",
     settingsConfig: {
@@ -1179,7 +1179,7 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
   },
   {
     name: "DeepSeek",
-    providerKey: "cc-switch-deep-seek",
+    providerKey: "lolicode-deep-seek",
     websiteUrl: "https://platform.deepseek.com",
     apiKeyUrl: "https://platform.deepseek.com/api_keys",
     settingsConfig: {
@@ -1206,7 +1206,7 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
     name: "Zhipu GLM",
     family: "zhipu",
     regionKey: "cn",
-    providerKey: "cc-switch-zhipu-glm",
+    providerKey: "lolicode-zhipu-glm",
     websiteUrl: "https://open.bigmodel.cn",
     apiKeyUrl: "https://www.bigmodel.cn/claude-code?ic=RRVJPB5SII",
     settingsConfig: {
@@ -1229,7 +1229,7 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
     name: "Zhipu GLM en",
     family: "zhipu",
     regionKey: "intl",
-    providerKey: "cc-switch-zhipu-glm-en",
+    providerKey: "lolicode-zhipu-glm-en",
     websiteUrl: "https://z.ai",
     apiKeyUrl: "https://z.ai/subscribe?ic=8JVLJQFSKB",
     settingsConfig: {
@@ -1252,7 +1252,7 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
     name: "千问AI平台",
     family: "qianwen",
     planKey: "payg",
-    providerKey: "cc-switch-qianwenai",
+    providerKey: "lolicode-qianwenai",
     websiteUrl: "https://platform.qianwenai.com/?utm_content=g_20000002971",
     apiKeyUrl:
       "https://platform.qianwenai.com/home/api-keys?utm_content=g_20000002972",
@@ -1278,7 +1278,7 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
     name: "千问AI平台 Token Plan",
     family: "qianwen",
     planKey: "tokenPlan",
-    providerKey: "cc-switch-qianwenai-token-plan",
+    providerKey: "lolicode-qianwenai-token-plan",
     websiteUrl:
       "https://platform.qianwenai.com/pricing/token-plan?utm_content=g_20000002977",
     apiKeyUrl:
@@ -1311,7 +1311,7 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
     name: "QwenCloud",
     family: "qwencloud",
     planKey: "payg",
-    providerKey: "cc-switch-qwencloud",
+    providerKey: "lolicode-qwencloud",
     websiteUrl: "https://home.qwencloud.com/?utm_content=g_20000002974",
     apiKeyUrl: "https://home.qwencloud.com/api-keys?utm_content=g_20000002975",
     settingsConfig: {
@@ -1342,7 +1342,7 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
     name: "QwenCloud For Coding",
     family: "qwencloud",
     planKey: "coding",
-    providerKey: "cc-switch-qwencloud-coding",
+    providerKey: "lolicode-qwencloud-coding",
     websiteUrl: "https://www.qwencloud.com",
     apiKeyUrl: "https://home.qwencloud.com/api-keys",
     settingsConfig: {
@@ -1366,7 +1366,7 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
     name: "QwenCloud Token Plan",
     family: "qwencloud",
     planKey: "tokenPlan",
-    providerKey: "cc-switch-qwencloud-token-plan",
+    providerKey: "lolicode-qwencloud-token-plan",
     websiteUrl:
       "https://www.qwencloud.com/pricing/token-plan?utm_content=g_20000002980",
     apiKeyUrl: "https://home.qwencloud.com/api-keys?utm_content=g_20000002981",
@@ -1399,7 +1399,7 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
     name: "StepFun",
     family: "stepfun",
     regionKey: "cn",
-    providerKey: "cc-switch-step-fun",
+    providerKey: "lolicode-step-fun",
     websiteUrl: "https://platform.stepfun.com/step-plan",
     apiKeyUrl: "https://platform.stepfun.com/interface-key",
     settingsConfig: {
@@ -1427,7 +1427,7 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
     name: "StepFun en",
     family: "stepfun",
     regionKey: "intl",
-    providerKey: "cc-switch-step-fun-en",
+    providerKey: "lolicode-step-fun-en",
     websiteUrl: "https://platform.stepfun.ai/step-plan",
     apiKeyUrl: "https://platform.stepfun.ai/interface-key",
     settingsConfig: {
@@ -1453,7 +1453,7 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
   },
   {
     name: "StepFun Step Plan",
-    providerKey: "cc-switch-step-fun-step-plan",
+    providerKey: "lolicode-step-fun-step-plan",
     websiteUrl: "https://platform.stepfun.com/docs/zh/step-plan/overview",
     apiKeyUrl: "https://platform.stepfun.com/interface-key",
     settingsConfig: {
@@ -1475,7 +1475,7 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
   },
   {
     name: "ModelScope",
-    providerKey: "cc-switch-model-scope",
+    providerKey: "lolicode-model-scope",
     websiteUrl: "https://modelscope.cn",
     apiKeyUrl: "https://modelscope.cn/my/myaccesstoken",
     settingsConfig: {
@@ -1495,7 +1495,7 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
   },
   {
     name: "KAT-Coder",
-    providerKey: "cc-switch-kat-coder",
+    providerKey: "lolicode-kat-coder",
     websiteUrl: "https://console.streamlake.ai",
     apiKeyUrl: "https://console.streamlake.ai/console/api-key",
     settingsConfig: {
@@ -1515,7 +1515,7 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
   },
   {
     name: "Longcat",
-    providerKey: "cc-switch-longcat",
+    providerKey: "lolicode-longcat",
     websiteUrl: "https://longcat.chat/platform",
     apiKeyUrl: "https://longcat.chat/platform/api_keys",
     settingsConfig: {
@@ -1537,7 +1537,7 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
     name: "MiniMax",
     family: "minimax",
     regionKey: "cn",
-    providerKey: "cc-switch-mini-max",
+    providerKey: "lolicode-mini-max",
     websiteUrl: "https://platform.minimax.cn",
     apiKeyUrl: "https://platform.minimax.cn/subscribe/token-plan",
     settingsConfig: {
@@ -1564,7 +1564,7 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
     name: "MiniMax en",
     family: "minimax",
     regionKey: "intl",
-    providerKey: "cc-switch-mini-max-en",
+    providerKey: "lolicode-mini-max-en",
     websiteUrl: "https://platform.minimax.io",
     apiKeyUrl: "https://platform.minimax.io/subscribe/coding-plan",
     settingsConfig: {
@@ -1589,7 +1589,7 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
   },
   {
     name: "BaiLing",
-    providerKey: "cc-switch-bai-ling",
+    providerKey: "lolicode-bai-ling",
     websiteUrl: "https://developer.ant-ling.com/zh-CN/docs/",
     apiKeyUrl: "https://chat.ant-ling.com/open",
     settingsConfig: {
@@ -1610,7 +1610,7 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
     name: "Xiaomi MiMo",
     family: "xiaomi-mimo",
     planKey: "payg",
-    providerKey: "cc-switch-xiaomi-mi-mo",
+    providerKey: "lolicode-xiaomi-mi-mo",
     websiteUrl: "https://platform.xiaomimimo.com",
     apiKeyUrl: "https://platform.xiaomimimo.com/#/console/api-keys",
     settingsConfig: {
@@ -1655,7 +1655,7 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
     name: "Xiaomi MiMo Token Plan (China)",
     family: "xiaomi-mimo",
     planKey: "tokenPlan",
-    providerKey: "cc-switch-xiaomi-mi-mo-token-plan-china",
+    providerKey: "lolicode-xiaomi-mi-mo-token-plan-china",
     websiteUrl: "https://platform.xiaomimimo.com/#/token-plan",
     apiKeyUrl: "https://platform.xiaomimimo.com/#/console/plan-manage",
     settingsConfig: {
@@ -1686,7 +1686,7 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
   },
   {
     name: "OpenCode Go",
-    providerKey: "cc-switch-open-code-go",
+    providerKey: "lolicode-open-code-go",
     websiteUrl: "https://opencode.ai/go",
     apiKeyUrl: "https://opencode.ai/go",
     settingsConfig: {
@@ -1738,7 +1738,7 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
   },
   {
     name: "AiHubMix",
-    providerKey: "cc-switch-ai-hub-mix",
+    providerKey: "lolicode-ai-hub-mix",
     websiteUrl: "https://aihubmix.com",
     apiKeyUrl: "https://aihubmix.com",
     settingsConfig: {
@@ -1763,7 +1763,7 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
   },
   {
     name: "CherryIN",
-    providerKey: "cc-switch-cherry-in",
+    providerKey: "lolicode-cherry-in",
     websiteUrl: "https://open.cherryin.ai",
     apiKeyUrl: "https://open.cherryin.ai/console/token",
     settingsConfig: {
@@ -1788,7 +1788,7 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
   },
   {
     name: "OpenRouter",
-    providerKey: "cc-switch-open-router",
+    providerKey: "lolicode-open-router",
     websiteUrl: "https://openrouter.ai",
     apiKeyUrl: "https://openrouter.ai/keys",
     settingsConfig: {
@@ -1817,7 +1817,7 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
   },
   {
     name: "TheRouter",
-    providerKey: "cc-switch-the-router",
+    providerKey: "lolicode-the-router",
     websiteUrl: "https://therouter.ai",
     apiKeyUrl: "https://dashboard.therouter.ai",
     settingsConfig: {
@@ -1848,7 +1848,7 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
   },
   {
     name: "Novita AI",
-    providerKey: "cc-switch-novita-ai",
+    providerKey: "lolicode-novita-ai",
     websiteUrl: "https://novita.ai",
     apiKeyUrl: "https://novita.ai",
     settingsConfig: {
@@ -1871,7 +1871,7 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
   },
   {
     name: "Nvidia",
-    providerKey: "cc-switch-nvidia",
+    providerKey: "lolicode-nvidia",
     websiteUrl: "https://build.nvidia.com",
     apiKeyUrl: "https://build.nvidia.com/settings/api-keys",
     settingsConfig: {
@@ -1893,7 +1893,7 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
   },
   {
     name: "PIPELLM",
-    providerKey: "cc-switch-pipellm",
+    providerKey: "lolicode-pipellm",
     websiteUrl: "https://code.pipellm.ai",
     apiKeyUrl: "https://code.pipellm.ai/login?ref=uvw650za",
     settingsConfig: {
@@ -1921,7 +1921,7 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
   },
   {
     name: "AICodeWith",
-    providerKey: "cc-switch-aicode-with",
+    providerKey: "lolicode-aicode-with",
     websiteUrl: "https://aicodewith.ai",
     apiKeyUrl: "https://aicodewith.ai/login?tab=register",
     settingsConfig: {
@@ -1944,7 +1944,7 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
   },
   {
     name: "E-FlowCode",
-    providerKey: "cc-switch-e-flow-code",
+    providerKey: "lolicode-e-flow-code",
     websiteUrl: "https://e-flowcode.cc",
     apiKeyUrl: "https://e-flowcode.cc",
     settingsConfig: {
@@ -1971,7 +1971,7 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
   },
   {
     name: "AWS Bedrock",
-    providerKey: "cc-switch-aws-bedrock",
+    providerKey: "lolicode-aws-bedrock",
     websiteUrl: "https://aws.amazon.com/bedrock/",
     settingsConfig: {
       name: "AWS Bedrock",
@@ -2016,7 +2016,7 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
     family: "tencent",
     planKey: "tokenPlan",
     regionKey: "cn",
-    providerKey: "cc-switch-tencent-token-plan",
+    providerKey: "lolicode-tencent-token-plan",
     websiteUrl: "https://cloud.tencent.com/product/tokenhub",
     apiKeyUrl: "https://console.cloud.tencent.com/tokenhub/tokenplan",
     settingsConfig: {
@@ -2059,7 +2059,7 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
     family: "tencent",
     planKey: "tokenPlan",
     regionKey: "intl",
-    providerKey: "cc-switch-tencent-token-plan-intl",
+    providerKey: "lolicode-tencent-token-plan-intl",
     websiteUrl: "https://www.tencentcloud.com/products/tokenhub",
     apiKeyUrl: "https://console.tencentcloud.com/tokenhub/tokenplan",
     settingsConfig: {
@@ -2099,7 +2099,7 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
     family: "tencent",
     planKey: "enterprisePro",
     regionKey: "cn",
-    providerKey: "cc-switch-tencent-token-plan-enterprise-pro",
+    providerKey: "lolicode-tencent-token-plan-enterprise-pro",
     websiteUrl: "https://cloud.tencent.com/product/tokenhub",
     apiKeyUrl: "https://console.cloud.tencent.com/tokenhub/tokenplan-e",
     settingsConfig: {
@@ -2182,7 +2182,7 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
     family: "tencent",
     planKey: "enterprisePro",
     regionKey: "intl",
-    providerKey: "cc-switch-tencent-token-plan-enterprise-pro-intl",
+    providerKey: "lolicode-tencent-token-plan-enterprise-pro-intl",
     websiteUrl: "https://www.tencentcloud.com/products/tokenhub",
     apiKeyUrl: "https://console.tencentcloud.com/tokenhub/tokenplan-e",
     settingsConfig: {
@@ -2260,7 +2260,7 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
     family: "tencent",
     planKey: "enterpriseLite",
     regionKey: "cn",
-    providerKey: "cc-switch-tencent-token-plan-enterprise-lite",
+    providerKey: "lolicode-tencent-token-plan-enterprise-lite",
     websiteUrl: "https://cloud.tencent.com/product/tokenhub",
     apiKeyUrl: "https://console.cloud.tencent.com/tokenhub/tokenplan-e",
     settingsConfig: {
@@ -2279,7 +2279,7 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
     family: "tencent",
     planKey: "enterpriseLite",
     regionKey: "intl",
-    providerKey: "cc-switch-tencent-token-plan-enterprise-lite-intl",
+    providerKey: "lolicode-tencent-token-plan-enterprise-lite-intl",
     websiteUrl: "https://www.tencentcloud.com/products/tokenhub",
     apiKeyUrl: "https://console.tencentcloud.com/tokenhub/tokenplan-e",
     settingsConfig: {
@@ -2303,7 +2303,7 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
     family: "tencent",
     planKey: "payg",
     regionKey: "cn",
-    providerKey: "cc-switch-tencent-tokenhub",
+    providerKey: "lolicode-tencent-tokenhub",
     websiteUrl: "https://cloud.tencent.com/product/tokenhub",
     apiKeyUrl: "https://console.cloud.tencent.com/tokenhub/apikey",
     settingsConfig: {
@@ -2399,7 +2399,7 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
     family: "tencent",
     planKey: "payg",
     regionKey: "intl",
-    providerKey: "cc-switch-tencent-tokenhub-intl",
+    providerKey: "lolicode-tencent-tokenhub-intl",
     websiteUrl: "https://www.tencentcloud.com/products/tokenhub",
     apiKeyUrl: "https://console.tencentcloud.com/tokenhub/apikey",
     settingsConfig: {
@@ -2500,7 +2500,7 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
   {
     name: "Tu-zi",
     nameKey: "providerForm.presets.tuzi",
-    providerKey: "cc-switch-tuzi",
+    providerKey: "lolicode-tuzi",
     websiteUrl: "https://api.tu-zi.com",
     apiKeyUrl: "https://api.tu-zi.com/token",
     settingsConfig: {
@@ -2525,7 +2525,7 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
   },
   {
     name: "模力方舟",
-    providerKey: "cc-switch-moark",
+    providerKey: "lolicode-moark",
     websiteUrl: "https://moark.com",
     apiKeyUrl: "https://moark.com/dashboard/tokens",
     settingsConfig: {
@@ -2549,7 +2549,7 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
   },
   {
     name: "SoruxGPT",
-    providerKey: "cc-switch-sorux-gpt",
+    providerKey: "lolicode-sorux-gpt",
     websiteUrl: "https://ai.soruxgpt.com",
     apiKeyUrl: "https://ai.soruxgpt.com/console/token",
     settingsConfig: {
@@ -2570,7 +2570,7 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
   },
   {
     name: "IKunCode",
-    providerKey: "cc-switch-ikun-code",
+    providerKey: "lolicode-ikun-code",
     websiteUrl: "https://api.ikuncode.ai",
     apiKeyUrl: "https://api.ikuncode.ai/console/token",
     settingsConfig: {
@@ -2591,7 +2591,7 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
   },
   {
     name: "RunToken",
-    providerKey: "cc-switch-run-token",
+    providerKey: "lolicode-run-token",
     websiteUrl: "https://www.runtoken.ai",
     apiKeyUrl: "https://www.runtoken.ai/console/token",
     settingsConfig: {
@@ -2612,7 +2612,7 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
   },
   {
     name: "BotCF",
-    providerKey: "cc-switch-bot-cf",
+    providerKey: "lolicode-bot-cf",
     websiteUrl: "https://botcf.com",
     apiKeyUrl: "https://botcf.com/console/token",
     settingsConfig: {
@@ -2634,7 +2634,7 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
   {
     name: "YYLX",
     nameKey: "providerForm.presets.yylx",
-    providerKey: "cc-switch-yylx",
+    providerKey: "lolicode-yylx",
     websiteUrl: "https://yylx.io",
     apiKeyUrl: "https://app.yylx.io/keys",
     settingsConfig: {
@@ -2655,7 +2655,7 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
   },
   {
     name: "TokenFlux",
-    providerKey: "cc-switch-token-flux",
+    providerKey: "lolicode-token-flux",
     websiteUrl: "https://tokenflux.dev",
     apiKeyUrl: "https://tokenflux.dev/keys",
     settingsConfig: {
@@ -2676,7 +2676,7 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
   },
   {
     name: "NekoCode",
-    providerKey: "cc-switch-neko-code",
+    providerKey: "lolicode-neko-code",
     websiteUrl: "https://nekoapi.ai",
     apiKeyUrl: "https://nekoapi.ai/token",
     settingsConfig: {

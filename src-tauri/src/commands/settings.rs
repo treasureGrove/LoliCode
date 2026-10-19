@@ -368,7 +368,7 @@ async fn install_update_and_restart_inner(app: &AppHandle) -> Result<bool, Strin
             .map_err(|e| format!("更新前数据库备份任务未完成: {e}"))?
             .map_err(|e| format!("更新前数据库备份失败，已取消更新以保护项目和渠道配置: {e}"))?
     } else {
-        let db_path = crate::config::get_app_config_dir().join("cc-switch.db");
+        let db_path = crate::config::get_database_path();
         if db_path.is_file() {
             tauri::async_runtime::spawn_blocking(move || {
                 crate::database::Database::backup_database_path(&db_path)
@@ -466,8 +466,10 @@ pub async fn recover_app_config_dir(app: AppHandle, path: String) -> Result<bool
     if !selected.is_dir() {
         return Err("请选择一个现有的数据目录。".into());
     }
-    if !selected.join("cc-switch.db").is_file() && !selected.join("config.json").is_file() {
-        return Err("所选目录中没有 cc-switch.db 或旧版 config.json。为避免创建空数据库，请选择原 LoliCode 数据目录。".into());
+    if !crate::config::database_path_in(&selected).is_file()
+        && !selected.join("config.json").is_file()
+    {
+        return Err("所选目录中没有 LoliCode 数据库（lolicode.db／兼容旧版数据库）或 config.json。为避免创建空数据库，请选择原 LoliCode 数据目录。".into());
     }
     let selected = selected
         .to_str()

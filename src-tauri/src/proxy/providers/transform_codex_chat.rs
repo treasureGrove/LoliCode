@@ -2227,7 +2227,7 @@ pub(crate) fn chat_usage_to_responses_usage(usage: Option<&Value>) -> Value {
 }
 
 pub(crate) fn response_id_from_chat_id(id: Option<&str>) -> String {
-    let id = id.unwrap_or("ccswitch");
+    let id = id.unwrap_or("lolicode");
     if id.starts_with("resp_") {
         id.to_string()
     } else {
@@ -4214,7 +4214,7 @@ mod tests {
 
         assert_eq!(
             messages[2]["content"][0]["text"],
-            "[cc-switch: media output of tool call call_image]"
+            "[lolicode: media output of tool call call_image]"
         );
         assert_eq!(messages[2]["content"][1]["type"], "image_url");
         assert_eq!(messages[2]["content"][1]["image_url"]["url"], data_url);
@@ -4591,7 +4591,7 @@ mod tests {
             serde_json::from_str(messages[1]["content"].as_str().unwrap()).unwrap();
         let rewritten = tool_item["output"].as_str().unwrap();
 
-        assert!(rewritten.contains("[cc-switch: omitted 20000 bytes]"));
+        assert!(rewritten.contains("[lolicode: omitted 20000 bytes]"));
         assert!(!rewritten.contains(&"A".repeat(64)));
         assert!(!rewritten.contains("CUSTOM_STRING_IMAGE_SENTINEL"));
         assert_eq!(messages[2]["content"][1]["type"], "image_url");
@@ -5058,7 +5058,7 @@ mod tests {
         assert!(tool_content[2]["data"]
             .as_str()
             .unwrap()
-            .starts_with("[cc-switch: omitted 20000 bytes]"));
+            .starts_with("[lolicode: omitted 20000 bytes]"));
         assert!(!tool_content_text.contains(&data_url));
         assert!(!tool_content_text.contains("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"));
     }

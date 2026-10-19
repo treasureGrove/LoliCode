@@ -26,11 +26,11 @@ pub fn set_proxy_port(port: u16) {
     if let Some(lock) = CC_SWITCH_PROXY_PORT.get() {
         if let Ok(mut current_port) = lock.write() {
             *current_port = port;
-            log::debug!("[GlobalProxy] Updated CC Switch proxy port to {port}");
+            log::debug!("[GlobalProxy] Updated LoliCode proxy port to {port}");
         }
     } else {
         let _ = CC_SWITCH_PROXY_PORT.set(RwLock::new(port));
-        log::debug!("[GlobalProxy] Initialized CC Switch proxy port to {port}");
+        log::debug!("[GlobalProxy] Initialized LoliCode proxy port to {port}");
     }
 }
 

@@ -30,7 +30,7 @@ const TEMPLATE_TYPE_OFFICIAL_SUBSCRIPTION: &str = "official_subscription";
 /// Copilot 用量结果的单位（`commands::provider` 的 `COPILOT_UNIT_PREMIUM`）：高级请求次数。
 const COPILOT_UNIT_PREMIUM: &str = "requests";
 
-pub const TRAY_ID: &str = "cc-switch";
+pub const TRAY_ID: &str = "lolicode";
 
 /// Client providers are configured in LoliCode's shared channel center. The
 /// product tray no longer offers a parallel CC Switch provider switcher.
@@ -2858,7 +2858,7 @@ mod tests {
 
     #[test]
     fn tray_id_is_unique_to_app() {
-        assert_eq!(TRAY_ID, "cc-switch");
+        assert_eq!(TRAY_ID, "lolicode");
         assert_ne!(TRAY_ID, "main");
     }
 

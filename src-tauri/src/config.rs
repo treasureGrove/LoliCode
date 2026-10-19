@@ -329,6 +329,74 @@ pub fn get_app_config_path() -> PathBuf {
     get_app_config_dir().join("config.json")
 }
 
+/// Existing installations keep their live SQLite/WAL database in place. Fresh
+/// profiles use the product name; a rename must never create an empty profile.
+pub fn database_path_in(directory: &Path) -> PathBuf {
+    let legacy = directory.join("cc-switch.db");
+    if legacy.is_file() {
+        legacy
+    } else {
+        directory.join("lolicode.db")
+    }
+}
+
+pub fn get_database_path() -> PathBuf {
+    database_path_in(&get_app_config_dir())
+}
+
+#[cfg(test)]
+mod branding_compat_tests {
+    use super::*;
+    #[test]
+    fn branded_database_name_does_not_shadow_an_existing_profile() {
+        let root = tempfile::tempdir().unwrap();
+        assert_eq!(
+            database_path_in(root.path()),
+            root.path().join("lolicode.db")
+        );
+        assert!(!root.path().join("lolicode.db").exists());
+        let original = root.path().join("cc-switch.db");
+        std::fs::write(&original, b"synthetic saved projects and keys").unwrap();
+        assert_eq!(database_path_in(root.path()), original);
+        // Even an accidentally empty new file must not hide the saved profile.
+        std::fs::write(root.path().join("lolicode.db"), b"").unwrap();
+        assert_eq!(database_path_in(root.path()), original);
+        assert_eq!(
+            std::fs::read(original).unwrap(),
+            b"synthetic saved projects and keys"
+        );
+    }
+
+    #[test]
+    fn old_and_new_model_catalog_pointers_are_owned_but_user_catalogs_are_not() {
+        for name in [
+            "lolicode-model-catalog.json",
+            "cc-switch-model-catalog.json",
+        ] {
+            assert!(crate::live::project::codex::live_catalog_is_ours(&format!(
+                "model_catalog_json = \"{name}\""
+            )));
+        }
+        assert!(!crate::live::project::codex::live_catalog_is_ours(
+            "model_catalog_json = \"my-models.json\""
+        ));
+    }
+
+    #[test]
+    fn new_sync_defaults_do_not_redirect_saved_sync_profiles() {
+        use crate::settings::{S3SyncSettings, WebDavSyncSettings};
+        assert_eq!(WebDavSyncSettings::default().remote_root, "lolicode-sync");
+        assert_eq!(S3SyncSettings::default().remote_root, "lolicode-sync");
+        let webdav: WebDavSyncSettings =
+            serde_json::from_str(r#"{"enabled":true,"baseUrl":"https://example.invalid"}"#)
+                .unwrap();
+        let s3: S3SyncSettings =
+            serde_json::from_str(r#"{"enabled":true,"bucket":"existing"}"#).unwrap();
+        assert_eq!(webdav.remote_root, "cc-switch-sync");
+        assert_eq!(s3.remote_root, "cc-switch-sync");
+    }
+}
+
 /// 清理供应商名称，确保文件名安全
 #[allow(dead_code)]
 pub fn sanitize_provider_name(name: &str) -> String {
