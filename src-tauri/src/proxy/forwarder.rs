@@ -6672,6 +6672,7 @@ mod tests {
                 model_picker_enabled: false,
                 context_window: Some(400_000),
                 context_windows: None,
+                output_limit: None,
                 supported_endpoints: endpoints.into_iter().map(str::to_string).collect(),
                 supports_parallel_tool_calls: None,
                 reasoning_effort: None,

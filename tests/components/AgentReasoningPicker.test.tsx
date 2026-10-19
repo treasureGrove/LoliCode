@@ -18,6 +18,50 @@ const open = () =>
   fireEvent.click(screen.getByRole("button", { name: "思考档位" }));
 
 describe("AgentReasoningPicker", () => {
+  it("offers the declared Copilot standard and long prompt tiers without treating the full model window as a preset", () => {
+    const context = vi.fn();
+    const { rerender } = render(
+      <AgentReasoningPicker
+        model={{
+          ...model,
+          contextLimit: 272000,
+          contextLimits: [272000, 922000],
+        }}
+        value="high"
+        onSelect={vi.fn()}
+        onContextSelect={context}
+      />,
+    );
+    open();
+    expect(
+      screen.getByRole("option", { name: "272,000 tokens（标准档）" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: "922,000 tokens（长上下文）" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", { name: /1,050,000/ }),
+    ).not.toBeInTheDocument();
+    fireEvent.change(screen.getByRole("combobox", { name: "上下文窗口" }), {
+      target: { value: "922000" },
+    });
+    expect(context).toHaveBeenCalledWith(922000);
+    rerender(
+      <AgentReasoningPicker
+        model={{
+          ...model,
+          contextLimit: 922000,
+          contextLimits: [272000, 922000],
+        }}
+        value="high"
+        onSelect={vi.fn()}
+        onContextSelect={context}
+      />,
+    );
+    expect(
+      screen.getByRole("option", { name: "922,000 tokens（长上下文）" }),
+    ).toBeInTheDocument();
+  });
   it("switches a session context window independently from reasoning", () => {
     const select = vi.fn(),
       context = vi.fn();

@@ -299,6 +299,67 @@ describe("ChannelCenterPanel", () => {
       128000, 1000000,
     ]);
   });
+  it("refreshes a Copilot channel into real context tiers and keeps the saved long tier across another refresh", async () => {
+    const channel: ChannelSource = {
+      id: "copilot-fixture",
+      name: "GitHub Copilot",
+      baseUrl: "https://api.githubcopilot.com",
+      apiKey: "",
+      authKind: "github_copilot",
+      accountId: "fixture-account",
+      protocol: "openai_responses",
+      enabled: true,
+      models: [
+        { id: "gpt-6.1-sol", name: "GPT-6.1 Sol", contextLimit: 272000 },
+      ],
+    };
+    saved = {
+      ...structuredClone(initial),
+      channels: [channel],
+      defaultModel: "copilot-fixture/gpt-6.1-sol",
+    };
+    vi.mocked(channelCenterApi.discover).mockImplementation(
+      async (previous) => ({
+        ...previous,
+        models: [
+          {
+            id: "gpt-6.1-sol",
+            name: "GPT-6.1 Sol",
+            contextLimit: 272000,
+            contextLimits: [272000, 922000],
+            outputLimit: 128000,
+          },
+        ],
+      }),
+    );
+    render(<ChannelCenterPanel />);
+    await ready();
+    modelList("GitHub Copilot");
+    fireEvent.click(screen.getByRole("button", { name: "刷新模型" }));
+    const select = await screen.findByRole("combobox", {
+      name: "GPT-6.1 Sol 上下文窗口",
+    });
+    expect(
+      within(select).getByRole("option", {
+        name: "922,000 tokens（长上下文）",
+      }),
+    ).toBeInTheDocument();
+    fireEvent.change(select, { target: { value: "922000" } });
+    await waitFor(() =>
+      expect(saved.channels[0].models[0].selectedContextLimit).toBe(922000),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "刷新模型" }));
+    await waitFor(() =>
+      expect(channelCenterApi.discover).toHaveBeenCalledTimes(2),
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByRole("combobox", { name: "GPT-6.1 Sol 上下文窗口" }),
+      ).toHaveValue("922000"),
+    );
+    expect(saved.channels[0].models[0].contextLimits).toEqual([272000, 922000]);
+    expect(channelCenterApi.apply).not.toHaveBeenCalled();
+  });
   it("offers external agent targets without selecting them until requested", async () => {
     saved = structuredClone(populated);
     render(<ChannelCenterPanel />);

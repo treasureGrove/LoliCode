@@ -45,6 +45,11 @@ export function ContextWindowSelect({
       {options.map((limit) => (
         <option key={limit} value={String(limit)}>
           {limit.toLocaleString()} tokens
+          {limit === options[0]
+            ? "（标准档）"
+            : limit > options[0]
+              ? "（长上下文）"
+              : ""}
         </option>
       ))}
     </select>

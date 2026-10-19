@@ -1,0 +1,25 @@
+{
+  "id": "gpt-6.1-sol",
+  "name": "GPT-6.1 Sol",
+  "vendor": "OpenAI",
+  "model_picker_enabled": true,
+  "supported_endpoints": ["/responses"],
+  "capabilities": {
+    "limits": {
+      "max_context_window_tokens": 1050000,
+      "max_prompt_tokens": 922000,
+      "max_output_tokens": 128000
+    },
+    "supports": {
+      "parallel_tool_calls": true,
+      "reasoning_effort": ["none", "low", "medium", "high", "xhigh", "max"]
+    }
+  },
+  "billing": {
+    "token_prices": {
+      "batch_size": 1000000,
+      "default": {"context_max": 272000},
+      "long_context": {"context_max": 922000}
+    }
+  }
+}

@@ -121,6 +121,28 @@ pub(super) fn declared_context_windows(
         let value = entry.pointer(pointer)?;
         tokens(value).or_else(|| value.get("default").and_then(tokens))
     });
+    // Copilot publishes selectable prompt budgets as billing tiers, not as a
+    // `context_windows` array. These are explicit choices; the total model
+    // window and the output ceiling are not extra context presets.
+    if let Some(prices) = entry.pointer("/billing/token_prices") {
+        let tier = |name: &str| {
+            let value = prices.get(name)?;
+            value
+                .get("max_prompt_tokens")
+                .and_then(tokens)
+                .or_else(|| value.get("context_max").and_then(tokens))
+                .map(|limit| default.map_or(limit, |ceiling| limit.min(ceiling)))
+        };
+        if let Some(standard) = tier("default") {
+            // Free long context can omit the separate price tier; the
+            // official client still offers the published full prompt budget.
+            let windows = tier("long_context")
+                .or(default)
+                .filter(|long| *long > standard)
+                .map(|long| vec![standard, long]);
+            return (Some(standard), windows);
+        }
+    }
     let mut windows = Vec::new();
     for pointer in SCALARS.iter().copied().chain([
         "/context_windows",
@@ -620,6 +642,44 @@ fn ends_with_version_segment(url: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn copilot_billing_tiers_keep_prompt_choices_separate_from_total_and_output_limits() {
+        let entry: serde_json::Value = serde_json::from_str(include_str!(
+            "../../tests/fixtures/copilot-tiered-model.json"
+        ))
+        .unwrap();
+        for field in ["context_max", "max_prompt_tokens"] {
+            let mut value = entry.clone();
+            for (name, limit) in [("default", 272000), ("long_context", 922000)] {
+                value["billing"]["token_prices"][name] = serde_json::json!({field:limit});
+            }
+            let metadata = declared_model_metadata(&value);
+            assert_eq!(metadata.context_limit, Some(272000));
+            assert_eq!(metadata.context_limits, Some(vec![272000, 922000]));
+            assert_eq!(metadata.output_limit, Some(128000));
+        }
+        let mut free = entry.clone();
+        free["billing"]["token_prices"]
+            .as_object_mut()
+            .unwrap()
+            .remove("long_context");
+        assert_eq!(
+            declared_model_metadata(&free).context_limits,
+            Some(vec![272000, 922000])
+        );
+        let mut capped = entry.clone();
+        capped["capabilities"]["limits"]["max_prompt_tokens"] = serde_json::json!(272000);
+        assert_eq!(declared_model_metadata(&capped).context_limits, None);
+        let mut legacy = entry;
+        legacy.as_object_mut().unwrap().remove("billing");
+        let metadata = declared_model_metadata(&legacy);
+        assert_eq!(metadata.context_limit, Some(922000));
+        assert_eq!(
+            metadata.context_limits, None,
+            "different input/output/total ceilings are not presets"
+        );
+    }
 
     #[test]
     fn context_window_enums_are_retained_without_inventing_ranges_or_variants() {

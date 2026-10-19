@@ -140,7 +140,9 @@ fn composite_account_id(domain: &str, user_id: u64) -> String {
 pub const COPILOT_EDITOR_VERSION: &str = "vscode/1.110.1";
 pub const COPILOT_PLUGIN_VERSION: &str = "copilot-chat/0.38.2";
 pub const COPILOT_USER_AGENT: &str = "GitHubCopilotChat/0.38.2";
-pub const COPILOT_API_VERSION: &str = "2025-10-01";
+// The tiered catalog and long prompt limits are only exposed by this contract.
+// Generation uses the same version so a selected long budget is accepted.
+pub const COPILOT_API_VERSION: &str = "2026-06-01";
 pub const COPILOT_INTEGRATION_ID: &str = "vscode-chat";
 
 /// Build the Copilot request identity shared by every proxy adapter.
@@ -271,6 +273,8 @@ pub struct CopilotModel {
     pub context_window: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_windows: Option<Vec<u64>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_limit: Option<u64>,
     /// Upstream protocols supported by this exact model ID.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub supported_endpoints: Vec<String>,
@@ -312,19 +316,30 @@ struct CopilotModelsResponseItem {
     supported_endpoints: Vec<String>,
     #[serde(default)]
     capabilities: Option<Value>,
+    #[serde(default)]
+    billing: Option<Value>,
 }
 
-fn positive_capability_limit(capabilities: &Value, pointer: &str) -> Option<u64> {
-    capabilities
-        .pointer(pointer)?
-        .as_u64()
-        .filter(|tokens| *tokens > 0)
-}
-
-fn extract_copilot_prompt_limit(capabilities: Option<&Value>) -> Option<u64> {
-    let capabilities = capabilities?;
-    positive_capability_limit(capabilities, "/limits/max_prompt_tokens")
-        .or_else(|| positive_capability_limit(capabilities, "/limits/max_context_window_tokens"))
+impl From<CopilotModelsResponseItem> for CopilotModel {
+    fn from(item: CopilotModelsResponseItem) -> Self {
+        let metadata = crate::services::model_fetch::declared_model_metadata(
+            &serde_json::json!({"capabilities":item.capabilities,"billing":item.billing}),
+        );
+        Self {
+            id: item.id,
+            name: item.name,
+            vendor: item.vendor,
+            model_picker_enabled: item.model_picker_enabled,
+            context_window: metadata.context_limit,
+            context_windows: metadata.context_limits,
+            output_limit: metadata.output_limit,
+            supported_endpoints: item.supported_endpoints,
+            supports_parallel_tool_calls: extract_copilot_parallel_tool_calls(
+                item.capabilities.as_ref(),
+            ),
+            reasoning_effort: extract_copilot_reasoning_effort(item.capabilities.as_ref()),
+        }
+    }
 }
 
 fn extract_copilot_parallel_tool_calls(capabilities: Option<&Value>) -> Option<bool> {
@@ -1186,6 +1201,24 @@ impl CopilotAuthManager {
             .collect())
     }
 
+    /// An explicit channel refresh must bypass the process-lifetime catalog.
+    /// Keep the previous cache if the refresh fails.
+    pub async fn refresh_models_for_account(
+        &self,
+        account_id: &str,
+    ) -> Result<Vec<CopilotModel>, CopilotAuthError> {
+        self.ensure_migration_complete().await?;
+        let models = self.fetch_models_for_account_uncached(account_id).await?;
+        self.copilot_models
+            .write()
+            .await
+            .insert(account_id.into(), models.clone());
+        Ok(models
+            .into_iter()
+            .filter(|model| model.model_picker_enabled)
+            .collect())
+    }
+
     async fn fetch_all_models_for_account(
         &self,
         account_id: &str,
@@ -1242,20 +1275,7 @@ impl CopilotAuthManager {
         let models: Vec<CopilotModel> = models_response
             .data
             .into_iter()
-            .map(|m| CopilotModel {
-                id: m.id,
-                name: m.name,
-                vendor: m.vendor,
-                model_picker_enabled: m.model_picker_enabled,
-                context_window: extract_copilot_prompt_limit(m.capabilities.as_ref()),
-                context_windows: m.capabilities.as_ref().and_then(|capabilities|
-                    crate::services::model_fetch::declared_model_metadata(&serde_json::json!({"capabilities":capabilities})).context_limits),
-                supported_endpoints: m.supported_endpoints,
-                supports_parallel_tool_calls: extract_copilot_parallel_tool_calls(
-                    m.capabilities.as_ref(),
-                ),
-                reasoning_effort: extract_copilot_reasoning_effort(m.capabilities.as_ref()),
-            })
+            .map(CopilotModel::from)
             .collect();
 
         log::info!("[CopilotAuth] 获取到 {} 个可用模型", models.len());
@@ -2163,16 +2183,14 @@ mod tests {
         }))
         .unwrap();
 
+        let model = CopilotModel::from(item);
+        assert_eq!(model.context_window, Some(922_000));
         assert_eq!(
-            extract_copilot_prompt_limit(item.capabilities.as_ref()),
-            Some(922_000)
-        );
-        assert_eq!(
-            extract_copilot_parallel_tool_calls(item.capabilities.as_ref()),
+            model.supports_parallel_tool_calls,
             Some(true)
         );
         assert_eq!(
-            extract_copilot_reasoning_effort(item.capabilities.as_ref()),
+            model.reasoning_effort,
             Some(vec![
                 CopilotReasoningEffort::None,
                 CopilotReasoningEffort::Low,
@@ -2180,24 +2198,21 @@ mod tests {
             ])
         );
         assert_eq!(
-            item.supported_endpoints,
+            model.supported_endpoints,
             vec!["/responses", "/chat/completions"]
         );
     }
 
     #[test]
     fn prompt_limit_falls_back_to_positive_context_window() {
-        let capabilities = serde_json::json!({
-            "limits": {
+        let item = serde_json::from_value::<CopilotModelsResponseItem>(serde_json::json!({
+            "id":"fixture", "name":"Fixture", "vendor":"Fixture", "model_picker_enabled":true,
+            "capabilities": {"limits": {
                 "max_prompt_tokens": 0,
                 "max_context_window_tokens": 400000
-            }
-        });
-
-        assert_eq!(
-            extract_copilot_prompt_limit(Some(&capabilities)),
-            Some(400_000)
-        );
+            }}
+        })).unwrap();
+        assert_eq!(CopilotModel::from(item).context_window, Some(400_000));
     }
 
     #[test]
@@ -2220,6 +2235,7 @@ mod tests {
             model_picker_enabled: true,
             context_window: Some(922_000),
             context_windows: None,
+            output_limit: None,
             supported_endpoints: vec!["/responses".to_string()],
             supports_parallel_tool_calls: Some(true),
             reasoning_effort: Some(vec![
@@ -2269,6 +2285,82 @@ mod tests {
         );
         assert!(headers.contains_key("x-request-id"));
         assert_eq!(headers.get("x-request-id"), headers.get("x-agent-task-id"));
+        assert_eq!(headers["x-github-api-version"], "2026-06-01");
+    }
+
+    #[test]
+    fn tiered_copilot_catalog_survives_channel_save_and_selects_the_agent_budget() {
+        use crate::services::channel_center::{self, ChannelCenterSnapshot, ChannelSource};
+        let parse = || {
+            CopilotModel::from(
+                serde_json::from_str::<CopilotModelsResponseItem>(include_str!(
+                    "../../../tests/fixtures/copilot-tiered-model.json"
+                ))
+                .unwrap(),
+            )
+        };
+        let model = parse();
+        assert_eq!(model.context_window, Some(272000));
+        assert_eq!(model.context_windows, Some(vec![272000, 922000]));
+        assert_eq!(model.output_limit, Some(128000));
+        let source: ChannelSource = serde_json::from_value(serde_json::json!({
+            "id":"copilot-fixture", "name":"Copilot", "baseUrl":"https://api.githubcopilot.com",
+            "apiKey":"", "authKind":"github_copilot", "accountId":"synthetic-account",
+            "protocol":"openai_responses", "enabled":true, "models":[]
+        }))
+        .unwrap();
+        let mut channel = channel_center::merge_copilot_models(source, vec![model]);
+        channel.models[0].selected_context_limit = Some(922000);
+        let channel = channel_center::merge_copilot_models(channel, vec![parse()]);
+        assert_eq!(channel.models[0].selected_context_limit, Some(922000));
+        let db = crate::Database::memory().unwrap();
+        channel_center::save(
+            &db,
+            ChannelCenterSnapshot {
+                channels: vec![channel],
+                default_model: Some("copilot-fixture/gpt-6.1-sol".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let saved = channel_center::load(&db).unwrap();
+        assert_eq!(
+            saved.channels[0].models[0].selected_context_limit,
+            Some(922000)
+        );
+        let catalog = channel_center::agent_catalog(&db).unwrap();
+        assert_eq!(catalog.models[0].context_limit, Some(922000));
+        assert_eq!(catalog.models[0].context_limits, Some(vec![272000, 922000]));
+        assert_eq!(catalog.models[0].output_limit, Some(128000));
+    }
+
+    #[tokio::test]
+    async fn explicit_model_refresh_bypasses_cached_models_and_retains_them_on_failure() {
+        let directory = tempdir().unwrap();
+        let manager = CopilotAuthManager::new(directory.path().into());
+        let model = CopilotModel::from(
+            serde_json::from_str::<CopilotModelsResponseItem>(include_str!(
+                "../../../tests/fixtures/copilot-tiered-model.json"
+            ))
+            .unwrap(),
+        );
+        manager
+            .copilot_models
+            .write()
+            .await
+            .insert("missing-account".into(), vec![model]);
+        assert!(manager
+            .refresh_models_for_account("missing-account")
+            .await
+            .is_err());
+        assert_eq!(
+            manager
+                .fetch_models_for_account("missing-account")
+                .await
+                .unwrap()[0]
+                .id,
+            "gpt-6.1-sol"
+        );
     }
 
     #[test]
@@ -2487,6 +2579,7 @@ mod tests {
                         model_picker_enabled: true,
                         context_window: None,
                         context_windows: None,
+                        output_limit: None,
                         supported_endpoints: Vec::new(),
                         supports_parallel_tool_calls: None,
                         reasoning_effort: None,
@@ -2498,6 +2591,7 @@ mod tests {
                         model_picker_enabled: true,
                         context_window: None,
                         context_windows: None,
+                        output_limit: None,
                         supported_endpoints: Vec::new(),
                         supports_parallel_tool_calls: None,
                         reasoning_effort: None,
@@ -2509,6 +2603,7 @@ mod tests {
                         model_picker_enabled: false,
                         context_window: Some(128_000),
                         context_windows: None,
+                        output_limit: None,
                         supported_endpoints: vec![
                             "/v1/chat/completions".to_string(),
                             "/responses".to_string(),
@@ -2593,6 +2688,7 @@ mod tests {
             model_picker_enabled: false,
             context_window: Some(1_000_000),
             context_windows: None,
+            output_limit: None,
             supported_endpoints: endpoints
                 .iter()
                 .map(|endpoint| endpoint.to_string())

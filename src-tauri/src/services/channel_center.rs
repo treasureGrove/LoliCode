@@ -1088,7 +1088,7 @@ pub fn merge_copilot_models(
                 }),
                 context_limits: model.context_windows,
                 selected_context_limit: None,
-                output_limit: None,
+                output_limit: model.output_limit,
                 reasoning_efforts: model.reasoning_effort.map(|efforts| {
                     efforts
                         .into_iter()

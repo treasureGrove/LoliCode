@@ -99,7 +99,7 @@ pub async fn discover_channel_models(
             .ok_or_else(|| "请先为此渠道选择已登录的 Copilot 账户".to_string())?;
         let manager = copilot.0.read().await;
         let models = manager
-            .fetch_models_for_account(account)
+            .refresh_models_for_account(account)
             .await
             .map_err(|_| "无法读取 Copilot 模型，请检查账户登录、订阅与网络后重试".to_string())?;
         return Ok(channel_center::merge_copilot_models(channel, models));
