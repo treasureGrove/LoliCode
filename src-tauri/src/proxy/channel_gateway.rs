@@ -59,7 +59,7 @@ struct GatewayClient(&'static str);
 pub(crate) fn is_attributed_client(client: &str) -> bool {
     matches!(
         client,
-        "lolicode" | "tavern" | "workbuddy" | "deepseek-harness" | "zcode" | "mimocode"
+        "lolicode" | "tavern" | "workbuddy" | "deepseek-harness" | "zcode" | "mimocode" | "codebuddy"
     )
 }
 
@@ -80,6 +80,7 @@ fn client_for_uri(uri: &http::Uri) -> Result<&'static str, ProxyError> {
         Some("deepseek-harness") => Ok("deepseek-harness"),
         Some("zcode") => Ok("zcode"),
         Some("mimocode") => Ok("mimocode"),
+        Some("codebuddy") => Ok("codebuddy"),
         _ => Err(ProxyError::InvalidRequest("未知的客户端配置入口".into())),
     }
 }
@@ -2195,6 +2196,7 @@ mod tests {
             "deepseek-harness",
             "zcode",
             "mimocode",
+            "codebuddy",
         ] {
             let client_base = catalog_client_base_url(&version_base, app).unwrap();
             let uri: http::Uri = format!("{client_base}/chat/completions").parse().unwrap();

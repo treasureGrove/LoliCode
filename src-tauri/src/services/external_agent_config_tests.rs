@@ -85,6 +85,71 @@ fn external_workbuddy_adds_models_without_erasing_user_entries_and_updates_only_
 }
 
 #[test]
+fn external_codebuddy_keeps_user_models_and_makes_managed_models_visible_with_capabilities() {
+    let directory = tempdir().unwrap();
+    let path = directory.path().join(".codebuddy/models.json");
+    let old = r#"{"models":[{"id":"mine","name":"Keep","url":"https://example.invalid/v1/chat/completions"}],"availableModels":["mine"],"theme":{"name":"custom"}}"#;
+    write(&path, old);
+    let outcome = apply_at("codebuddy", &source(), "channel/model", directory.path()).unwrap();
+    assert_eq!(fs::read_to_string(&outcome.backups[0]).unwrap(), old);
+    let value = parsed(&path);
+    assert_eq!(value["theme"]["name"], "custom");
+    assert_eq!(value["models"][0]["name"], "Keep");
+    let model = &value["models"][1];
+    assert_eq!(model["url"], "http://127.0.0.1:19318/v1/chat/completions");
+    assert_eq!(model["supportsToolCall"], true);
+    assert_eq!(model["supportsImages"], true);
+    assert_eq!(model["supportsReasoning"], true);
+    assert_eq!(model["maxInputTokens"], 128000);
+    assert_eq!(value["availableModels"], json!(["mine", "channel/model"]));
+    assert!(
+        apply_at("codebuddy", &source(), "channel/model", directory.path())
+            .unwrap()
+            .backups
+            .is_empty()
+    );
+    let mut changed = source();
+    changed.models[0].id = "channel/new".into();
+    apply_at("codebuddy", &changed, "channel/new", directory.path()).unwrap();
+    assert_eq!(
+        parsed(&path)["availableModels"],
+        json!(["mine", "channel/new"])
+    );
+    assert!(!directory.path().join(".workbuddy/models.json").exists());
+}
+
+#[test]
+fn external_codebuddy_defaults_to_documented_object_schema_and_preserves_conflicts() {
+    let directory = tempdir().unwrap();
+    let path = directory.path().join(".codebuddy/models.json");
+    apply_at("codebuddy", &source(), "channel/model", directory.path()).unwrap();
+    assert!(parsed(&path).is_object());
+    assert_eq!(parsed(&path)["models"][0]["id"], "channel/model");
+    let mut value = parsed(&path);
+    value["models"][0]["apiKey"] = json!("synthetic-user-edit");
+    write(&path, &value.to_string());
+    let before = fs::read(&path).unwrap();
+    assert!(matches!(
+        apply_at("codebuddy", &source(), "channel/model", directory.path()),
+        Err(AppError::Conflict(_))
+    ));
+    assert_eq!(fs::read(&path).unwrap(), before);
+    for invalid in [
+        r#"[]"#,
+        r#"{"availableModels":{}}"#,
+        r#"{"models":[{"id":"channel/model","name":"User"}]}"#,
+    ] {
+        let isolated = tempdir().unwrap();
+        let path = isolated.path().join(".codebuddy/models.json");
+        write(&path, invalid);
+        assert!(apply_at("codebuddy", &source(), "channel/model", isolated.path()).is_err());
+        assert_eq!(fs::read_to_string(path).unwrap(), invalid);
+    }
+    assert!(apply_at("qoder", &source(), "channel/model", directory.path()).is_err());
+    assert!(!directory.path().join(".qoder/settings.json").exists());
+}
+
+#[test]
 fn external_zcode_preserves_plugins_and_config_comments_and_rolls_back_multifile_failure() {
     let directory = tempdir().unwrap();
     let desktop = directory.path().join(".zcode/v2/config.json");

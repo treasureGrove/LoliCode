@@ -504,23 +504,27 @@ describe("ChannelCenterPanel", () => {
     expect(channelCenterApi.apply).not.toHaveBeenCalled();
   });
 
-  it("selects a local tool for configuration without removing existing targets or writing external files", async () => {
-    saved = structuredClone(populated);
-    render(<ChannelCenterPanel initialToolsOpen />);
-    await ready();
-    const props = embeddedToolsProps.mock.lastCall?.[0] as {
-      onConfigureLocalAgent: (target: "workbuddy") => void;
-      configureLocalAgentDisabled: boolean;
-    };
-    expect(props.configureLocalAgentDisabled).toBe(false);
-    act(() => props.onConfigureLocalAgent("workbuddy"));
-    expect(screen.getByRole("checkbox", { name: "WorkBuddy" })).toBeChecked();
-    expect(screen.getByRole("checkbox", { name: "OpenCode" })).toBeChecked();
-    expect(screen.getByRole("checkbox", { name: "WorkBuddy" })).toHaveFocus();
-    await waitFor(() => expect(saved.targets).toContain("workbuddy"));
-    expect(saved.targets).toEqual(expect.arrayContaining(initial.targets));
-    expect(channelCenterApi.apply).not.toHaveBeenCalled();
-  });
+  it.each(["workbuddy", "codebuddy"] as const)(
+    "selects %s for configuration without removing existing targets or writing external files",
+    async (target) => {
+      saved = structuredClone(populated);
+      render(<ChannelCenterPanel initialToolsOpen />);
+      await ready();
+      const props = embeddedToolsProps.mock.lastCall?.[0] as {
+        onConfigureLocalAgent: (target: "workbuddy" | "codebuddy") => void;
+        configureLocalAgentDisabled: boolean;
+      };
+      expect(props.configureLocalAgentDisabled).toBe(false);
+      const name = target === "codebuddy" ? "CodeBuddy" : "WorkBuddy";
+      act(() => props.onConfigureLocalAgent(target));
+      expect(screen.getByRole("checkbox", { name })).toBeChecked();
+      expect(screen.getByRole("checkbox", { name: "OpenCode" })).toBeChecked();
+      expect(screen.getByRole("checkbox", { name })).toHaveFocus();
+      await waitFor(() => expect(saved.targets).toContain(target));
+      expect(saved.targets).toEqual(expect.arrayContaining(initial.targets));
+      expect(channelCenterApi.apply).not.toHaveBeenCalled();
+    },
+  );
 
   it("autosaves complete edits to an existing source without fetching an incomplete address", async () => {
     saved = structuredClone(populated);

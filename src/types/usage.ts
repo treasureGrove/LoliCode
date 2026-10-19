@@ -245,6 +245,7 @@ export type AppType =
   | "deepseek-harness"
   | "zcode"
   | "mimocode"
+  | "codebuddy"
   | "tavern";
 
 export type AppTypeFilter = "all" | AppType;
@@ -263,6 +264,7 @@ export const KNOWN_APP_TYPES: ReadonlyArray<AppType> = [
   "deepseek-harness",
   "zcode",
   "mimocode",
+  "codebuddy",
   "tavern",
 ];
 
@@ -274,6 +276,7 @@ export const USAGE_APP_LABELS: Partial<Record<AppType, string>> = {
   "deepseek-harness": "DeepSeek Harness",
   zcode: "ZCode",
   mimocode: "MiMo",
+  codebuddy: "CodeBuddy",
   tavern: "酒馆",
 };
 

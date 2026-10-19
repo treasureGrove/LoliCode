@@ -5,8 +5,11 @@ export const LOCAL_AGENT_IDS = [
   "deepseek-harness",
   "zcode",
   "mimocode",
+  "codebuddy",
+  "qoder",
 ] as const;
 export type LocalAgentId = (typeof LOCAL_AGENT_IDS)[number];
+export type AutoConfigLocalAgentId = Exclude<LocalAgentId, "qoder">;
 export interface LocalAgentTool {
   id: LocalAgentId;
   installed: boolean;
@@ -34,4 +37,6 @@ export const LOCAL_AGENT_DOWNLOADS: Record<LocalAgentId, string> = {
     "https://github.com/deepseek-ai/deepseek-harness/releases",
   zcode: "https://zcode.z.ai/",
   mimocode: "https://github.com/XiaomiMiMo/MiMo-Code",
+  codebuddy: "https://www.codebuddy.cn/downloads/",
+  qoder: "https://qoder.com/download",
 };

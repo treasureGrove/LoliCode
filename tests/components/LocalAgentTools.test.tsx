@@ -66,6 +66,26 @@ const tools: LocalAgentTool[] = [
     configExists: false,
     configError: null,
   },
+  {
+    id: "codebuddy",
+    installed: false,
+    path: null,
+    version: null,
+    customPath: false,
+    configPaths: [],
+    configExists: false,
+    configError: null,
+  },
+  {
+    id: "qoder",
+    installed: true,
+    path: "C:/apps/Qoder IDE.exe",
+    version: "1.25.1",
+    customPath: false,
+    configPaths: [],
+    configExists: false,
+    configError: null,
+  },
 ];
 function setup(props: Parameters<typeof LocalAgentTools>[0] = {}) {
   const client = new QueryClient({
@@ -92,7 +112,7 @@ beforeEach(() => {
 });
 
 describe("local domestic Agent management", () => {
-  it("lists all four tools and keeps configuration existence separate from installation", async () => {
+  it("lists all six tools and keeps configuration existence separate from installation", async () => {
     setup();
     await screen.findByText("5.3.14");
     expect(row("workbuddy").getByText("已发现配置文件")).toBeInTheDocument();
@@ -107,6 +127,11 @@ describe("local domestic Agent management", () => {
     ).not.toBeInTheDocument();
     expect(row("zcode").getByText("已安装")).toBeInTheDocument();
     expect(row("mimocode").getByText("MiMo Code")).toBeInTheDocument();
+    expect(row("codebuddy").getByText("CodeBuddy")).toBeInTheDocument();
+    expect(row("qoder").getByText("1.25.1")).toBeInTheDocument();
+    expect(
+      row("qoder").getByText("通过 Qoder 官方设置向导添加模型"),
+    ).toBeInTheDocument();
     fireEvent.click(row("workbuddy").getByText("打开位置"));
     await waitFor(() =>
       expect(localAgentToolsApi.reveal).toHaveBeenCalledWith("workbuddy"),
@@ -175,7 +200,7 @@ describe("local domestic Agent management", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "无法读取路径记录",
     );
-    expect(screen.getAllByText("状态未知")).toHaveLength(4);
+    expect(screen.getAllByText("状态未知")).toHaveLength(6);
     expect(screen.queryByText("未检测到程序")).not.toBeInTheDocument();
   });
   it("uses the bundled official ZCode Z instead of the GLM provider symbol", () => {
@@ -183,5 +208,25 @@ describe("local domestic Agent management", () => {
     expect(getIconUrl("zcode")).toContain("zcode.png");
     expect(getIconUrl("zcode")).not.toMatch(/^https?:/);
     expect(getIcon("zcode")).toBe("");
+  });
+
+  it("adds CodeBuddy to managed configuration while Qoder opens its official wizard guide", async () => {
+    const onConfigure = vi.fn();
+    setup({ onConfigure });
+    await screen.findByText("5.3.14");
+    fireEvent.click(row("codebuddy").getByText("配置模型"));
+    expect(onConfigure).toHaveBeenCalledWith("codebuddy");
+    expect(row("qoder").queryByText("配置模型")).not.toBeInTheDocument();
+    fireEvent.click(row("qoder").getByText("模型设置指引"));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(/验证并添加/)).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByText("打开官方配置文档"));
+    await waitFor(() =>
+      expect(settingsApi.openExternal).toHaveBeenCalledWith(
+        "https://docs.qoder.com/zh/qoder/custom-models",
+      ),
+    );
+    expect(onConfigure).toHaveBeenCalledTimes(1);
+    expect(localAgentToolsApi.setPath).not.toHaveBeenCalled();
   });
 });

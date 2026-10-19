@@ -1010,6 +1010,22 @@ export const iconMetadata: Record<string, IconMetadata> = {
     shape: "tile",
     defaultColor: "currentColor",
   },
+  codebuddy: {
+    name: "codebuddy",
+    displayName: "CodeBuddy",
+    category: "tool",
+    shape: "tile",
+    keywords: ["codebuddy", "tencent", "ide", "agent"],
+    defaultColor: "currentColor",
+  },
+  qoder: {
+    name: "qoder",
+    displayName: "Qoder",
+    category: "tool",
+    shape: "tile",
+    keywords: ["qoder", "ide", "agent"],
+    defaultColor: "currentColor",
+  },
 };
 
 export function getIconMetadata(name: string): IconMetadata | undefined {

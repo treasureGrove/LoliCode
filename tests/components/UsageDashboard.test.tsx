@@ -269,6 +269,24 @@ describe("UsageDashboard", () => {
     expect(button).not.toHaveTextContent(/^Z$/);
   });
 
+  it("filters managed CodeBuddy route usage independently", async () => {
+    const user = userEvent.setup();
+    renderDashboard();
+    await user.click(screen.getByRole("button", { name: "CodeBuddy" }));
+    await waitFor(() =>
+      expect(useProviderStatsMock).toHaveBeenLastCalledWith(
+        expect.anything(),
+        { appType: "codebuddy" },
+        expect.anything(),
+      ),
+    );
+    expect(
+      screen
+        .getByRole("button", { name: "CodeBuddy", pressed: true })
+        .querySelector("img"),
+    ).toHaveAttribute("alt", "CodeBuddy");
+  });
+
   it("filters by provider and lists request counts", async () => {
     const user = userEvent.setup();
     renderDashboard();

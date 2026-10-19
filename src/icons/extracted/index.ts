@@ -3,6 +3,8 @@
 
 import _88api from "./88api.png";
 import _zcode from "./zcode.png";
+import _codebuddy from "./codebuddy.svg";
+import _qoder from "./qoder.svg";
 import _a6api from "./a6-icon.png";
 import _apikeyfun from "./apikeyfun.png";
 import _apinebula from "./apinebula_icon.png";
@@ -141,6 +143,8 @@ Object.assign(icons, {
 
 export const iconUrls: Record<string, string> = {
   zcode: _zcode,
+  codebuddy: _codebuddy,
+  qoder: _qoder,
   "88api": _88api,
   a6api: _a6api,
   apikeyfun: _apikeyfun,

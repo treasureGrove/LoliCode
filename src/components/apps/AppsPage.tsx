@@ -53,7 +53,7 @@ import { ToolErrorMessage } from "@/components/settings/ToolErrorMessage";
 import { ToolUninstallConfirmDialog } from "./ToolUninstallConfirmDialog";
 import { ManualUninstallDialog } from "./ManualUninstallDialog";
 import { LocalAgentTools } from "./LocalAgentTools";
-import type { LocalAgentId } from "@/lib/api/local-agent-tools";
+import type { AutoConfigLocalAgentId } from "@/lib/api/local-agent-tools";
 import {
   ENV_BADGE_CONFIG,
   ONE_CLICK_INSTALL_COMMANDS,
@@ -114,7 +114,7 @@ export function AppsPage({
 }: {
   simpleMode?: boolean;
   embedded?: boolean;
-  onConfigureLocalAgent?: (target: LocalAgentId) => void;
+  onConfigureLocalAgent?: (target: AutoConfigLocalAgentId) => void;
   configureLocalAgentDisabled?: boolean;
 } = {}) {
   const { t, i18n } = useTranslation();

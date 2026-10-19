@@ -6,7 +6,8 @@ export type ChannelTarget =
   | "workbuddy"
   | "deepseek-harness"
   | "zcode"
-  | "mimocode";
+  | "mimocode"
+  | "codebuddy";
 
 export type ChannelProtocol =
   | "openai_chat"

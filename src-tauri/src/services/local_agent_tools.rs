@@ -6,7 +6,14 @@ use std::{
     path::{Path, PathBuf},
 };
 
-pub const TARGETS: [&str; 4] = ["workbuddy", "deepseek-harness", "zcode", "mimocode"];
+pub const TARGETS: [&str; 6] = [
+    "workbuddy",
+    "deepseek-harness",
+    "zcode",
+    "mimocode",
+    "codebuddy",
+    "qoder",
+];
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -37,6 +44,8 @@ fn names(target: &str) -> &'static [&'static str] {
         "deepseek-harness" => &["DeepSeek Harness", "deepseek-harness"],
         "zcode" => &["ZCode", "zcode"],
         "mimocode" => &["mimo"],
+        "codebuddy" => &["CodeBuddy", "CodeBuddy CN", "CodeBuddy IDE", "codebuddy"],
+        "qoder" => &["Qoder", "Qoder IDE", "qoder"],
         _ => &[],
     }
 }
@@ -143,6 +152,8 @@ fn registry_candidates(target: &str) -> Vec<Candidate> {
         "deepseek-harness" => &["deepseek harness", "deepseek-harness"],
         "zcode" => &["zcode"],
         "mimocode" => &["mimo code", "mimocode"],
+        "codebuddy" => &["codebuddy", "codebuddy cn", "codebuddy ide"],
+        "qoder" => &["qoder", "qoder ide"],
         _ => &[],
     };
     for hive in [HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE] {
@@ -246,6 +257,34 @@ fn candidates(target: &str) -> Vec<Candidate> {
     out
 }
 
+fn product_version(path: &Path, target: &str) -> Option<String> {
+    if !matches!(target, "qoder" | "codebuddy") {
+        return None;
+    }
+    // The Windows uninstall version may be the underlying editor's version.
+    // Prefer the installed product's own bounded package metadata when present.
+    let root = if path.is_dir() {
+        path.join("Contents/Resources/app")
+    } else {
+        path.parent()?.join("resources/app")
+    };
+    let file = root.join("package.json");
+    if std::fs::metadata(&file).ok()?.len() > 128 * 1024 {
+        return None;
+    }
+    let value: serde_json::Value = serde_json::from_slice(&std::fs::read(file).ok()?).ok()?;
+    let name = value["name"].as_str()?;
+    if !names(target).iter().any(|n| name.eq_ignore_ascii_case(n)) {
+        return None;
+    }
+    let version = value["version"].as_str()?;
+    (version.len() < 64
+        && version
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || ".-+".contains(c)))
+    .then(|| version.to_owned())
+}
+
 fn detect(target: &str, custom: Option<&PathBuf>, candidates: Vec<Candidate>) -> LocalAgentTool {
     let found = candidates.into_iter().find(|c| runnable(&c.path, target));
     let (path, version, installed) = if let Some(path) = custom {
@@ -267,6 +306,11 @@ fn detect(target: &str, custom: Option<&PathBuf>, candidates: Vec<Candidate>) ->
     } else {
         (None, None, false)
     };
+    let version = path
+        .as_deref()
+        .filter(|_| installed)
+        .and_then(|p| product_version(Path::new(p), target))
+        .or(version);
     LocalAgentTool {
         id: target.into(),
         installed,
@@ -284,6 +328,11 @@ pub fn list(paths: &ToolPaths) -> Vec<LocalAgentTool> {
         .into_iter()
         .map(|target| {
             let mut tool = detect(target, paths.0.get(target), candidates(target));
+            // Qoder BYOK is owned by its settings wizard; a generic settings.json
+            // is neither a model credential file nor a supported import surface.
+            if target == "qoder" {
+                return tool;
+            }
             match super::external_agent_config::config_paths(target) {
                 Ok(paths) => {
                     tool.config_exists = paths.iter().any(|p| p.is_file());
@@ -363,6 +412,9 @@ mod tests {
         assert!(display_name_matches("ZCode 3.15.3", "zcode"));
         assert!(!display_name_matches("ZCode-setup", "zcode"));
         assert!(!display_name_matches("Xiaomi MiMo 26.9", "mimo code"));
+        assert!(display_name_matches("Qoder IDE", "qoder"));
+        assert!(display_name_matches("CodeBuddy 1.0", "codebuddy"));
+        assert!(!display_name_matches("WorkBuddy 5.3", "codebuddy"));
         assert_eq!(
             display_icon_path("\"D:\\Apps,Local\\ZCode.exe\",0"),
             PathBuf::from("D:\\Apps,Local\\ZCode.exe")
@@ -373,10 +425,36 @@ mod tests {
         );
     }
     #[test]
+    fn editor_product_version_takes_priority_over_base_editor_version() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = executable(dir.path(), "qoder");
+        std::fs::create_dir_all(dir.path().join("resources/app")).unwrap();
+        std::fs::write(
+            dir.path().join("resources/app/package.json"),
+            r#"{"name":"Qoder IDE","version":"1.25.1"}"#,
+        )
+        .unwrap();
+        let tool = detect(
+            "qoder",
+            None,
+            vec![Candidate {
+                path: path.clone(),
+                version: Some("1.106.3".into()),
+            }],
+        );
+        assert_eq!(tool.version.as_deref(), Some("1.25.1"));
+        std::fs::write(
+            dir.path().join("resources/app/package.json"),
+            r#"{"name":"Other Editor","version":"9.9.9"}"#,
+        )
+        .unwrap();
+        assert!(product_version(&path, "qoder").is_none());
+    }
+    #[test]
     #[ignore = "Manual read-only check of installed local tools on this device"]
     fn system_discovery_smoke() {
         let tools = list(&ToolPaths::default());
-        assert_eq!(tools.len(), 4);
+        assert_eq!(tools.len(), TARGETS.len());
         println!("{}", serde_json::to_string_pretty(&tools).unwrap());
     }
 }

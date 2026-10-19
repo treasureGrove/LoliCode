@@ -10,6 +10,7 @@ export const CHANNEL_TARGETS: ChannelTarget[] = [
   "deepseek-harness",
   "zcode",
   "mimocode",
+  "codebuddy",
 ];
 
 export const CHANNEL_TARGET_NAMES: Record<ChannelTarget, string> = {
@@ -18,17 +19,28 @@ export const CHANNEL_TARGET_NAMES: Record<ChannelTarget, string> = {
   "deepseek-harness": "DeepSeek Harness",
   zcode: "ZCode",
   mimocode: "MiMo Code",
+  codebuddy: "CodeBuddy",
 };
 
 export function ChannelTargetGlyph({
   app,
   size = 18,
 }: {
-  app: ChannelTarget;
+  app: ChannelTarget | "qoder";
   size?: number;
 }) {
   if (APP_IDS.includes(app as AppId))
     return <AppGlyph app={app as AppId} size={size} />;
+
+  if (app === "codebuddy" || app === "qoder")
+    return (
+      <ProviderIcon
+        icon={app}
+        name={app === "qoder" ? "Qoder" : "CodeBuddy"}
+        size={size}
+        showFallback={false}
+      />
+    );
 
   if (app === "deepseek-harness")
     return (

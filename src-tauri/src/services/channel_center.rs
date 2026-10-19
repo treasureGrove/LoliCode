@@ -16,7 +16,7 @@ const SETTINGS_KEY: &str = "channel_center";
 const TOKEN_KEY: &str = "channel_center_gateway_token";
 const APPLIED_KEY: &str = "channel_center_applied";
 const BACKGROUND_KEY: &str = "channel_center_requires_background";
-const TARGETS: [&str; 14] = [
+const TARGETS: [&str; 15] = [
     "claude",
     "claude-desktop",
     "codex",
@@ -31,6 +31,7 @@ const TARGETS: [&str; 14] = [
     "deepseek-harness",
     "zcode",
     "mimocode",
+    "codebuddy",
 ];
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -3191,7 +3192,7 @@ mod tests {
         let mut configured = snapshot();
         configured.targets = super::super::external_agent_config::TARGETS.iter().map(|target| target.to_string()).collect();
         save(&db, configured).unwrap();
-        assert_eq!(load(&db).unwrap().targets, ["workbuddy", "deepseek-harness", "zcode", "mimocode"]);
+        assert_eq!(load(&db).unwrap().targets, ["workbuddy", "deepseek-harness", "zcode", "mimocode", "codebuddy"]);
         assert!(db.get_setting(APPLIED_KEY).unwrap().is_none());
     }
 

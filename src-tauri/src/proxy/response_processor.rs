@@ -1038,6 +1038,7 @@ mod tests {
                     "deepseek-harness",
                     "zcode",
                     "mimocode",
+                    "codebuddy",
                 ] {
                     let mut usage =
                         normalize_gateway_usage(app, parser.input_includes_cache, usage.clone());

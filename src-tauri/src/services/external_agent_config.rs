@@ -17,7 +17,7 @@ use std::{
 };
 use uuid::Uuid;
 
-pub const TARGETS: [&str; 4] = ["workbuddy", "deepseek-harness", "zcode", "mimocode"];
+pub const TARGETS: [&str; 5] = ["workbuddy", "deepseek-harness", "zcode", "mimocode", "codebuddy"];
 const LIMIT: u64 = 4 * 1024 * 1024;
 static WRITE_GATE: Mutex<()> = Mutex::new(());
 
@@ -244,6 +244,7 @@ pub fn config_paths(target: &str) -> Result<Vec<PathBuf>, AppError> {
 fn paths(target: &str, locations: &Locations) -> Result<Vec<PathBuf>, AppError> {
     valid_path(&locations.home)?;
     match target {
+        "codebuddy" => Ok(vec![locations.home.join(".codebuddy/models.json")]),
         "workbuddy" => {
             let candidates = [
                 locations.home.join(".workbuddy/models.json"),
@@ -850,6 +851,80 @@ fn workbuddy(
     Ok((json_bytes(&value)?, result))
 }
 
+/// CodeBuddy IDE's documented object schema, with its model picker allowlist.
+/// Use the same additive/owned-entry checks as WorkBuddy; never replace user
+/// models just because their id happens to match a generated route.
+fn codebuddy(
+    raw: Option<&[u8]>,
+    source: &ChannelSource,
+    models: &[ChannelModel],
+    ownership: &BTreeMap<String, String>,
+) -> Result<(Vec<u8>, BTreeMap<String, String>), AppError> {
+    let initial = raw.unwrap_or(b"{\"models\":[]}");
+    let mut value: Value = serde_json::from_slice(initial)
+        .map_err(|_| fail("CodeBuddy models.json 无法解析，未修改原文件"))?;
+    if !value.is_object() {
+        return Err(fail("CodeBuddy models.json 顶层必须是对象，未修改原文件"));
+    }
+    if let Some(list) = value.get("availableModels") {
+        if !list
+            .as_array()
+            .is_some_and(|a| a.iter().all(Value::is_string))
+        {
+            return Err(fail(
+                "CodeBuddy availableModels 必须是模型 ID 数组，未修改原文件",
+            ));
+        }
+    }
+    object(&mut value)?
+        .entry("models")
+        .or_insert_with(|| json!([]));
+    let normalized = json_bytes(&value)?;
+    let (bytes, mut result) =
+        workbuddy(Some(&normalized), source, models, ownership).map_err(|e| match e {
+            AppError::Config(message) => fail(&message.replace("WorkBuddy", "CodeBuddy")),
+            other => other,
+        })?;
+    let mut value: Value =
+        serde_json::from_slice(&bytes).map_err(|_| fail("CodeBuddy 配置生成失败"))?;
+    for entry in value["models"]
+        .as_array_mut()
+        .ok_or_else(|| fail("CodeBuddy models 必须是数组"))?
+    {
+        let id = entry["id"].as_str().unwrap_or_default().to_string();
+        if let Some(model) = models.iter().find(|m| m.id == id) {
+            if let Some(tools) = model.supports_tools {
+                entry["supportsToolCall"] = json!(tools);
+            }
+            if let Some(modalities) = &model.input_modalities {
+                entry["supportsImages"] = json!(modalities.iter().any(|m| m == "image"));
+            }
+            if let Some(efforts) = &model.reasoning_efforts {
+                entry["supportsReasoning"] = json!(efforts
+                    .iter()
+                    .any(|e| !matches!(e.as_str(), "none" | "off" | "default")));
+            }
+            result.insert(id, json_digest(entry)?);
+        }
+    }
+    if let Some(list) = value
+        .get_mut("availableModels")
+        .and_then(Value::as_array_mut)
+        .filter(|list| !list.is_empty())
+    {
+        list.retain(|id| {
+            !ownership.contains_key(id.as_str().unwrap_or_default())
+                || models.iter().any(|m| id.as_str() == Some(m.id.as_str()))
+        });
+        for model in models {
+            if !list.iter().any(|id| id.as_str() == Some(model.id.as_str())) {
+                list.push(json!(model.id));
+            }
+        }
+    }
+    Ok((json_bytes(&value)?, result))
+}
+
 fn yaml(raw: &str) -> Result<serde_yaml::Value, AppError> {
     parse_yaml(raw, "DSH YAML 无法安全解析")
 }
@@ -1272,6 +1347,7 @@ fn apply_inner(
         let key = path.to_string_lossy().into_owned();
         let prior = previous.files.get(&key).cloned().unwrap_or_default();
         let (after, own) = match target {
+            "codebuddy" => codebuddy(before.as_deref(), source, &models, &prior)?,
             "workbuddy" => workbuddy(before.as_deref(), source, &models, &prior)?,
             "deepseek-harness" => dsh(before.as_deref(), source, &models, &prior)?,
             "zcode" if modern_zcode => {
@@ -1400,7 +1476,7 @@ fn apply_inner(
         backups,
         message: if independent_zcode {
             "已使用独立的 LoliCode 托管提供商，保留原有同名或已修改配置；请重新打开目标应用或新建会话。"
-        } else if target == "workbuddy" || target == "deepseek-harness" {
+        } else if matches!(target, "workbuddy" | "deepseek-harness" | "codebuddy") {
             "已添加 LoliCode 模型；请在目标应用中选择模型，现有会话保持原选择。"
         } else {
             "已添加 LoliCode 模型并设置默认模型；请重新打开目标应用或新建会话。"
