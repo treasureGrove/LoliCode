@@ -1,0 +1,47 @@
+{
+  "version": "4.0.22",
+  "items": [
+    {
+      "type": "fix",
+      "zh": "修复 MiMo 配置校验失败、DSH YAML 导入与 ZCode 配置冲突处理",
+      "zh-TW": "修復 MiMo 設定驗證失敗、DSH YAML 匯入與 ZCode 設定衝突處理",
+      "en": "Fix MiMo validation, DSH YAML imports and ZCode configuration conflict handling",
+      "ja": "MiMo 設定検証、DSH YAML 読み込み、ZCode 設定競合の処理を修正"
+    },
+    {
+      "type": "improve",
+      "zh": "支持 GitHub Copilot 标准与长上下文档位，刷新后保留选择",
+      "zh-TW": "支援 GitHub Copilot 標準與長上下文檔位，重新整理後保留選擇",
+      "en": "Support GitHub Copilot standard and long context tiers with persistent selection",
+      "ja": "GitHub Copilot の標準・長文コンテキストと更新後の選択保持に対応"
+    },
+    {
+      "type": "new",
+      "zh": "加入原生配置与 LoliCode 路由切换，完善本地 Agent 管理",
+      "zh-TW": "加入原生設定與 LoliCode 路由切換，完善本機 Agent 管理",
+      "en": "Add native and LoliCode route switching and expand local agent management",
+      "ja": "ネイティブ設定と LoliCode ルーティングの切替、ローカル Agent 管理を改善"
+    },
+    {
+      "type": "fix",
+      "zh": "修复 LoliCode 自身用量记录与渠道统计",
+      "zh-TW": "修復 LoliCode 自身用量記錄與渠道統計",
+      "en": "Fix LoliCode usage recording and channel statistics",
+      "ja": "LoliCode 自体の使用量記録とチャネル統計を修正"
+    },
+    {
+      "type": "improve",
+      "zh": "完善酒馆人物卡预设与 Unreal Editor 配置桥",
+      "zh-TW": "完善酒館人物卡預設與 Unreal Editor 設定橋接",
+      "en": "Improve Tavern character presets and Unreal Editor bridge setup",
+      "ja": "酒場のキャラクタープリセットと Unreal Editor 設定ブリッジを改善"
+    },
+    {
+      "type": "improve",
+      "zh": "统一 LoliCode 产品与网关名称，保留旧数据和升级路径",
+      "zh-TW": "統一 LoliCode 產品與閘道名稱，保留舊資料和升級路徑",
+      "en": "Unify LoliCode product and gateway branding while retaining existing data and upgrade paths",
+      "ja": "製品名とゲートウェイ名を LoliCode に統一し既存データと更新経路を維持"
+    }
+  ]
+}
