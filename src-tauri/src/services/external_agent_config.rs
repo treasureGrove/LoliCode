@@ -417,11 +417,12 @@ fn zcode_provider_name(key: &str) -> String {
 }
 fn model_value(model: &ChannelModel) -> Value {
     let mut value = json!({"id":model.id,"name":model.name.as_deref().unwrap_or(&model.id),"tool_call":model.supports_tools != Some(false)});
-    if let Some(context) = model.effective_context_limit() {
-        value["limit"]["context"] = json!(context);
-    }
-    if let Some(output) = model.output_limit {
-        value["limit"]["output"] = json!(output);
+    // MiMo (and the legacy OpenCode-shaped config) accepts `limit` only when
+    // both required fields are present. Catalogs often report only one value;
+    // omit the override in that case so the client can use its own defaults.
+    // Never invent a missing upstream limit just to make the config validate.
+    if let (Some(context), Some(output)) = (model.effective_context_limit(), model.output_limit) {
+        value["limit"] = json!({"context": context, "output": output});
     }
     if let Some(input) = &model.input_modalities {
         value["modalities"] = json!({"input":input,"output":["text"]});

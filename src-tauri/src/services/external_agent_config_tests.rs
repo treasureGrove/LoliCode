@@ -582,6 +582,89 @@ fn external_managed_provider_manual_edits_are_not_overwritten() {
 }
 
 #[test]
+fn external_mimo_partial_catalog_limits_produce_a_loadable_config() {
+    let directory = tempdir().unwrap();
+    let mut catalog = source();
+    let complete = catalog.models[0].clone();
+    catalog.models = [
+        ("complete", Some(128000), Some(8192)),
+        ("context-only", Some(1000000), None),
+        ("output-only", None, Some(64000)),
+        ("unknown", None, None),
+    ]
+    .into_iter()
+    .map(|(id, context, output)| {
+        let mut model = complete.clone();
+        model.id = id.into();
+        model.context_limit = context;
+        model.output_limit = output;
+        model
+    })
+    .collect();
+    let outcome = apply_at("mimocode", &catalog, "context-only", directory.path()).unwrap();
+    let document = parsed(Path::new(&outcome.files[0]));
+    assert_eq!(document["model"], "lolicode/context-only");
+    let models = &document["provider"]["lolicode"]["models"];
+    assert_eq!(
+        models["complete"]["limit"],
+        json!({"context":128000,"output":8192})
+    );
+    for id in ["context-only", "output-only", "unknown"] {
+        assert!(
+            models[id].get("limit").is_none(),
+            "{id}: MiMo requires both context and output in a limit override"
+        );
+        assert_eq!(models[id]["tool_call"], true);
+        assert_eq!(models[id]["modalities"]["input"], json!(["text", "image"]));
+    }
+}
+
+#[test]
+fn external_mimo_reapply_repairs_owned_partial_limits_with_a_backup() {
+    let directory = tempdir().unwrap();
+    let mut catalog = source();
+    catalog.models[0].output_limit = None;
+    apply_at("mimocode", &catalog, "channel/model", directory.path()).unwrap();
+    let path = paths("mimocode", &Locations::fixture(directory.path()))
+        .unwrap()
+        .remove(0);
+    // Simulate the previous writer and its ownership ledger, keeping unrelated
+    // settings in place. Only the managed provider may be repaired on reapply.
+    let mut legacy = parsed(&path);
+    legacy["provider"]["lolicode"]["models"]["channel/model"]["limit"] = json!({"context":128000});
+    legacy["theme"] = json!("keep-my-theme");
+    let before = json_bytes(&legacy).unwrap();
+    fs::write(&path, &before).unwrap();
+    let marker = directory
+        .path()
+        .join(".tai-switch/external-model-config/mimocode.json");
+    let mut ledger: Ownership = serde_json::from_slice(&fs::read(&marker).unwrap()).unwrap();
+    ledger
+        .files
+        .get_mut(&path.to_string_lossy().into_owned())
+        .unwrap()
+        .insert(
+            "lolicode".into(),
+            json_digest(&legacy["provider"]["lolicode"]).unwrap(),
+        );
+    fs::write(&marker, serde_json::to_vec(&ledger).unwrap()).unwrap();
+    let result = apply_at("mimocode", &catalog, "channel/model", directory.path()).unwrap();
+    assert_eq!(fs::read(&result.backups[0]).unwrap(), before);
+    assert_eq!(parsed(&path)["theme"], "keep-my-theme");
+    assert!(
+        parsed(&path)["provider"]["lolicode"]["models"]["channel/model"]
+            .get("limit")
+            .is_none()
+    );
+    assert!(
+        apply_at("mimocode", &catalog, "channel/model", directory.path())
+            .unwrap()
+            .backups
+            .is_empty()
+    );
+}
+
+#[test]
 fn external_zcode_legacy_collision_reserves_one_provider_and_reuses_it_on_rotation() {
     let directory = tempdir().unwrap();
     let path = directory.path().join(".zcode/v2/config.json");
