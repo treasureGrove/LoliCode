@@ -2,7 +2,7 @@
 
 本流程是 LoliCode 自己的发布链路，不复用 CCSwitch 的公钥、更新地址、GitHub workflow 或下载站清单。`scripts/lolicode-release.mjs` 仅在本地产生并验证发布目录，不上传文件，不读取私钥或 `.env`。
 
-当前正式更新版本为 **4.0.21**，见[本次交付记录](lolicode-4.0.21-delivery.md)。公开分发目前是 **Windows x64 NSIS 安装版与便携 ZIP**；macOS 和 Linux 是产品目标，尚未发布对应安装包。真实发布结果记录在每版交付文档中，不能用待发布清单替代发布证据。
+当前正式更新版本为 **4.0.22**，见[本次交付记录](lolicode-4.0.22-delivery.md)。公开分发目前是 **Windows x64 NSIS 安装版与便携 ZIP**；macOS 和 Linux 是产品目标，尚未发布对应安装包。真实发布结果记录在每版交付文档中，不能用待发布清单替代发布证据。
 
 历史 **4.0.21-rc.1／rc.2 测试候选版**保留独立清单和原附件；测试版公开不能算正式更新上线。4.0.21 已同步正式 latest、官网和 GitHub Latest，并验证旧版默认源下载验签。真实用户账号、界面热更新 WebView 与其余功能场景仍按持续验收范围跟进。
 
@@ -11,7 +11,7 @@
 - 源码与发布记录：[treasureGrove/LoliCode](https://github.com/treasureGrove/LoliCode)。
 - 正式签名更新源：[updates/latest.json](https://tools.treasuregrove.art/lolicode/updates/latest.json)。
 
-4.0.20 的安装器与便携包由 R2、公开 GitHub Releases 同时保存；官网和更新清单使用 `https://lolicode.com/downloads/releases/4.0.20/<文件名>`。服务器仅检查已知 R2 对象并返回跳转；R2 异常时选择同版本 GitHub 文件，下载字节不经过官网服务器。这是下载前选路，不会在客户端传输中断后自动接管连接。R2 当前使用临时公开开发地址，后续可替换上游而保持官网路径不变。具体限制和验收结果见交付记录。
+4.0.22 的安装器与便携包由 R2、公开 GitHub Releases 同时保存；官网和更新清单使用 `https://lolicode.com/downloads/releases/4.0.22/<文件名>`，旧版下载路由保留。服务器仅检查已知 R2 对象并返回跳转；R2 异常时选择同版本 GitHub 文件，下载字节不经过官网服务器。这是下载前选路，不会在客户端传输中断后自动接管连接。R2 当前使用临时公开开发地址，后续可替换上游而保持官网路径不变。具体限制和验收结果见交付记录。
 
 ## 更新文件约定
 
