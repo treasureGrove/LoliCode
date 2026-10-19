@@ -23,20 +23,6 @@
       "ja": "ネイティブ設定と LoliCode ルーティングの切替、ローカル Agent 管理を改善"
     },
     {
-      "type": "fix",
-      "zh": "修复 LoliCode 自身用量记录与渠道统计",
-      "zh-TW": "修復 LoliCode 自身用量記錄與渠道統計",
-      "en": "Fix LoliCode usage recording and channel statistics",
-      "ja": "LoliCode 自体の使用量記録とチャネル統計を修正"
-    },
-    {
-      "type": "improve",
-      "zh": "完善酒馆人物卡预设与 Unreal Editor 配置桥",
-      "zh-TW": "完善酒館人物卡預設與 Unreal Editor 設定橋接",
-      "en": "Improve Tavern character presets and Unreal Editor bridge setup",
-      "ja": "酒場のキャラクタープリセットと Unreal Editor 設定ブリッジを改善"
-    },
-    {
       "type": "improve",
       "zh": "统一 LoliCode 产品与网关名称，保留旧数据和升级路径",
       "zh-TW": "統一 LoliCode 產品與閘道名稱，保留舊資料和升級路徑",
