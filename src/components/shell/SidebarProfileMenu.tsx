@@ -10,6 +10,7 @@ import {
   LogOut,
   RefreshCw,
   Settings,
+  Smartphone,
   UserRound,
 } from "lucide-react";
 import { APP_NAME } from "@/lib/branding";
@@ -35,6 +36,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import "./sidebar-profile-menu.css";
+import { LolicodeRelayDialog } from "./LolicodeRelayDialog";
+import { MobileCompanionDialog } from "./MobileCompanionDialog";
 
 export interface SidebarProfileMenuProps {
   onOpenSettings: () => void;
@@ -69,7 +72,7 @@ function AccountAvatar({ account }: { account: LolicodeAccount | null }) {
   );
 }
 
-/** Website identity is separate from model-provider credentials. */
+/** One forum identity also unlocks the sponsored model allowance. */
 export function SidebarProfileMenu({
   onOpenSettings,
   onOpenUpdates,
@@ -82,6 +85,8 @@ export function SidebarProfileMenu({
   const identity = useLolicodeAccount();
   const { account } = identity;
   const [loginOpen, setLoginOpen] = useState(false);
+  const [relayOpen, setRelayOpen] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
   const [identification, setIdentification] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -189,6 +194,12 @@ export function SidebarProfileMenu({
           )}
           {account ? (
             <>
+              <DropdownMenuItem onSelect={() => setRelayOpen(true)}>
+                {text(
+                  "公益模型与每日额度",
+                  "Sponsored models and daily allowance",
+                )}
+              </DropdownMenuItem>
               <DropdownMenuItem
                 onSelect={() =>
                   void perform(() =>
@@ -236,6 +247,10 @@ export function SidebarProfileMenu({
             </DropdownMenuItem>
           )}
           <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={() => setMobileOpen(true)}>
+            <Smartphone size={15} aria-hidden="true" />
+            {text("连接手机", "Connect a phone")}
+          </DropdownMenuItem>
           <DropdownMenuItem onSelect={onOpenSettings}>
             <Settings size={15} aria-hidden="true" />
             {settingsLabel}
@@ -267,6 +282,15 @@ export function SidebarProfileMenu({
           )}
         </DropdownMenuContent>
       </DropdownMenu>
+      <MobileCompanionDialog
+        open={mobileOpen}
+        onOpenChange={setMobileOpen}
+        accountId={account?.id ?? null}
+        onRequestLogin={() => {
+          setMobileOpen(false);
+          changeLoginOpen(true);
+        }}
+      />
       <Dialog open={loginOpen} onOpenChange={changeLoginOpen}>
         <DialogContent
           className="tai-shell-account-dialog"
@@ -281,8 +305,8 @@ export function SidebarProfileMenu({
             </DialogTitle>
             <DialogDescription>
               {text(
-                "使用 lolicode.com 账户，同步显示你的昵称和头像。",
-                "Use your lolicode.com account to display your name and avatar.",
+                "使用原有 lolicode.com 账号登录，公益模型共用这个账号，无需再次注册。",
+                "Sign in with your existing lolicode.com account. Sponsored models use the same account.",
               )}
             </DialogDescription>
           </DialogHeader>
@@ -404,6 +428,11 @@ export function SidebarProfileMenu({
           </form>
         </DialogContent>
       </Dialog>
+      <LolicodeRelayDialog
+        open={relayOpen}
+        onOpenChange={setRelayOpen}
+        accountId={account?.id ?? null}
+      />
     </>
   );
 }

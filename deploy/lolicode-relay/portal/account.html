@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#9e2445" />
+    <title>我的公益额度 · LoliCode</title>
+    <link rel="icon" href="https://lolicode.com/desktop-assets/favicon-32.png" />
+    <link rel="stylesheet" href="/relay-assets/account.css?v=20261021-2" />
+    <script src="/relay-assets/account.js?v=20261021-1" defer></script>
+  </head>
+  <body>
+    <header class="header page-width">
+      <a class="brand" href="/"><img src="https://lolicode.com/desktop-assets/favicon-32.png" alt="" width="34" height="34" />LoliCode <span>Relay</span></a>
+      <nav aria-label="主导航"><a href="/">首页</a><a href="/account" aria-current="page">我的额度</a><a href="https://lolicode.com/#download">下载客户端 ↗</a></nav>
+    </header>
+    <main class="page-width">
+      <section class="intro">
+        <p class="eyebrow">YOUR ACCOUNT. A LITTLE SHARED MAGIC.</p>
+        <h1>熟悉的账号，<br />多一点<span>创作的余地。</span></h1>
+        <p>LoliCode 社区、客户端与公益模型，共用同一个账号。<br />在这里查看额度，在客户端继续你的创作。</p>
+      </section>
+      <p id="message" class="message" role="status" aria-live="polite">正在确认登录状态…</p>
+      <section id="login-panel" class="account-layout" hidden aria-labelledby="login-title">
+        <div class="paper login-card">
+          <p class="eyebrow">WELCOME BACK</p><h2 id="login-title">登录 LoliCode 账号</h2>
+          <p class="muted">直接使用社区的用户名或邮箱和密码，无需再注册。</p>
+          <form id="login-form">
+            <label for="identification">用户名或邮箱</label>
+            <input id="identification" name="username" autocomplete="username" maxlength="512" required placeholder="你的 LoliCode 账号" />
+            <label for="password">密码</label>
+            <input id="password" name="password" type="password" autocomplete="current-password" maxlength="1024" required placeholder="社区账号密码" />
+            <button id="login-submit" class="button" type="submit">登录并查看额度 <span>↗</span></button>
+          </form>
+          <div class="account-links"><a href="/register">还没有账号？去注册 ↗</a><a href="https://lolicode.com/all?account=login">忘记密码？</a></div>
+        </div>
+        <aside class="guide">
+          <span class="stamp" aria-hidden="true">LC<br />♡</span>
+          <h2>一份小小的支持，<br />每天重新开始。</h2>
+          <p>每天 <strong>20 次请求</strong>、<strong>10 万 token</strong>，同一账号在网页和不同设备查看的是同一份额度。</p>
+          <p>模型在 LoliCode 客户端内使用。网页登录后可以查看剩余额度与当前开放的模型。</p>
+          <a class="text-link" href="https://lolicode.com/#download">准备好客户端，开始创作 ↗</a>
+        </aside>
+      </section>
+      <section id="account-panel" hidden aria-labelledby="account-title">
+        <div class="account-heading"><div><p class="eyebrow">MY DAILY ALLOWANCE</p><h2 id="account-title">你好，<span id="display-name"></span>。</h2><p id="username" class="muted"></p></div><div class="actions"><button id="refresh" class="button secondary" type="button">刷新额度 ↻</button><button id="logout" class="quiet" type="button">退出登录</button></div></div>
+        <div class="quota-grid">
+          <article class="paper quota"><p class="eyebrow">REQUESTS / 今日剩余请求</p><p class="amount"><strong id="requests-remaining">—</strong><span>次</span></p><progress id="requests-progress" aria-label="今日剩余请求"></progress><p id="requests-detail" class="muted"></p></article>
+          <article class="paper quota"><p class="eyebrow">TOKENS / 今日剩余额度</p><p class="amount"><strong id="tokens-remaining">—</strong><span>token</span></p><progress id="tokens-progress" aria-label="今日剩余 token"></progress><p id="tokens-detail" class="muted"></p></article>
+        </div>
+        <p id="reset" class="reset"></p>
+        <div class="paper model-card"><div><p class="eyebrow">AVAILABLE MODELS</p><h2>此刻可以使用的模型</h2></div><p id="availability"></p><ul id="models"></ul><p id="trial-end" class="muted"></p><p class="muted">在 LoliCode 客户端登录同一账号，打开头像菜单 → 公益模型与每日额度 → 刷新。若当前版本没有这个入口，请先更新客户端。</p><a class="text-link" href="https://lolicode.com/#download">下载 LoliCode ↗</a></div>
+      </section>
+      <noscript><p class="message error">请启用 JavaScript 后登录查看额度。</p></noscript>
+    </main>
+    <footer class="page-width"><span>Made with care. Shared with you.</span><a href="/sign-in?admin=1">管理员后台 ↗</a></footer>
+  </body>
+</html>

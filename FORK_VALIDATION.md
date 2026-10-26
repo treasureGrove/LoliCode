@@ -28,32 +28,25 @@ Node 实际使用 24.19，仓库 .node-version 原样保留为 22.12.0；pnpm �
 
 原生启动验证没有导入用户真实 Key、切换真实客户端、迁移旧 FreeHub 数据或覆盖正在运行的原 CC Switch。后续复查发现，原后端 Hermes 测试 helper 未隔离 Windows 平台目录，曾向本机 Hermes YAML 留下一条测试记录；修复和清理记录见下方。真实供应商、全部原生 UI 操作、干净 Windows 安装与升级尚未验收。
 
-Windows 程序输出：`src-tauri/target/debug/cc-switch.exe`。它是本轮原版基线的验证构建，当前产品界面仍为 CC Switch，TAI 品牌和发布安装包留到后续定制阶段。
+Windows 程序输出：`src-tauri/target/debug/cc-switch.exe`。它是本轮原版基线的验证构建，当前产品界面仍为 CC Switch，LoliCode 品牌定制和独立发布安装包留到后续阶段。
 
 ## 本机证据
 
 以下文件仅保存在本机，不提交测试运行数据：
 
-- `C:/Users/admin/.codex/artifacts/tai-switch-upstream-copy-verification.json`
-- `C:/Users/admin/.codex/artifacts/tai-switch-frontend-full-tests.json`
-- `C:/Users/admin/.codex/artifacts/tai-switch-app-tests.json`
-- `C:/Users/admin/.codex/artifacts/tai-switch-backend-tests-serial-build.log`
-- `C:/Users/admin/.codex/artifacts/tai-switch-hermes-test.log`
-- `C:/Users/admin/.codex/artifacts/tai-switch-backend-integration-tests.log`
-- `C:/Users/admin/.codex/artifacts/tai-switch-native-startup.json`
-- `C:/Users/admin/.codex/artifacts/tai-switch-native-verification-build.log`
+- 复制校验、前后端测试、构建和启动报告保存在本机 artifacts 目录，不提交测试运行数据。
 
 服务器任务书已更新为 v0.4，旧稿备份：`/www/backups/free-gateway/taskbook/TASKBOOK.v0.3.20261013-180108.38c18fe2.md`。新稿 SHA256 为 `4dd3d64a8f6aa0e6cced1f31816b4ea383f23c979bf86c51d79b94dabed8b873`。
 
-## 2026-10-13 测试修复与 TAI 打包
+## 2026-10-13 测试修复与 Windows 隔离打包
 
 用户要求检查失败代码、修复并交付 Windows EXE。修复基于纯复制提交，未更改供应商切换、路由、模型和计费算法。
 
 - App 测试原本在第一条测试内动态导入庞大的应用模块，冷加载超过 10 秒会在超时清理后继续挂载，再污染下一条测试。改为测试收集阶段静态导入、提升 mock 初始化并清理每次创建的 QueryClient；原 10 秒操作断言仍保留。
 - Hermes 的额外导入记录来自 Windows `%LOCALAPPDATA%` / `HERMES_HOME` 绕过旧测试 helper 的 HOME 隔离。统一复用 RAII TempHome，隔离并恢复这些变量，包括 panic 路径；增加环境覆盖隔离回归，并验证重复导入返回 0。导入算法保持原实现。
 - 同时检查前次测试遗留：本机 Hermes YAML 中确有 `existing-hermes` 测试条目。仅在名称、地址、模型、测试凭据和完整字段集合全部匹配固定测试数据时移除；先在 Hermes 目录备份，比较移除前后的全部 YAML 语义，确保除了这一条测试记录之外的内容一致。清理后再次核对，测试条目为 0；没有导出或记录真实凭据。
-- TAI 的应用标识、数据、设备设置、备份、自动启动名称与窗口文案独立。默认目录为 `~/.tai-switch`，不回退到原 CC Switch 的数据库。数据库文件名及数据结构保留，MIT 许可证和原作者署名保留。
-- 本测试版关闭原 CC Switch 更新源和 `ccswitch://` 注册，安装包使用独立的 `TAI Switch Test` 产品目录。详细试用和构建步骤见 `TESTING_TAI.md`。
+- 测试构建的应用标识、数据、设备设置、备份、自动启动名称与窗口文案独立。默认目录为 `~/.tai-switch`，不回退到原 CC Switch 的数据库。数据库文件名及数据结构保留，MIT 许可证和原作者署名保留。
+- 本测试版关闭原 CC Switch 更新源和 `ccswitch://` 注册，安装包使用独立测试目录。详细试用和构建步骤见 `TESTING_LOLICODE.md`。
 
 修复后验证：
 
@@ -62,19 +55,19 @@ Windows 程序输出：`src-tauri/target/debug/cc-switch.exe`。它是本轮原�
 - TypeScript、Prettier、Rustfmt、Clippy（警告视为错误）均通过。
 - 使用原固定 Rust 1.95 / pnpm 10.12.3。Cargo 锁文件仅更改本地项目包名；第三方依赖版本未更新。
 
-本机证据：`C:/Users/admin/.codex/artifacts/tai-switch-fixed-frontend-tests.json`、`tai-switch-fixed-backend-tests.log`、`tai-switch-fixed-clippy.log`、`tai-switch-fixed-typecheck-final.log`（后三个同目录）。
+本机证据：前端与后端测试、Clippy 和类型检查日志保存在本机 artifacts 目录，不提交。
 
 ### Windows 成品
 
-- Release 构建与 NSIS 打包成功，Windows x64 GUI 程序（无控制台窗口），版本 4.0.10，产品名称 `TAI Switch Test`。
-- 交付目录：`D:/projectGithub/TAI-Switch/release/TAI-Switch-4.0.10-test/`。
-- 直接运行 `tai-switch.exe`：43,282,432 字节，SHA256 `954dffaba68480dfa73014c3fae307d1fd27e14b879c3914ff49bfe254ec9de7`。
-- 安装包 `TAI Switch Test_4.0.10_x64-setup.exe`：12,086,265 字节，SHA256 `7b60cf166da51d19638a132c90aecaac8deb471124794d4f1672848b6b11505d`。
+- Release 构建与 NSIS 打包成功，Windows x64 GUI 程序（无控制台窗口），版本 4.0.10，使用独立测试产品标识。
+- 测试交付物位于 `release/` 下的独立历史目录。
+- 直接运行版：43,282,432 字节，SHA256 `954dffaba68480dfa73014c3fae307d1fd27e14b879c3914ff49bfe254ec9de7`。
+- 安装包：12,086,265 字节，SHA256 `7b60cf166da51d19638a132c90aecaac8deb471124794d4f1672848b6b11505d`。
 - 7-Zip 提取校验通过。安装包内程序与直接运行版仅存在 Tauri 预期的 bundle 类型标记差异（`UNK` → `NSS`），其余字节全部相同；对应 `tauri-utils::platform::bundle_type()` 的原实现。
 - 直接运行版和提取的安装版分别在独立空白配置中启动，均存活、创建 `~/.tai-switch/cc-switch.db` 并启动 WebView2 子进程；测试目录没有 `.cc-switch`，原 CC Switch 进程均保留。验证仅结束自己创建的测试进程。
 - 测试包未签名。未执行会修改安装注册表的安装向导，也未宣称已完成干净系统安装、升级、全部原生界面或真实供应商验收。
 
-成品验证证据：`tai-switch-fixed-release-build.log`、`tai-switch-fixed-native-startup.json`、`tai-switch-fixed-installer-native-startup.json`、`tai-switch-fixed-installer-payload-verification.json`（均位于上述 artifacts 目录）。交付目录包含许可证、说明、测试摘要、启动验证与 SHA256SUMS.txt，全部构建产物不纳入 Git。
+成品验证证据保存在本机 artifacts 目录。交付目录包含许可证、说明、测试摘要、启动验证与 SHA256SUMS.txt，全部构建产物不纳入 Git。
 
 服务器任务书更新为 v0.4.1，SHA256 `bb2ffc80281730a934271623b08fe2bc9de4d7c86116acf0053fcacf194080c3`；旧稿备份到 `/www/backups/free-gateway/taskbook/TASKBOOK.v0.4.20261013.before-test-fixes.4dd3d64a.md`。服务器仍只负责任务书与 Git 备份。
 
@@ -93,16 +86,16 @@ Windows 程序输出：`src-tauri/target/debug/cc-switch.exe`。它是本轮原�
 - 实际操作验证明暗主题、供应商新增表单、路由视图、用量统计、侧栏开合及未保存内容确认；选择“继续编辑”后草稿名称保留。
 - 前端生产构建通过。原生打包第一次遇到 LLVM 内存不足，结束本次预览与测试后重试；未修改系统内存设置或结束用户的其他应用。
 
-测试证据：`C:/Users/admin/.codex/artifacts/tai-switch-taiji-frontend-tests.json`、`tai-switch-taiji-app-final.json`、`tai-switch-taiji-typecheck.log`（同目录）。界面截图位于 `tai-switch-taiji-ui-evidence/`；截图中的数据不代表真实调用或账户费用。
+测试证据和界面截图保存在本机 artifacts 目录；截图中的数据不代表真实调用或账户费用。
 
 ### 太极 UI Windows 成品
 
-- Release 重试及 NSIS 打包成功；日志为 `C:/Users/admin/.codex/artifacts/tai-switch-taiji-release-build-retry.log`。
-- 新交付目录：`D:/projectGithub/TAI-Switch/release/TAI-Switch-4.0.10-taiji-20261014/`。旧基线成品保留且复核哈希未变。
-- 直接运行 `tai-switch.exe`：43,290,624 字节，SHA256 `028eb0dde627fe876b3f7e5dfa2534537dc9b17103dd0d3f3e45c6cd016281d5`。
-- 安装包 `TAI Switch Test_4.0.10_x64-setup.exe`：12,089,405 字节，SHA256 `54f9b2755ad2cf92f3b37aedf41d49552acde7d972eb759ec6fa1b29715fa25f`。
+- Release 重试及 NSIS 打包成功；对应日志保存在本机 artifacts 目录。
+- 新交付物位于 `release/` 下的独立历史目录；旧基线成品保留且复核哈希未变。
+- 直接运行版：43,290,624 字节，SHA256 `028eb0dde627fe876b3f7e5dfa2534537dc9b17103dd0d3f3e45c6cd016281d5`。
+- 安装包：12,089,405 字节，SHA256 `54f9b2755ad2cf92f3b37aedf41d49552acde7d972eb759ec6fa1b29715fa25f`。
 - 安装包提取校验通过：内含 EXE 与直接运行版仅存在预期 Tauri 标记 `UNK` → `NSS` 差异，其余字节完全相同。
-- 用户退出旧 TAI 后，分别在两个全新临时配置目录启动直接运行版和安装包提取版。两者均保持运行、创建隔离数据库并启动 WebView2 子进程；没有创建 `.cc-switch`，原 CC Switch 进程保留，仅结束本次检查自身进程。
+- 用户退出旧版本后，分别在两个全新临时配置目录启动直接运行版和安装包提取版。两者均保持运行、创建隔离数据库并启动 WebView2 子进程；没有创建 `.cc-switch`，原 CC Switch 进程保留，仅结束本次检查自身进程。
 - 交付目录保存界面测试摘要、两份启动记录、安装包内容校验、示例截图、试用说明、许可证、源码提交记录与 SHA256 清单。程序继续使用用户已有 `.tai-switch` 配置，截图使用示例数据。
 - 本轮没有重新运行未改动的 Rust 业务测试、调用真实渠道或执行修改安装注册表的安装向导；测试包未签名，干净系统安装和升级仍待验证。
 
@@ -116,10 +109,10 @@ Windows 程序输出：`src-tauri/target/debug/cc-switch.exe`。它是本轮原�
 
 ### 本轮验证
 
-- 最终源码全量前端回归：**218 个文件、2,641 项全部通过，0 失败、0 跳过**；单 worker、关闭文件并发，用时 574.72 秒。证据：`C:/Users/admin/.codex/artifacts/tai-switch-ui-rebuild-final-full-tests.json` 及同名 `.log`。JSON 的 561 是嵌套测试组数量，不是文件数。
+- 最终源码全量前端回归：**218 个文件、2,641 项全部通过，0 失败、0 跳过**；单 worker、关闭文件并发，用时 574.72 秒。验证报告及日志保存在本机 artifacts 目录。JSON 的 561 是嵌套测试组数量，不是文件数。
 - TypeScript 与改动文件的 Prettier 检查通过。最终前端生产构建通过，入口 `index-Dm4iYZGe.js`、样式 `index-7wyBhni3.css`。
 - 浏览器使用仓库外隔离入口加载真实 React 组件，明确标记模拟供应商/金额并阻止外部连接，正式构建不含模拟服务。验证 1000×650 明亮工作台、900×600 深色用量、导航、侧栏、详情连续反向切换 10 次、模式视图连续切换 10 次，以及草稿取消/继续/确认放弃。搜索输入框 Esc 后焦点回到搜索按钮。
-- 两张示例截图位于 `C:/Users/admin/.codex/artifacts/tai-switch-motion-evidence/`；截图中的供应商和金额不代表真实业务记录。
+- 两张示例截图保存在本机 motion-evidence 目录；截图中的供应商和金额不代表真实业务记录。
 - 默认并发测试与构建同时运行时发生内存分配失败；保留失败日志后改为低并发串行完成。未修改系统内存设置或结束用户其他应用。
 
 ### 原生检查范围
@@ -128,4 +121,4 @@ Windows 程序输出：`src-tauri/target/debug/cc-switch.exe`。它是本轮原�
 
 用户随后明确要求“**不用录屏，我自己debug**”，因此停止窗口操作和录屏，不再安排该项验收。最终版本的原生交互、125%/150% 系统缩放、减少动态效果实机体验及帧率采样均由用户后续调试；不宣称持续 60fps。没有运行修改注册表的安装向导，也未重复运行未改动的 Rust 业务测试。
 
-本轮交付使用独立目录 `release/TAI-Switch-4.0.10-motion-20261014/`，旧 test/taiji 成品保留。最终程序、安装包及资源核对结果随交付目录的 `README.md`、`SHA256SUMS.txt` 和安装包内容校验记录提供；早期含 `index-B1dkIbPh.js` 的构建不作为最终交付。
+本轮交付使用 `release/` 下的独立目录，早期测试成品保留。最终程序、安装包及资源核对结果随交付目录的 `README.md`、`SHA256SUMS.txt` 和安装包内容校验记录提供；早期含 `index-B1dkIbPh.js` 的构建不作为最终交付。

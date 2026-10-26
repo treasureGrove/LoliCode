@@ -16,7 +16,7 @@
 本机脱敏证据：`release/native-glm-managed-acceptance-20261017.json`。该目录用于验收产物，不保证随仓库提交。
 
 ```powershell
-C:/Users/admin/.cargo/bin/cargo.exe run --manifest-path src-tauri/Cargo.toml --features test-hooks --example lolicode_native_glm_smoke -j2 -- --out D:/projectGithub/TAI-Switch/release/native-glm-managed-acceptance-20261017.json
+C:/Users/admin/.cargo/bin/cargo.exe run --manifest-path src-tauri/Cargo.toml --features test-hooks --example lolicode_native_glm_smoke -j2 -- --out release/native-glm-managed-acceptance-20261017.json
 ```
 
 执行会真实消耗当前明确授权的 GLM 订阅。示例仅适用于已有相应 managed channel/account 的本机环境，不会自动换用其它渠道或猜测密钥。
@@ -28,7 +28,7 @@ C:/Users/admin/.cargo/bin/cargo.exe run --manifest-path src-tauri/Cargo.toml --f
 同日另跑 `--memory-smoke`，保留上述图片与 JS 验收证据不变。使用全新的临时 NativeEngine 存储及项目，不读取或改变用户实际记忆。
 
 ```powershell
-C:/Users/admin/.cargo/bin/cargo.exe run --manifest-path src-tauri/Cargo.toml --features test-hooks --example lolicode_native_glm_smoke -j2 -- --memory-smoke --out D:/projectGithub/TAI-Switch/release/native-glm-memory-acceptance-20261017.json
+C:/Users/admin/.cargo/bin/cargo.exe run --manifest-path src-tauri/Cargo.toml --features test-hooks --example lolicode_native_glm_smoke -j2 -- --memory-smoke --out release/native-glm-memory-acceptance-20261017.json
 ```
 
 - 保持默认记忆开关与确认策略，首会话使用 `ask` 权限。模型实际调用 `memory` 的 `add/user`；观察到 `user-once` 权限请求，确认前用户记忆为空，测试仅批准这条合成偏好。工具返回完成，临时 `memory.json` 中保存了内容与来源会话。
@@ -49,7 +49,7 @@ C:/Users/admin/.cargo/bin/cargo.exe run --manifest-path src-tauri/Cargo.toml --f
 新增 `--automation-smoke`，继续使用此前明确授权的 GLM 订阅作补充调试；`designatedTestkeyAcceptance=false`，不替代用户本次指定 testkey。先前图片、记忆、标题、工作流和酒馆证据保留，不把多个独立场景合并成一次验收。
 
 ```powershell
-C:/Users/admin/.cargo/bin/cargo.exe run --manifest-path src-tauri/Cargo.toml --features test-hooks --example lolicode_native_glm_smoke -- --automation-smoke --out D:/projectGithub/TAI-Switch/release/acceptance/glm-supplemental-automation.json
+C:/Users/admin/.cargo/bin/cargo.exe run --manifest-path src-tauri/Cargo.toml --features test-hooks --example lolicode_native_glm_smoke -- --automation-smoke --out release/acceptance/glm-supplemental-automation.json
 ```
 
 测试注册临时项目，使用生产自动化创建服务、调度检查、派发和结果监测，运行同一个 NativeEngine 与生产渠道网关。桌面宿主适配器继续负责真实账号解析和工程绑定；隔离适配器只替换宿主环境，未复制另一套调度或回执实现。
@@ -63,7 +63,7 @@ C:/Users/admin/.cargo/bin/cargo.exe run --manifest-path src-tauri/Cargo.toml --f
 ## 真实 SSH 与主 Agent 工具宿主（无外部模型）
 
 ```powershell
-C:/Users/admin/.cargo/bin/cargo.exe run --manifest-path src-tauri/Cargo.toml --features test-hooks --example lolicode_remote_agent_acceptance -- --ssh-config-alias tools --out D:/projectGithub/TAI-Switch/release/acceptance/remote-host-real-native-ssh-v2.json
+C:/Users/admin/.cargo/bin/cargo.exe run --manifest-path src-tauri/Cargo.toml --features test-hooks --example lolicode_remote_agent_acceptance -- --ssh-config-alias tools --out release/acceptance/remote-host-real-native-ssh-v2.json
 ```
 
 此入口必须由操作者明确选择已授权 SSH alias。它真实连接 Linux，只操作 nonce 标记的独立 `/tmp/lolicode-native-remote-*` 工程；本机数据库、占位目录与 NativeEngine 存储都是临时的。生产 `RemoteProjects` 和 `DesktopToolHost` 经同一个 NativeEngine 完成读取、修改、图片、权限和打断链路；远端不部署另一套 Agent。用本机有界 SSE 模型确定工具顺序，5 次本机模型请求、0 次外部模型请求，不使用 GLM 或 testkey。
@@ -81,7 +81,7 @@ C:/Users/admin/.cargo/bin/cargo.exe run --manifest-path src-tauri/Cargo.toml --f
 ## 真实 SSH 定时、闲时与取消（无外部提供商）
 
 ```powershell
-C:/Users/admin/.cargo/bin/cargo.exe run --manifest-path src-tauri/Cargo.toml --features test-hooks --example lolicode_remote_automation_acceptance -- --ssh-config-alias tools --out D:/projectGithub/TAI-Switch/release/acceptance/remote-automation-real-ssh-v3.json
+C:/Users/admin/.cargo/bin/cargo.exe run --manifest-path src-tauri/Cargo.toml --features test-hooks --example lolicode_remote_automation_acceptance -- --ssh-config-alias tools --out release/acceptance/remote-automation-real-ssh-v3.json
 ```
 
 此命令真实连接已授权 SSH alias，只写独立 nonce 工程和临时 SQLite/本体目录。实际等待下一分钟计划、读取当前 Windows 输入闲置时间，不修改 nextRunAt 或合成用户输入；生产调度器通过同一个 NativeEngine 的远程工具写入两份标记并回读。第三个远程进程由生产取消入口停止，/proc 确认退出。前台另选本地项目，范围隔离和跨工程取消拒绝均通过；本地确定性模型合计 5 次请求，无外部模型或凭据。
@@ -92,7 +92,7 @@ C:/Users/admin/.cargo/bin/cargo.exe run --manifest-path src-tauri/Cargo.toml --f
 ## 已安装 GitHub CLI 技能补充调试
 
 ```powershell
-C:/Users/admin/.cargo/bin/cargo.exe run --manifest-path src-tauri/Cargo.toml --features test-hooks --example lolicode_native_glm_smoke -- --marketplace-smoke --out D:/projectGithub/TAI-Switch/release/acceptance/glm-supplemental-marketplace-v3.json
+C:/Users/admin/.cargo/bin/cargo.exe run --manifest-path src-tauri/Cargo.toml --features test-hooks --example lolicode_native_glm_smoke -- --marketplace-smoke --out release/acceptance/glm-supplemental-marketplace-v3.json
 ```
 
 使用此前允许的 GLM 订阅，通过真实市场安装到临时扩展库、生产技能准备与 NativeEngine，要求参考已安装扩展说明后查询已有 CLI 版本，不指定工具名/技能 ID。模型实际 read_skill，再经一次权限批准执行 gh --version，真实版本和回复一致；停用/启用/重开/卸载检查通过。3 次真实请求、11,505 tokens，未安装依赖、登录或修改用户配置；不是指定 testkey 或桌面按钮验收。

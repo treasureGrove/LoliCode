@@ -37,6 +37,12 @@
   !insertmacro LoliCodePrepareProcessGuard
 
   ReadRegStr $OldMainBinaryName SHCTX "${UNINSTKEY}" "MainBinaryName"
+  ${If} $OldMainBinaryName == ""
+  ${AndIf} ${FileExists} "$INSTDIR\tai-switch.exe"
+    ; Some early installers did not record the binary name. Still guard the
+    ; known legacy executable and migrate its shortcuts after overwriting.
+    StrCpy $OldMainBinaryName "tai-switch.exe"
+  ${EndIf}
   ${If} $OldMainBinaryName == "tai-switch.exe"
     !insertmacro LoliCodeRunProcessGuard "$OldMainBinaryName"
   ${ElseIf} $OldMainBinaryName != "LoliCode.exe"

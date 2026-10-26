@@ -18,6 +18,8 @@ export type GlobalPage =
   | "agent"
   | "tavern"
   | "unreal"
+  | "rankings"
+  | "free-ai"
   | "channels"
   | "usage"
   | "auth"
@@ -59,6 +61,8 @@ const GLOBAL_PAGES: GlobalPage[] = [
   "agent",
   "tavern",
   "unreal",
+  "rankings",
+  "free-ai",
   "channels",
   "usage",
   "auth",

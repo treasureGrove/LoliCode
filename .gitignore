@@ -1,4 +1,9 @@
 node_modules/
+__pycache__/
+*.pyc
+*.pyo
+/.pnpm-store/
+/tmp/
 packages/contracts/dist/
 packages/platform-client/dist/
 packages/platform-host/dist/

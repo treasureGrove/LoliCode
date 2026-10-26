@@ -68,10 +68,10 @@
 
 ### 浏览器预览
 
-仓库外准备目录：`C:/Users/admin/.codex/artifacts/tai-switch-ui-rebuild-preview-20261014/`。它复用真实 React 应用与仓库测试状态，端口为 `127.0.0.1:3067`，不影响旧 3066 预览。运行：
+仓库外准备目录：本机 artifacts 下的隔离预览目录。它复用真实 React 应用与仓库测试状态，端口为 `127.0.0.1:3067`，不影响旧 3066 预览。运行：
 
 ```powershell
-pnpm exec vite --config C:/Users/admin/.codex/artifacts/tai-switch-ui-rebuild-preview-20261014/vite.config.mjs
+pnpm exec vite --config <隔离预览目录>/vite.config.mjs
 ```
 
 预览中所有供应商、用量和费用都是内存示例；画面附“隔离演示数据 · 浏览器预览”。配置通过 Vite 仅限开发模式的别名替换 Tauri，并硬拒绝 production build；CSP 与 fetch 包装阻止外部网络。正式构建不引用该目录。未知 Tauri 命令可能还需要补夹具；OS、OAuth、真实收费、安装和原生性能不能凭此验收。
@@ -80,9 +80,9 @@ pnpm exec vite --config C:/Users/admin/.codex/artifacts/tai-switch-ui-rebuild-pr
 
 ### Windows 原生与连续录屏
 
-已准备但未替代实测的仓库外辅助脚本：
+已准备但未替代实测的仓库外辅助脚本，位于本机隔离验证目录：
 
-- `C:/Users/admin/.codex/artifacts/tai-switch-ui-rebuild-validation/prepare-native.ps1`：默认只创建全新隔离空白 profile；加 `-Launch -ExePath <新 EXE>` 才启动。若已有 TAI 进程则拒绝启动并保留现场。分别隔离 TAI home、客户端目录、APPDATA、LOCALAPPDATA、Hermes、MiniMax、OpenCode 与 WebView2，清除继承凭据变量。它不启动 mock 后端。
+- `prepare-native.ps1`：默认只创建全新隔离空白 profile；加 `-Launch -ExePath <新 EXE>` 才启动。若已有应用进程则拒绝启动并保留现场。分别隔离用户数据根目录、客户端目录、APPDATA、LOCALAPPDATA、Hermes、MiniMax、OpenCode 与 WebView2，清除继承凭据变量。它不启动 mock 后端。
 - 同目录 `record-native-window.ps1 -SessionRecord <记录 JSON> -Seconds 45`：默认只检查并输出录制参数；加 `-Start` 才录制该自建进程主窗口。PID、程序路径和启动时间必须匹配，禁止抓整个桌面。默认 30fps 编码仅为视频采样参数，不能用作应用帧率证据。
 - 同目录 `stop-native.ps1 -SessionRecord <记录 JSON>`：只关闭这份记录匹配的自建测试进程，不清理用户目录或其他应用。
 
@@ -101,7 +101,7 @@ $env:CARGO_BUILD_JOBS = '1'
 pnpm exec tauri build --bundles nsis --config src-tauri/tauri.test.conf.json
 ```
 
-新成品放独立目录，不能覆盖 `release/TAI-Switch-4.0.10-test/` 或 `release/TAI-Switch-4.0.10-taiji-20261014/`。保留 MIT 与 Jason Young 署名、`.tai-switch` 数据位置、独立应用标识、更新与 URI 隔离。对 EXE/安装包计算 SHA256，提取安装包核对 payload；独立运行版与安装包内 EXE 的 Tauri bundle 标记可能不同，应使用已有验证逻辑核对除标记外全部字节。
+新成品放在独立目录，不能覆盖既有历史测试包。保留 MIT 与 Jason Young 署名、`.tai-switch` 数据位置、独立应用标识、更新与 URI 隔离。对 EXE/安装包计算 SHA256，提取安装包核对 payload；独立运行版与安装包内 EXE 的 Tauri bundle 标记可能不同，应使用已有验证逻辑核对除标记外全部字节。
 
 交付记录应逐项填写：实现覆盖、定向/全量测试结果、类型检查、构建、新 EXE 与安装包、原生交互、视频、窗口尺寸、系统缩放、减少动态效果、性能采样与未验证项。没有实际轨迹不能声称持续 60fps；没有执行安装向导不能声称安装/升级通过。
 

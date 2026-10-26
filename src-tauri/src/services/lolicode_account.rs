@@ -319,6 +319,27 @@ impl Default for LolicodeAccountState {
 }
 
 impl LolicodeAccountState {
+    /// Native transport only. Never expose this bearer through renderer IPC.
+    pub(crate) async fn relay_credential(
+        &self,
+        expected_id: Option<&str>,
+    ) -> Result<(String, String), String> {
+        self.status(false).await;
+        let session = self.session.lock().await;
+        let credential = session
+            .credential
+            .as_ref()
+            .ok_or("请先登录 LoliCode 账号。")?;
+        if expected_id.is_some_and(|id| id != credential.id) {
+            return Err("公益模型绑定的账号已切换，请刷新公益模型后重试。".into());
+        }
+        validate_credential(credential).map_err(|_| "LoliCode 登录凭据无效，请重新登录。")?;
+        Ok((
+            credential.id.clone(),
+            format!("lc1.{}.{}", credential.id, credential.token),
+        ))
+    }
+
     async fn delete_credential(&self) -> bool {
         let vault = self.vault.clone();
         matches!(
@@ -610,6 +631,27 @@ mod tests {
             parse_profile(public_profile, "42"),
             Err(ForumFailure::Unauthorized)
         ));
+    }
+
+    #[tokio::test]
+    async fn relay_transport_is_account_bound_and_logout_revokes_local_access() {
+        let state = service(
+            Arc::new(FakeForum::default()),
+            Arc::new(FakeVault::default()),
+        );
+        assert!(state.relay_credential(None).await.is_err());
+        state
+            .login("member".into(), "fixture password".into())
+            .await
+            .unwrap();
+        assert!(state.relay_credential(Some("7")).await.is_err());
+        let (id, bearer) = state.relay_credential(Some("42")).await.unwrap();
+        assert_eq!(id, "42");
+        assert_eq!(bearer, format!("lc1.42.{}", "a".repeat(40)));
+        let public = serde_json::to_string(&state.status(false).await).unwrap();
+        assert!(!public.contains(&bearer) && !public.contains(&"a".repeat(40)));
+        state.logout().await;
+        assert!(state.relay_credential(Some("42")).await.is_err());
     }
 
     #[tokio::test]

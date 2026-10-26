@@ -1,0 +1,19 @@
+{
+  "version": "4.1.1",
+  "items": [
+    {
+      "type": "improve",
+      "zh": "应用与官网统一原人物图标，换上酒红色背景",
+      "zh-TW": "應用與官網統一原人物圖示，換上酒紅色背景",
+      "en": "Unify the original character icon across the app and website with a wine-red background",
+      "ja": "アプリと公式サイトの人物アイコンを統一し、背景をワインレッドに変更"
+    },
+    {
+      "type": "fix",
+      "zh": "移除图标白色边角，优化深浅背景与小尺寸显示",
+      "zh-TW": "移除圖示白色邊角，改善深淺背景與小尺寸顯示",
+      "en": "Remove white icon corners for cleaner display at small sizes on light and dark backgrounds",
+      "ja": "アイコンの白い角を透明にし、明暗背景や小さいサイズでの表示を改善"
+    }
+  ]
+}

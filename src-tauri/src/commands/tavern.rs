@@ -4,6 +4,53 @@ use crate::{
 };
 use tauri::State;
 
+fn require_tavern(state: &AppState) -> Result<(), String> {
+    crate::services::builtin_apps::require(
+        &state.db,
+        crate::services::builtin_apps::BuiltinApp::Tavern,
+    )
+}
+
+#[tauri::command]
+pub fn get_tavern_local_model(
+    state: State<'_, AppState>,
+) -> Result<tavern::local_model::LocalModelStatus, String> {
+    require_tavern(&state)?;
+    Ok(tavern::local_model::manager().status())
+}
+
+#[tauri::command]
+pub fn install_tavern_local_model(
+    state: State<'_, AppState>,
+) -> Result<tavern::local_model::LocalModelStatus, String> {
+    require_tavern(&state)?;
+    tavern::local_model::manager().begin_install()
+}
+
+#[tauri::command]
+pub fn pause_tavern_local_model_install(state: State<'_, AppState>) -> Result<(), String> {
+    require_tavern(&state)?;
+    tavern::local_model::manager().cancel_install();
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn set_tavern_local_model_enabled(
+    state: State<'_, AppState>,
+    enabled: bool,
+) -> Result<tavern::local_model::LocalModelStatus, String> {
+    require_tavern(&state)?;
+    tavern::local_model::manager().set_enabled(enabled).await
+}
+
+#[tauri::command]
+pub async fn stop_tavern_local_model(
+    state: State<'_, AppState>,
+) -> Result<tavern::local_model::LocalModelStatus, String> {
+    require_tavern(&state)?;
+    tavern::local_model::manager().stop().await
+}
+
 #[tauri::command]
 pub fn get_tavern_presets(state: State<'_, AppState>) -> Result<Vec<tavern::TavernPreset>, String> {
     crate::services::builtin_apps::require(

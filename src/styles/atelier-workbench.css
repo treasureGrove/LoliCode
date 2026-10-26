@@ -96,15 +96,25 @@
   font-size: 12px;
   border-radius: 8px;
 }
-.lolicode-workbench .wb-nav > .wb-nav-button:first-child {
+.lolicode-workbench .wb-create-task {
   border: 1px solid rgb(204 164 140 / 33%);
   color: #f0dfdc;
   background: linear-gradient(125deg, #68404d, #4a2e3c);
   box-shadow: 0 3px 9px rgb(10 4 14 / 15%);
-  justify-content: center;
   margin-bottom: 4px;
+  overflow: hidden;
+  border-radius: 8px;
 }
-.lolicode-workbench .wb-nav > .wb-nav-button:first-child:hover:not(:disabled) {
+.lolicode-workbench .wb-create-task > .wb-nav-create {
+  background: transparent;
+  color: inherit;
+  border-radius: 0;
+}
+.lolicode-workbench .wb-create-task-options {
+  background: transparent;
+}
+.lolicode-workbench .wb-create-task > .wb-nav-create:hover:not(:disabled),
+.lolicode-workbench .wb-create-task-options:hover:not(:disabled) {
   background: #704452;
 }
 .lolicode-workbench .wb-search {

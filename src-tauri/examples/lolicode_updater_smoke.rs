@@ -96,7 +96,25 @@ mod smoke {
         {
             return false;
         }
-        base.join(&format!("LoliCode-{version}-Windows-x64-Setup.exe"))
+        // Public product versions start at v1; native updater versions keep increasing.
+        let (core, pre) = version.split_once('-').unwrap_or((version, ""));
+        let parts: Vec<_> = core.split('.').collect();
+        let public_version = if parts.len() == 3 {
+            match (parts[0].parse::<u64>(), parts[1].parse::<u64>()) {
+                (Ok(major), Ok(minor)) if major >= 4 && minor >= 1 => format!(
+                    "{}.{}.{}{}{}",
+                    major - 3,
+                    minor - 1,
+                    parts[2],
+                    if pre.is_empty() { "" } else { "-" },
+                    pre
+                ),
+                _ => version.to_string(),
+            }
+        } else {
+            version.to_string()
+        };
+        base.join(&format!("LoliCode-{public_version}-Windows-x64-Setup.exe"))
             .is_ok_and(|expected| expected.as_str() == package.as_str())
     }
 

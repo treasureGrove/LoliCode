@@ -29,11 +29,11 @@ Windows、macOS、Linux を対象としています。現在の公開パッケ�
 
 左下のアバターメニューまたは更新ボタンからソフトウェア更新を確認できます。インストール版は [LoliCode の署名付き更新マニフェスト](https://tools.treasuregrove.art/lolicode/updates/latest.json)を使用します。ポータブル版はダウンロードページとリリース手順に従って更新してください。
 
-既存データとの互換性のため、保存先には `~/.tai-switch` の名称が残っています。[インストールガイド](docs/user-manual/ja/1-getting-started/1.2-installation.md)を参照してください。
+LoliCode は既存データとの互換性のため、保存先に歴史的な `~/.tai-switch` を引き続き使用します。[インストールガイド](docs/user-manual/ja/1-getting-started/1.2-installation.md)を参照してください。
 
 ## 今後の方向性
 
-共通のメイン Agent を中心に、**UE ツール**と**Tavern 形式のキャラクター対話**を独立した業務アプリとして追加する予定です。高度なメモリプロバイダー、音声、マスコットとの豊かな対話、フロントエンド・3D 向け軽量モデル **sillyLoli** も今後の構想です。
+共通のメイン Agent を中心に、**UE ツール**と**Tavern 形式のキャラクター対話**を独立した業務アプリとして追加する予定です。高度なメモリプロバイダー、音声、マスコットとの豊かな対話、フロントエンド・3D 向け軽量モデル **sillyDog** も今後の構想です。
 
 これらは開発計画であり、現在すべて利用できるわけではありません。参照元のアプリ全体を取り込むのではなく、必要な機能やコンポーネントを接続します。[製品構想](docs/guides/lolicode-product-vision.md)、[最初のマイルストーン](docs/guides/lolicode-phase-one-plan.md)、[機能と出典](docs/guides/lolicode-platform-capabilities.json)を参照してください。
 

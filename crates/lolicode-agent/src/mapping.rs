@@ -1,4 +1,5 @@
 use crate::dto::*;
+use crate::images::ImageMarkdown;
 use serde_json::Value;
 
 pub(crate) fn string(value: &Value, key: &str) -> String {
@@ -83,11 +84,19 @@ pub(crate) fn message(value: &Value) -> Option<AgentMessage> {
     .into();
     let mut parts = Vec::new();
     if message_type == "assistant" {
+        let mut images = ImageMarkdown::default();
+        let mut image_parts = Vec::new();
+        let completed = value["time"]["completed"].as_u64().is_some();
         for content in array(&value["content"]) {
             match string(content, "type").as_str() {
-                "text" => parts.push(AgentPart::Text {
+                "text" | "output_text" => parts.push(AgentPart::Text {
                     text: string(content, "text"),
                 }),
+                "image" | "image_url" | "output_image" => {
+                    if let Some(text) = completed.then(|| images.block(content)).flatten() {
+                        image_parts.push(AgentPart::Text { text });
+                    }
+                }
                 "reasoning" => parts.push(AgentPart::Reasoning {
                     text: string(content, "text"),
                 }),
@@ -112,6 +121,15 @@ pub(crate) fn message(value: &Value) -> Option<AgentMessage> {
                 _ => {}
             }
         }
+        for image in array(&value["images"]) {
+            if let Some(text) = completed.then(|| images.block(image)).flatten() {
+                image_parts.push(AgentPart::Text { text });
+            }
+        }
+        // LiveState indexes upstream text blocks by text-only ordinal. Include
+        // images only in completed snapshots, after the original blocks, so
+        // in-flight or failed-step text overlays retain their real ordinals.
+        parts.extend(image_parts);
     } else if let Some(text) = optional_string(value, "text") {
         parts.push(AgentPart::Text { text });
     } else if message_type == "shell" {

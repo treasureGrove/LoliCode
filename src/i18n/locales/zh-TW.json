@@ -4124,6 +4124,14 @@
     "refresh": "重新整理"
   },
   "nav": {
+    "tools": "工具",
+    "expandTools": "展開工具",
+    "collapseTools": "收起工具",
+    "pinnedTools": "置頂工具",
+    "pinTool": "置頂",
+    "unpinTool": "取消置頂",
+    "removeTool": "移除工具",
+    "removeToolHint": "保留資料，可從應用中心重新新增。",
     "softwareUpdates": "軟體更新",
     "softwareUpdatesAvailable": "發現 LoliCode 新版本",
     "mainLabel": "主導覽",
@@ -4158,7 +4166,7 @@
   },
   "tavern": {
     "title": "酒館",
-    "subtitle": "選擇預設或匯入角色卡，使用已設定的渠道展開故事",
+    "subtitle": "選擇預設或匯入角色卡，使用本地模型或已設定的渠道展開故事",
     "importTitle": "匯入 SillyTavern 角色卡",
     "characterCard": "角色卡",
     "importCard": "匯入角色卡",
@@ -4174,13 +4182,13 @@
     "noStories": "還沒有故事紀錄",
     "chooseCharacter": "先從左側選擇角色",
     "welcomeTitle": "你的故事從這裡開始",
-    "startStoryHint": "建立故事後即可使用共享模型渠道繼續對話，內容會自動儲存在本機。",
+    "startStoryHint": "建立故事後即可使用本地模型或渠道模型繼續對話，內容會自動儲存在本機。",
     "emptyLibraryHint": "從預設人物開始，也可以匯入 SillyTavern PNG 或 JSON 角色卡。故事與角色儲存在本機。",
     "emptyStory": "傳送第一則訊息，開始這個故事。",
     "model": "模型與渠道",
     "noModels": "請先設定可用模型",
     "configureModels": "設定模型",
-    "configureModelsHint": "前往「模型與渠道」新增並啟用模型後即可開始。",
+    "configureModelsHint": "在上方一鍵設定本地陪伴模型，或前往「模型與渠道」新增模型後開始。",
     "loadingModels": "正在讀取可用模型…",
     "contextPreview": "上下文",
     "loadingContext": "正在預覽本輪上下文…",
@@ -4205,6 +4213,39 @@
     "generationFailedShort": "失敗，可重新傳送",
     "send": "傳送",
     "enterHint": "Enter 傳送 · Shift + Enter 換行",
+    "local": {
+      "title": "本機陪伴模型",
+      "expand": "展開本機模型設定",
+      "collapse": "收起本機模型設定",
+      "model": "矽基女友 v2 9B · Q4_K_M · 16K",
+      "description": "一鍵設定後即可聊天，無需 API 金鑰。本機模式不會自動切換至雲端。",
+      "install": "一鍵設定並啟用",
+      "resume": "繼續設定",
+      "start": "啟用並啟動",
+      "pause": "暫停設定",
+      "release": "釋放顯示記憶體",
+      "useChannels": "使用管道模型",
+      "disabled": "已安裝，目前使用管道模型",
+      "loadFailed": "無法讀取本機模型狀態，請重試",
+      "loading": "正在讀取本機模型狀態…",
+      "memoryMode": "節省顯示記憶體模式",
+      "progress": "本機模型下載進度",
+      "repair": "重新驗證並設定",
+      "details": "執行需求與對話記憶",
+      "requirements": "Windows x64 NVIDIA 顯示卡（建議 6GB 以上），建議 16GB 系統記憶體。首次下載約 6.36GB，安裝時請預留 16GB 磁碟空間。下載可暫停後繼續。",
+      "history": "固定使用 16K 視窗與非思考模式。優先保留角色、世界書與最新訊息；超出視窗時省略最早的對話，不會自動產生長期記憶。釋放顯示記憶體後，下次傳送會重新啟動。",
+      "states": {
+        "unsupported": "一鍵設定目前支援 Windows x64 NVIDIA 顯示卡",
+        "notInstalled": "尚未設定",
+        "downloading": "正在下載，可暫停後繼續…",
+        "verifying": "正在驗證並準備檔案…",
+        "paused": "已暫停，可繼續設定",
+        "ready": "已就緒，聊天時自動啟動",
+        "starting": "正在載入本機模型…",
+        "running": "正在本機執行",
+        "error": "設定或啟動未完成，可重試"
+      }
+    },
     "presets": {
       "title": "預設人物",
       "description": "挑一位同行者，開始一段新故事。人物設定、開場白與世界書已在本機備好。",
@@ -4953,6 +4994,14 @@
     "unreal": {
       "title": "虛幻工作台",
       "description": "管理本機 Unreal 工程、啟動編輯器，讓主 Agent 透過外掛操作編輯器。需要安裝 Unreal Engine。"
+    },
+    "rankings": {
+      "title": "模型榜单",
+      "description": "汇集综合、编程与多模态榜单，收藏常看的独立评测来源。"
+    },
+    "free-ai": {
+      "title": "免费 AI 导航",
+      "description": "发现免费模型、体验额度和开发平台，查看清楚的使用条件与官方入口。"
     }
   },
   "resourceUpdates": {
@@ -4988,5 +5037,85 @@
     "buildingBridge": "正在為此引擎編譯並驗證外掛，首次可能需要數分鐘；請保持編輯器關閉。",
     "buildingBridgeShort": "正在準備橋接…",
     "restartEditor": "外掛已編譯並啟用。請從本頁啟動編輯器以完成安全配對；直接開啟工程不會自動連接 LoliCode。原工程已備份為 .uproject.lolicode.bak。"
+  },
+  "discovery": {
+    "rankings": {
+      "subtitle": "来自独立来源的模型榜单",
+      "headline": "在這裡，直接看榜單。",
+      "intro": "直接瀏覽真實榜單快照，點擊圖片放大。不同來源各有評測方式；完整結果與即時變化仍可查看原站。",
+      "search": "搜索榜单、编程、多模态…",
+      "footer": "圖片標示擷取日期，僅展示榜單局部內容；擷取日期不代表評分更新日期。"
+    },
+    "free-ai": {
+      "subtitle": "发现值得收藏的免费 AI 入口",
+      "headline": "小小的发现，多一点创作可能。",
+      "intro": "从免费模型到开发体验，整理清楚入口和使用条件。找到喜欢的服务，收藏下来，需要时再去逛逛。",
+      "search": "搜索网站、免费模型、体验平台…",
+      "footer": "免费范围、额度和活动可能变化，请以原站最新说明为准。"
+    },
+    "refresh": "更新目录",
+    "favoriteFailed": "收藏未保存，请重试",
+    "openFailed": "链接未能打开，请重试",
+    "count": "{{count}} 个精选入口",
+    "source": {
+      "builtin": "内置目录 · 离线可看",
+      "cache": "已保存的在线目录"
+    },
+    "updated": "目录更新于 {{date}}",
+    "refreshed": "已检查最新目录",
+    "refreshUnavailable": "暂时无法更新在线目录，当前内容和收藏已保留。",
+    "search": "搜索目录",
+    "clearSearch": "清空搜索",
+    "favorites": "只看收藏",
+    "categories": "目录分类",
+    "category": {
+      "all": "全部",
+      "general": "综合",
+      "coding": "编程",
+      "multimodal": "多模态",
+      "platform": "模型平台"
+    },
+    "results": "{{count}} 个结果",
+    "loading": "正在打开目录…",
+    "loadFailed": "目录暂时无法读取，请重试。",
+    "noFavorites": "还没有符合条件的收藏，点卡片右上角就能收藏。",
+    "noResults": "没有找到匹配的入口，试试其他关键词。",
+    "showAll": "查看全部",
+    "favorite": "收藏 {{name}}",
+    "unfavorite": "取消收藏 {{name}}",
+    "offer": {
+      "ranking": "独立榜单",
+      "free-tier": "免费额度",
+      "limited-free": "部分限时免费",
+      "trial": "开发试用"
+    },
+    "access": {
+      "public": "公开浏览",
+      "account": "需要账号",
+      "varies": "视服务而定"
+    },
+    "expired": "活动已到期",
+    "officialSource": "官方说明",
+    "checked": "入口核验 {{date}}",
+    "viewRanking": "查看完整原榜",
+    "visit": "前往网站",
+    "preview": {
+      "loading": "正在讀取本機快照…",
+      "unavailable": "此來源暫未提供可用快照，可透過下方入口查看原站。",
+      "date": "擷取於 {{date}} · 榜單局部快照",
+      "alt": "{{name}} 榜單快照",
+      "expand": "放大 {{name}} 榜單",
+      "enlarge": "放大檢視",
+      "local": "可離線檢視",
+      "stale": "暫用上次快照，稍後更新目錄",
+      "zoomOut": "縮小圖片",
+      "zoomIn": "放大圖片",
+      "close": "關閉預覽"
+    }
+  },
+  "productRelease": {
+    "build": "内部构建 {{version}}",
+    "legacy": "Legacy 历史版本",
+    "note": "v1.0.0 起使用独立产品版本；历史版本与已有数据保留兼容。"
   }
 }

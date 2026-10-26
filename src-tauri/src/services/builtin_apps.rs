@@ -7,6 +7,9 @@ use serde::{Deserialize, Serialize};
 pub enum BuiltinApp {
     Tavern,
     Unreal,
+    Rankings,
+    #[serde(rename = "free-ai")]
+    FreeAi,
 }
 
 impl BuiltinApp {
@@ -14,12 +17,16 @@ impl BuiltinApp {
         match self {
             Self::Tavern => "lolicode_builtin_tavern_enabled_v1",
             Self::Unreal => "lolicode_builtin_unreal_enabled_v1",
+            Self::Rankings => "lolicode_builtin_rankings_enabled_v1",
+            Self::FreeAi => "lolicode_builtin_free_ai_enabled_v1",
         }
     }
     fn legacy_store(self) -> &'static str {
         match self {
             Self::Tavern => "lolicode_tavern_store_v1",
             Self::Unreal => "lolicode_unreal_store_v1",
+            Self::Rankings => "lolicode_rankings_store_v1",
+            Self::FreeAi => "lolicode_free_ai_store_v1",
         }
     }
 }
@@ -56,15 +63,20 @@ pub fn require(db: &Database, app: BuiltinApp) -> Result<(), String> {
 }
 
 pub fn list(db: &Database) -> Result<Vec<BuiltinAppState>, String> {
-    [BuiltinApp::Tavern, BuiltinApp::Unreal]
-        .into_iter()
-        .map(|id| {
-            Ok(BuiltinAppState {
-                id,
-                enabled: enabled(db, id)?,
-            })
+    [
+        BuiltinApp::Tavern,
+        BuiltinApp::Unreal,
+        BuiltinApp::Rankings,
+        BuiltinApp::FreeAi,
+    ]
+    .into_iter()
+    .map(|id| {
+        Ok(BuiltinAppState {
+            id,
+            enabled: enabled(db, id)?,
         })
-        .collect()
+    })
+    .collect()
 }
 
 pub fn set_enabled(db: &Database, app: BuiltinApp, enabled: bool) -> Result<(), String> {

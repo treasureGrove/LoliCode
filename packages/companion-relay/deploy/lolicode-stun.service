@@ -1,0 +1,18 @@
+[Unit]
+Description=LoliCode bounded STUN-only container
+Requires=docker.service lolicode-stun-firewall.service
+BindsTo=lolicode-stun-firewall.service
+After=network-online.target docker.service lolicode-stun-firewall.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/lolicode-companion/stun-only
+ExecStart=/usr/bin/docker compose --env-file /dev/null --project-name lolicode-stun --file /opt/lolicode-companion/stun-only/stun-only.compose.yml up --abort-on-container-exit --exit-code-from lolicode-stun
+ExecStop=/usr/bin/docker compose --env-file /dev/null --project-name lolicode-stun --file /opt/lolicode-companion/stun-only/stun-only.compose.yml stop --timeout 5
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=20
+
+[Install]
+WantedBy=multi-user.target

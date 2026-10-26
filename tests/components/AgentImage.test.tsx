@@ -4,6 +4,7 @@ import { vi, describe, it, expect, beforeEach } from "vitest";
 import { AgentMessageView } from "@/components/agent/AgentParts";
 import { AgentImage } from "@/components/agent/AgentImage";
 import { AgentFileActionsContext } from "@/components/agent/AgentFilePath";
+import { SessionMarkdown } from "@/components/sessions/reader/SessionMarkdown";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 const data = {
@@ -15,6 +16,119 @@ beforeEach(() => {
 });
 
 describe("generated agent image previews", () => {
+  function reply(text: string) {
+    return render(
+      <AgentMessageView
+        sessionId="zc:fixture"
+        projectPath="C:/project"
+        message={{
+          id: "assistant",
+          role: "assistant",
+          createdAt: 1,
+          parts: [{ type: "text", text }],
+        }}
+      />,
+    );
+  }
+
+  it("displays a remote assistant image inline and opens its preview", async () => {
+    reply("![效果图](https://example.com/generated.png)");
+    expect(screen.getByRole("img", { name: "效果图" })).toHaveAttribute(
+      "src",
+      "https://example.com/generated.png",
+    );
+    expect(
+      screen.queryByRole("button", { name: /加载远程图片/ }),
+    ).not.toBeInTheDocument();
+    expect(invoke).not.toHaveBeenCalled();
+    fireEvent.click(
+      screen.getByRole("button", { name: "放大查看图片：效果图" }),
+    );
+    expect(await screen.findByRole("dialog")).toBeVisible();
+  });
+
+  it("renders a large embedded image without exposing base64 or losing surrounding Markdown", async () => {
+    const src = `data:image/png;base64,${"AAAA".repeat(20000)}`;
+    const view = reply(
+      `**生成完成**\n\n![生成图](${src})\n\n下面可以继续调整。`,
+    );
+    expect(screen.getByRole("img", { name: "生成图" })).toHaveAttribute(
+      "src",
+      src,
+    );
+    expect(screen.getByText("生成完成").tagName).toBe("STRONG");
+    expect(screen.getByText("下面可以继续调整。")).toBeVisible();
+    expect(view.container).not.toHaveTextContent("data:image/");
+    fireEvent.click(
+      screen.getByRole("button", { name: "放大查看图片：生成图" }),
+    );
+    expect(await screen.findByRole("dialog")).toBeVisible();
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("keeps embedded images visible when a long reply uses the plain-text fallback", () => {
+    const src = `data:image/png;base64,${"AAAA".repeat(20000)}`;
+    const view = reply(
+      `${"正文".repeat(35000)}\n\n![图](${src})\n\n图后说明。`,
+    );
+    expect(screen.getByRole("img", { name: "图" })).toHaveAttribute("src", src);
+    expect(view.container).toHaveTextContent("图后说明。");
+    expect(view.container).not.toHaveTextContent("data:image/");
+  });
+
+  it("leaves embedded image examples inside code and escaped syntax untouched", () => {
+    const src = "data:image/png;base64,aGVsbG8=";
+    const example = `![示例](${src})`;
+    const view = reply(
+      `\`${example}\`\n\n\`\`\`md\n${example}\n\`\`\`\n\n    ${example}\n\n\\${example}`,
+    );
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+    expect(view.container).toHaveTextContent(src);
+    expect(view.container).not.toHaveTextContent("lolicode.invalid");
+  });
+
+  it("keeps rejected image payloads out of a long plain-text fallback", () => {
+    const view = reply(
+      `${"正文".repeat(35000)}\n\n![图片](data:image/png;base64,AAAAA)`,
+    );
+    expect(view.container).toHaveTextContent("图片无法显示：图片");
+    expect(view.container).not.toHaveTextContent("data:image/");
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+  });
+
+  it.each([
+    "data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=",
+    "data:text/html;base64,PGgxPng8L2gxPg==",
+    "javascript:alert(1)",
+  ])(
+    "does not turn an unsupported image target into active content: %s",
+    (src) => {
+      const view = reply(`![图片](${src})`);
+      expect(view.container.querySelector("img")).toBeNull();
+      expect(invoke).not.toHaveBeenCalled();
+    },
+  );
+
+  it("keeps the reader's remote-image loading control", () => {
+    render(
+      <SessionMarkdown content="![阅读器图片](https://example.com/read.png)" />,
+    );
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /加载远程图片/ })).toBeVisible();
+  });
+
+  it("offers a retry instead of opening a broken data image as an external link", () => {
+    reply("![生成图](data:image/png;base64,aGVsbG8=)");
+    fireEvent.error(screen.getByRole("img", { name: "生成图" }));
+    expect(screen.getByRole("status")).toHaveTextContent("图片无法显示");
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "重新加载图片" }));
+    expect(screen.getByRole("img", { name: "生成图" })).toHaveAttribute(
+      "src",
+      "data:image/png;base64,aGVsbG8=",
+    );
+  });
+
   it.each([
     {
       text: "![生成结果](/tmp/project/result.png)",

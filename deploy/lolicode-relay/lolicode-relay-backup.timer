@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily LoliCode relay backup
+
+[Timer]
+OnCalendar=*-*-* 03:20:00 Asia/Singapore
+RandomizedDelaySec=300
+Persistent=true
+Unit=lolicode-relay-backup.service
+
+[Install]
+WantedBy=timers.target

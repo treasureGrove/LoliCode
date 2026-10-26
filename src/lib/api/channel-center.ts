@@ -46,7 +46,8 @@ export interface ChannelSource {
     | "codex_oauth"
     | "xai_oauth"
     | "claude_subscription"
-    | "gemini_subscription";
+    | "gemini_subscription"
+    | "lolicode_account";
   accountId?: string;
   protocol: ChannelProtocol;
   models: ChannelModel[];

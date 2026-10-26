@@ -1,0 +1,321 @@
+.agent-spreadsheet {
+  --sheet-paper: var(--preview-paper, var(--bg-card, #fff));
+  --sheet-text: var(--preview-ink, var(--text-1, #24292f));
+  --sheet-accent: #217346;
+  --sheet-line: color-mix(in srgb, var(--sheet-text) 17%, var(--sheet-paper));
+  --sheet-header: color-mix(in srgb, var(--sheet-text) 5%, var(--sheet-paper));
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--sheet-line);
+  background: var(--sheet-paper);
+  color: var(--sheet-text);
+  font-size: 12px;
+}
+
+.agent-spreadsheet-formula-row {
+  display: flex;
+  min-height: 35px;
+  flex-shrink: 0;
+  align-items: stretch;
+  border-bottom: 1px solid var(--sheet-line);
+  background: var(--sheet-paper);
+}
+
+.agent-spreadsheet-address {
+  display: flex;
+  width: 116px;
+  min-width: 74px;
+  flex: 0 1 116px;
+  align-items: center;
+  gap: 4px;
+  border-right: 1px solid var(--sheet-line);
+  padding: 0 7px;
+}
+
+.agent-spreadsheet-address input,
+.agent-spreadsheet .agent-spreadsheet-formula {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  border-radius: 0;
+  outline: none;
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+  line-height: 24px;
+}
+
+.agent-spreadsheet-address input {
+  font-variant-numeric: tabular-nums;
+}
+
+.agent-spreadsheet-address:focus-within {
+  box-shadow: inset 0 -2px var(--sheet-accent);
+}
+
+.agent-spreadsheet-address:has([aria-invalid="true"]) {
+  box-shadow: inset 0 -2px var(--danger-text, #bc394f);
+}
+
+.agent-spreadsheet-fx {
+  display: grid;
+  width: 36px;
+  flex-shrink: 0;
+  place-items: center;
+  color: color-mix(in srgb, var(--sheet-text) 58%, var(--sheet-paper));
+  font-family: Georgia, serif;
+  font-size: 18px;
+  font-style: italic;
+}
+
+.agent-spreadsheet .agent-spreadsheet-formula {
+  flex: 1 1 0;
+  padding-right: 10px;
+  text-overflow: ellipsis;
+}
+
+.agent-spreadsheet .agent-spreadsheet-formula:focus-visible {
+  box-shadow: inset 0 -2px var(--sheet-accent);
+}
+
+.agent-spreadsheet-options {
+  display: flex;
+  min-height: 30px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--sheet-line);
+  padding: 3px 10px;
+  color: color-mix(in srgb, var(--sheet-text) 70%, var(--sheet-paper));
+  font-size: 11px;
+}
+
+.agent-spreadsheet-options label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.agent-spreadsheet-options input {
+  margin: 0;
+  accent-color: var(--sheet-accent);
+}
+
+.agent-spreadsheet-error {
+  margin: 0;
+  border-bottom: 1px solid var(--sheet-line);
+  padding: 7px 10px;
+  color: var(--danger-text, #bc394f);
+  font-size: 11px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.agent-spreadsheet-scroll {
+  min-width: 0;
+  min-height: 170px;
+  max-height: min(65vh, 680px);
+  flex: 1 1 auto;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  background: var(--sheet-paper);
+}
+
+.agent-spreadsheet .agent-spreadsheet-table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
+  color: var(--sheet-text);
+  font-family: Calibri, "Segoe UI", "Microsoft YaHei", sans-serif;
+  font-size: calc(12px * var(--spreadsheet-zoom, 1));
+  line-height: 1.4;
+}
+
+.agent-spreadsheet-table col {
+  width: calc(100px * var(--spreadsheet-zoom, 1));
+}
+
+.agent-spreadsheet-table col.agent-spreadsheet-row-number {
+  width: calc(46px * var(--spreadsheet-zoom, 1));
+}
+
+.agent-spreadsheet .agent-spreadsheet-table td,
+.agent-spreadsheet .agent-spreadsheet-table th {
+  position: relative;
+  height: calc(27px * var(--spreadsheet-zoom, 1));
+  min-width: calc(100px * var(--spreadsheet-zoom, 1));
+  max-width: calc(100px * var(--spreadsheet-zoom, 1));
+  overflow: hidden;
+  border: 0;
+  border-right: 1px solid var(--sheet-line);
+  border-bottom: 1px solid var(--sheet-line);
+  padding: 0 calc(6px * var(--spreadsheet-zoom, 1));
+  background: var(--sheet-paper);
+  text-align: left;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+  white-space: nowrap;
+  user-select: text;
+}
+
+.agent-spreadsheet .agent-spreadsheet-table th {
+  position: sticky;
+  z-index: 1;
+  background: var(--sheet-header);
+  font-size: calc(11px * var(--spreadsheet-zoom, 1));
+  font-weight: 400;
+  text-align: center;
+  user-select: none;
+}
+
+.agent-spreadsheet-table thead th {
+  top: 0;
+  z-index: 2;
+}
+
+.agent-spreadsheet .agent-spreadsheet-table tbody th,
+.agent-spreadsheet .agent-spreadsheet-table .agent-spreadsheet-corner {
+  left: 0;
+  min-width: calc(46px * var(--spreadsheet-zoom, 1));
+  max-width: calc(46px * var(--spreadsheet-zoom, 1));
+}
+
+.agent-spreadsheet .agent-spreadsheet-table .agent-spreadsheet-corner {
+  z-index: 3;
+}
+
+.agent-spreadsheet .agent-spreadsheet-table th[data-highlighted="true"] {
+  background: color-mix(in srgb, var(--sheet-accent) 15%, var(--sheet-paper));
+  color: var(--sheet-accent);
+  font-weight: 600;
+}
+
+.agent-spreadsheet .agent-spreadsheet-table td[aria-selected="true"] {
+  background: color-mix(in srgb, var(--sheet-accent) 7%, var(--sheet-paper));
+}
+
+.agent-spreadsheet .agent-spreadsheet-table td[data-active-cell="true"] {
+  z-index: 1;
+  outline: 2px solid var(--sheet-accent);
+  outline-offset: -2px;
+  background: var(--sheet-paper);
+}
+
+.agent-spreadsheet-table td[data-numeric="true"] {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.agent-spreadsheet-window {
+  display: flex;
+  min-width: 0;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 3px 12px;
+  border-top: 1px solid var(--sheet-line);
+  padding: 3px 6px;
+  background: var(--sheet-header);
+  font-size: 10px;
+}
+
+.agent-spreadsheet-window > div {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.agent-spreadsheet .agent-spreadsheet-window button {
+  display: grid;
+  width: 24px;
+  height: 23px;
+  place-items: center;
+  border: 0;
+  border-radius: 3px;
+  padding: 0;
+  background: transparent;
+  color: var(--sheet-text);
+}
+
+.agent-spreadsheet .agent-spreadsheet-window button:hover:enabled {
+  background: color-mix(in srgb, var(--sheet-text) 10%, transparent);
+}
+
+.agent-spreadsheet-tabs {
+  display: flex;
+  min-width: 0;
+  min-height: 35px;
+  flex-shrink: 0;
+  align-items: stretch;
+  gap: 2px;
+  overflow-x: auto;
+  border-top: 1px solid var(--sheet-line);
+  padding: 0 8px;
+  background: var(--sheet-header);
+  scrollbar-width: thin;
+}
+
+.agent-spreadsheet .agent-spreadsheet-tabs [role="tab"] {
+  max-width: 180px;
+  flex-shrink: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  border-bottom: 3px solid transparent;
+  padding: 7px 16px 5px;
+  background: transparent;
+  color: var(--sheet-text);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-spreadsheet .agent-spreadsheet-tabs [aria-selected="true"] {
+  border-bottom-color: var(--sheet-accent);
+  background: var(--sheet-paper);
+  color: var(--sheet-accent);
+  font-weight: 600;
+}
+
+.agent-spreadsheet .agent-spreadsheet-tabs button[role="tab"]:hover {
+  background: color-mix(in srgb, var(--sheet-accent) 7%, var(--sheet-paper));
+  color: var(--sheet-text);
+}
+
+.agent-spreadsheet
+  .agent-spreadsheet-tabs
+  button[role="tab"][aria-selected="true"]:hover {
+  background: var(--sheet-paper);
+  color: var(--sheet-accent);
+}
+
+.agent-spreadsheet .agent-spreadsheet-tabs button:focus-visible,
+.agent-spreadsheet .agent-spreadsheet-window button:focus-visible {
+  outline: 2px solid var(--sheet-accent);
+  outline-offset: -2px;
+}
+
+@media (max-width: 420px) {
+  .agent-spreadsheet-address {
+    flex-basis: 90px;
+  }
+
+  .agent-spreadsheet-fx {
+    width: 28px;
+  }
+
+  .agent-spreadsheet .agent-spreadsheet-tabs [role="tab"] {
+    padding-right: 11px;
+    padding-left: 11px;
+  }
+}

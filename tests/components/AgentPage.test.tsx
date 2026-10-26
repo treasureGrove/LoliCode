@@ -24,6 +24,7 @@ vi.mock("@/lib/api/agent", () => ({
     getCatalog: vi.fn(),
     getCatalogRevision: vi.fn(),
     openProject: vi.fn(),
+    openStandalone: vi.fn(),
     listSessions: vi.fn(),
     listProjects: vi.fn(),
     setProjectMetadata: vi.fn(),
@@ -208,6 +209,17 @@ beforeEach(() => {
       id: "lc:new",
       title: "新会话",
     });
+  vi.mocked(agentApi.openStandalone)
+    .mockReset()
+    .mockResolvedValue({
+      workspace: {
+        path: "D:/fixture/app/agent/standalone-workspace",
+        name: "独立任务",
+        standalone: true,
+      },
+      catalog: structuredClone(catalog),
+      sessions: [],
+    });
   vi.mocked(agentApi.sendMessage).mockReset().mockResolvedValue();
   vi.mocked(agentApi.queryCommand)
     .mockReset()
@@ -226,6 +238,132 @@ afterEach(() => {
 });
 
 describe("AgentPage", () => {
+  it("presents queued question requests one at a time", async () => {
+    snapshot.status = "waiting_question";
+    snapshot.questions = [
+      {
+        id: "first-question",
+        sessionId: "s1",
+        title: "选择开发范围",
+        fields: [
+          {
+            key: "scope",
+            type: "string",
+            title: "范围",
+            required: true,
+            options: [{ value: "small", label: "先做核心功能" }],
+          },
+        ],
+      },
+      {
+        id: "second-question",
+        sessionId: "s1",
+        title: "选择验证方式",
+        fields: [
+          { key: "check", type: "string", title: "验证", required: true },
+        ],
+      },
+    ];
+    vi.mocked(agentApi.replyQuestion).mockImplementation(async () => {
+      snapshot.questions = snapshot.questions.slice(1);
+    });
+    render(<AgentPage />);
+    await flush();
+    expect(screen.getByRole("form", { name: "选择开发范围" })).toBeVisible();
+    expect(
+      screen.queryByRole("form", { name: "选择验证方式" }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "先做核心功能" }));
+    fireEvent.click(screen.getByRole("button", { name: "提交答案" }));
+    await flush();
+    expect(agentApi.replyQuestion).toHaveBeenCalledWith(
+      "s1",
+      "first-question",
+      { scope: "small" },
+    );
+    expect(screen.getByRole("form", { name: "选择验证方式" })).toBeVisible();
+    expect(
+      screen.queryByRole("form", { name: "选择开发范围" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("creates an independent task without choosing or requiring a project", async () => {
+    const path = "D:/fixture/app/agent/standalone-workspace";
+    vi.mocked(agentApi.getStatus).mockResolvedValue({
+      available: true,
+      running: false,
+    });
+    vi.mocked(agentApi.createSession).mockResolvedValue({
+      ...session,
+      id: "lc:standalone",
+      projectPath: path,
+      title: "新独立任务",
+    });
+    render(<AgentPage />);
+    await flush();
+    expect(screen.getByRole("button", { name: "新建任务" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "新建任务" }));
+    await flush();
+    expect(agentApi.openStandalone).toHaveBeenCalledOnce();
+    expect(agentApi.createSession).toHaveBeenCalledWith(
+      catalog.defaultModel,
+      "build",
+      undefined,
+      "ask",
+      undefined,
+      path,
+    );
+    expect(settingsApi.pickDirectory).not.toHaveBeenCalled();
+    expect(agentApi.openProject).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("group", { name: "独立任务 的任务" }),
+    ).toBeInTheDocument();
+    expect(
+      localStorage.getItem("lolicode.agent.recent-projects") || "",
+    ).not.toContain("standalone-workspace");
+  });
+  it("opens the independent task action from a project without discarding its draft", async () => {
+    render(<AgentPage />);
+    await flush();
+    fill("保留项目草稿");
+    fireEvent.keyDown(
+      screen.getByRole("button", { name: "选择新建任务类型" }),
+      { key: "Enter" },
+    );
+    await flush();
+    fireEvent.click(screen.getByRole("menuitem", { name: /新建独立任务/ }));
+    await flush();
+    expect(agentApi.openStandalone).toHaveBeenCalledOnce();
+    expect(agentApi.interruptSession).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "project" }));
+    await flush();
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
+      "保留项目草稿",
+    );
+  });
+  it("keeps the independent task starter usable when no model is configured", async () => {
+    vi.mocked(agentApi.getStatus).mockResolvedValue({
+      available: true,
+      running: false,
+    });
+    vi.mocked(agentApi.openStandalone).mockResolvedValue({
+      workspace: {
+        path: "D:/fixture/standalone",
+        name: "独立任务",
+        standalone: true,
+      },
+      catalog: { ...catalog, models: [], defaultModel: null },
+      sessions: [],
+    });
+    render(<AgentPage />);
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: "新建独立任务" }));
+    await flush();
+    expect(agentApi.createSession).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("heading", { name: "开始新任务" }),
+    ).toBeInTheDocument();
+  });
   it("preserves a composing session search and restores focus after clearing", async () => {
     render(<AgentPage />);
     await flush();

@@ -29,11 +29,11 @@ Windows, macOS und Linux sind Zielplattformen. Derzeit sind **Windows-x64-NSIS-I
 
 Updates lassen sich über das Avatar-Menü unten links oder den Update-Eintrag prüfen. Die installierte Ausgabe verwendet das [signierte LoliCode-Update-Manifest](https://tools.treasuregrove.art/lolicode/updates/latest.json). Bei portablen Ausgaben die Programmdateien gemäß Downloadseite und Versionshinweisen ersetzen und die eigenen Daten behalten.
 
-Aus Kompatibilitätsgründen bleibt das bisherige Datenverzeichnis `~/.tai-switch` erhalten. Weitere Hinweise enthält die [Installationsanleitung](docs/user-manual/en/1-getting-started/1.2-installation.md).
+LoliCode behält aus Kompatibilitätsgründen das historische Datenverzeichnis `~/.tai-switch` bei. Weitere Hinweise enthält die [Installationsanleitung](docs/user-manual/en/1-getting-started/1.2-installation.md).
 
 ## Geplante Erweiterungen
 
-**UE-Werkzeuge** und **Tavern-artige Charaktergespräche** sollen als gleichrangige Anwendungen ausgewählte Fähigkeiten desselben Haupt-Agenten nutzen. Erweiterte Gedächtnisanbieter, Sprache, weitere Maskottchen-Interaktionen und das leichte, auf Frontend und 3D ausgerichtete Modell **sillyLoli** sind weitere Entwicklungsziele.
+**UE-Werkzeuge** und **Tavern-artige Charaktergespräche** sollen als gleichrangige Anwendungen ausgewählte Fähigkeiten desselben Haupt-Agenten nutzen. Erweiterte Gedächtnisanbieter, Sprache, weitere Maskottchen-Interaktionen und das leichte, auf Frontend und 3D ausgerichtete Modell **sillyDog** sind weitere Entwicklungsziele.
 
 Diese Funktionen sind noch nicht vollständig ausgeliefert. Wir binden gezielte Fähigkeiten und Komponenten ein. Die vollständigen Programme der Referenzprojekte werden dadurch nicht automatisch übernommen. Siehe [Produktvision](docs/guides/lolicode-product-vision.md), [erster Meilenstein](docs/guides/lolicode-phase-one-plan.md) und [Funktions- und Quellenverzeichnis](docs/guides/lolicode-platform-capabilities.json).
 

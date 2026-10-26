@@ -46,6 +46,7 @@ const RUNTIME_LABELS: Record<string, string> = {
   available: "按需可用",
   active: "已载入",
   failed: "载入失败",
+  error: "连接失败",
   needs_auth: "需要登录",
   pending_reload: "待重新载入",
   disabled: "未启用",
@@ -1304,7 +1305,15 @@ export function AgentExtensionsPanel({
           )}
           {tab === "mcp" && (
             <>
-              {pluginStore?.capability.mcpRuntime === false && (
+              {catalog?.mcpRuntime === true ? (
+                <div className="wb-extension-hint">
+                  <p>已启用的服务会在发送任务时连接。工具定义通过工具搜索按需加载，实际调用仍遵循会话权限。</p>
+                  <button type="button" className="wb-mode-button" disabled={busy} onClick={() => void run(() => agentApi.connectMcp())}>
+                    <RefreshCw size={14} /> 连接启用的服务
+                  </button>
+                  {catalog.mcpRuntimeError && <p role="alert">{catalog.mcpRuntimeError}</p>}
+                </div>
+              ) : pluginStore?.capability.mcpRuntime === false && (
                 <p className="wb-extension-hint">
                   MCP 配置可保留，当前应用内执行引擎尚未接入 MCP
                   连接。可先使用插件市场中的 CLI 技能。
@@ -1342,7 +1351,7 @@ export function AgentExtensionsPanel({
                     </label>
                   </div>
                   {server.runtimeStatus && (
-                    <p>{runtimeLabel(server.runtimeStatus)}</p>
+                    <p>{runtimeLabel(server.runtimeStatus)}{server.loaded ? ` · ${server.toolCount ?? 0} 个工具` : ""}</p>
                   )}
                   {server.error && (
                     <p role="alert" className="text-danger-text">
@@ -1391,7 +1400,7 @@ export function AgentExtensionsPanel({
                   className="wb-primary"
                   disabled={busy || !serverName.trim() || !serverUrl.trim()}
                 >
-                  {pluginStore?.capability.mcpRuntime === false
+                  {catalog?.mcpRuntime !== true && pluginStore?.capability.mcpRuntime === false
                     ? "保存待接入配置"
                     : "保存服务"}
                 </button>

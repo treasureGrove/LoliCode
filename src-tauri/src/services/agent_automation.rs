@@ -785,6 +785,7 @@ mod tests {
         registered.projects.insert(
             preferences::path_key(&job.workspace_path),
             AgentProject {
+                standalone: false,
                 path: job.workspace_path.clone(),
                 name: "fixture".into(),
                 pinned: false,

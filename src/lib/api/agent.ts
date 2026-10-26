@@ -55,6 +55,7 @@ export const agentApi = {
   getCatalog: () => invoke<AgentCatalog>("get_agent_catalog"),
   openProject: (path: string, refreshModels?: boolean) =>
     invoke<AgentProjectResult>("open_agent_project", { path, refreshModels }),
+  openStandalone: () => invoke<AgentProjectResult>("open_agent_standalone"),
   openProjectDirectory: (path: string) =>
     invoke<void>("open_agent_project_directory", { path }),
   listSessions: (projectPath?: string, includeArchived?: boolean) =>
@@ -178,6 +179,7 @@ export const agentApi = {
     invoke<void>("reject_agent_question", { sessionId, requestId }),
   closeProject: () => invoke<void>("close_agent_project"),
   getExtensions: () => invoke<AgentExtensions>("get_agent_extensions"),
+  connectMcp: () => invoke<AgentExtensions>("connect_agent_mcp"),
   getPluginStore: () => invoke<AgentPluginStore>("get_agent_plugin_store"),
   addPluginMarketplace: (source: string) =>
     invoke<AgentPluginStore>("add_agent_plugin_marketplace", { source }),

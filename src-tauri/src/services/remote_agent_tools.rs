@@ -16,6 +16,7 @@ use tokio::sync::watch;
 pub struct DesktopToolHost {
     pub local: DesktopApplicationTools,
     pub remote: Arc<RemoteProjects>,
+    pub mcp: Option<Arc<super::native_mcp::NativeMcpTools>>,
 }
 const TOOLS: &[&str] = &[
     "read_file",
@@ -298,8 +299,43 @@ fn output(name: &str, path: &str, receipt: Value) -> Result<ToolOutput, String> 
 }
 
 impl ApplicationTools for DesktopToolHost {
+    fn prepare<'a>(
+        &'a self,
+        project: &'a Path,
+        cancel: watch::Receiver<bool>,
+    ) -> ApplicationResult<'a> {
+        Box::pin(async move {
+            if !self.remote.owns(project) {
+                if let Some(mcp) = &self.mcp {
+                    mcp.discover(project, cancel).await?;
+                }
+            }
+            Ok(String::new())
+        })
+    }
     fn schemas(&self) -> Vec<Value> {
-        self.local.schemas()
+        let mut schemas = self.local.schemas();
+        schemas.extend(super::agent_document_tools::DocumentTools.schemas());
+        schemas
+    }
+    fn schemas_for_project(&self, project: &Path) -> Vec<Value> {
+        if self.remote.owns(project) {
+            return Vec::new();
+        }
+        let mut schemas = self.schemas();
+        if let Some(mcp) = &self.mcp {
+            schemas.extend(mcp.schemas_for_project(project));
+        }
+        schemas
+    }
+    fn deferred_tool_names(&self, project: &Path) -> Vec<String> {
+        if self.remote.owns(project) {
+            return Vec::new();
+        }
+        self.mcp
+            .as_ref()
+            .map(|mcp| mcp.deferred_tool_names(project))
+            .unwrap_or_default()
     }
     fn allows_unreal(&self) -> bool {
         self.local.allows_unreal()
@@ -329,6 +365,16 @@ impl ApplicationTools for DesktopToolHost {
         input: &Value,
     ) -> Option<Result<ToolInspection, String>> {
         if !self.remote.owns(project) {
+            if let Some(result) =
+                super::agent_document_tools::DocumentTools.inspect(project, name, input)
+            {
+                return Some(result);
+            }
+            if let Some(mcp) = &self.mcp {
+                if let Some(result) = mcp.inspect(project, name, input) {
+                    return Some(result);
+                }
+            }
             return self.local.inspect(project, name, input);
         }
         Some(
@@ -359,6 +405,15 @@ impl ApplicationTools for DesktopToolHost {
     ) -> ApplicationOutput<'a> {
         Box::pin(async move {
             if !self.remote.owns(project) {
+                let documents = super::agent_document_tools::DocumentTools;
+                if documents.inspect(project, name, input).is_some() {
+                    return documents.execute_output(project, name, input, cancel).await;
+                }
+                if let Some(mcp) = &self.mcp {
+                    if mcp.inspect(project, name, input).is_some() {
+                        return mcp.execute_output(project, name, input, cancel).await;
+                    }
+                }
                 return self
                     .local
                     .execute_output(project, name, input, cancel)
@@ -387,6 +442,7 @@ mod tests {
         let host = DesktopToolHost {
             local: DesktopApplicationTools(AppState::new(db)),
             remote: remote.clone(),
+            mcp: None,
         };
         let read = host
             .inspect(&anchor, "read_file", &json!({"path":"src/./main.rs"}))

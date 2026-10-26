@@ -8,6 +8,8 @@ description = "In-process LoliCode Rust coding core and legacy session DTO adapt
 
 [dependencies]
 base64 = "0.22"
+glob = "=0.3.3"
+regex = "=1.12.3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "stream"] }

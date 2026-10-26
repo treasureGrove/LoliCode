@@ -29,11 +29,11 @@ Windows、macOS、Linux 都是产品目标。目前公开提供 **Windows x64 NS
 
 左下角头像菜单里的「软件更新」或更新入口可以检查新版。安装版使用 [LoliCode 签名更新源](https://tools.treasuregrove.art/lolicode/updates/latest.json)；便携版请按下载页及发布说明替换程序文件，并保留自己的数据。
 
-已有数据继续使用历史目录 `~/.tai-switch`，以保持兼容。迁移或替换安装前可查看[安装指南](docs/user-manual/zh/1-getting-started/1.2-installation.md)。
+LoliCode 为兼容已有数据，继续使用历史目录 `~/.tai-switch`。迁移或替换安装前可查看[安装指南](docs/user-manual/zh/1-getting-started/1.2-installation.md)。
 
 ## 后续方向
 
-围绕同一个主 Agent，逐步接入 **UE 工具应用**和**酒馆式角色交互应用**。它们是并列业务应用，按需共享 Agent 能力。高级记忆提供者、语音、更多看板娘交互，以及侧重前端和 3D 的轻量模型 **sillyLoli**，也在后续方向中。
+围绕同一个主 Agent，逐步接入 **UE 工具应用**和**酒馆式角色交互应用**。它们是并列业务应用，按需共享 Agent 能力。高级记忆提供者、语音、更多看板娘交互，以及侧重前端和 3D 的轻量模型 **sillyDog（小笨狗，暂定名）**，也在后续方向中。
 
 上述能力尚未全部交付。接入以功能和组件为单位，不把参考项目的整套程序搬进来。详见[产品愿景](docs/guides/lolicode-product-vision.md)、[第一期计划](docs/guides/lolicode-phase-one-plan.md)和[能力与来源清单](docs/guides/lolicode-platform-capabilities.json)。
 

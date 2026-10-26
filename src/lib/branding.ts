@@ -1,4 +1,6 @@
 export const APP_NAME = "LoliCode";
+export const BUILTIN_AGENT_NAME = "sillyDog";
+export const BUILTIN_AGENT_NICKNAME = "小笨狗";
 export const APP_WEBSITE = "https://lolicode.com/";
 export const APP_REPOSITORY = "https://github.com/treasureGrove/LoliCode";
 export const APP_COMMUNITY = "https://lolicode.com/all";

@@ -1,0 +1,19 @@
+{
+  "version": "4.1.2",
+  "items": [
+    {
+      "type": "fix",
+      "zh": "修复旧版升级时卸载器无法启动的问题，自动识别并保留原安装目录",
+      "zh-TW": "修復舊版升級時解除安裝程式無法啟動的問題，自動識別並保留原安裝目錄",
+      "en": "Fix upgrades from older installations by recovering their original install folder",
+      "ja": "旧バージョンのインストール先を復元し、更新時にアンインストーラーが起動しない問題を修正"
+    },
+    {
+      "type": "improve",
+      "zh": "安装版更新与同版修复直接覆盖，保留配置、数据和已有快捷方式",
+      "zh-TW": "安裝版更新與同版修復直接覆蓋，保留設定、資料及既有捷徑",
+      "en": "Update and repair installations in place while preserving settings, data and existing shortcuts",
+      "ja": "設定、データ、既存のショートカットを保持し、更新と修復を上書きで実行"
+    }
+  ]
+}

@@ -31,6 +31,51 @@ fn assistant(content: Value, completed: bool) -> AgentMessage {
 }
 
 #[test]
+fn legacy_image_output_blocks_preserve_text_ordinals_and_ignore_duplicate_or_active_sources() {
+    let message = mapping::message(&json!({
+        "id":"image-reply", "type":"assistant", "time":{"created":1000,"completed":1002},
+        "content":[
+            {"type":"output_text","text":"The generated previews:"},
+            {"type":"image_url","image_url":{"url":"https://example.com/a.png"},"alt":"A"},
+            {"type":"image","source":{"type":"url","url":"generated/b (2).png"},"alt":"B"},
+            {"type":"image","url":"javascript:alert(1)"},
+            {"type":"reasoning","text":"kept reasoning"}
+        ],
+        "images":[{"url":"https://example.com/a.png"},{"path":"generated/c.svg"}]
+    })).unwrap();
+    assert_eq!(message.role, "assistant");
+    assert_eq!(message.completed_at, Some(1002));
+    assert_eq!(message.parts, vec![
+        AgentPart::Text { text: "The generated previews:".into() },
+        AgentPart::Reasoning { text: "kept reasoning".into() },
+        AgentPart::Text { text: "\n\n![A](<https://example.com/a.png>)\n\n".into() },
+        AgentPart::Text { text: "\n\n![B](<generated/b (2).png>)\n\n".into() },
+        AgentPart::Text { text: "\n\n![图片](<generated/c.svg>)\n\n".into() },
+    ]);
+
+    let mut state = LiveState::default();
+    state.track("ses_test");
+    state.apply(&event("session.text.started", 1, json!({})));
+    state.apply(&event("session.text.ended", 1, json!({"text":"final second text"})));
+    let mut live = vec![assistant(json!([
+        {"type":"text","text":"first text"},
+        {"type":"image","path":"generated/a.png"},
+        {"type":"text","text":""}
+    ]), false)];
+    state.overlay("ses_test", &mut live);
+    assert!(matches!(&live[0].parts[1], AgentPart::Text {text} if text == "final second text"));
+    assert_eq!(live[0].parts.len(), 2, "incomplete snapshots leave image-only synthetic text out of live ordinals");
+    let mut completed = vec![assistant(json!([
+        {"type":"text","text":"first text"},
+        {"type":"image","path":"generated/a.png"},
+        {"type":"text","text":"final second text"}
+    ]), true)];
+    state.overlay("ses_test", &mut completed);
+    assert!(matches!(&completed[0].parts[1], AgentPart::Text {text} if text == "final second text"));
+    assert!(matches!(&completed[0].parts[2], AgentPart::Text {text} if text.contains("generated/a.png")));
+}
+
+#[test]
 fn live_text_is_streamed_without_duplicating_persisted_final_text() {
     let mut state = LiveState::default();
     state.track("ses_test");

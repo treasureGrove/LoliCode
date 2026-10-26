@@ -2,6 +2,7 @@ import path from "node:path";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { codeInspectorPlugin } from "code-inspector-plugin";
+import { documentAssets } from "./scripts/vite-document-assets";
 
 export default defineConfig(({ command }) => ({
   root: "src",
@@ -11,6 +12,7 @@ export default defineConfig(({ command }) => ({
         bundler: "vite",
       }),
     react(),
+    documentAssets(),
   ].filter(Boolean),
   base: "./",
   build: {

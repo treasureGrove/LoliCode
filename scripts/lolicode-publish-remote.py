@@ -11,7 +11,7 @@ import sys
 import uuid
 
 ROOT = Path('/www/wwwroot/tools.treasuregrove.art/lolicode')
-SITE_NAMES = {'index.html', 'assets/site.css', 'assets/downloads.js', 'assets/logo.svg', 'assets/maid.png', 'assets/workbench.jpg'}
+SITE_NAMES = {'index.html', 'assets/site.css', 'assets/downloads.js', 'assets/logo.svg', 'assets/maid.png', 'assets/workbench.jpg', 'assets/discovery-v1.json'}
 
 
 def version(value):
@@ -76,6 +76,12 @@ def main(phase, spec):
     if not re.fullmatch(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', stage_id):
         raise ValueError('Invalid staging ID.')
     release_version = spec['version']
+    public_version = spec.get('productVersion', release_version)
+    build_core, build_pre = version(release_version)
+    expected_public = (f'{build_core[0]-3}.{build_core[1]-1}.{build_core[2]}'
+                       if build_core[0] >= 4 and build_core[1] >= 1 else release_version)
+    if public_version != expected_public or version(public_version)[1]:
+        raise ValueError('Product/build version mismatch.')
     if version(release_version)[1]:
         raise ValueError('Stable latest.json cannot publish a prerelease')
     if spec['namespace'] != str(ROOT):
@@ -86,12 +92,12 @@ def main(phase, spec):
     lock = no_symlink(ROOT / '.publish-lock')
     owner = lock / 'owner'
     stage = no_symlink(ROOT / ('.publish-stage-' + stage_id))
-    destination = no_symlink(ROOT / 'releases' / release_version)
+    destination = no_symlink(ROOT / 'releases' / public_version)
     latest = no_symlink(ROOT / 'updates' / 'latest.json')
     content = {key: value for key, value in spec.items() if key != 'resume'}
     plan_hash = hashlib.sha256(json.dumps(content, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
-    expected_release = {f'LoliCode-{release_version}-Windows-x64-Setup.exe',
-                        f'LoliCode-{release_version}-Windows-x64-Setup.exe.sig',
+    expected_release = {f'LoliCode-{public_version}-Windows-x64-Setup.exe',
+                        f'LoliCode-{public_version}-Windows-x64-Setup.exe.sig',
                         'LoliCode-Portable.zip', 'latest.json', 'release-manifest.json', 'upload-plan.json'}
     seen = set()
     for item in spec['files']:
@@ -100,7 +106,8 @@ def main(phase, spec):
             raise ValueError('Unexpected duplicate uploaded file.')
         seen.add(identity)
         allowed = expected_release if item['role'] == 'release' else SITE_NAMES
-        if item['name'] not in allowed or not re.fullmatch(r'[a-f0-9]{64}', item['sha256']) or not isinstance(item['bytes'], int) or item['bytes'] <= 0:
+        preview = item['role'] == 'site' and re.fullmatch(r'assets/rankings/[a-z0-9-]+-[a-f0-9]{12}\.(?:png|jpg)', item['name'])
+        if (item['name'] not in allowed and not preview) or not re.fullmatch(r'[a-f0-9]{64}', item['sha256']) or not isinstance(item['bytes'], int) or item['bytes'] <= 0:
             raise ValueError('Unsafe uploaded path or checksum.')
 
     def require_owner():
@@ -162,6 +169,8 @@ def main(phase, spec):
             stage.mkdir(mode=0o700)
             (stage / 'release').mkdir(mode=0o755)
             (stage / 'site' / 'assets').mkdir(parents=True)
+            if any(item['role'] == 'site' and item['name'].startswith('assets/rankings/') for item in spec['files']):
+                (stage / 'site' / 'assets' / 'rankings').mkdir()
             atomic_json(stage / 'state.json', {'planHash': plan_hash, 'artifactsReady': False})
         return {'ok': True, 'artifactsReady': False, 'resume': bool(spec.get('resume'))}
 

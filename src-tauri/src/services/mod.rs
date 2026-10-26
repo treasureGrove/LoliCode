@@ -12,6 +12,7 @@ pub mod backup_storage;
 pub mod balance;
 pub mod channel_center;
 pub mod channel_connections;
+pub mod discovery;
 pub mod channel_grok;
 pub mod codex_oauth_models;
 pub mod codex_session_compression;
@@ -22,12 +23,14 @@ pub mod env_checker;
 pub mod env_manager;
 pub mod external_agent_config;
 pub mod inprocess_agent;
+pub mod mobile_companion;
 #[cfg(test)]
 mod inprocess_binding_tests;
 pub mod inprocess_diagnostics;
 pub mod inprocess_extensions;
 mod litellm_capabilities;
 pub mod lolicode_account;
+pub mod lolicode_relay;
 pub mod local_agent_tools;
 pub mod mcp;
 pub mod model_fetch;
@@ -92,6 +95,9 @@ pub mod session_usage_mcode;
 pub mod builtin_apps;
 
 pub mod agent_applications;
+pub mod agent_documents;
+pub mod agent_document_tools;
+pub mod native_mcp;
 
 pub mod resource_updates;
 

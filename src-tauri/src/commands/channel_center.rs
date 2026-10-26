@@ -53,10 +53,14 @@ pub fn save_channel_center(
 #[tauri::command]
 pub async fn discover_channel_models(
     channel: ChannelSource,
+    lolicode: State<'_, crate::services::lolicode_account::LolicodeAccountState>,
     copilot: State<'_, CopilotAuthState>,
     codex: State<'_, CodexOAuthState>,
     xai: State<'_, XaiOAuthState>,
 ) -> Result<ChannelSource, String> {
+    if channel.auth_kind == "lolicode_account" {
+        return crate::services::lolicode_relay::discover(lolicode.inner()).await;
+    }
     if let Some(target) = channel_center::native_auth_target(&channel.auth_kind) {
         let discovered = discover_native_subscription_channel(target.as_str().into()).await?;
         return Ok(channel_center::merge_managed_discovery(channel, discovered));

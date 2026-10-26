@@ -4,7 +4,7 @@
 
 The desktop client is a Tauri application: the React interface and Rust runtime are shipped together in signed, versioned application packages. The updater replaces that package; it does not update Rust code or execute arbitrary downloaded files inside the running process.
 
-User state lives outside the installation directory. The default root is `~/.tai-switch`; an optional path override is stored separately by Tauri. The SQLite database contains provider/channel configuration and credentials, while projects and agent memory are stored alongside it. A normal application update should not remove this root.
+User state lives outside the installation directory. LoliCode retains the historical compatibility root `~/.tai-switch`; an optional path override is stored separately by Tauri. The SQLite database contains provider/channel configuration and credentials, while projects and agent memory are stored alongside it. A normal application update should not remove this root.
 
 Two protections now apply to this boundary:
 

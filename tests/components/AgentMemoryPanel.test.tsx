@@ -50,6 +50,23 @@ beforeEach(() => {
 });
 
 describe("AgentMemoryPanel", () => {
+  it("identifies editable character presets without reinitializing them from the UI", async () => {
+    const preset = {
+      id: "preset",
+      content: "默认称呼用户为主人",
+      source: "preset:sillyDog:v1",
+      updatedAt: 1792195200000,
+    };
+    vi.mocked(agentMemoryApi.get).mockResolvedValue(
+      snapshot({ user: { entries: [preset], used: 10, limit: 1375 } }),
+    );
+    render(<AgentMemoryPanel />);
+    expect(await screen.findByText(preset.content)).toBeVisible();
+    expect(screen.getByText(/sillyDog（小笨狗）/)).toBeVisible();
+    expect(screen.getByText(/内置预设 ·/)).toBeVisible();
+    expect(screen.getByRole("button", { name: "编辑记忆" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "删除记忆" })).toBeEnabled();
+  });
   it("loads current scopes, edits by exact original content, and sends an optimistic revision", async () => {
     render(<AgentMemoryPanel projectPath="D:/project" />);
     expect(await screen.findByText("默认用中文回答")).toBeVisible();

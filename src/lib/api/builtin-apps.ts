@@ -1,7 +1,15 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useQuery } from "@tanstack/react-query";
 
-export type BuiltinAppId = "tavern" | "unreal";
+export const BUILTIN_APP_IDS = [
+  "tavern",
+  "unreal",
+  "rankings",
+  "free-ai",
+] as const;
+export type BuiltinAppId = (typeof BUILTIN_APP_IDS)[number];
+export const isBuiltinApp = (value: string): value is BuiltinAppId =>
+  (BUILTIN_APP_IDS as readonly string[]).includes(value);
 export interface BuiltinAppState {
   id: BuiltinAppId;
   enabled: boolean;

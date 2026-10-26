@@ -14,6 +14,7 @@ import {
 import { useTranslation } from "react-i18next";
 
 import { toast } from "@/lib/toast";
+import { prepareEmbeddedMarkdownImages } from "@/lib/embeddedMarkdownImages";
 import { cn } from "@/lib/utils";
 import { highlightText } from "../utils";
 import { fileUrlToPath, PathChip, shortenPath } from "./PathChip";
@@ -45,6 +46,8 @@ export interface SessionMarkdownProps {
   onRevealPath?: (path: string) => void;
   /** 远程图片是否直接加载；默认 false，需用户点击后才发请求 */
   autoLoadRemoteImages?: boolean;
+  /** Live Agent replies can contain bounded raster data URLs from image-capable models. */
+  allowEmbeddedImages?: boolean;
   /** 本地图片（`![](/abs/path.png)`）的渲染；不传时显示为路径 chip */
   renderLocalImage?: (path: string, alt: string) => ReactNode;
   /** Agent workspace actions; ordinary readers keep their existing PathChip. */
@@ -119,6 +122,7 @@ const stripAngleBrackets = (value: string) => {
 
 const safeExternalUrl = (value: string) => {
   const url = stripAngleBrackets(value);
+  if (/^https:\/\/lolicode\.invalid\/embedded-image\//i.test(url)) return null;
   if (/^(https?:|mailto:)/i.test(url)) return url;
   if (/^www\./i.test(url)) return `https://${url}`;
   if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(url)) return `mailto:${url}`;
@@ -610,6 +614,7 @@ interface MarkdownActions {
   renderLocalImage?: (path: string, alt: string) => ReactNode;
   renderLocalPath?: (path: string, label?: ReactNode) => ReactNode;
   previewLocalImageLinks?: boolean;
+  embeddedImages?: ReadonlyMap<string, string>;
 }
 
 const defaultOpenLink = (url: string) => {
@@ -746,9 +751,17 @@ interface RemoteImageProps {
   searchQuery?: string;
 }
 
-const RemoteImage = ({ src, alt, searchQuery }: RemoteImageProps) => {
+const RemoteImage = ({
+  src: reference,
+  alt,
+  searchQuery,
+}: RemoteImageProps) => {
   const { t } = useTranslation();
-  const { autoLoadRemoteImages } = useContext(MarkdownActionsContext);
+  const { autoLoadRemoteImages, embeddedImages } = useContext(
+    MarkdownActionsContext,
+  );
+  const embedded = embeddedImages?.get(reference);
+  const src = embedded ?? reference;
   const [loadedSrc, setLoadedSrc] = useState<string | null>(null);
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -762,23 +775,38 @@ const RemoteImage = ({ src, alt, searchQuery }: RemoteImageProps) => {
   // 加载失败退化为链接
   if (failedSrc === src) {
     return (
-      <ExternalLink url={src}>{renderText(label, searchQuery)}</ExternalLink>
+      <span className="my-2 inline-flex flex-col items-start gap-1 text-caption">
+        {embedded ? (
+          <span role="status">图片无法显示，请重试。</span>
+        ) : (
+          <ExternalLink url={src}>
+            {renderText(label, searchQuery)}
+          </ExternalLink>
+        )}
+        <button
+          type="button"
+          onClick={() => setFailedSrc(null)}
+          className="text-fg-2 underline"
+        >
+          重新加载图片
+        </button>
+      </span>
     );
   }
 
-  if (autoLoadRemoteImages || loadedSrc === src) {
+  if (embedded || autoLoadRemoteImages || loadedSrc === src) {
     return (
       <>
         <button
           type="button"
           aria-label={`放大查看图片：${label}`}
-          title={src}
+          title={embedded ? label : src}
           onClick={() => setPreviewOpen(true)}
           className="my-2 block max-w-full cursor-zoom-in rounded-[8px] border border-border bg-transparent p-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <img
             src={src}
-            alt={alt}
+            alt={label}
             loading="lazy"
             decoding="async"
             referrerPolicy="no-referrer"
@@ -820,6 +848,64 @@ const RemoteImage = ({ src, alt, searchQuery }: RemoteImageProps) => {
 // ---------------------------------------------------------------------------
 // 渲染
 // ---------------------------------------------------------------------------
+
+/** Keep accepted images visible even when a long answer uses plain text. */
+const MarkdownOverflowWithImages = ({
+  content,
+  searchQuery,
+  className,
+}: SessionPlainTextProps) => {
+  const { embeddedImages } = useContext(MarkdownActionsContext);
+  const blocks = useMemo(() => splitFencedCode(content), [content]);
+  return (
+    <div
+      className={cn(
+        "min-w-0 space-y-3 break-words [overflow-wrap:anywhere]",
+        className,
+      )}
+    >
+      {blocks.map((block, index) => {
+        if (block.type === "code")
+          return (
+            <SessionCodeBlock
+              key={index}
+              code={block.code}
+              language={block.language}
+            />
+          );
+        const pieces: ReactNode[] = [];
+        const pattern =
+          /!\[((?:\\.|[^\]\\\n])*)\]\((https:\/\/lolicode\.invalid\/embedded-image\/\d+)\)/g;
+        let cursor = 0;
+        for (const match of block.text.matchAll(pattern)) {
+          if (!embeddedImages?.has(match[2])) continue;
+          if (match.index! > cursor)
+            pieces.push(
+              <span key={`text-${cursor}`} className="whitespace-pre-wrap">
+                {renderText(block.text.slice(cursor, match.index), searchQuery)}
+              </span>,
+            );
+          pieces.push(
+            <RemoteImage
+              key={`image-${match.index}`}
+              src={match[2]}
+              alt={match[1]}
+              searchQuery={searchQuery}
+            />,
+          );
+          cursor = match.index! + match[0].length;
+        }
+        if (cursor < block.text.length)
+          pieces.push(
+            <span key={`text-${cursor}`} className="whitespace-pre-wrap">
+              {renderText(block.text.slice(cursor), searchQuery)}
+            </span>,
+          );
+        return <div key={index}>{pieces}</div>;
+      })}
+    </div>
+  );
+};
 
 const renderChildren = (
   node: MarkdownNode,
@@ -1213,11 +1299,19 @@ export const SessionMarkdown = memo(function SessionMarkdown({
   onOpenLink,
   onRevealPath,
   autoLoadRemoteImages = false,
+  allowEmbeddedImages = false,
   renderLocalImage,
   renderLocalPath,
   previewLocalImageLinks = false,
   className,
 }: SessionMarkdownProps) {
+  const prepared = useMemo(
+    () =>
+      allowEmbeddedImages
+        ? prepareEmbeddedMarkdownImages(content)
+        : { content, images: undefined },
+    [content, allowEmbeddedImages],
+  );
   const actions = useMemo<MarkdownActions>(
     () => ({
       openLink: onOpenLink ?? defaultOpenLink,
@@ -1226,6 +1320,7 @@ export const SessionMarkdown = memo(function SessionMarkdown({
       renderLocalImage,
       renderLocalPath,
       previewLocalImageLinks,
+      embeddedImages: prepared.images,
     }),
     [
       autoLoadRemoteImages,
@@ -1234,13 +1329,24 @@ export const SessionMarkdown = memo(function SessionMarkdown({
       renderLocalImage,
       renderLocalPath,
       previewLocalImageLinks,
+      prepared.images,
     ],
   );
 
-  if (content.length > MARKDOWN_PARSE_LIMIT) {
+  if (prepared.content.length > MARKDOWN_PARSE_LIMIT) {
+    if (prepared.images?.size)
+      return (
+        <MarkdownActionsContext.Provider value={actions}>
+          <MarkdownOverflowWithImages
+            content={prepared.content}
+            searchQuery={searchQuery}
+            className={cn(VARIANT_CLASS[variant], className)}
+          />
+        </MarkdownActionsContext.Provider>
+      );
     return (
       <SessionPlainText
-        content={content}
+        content={prepared.content}
         searchQuery={searchQuery}
         className={cn(VARIANT_CLASS[variant], className)}
       />
@@ -1258,7 +1364,7 @@ export const SessionMarkdown = memo(function SessionMarkdown({
         )}
       >
         <MarkdownTree
-          content={content}
+          content={prepared.content}
           searchQuery={searchQuery}
           projectDir={projectDir}
         />

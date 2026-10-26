@@ -4125,6 +4125,14 @@
     "refresh": "Refresh"
   },
   "nav": {
+    "tools": "Tools",
+    "expandTools": "Expand tools",
+    "collapseTools": "Collapse tools",
+    "pinnedTools": "Pinned tools",
+    "pinTool": "Pin to top",
+    "unpinTool": "Unpin",
+    "removeTool": "Remove tool",
+    "removeToolHint": "Your data is kept. Add this tool again from Apps.",
     "softwareUpdates": "Software updates",
     "softwareUpdatesAvailable": "A new LoliCode version is available",
     "mainLabel": "Main navigation",
@@ -4160,7 +4168,7 @@
   },
   "tavern": {
     "title": "Tavern",
-    "subtitle": "Choose a preset or import a card, then tell a story with your configured models",
+    "subtitle": "Choose a preset or import a card, then tell a story with a local model or configured channel",
     "importTitle": "Import SillyTavern character card",
     "characterCard": "Character card",
     "importCard": "Import card",
@@ -4176,13 +4184,13 @@
     "noStories": "No stories yet",
     "chooseCharacter": "Choose a character on the left",
     "welcomeTitle": "Your next story starts here",
-    "startStoryHint": "Start a story to chat with the shared model channels. The conversation is saved locally.",
+    "startStoryHint": "Start a story with a local model or configured channel. The conversation is saved locally.",
     "emptyLibraryHint": "Start with a preset, or import a SillyTavern PNG or JSON card. Characters and stories stay on this device.",
     "emptyStory": "Send the first message to begin this story.",
     "model": "Model and channel",
     "noModels": "Configure a model first",
     "configureModels": "Configure models",
-    "configureModelsHint": "Add and enable a model in Models & channels to begin.",
+    "configureModelsHint": "Set up the local companion above, or add a model in Models & channels to begin.",
     "loadingModels": "Loading available models…",
     "contextPreview": "Context",
     "loadingContext": "Previewing this turn's context…",
@@ -4207,6 +4215,39 @@
     "generationFailedShort": "Failed · retry by sending again",
     "send": "Send",
     "enterHint": "Enter to send · Shift + Enter for a new line",
+    "local": {
+      "title": "Local companion model",
+      "expand": "Expand local model settings",
+      "collapse": "Collapse local model settings",
+      "model": "Silicon-based Girlfriend v2 9B · Q4_K_M · 16K",
+      "description": "Set up once and chat without an API key. Local mode never falls back to cloud models automatically.",
+      "install": "Set up and enable",
+      "resume": "Resume setup",
+      "start": "Enable and start",
+      "pause": "Pause setup",
+      "release": "Release VRAM",
+      "useChannels": "Use channel models",
+      "disabled": "Installed; using channel models",
+      "loadFailed": "Could not read local model status. Please retry.",
+      "loading": "Reading local model status…",
+      "memoryMode": "VRAM saving mode",
+      "progress": "Local model download progress",
+      "repair": "Verify and repair setup",
+      "details": "Requirements and conversation memory",
+      "requirements": "Windows x64 with NVIDIA graphics (6GB VRAM recommended), and 16GB system RAM recommended. Initial download: about 6.36GB. Allow 16GB free disk space during installation. Downloads can pause and resume.",
+      "history": "Uses a fixed 16K window with thinking disabled. Keeps the character, world book, and newest messages; removes the oldest exchanges when full. Long-term memory is not generated automatically. Sending after releasing VRAM restarts the model.",
+      "states": {
+        "unsupported": "Automatic setup currently supports Windows x64 NVIDIA graphics",
+        "notInstalled": "Not configured",
+        "downloading": "Downloading; pause and resume available…",
+        "verifying": "Verifying and preparing files…",
+        "paused": "Paused; setup can resume",
+        "ready": "Ready; starts when you chat",
+        "starting": "Loading the local model…",
+        "running": "Running locally",
+        "error": "Setup or startup did not finish; retry available"
+      }
+    },
     "presets": {
       "title": "Preset characters",
       "description": "Choose a companion and begin a story. Character prompts, greetings and lore are bundled locally.",
@@ -5005,6 +5046,14 @@
     "unreal": {
       "title": "Unreal workspace",
       "description": "Manage local Unreal projects, launch the editor and use the main Agent through an editor plugin. Requires a local Unreal Engine installation."
+    },
+    "rankings": {
+      "title": "Model rankings",
+      "description": "Explore and bookmark independent model, coding and multimodal leaderboards."
+    },
+    "free-ai": {
+      "title": "Free AI directory",
+      "description": "Discover free models, developer trials and platforms with clear conditions and official links."
     }
   },
   "resourceUpdates": {
@@ -5033,5 +5082,85 @@
     "bundled": "Using bundled interface",
     "scope": "Interface and interaction updates only; native changes require an app update",
     "recover": "Restart and recover interface"
+  },
+  "discovery": {
+    "rankings": {
+      "subtitle": "Independent model leaderboards",
+      "headline": "See the rankings, right here.",
+      "intro": "Browse real leaderboard snapshots and click to enlarge. Each source uses its own methodology; visit the original site for full results and live changes.",
+      "search": "Search leaderboards, coding, multimodal…",
+      "footer": "Images show leaderboard excerpts. Capture dates are not the dates when scores were updated."
+    },
+    "free-ai": {
+      "subtitle": "A collection of free AI discoveries",
+      "headline": "Little discoveries, more possibilities.",
+      "intro": "Discover free models and developer trials with clear access conditions. Save useful services and return when inspiration arrives.",
+      "search": "Search sites, free models, developer trials…",
+      "footer": "Free allowances and offers can change. Check the source for current terms."
+    },
+    "refresh": "Update directory",
+    "favoriteFailed": "Could not save bookmark. Please retry.",
+    "openFailed": "Could not open link. Please retry.",
+    "count": "{{count}} curated entries",
+    "source": {
+      "builtin": "Built-in · available offline",
+      "cache": "Saved online directory"
+    },
+    "updated": "Directory updated {{date}}",
+    "refreshed": "Latest directory checked",
+    "refreshUnavailable": "The online directory is unavailable. Current entries and bookmarks are retained.",
+    "search": "Search directory",
+    "clearSearch": "Clear search",
+    "favorites": "Bookmarks only",
+    "categories": "Directory categories",
+    "category": {
+      "all": "All",
+      "general": "General",
+      "coding": "Coding",
+      "multimodal": "Multimodal",
+      "platform": "Platforms"
+    },
+    "results": "{{count}} results",
+    "loading": "Opening directory…",
+    "loadFailed": "Could not read the directory. Please retry.",
+    "noFavorites": "No matching bookmarks yet. Save entries using the bookmark button.",
+    "noResults": "No matching entries. Try another search.",
+    "showAll": "Show all",
+    "favorite": "Bookmark {{name}}",
+    "unfavorite": "Remove bookmark {{name}}",
+    "offer": {
+      "ranking": "Independent leaderboard",
+      "free-tier": "Free allowance",
+      "limited-free": "Selected offers · limited time",
+      "trial": "Developer trial"
+    },
+    "access": {
+      "public": "Public access",
+      "account": "Account required",
+      "varies": "Varies by service"
+    },
+    "expired": "Offer expired",
+    "officialSource": "Official details",
+    "checked": "Entry checked {{date}}",
+    "viewRanking": "Full leaderboard",
+    "visit": "Visit website",
+    "preview": {
+      "loading": "Loading local snapshot…",
+      "unavailable": "No snapshot is available for this source yet. The original site is linked below.",
+      "date": "Captured {{date}} · Leaderboard excerpt",
+      "alt": "{{name}} leaderboard snapshot",
+      "expand": "Enlarge {{name}} leaderboard",
+      "enlarge": "Enlarge snapshot",
+      "local": "Available offline",
+      "stale": "Showing the last snapshot; refresh the directory later",
+      "zoomOut": "Zoom out",
+      "zoomIn": "Zoom in",
+      "close": "Close preview"
+    }
+  },
+  "productRelease": {
+    "build": "Internal build {{version}}",
+    "legacy": "Legacy releases",
+    "note": "Independent product versioning starts at v1.0.0. Legacy releases and existing data remain compatible."
   }
 }

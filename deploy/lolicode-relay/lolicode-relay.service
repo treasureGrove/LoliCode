@@ -1,0 +1,17 @@
+[Unit]
+Description=LoliCode relay foundation (New API, PostgreSQL, Redis)
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/lolicode-relay
+ExecStart=/usr/bin/docker compose -f /opt/lolicode-relay/compose.yaml up -d --wait --wait-timeout 180
+ExecStop=/usr/bin/docker compose -f /opt/lolicode-relay/compose.yaml stop
+TimeoutStartSec=240
+TimeoutStopSec=120
+
+[Install]
+WantedBy=multi-user.target

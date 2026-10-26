@@ -137,6 +137,7 @@ impl AgentState {
             navigation.projects.insert(
                 preferences::path_key(&project.path),
                 preferences::AgentProject {
+                    standalone: false,
                     path: project.path,
                     name: project.name,
                     pinned: false,
@@ -522,6 +523,7 @@ impl AgentState {
         navigation.projects.insert(
             project_key.clone(),
             preferences::AgentProject {
+                standalone: false,
                 path: workspace.path.clone(),
                 name: workspace.name.clone(),
                 pinned,

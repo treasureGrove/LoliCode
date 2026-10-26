@@ -24,9 +24,12 @@ const MAX_CARD_BYTES: u64 = 32 * 1024 * 1024;
 const MAX_CARD_JSON_BYTES: usize = 8 * 1024 * 1024;
 const MAX_MESSAGE_CHARS: usize = 64 * 1024;
 const MAX_HISTORY_MESSAGES: usize = 60;
+const VOICE_EXAMPLE_EXCHANGES: usize = 3;
 const MAX_MODEL_RESPONSE_BYTES: usize = 8 * 1024 * 1024;
 const WORLD_INFO_BUDGET_CHARS: usize = 12_000;
+const ROLEPLAY_STYLE: &str = "像一个有自己生活的人那样接话：依据角色的偏好、眼下的愿望和与用户的关系作出判断，回应用户这一句话的具体内容。可以聊自己的小事、表达不同意见，或主动做一件合乎情境的小事，让个性通过选择和措辞显现。\n默认用第一人称接话，延续开场白中角色的口吻。日常闲聊通常一到三句自然话就够了，说到点上便停；需要展开时随话题自然展开。对白可以独立成立；动作在能传达新信息时出现，提问在确实想知道答案时出现。关心落实在具体回应中，不用泛泛的安慰或解释自己如何扮演、是否自然。\n开场场景和开场白建立故事起点，之后的地点、物品状态、称呼、约定与关系承接最新已经发生的变化；世界书背景不使故事每轮回到起点。用户最近明确的选择、拒绝和偏好应落实到后续行动中，已答过的选择不反复询问，角色自己的喜好不替用户作决定。语气示例中的事件不属于当前故事。只写本角色的回应，用户的台词、动作和感受留给用户；用户的经历、偏好与身体状况以角色卡和用户实际提供的信息为准。\n以上是默认接话方式，角色卡和用户对文风、格式、语言、叙述视角的明确要求优先。";
 
+pub mod local_model;
 mod presets;
 pub use presets::{add_preset, preset_catalog, TavernPreset};
 
@@ -173,6 +176,9 @@ fn read_store(state: &AppState) -> Result<TavernStore, String> {
             .map_err(|_| "酒馆本地数据无法解析，原数据已保留".to_string())?,
         None => TavernStore::default(),
     };
+    for character in &mut store.characters {
+        presets::refresh_bundled_dialogue(character);
+    }
     let active = active_stories()
         .lock()
         .map_err(|_| "酒馆会话状态暂不可用，请重试".to_string())?;
@@ -319,6 +325,10 @@ pub fn avatar(state: &AppState, character_id: &str) -> Result<TavernAvatar, Stri
 }
 
 pub async fn catalog(state: &AppState) -> Result<AgentCatalog, String> {
+    let local = local_model::manager();
+    if local.enabled() {
+        return Ok(local.catalog());
+    }
     channel_center::prepare_tavern_binding(state)
         .await
         .map(|binding| binding.catalog)
@@ -357,7 +367,7 @@ pub fn create_story(
         story.messages.push(TavernMessage {
             id: Uuid::new_v4().to_string(),
             role: "assistant".into(),
-            text: character.card.first_mes.clone(),
+            text: render_card_text(&character.card.first_mes, &character.card.name),
             created_at: now,
             failed: false,
         });
@@ -414,16 +424,31 @@ pub async fn send_message(
         return Err("消息超过 64,000 字符，请拆分后发送".into());
     }
     let _active = ActiveStory::acquire(story_id)?;
-    let binding = channel_center::prepare_tavern_binding(state)
-        .await
-        .map_err(|error| error.to_string())?;
+    let local = local_model::manager();
+    let use_local = selected_model_id == local_model::MODEL_ID;
+    if use_local != local.enabled() {
+        return Err("酒馆模型来源已切换，请刷新模型选择后重试".into());
+    }
+    let binding = if use_local {
+        None
+    } else {
+        Some(
+            channel_center::prepare_tavern_binding(state)
+                .await
+                .map_err(|error| error.to_string())?,
+        )
+    };
     let model = binding
-        .catalog
-        .models
-        .iter()
-        .find(|model| model.id == selected_model_id)
-        .ok_or("所选模型已不在当前渠道目录中，请重新选择模型")?;
-    let route_model_id = model.model_id.clone();
+        .as_ref()
+        .map(|binding| {
+            binding
+                .catalog
+                .models
+                .iter()
+                .find(|model| model.id == selected_model_id)
+                .ok_or("所选模型已不在当前渠道目录中，请重新选择模型")
+        })
+        .transpose()?;
 
     let (request_story, request_character) = {
         let _write = store_gate().lock().map_err(|_| "酒馆存储繁忙，请重试")?;
@@ -455,15 +480,16 @@ pub async fn send_message(
     };
 
     let messages = build_request_messages(&request_character, &request_story);
-    let mut request = json!({
-        "model": route_model_id,
-        "messages": messages,
-        "stream": false,
-    });
-    if let Some(limit) = model.output_limit {
-        request["max_tokens"] = json!(limit);
-    }
     let answer = async {
+        if use_local {
+            return local.chat(messages).await;
+        }
+        let binding = binding.as_ref().ok_or("模型连接不可用")?;
+        let model = model.ok_or("模型连接不可用")?;
+        let mut request = json!({"model":model.model_id,"messages":messages,"stream":false});
+        if let Some(limit) = model.output_limit {
+            request["max_tokens"] = json!(limit);
+        }
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(180))
             .build()
@@ -603,8 +629,7 @@ fn response_text(value: &Value) -> Option<String> {
 fn build_request_messages(character: &StoredCharacter, story: &TavernStory) -> Vec<Value> {
     let context = build_context(character, story).0;
     let mut messages = vec![json!({"role":"system","content":context.pre_history})];
-    let start = story.messages.len().saturating_sub(MAX_HISTORY_MESSAGES);
-    let history = &story.messages[start..];
+    let history = request_history(story);
     let current_user_index = history
         .last()
         .filter(|message| message.role == "user")
@@ -625,25 +650,74 @@ fn build_request_messages(character: &StoredCharacter, story: &TavernStory) -> V
     messages
 }
 
+// Failed attempts remain visible in the saved story, but never become events in
+// the model's story. When clipping, keep the current user and complete preceding
+// turns rather than an assistant answer whose user message has been removed.
+fn request_history(story: &TavernStory) -> Vec<&TavernMessage> {
+    let history = story
+        .messages
+        .iter()
+        .filter(|message| !message.failed)
+        .collect::<Vec<_>>();
+    let mut start = history.len().saturating_sub(MAX_HISTORY_MESSAGES);
+    if start > 0 {
+        while start < history.len() && history[start].role == "assistant" {
+            start += 1;
+        }
+    }
+    history[start..].to_vec()
+}
+
+fn successful_exchanges(story: &TavernStory) -> usize {
+    let mut pending_user = false;
+    let mut exchanges = 0;
+    for message in story.messages.iter().filter(|message| !message.failed) {
+        if message.role == "user" {
+            pending_user = true;
+        } else if message.role == "assistant" && pending_user {
+            exchanges += 1;
+            pending_user = false;
+        }
+    }
+    exchanges
+}
+
 fn build_context(
     character: &StoredCharacter,
     story: &TavernStory,
 ) -> (TavernContextPreview, usize) {
     let card = &character.card;
     let mut sections = vec![format!("你正在扮演角色「{}」。", card.name)];
+    let examples = if successful_exchanges(story) < VOICE_EXAMPLE_EXCHANGES {
+        card.mes_example.as_str()
+    } else {
+        ""
+    };
     for (label, value) in [
         ("角色设定", card.description.as_str()),
         ("性格", card.personality.as_str()),
-        ("场景", card.scenario.as_str()),
-        ("示例对话", card.mes_example.as_str()),
+        (
+            "故事开场背景（后续场景状态承接对话中的最新进展）",
+            card.scenario.as_str(),
+        ),
+        (
+            "语气示例（仅参考说话方式，其中的事件不属于当前故事）",
+            examples,
+        ),
         ("角色系统提示", card.system_prompt.as_str()),
     ] {
         if !value.trim().is_empty() {
-            sections.push(format!("{label}：\n{}", value.trim()));
+            let value = render_card_text(value.trim(), &card.name);
+            let value = if value.contains("<START>") {
+                value.replace("<START>", "\n---\n")
+            } else {
+                value
+            };
+            sections.push(format!("{label}：\n{value}"));
         }
     }
-    let scan_text = story
-        .messages
+    let history = request_history(story);
+    let scan_text = history
         .iter()
         .rev()
         .take(20)
@@ -679,7 +753,7 @@ fn build_context(
             excluded.push(format!("{title}（本轮未命中关键词）"));
             continue;
         }
-        let content = string_field(&entry, "content");
+        let content = render_card_text(&string_field(&entry, "content"), &card.name);
         if content.trim().is_empty() {
             excluded.push(format!("{title}（没有可注入内容）"));
             continue;
@@ -692,10 +766,13 @@ fn build_context(
         included.push(title);
     }
     if !world_info.is_empty() {
-        sections.push(format!("本轮世界书内容：{world_info}"));
+        sections.push(format!(
+            "本轮世界书背景（不是每轮重置的场景；已变化的场景状态以最新对话为准）：{world_info}"
+        ));
     }
+    sections.push(format!("接话方式：\n{ROLEPLAY_STYLE}"));
     let pre_history = sections.join("\n\n");
-    let post_history = card.post_history_instructions.trim().to_string();
+    let post_history = render_card_text(card.post_history_instructions.trim(), &card.name);
     let world_info_chars = world_info.chars().count();
     (
         TavernContextPreview {
@@ -707,6 +784,22 @@ fn build_context(
         },
         world_info_chars,
     )
+}
+
+// Common character-card identity macros are expanded only in card fields,
+// never in the user's messages. Other macros remain intact for future support.
+fn render_card_text(text: &str, character_name: &str) -> String {
+    static IDENTITIES: OnceLock<regex::Regex> = OnceLock::new();
+    IDENTITIES
+        .get_or_init(|| regex::Regex::new(r"(?i)\{\{\s*(char|user)\s*\}\}").unwrap())
+        .replace_all(text, |capture: &regex::Captures<'_>| {
+            if capture[1].eq_ignore_ascii_case("char") {
+                character_name
+            } else {
+                "用户"
+            }
+        })
+        .into_owned()
 }
 
 fn world_info_entries(raw_data: &Value) -> Vec<Value> {
@@ -1154,6 +1247,287 @@ mod tests {
         assert_eq!(roles, ["system", "user", "assistant", "system", "user"]);
         assert_eq!(messages[3]["content"], "Stay in character.");
         assert_eq!(messages[4]["content"], "Continue the scene.");
+    }
+
+    fn context_character(data: Value) -> StoredCharacter {
+        StoredCharacter {
+            card: character_from_data("context-fixture".into(), &data, "V2".into(), false).unwrap(),
+            raw_data: json!({"spec":"chara_card_v2","data":data}),
+            avatar_relative_path: None,
+        }
+    }
+
+    fn context_message(role: &str, text: &str, failed: bool) -> TavernMessage {
+        TavernMessage {
+            id: format!("{role}-{text}"),
+            role: role.into(),
+            text: text.into(),
+            created_at: 1,
+            failed,
+        }
+    }
+
+    fn context_story(messages: Vec<TavernMessage>) -> TavernStory {
+        TavernStory {
+            id: "context-story".into(),
+            character_id: "context-fixture".into(),
+            title: "Context fixture".into(),
+            created_at: 1,
+            updated_at: 1,
+            model_id: None,
+            messages,
+            is_generating: false,
+        }
+    }
+
+    #[test]
+    fn failed_attempts_do_not_enter_story_context_or_trigger_worldbook_entries() {
+        let character = context_character(json!({
+            "name":"Mira",
+            "character_book":{"entries":[
+                {"comment":"Forest","content":"forest lore","keys":["forest"]},
+                {"comment":"Ocean","content":"ocean lore","keys":["ocean"]},
+                {"comment":"Sky","content":"sky lore","keys":["sky"]}
+            ]}
+        }));
+        let story = context_story(vec![
+            context_message("assistant", "Come in.", false),
+            context_message("user", "We travel to the ocean.", true),
+            context_message("assistant", "We fly into the sky.", true),
+            context_message("user", "We enter the forest.", false),
+        ]);
+        let context = build_context(&character, &story).0;
+        assert_eq!(context.included_entries, ["Forest"]);
+        assert!(!context.pre_history.contains("ocean lore"));
+        assert!(!context.pre_history.contains("sky lore"));
+        let messages = build_request_messages(&character, &story);
+        assert_eq!(messages.len(), 3);
+        assert_eq!(messages[1]["content"], "Come in.");
+        assert_eq!(messages[2]["content"], "We enter the forest.");
+        assert_eq!(story.messages.len(), 4, "saved attempts are preserved");
+        assert!(story.messages[1].failed && story.messages[2].failed);
+    }
+
+    #[test]
+    fn history_clipping_keeps_whole_exchanges_and_current_user_without_old_greeting() {
+        let mut story = context_story(vec![context_message(
+            "assistant",
+            "Opening greeting",
+            false,
+        )]);
+        for turn in 0..35 {
+            story
+                .messages
+                .push(context_message("user", &format!("Question {turn}"), false));
+            story.messages.push(context_message(
+                "assistant",
+                &format!("Answer {turn}"),
+                false,
+            ));
+        }
+        story
+            .messages
+            .push(context_message("user", "Current question", false));
+        let history = request_history(&story);
+        assert_eq!(history.len(), 59);
+        assert_eq!(history[0].text, "Question 6");
+        for (offset, pair) in history[..history.len() - 1].chunks_exact(2).enumerate() {
+            assert_eq!(pair[0].role, "user");
+            assert_eq!(pair[1].role, "assistant");
+            assert_eq!(pair[0].text, format!("Question {}", offset + 6));
+            assert_eq!(pair[1].text, format!("Answer {}", offset + 6));
+        }
+        assert_eq!(history.last().unwrap().text, "Current question");
+        assert!(!history
+            .iter()
+            .any(|message| message.text == "Opening greeting"));
+        assert_eq!(
+            story.messages.len(),
+            72,
+            "clipping never deletes saved history"
+        );
+    }
+
+    #[test]
+    fn failed_attempts_do_not_displace_a_short_story_or_its_greeting() {
+        let mut story = context_story(vec![context_message(
+            "assistant",
+            "Opening greeting",
+            false,
+        )]);
+        for attempt in 0..80 {
+            story
+                .messages
+                .push(context_message("user", &format!("Failed {attempt}"), true));
+        }
+        story
+            .messages
+            .push(context_message("user", "Current question", false));
+        let history = request_history(&story);
+        assert_eq!(history.len(), 2);
+        assert_eq!(history[0].text, "Opening greeting");
+        assert_eq!(history[1].text, "Current question");
+    }
+
+    #[test]
+    fn voice_examples_fade_after_successful_exchanges_without_changing_imported_fields() {
+        let character = context_character(json!({
+            "name":"Mira",
+            "mes_example":"<START>\n{{user}}: Broken?\n{{char}}: Only its pride.\n<custom>{{roll:1d6}}</custom>",
+            "system_prompt":"Reply in English, dialogue only.",
+            "post_history_instructions":"{{char}} speaks only for {{char}}."
+        }));
+        let original_card = serde_json::to_value(&character.card).unwrap();
+        let original_data = character.raw_data.clone();
+        let mut story = context_story(vec![context_message(
+            "assistant",
+            "Opening greeting",
+            false,
+        )]);
+        for turn in 0..2 {
+            story
+                .messages
+                .push(context_message("user", &format!("Question {turn}"), false));
+            story.messages.push(context_message(
+                "assistant",
+                &format!("Answer {turn}"),
+                false,
+            ));
+        }
+        story
+            .messages
+            .push(context_message("user", "Unanswered attempt", true));
+        story
+            .messages
+            .push(context_message("assistant", "Failed answer", true));
+        story
+            .messages
+            .push(context_message("user", "Question 2", false));
+        let early = build_context(&character, &story).0;
+        assert!(early.pre_history.contains("Mira: Only its pride."));
+        assert!(early.pre_history.contains("<custom>{{roll:1d6}}</custom>"));
+        story
+            .messages
+            .push(context_message("assistant", "Answer 2", false));
+        story
+            .messages
+            .push(context_message("user", "Question 3", false));
+        let later = build_context(&character, &story).0;
+        assert!(!later.pre_history.contains("Only its pride."));
+        assert!(!later.pre_history.contains("语气示例（仅参考"));
+        assert!(later
+            .pre_history
+            .contains("Reply in English, dialogue only."));
+        assert_eq!(later.post_history, "Mira speaks only for Mira.");
+        assert_eq!(
+            serde_json::to_value(&character.card).unwrap(),
+            original_card
+        );
+        assert_eq!(character.raw_data, original_data);
+    }
+
+    #[test]
+    fn opening_scenario_and_worldbook_are_background_for_the_latest_scene() {
+        let character = context_character(json!({
+            "name":"Mira",
+            "scenario":"Mira opens the camera shop.",
+            "character_book":{"entries":[{
+                "comment":"Shop","constant":true,"content":"Mira is at the shop counter."
+            }]}
+        }));
+        let story = context_story(vec![
+            context_message("assistant", "Come into the shop.", false),
+            context_message(
+                "user",
+                "We have left the shop and reached the river.",
+                false,
+            ),
+            context_message(
+                "assistant",
+                "I set the camera down on the riverbank.",
+                false,
+            ),
+            context_message(
+                "user",
+                "Stay here by the river. No narration, just English dialogue.",
+                false,
+            ),
+        ]);
+        let context = build_context(&character, &story).0;
+        assert!(context
+            .pre_history
+            .contains("故事开场背景（后续场景状态承接对话中的最新进展）"));
+        assert!(context
+            .pre_history
+            .contains("本轮世界书背景（不是每轮重置的场景；已变化的场景状态以最新对话为准）"));
+        assert!(context.pre_history.contains("Mira opens the camera shop."));
+        assert!(context.pre_history.contains("Mira is at the shop counter."));
+        assert!(context
+            .pre_history
+            .contains("角色卡和用户对文风、格式、语言、叙述视角的明确要求优先"));
+        let messages = build_request_messages(&character, &story);
+        assert_eq!(
+            messages[3]["content"],
+            "I set the camera down on the riverbank."
+        );
+        assert_eq!(
+            messages.last().unwrap()["content"],
+            story.messages.last().unwrap().text
+        );
+    }
+
+    #[test]
+    fn card_macros_and_style_are_applied_without_rewriting_user_text_or_stored_cards() {
+        let state = AppState::new(std::sync::Arc::new(
+            crate::database::Database::memory().unwrap(),
+        ));
+        let raw = json!({"spec":"chara_card_v2","data":{
+            "name":"Mira",
+            "description":"{{char}} repairs cameras with {{user}}.",
+            "personality":"Dry humour, impatient with flattery.",
+            "first_mes":"{{CHAR}}: Come in, {{User}}.",
+            "mes_example":"<START>\n{{user}}: Broken?\n{{char}}: Only its pride.",
+            "system_prompt":"Reply in English, dialogue only.",
+            "post_history_instructions":"{{char}} speaks only for {{char}}, never {{user}}.",
+            "character_book":{"entries":[{"constant":true,"content":"{{char}} keeps {{user}}'s camera on the shelf."}]}
+        }});
+        let card_file = tempfile::Builder::new().suffix(".json").tempfile().unwrap();
+        std::fs::write(card_file.path(), serde_json::to_vec(&raw).unwrap()).unwrap();
+        let card = import_character(&state, card_file.path().to_str().unwrap()).unwrap();
+        let mut story = create_story(&state, &card.id, None).unwrap();
+        assert_eq!(story.messages[0].text, "Mira: Come in, 用户.");
+        assert!(snapshot(&state).unwrap().characters[0]
+            .first_mes
+            .contains("{{CHAR}}"));
+        story.messages.push(TavernMessage {
+            id: "literal".into(),
+            role: "user".into(),
+            text: "Explain {{char}} and <START> literally.".into(),
+            created_at: 2,
+            failed: false,
+        });
+        let preview = build_context(&read_store(&state).unwrap().characters[0], &story).0;
+        assert!(preview.pre_history.contains(ROLEPLAY_STYLE));
+        assert!(preview
+            .pre_history
+            .contains("Dry humour, impatient with flattery."));
+        assert!(preview
+            .pre_history
+            .contains("Reply in English, dialogue only."));
+        assert!(preview
+            .pre_history
+            .contains("Mira keeps 用户's camera on the shelf."));
+        assert!(!preview.pre_history.contains("{{char}}"));
+        assert!(!preview.pre_history.contains("<START>"));
+        assert_eq!(
+            preview.post_history,
+            "Mira speaks only for Mira, never 用户."
+        );
+        let messages = build_request_messages(&read_store(&state).unwrap().characters[0], &story);
+        assert_eq!(
+            messages.last().unwrap()["content"],
+            "Explain {{char}} and <START> literally."
+        );
     }
 
     fn png_with_text_chunks(chunks: &[(&str, &str)]) -> Vec<u8> {

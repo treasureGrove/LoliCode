@@ -33,6 +33,19 @@ const hooksPath = path.join(
   repositoryRoot,
   "src-tauri/nsis/lolicode-installer-hooks.nsh",
 );
+// Exact source bytes from the official webrtc-rs/webrtc v0.17.2 tag.
+// https://raw.githubusercontent.com/webrtc-rs/webrtc/v0.17.2/LICENSE-MIT
+// https://raw.githubusercontent.com/webrtc-rs/webrtc/v0.17.2/LICENSE-APACHE
+const companionLicenses = [
+  [
+    "webrtc-LICENSE-MIT",
+    "56cc6c08157f4faf70d351b3a7ceac143399d5359a78c180e06dcd0390784f4d",
+  ],
+  [
+    "webrtc-LICENSE-APACHE",
+    "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+  ],
+];
 
 function isWithin(parent, candidate) {
   const relative = path.relative(parent, candidate);
@@ -230,8 +243,108 @@ function payloadFromGeneratedScript(filename) {
       /(?:^|\\)LICENSE(?:\.[^\\]+)?$/iu.test(file.destination),
     ).length >= 5,
   );
-  return { files, operations, version, hooksPath: bundledHooks };
+  for (const [name, expected] of companionLicenses) {
+    const destination = `licenses\\companion\\${name}`;
+    const file = files.find((file) => file.destination === destination);
+    assert(
+      file,
+      `Actual NSIS payload must include companion license: ${destination}`,
+    );
+    assert.equal(
+      sha256(file.source),
+      expected,
+      `Actual NSIS companion license source must match official WebRTC v0.17.2: ${name}`,
+    );
+  }
+  return {
+    files,
+    operations,
+    version,
+    hooksPath: bundledHooks,
+    companionLicenseFiles: companionLicenses.length,
+  };
 }
+
+test("actual NSIS payload parser requires both official companion license bytes at their installed paths", () => {
+  const temporaryParent = path.join(repositoryRoot, "tmp");
+  mkdirSync(temporaryParent, { recursive: true });
+  const temporary = mkdtempSync(
+    path.join(temporaryParent, "lolicode-license-payload-"),
+  );
+  try {
+    const executable = path.join(temporary, "LoliCode.exe");
+    writeFileSync(executable, "parser fixture only; never executed");
+    const filename = path.join(temporary, "installer.nsi");
+    const extensionRoot = path.join(
+      repositoryRoot,
+      "src-tauri/resources/agent/extensions",
+    );
+    const extensionLicenses = [
+      "LICENSE",
+      "skills/docx/LICENSE.txt",
+      "skills/pdf/LICENSE.txt",
+      "skills/pptx/LICENSE.txt",
+      "skills/xlsx/LICENSE.txt",
+    ];
+    const resource = (destination, source) =>
+      `  File /a "/oname=${destination}" "${source}"`;
+    const required = companionLicenses.map(([name]) => [
+      `licenses\\companion\\${name}`,
+      path.join(repositoryRoot, "src-tauri/resources/companion-licenses", name),
+    ]);
+    function render(licenses) {
+      writeFileSync(
+        filename,
+        [
+          `!include "${hooksPath}"`,
+          `!define VERSION "${expectedVersion}"`,
+          '!define MAINBINARYNAME "LoliCode"',
+          `!define MAINBINARYSRCPATH "${executable}"`,
+          "Section Install",
+          "; Copy main executable",
+          '  File "${MAINBINARYSRCPATH}"',
+          resource(
+            "agent\\extensions\\manifest.json",
+            path.join(extensionRoot, "manifest.json"),
+          ),
+          ...extensionLicenses.map((name) =>
+            resource(
+              `agent\\extensions\\${name.replaceAll("/", "\\")}`,
+              path.join(extensionRoot, name),
+            ),
+          ),
+          ...licenses.map(([destination, source]) =>
+            resource(destination, source),
+          ),
+          "; Copy external binaries",
+          "; Create file associations",
+          "SectionEnd",
+          "",
+        ].join("\n"),
+      );
+      return () => payloadFromGeneratedScript(filename);
+    }
+    assert.equal(render(required)().companionLicenseFiles, 2);
+    assert.throws(render(required.slice(1)), /must include companion license/u);
+    assert.throws(
+      render([["wrong\\webrtc-LICENSE-MIT", required[0][1]], required[1]]),
+      /must include companion license/u,
+    );
+    const changed = path.join(temporary, "changed-license");
+    writeFileSync(changed, "altered license text");
+    assert.throws(
+      render([[required[0][0], changed], required[1]]),
+      /must match official WebRTC/u,
+    );
+  } finally {
+    assert.equal(
+      path.dirname(path.resolve(temporary)),
+      path.resolve(temporaryParent),
+    );
+    assert(!lstatSync(temporary).isSymbolicLink());
+    rmSync(temporary, { recursive: true, force: true });
+  }
+});
 
 function run(command, args, options, label) {
   const result = spawnSync(command, args, {
@@ -449,7 +562,7 @@ test(
         /(?:^|\\)LICENSE(?:\.[^\\]+)?$/iu.test(file.destination),
       );
       context.diagnostic(
-        `${payload.version}: ${payload.files.length} actual payload files and ${licenses.length} licenses hash-verified twice; extracted executable offline check passed; paidCalls=0; userConfigurationRead=false`,
+        `${payload.version}: ${payload.files.length} actual payload files, ${licenses.length} skill licenses and ${payload.companionLicenseFiles} official WebRTC companion licenses hash-verified twice; extracted executable offline check passed; paidCalls=0; userConfigurationRead=false`,
       );
     } finally {
       const resolved = path.resolve(temporary);

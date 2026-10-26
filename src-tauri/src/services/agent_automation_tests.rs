@@ -67,6 +67,7 @@ async fn automation_dispatch_preserves_cancelled_and_binding_failure_receipts_wi
         prefs.projects.insert(
             preferences::path_key(&path.to_string_lossy()),
             AgentProject {
+                standalone: false,
                 path: path.to_string_lossy().into_owned(),
                 name: "isolated failure".into(),
                 pinned: false,
@@ -118,6 +119,7 @@ async fn automation_production_dispatch_and_monitor_record_completed_native_sess
     registered.projects.insert(
         preferences::path_key(&path.to_string_lossy()),
         AgentProject {
+            standalone: false,
             path: path.to_string_lossy().into_owned(),
             name: "isolated".into(),
             pinned: false,
@@ -391,6 +393,7 @@ async fn automation_recovery_reattaches_live_run_and_scoped_cancel_persists_term
         registered.projects.insert(
             preferences::path_key(&dir.to_string_lossy()),
             AgentProject {
+                standalone: false,
                 path: dir.to_string_lossy().into_owned(),
                 name: "isolated recovery".into(),
                 pinned: false,

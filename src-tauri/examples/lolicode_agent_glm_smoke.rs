@@ -437,6 +437,7 @@ mod live {
         stopped?;
         let (catalog, snapshot, extra) = result?;
         let workspace = AgentWorkspace {
+            standalone: false,
             path: project.to_string_lossy().into_owned(),
             name: "真实 GLM 临时项目测试记录".into(),
         };

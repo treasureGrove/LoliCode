@@ -4123,6 +4123,14 @@
     "refresh": "更新"
   },
   "nav": {
+    "tools": "ツール",
+    "expandTools": "ツールを展開",
+    "collapseTools": "ツールを折りたたむ",
+    "pinnedTools": "固定したツール",
+    "pinTool": "上部に固定",
+    "unpinTool": "固定を解除",
+    "removeTool": "ツールを削除",
+    "removeToolHint": "データは保持されます。「アプリ」から再追加できます。",
     "softwareUpdates": "ソフトウェア更新",
     "softwareUpdatesAvailable": "LoliCode の新しいバージョンがあります",
     "mainLabel": "メインナビゲーション",
@@ -4157,7 +4165,7 @@
   },
   "tavern": {
     "title": "酒場",
-    "subtitle": "プリセットまたはインポートしたカードで、設定済みモデルと物語を始めましょう",
+    "subtitle": "プリセットや読み込んだカードで、ローカルモデルまたは設定済みチャンネルと物語を始めましょう",
     "importTitle": "SillyTavern キャラクターカードを読み込む",
     "characterCard": "キャラクターカード",
     "importCard": "カードを読み込む",
@@ -4173,13 +4181,13 @@
     "noStories": "ストーリーはまだありません",
     "chooseCharacter": "左側からキャラクターを選択",
     "welcomeTitle": "新しい物語を始めましょう",
-    "startStoryHint": "共有モデルチャンネルで会話できます。ストーリーはローカルに保存されます。",
+    "startStoryHint": "ローカルモデルまたは設定済みチャンネルで会話できます。ストーリーはこの端末に保存されます。",
     "emptyLibraryHint": "プリセットを選ぶか、SillyTavern の PNG・JSON カードをインポートしてください。人物と物語はこの端末に保存されます。",
     "emptyStory": "最初のメッセージを送って物語を始めます。",
     "model": "モデルとチャンネル",
     "noModels": "先にモデルを設定してください",
     "configureModels": "モデルを設定",
-    "configureModelsHint": "「モデルとチャンネル」でモデルを追加して有効にしてください。",
+    "configureModelsHint": "上のローカルモデルを設定するか、「モデルとチャンネル」でモデルを追加してください。",
     "loadingModels": "利用可能なモデルを読み込み中…",
     "contextPreview": "コンテキスト",
     "loadingContext": "今回のコンテキストを確認中…",
@@ -4204,6 +4212,39 @@
     "generationFailedShort": "失敗 · 再送信できます",
     "send": "送信",
     "enterHint": "Enter で送信 · Shift + Enter で改行",
+    "local": {
+      "title": "ローカル会話モデル",
+      "expand": "ローカルモデル設定を開く",
+      "collapse": "ローカルモデル設定を折りたたむ",
+      "model": "Silicon-based Girlfriend v2 9B · Q4_K_M · 16K",
+      "description": "一度設定すれば API キーなしで会話できます。クラウドモデルへ自動転送しません。",
+      "install": "設定して有効化",
+      "resume": "設定を再開",
+      "start": "有効化して起動",
+      "pause": "設定を一時停止",
+      "release": "VRAM を解放",
+      "useChannels": "チャネルモデルを使う",
+      "disabled": "インストール済み・チャネルモデルを使用中",
+      "loadFailed": "ローカルモデルの状態を取得できません。再試行してください。",
+      "loading": "ローカルモデルの状態を確認中…",
+      "memoryMode": "VRAM 節約モード",
+      "progress": "ローカルモデルのダウンロード進捗",
+      "repair": "検証して設定を修復",
+      "details": "動作要件と会話メモリ",
+      "requirements": "Windows x64 の NVIDIA GPU（VRAM 6GB 以上推奨）とシステムメモリ 16GB 推奨。初回ダウンロードは約 6.36GB、インストール時に 16GB の空き容量を確保してください。中断後に再開できます。",
+      "history": "思考モードを無効にした 16K ウィンドウを使います。キャラクター、ワールドブック、最新メッセージを優先し、上限を超えると古い会話を省きます。長期メモリは自動生成しません。VRAM 解放後は次の送信で再起動します。",
+      "states": {
+        "unsupported": "自動設定は現在 Windows x64 の NVIDIA GPU に対応",
+        "notInstalled": "未設定",
+        "downloading": "ダウンロード中・一時停止して再開できます…",
+        "verifying": "ファイルを検証・準備中…",
+        "paused": "一時停止中・再開できます",
+        "ready": "準備完了・会話時に自動起動",
+        "starting": "ローカルモデルを読み込み中…",
+        "running": "ローカルで実行中",
+        "error": "設定または起動が未完了です。再試行できます"
+      }
+    },
     "presets": {
       "title": "プリセットキャラクター",
       "description": "仲間を選んで物語を始めましょう。人物設定、挨拶、世界設定はローカルに収録されています。",
@@ -4952,6 +4993,14 @@
     "unreal": {
       "title": "Unreal ワークスペース",
       "description": "Unreal プロジェクトを管理し、メイン Agent と連携。Unreal Engine が必要です。"
+    },
+    "rankings": {
+      "title": "Model rankings",
+      "description": "Explore and bookmark independent model, coding and multimodal leaderboards."
+    },
+    "free-ai": {
+      "title": "Free AI directory",
+      "description": "Discover free models, developer trials and platforms with clear conditions and official links."
     }
   },
   "resourceUpdates": {
@@ -4987,5 +5036,85 @@
     "buildingBridge": "このエンジン用のプラグインをビルド・検証しています。初回は数分かかる場合があります。エディターは閉じておいてください。",
     "buildingBridgeShort": "ブリッジを準備中…",
     "restartEditor": "このページからエディターを起動して安全にペアリングしてください。プロジェクトを直接開いても接続されません。元の設定は .uproject.lolicode.bak に保存されています。"
+  },
+  "discovery": {
+    "rankings": {
+      "subtitle": "Independent model leaderboards",
+      "headline": "ランキングを、その場で確認。",
+      "intro": "実際のランキング画像を閲覧し、クリックで拡大できます。評価方法はサイトごとに異なります。全結果や最新情報は元のサイトで確認できます。",
+      "search": "Search leaderboards, coding, multimodal…",
+      "footer": "画像はランキングの一部です。撮影日はスコアの更新日ではありません。"
+    },
+    "free-ai": {
+      "subtitle": "A collection of free AI discoveries",
+      "headline": "Little discoveries, more possibilities.",
+      "intro": "Discover free models and developer trials with clear access conditions. Save useful services and return when inspiration arrives.",
+      "search": "Search sites, free models, developer trials…",
+      "footer": "Free allowances and offers can change. Check the source for current terms."
+    },
+    "refresh": "Update directory",
+    "favoriteFailed": "Could not save bookmark. Please retry.",
+    "openFailed": "Could not open link. Please retry.",
+    "count": "{{count}} curated entries",
+    "source": {
+      "builtin": "Built-in · available offline",
+      "cache": "Saved online directory"
+    },
+    "updated": "Directory updated {{date}}",
+    "refreshed": "Latest directory checked",
+    "refreshUnavailable": "The online directory is unavailable. Current entries and bookmarks are retained.",
+    "search": "Search directory",
+    "clearSearch": "Clear search",
+    "favorites": "Bookmarks only",
+    "categories": "Directory categories",
+    "category": {
+      "all": "All",
+      "general": "General",
+      "coding": "Coding",
+      "multimodal": "Multimodal",
+      "platform": "Platforms"
+    },
+    "results": "{{count}} results",
+    "loading": "Opening directory…",
+    "loadFailed": "Could not read the directory. Please retry.",
+    "noFavorites": "No matching bookmarks yet. Save entries using the bookmark button.",
+    "noResults": "No matching entries. Try another search.",
+    "showAll": "Show all",
+    "favorite": "Bookmark {{name}}",
+    "unfavorite": "Remove bookmark {{name}}",
+    "offer": {
+      "ranking": "Independent leaderboard",
+      "free-tier": "Free allowance",
+      "limited-free": "Selected offers · limited time",
+      "trial": "Developer trial"
+    },
+    "access": {
+      "public": "Public access",
+      "account": "Account required",
+      "varies": "Varies by service"
+    },
+    "expired": "Offer expired",
+    "officialSource": "Official details",
+    "checked": "Entry checked {{date}}",
+    "viewRanking": "元のランキングを見る",
+    "visit": "Visit website",
+    "preview": {
+      "loading": "ローカル画像を読み込み中…",
+      "unavailable": "このサイトの画像はまだありません。下のリンクから元のサイトをご覧ください。",
+      "date": "撮影日 {{date}} · ランキング抜粋",
+      "alt": "{{name}} ランキング画像",
+      "expand": "{{name}} のランキングを拡大",
+      "enlarge": "拡大表示",
+      "local": "オフラインでも閲覧可能",
+      "stale": "前回の画像を表示中。後で一覧を更新してください",
+      "zoomOut": "縮小",
+      "zoomIn": "拡大",
+      "close": "プレビューを閉じる"
+    }
+  },
+  "productRelease": {
+    "build": "Internal build {{version}}",
+    "legacy": "Legacy releases",
+    "note": "Independent product versioning starts at v1.0.0. Legacy releases and existing data remain compatible."
   }
 }

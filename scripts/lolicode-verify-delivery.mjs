@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Final stable-delivery gate. A GitHub release alone does not satisfy this gate.
 import assert from "node:assert/strict";
+import { productVersion } from "./lolicode-product-version.mjs";
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -28,11 +29,13 @@ export function validateStableFeed(feed, local) {
     "Stable feed has not been promoted to this version",
   );
   assert.deepEqual(Object.keys(feed.platforms ?? {}), ["windows-x86_64"]);
-  const installer = `LoliCode-${local.version}-Windows-x64-Setup.exe`;
+  const publicVersion = productVersion(local.version);
+  assert.equal(feed.productVersion ?? feed.version, publicVersion);
+  const installer = `LoliCode-${publicVersion}-Windows-x64-Setup.exe`;
   assert.deepEqual(
     feed.platforms["windows-x86_64"],
     {
-      url: `https://lolicode.com/downloads/releases/${local.version}/${installer}`,
+      url: `https://lolicode.com/downloads/releases/${publicVersion}/${installer}`,
       signature: local.signature,
     },
     "Stable updater must use the reviewed installer and signature",
@@ -41,12 +44,12 @@ export function validateStableFeed(feed, local) {
   assert.deepEqual(feed.downloads?.["windows-x86_64-portable"], {
     name: "LoliCode-Portable.zip",
     ...portable,
-    url: `https://lolicode.com/downloads/releases/${local.version}/LoliCode-Portable.zip`,
+    url: `https://lolicode.com/downloads/releases/${publicVersion}/LoliCode-Portable.zip`,
   });
   assert.deepEqual(feed.downloads?.["windows-x86_64-installer-github"], {
     name: installer,
     ...local.assets[installer],
-    url: `${GITHUB}${local.version}/${installer}`,
+    url: `${GITHUB}${publicVersion}/${installer}`,
   });
 }
 
@@ -102,7 +105,8 @@ export async function verifyDelivery(options) {
   );
   const version = release.version;
   assert.equal(parseVersion(version).pre.length, 0, "Stable version required");
-  const installer = `LoliCode-${version}-Windows-x64-Setup.exe`;
+  const publicVersion = productVersion(version);
+  const installer = `LoliCode-${publicVersion}-Windows-x64-Setup.exe`;
   const assets = Object.fromEntries(
     release.files
       .filter((f) => f.name !== "latest.json")
@@ -142,7 +146,7 @@ export async function verifyDelivery(options) {
     "Website and installed clients disagree",
   );
   const github = (await metadata(`${API}/releases/latest`)).value;
-  assert.equal(github.tag_name, `lolicode-v${version}`);
+  assert.equal(github.tag_name, `lolicode-v${publicVersion}`);
   assert.equal(github.draft, false);
   assert.equal(github.prerelease, false);
   proof.githubLatest = github.tag_name;
@@ -155,7 +159,7 @@ export async function verifyDelivery(options) {
         asset.digest === `sha256:${expected.sha256}`,
       "GitHub asset differs from verified local bytes",
     );
-    const url = `https://lolicode.com/downloads/releases/${version}/${name}`;
+    const url = `https://lolicode.com/downloads/releases/${publicVersion}/${name}`;
     const routed = await request(url);
     assert.equal(
       routed.status,
@@ -166,8 +170,8 @@ export async function verifyDelivery(options) {
     await routed.body?.cancel();
     assert(
       [
-        `${R2}/lolicode/releases/${version}/${name}`,
-        `${GITHUB}${version}/${name}`,
+        `${R2}/lolicode/releases/${publicVersion}/${name}`,
+        `${GITHUB}${publicVersion}/${name}`,
       ].includes(selected),
     );
     let response = await request(selected);

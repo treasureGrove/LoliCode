@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useCallback,
   useMemo,
   useRef,
   useState,
@@ -33,6 +34,7 @@ import {
   type TavernSnapshot,
 } from "@/lib/api/tavern";
 import { TavernPresetGallery } from "./TavernPresetGallery";
+import { TavernLocalModelPanel } from "./TavernLocalModelPanel";
 import companion from "@/assets/atelier/companion.png";
 import { cn } from "@/lib/utils";
 
@@ -64,6 +66,10 @@ function upsertStory(
 export function TavernPage({ onOpenChannels }: { onOpenChannels: () => void }) {
   const { t, i18n } = useTranslation();
   const queryClient = useQueryClient();
+  const refreshCatalog = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: CATALOG_QUERY_KEY }),
+    [queryClient],
+  );
   const [characterId, setCharacterId] = useState<string | null>(null);
   const [storyId, setStoryId] = useState<string | null>(null);
   const [modelId, setModelId] = useState("");
@@ -316,6 +322,7 @@ export function TavernPage({ onOpenChannels }: { onOpenChannels: () => void }) {
         }
       />
 
+      <TavernLocalModelPanel onChange={refreshCatalog} />
       <div className="flex min-h-0 flex-1 gap-4 p-4 lg:p-5">
         <aside className="flex w-[280px] shrink-0 flex-col overflow-hidden rounded-2xl border border-border bg-surface/90 shadow-v7-sm max-lg:w-[230px] max-sm:hidden">
           <div className="flex items-center justify-between border-b border-border px-4 py-3">

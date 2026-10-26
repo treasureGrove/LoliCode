@@ -12,6 +12,12 @@ const PROJECT_LIMIT: usize = 2200;
 const MAX_ENTRIES: usize = 64;
 const MAX_PROJECTS: usize = 256;
 const MAX_STORE_BYTES: u64 = 4 * 1024 * 1024;
+const PERSONA_PRESET_VERSION: u32 = 1;
+const PERSONA_PRESETS: [&str; 3] = [
+    "默认称呼用户为「主人」；用户另有称呼偏好时，以用户的设定为准。",
+    "助手的角色名暂定为 sillyDog（小笨狗），是一只可爱的犬耳兽耳娘。语气亲切、呆萌，做事认真、清晰，不因角色扮演降低回答质量。",
+    "角色叫声使用「汪呜~」，自然、适量地表达，不必每句话重复。",
+];
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -31,6 +37,8 @@ pub(super) struct Store {
     require_approval: bool,
     user: Vec<Entry>,
     projects: BTreeMap<String, Vec<Entry>>,
+    #[serde(default)]
+    persona_preset_version: u32,
 }
 
 impl Default for Store {
@@ -42,6 +50,7 @@ impl Default for Store {
             require_approval: true,
             user: Vec::new(),
             projects: BTreeMap::new(),
+            persona_preset_version: 0,
         }
     }
 }
@@ -130,6 +139,27 @@ fn validate_text(content: &str) -> Result<(), String> {
 }
 
 impl Store {
+    /// A durable marker is saved atomically with the entries. Editing, removing,
+    /// clearing or disabling memory never makes this eligible for seeding again.
+    pub fn initialize_persona(&mut self) -> Result<bool, String> {
+        // Any previous initialization counts, even if a later release changes
+        // the preset version. User edits and deletions must never be revived.
+        if self.persona_preset_version != 0 { return Ok(false); }
+        if self.enabled {
+            let remaining = USER_LIMIT.saturating_sub(size(&self.user));
+            let needed: usize = PERSONA_PRESETS.iter().map(|text| text.chars().count()).sum();
+            if needed <= remaining && self.user.len() + PERSONA_PRESETS.len() <= MAX_ENTRIES {
+                self.user.extend(PERSONA_PRESETS.iter().map(|text| Entry {
+                    id: Uuid::new_v4().to_string(), content: (*text).into(),
+                    updated_at: super::engine::now(), source: "preset:sillyDog:v1".into(),
+                }));
+            }
+        }
+        self.persona_preset_version = PERSONA_PRESET_VERSION;
+        self.bump()?;
+        Ok(true)
+    }
+
     fn validate(&self) -> Result<(), String> {
         if self.format != 1 || self.projects.len() > MAX_PROJECTS {
             return Err("本地记忆格式无效，原文件已保留".into());
@@ -175,7 +205,8 @@ impl Store {
         }
         // JSON keeps entry text visibly separate from metadata; wrapping is added
         // as a user-role context message by context::with_memory.
-        Some(json!({"userPreferences":self.user.iter().map(|entry| &entry.content).collect::<Vec<_>>(),
+        Some(json!({"defaultPersona":self.user.iter().filter(|entry| entry.source == "preset:sillyDog:v1").map(|entry| &entry.content).collect::<Vec<_>>(),
+            "userPreferences":self.user.iter().filter(|entry| entry.source != "preset:sillyDog:v1").map(|entry| &entry.content).collect::<Vec<_>>(),
             "projectFacts":project_entries.iter().map(|entry| &entry.content).collect::<Vec<_>>()}).to_string())
     }
 
@@ -454,6 +485,52 @@ pub(super) fn schema() -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn persona_presets_are_one_time_editable_and_never_return_after_clear() {
+        let root = tempfile::tempdir().unwrap();
+        let mut store = load(root.path()).await.unwrap();
+        assert!(store.initialize_persona().unwrap());
+        assert_eq!(store.user.len(), 3);
+        assert!(store.context("a").unwrap().contains("汪呜~"));
+        save(root.path(), &store).await.unwrap();
+        let mut store = load(root.path()).await.unwrap();
+        assert!(!store.initialize_persona().unwrap());
+        store.edit(None, &json!({"revision":store.revision,"action":"patch","scope":"user","old_text":PERSONA_PRESETS[0],"content":"称呼用户为老师，不使用动物叫声"})).unwrap();
+        store.edit(None, &json!({"revision":store.revision,"action":"remove","scope":"user","old_text":PERSONA_PRESETS[2]})).unwrap();
+        save(root.path(), &store).await.unwrap();
+        let mut store = load(root.path()).await.unwrap();
+        assert!(!store.initialize_persona().unwrap());
+        let context = store.context("a").unwrap();
+        assert!(!context.contains("主人"));
+        assert!(!context.contains("汪呜~"));
+        assert!(context.contains("老师"));
+        store.clear(&json!({"revision":store.revision,"scope":"all"}), None).unwrap();
+        save(root.path(), &store).await.unwrap();
+        let mut empty = load(root.path()).await.unwrap();
+        assert!(!empty.initialize_persona().unwrap());
+        assert!(empty.context("a").is_none());
+    }
+
+    #[test]
+    fn existing_preferences_take_precedence_and_disabled_or_full_memory_is_preserved() {
+        let mut store = Store::default();
+        store.execute("a", &json!({"scope":"user","action":"add","content":"称呼我为老师，保持正式语气"}), "user").unwrap();
+        store.initialize_persona().unwrap();
+        let context: Value = serde_json::from_str(&store.context("a").unwrap()).unwrap();
+        assert_eq!(context["userPreferences"], json!(["称呼我为老师，保持正式语气"]));
+        assert_eq!(context["defaultPersona"].as_array().unwrap().len(), 3);
+        let mut disabled = Store::default();
+        disabled.configure(&json!({"revision":0,"enabled":false})).unwrap();
+        disabled.initialize_persona().unwrap();
+        assert!(!disabled.enabled());
+        assert!(disabled.user.is_empty());
+        let mut full = Store::default();
+        full.execute("a", &json!({"scope":"user","action":"add","content":"字".repeat(USER_LIMIT)}), "user").unwrap();
+        full.initialize_persona().unwrap();
+        assert_eq!(full.user.len(), 1);
+        assert_eq!(size(&full.user), USER_LIMIT);
+    }
 
     #[tokio::test]
     async fn memory_persists_scopes_and_rejects_credentials_without_a_write() {

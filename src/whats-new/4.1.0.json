@@ -1,0 +1,33 @@
+{
+  "version": "4.1.0",
+  "items": [
+    {
+      "type": "new",
+      "zh": "酒馆新增9B本地陪伴模型，一键配置16K对话与6GB显卡内存分担",
+      "zh-TW": "酒館新增9B本地陪伴模型，一鍵設定16K對話與6GB顯示卡記憶體分擔",
+      "en": "Add one-click 9B local Tavern setup with 16K context and memory sharing for 6GB GPUs",
+      "ja": "酒館に9Bローカルモデルの一括設定、16K対話、6GB GPUメモリ分担を追加"
+    },
+    {
+      "type": "new",
+      "zh": "加入模型榜单与免费 AI 导航，支持搜索、分类和收藏",
+      "zh-TW": "加入模型榜單與免費 AI 導航，支援搜尋、分類和收藏",
+      "en": "Add model rankings and free AI directories with search, categories and bookmarks",
+      "ja": "モデルランキングと無料AI案内に検索・分類・ブックマークを追加"
+    },
+    {
+      "type": "improve",
+      "zh": "模型榜单直接展示本地截图，支持应用内放大与缩放",
+      "zh-TW": "模型榜單直接顯示本機截圖，支援應用內放大與縮放",
+      "en": "View local leaderboard snapshots with in-app enlargement and zoom",
+      "ja": "ランキング画像のローカル閲覧とアプリ内拡大に対応"
+    },
+    {
+      "type": "improve",
+      "zh": "以 v1.0.0 开启独立产品版本，保留 Legacy 与升级兼容",
+      "zh-TW": "以 v1.0.0 開啟獨立產品版本，保留 Legacy 與升級相容",
+      "en": "Start independent product versioning at v1.0.0 while retaining legacy upgrade compatibility",
+      "ja": "製品バージョンをv1.0.0から開始し既存版との更新互換性を維持"
+    }
+  ]
+}

@@ -157,6 +157,14 @@ pub async fn open_agent_project(
     sort_sessions(&mut opened.sessions);
     Ok(opened)
 }
+#[tauri::command]
+pub async fn open_agent_standalone(app: AppHandle) -> Result<AgentOpenProject, String> {
+    let path = tokio::task::spawn_blocking(|| {
+        crate::services::agent_host::standalone_workspace_at(&crate::config::get_app_config_dir())
+    }).await.map_err(|_| "独立任务目录检查未完成")??;
+    open_agent_project(app, path.to_string_lossy().into_owned(), None).await
+}
+
 #[tauri::command(rename_all = "camelCase")]
 pub async fn list_agent_sessions(
     app: AppHandle,

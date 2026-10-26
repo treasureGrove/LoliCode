@@ -2,7 +2,17 @@
 
 本流程是 LoliCode 自己的发布链路，不复用 CCSwitch 的公钥、更新地址、GitHub workflow 或下载站清单。`scripts/lolicode-release.mjs` 仅在本地产生并验证发布目录，不上传文件，不读取私钥或 `.env`。
 
-当前正式更新版本为 **4.0.22**，见[本次交付记录](lolicode-4.0.22-delivery.md)。公开分发目前是 **Windows x64 NSIS 安装版与便携 ZIP**；macOS 和 Linux 是产品目标，尚未发布对应安装包。真实发布结果记录在每版交付文档中，不能用待发布清单替代发布证据。
+当前正式产品版本为 **v1.0.2**、原生更新版本为 **4.1.2**，见[本次交付记录](lolicode-v1.0.2-delivery.md)。公开分发目前是 **Windows x64 NSIS 安装版与便携 ZIP**；macOS 和 Linux 是产品目标，尚未发布对应安装包。真实发布结果记录在每版交付文档中，不能用待发布清单替代发布证据。
+
+`product-release.json` 区分展示版本和原生构建版本，`scripts/lolicode-product-version.mjs` 负责映射。Cargo、package、Tauri 和 feed.version 继续使用递增的 4.1.2；官网、GitHub tag、下载文件名和目录使用 1.0.2，feed.productVersion 用于展示，不能把 updater 版本回退成产品版本号。维护者可使用 `$lolicode-release` skill。
+
+当前源码冻结与便携包验收入口为 `scripts/lolicode-build-snapshot.mjs`、`scripts/lolicode-portable.mjs`。前者在独立 index 和审计 ref 中保存源树并导出构建目录，保留用户分支和 index；后者从真实本轮可执行文件组装 ZIP、逐文件核对并执行离线自检。
+
+v1.0.1 是图标补丁：基于 v1.0.0 已发布冻结树，在独立 index 中仅套用 18 个图标、5 个版本文件和一份更新说明再冻结，排除工作区其他未提交功能。Windows 安装、旧版覆盖升级、重复安装、便携包、官方 SDK 下载验签和双 feed 交付验收均通过。新版本默认通过同版 GitHub 不可变附件下载。2026-10-21 已补齐 R2 同字节镜像并完成匿名完整下载、哈希和签名验收；补镜像不改变默认源，历史路由保留。
+
+当前用户选择 **GitHub Release 为默认下载源，R2 为单独镜像**。后续版本沿用该选择；R2 同步成功也不自动修改官网 exact 路由或正式 feed。发布检查逐项记录 GitHub 与 R2 状态：R2 只向既有 `lolicode-releases` 桶的 `lolicode/releases/<productVersion>/` 新前缀上传本轮已验证的安装器、`.sig`、便携 ZIP 和脱敏 `release-build.json`，不上传 `latest.json`、源码或私有配置。已存在对象必须先核对长度和完整 SHA；不同字节不得覆盖。完成匿名完整下载、安装器验签和 Range 验收后才记录镜像已同步，缺失则明确记录未同步。历史控制台上传与 GitHub SSH 上传是独立步骤，不能以 GitHub 上传回执代替 R2 验收。
+
+v1.0.0 本轮使用已验证的同版本 GitHub 下载通道，保留历史 R2 路由；R2 本轮未同步。模型榜单目录与三张快照也已同步官网和工具站。下文 4.0.x 命令是历史参数示例，实际执行时同时核对本轮原生版与产品版。
 
 历史 **4.0.21-rc.1／rc.2 测试候选版**保留独立清单和原附件；测试版公开不能算正式更新上线。4.0.21 已同步正式 latest、官网和 GitHub Latest，并验证旧版默认源下载验签。真实用户账号、界面热更新 WebView 与其余功能场景仍按持续验收范围跟进。
 
@@ -14,6 +24,16 @@
 4.0.22 的安装器与便携包由 R2、公开 GitHub Releases 同时保存；官网和更新清单使用 `https://lolicode.com/downloads/releases/4.0.22/<文件名>`，旧版下载路由保留。服务器仅检查已知 R2 对象并返回跳转；R2 异常时选择同版本 GitHub 文件，下载字节不经过官网服务器。这是下载前选路，不会在客户端传输中断后自动接管连接。R2 当前使用临时公开开发地址，后续可替换上游而保持官网路径不变。具体限制和验收结果见交付记录。
 
 ## 更新文件约定
+
+### Windows 覆盖更新
+
+v1.0.2 及后续安装包使用 `src-tauri/nsis/installer.nsi` 自定义模板，基于 Tauri CLI 2.10.1：NSIS 同版本修复与升版直接覆盖原目录，不调用旧卸载器。手动运行、`/P`、`/S`、`/UPDATE` 使用同一策略；Windows「已安装的应用」中的主动卸载入口保留，MSI 转 NSIS 仍沿用上游迁移流程。
+
+恢复安装目录时依次检查当前 publisher 注册项、产品卸载项的 `InstallLocation`、`UninstallString`，兼容历史带引号路径。仅自动接受包含 `LoliCode.exe` 或 `tai-switch.exe` 的绝对本地非根目录；存在旧安装记录却无法定位时停止，不默认安装到另一个目录。显式 `/D=<原安装目录>` 可用于修复异常登记。旧主程序名称缺失时识别原目录的 `tai-switch.exe`，先检查进程，再在新文件复制完成后迁移旧名称与标准快捷方式。用户配置和数据库不进入卸载流程。
+
+发版前执行 `node --test scripts/tests/lolicode-nsis-overwrite-upgrade.test.mjs`。此测试通过本机已安装的 Tauri CLI 和真实 NSIS 编译器打包隔离程序，实际验证旧 publisher 项缺失、中文/空格路径、重复覆盖、应用内更新、旧程序名缺失、数据保留、禁止降级策略与异常目录拒绝；使用唯一测试注册项，不操作真实用户安装。升级 Tauri CLI 时同步复核自定义模板和上游差异。
+
+v1.0.2 已交付该修复，并真实验证远端正式 v1.0.1 与本机 4.0.11 程序副本覆盖升级；已发布的 v1.0.1 文件保持不变，不覆盖同版本历史附件。
 
 本项目使用 Tauri v2 Windows x64 NSIS 更新。更新客户端下载完整 NSIS 安装器 `.exe`；对应 `.exe.sig` 为 Tauri 签名。`latest.json` 的 `platforms.windows-x86_64.signature` 必须嵌入 `.sig` 的内容，而不是文件路径或 URL。[Tauri 官方 updater 文档](https://v2.tauri.app/plugin/updater/)
 

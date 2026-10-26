@@ -1,6 +1,36 @@
 use super::*;
 
 #[tokio::test]
+async fn sillydog_defaults_reach_model_context_and_user_changes_survive_restart() {
+    let fake = Fake::start(|_| text("PERSONA_CONTEXT_OK")).await;
+    let (data, project, engine, id) = setup(&fake).await;
+    let seeded = engine.call("initializeMemoryDefaults", json!({})).await.unwrap();
+    assert_eq!(seeded["user"]["entries"].as_array().unwrap().len(), 3);
+    send(&engine, &id, "persona-first", "你好").await;
+    wait(&engine, &id, |value| value["status"] == "idle").await;
+    let body = fake.requests.lock().unwrap()[0].clone();
+    assert!(body["messages"][1]["content"].as_str().unwrap().contains("sillyDog"));
+    assert!(body["messages"][1]["content"].as_str().unwrap().contains("汪呜~"));
+    assert!(!body["messages"][0]["content"].as_str().unwrap().contains("主人"));
+    let edited = engine.call("editMemory", json!({"revision":seeded["revision"],"action":"patch","scope":"user","old_text":seeded["user"]["entries"][0]["content"],"content":"称呼用户为老师"})).await.unwrap();
+    engine.shutdown().await.unwrap();
+    let resumed = NativeEngine::open(data.path().into()).await.unwrap();
+    resumed.bind(project.path().into(), catalog(), fake.gateway()).await.unwrap();
+    let again = resumed.call("initializeMemoryDefaults", json!({})).await.unwrap();
+    assert_eq!(again, edited);
+    send(&resumed, &id, "persona-edited", "你好，再次检查偏好").await;
+    wait(&resumed, &id, |value| value["status"] == "idle").await;
+    let body = fake.requests.lock().unwrap().last().unwrap().clone();
+    let memory = body["messages"][1]["content"].as_str().unwrap();
+    assert!(memory.contains("老师"));
+    assert!(!memory.contains("主人"));
+    let cleared = resumed.call("clearMemory", json!({"revision":again["revision"],"scope":"all"})).await.unwrap();
+    assert_eq!(resumed.call("initializeMemoryDefaults", json!({})).await.unwrap(), cleared);
+    assert_eq!(cleared["user"]["entries"], json!([]));
+    resumed.shutdown().await.unwrap();
+}
+
+#[tokio::test]
 async fn memory_survives_restart_and_only_injects_the_selected_projects_facts() {
     let fake = Fake::start(|_| text("MEMORY_RESPONSE")).await;
     let (data, project, engine, id) = setup(&fake).await;

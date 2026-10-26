@@ -1,0 +1,138 @@
+/* Office documents use a familiar neutral window around their paper or grid. */
+.wb-office-preview-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 199;
+  background: rgb(17 24 39 / 36%);
+}
+.wb-preview-panel.wb-preview-panel--office {
+  --preview-paper: #ffffff;
+  --preview-ink: #26313d;
+  --preview-rule: #dce1e7;
+  --wb-muted: #6d7784;
+  --wb-hover: #edf1f6;
+  --wb-accent: #2b579a;
+  --wb-selected: #e7eef9;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  color: var(--preview-ink);
+  background: #f6f7f9;
+  border: 1px solid #d6dce5;
+  border-radius: 9px;
+  box-shadow: 0 2px 9px rgb(26 40 62 / 5%);
+  color-scheme: light;
+}
+.wb-preview-panel--office[data-office-kind="xlsx"] {
+  --wb-accent: #217346;
+}
+.wb-preview-panel--office[data-office-kind="pptx"] {
+  --wb-accent: #c34e2c;
+}
+.wb-preview-panel--office[data-office-kind="pdf"] {
+  --wb-accent: #bc3941;
+}
+.wb-preview-panel.wb-preview-panel--office > .wb-preview-header {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 53px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #e1e5ec;
+  background: #fff;
+}
+.wb-preview-panel--office .wb-preview-format {
+  display: grid;
+  flex: 0 0 29px;
+  width: 29px;
+  height: 32px;
+  place-items: center;
+  border-radius: 4px;
+  color: #fff;
+  background: var(--wb-accent);
+  font-size: 19px;
+  font-weight: 600;
+  font-family: "Segoe UI", sans-serif;
+}
+.wb-preview-panel--office[data-office-kind="pdf"] .wb-preview-format {
+  font-size: 10px;
+}
+.wb-preview-panel.wb-preview-panel--office .wb-preview-heading {
+  gap: 2px;
+}
+.wb-preview-panel--office .wb-preview-eyebrow {
+  color: #7d8794;
+  font-size: 9px;
+  letter-spacing: 0.03em;
+}
+.wb-preview-panel--office .wb-preview-filename {
+  color: #26313d;
+  font-size: 12px;
+}
+.wb-preview-panel.wb-preview-panel--office .wb-preview-actions button {
+  width: 26px;
+  height: 28px;
+  border-radius: 4px;
+  color: #647080;
+}
+.wb-preview-panel.wb-preview-panel--office
+  .wb-preview-actions
+  button:not(:disabled):hover {
+  color: #26313d;
+  background: #edf1f6;
+}
+.wb-preview-panel--office
+  .wb-preview-actions
+  button:last-child:not(:disabled):hover {
+  color: #b83b48;
+  background: #ffeff1;
+}
+.wb-preview-panel.wb-preview-panel--office .wb-preview-path-form {
+  margin: 8px 10px;
+  border: 1px solid #ccd4df;
+  border-radius: 4px;
+  color: #647080;
+  background: #fff;
+}
+.wb-preview-panel--office .wb-preview-path-form input {
+  color: #26313d;
+}
+.wb-preview-panel.wb-preview-panel--office .wb-preview-path-form:focus-within {
+  border-color: var(--wb-accent);
+  box-shadow: 0 0 0 1px var(--wb-accent);
+}
+.wb-resizable-layout > .wb-preview-panel.wb-preview-panel--expanded,
+.wb-preview-panel.wb-preview-panel--expanded {
+  position: fixed;
+  inset: 16px;
+  z-index: 200;
+  width: auto;
+  max-width: none;
+  height: auto;
+  margin: 0;
+  box-shadow: 0 18px 70px rgb(17 24 39 / 25%);
+}
+@media (max-width: 640px) {
+  .wb-preview-panel.wb-preview-panel--office > .wb-preview-header {
+    gap: 7px;
+    padding: 7px 8px;
+  }
+  .wb-preview-panel--office .wb-preview-format {
+    flex-basis: 24px;
+    width: 24px;
+    height: 28px;
+    font-size: 17px;
+  }
+  .wb-resizable-layout > .wb-preview-panel.wb-preview-panel--expanded,
+  .wb-preview-panel.wb-preview-panel--expanded {
+    inset: 5px;
+  }
+}
+@media (forced-colors: active) {
+  .wb-preview-panel--office .wb-preview-format {
+    border: 1px solid CanvasText;
+  }
+}

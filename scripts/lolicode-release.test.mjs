@@ -373,3 +373,18 @@ test("previous published version and inherited upstream key both prevent acciden
     f.clean();
   }
 });
+
+
+test("independent v1 public assets retain a higher native updater version", async () => {
+  const f=fixture();
+  try {
+    f.config.version="4.1.0";
+    writeFileSync(f.configFile,JSON.stringify(f.config));
+    const result=await prepareRelease({...f.options,version:"4.1.0","current-version":"4.0.22"});
+    assert.equal(path.basename(result.directory),"1.0.0");
+    const feed=JSON.parse(readFileSync(path.join(result.directory,"latest.json"),"utf8"));
+    assert.equal(feed.version,"4.1.0");assert.equal(feed.productVersion,"1.0.0");
+    assert.match(feed.platforms["windows-x86_64"].url,/\/1\.0\.0\/LoliCode-1\.0\.0-Windows-x64-Setup\.exe$/);
+    await verifyRelease({...f.verifyOptions,"release-dir":result.directory});
+  } finally {f.clean();}
+});

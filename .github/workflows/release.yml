@@ -47,6 +47,8 @@ jobs:
         shell: pwsh
         run: |
           if ($env:RELEASE_VERSION -notmatch '^\d+\.\d+\.\d+$') { throw 'Expected a stable SemVer.' }
+          $productVersion = node --input-type=module -e "import { productVersion } from './scripts/lolicode-product-version.mjs'; process.stdout.write(productVersion(process.env.RELEASE_VERSION));"
+          "PRODUCT_VERSION=$productVersion" >> $env:GITHUB_ENV
           $packageVersion = (Get-Content -Raw package.json | ConvertFrom-Json).version
           $tauriVersion = (Get-Content -Raw src-tauri/tauri.conf.json | ConvertFrom-Json).version
           if ($packageVersion -ne $env:RELEASE_VERSION -or $tauriVersion -ne $env:RELEASE_VERSION) { throw 'Commit the release version before running this workflow.' }
@@ -66,7 +68,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node --test scripts/lolicode-release.test.mjs scripts/lolicode-publish.test.mjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          node --test scripts/tests/lolicode-nsis-upgrade-guard.test.mjs scripts/tests/lolicode-nsis-resource-layout.test.mjs
+          node --test scripts/tests/lolicode-nsis-upgrade-guard.test.mjs scripts/tests/lolicode-nsis-resource-layout.test.mjs scripts/tests/lolicode-nsis-overwrite-upgrade.test.mjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node --test scripts/tests/lolicode-bundled-mascot.test.mjs
           exit $LASTEXITCODE
@@ -103,12 +105,12 @@ jobs:
           GH_TOKEN: ${{ secrets.LOLICODE_RELEASES_TOKEN }}
         run: |
           if (-not $env:GH_TOKEN) { throw 'Configure LOLICODE_RELEASES_TOKEN for treasureGrove/LoliCode-Releases in the release environment.' }
-          $installer = "$env:RUNNER_TEMP/lolicode-release/$($env:RELEASE_VERSION)/LoliCode-$($env:RELEASE_VERSION)-Windows-x64-Setup.exe"
+          $installer = "$env:RUNNER_TEMP/lolicode-release/$($env:PRODUCT_VERSION)/LoliCode-$($env:PRODUCT_VERSION)-Windows-x64-Setup.exe"
           $summary = Get-Content -Raw "src/whats-new/$env:RELEASE_VERSION.json" | ConvertFrom-Json
           $notes = @('LoliCode desktop update', '', 'Download website: https://lolicode.com/', "Build source commit: $env:GITHUB_SHA", '')
           $notes += $summary.items | ForEach-Object { '- ' + $_.en }
           $notes | Set-Content -Encoding utf8 "$env:RUNNER_TEMP/lolicode-release-notes.md"
-          gh release create "lolicode-v$env:RELEASE_VERSION" $installer "$installer.sig" --repo treasureGrove/LoliCode-Releases --target main --title "LoliCode $env:RELEASE_VERSION" --notes-file "$env:RUNNER_TEMP/lolicode-release-notes.md"
+          gh release create "lolicode-v$env:PRODUCT_VERSION" $installer "$installer.sig" --repo treasureGrove/LoliCode-Releases --target main --title "LoliCode $env:PRODUCT_VERSION" --notes-file "$env:RUNNER_TEMP/lolicode-release-notes.md"
           exit $LASTEXITCODE
 
 # The signed website feed is published separately with scripts/lolicode-publish.mjs.

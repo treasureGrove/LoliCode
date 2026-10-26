@@ -360,6 +360,57 @@ fn last_tool(input: &Value) -> Option<&str> {
         .find(|v| v["role"] == "tool")?["tool_call_id"]
         .as_str()
 }
+
+#[tokio::test]
+async fn mobile_background_policy_blocks_shell_hosted_tools_and_survives_restart() {
+    for name in ["run_command", "tavern_fixture", "unreal_editor_command"] {
+        let tool_name=name.to_string();
+        let fake=Fake::start(move |input|if last_tool(input).is_none(){tool(&tool_name,json!({"command":"echo SHOULD_NOT_RUN","path":"ignored"}))}else{text("BLOCK_CONFIRMED")}).await;
+        let data=TempDir::new().unwrap();let project=TempDir::new().unwrap();let engine=NativeEngine::open(data.path().into()).await.unwrap();
+        engine.bind(project.path().into(),catalog(),fake.gateway()).await.unwrap();
+        let host=Arc::new(HostedFixture{enabled:true.into(),executions:0.into()});engine.set_application_tools(host.clone()).await;
+        assert!(engine.call("createSession",json!({"backgroundOnly":true,"permissionMode":"full_access"})).await.is_err());
+        let created=engine.call("createSession",json!({"backgroundOnly":true,"permissionMode":"ask"})).await.unwrap();let id=created["id"].as_str().unwrap();
+        assert!(engine.call("updateSession",json!({"sessionId":id,"permissionMode":"auto"})).await.is_err());
+        engine.shutdown().await.unwrap();let engine=NativeEngine::open(data.path().into()).await.unwrap();engine.bind_background(project.path().into(),catalog(),fake.gateway()).await.unwrap();engine.set_application_tools(host.clone()).await;
+        send(&engine,id,"blocked-call","Try the requested tool").await;
+        let result=wait(&engine,id,|v|v["status"]=="idle").await;assert!(result.to_string().contains("此次未执行"));assert_eq!(host.executions.load(std::sync::atomic::Ordering::SeqCst),0);
+        let requests=fake.requests.lock().unwrap();for request in requests.iter(){for schema in request["tools"].as_array().unwrap(){let name=schema["function"]["name"].as_str().unwrap();assert!(!matches!(name,"run_command"|"tavern_fixture"|"unreal_editor_command"));}}drop(requests);
+        engine.shutdown().await.unwrap();
+    }
+}
+
+#[tokio::test]
+async fn mobile_background_binding_never_reselects_the_desktop_project() {
+    let fake=Fake::start(|_|text("done")).await;let data=TempDir::new().unwrap();let a=TempDir::new().unwrap();let b=TempDir::new().unwrap();let engine=NativeEngine::open(data.path().into()).await.unwrap();
+    engine.bind(a.path().into(),catalog(),fake.gateway()).await.unwrap();let before=engine.call("status",json!({})).await.unwrap();
+    engine.bind_background(b.path().into(),catalog(),fake.gateway()).await.unwrap();
+    let phone=engine.call("createSession",json!({"projectPath":b.path().to_string_lossy(),"backgroundOnly":true,"permissionMode":"ask"})).await.unwrap();
+    assert_eq!(engine.call("status",json!({})).await.unwrap()["projectPath"],before["projectPath"]);
+    let local=engine.call("createSession",json!({"permissionMode":"auto"})).await.unwrap();assert_ne!(local["projectPath"],phone["projectPath"]);assert_eq!(local["permissionMode"],"auto");engine.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn mobile_background_ignores_desktop_grants_and_rejects_stale_or_remembered_approval() {
+    let fake=Fake::start(|input|if last_tool(input).is_none(){tool("write_file",json!({"path":"mobile-write.txt","content":"approved","expected_content":null}))}else{text("done")}).await;
+    let (_data,project,engine,local)=setup(&fake).await;
+    engine.call("updateSession",json!({"sessionId":local,"permissionMode":"ask"})).await.unwrap();
+    send(&engine,&local,"grant-local","Write a file").await;
+    let pending=wait(&engine,&local,|s|s["status"]=="waiting_permission").await;
+    engine.call("replyPermission",json!({"sessionId":local,"requestId":pending["permissions"][0]["id"],"decision":"always"})).await.unwrap();
+    wait(&engine,&local,|s|s["status"]=="idle").await;
+    std::fs::remove_file(project.path().join("mobile-write.txt")).unwrap();
+    let phone=engine.call("createSession",json!({"backgroundOnly":true,"permissionMode":"ask"})).await.unwrap();let id=phone["id"].as_str().unwrap();
+    send(&engine,id,"phone-write","Write a file").await;
+    let pending=wait(&engine,id,|s|s["status"]=="waiting_permission").await;
+    assert!(!project.path().join("mobile-write.txt").exists());let permission=pending["permissions"][0]["id"].clone();
+    assert!(engine.call("replyPermission",json!({"sessionId":id,"requestId":permission,"decision":"always"})).await.is_err());
+    engine.call("replyPermission",json!({"sessionId":id,"requestId":permission,"decision":"once"})).await.unwrap();
+    wait(&engine,id,|s|s["status"]=="idle").await;
+    assert_eq!(std::fs::read_to_string(project.path().join("mobile-write.txt")).unwrap(),"approved");
+    assert!(engine.call("replyPermission",json!({"sessionId":id,"requestId":permission,"decision":"once"})).await.is_err());
+    engine.shutdown().await.unwrap();
+}
 fn is_compaction(input: &Value) -> bool {
     input["messages"][0]["content"].as_str()
         .is_some_and(|prompt| prompt.starts_with(super::context::SUMMARY_PROMPT))
@@ -367,7 +418,10 @@ fn is_compaction(input: &Value) -> bool {
 
 mod context_cases;
 mod stream_usage_cases;
+mod image_output_cases;
 mod memory_cases;
+mod tool_search_cases;
+mod deferred_tool_cases;
 
 #[tokio::test]
 async fn long_tool_tasks_complete_real_edits_after_more_than_twenty_four_rounds() {

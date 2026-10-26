@@ -5,6 +5,7 @@ mod engine;
 mod context;
 mod inference;
 mod memory;
+mod tool_search;
 mod persistence;
 pub(crate) mod tools;
 mod types;

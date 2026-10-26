@@ -77,6 +77,7 @@ import type {
   AgentImageAttachment,
   AgentPermissionMode,
   AgentProject,
+  AgentProjectResult,
   AgentSession,
   AgentSnapshot,
   AgentWorkspace,
@@ -642,9 +643,13 @@ export function AgentPage({
         ]);
         if (!mounted.current || generation.current !== requestGeneration)
           return;
+        const selectedProject = knownProjects.find(
+          (project) => project.path === status.projectPath,
+        );
         setWorkspace({
           path: status.projectPath,
-          name: nameOf(status.projectPath),
+          name: selectedProject?.name || nameOf(status.projectPath),
+          standalone: selectedProject?.standalone,
         });
         bindCatalog(nextCatalog);
         setSessions(nextSessions);
@@ -652,7 +657,7 @@ export function AgentPage({
         setPending(restorePending(status.projectPath, nextSessions));
         setStopping(restoreStopping(status.projectPath, nextSessions));
         setSessionId(nextSessions[0]?.id || null);
-        rememberProject(status.projectPath);
+        if (!selectedProject?.standalone) rememberProject(status.projectPath);
       }
     } catch (cause) {
       if (mounted.current && generation.current === requestGeneration)
@@ -979,6 +984,28 @@ export function AgentPage({
     refresh,
     onSnapshot,
   });
+  const documentViewsSeen = useRef<{session: string | null; initialized: boolean; ids: Set<string>}>({session:null, initialized:false, ids:new Set()});
+  useEffect(() => {
+    if (!sessionId || snapshot?.session.id !== sessionId) return;
+    const previous = documentViewsSeen.current;
+    const sameSession = previous.session === sessionId;
+    const seen = sameSession ? previous.ids : new Set<string>();
+    let reveal: string | null = null;
+    for (const message of snapshot.messages) {
+      for (const part of message.parts) {
+        if (part.type !== "tool" || part.state !== "completed" || !["open_document","show_in_viewer"].includes(part.name)) continue;
+        if (seen.has(part.id)) continue;
+        seen.add(part.id);
+        if (!sameSession || !previous.initialized) continue;
+        if (!part.input || typeof part.input !== "object") continue;
+        const input = part.input as Record<string,unknown>;
+        if (typeof input.path !== "string") continue;
+        reveal = input.path + (typeof input.locator === "string" ? `#${encodeURIComponent(input.locator)}` : "");
+      }
+    }
+    documentViewsSeen.current = {session:sessionId, initialized:true, ids:seen};
+    if (reveal) openPreview(reveal);
+  }, [sessionId, snapshot, openPreview]);
   useEffect(() => {
     for (const message of snapshot?.messages || []) {
       if (message.role !== "user") continue;
@@ -1436,6 +1463,38 @@ export function AgentPage({
     setComposerDocumentsBySession(next);
   };
 
+  const adoptProject = (
+    result: AgentProjectResult,
+    preferredSessionId?: string,
+  ) => {
+    if (workspace?.path !== result.workspace.path) {
+      setExpandedWorkspaces((old) => ({
+        ...old,
+        ...(workspace ? { [workspace.path]: old[workspace.path] ?? true } : {}),
+        [result.workspace.path]: old[result.workspace.path] ?? true,
+      }));
+    }
+    setWorkspace(result.workspace);
+    bindCatalog(result.catalog);
+    setSessions(result.sessions);
+    discoverSessionActivity(result.sessions);
+    setSessionId(
+      result.sessions.find((session) => session.id === preferredSessionId)
+        ?.id ||
+        result.sessions[0]?.id ||
+        null,
+    );
+    setShowArchived(false);
+    setPending((old) => ({
+      ...old,
+      ...restorePending(result.workspace.path, result.sessions),
+    }));
+    setStopping((old) => ({
+      ...old,
+      ...restoreStopping(result.workspace.path, result.sessions),
+    }));
+    if (!result.workspace.standalone) rememberProject(result.workspace.path);
+  };
   const openProject = async (path?: string, preferredSessionId?: string) => {
     if (mutation.current || initializing) return;
     mutation.current = true;
@@ -1454,35 +1513,7 @@ export function AgentPage({
       const result = await agentApi.openProject(selectedPath);
       if (!mounted.current || generation.current !== requestGeneration) return;
       result.warnings?.forEach((warning) => toast.warning(warning));
-      if (workspace?.path !== result.workspace.path) {
-        setExpandedWorkspaces((old) => ({
-          ...old,
-          ...(workspace
-            ? { [workspace.path]: old[workspace.path] ?? true }
-            : {}),
-          [result.workspace.path]: old[result.workspace.path] ?? true,
-        }));
-      }
-      setWorkspace(result.workspace);
-      bindCatalog(result.catalog);
-      setSessions(result.sessions);
-      discoverSessionActivity(result.sessions);
-      setSessionId(
-        result.sessions.find((session) => session.id === preferredSessionId)
-          ?.id ||
-          result.sessions[0]?.id ||
-          null,
-      );
-      setShowArchived(false);
-      setPending((old) => ({
-        ...old,
-        ...restorePending(result.workspace.path, result.sessions),
-      }));
-      setStopping((old) => ({
-        ...old,
-        ...restoreStopping(result.workspace.path, result.sessions),
-      }));
-      rememberProject(result.workspace.path);
+      adoptProject(result, preferredSessionId);
       const knownProjects = await agentApi.listProjects();
       if (!mounted.current || generation.current !== requestGeneration) return;
       setProjects(preserveWorkspaceOrder(knownProjects));
@@ -1512,10 +1543,11 @@ export function AgentPage({
     onInitialProjectConsumed?.();
     void openProject(initialProjectPath);
   }, [initialProjectPath, initializing, onInitialProjectConsumed]);
-  const createSession = async () => {
+  const createSession = async (standalone = false) => {
+    if (mutation.current || initializing || engine?.available === false) return;
     if (
-      mutation.current ||
-      !workspace ||
+      !standalone &&
+      workspace &&
       !catalog.models.some((model) => model.id === modelId)
     )
       return;
@@ -1524,16 +1556,46 @@ export function AgentPage({
     setError(null);
     const requestGeneration = generation.current;
     try {
+      let target = workspace;
+      let targetCatalog = catalog;
+      if (standalone || !target) {
+        const result = await agentApi.openStandalone();
+        if (!mounted.current || generation.current !== requestGeneration)
+          return;
+        result.warnings?.forEach((warning) => toast.warning(warning));
+        adoptProject(result);
+        target = result.workspace;
+        targetCatalog = result.catalog;
+        setEngine((old) => ({
+          ...old,
+          available: true,
+          running: true,
+          projectPath: target!.path,
+        }));
+        const knownProjects = await agentApi.listProjects();
+        if (!mounted.current || generation.current !== requestGeneration)
+          return;
+        setProjects(preserveWorkspaceOrder(knownProjects));
+      }
+      const selectedModel =
+        targetCatalog.models.find((model) => model.id === modelId) ||
+        targetCatalog.models.find(
+          (model) => model.id === targetCatalog.defaultModel,
+        ) ||
+        targetCatalog.models[0];
+      if (!selectedModel) return;
       const sessionArgs: Parameters<typeof agentApi.createSession> = [
-        modelId,
+        selectedModel.id,
         "build",
         undefined,
         permissionMode,
         reasoningEffort || undefined,
       ];
+      if (target.standalone) sessionArgs[5] = target.path;
       if (contextLimit != null) sessionArgs[6] = contextLimit;
       const session = await agentApi.createSession(...sessionArgs);
       if (!mounted.current || generation.current !== requestGeneration) return;
+      setShowArchived(false);
       setSessions((old) => [
         session,
         ...old.filter((item) => item.id !== session.id),
@@ -2207,7 +2269,11 @@ export function AgentPage({
       pinned: false,
       lastOpenedAt: 0,
     });
-  sidebarProjects.sort((a, b) => Number(b.pinned) - Number(a.pinned));
+  sidebarProjects.sort(
+    (a, b) =>
+      Number(Boolean(b.standalone)) - Number(Boolean(a.standalone)) ||
+      Number(b.pinned) - Number(a.pinned),
+  );
 
   return (
     <div
@@ -2236,14 +2302,57 @@ export function AgentPage({
             </div>
           </div>
           <nav className="wb-nav" aria-label="工作台操作">
-            <button
-              className="wb-nav-button wb-nav-create"
-              disabled={!workspace || Boolean(busy) || !modelId}
-              onClick={() => void createSession()}
-            >
-              <MessageSquarePlus />
-              {busy === "create" ? "正在创建…" : "新建任务"}
-            </button>
+            <div className="wb-create-task">
+              <button
+                className="wb-nav-button wb-nav-create"
+                disabled={
+                  initializing ||
+                  Boolean(busy) ||
+                  engine?.available === false ||
+                  Boolean(workspace && !modelId)
+                }
+                onClick={() => void createSession()}
+              >
+                <MessageSquarePlus />
+                {busy === "create" ? "正在创建…" : "新建任务"}
+              </button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className="wb-create-task-options"
+                    aria-label="选择新建任务类型"
+                    disabled={
+                      initializing ||
+                      Boolean(busy) ||
+                      engine?.available === false
+                    }
+                  >
+                    <ChevronDown />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" sideOffset={6}>
+                  {workspace && !workspace.standalone && (
+                    <DropdownMenuItem
+                      disabled={!modelId}
+                      onSelect={() => void createSession()}
+                    >
+                      <Folder className="mr-2 h-4 w-4" />
+                      在当前项目新建任务
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuItem onSelect={() => void createSession(true)}>
+                    <MessageSquarePlus className="mr-2 h-4 w-4" />
+                    <span>
+                      新建独立任务
+                      <span className="block text-xs text-fg-3">
+                        无需打开项目或选择文件夹
+                      </span>
+                    </span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
             <button
               className="wb-nav-button"
               disabled={
@@ -2364,7 +2473,11 @@ export function AgentPage({
                         ? "wb-project-row"
                         : "wb-project-list-row"
                     }
-                    title={project.path}
+                    title={
+                      project.standalone
+                        ? "无需绑定项目的独立任务"
+                        : project.path
+                    }
                   >
                     <button
                       type="button"
@@ -2379,14 +2492,16 @@ export function AgentPage({
                     </button>
                     {isCurrentWorkspace ? (
                       <>
-                        <Folder />
+                        {project.standalone ? <MessageSquare /> : <Folder />}
                         <span>{project.name}</span>
                         {project.pinned && <Pin size={11} />}
                       </>
                     ) : (
                       <button
                         className="wb-nav-button wb-workspace-project"
-                        title={project.path}
+                        title={
+                          project.standalone ? "打开独立任务" : project.path
+                        }
                         disabled={
                           initializing ||
                           Boolean(busy) ||
@@ -2394,13 +2509,14 @@ export function AgentPage({
                         }
                         onClick={() => void openProject(project.path)}
                       >
-                        <Folder />
+                        {project.standalone ? <MessageSquare /> : <Folder />}
                         <span className="truncate">{project.name}</span>
                         {project.pinned && <Pin size={11} />}
                       </button>
                     )}
                     <AgentProjectMenu
                       name={project.name}
+                      standalone={project.standalone}
                       pinned={Boolean(project.pinned)}
                       disabled={Boolean(busy)}
                       inProjectList={!isCurrentWorkspace}
@@ -2598,14 +2714,18 @@ export function AgentPage({
               type="button"
               className="wb-titlebar-project"
               title={
-                workspace.remote
-                  ? `管理远程项目：${workspace.remote.root}`
-                  : `打开项目文件夹：${workspace.path}`
+                workspace.standalone
+                  ? "打开独立任务的文件目录"
+                  : workspace.remote
+                    ? `管理远程项目：${workspace.remote.root}`
+                    : `打开项目文件夹：${workspace.path}`
               }
               aria-label={
-                workspace.remote
-                  ? `管理远程项目：${workspace.remote.root}`
-                  : `打开项目文件夹：${workspace.path}`
+                workspace.standalone
+                  ? "打开独立任务的文件目录"
+                  : workspace.remote
+                    ? `管理远程项目：${workspace.remote.root}`
+                    : `打开项目文件夹：${workspace.path}`
               }
               onClick={(event) => {
                 event.stopPropagation();
@@ -2626,7 +2746,7 @@ export function AgentPage({
               }}
               style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
             >
-              <Folder />
+              {workspace.standalone ? <MessageSquare /> : <Folder />}
               {workspace.name}
             </button>
           )}
@@ -2671,10 +2791,21 @@ export function AgentPage({
             <div className="wb-empty-content">
               <WelcomeMark />
               <span className="wb-welcome-eyebrow">YOUR CREATIVE SPACE</span>
-              <h2>从一个项目开始</h2>
-              <p>把灵感变成作品。与 LoliCode 一起，让每一步都更轻松。</p>
+              <h2>从一个想法开始</h2>
+              <p>直接开始独立任务，也可以打开项目，继续你的创作。</p>
               <button
                 className="wb-primary wb-welcome-action"
+                disabled={
+                  initializing || Boolean(busy) || engine?.available === false
+                }
+                onClick={() => void createSession(true)}
+              >
+                <MessageSquarePlus />
+                新建独立任务
+                <ArrowUpRight aria-hidden="true" />
+              </button>
+              <button
+                className="wb-nav-button justify-center"
                 aria-label="打开项目文件夹"
                 disabled={
                   initializing || Boolean(busy) || engine?.available === false
@@ -2686,7 +2817,7 @@ export function AgentPage({
                 <ArrowUpRight aria-hidden="true" />
               </button>
               <span className="wb-welcome-note">
-                选择本地文件夹，开始你的创作
+                独立任务自动保存，无需选择文件夹
               </span>
               {error && (
                 <button
@@ -2867,22 +2998,35 @@ export function AgentPage({
                             {[
                               {
                                 icon: Compass,
-                                title: "读懂项目",
-                                detail: "梳理结构与核心流程",
-                                prompt:
-                                  "帮我梳理这个项目的结构，介绍核心模块和主要运行流程。",
+                                title: workspace.standalone
+                                  ? "回答问题"
+                                  : "读懂项目",
+                                detail: workspace.standalone
+                                  ? "解释概念与整理思路"
+                                  : "梳理结构与核心流程",
+                                prompt: workspace.standalone
+                                  ? "帮我分析并解释这个问题："
+                                  : "帮我梳理这个项目的结构，介绍核心模块和主要运行流程。",
                               },
                               {
                                 icon: Code2,
                                 title: "实现想法",
                                 detail: "把灵感变成可用功能",
-                                prompt: "我想为这个项目实现一个新功能：",
+                                prompt: workspace.standalone
+                                  ? "帮我实现这个想法："
+                                  : "我想为这个项目实现一个新功能：",
                               },
                               {
-                                icon: Bug,
-                                title: "排查问题",
-                                detail: "找到原因，稳妥修复",
-                                prompt: "帮我排查并修复这个项目中的问题：",
+                                icon: workspace.standalone ? FileText : Bug,
+                                title: workspace.standalone
+                                  ? "整理资料"
+                                  : "排查问题",
+                                detail: workspace.standalone
+                                  ? "总结内容与提炼要点"
+                                  : "找到原因，稳妥修复",
+                                prompt: workspace.standalone
+                                  ? "请帮我整理和总结下面的资料："
+                                  : "帮我排查并修复这个项目中的问题：",
                               },
                             ].map(({ icon: Icon, title, detail, prompt }) => (
                               <button
@@ -2928,6 +3072,7 @@ export function AgentPage({
                   {!readOnlySession &&
                     snapshot?.questions
                       .filter((request) => request.sessionId === sessionId)
+                      .slice(0, 1)
                       .map((request) => (
                         <AgentQuestionCard
                           key={request.id}

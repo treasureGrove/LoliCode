@@ -1,17 +1,22 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ChevronDown,
   ExternalLink,
   File,
   FolderOpen,
   Loader2,
+  Maximize2,
+  Minimize2,
   RefreshCw,
   ShieldCheck,
   X,
 } from "lucide-react";
 import { agentFilesApi, type AgentFilePreview } from "@/lib/api/agent-files";
+import { isOfficeDocumentPath } from "@/lib/api/agent-documents";
 import { SessionCodeBlock } from "@/components/sessions/reader/SessionCodeBlock";
+import { AgentDocumentViewer, splitDocumentPath } from "./AgentDocumentViewer";
 import "./agent-preview-atelier.css";
+import "./agent-office-preview.css";
 
 const STATIC_TAGS = new Set(
   "a abbr address article aside b blockquote br button caption center code col colgroup dd del details div dl dt em figcaption figure footer h1 h2 h3 h4 h5 h6 header hr i img input label legend li main mark nav ol p pre s section small span strong style sub summary sup table tbody td textarea tfoot th thead tr u ul".split(
@@ -105,16 +110,62 @@ export function AgentPreviewPanel({
   const [requestedPath, setRequestedPath] = useState(path);
   const [draft, setDraft] = useState(path);
   const [view, setView] = useState<"preview" | "source">("preview");
+  const [expanded, setExpanded] = useState(false);
+  const [showPath, setShowPath] = useState(false);
+  const panel = useRef<HTMLElement>(null);
+  const expandButton = useRef<HTMLButtonElement>(null);
+  const officeDocument = isOfficeDocumentPath(requestedPath);
+  const officePath = officeDocument
+    ? splitDocumentPath(requestedPath).filePath
+    : requestedPath;
+  const officeKind = officePath.split(".").pop()?.toLowerCase();
+  useEffect(() => {
+    if (!expanded) return;
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setExpanded(false);
+        expandButton.current?.focus();
+      }
+      if (event.key !== "Tab") return;
+      const controls = Array.from(
+        panel.current?.querySelectorAll<HTMLElement>(
+          'button:not(:disabled), input:not(:disabled), select:not(:disabled), summary, [tabindex="0"]',
+        ) || [],
+      ).filter((element) => element.getClientRects().length > 0);
+      const first = controls[0];
+      const last = controls[controls.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last?.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first?.focus();
+      }
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [expanded]);
+  useEffect(() => {
+    if (!officeDocument) {
+      setExpanded(false);
+      setShowPath(false);
+    }
+  }, [officeDocument]);
   const staticHtml = useMemo(
     () =>
       preview?.kind === "html" ? isolatedAgentHtml(preview.content || "") : "",
     [preview?.kind, preview?.content],
   );
   useEffect(() => {
+    setRequestedPath(path);
+    setDraft(path);
+  }, [path]);
+  useEffect(() => {
     let disposed = false;
     setPreview(null);
     setError(null);
-    if (!requestedPath) {
+    if (!requestedPath || officeDocument) {
       setLoading(false);
       return;
     }
@@ -136,175 +187,249 @@ export function AgentPreviewPanel({
     return () => {
       disposed = true;
     };
-  }, [sessionId, requestedPath, revision]);
+  }, [sessionId, requestedPath, revision, officeDocument]);
   const open = async (action: "file" | "directory") => {
     try {
-      await agentFilesApi.open(sessionId, requestedPath, action);
+      await agentFilesApi.open(
+        sessionId,
+        officeDocument
+          ? splitDocumentPath(requestedPath).filePath
+          : requestedPath,
+        action,
+      );
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     }
   };
   return (
-    <aside
-      className="wb-preview-panel"
-      aria-label="文件预览"
-      style={width === undefined ? undefined : { width, flexBasis: width }}
-    >
-      <header className="wb-preview-header">
-        <div className="wb-preview-heading">
-          <span className="wb-preview-eyebrow">作品检视</span>
-          <span className="wb-preview-filename" title={requestedPath}>
-            {preview?.name ||
-              requestedPath.split(/[\\/]/).pop() ||
-              "项目文件预览"}
-          </span>
-        </div>
-        <div className="wb-preview-actions">
-          <button
-            type="button"
-            aria-label="打开预览文件"
-            title={
-              preview?.remote
-                ? "远程文件可在此预览或通过主 Agent 编辑"
-                : "在默认应用中打开"
-            }
-            disabled={!requestedPath || preview?.remote}
-            onClick={() => void open("file")}
-          >
-            <ExternalLink size={15} />
-          </button>
-          <button
-            type="button"
-            aria-label="打开预览所在文件夹"
-            title={
-              preview?.remote
-                ? "远程目录请通过 SSH / WSL 管理"
-                : "打开所在文件夹"
-            }
-            disabled={!requestedPath || preview?.remote}
-            onClick={() => void open("directory")}
-          >
-            <FolderOpen size={15} />
-          </button>
-          <button
-            type="button"
-            aria-label="重新读取预览"
-            title="重新读取预览"
-            disabled={loading}
-            onClick={() => setRevision((old) => old + 1)}
-          >
-            <RefreshCw
-              size={15}
-              className={loading ? "animate-spin" : undefined}
-            />
-          </button>
-          <button
-            type="button"
-            aria-label="关闭预览"
-            title="关闭预览"
-            onClick={onClose}
-          >
-            <X size={16} />
-          </button>
-        </div>
-      </header>
-      <form
-        className="wb-preview-path-form"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (draft.trim()) setRequestedPath(draft.trim());
-        }}
-      >
-        <File size={13} aria-hidden="true" />
-        <input
-          aria-label="预览文件路径"
-          placeholder="输入项目内文件路径…"
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
+    <>
+      {expanded && (
+        <div
+          className="wb-office-preview-backdrop"
+          aria-hidden="true"
+          onClick={() => setExpanded(false)}
         />
-        <button type="submit" disabled={!draft.trim()}>
-          预览
-        </button>
-      </form>
-      <div className="wb-preview-toolbar">
-        {preview?.kind === "html" && (
-          <div className="wb-preview-view-switch" aria-label="预览显示方式">
+      )}
+      <aside
+        ref={panel}
+        className={`wb-preview-panel${officeDocument ? " wb-preview-panel--office" : ""}${expanded ? " wb-preview-panel--expanded" : ""}`}
+        aria-label="文件预览"
+        role={expanded ? "dialog" : undefined}
+        aria-modal={expanded ? true : undefined}
+        data-office-kind={officeDocument ? officeKind : undefined}
+        style={
+          width === undefined || expanded
+            ? undefined
+            : { width, flexBasis: width }
+        }
+      >
+        <header className="wb-preview-header">
+          {officeDocument && (
+            <span className="wb-preview-format" aria-hidden="true">
+              {officeKind === "xlsx"
+                ? "X"
+                : officeKind === "pptx"
+                  ? "P"
+                  : officeKind === "pdf"
+                    ? "PDF"
+                    : "W"}
+            </span>
+          )}
+          <div className="wb-preview-heading">
+            <span className="wb-preview-eyebrow">
+              {officeDocument ? "文档预览 · 只读" : "作品检视"}
+            </span>
+            <span className="wb-preview-filename" title={requestedPath}>
+              {preview?.name ||
+                officePath.split(/[\\/]/).pop() ||
+                "项目文件预览"}
+            </span>
+          </div>
+          <div className="wb-preview-actions">
+            {officeDocument && (
+              <button
+                type="button"
+                aria-label="切换预览文件"
+                title="切换预览文件"
+                aria-expanded={showPath}
+                onClick={() => setShowPath((value) => !value)}
+              >
+                <File size={15} />
+              </button>
+            )}
             <button
               type="button"
-              aria-pressed={view === "preview"}
-              onClick={() => setView("preview")}
+              aria-label="打开预览文件"
+              title={
+                preview?.remote
+                  ? "远程文件可在此预览或通过主 Agent 编辑"
+                  : "在默认应用中打开"
+              }
+              disabled={!requestedPath || preview?.remote}
+              onClick={() => void open("file")}
             >
-              静态预览
+              <ExternalLink size={15} />
+            </button>
+            {officeDocument && (
+              <button
+                ref={expandButton}
+                type="button"
+                aria-label={expanded ? "还原文档预览" : "放大文档预览"}
+                title={expanded ? "还原文档预览（Esc）" : "放大文档预览"}
+                onClick={() => setExpanded((value) => !value)}
+              >
+                {expanded ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+              </button>
+            )}
+            <button
+              type="button"
+              aria-label="打开预览所在文件夹"
+              title={
+                preview?.remote
+                  ? "远程目录请通过 SSH / WSL 管理"
+                  : "打开所在文件夹"
+              }
+              disabled={!requestedPath || preview?.remote}
+              onClick={() => void open("directory")}
+            >
+              <FolderOpen size={15} />
             </button>
             <button
               type="button"
-              aria-pressed={view === "source"}
-              onClick={() => setView("source")}
+              aria-label="重新读取预览"
+              title="重新读取预览"
+              disabled={loading}
+              onClick={() => setRevision((old) => old + 1)}
             >
-              源码
+              <RefreshCw
+                size={15}
+                className={loading ? "animate-spin" : undefined}
+              />
+            </button>
+            <button
+              type="button"
+              aria-label="关闭预览"
+              title="关闭预览"
+              onClick={onClose}
+            >
+              <X size={16} />
             </button>
           </div>
+        </header>
+        {(!officeDocument || showPath) && (
+          <form
+            className="wb-preview-path-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (draft.trim()) {
+                setRequestedPath(draft.trim());
+                setShowPath(false);
+              }
+            }}
+          >
+            <File size={13} aria-hidden="true" />
+            <input
+              aria-label="预览文件路径"
+              placeholder="输入项目内文件路径…"
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+            />
+            <button type="submit" disabled={!draft.trim()}>
+              预览
+            </button>
+          </form>
         )}
-        <details className="wb-preview-isolation">
-          <summary>
-            <ShieldCheck size={12} aria-hidden="true" />
-            隔离预览
-            <ChevronDown size={11} aria-hidden="true" />
-          </summary>
-          <p className="wb-preview-note">
-            {preview?.remote
-              ? "远程文件以只读方式预览，不执行脚本或加载外部依赖；可通过主 Agent 编辑。"
-              : "静态预览不执行脚本或加载外部依赖；交互页面可打开文件在浏览器中运行。"}
+        {!officeDocument && (
+          <div className="wb-preview-toolbar">
+            {preview?.kind === "html" && (
+              <div className="wb-preview-view-switch" aria-label="预览显示方式">
+                <button
+                  type="button"
+                  aria-pressed={view === "preview"}
+                  onClick={() => setView("preview")}
+                >
+                  静态预览
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={view === "source"}
+                  onClick={() => setView("source")}
+                >
+                  源码
+                </button>
+              </div>
+            )}
+            <details className="wb-preview-isolation">
+              <summary>
+                <ShieldCheck size={12} aria-hidden="true" />
+                隔离预览
+                <ChevronDown size={11} aria-hidden="true" />
+              </summary>
+              <p className="wb-preview-note">
+                {preview?.remote
+                  ? "远程文件以只读方式预览，不执行脚本或加载外部依赖；可通过主 Agent 编辑。"
+                  : "静态预览不执行脚本或加载外部依赖；交互页面可打开文件在浏览器中运行。"}
+              </p>
+            </details>
+          </div>
+        )}
+        {loading && !officeDocument && (
+          <p role="status" className="wb-preview-note wb-preview-state">
+            <Loader2 className="inline animate-spin" size={14} /> 正在读取文件…
           </p>
-        </details>
-      </div>
-      {loading && (
-        <p role="status" className="wb-preview-note wb-preview-state">
-          <Loader2 className="inline animate-spin" size={14} /> 正在读取文件…
-        </p>
-      )}
-      {error && (
-        <p
-          role="alert"
-          className="wb-preview-note wb-preview-state text-danger-text"
-        >
-          {error}
-        </p>
-      )}
-      {preview && (
-        <div
-          className="wb-preview-content"
-          data-kind={preview.kind}
-          data-view={view}
-        >
-          {preview.truncated && (
-            <p role="status" className="wb-preview-note">
-              文件较大，当前仅显示部分内容。
-            </p>
-          )}
-          {preview.kind === "html" && view === "preview" ? (
-            <iframe
-              title={`HTML 预览：${preview.name}`}
-              sandbox=""
-              referrerPolicy="no-referrer"
-              srcDoc={staticHtml}
-            />
-          ) : preview.kind === "image" ? (
-            /^data:image\/(?:png|jpeg|gif|webp|bmp|avif|svg\+xml);base64,/i.test(
-              preview.dataUrl || "",
-            ) ? (
-              <img src={preview.dataUrl} alt={preview.name} />
+        )}
+        {error && (
+          <p
+            role="alert"
+            className="wb-preview-note wb-preview-state text-danger-text"
+          >
+            {error}
+          </p>
+        )}
+        {officeDocument && (
+          <AgentDocumentViewer
+            embedded
+            sessionId={sessionId}
+            path={requestedPath}
+            revision={revision}
+            onLoadingChange={setLoading}
+          />
+        )}
+        {!officeDocument && preview && (
+          <div
+            className="wb-preview-content"
+            data-kind={preview.kind}
+            data-view={view}
+          >
+            {preview.truncated && (
+              <p role="status" className="wb-preview-note">
+                文件较大，当前仅显示部分内容。
+              </p>
+            )}
+            {preview.kind === "html" && view === "preview" ? (
+              <iframe
+                title={`HTML 预览：${preview.name}`}
+                sandbox=""
+                referrerPolicy="no-referrer"
+                srcDoc={staticHtml}
+              />
+            ) : preview.kind === "image" ? (
+              /^data:image\/(?:png|jpeg|gif|webp|bmp|avif|svg\+xml);base64,/i.test(
+                preview.dataUrl || "",
+              ) ? (
+                <img src={preview.dataUrl} alt={preview.name} />
+              ) : (
+                <p role="alert">图片数据无法显示。</p>
+              )
             ) : (
-              <p role="alert">图片数据无法显示。</p>
-            )
-          ) : (
-            <SessionCodeBlock
-              className="wb-preview-source"
-              code={preview.content || ""}
-            />
-          )}
-        </div>
-      )}
-    </aside>
+              <SessionCodeBlock
+                className="wb-preview-source"
+                code={preview.content || ""}
+              />
+            )}
+          </div>
+        )}
+      </aside>
+    </>
   );
 }

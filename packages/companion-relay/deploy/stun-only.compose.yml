@@ -1,0 +1,33 @@
+# Review-only template. No broad port range and no host coturn daemon.
+services:
+  lolicode-stun:
+    image: coturn/coturn:4.18.0-r0@sha256:bbefd3e1fdfdc0d58770fe01b581fd8b00d9f3a5580d00acb77cf719a6bc78e3
+    container_name: lolicode-stun
+    labels:
+      art.treasuregrove.owner: lolicode-companion-stun-only-v1
+    network_mode: host
+    user: "65534:65534"
+    entrypoint: ["/usr/bin/turnserver"]
+    command: ["-c", "/etc/lolicode-stun.conf", "--stun-only"]
+    # Dedicated systemd unit starts only after its own firewall. Docker must
+    # not independently start this container first during host reboot.
+    restart: "no"
+    read_only: true
+    cap_drop: [ALL]
+    # Official turnserver has only cap_net_bind_service=ep on the executable.
+    # This bounded capability is required to exec it; no NET_ADMIN/NET_RAW.
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 128m
+    cpus: 0.25
+    pids_limit: 32
+    ulimits:
+      nofile: {soft: 1024, hard: 1024}
+    volumes:
+      - ./coturn-stun-only.conf:/etc/lolicode-stun.conf:ro
+    tmpfs:
+      - /tmp:size=4m,mode=1777
+      - /var/lib/coturn:size=4m,mode=0700,uid=65534,gid=65534
+    logging:
+      driver: local
+      options: {max-size: 5m, max-file: "2"}

@@ -163,4 +163,51 @@ describe("channel catalog selection", () => {
       ]),
     ).toBe("操作未完成，请检查地址、密钥或账号后重试。");
   });
+
+  it("distinguishes local tool configuration failures from API authentication and model discovery", () => {
+    expect(
+      channelErrorMessage(
+        "write config: Access is denied. (os error 5)",
+        [],
+        "configuration",
+      ),
+    ).toContain("写入权限");
+    expect(
+      channelErrorMessage(
+        "MCode configuration is busy; retry after saving",
+        [],
+        "configuration",
+      ),
+    ).toContain("正在被占用");
+    expect(
+      channelErrorMessage(
+        "models.json parse error at line 3: {apiKey: secret-value}",
+        ["secret-value"],
+        "configuration",
+      ),
+    ).toBe(
+      "工具现有配置的格式或字段不兼容，请检查该工具的 JSON、TOML 或 YAML 配置后重试。",
+    );
+    expect(
+      channelErrorMessage("File not found (os error 2)", [], "configuration"),
+    ).toContain("配置文件或目录");
+    expect(
+      channelErrorMessage(
+        "connection 配置字段不兼容，请更新工具。",
+        [],
+        "configuration",
+      ),
+    ).toBe("connection 配置字段不兼容，请更新工具。");
+    expect(
+      channelErrorMessage("404 Not Found", [], "configuration"),
+    ).not.toContain("模型列表");
+    expect(channelErrorMessage("404 Not Found")).toContain("模型列表");
+    expect(
+      channelErrorMessage(
+        "private diagnostic secret-value",
+        ["secret-value"],
+        "configuration",
+      ),
+    ).not.toContain("secret-value");
+  });
 });

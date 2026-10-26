@@ -1,4 +1,5 @@
 use super::types::NativeGateway;
+use crate::images::ImageMarkdown;
 use crate::AgentTokenUsage;
 use futures::StreamExt;
 use reqwest::Client;
@@ -167,6 +168,7 @@ pub(super) async fn infer_with_policy(
         usage: AgentTokenUsage::default(),
     };
     let mut calls: BTreeMap<usize, ToolCall> = BTreeMap::new();
+    let mut images = ImageMarkdown::default();
     let mut finish = None;
     let mut bytes = Vec::new();
     let mut event = String::new();
@@ -228,7 +230,14 @@ pub(super) async fn infer_with_policy(
                     } else {
                         let value: Value = serde_json::from_str(event.trim())
                             .map_err(|_| "模型流格式无效，请检查渠道兼容性")?;
-                        consume(&value, &tx, &mut result, &mut calls, &mut finish)?;
+                        consume(
+                            &value,
+                            &tx,
+                            &mut result,
+                            &mut calls,
+                            &mut finish,
+                            &mut images,
+                        )?;
                     }
                     event.clear();
                 }
@@ -267,13 +276,27 @@ pub(super) async fn infer_with_policy(
         } else {
             let value: Value =
                 serde_json::from_str(event.trim()).map_err(|_| "模型流在结束前中断")?;
-            consume(&value, &tx, &mut result, &mut calls, &mut finish)?;
+            consume(
+                &value,
+                &tx,
+                &mut result,
+                &mut calls,
+                &mut finish,
+                &mut images,
+            )?;
         }
     }
     // A non-streaming compatible provider can still return a full JSON reply.
     if (json_response || finish.is_none()) && !bytes.is_empty() {
         if let Ok(value) = serde_json::from_slice::<Value>(&bytes) {
-            consume(&value, &tx, &mut result, &mut calls, &mut finish)?;
+            consume(
+                &value,
+                &tx,
+                &mut result,
+                &mut calls,
+                &mut finish,
+                &mut images,
+            )?;
         }
     }
     match finish.as_deref() {
@@ -306,6 +329,7 @@ fn consume(
     result: &mut Turn,
     calls: &mut BTreeMap<usize, ToolCall>,
     finish: &mut Option<String>,
+    images: &mut ImageMarkdown,
 ) -> Result<(), String> {
     if value.get("error").is_some() {
         if context_error(value) {
@@ -319,11 +343,34 @@ fn consume(
     };
     let delta = choice
         .get("delta")
+        .filter(|value| !value.is_null())
         .or_else(|| choice.get("message"))
         .unwrap_or(&Value::Null);
-    if let Some(text) = delta["content"].as_str().filter(|text| !text.is_empty()) {
-        result.content.push_str(text);
-        let _ = tx.send(Delta::Text(text.into()));
+    if let Some(text) = delta["content"].as_str() {
+        append_text(text, tx, result);
+    } else if let Some(parts) = delta["content"].as_array() {
+        for part in parts {
+            match part["type"].as_str() {
+                Some("text" | "output_text") => {
+                    if let Some(text) = part["text"].as_str() {
+                        append_text(text, tx, result);
+                    }
+                }
+                Some("image_url" | "image" | "output_image") => {
+                    if let Some(markdown) = images.block(part) {
+                        append_text(&markdown, tx, result);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    if let Some(parts) = delta["images"].as_array() {
+        for part in parts {
+            if let Some(markdown) = images.block(part) {
+                append_text(&markdown, tx, result);
+            }
+        }
     }
     if let Some(text) = delta["reasoning_content"]
         .as_str()
@@ -374,6 +421,13 @@ fn consume(
         *finish = Some(reason.into());
     }
     Ok(())
+}
+
+fn append_text(text: &str, tx: &mpsc::UnboundedSender<Delta>, result: &mut Turn) {
+    if !text.is_empty() {
+        result.content.push_str(text);
+        let _ = tx.send(Delta::Text(text.into()));
+    }
 }
 
 fn consume_usage(value: &Value, tx: &mpsc::UnboundedSender<Delta>, result: &mut Turn) {

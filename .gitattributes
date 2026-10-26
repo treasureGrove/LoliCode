@@ -40,3 +40,7 @@
 # Pinned upstream skills are verified byte-for-byte by their source manifest.
 # Preserve their original line endings on every platform.
 third-party/zcode/** -text
+
+# Pinned upstream WebRTC licenses are checked against their original SHA-256.
+src-tauri/resources/companion-licenses/** -text
+apps/android/app/src/main/assets/licenses/** -text

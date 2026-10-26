@@ -1,0 +1,12 @@
+[Unit]
+Description=LoliCode owned STUN-only packet budget
+Before=lolicode-stun.service
+PartOf=lolicode-stun.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStart=/usr/bin/python3 /opt/lolicode-companion/stun-only/stun-firewall.py start
+ExecStop=/usr/bin/python3 /opt/lolicode-companion/stun-only/stun-firewall.py stop
+TimeoutStartSec=10
+TimeoutStopSec=10

@@ -700,6 +700,7 @@ mod live {
         prefs.projects.insert(
             workspace_path_key(&canonical),
             AgentProject {
+                standalone: false,
                 path: canonical.clone(),
                 name: "isolated automation project".into(),
                 pinned: false,

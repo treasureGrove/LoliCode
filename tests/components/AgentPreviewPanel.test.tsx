@@ -22,6 +22,14 @@ vi.mock("@/lib/api/agent-files", () => ({
   agentFilesApi: { preview: vi.fn(), open: vi.fn() },
 }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
+vi.mock("@/components/agent/AgentDocumentViewer", async (original) => ({
+  ...(await original<
+    typeof import("@/components/agent/AgentDocumentViewer")
+  >()),
+  AgentDocumentViewer: () => (
+    <section aria-label="文档查看器">Office 内容</section>
+  ),
+}));
 const file = (values: Partial<AgentFilePreview> = {}): AgentFilePreview => ({
   kind: "text",
   name: "readme.txt",
@@ -42,6 +50,53 @@ beforeEach(() => {
 });
 
 describe("Agent file previews", () => {
+  it("keeps Office chrome compact and restores an expanded reader with Escape", () => {
+    render(
+      <AgentPreviewPanel
+        sessionId="lc:session"
+        path="notes.docx#p:2"
+        width={480}
+        onClose={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("notes.docx")).toBeVisible();
+    expect(screen.queryByLabelText("预览文件路径")).not.toBeInTheDocument();
+    expect(screen.queryByText("隔离预览")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "放大文档预览" }));
+    expect(screen.getByRole("dialog", { name: "文件预览" })).toHaveAttribute(
+      "aria-modal",
+      "true",
+    );
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "放大文档预览" })).toHaveFocus();
+    expect(agentFilesApi.preview).not.toHaveBeenCalled();
+  });
+
+  it("opens the path picker on demand and returns to the normal file preview", async () => {
+    render(
+      <AgentPreviewPanel
+        sessionId="lc:session"
+        path="notes.xlsx"
+        onClose={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "放大文档预览" }));
+    fireEvent.click(screen.getByRole("button", { name: "切换预览文件" }));
+    fireEvent.change(screen.getByLabelText("预览文件路径"), {
+      target: { value: "readme.txt" },
+    });
+    expect(agentFilesApi.preview).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: /^预览$/ }));
+    expect(await screen.findByText("file content")).toBeVisible();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(agentFilesApi.preview).toHaveBeenCalledWith(
+      "lc:session",
+      "readme.txt",
+    );
+    expect(screen.getByLabelText("预览文件路径")).toBeVisible();
+  });
+
   it("previews remote HTML through the same isolated renderer and never invokes local open actions", async () => {
     vi.mocked(agentFilesApi.preview).mockResolvedValue(
       file({

@@ -75,19 +75,67 @@ const presets = [
 let stored: TavernSnapshot;
 let failStory: boolean;
 let failPresets: boolean;
+let localEnabled: boolean;
 let pauseAdd: (() => Promise<unknown>) | undefined;
 beforeEach(() => {
   stored = { characters: [], stories: [] };
   failStory = false;
   failPresets = false;
+  localEnabled = false;
   pauseAdd = undefined;
   Element.prototype.scrollIntoView = vi.fn();
   vi.mocked(invoke)
     .mockReset()
     .mockImplementation(async (command, args) => {
       if (command === "get_tavern_snapshot") return structuredClone(stored);
+      if (command === "get_tavern_local_model")
+        return {
+          supported: true,
+          installed: localEnabled,
+          enabled: localEnabled,
+          stage: localEnabled ? "running" : "notInstalled",
+          downloadedBytes: 0,
+          totalBytes: 6358750677,
+          error: null,
+          cpuFfnLayers: 0,
+        };
       if (command === "get_tavern_catalog")
-        return { models: [], defaultModel: null };
+        return localEnabled
+          ? {
+              models: [
+                {
+                  id: "tavern-local:sbg-v2-9b-q4-16k",
+                  name: "硅基女友 v2 9B · Q4_K_M · 16K",
+                  channelName: "本机运行",
+                },
+              ],
+              defaultModel: "tavern-local:sbg-v2-9b-q4-16k",
+            }
+          : { models: [], defaultModel: null };
+      if (command === "install_tavern_local_model") {
+        localEnabled = true;
+        return;
+      }
+      if (command === "send_tavern_message") {
+        const { storyId, text, modelId } = args as {
+          storyId: string;
+          text: string;
+          modelId: string;
+        };
+        expect(modelId).toBe("tavern-local:sbg-v2-9b-q4-16k");
+        const story = stored.stories.find((item) => item.id === storyId)!;
+        story.messages.push(
+          { id: "user", role: "user", text, createdAt: 3, failed: false },
+          {
+            id: "reply",
+            role: "assistant",
+            text: "来啦，坐下来聊一会儿吧。",
+            createdAt: 4,
+            failed: false,
+          },
+        );
+        return structuredClone(story);
+      }
       if (command === "get_tavern_presets") {
         if (failPresets) throw new Error("目录读取失败");
         return presets.map((preset) => ({
@@ -156,6 +204,31 @@ const calls = (command: string) =>
   vi.mocked(invoke).mock.calls.filter(([name]) => name === command);
 
 describe("Tavern bundled character flow", () => {
+  it("refreshes an empty model catalog after local setup and chats with the selected local model", async () => {
+    const user = userEvent.setup();
+    mount();
+    const gallery = await openGallery(user);
+    await user.click(
+      within(gallery).getByRole("button", { name: "与sillyLoli开始故事" }),
+    );
+    const input = await screen.findByRole("textbox", { name: "故事消息" });
+    expect(input).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "展开本地模型设置" }));
+    await user.click(screen.getByRole("button", { name: "一键配置并启用" }));
+    await waitFor(() => expect(input).toBeEnabled());
+    await user.click(screen.getByRole("button", { name: "收起本地模型设置" }));
+    await user.type(input, "陪我聊一会儿。");
+    await user.click(screen.getByRole("button", { name: "发送" }));
+    expect(await screen.findByText("来啦，坐下来聊一会儿吧。")).toBeVisible();
+    expect(stored.characters).toHaveLength(1);
+    expect(stored.stories).toHaveLength(1);
+    expect(calls("send_tavern_message")).toHaveLength(1);
+    expect(
+      vi
+        .mocked(invoke)
+        .mock.calls.every(([name]) => !name.includes("channel_center")),
+    ).toBe(true);
+  });
   it("starts from an empty library, searches and previews a card, then saves and opens its greeting without calling a model", async () => {
     const user = userEvent.setup();
     mount();

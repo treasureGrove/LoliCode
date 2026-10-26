@@ -252,7 +252,7 @@ mod acceptance {
             let (gateway,requests,server)=fake_model().await?;
             let data=temp.path().join("engine");
             let engine=NativeEngine::open(data.clone()).await.map_err(|e|anyhow!(e))?;
-            engine.set_application_tools(Arc::new(DesktopToolHost {local:DesktopApplicationTools(AppState::new(db.clone())),remote:remotes.clone()})).await;
+            engine.set_application_tools(Arc::new(DesktopToolHost {local:DesktopApplicationTools(AppState::new(db.clone())),remote:remotes.clone(),mcp:None})).await;
             engine.bind(anchor.clone(),json!({"revision":1,"models":[{"id":"lolicode/channel/remote-fixture/model","providerId":"lolicode","modelId":"channel/remote-fixture/model","name":"Owned loopback fixture","channelName":"Owned fixture","contextLimit":128000}],"defaultModel":"lolicode/channel/remote-fixture/model","excludedSources":[]}),gateway).await.map_err(|e|anyhow!(e))?;
             let id=engine.call("createSession",json!({"title":"Owned remote acceptance","mode":"build","permissionMode":"ask"})).await.map_err(|e|anyhow!(e))?["id"].as_str().context("session missing")?.to_owned();
             record_run_in_db(&db,&anchor.to_string_lossy(),&id,"remote-review","project","remote-read-edit-image",&prompt).await.map_err(|e|anyhow!(e))?;

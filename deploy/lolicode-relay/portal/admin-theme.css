@@ -1,0 +1,117 @@
+/* LoliCode's public website palette; retain the upstream accessible components. */
+:root:not(.dark) {
+  --background: #f7f3eb;
+  --foreground: #632339;
+  --card: #fffaf3;
+  --card-foreground: #632339;
+  --popover: #fffaf3;
+  --popover-foreground: #632339;
+  --primary: #9e2445;
+  --primary-foreground: #fff6e9;
+  --secondary: #f2e6df;
+  --secondary-foreground: #632339;
+  --muted: #f1e9e3;
+  --muted-foreground: #8a6570;
+  --accent: #f1dce1;
+  --accent-foreground: #791b36;
+  --border: #63233926;
+  --input: #63233930;
+  --ring: #9e2445;
+  --sidebar: #fff6e9;
+  --sidebar-foreground: #632339;
+  --sidebar-primary: #9e2445;
+  --sidebar-primary-foreground: #fff6e9;
+  --sidebar-accent: #f0dfe2;
+  --sidebar-accent-foreground: #791b36;
+  --sidebar-border: #63233926;
+  --sidebar-ring: #9e2445;
+}
+:root.dark {
+  --background: #281c24;
+  --foreground: #fff0e7;
+  --card: #33232d;
+  --card-foreground: #fff0e7;
+  --popover: #33232d;
+  --popover-foreground: #fff0e7;
+  --primary: #ec9caf;
+  --primary-foreground: #3a1223;
+  --secondary: #49303d;
+  --secondary-foreground: #fff0e7;
+  --muted: #402c37;
+  --muted-foreground: #c4a4af;
+  --accent: #533142;
+  --accent-foreground: #fff0e7;
+  --border: #e8b4bf26;
+  --input: #e8b4bf35;
+  --ring: #ec9caf;
+  --sidebar: #2f2029;
+  --sidebar-foreground: #fff0e7;
+  --sidebar-primary: #ec9caf;
+  --sidebar-primary-foreground: #3a1223;
+  --sidebar-accent: #49303d;
+  --sidebar-accent-foreground: #fff0e7;
+  --sidebar-border: #e8b4bf26;
+  --sidebar-ring: #ec9caf;
+}
+body {
+  font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+}
+h1,
+h2 {
+  font-family:
+    "Noto Serif SC", "Source Han Serif SC", "Songti SC", "STSong", "SimSun",
+    serif;
+  letter-spacing: -0.025em;
+}
+::selection {
+  background: #edb9c5;
+  color: #791b36;
+}
+
+/* Keep one slim scrollbar for the page and match the application's active theme. */
+:root {
+  --relay-scroll-thumb: #b35f76;
+}
+:root.dark {
+  --relay-scroll-thumb: #ac7289;
+}
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--relay-scroll-thumb) transparent;
+}
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--relay-scroll-thumb);
+  border: 2px solid var(--background);
+  border-radius: 20px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--primary);
+}
+::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+@supports selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: auto;
+    scrollbar-color: auto;
+  }
+}
+iframe[src^="https://relay.lolicode.com/relay-assets/index.html?"]
+{
+  display: block;
+  margin-top: 64px;
+}
+body:has(iframe[src^="https://relay.lolicode.com/relay-assets/index.html?"]) header
+{
+  background: var(--background);
+  border-bottom: 1px solid var(--border);
+}

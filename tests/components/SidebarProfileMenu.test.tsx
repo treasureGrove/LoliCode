@@ -169,9 +169,7 @@ describe("LoliCode sidebar account", () => {
     await user.click(screen.getByRole("button", { name: "登录" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("登录失败");
     expect(screen.getByRole("alert")).not.toHaveTextContent("test-password");
-    expect(
-      screen.getByRole("button", { name: "登录" }),
-    ).toBeEnabled();
+    expect(screen.getByRole("button", { name: "登录" })).toBeEnabled();
   });
 
   it("retains offline account details and lets the user sign out", async () => {
@@ -197,6 +195,8 @@ describe("LoliCode sidebar account", () => {
     expect(
       screen.getByRole("menuitem", { name: "登录 LoliCode" }),
     ).toHaveFocus();
+    await user.keyboard("{ArrowDown}");
+    expect(screen.getByRole("menuitem", { name: "连接手机" })).toHaveFocus();
     await user.keyboard("{ArrowDown}{Enter}");
     expect(onOpenSettings).toHaveBeenCalledOnce();
     await waitFor(() => expect(trigger).toHaveFocus());

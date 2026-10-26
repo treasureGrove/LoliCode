@@ -2,6 +2,27 @@ import { invoke } from "@tauri-apps/api/core";
 import type { AgentCatalog } from "@/types/agent";
 
 export const TAVERN_PRESETS_KEY = ["tavern", "presets"] as const;
+export const TAVERN_LOCAL_MODEL_KEY = ["tavern", "local-model"] as const;
+
+export interface TavernLocalModelStatus {
+  supported: boolean;
+  installed: boolean;
+  enabled: boolean;
+  stage:
+    | "unsupported"
+    | "notInstalled"
+    | "downloading"
+    | "verifying"
+    | "paused"
+    | "ready"
+    | "starting"
+    | "running"
+    | "error";
+  downloadedBytes: number;
+  totalBytes: number;
+  error: string | null;
+  cpuFfnLayers: number;
+}
 
 export interface TavernCharacter {
   id: string;
@@ -66,6 +87,17 @@ export interface TavernContextPreview {
 }
 
 export const tavernApi = {
+  getLocalModel: () => invoke<TavernLocalModelStatus>("get_tavern_local_model"),
+  installLocalModel: () =>
+    invoke<TavernLocalModelStatus>("install_tavern_local_model"),
+  pauseLocalModelInstall: () =>
+    invoke<void>("pause_tavern_local_model_install"),
+  setLocalModelEnabled: (enabled: boolean) =>
+    invoke<TavernLocalModelStatus>("set_tavern_local_model_enabled", {
+      enabled,
+    }),
+  stopLocalModel: () =>
+    invoke<TavernLocalModelStatus>("stop_tavern_local_model"),
   getSnapshot: () => invoke<TavernSnapshot>("get_tavern_snapshot"),
   getPresets: () => invoke<TavernPreset[]>("get_tavern_presets"),
   addPreset: (presetId: string) =>

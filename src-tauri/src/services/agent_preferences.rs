@@ -12,6 +12,8 @@ pub struct AgentProject {
     pub path: String,
     pub name: String,
     #[serde(default)]
+    pub standalone: bool,
+    #[serde(default)]
     pub pinned: bool,
     pub last_opened_at: u64,
 }
@@ -84,6 +86,7 @@ mod tests {
         preferences.projects.insert(
             "p".into(),
             AgentProject {
+                standalone: false,
                 path: "project".into(),
                 name: "project".into(),
                 pinned: true,

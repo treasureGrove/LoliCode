@@ -460,6 +460,7 @@ impl ZcodeAgentState {
         navigation.projects.insert(
             key,
             preferences::AgentProject {
+                standalone: false,
                 path: result.workspace.path.clone(),
                 name: result.workspace.name.clone(),
                 pinned,

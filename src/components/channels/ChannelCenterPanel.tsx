@@ -247,10 +247,13 @@ export function ChannelCenterPanel({
     try {
       await operation();
     } catch (cause) {
-      const message = channelErrorMessage(cause, [
-        apiKey,
-        ...snapshot.channels.map((channel) => channel.apiKey),
-      ]);
+      const message = channelErrorMessage(
+        cause,
+        [apiKey, ...snapshot.channels.map((channel) => channel.apiKey)],
+        label === "apply" || label.startsWith("connection-")
+          ? "configuration"
+          : "channel",
+      );
       if (mounted.current) {
         setConflict(String(cause).includes("另一处修改"));
         if (label === "save" || label === "apply") setSaveFailed(true);
@@ -924,6 +927,11 @@ export function ChannelCenterPanel({
                       name={channel.name}
                     />
                     <span className="truncate">{channel.name}</span>
+                    {channel.authKind === "lolicode_account" && (
+                      <span className="text-caption text-fg-3">
+                        仅 LoliCode · 每日额度
+                      </span>
+                    )}
                     {(channel.authKind === "claude_subscription" ||
                       channel.authKind === "gemini_subscription") && (
                       <span className="text-caption text-fg-3">仅原生工具</span>
@@ -1252,6 +1260,7 @@ export function ChannelCenterPanel({
                         ? channelErrorMessage(
                             result.message,
                             snapshot.channels.map((channel) => channel.apiKey),
+                            "configuration",
                           )
                         : result.message}
                     </p>

@@ -6,6 +6,7 @@
 //! session data, never gateway or upstream credentials.
 
 mod dto;
+mod images;
 mod mapping;
 pub mod native;
 mod policy;

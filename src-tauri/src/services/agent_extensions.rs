@@ -633,6 +633,13 @@ impl AgentExtensionStore {
         let _guard = operation_lock().lock()?;
         self.catalog_with(&self.settings()?)
     }
+    /// Internal MCP transport input. Never return this unmasked value through IPC.
+    pub(crate) fn raw_mcp_config(&self) -> Result<(u64, Value), AppError> {
+        let _guard = operation_lock().lock()?;
+        let settings = self.settings()?;
+        Ok((settings.revision, settings.mcp))
+    }
+
     pub fn config(&self) -> Result<AgentExtensionConfig, AppError> {
         let _guard = operation_lock().lock()?;
         let settings = self.settings()?;

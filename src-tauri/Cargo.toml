@@ -1,12 +1,12 @@
 [package]
 name = "lolicode"
-version = "4.0.22"
+version = "4.1.3"
 description = "LoliCode desktop coding agent with shared model channels"
 authors = ["Jason Young"]
 license = "MIT"
 repository = "https://github.com/treasureGrove/LoliCode"
 edition = "2021"
-rust-version = "1.85.0"
+rust-version = "1.88.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -70,6 +70,8 @@ rquickjs = { version = "0.8", features = ["array-buffer", "classes"] }
 thiserror = "2.0"
 anyhow = "1.0"
 zip = "2.2"
+quick-xml = "=0.38.4"
+lopdf = { version = "=0.44.0", default-features = false }
 serde_yaml = "0.9"
 tempfile = "3"
 url = "2.5"
@@ -87,6 +89,11 @@ sha2 = "0.10"
 minisign-verify = "0.2.5"
 semver = "1"
 hmac = "0.12"
+ring = "0.17"
+p256 = { version = "=0.13.2", default-features = false, features = ["arithmetic", "ecdh", "pkcs8", "std"] }
+hkdf = "0.12"
+webrtc = "=0.17.2"
+tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots"] }
 json5 = "0.4"
 json-five = "0.3.1"
 sys-locale = "0.3"
@@ -129,6 +136,10 @@ opt-level = "s"
 panic = "unwind"
 strip = "symbols"
 
+# Multi-gigabyte model verification must stay responsive in desktop dev builds.
+[profile.dev.package.sha2]
+opt-level = 3
+
 [dev-dependencies]
 serial_test = "3"
 tempfile = "3"
@@ -139,4 +150,8 @@ required-features = ["test-hooks"]
 
 [[example]]
 name = "lolicode_renderer_acceptance"
+required-features = ["test-hooks"]
+
+[[example]]
+name = "tavern_local_acceptance"
 required-features = ["test-hooks"]

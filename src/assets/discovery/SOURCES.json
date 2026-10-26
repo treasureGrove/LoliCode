@@ -1,0 +1,23 @@
+{
+  "artificial-analysis": {
+    "sourceUrl": "https://artificialanalysis.ai/leaderboards/models",
+    "filename": "artificial-analysis-81519b0e6c2c.jpg",
+    "sha256": "81519b0e6c2ce04ae4cc965a646a905668d37ed712105a0a9e42ccd3d86de703",
+    "capturedAt": "2026-10-19",
+    "bytes": 69973
+  },
+  "livebench": {
+    "sourceUrl": "https://livebench.ai/",
+    "filename": "livebench-a818b4666b9b.jpg",
+    "sha256": "a818b4666b9b90bff7395d1bf8ae9d11cd3b4d12db206a5b42d7729d8e802ae2",
+    "capturedAt": "2026-10-19",
+    "bytes": 60213
+  },
+  "aider": {
+    "sourceUrl": "https://aider.chat/docs/leaderboards/",
+    "filename": "aider-fd3770d0718d.jpg",
+    "sha256": "fd3770d0718dd0a4d321abb58be1efd48927248f63ea577f79d3e3e6b45af232",
+    "capturedAt": "2026-10-19",
+    "bytes": 40740
+  }
+}

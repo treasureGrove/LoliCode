@@ -30,6 +30,13 @@ const TOOL_NAMES: Record<string, string> = {
   list: "查看目录",
   list_files: "查看目录",
   search_files: "搜索代码",
+  tool_search: "查找可用工具",
+  deferred_tool_call: "调用已加载工具",
+  open_document: "打开文档",
+  show_in_viewer: "定位文档",
+  read_document: "读取文档",
+  search_document: "搜索文档",
+  get_view: "读取文档视图",
   edit: "修改文件",
   write: "写入文件",
   write_file: "写入文件",
@@ -65,6 +72,7 @@ function toolTarget(part: Extract<AgentPart, { type: "tool" }>) {
     "path",
     "skill_id",
     "pattern",
+    "query",
     "description",
     "command",
     "url",
@@ -224,6 +232,8 @@ export const AgentTextPart = memo(function AgentTextPart({
       renderLocalImage={renderLocalImage}
       renderLocalPath={renderLocalPath}
       previewLocalImageLinks
+      autoLoadRemoteImages
+      allowEmbeddedImages
     />
   );
 });

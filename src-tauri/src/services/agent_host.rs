@@ -11,6 +11,8 @@ use std::path::{Path, PathBuf};
 pub struct AgentWorkspace {
     pub path: String,
     pub name: String,
+    #[serde(default)]
+    pub standalone: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub remote: Option<RemoteWorkspace>,
 }
@@ -63,16 +65,70 @@ pub(crate) fn canonical_project(path: &str) -> Result<PathBuf, String> {
     Ok(canonical)
 }
 
+/// Dedicated persistent task files, separate from the native engine's private
+/// database, runtime configuration and the user's project directories.
+pub(crate) fn standalone_workspace_at(config: &Path) -> Result<PathBuf, String> {
+    let parent = config.join("agent");
+    let path = parent.join("standalone-workspace");
+    std::fs::create_dir_all(&path).map_err(|_| "无法创建独立任务目录")?;
+    let canonical = canonical_project(&path.to_string_lossy())?;
+    let expected = canonical_project(&parent.to_string_lossy())?.join("standalone-workspace");
+    if canonical != expected {
+        return Err("独立任务目录指向了其他位置，请检查应用数据目录".into());
+    }
+    Ok(canonical)
+}
+
+pub(crate) fn is_standalone_workspace(path: &Path) -> bool {
+    canonical_project(
+        &crate::config::get_app_config_dir()
+            .join("agent/standalone-workspace")
+            .to_string_lossy(),
+    )
+    .is_ok_and(|expected| {
+        super::agent_preferences::path_key(&expected.to_string_lossy())
+            == super::agent_preferences::path_key(&path.to_string_lossy())
+    })
+}
+
 #[cfg(any(test, feature = "test-hooks"))]
 pub(crate) fn workspace(path: &Path) -> AgentWorkspace {
     AgentWorkspace {
         remote: None,
+        standalone: false,
         name: path
             .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or("项目")
             .to_string(),
         path: path.to_string_lossy().into_owned(),
+    }
+}
+
+#[cfg(test)]
+mod standalone_tests {
+    use super::*;
+    #[test]
+    fn task_files_survive_reopen_without_exposing_runtime_siblings() {
+        let root = tempfile::tempdir().unwrap();
+        let first = standalone_workspace_at(root.path()).unwrap();
+        std::fs::write(first.join("draft.txt"), "kept").unwrap();
+        let reopened = standalone_workspace_at(root.path()).unwrap();
+        assert_eq!(first, reopened);
+        assert_eq!(
+            std::fs::read_to_string(reopened.join("draft.txt")).unwrap(),
+            "kept"
+        );
+        assert!(!root.path().join("agent/native").starts_with(&first));
+    }
+    #[test]
+    fn invalid_task_directory_is_not_overwritten() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(root.path().join("agent")).unwrap();
+        let path = root.path().join("agent/standalone-workspace");
+        std::fs::write(&path, "preserve").unwrap();
+        assert!(standalone_workspace_at(root.path()).is_err());
+        assert_eq!(std::fs::read_to_string(path).unwrap(), "preserve");
     }
 }
 

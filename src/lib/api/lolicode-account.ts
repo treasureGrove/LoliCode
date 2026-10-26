@@ -15,7 +15,27 @@ export interface LolicodeAccountStatus {
   warning: string | null;
 }
 
+export interface LolicodeRelayStatus {
+  account: { id: string; username: string; displayName: string };
+  ready: boolean;
+  models: { id: string; name?: string }[];
+  quota: {
+    day: string;
+    timezone: string;
+    resetsAt: string;
+    requestLimit: number;
+    tokenLimit: number;
+    requestsUsed: number;
+    tokensUsed: number;
+    tokensReserved: number;
+    requestsRemaining: number;
+    tokensRemaining: number;
+  };
+}
+
 export const lolicodeAccountApi = {
+  relayStatus: () => invoke<LolicodeRelayStatus>("lolicode_relay_status"),
+  connectRelay: () => invoke<void>("lolicode_relay_connect"),
   status(refresh = false): Promise<LolicodeAccountStatus> {
     return invoke<LolicodeAccountStatus>("lolicode_account_status", {
       refresh,

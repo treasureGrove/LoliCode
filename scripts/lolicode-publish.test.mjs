@@ -375,3 +375,68 @@ test("actual remote Python lifecycle validates hashes, keeps version directories
     f.clean();
   }
 });
+
+test("v1 public release uses its own path while remote downgrade checks compare native builds", async () => {
+  const f = await fixture("4.1.0");
+  try {
+    const site = path.join(f.root, "lolicode");
+    mkdirSync(path.join(site, "assets/rankings"), { recursive: true });
+    for (const name of [
+      "index.html",
+      "assets/site.css",
+      "assets/downloads.js",
+      "assets/logo.svg",
+      "assets/maid.png",
+    ])
+      writeFileSync(path.join(site, name), "owned site fixture");
+    const catalog = JSON.parse(
+      readFileSync(
+        new URL("../src/public/discovery-v1.json", import.meta.url),
+        "utf8",
+      ),
+    );
+    writeFileSync(
+      path.join(site, "assets/discovery-v1.json"),
+      JSON.stringify(catalog),
+    );
+    for (const entry of catalog.entries.filter((entry) => entry.preview))
+      copyFileSync(
+        new URL(`../src/assets/discovery/${entry.id}.jpg`, import.meta.url),
+        path.join(site, "assets/rankings", entry.preview.filename),
+      );
+    const plan = await preparePublishPlan({ ...f.options, "site-dir": site }),
+      program = fileURLToPath(
+        new URL("./lolicode-publish-remote.py", import.meta.url),
+      );
+    const wrapper = `import importlib.util,json,sys,shutil,uuid\nfrom pathlib import Path\nsys.dont_write_bytecode=True\nm=importlib.util.spec_from_file_location('owned_publish',sys.argv[1]);p=importlib.util.module_from_spec(m);m.loader.exec_module(p)\np.ROOT=Path(sys.argv[2])\nspec=json.loads(sys.stdin.read());spec['namespace']=str(p.ROOT)\nassert p.compare('4.0.13-rc.10','4.0.13-rc.2')==1\nassert p.main('begin',spec)['artifactsReady']==False\nstage=p.ROOT/('.publish-stage-'+spec['stageId'])\nfor item in spec['files']:\n source=Path(sys.argv[3] if item['role']=='release' else sys.argv[4])/item['name'];target=stage/item['role']/item['name'];target.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(source,target)\nassert not (p.ROOT/'updates/latest.json').exists()\nassert p.main('commit-artifacts',spec)['remoteHashesAndBytesVerified']\nassert not (p.ROOT/'updates/latest.json').exists()\nassert p.main('finalize',spec)['latestPublishedLast']\nold=(p.ROOT/'updates/latest.json').read_bytes()\nnextspec=dict(spec);nextspec['stageId']=str(uuid.uuid4())\ntry: p.main('begin',nextspec);raise AssertionError('equal version was published')\nexcept ValueError as e: assert 'equal or newer' in str(e)\np.main('abort',nextspec)\nassert (p.ROOT/'updates/latest.json').read_bytes()==old\n(p.ROOT/'updates/latest.json').write_text(json.dumps({'version':'9.0.0'}))\nnextspec['stageId']=str(uuid.uuid4())\ntry: p.main('begin',nextspec);raise AssertionError('newer version was rolled back')\nexcept ValueError as e: assert 'equal or newer' in str(e)\np.main('abort',nextspec)\nassert stage.exists()\nprint('PASS actual offline remote lifecycle')\n`;
+    const result = spawnSync(
+      "python",
+      [
+        "-c",
+        wrapper,
+        program,
+        path.join(f.root, "remote-lolicode"),
+        f.options["release-dir"],
+        site,
+      ],
+      { input: JSON.stringify(plan.spec), encoding: "utf8" },
+    );
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /PASS actual offline/);
+    assert.equal(
+      plan.spec.files.filter((item) => item.name.startsWith("assets/rankings/"))
+        .length,
+      3,
+    );
+    writeFileSync(
+      path.join(site, "assets/rankings", catalog.entries[0].preview.filename),
+      "tampered",
+    );
+    await assert.rejects(
+      preparePublishPlan({ ...f.options, "site-dir": site }),
+      /preview checksum mismatch/,
+    );
+  } finally {
+    f.clean();
+  }
+});

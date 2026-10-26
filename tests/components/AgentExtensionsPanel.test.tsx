@@ -17,6 +17,7 @@ import type { AgentExtensions } from "@/types/agent";
 vi.mock("@/lib/api/agent", () => ({
   agentApi: {
     getExtensions: vi.fn(),
+    connectMcp: vi.fn(),
     getPluginStore: vi.fn(),
     updatePluginMarketplace: vi.fn(),
     installMarketplacePlugin: vi.fn(),
@@ -126,6 +127,32 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 describe("AgentExtensionsPanel", () => {
+  it("connects configured MCP services and shows only the returned runtime receipt", async () => {
+    vi.mocked(agentApi.getExtensions).mockResolvedValue({ ...catalog, mcpRuntime:true, mcpServers:[{...catalog.mcpServers[0],loaded:false,runtimeStatus:"disconnected",toolCount:0}] });
+    let finish!: (value: AgentExtensions) => void;
+    vi.mocked(agentApi.connectMcp).mockReturnValue(new Promise(resolve => { finish = resolve; }));
+    render(<PanelHarness />);
+    await flush();
+    fireEvent.click(screen.getByRole("tab", {name:"MCP 工具"}));
+    fireEvent.click(screen.getByRole("button", {name:"连接启用的服务"}));
+    await flush();
+    expect(agentApi.connectMcp).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(/2 个工具/)).not.toBeInTheDocument();
+    await act(async () => finish({...catalog,mcpRuntime:true,mcpServers:[{...catalog.mcpServers[0],loaded:true,runtimeStatus:"connected",toolCount:2}]}));
+    await flush();
+    expect(screen.getByText("已连接 · 2 个工具")).toBeInTheDocument();
+  });
+  it("keeps an MCP connection failure visible without claiming any tool was loaded", async () => {
+    vi.mocked(agentApi.getExtensions).mockResolvedValue({...catalog,mcpRuntime:true});
+    vi.mocked(agentApi.connectMcp).mockRejectedValue(new Error("本地 MCP 进程未能启动"));
+    render(<PanelHarness />);
+    await flush();
+    fireEvent.click(screen.getByRole("tab",{name:"MCP 工具"}));
+    fireEvent.click(screen.getByRole("button",{name:"连接启用的服务"}));
+    await flush();
+    expect(screen.getByText("本地 MCP 进程未能启动")).toBeInTheDocument();
+    expect(screen.queryByText(/已连接 ·/)).not.toBeInTheDocument();
+  });
   it("keeps verified skills usable when the optional marketplace fails to load", async () => {
     vi.mocked(agentApi.getPluginStore).mockRejectedValue(
       new Error("CLI registry unavailable"),

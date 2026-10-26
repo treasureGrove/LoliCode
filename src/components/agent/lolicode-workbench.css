@@ -149,6 +149,35 @@
   background: color-mix(in srgb, var(--wb-accent) 16%, var(--wb-panel));
   box-shadow: 0 4px 12px color-mix(in srgb, var(--wb-accent) 10%, transparent);
 }
+.wb-create-task {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  margin-bottom: 6px;
+}
+.wb-create-task > .wb-nav-create {
+  flex: 1;
+  min-width: 0;
+  margin-bottom: 0;
+  border-radius: 13px 0 0 13px;
+  justify-content: center;
+}
+.wb-create-task-options {
+  flex: 0 0 34px;
+  display: grid;
+  place-items: center;
+  border-left: 1px solid var(--wb-border);
+  border-radius: 0 13px 13px 0;
+  background: var(--wb-accent-soft);
+  color: inherit;
+}
+.wb-create-task-options svg {
+  width: 15px;
+  height: 15px;
+}
+.wb-create-task-options:hover:not(:disabled) {
+  background: var(--wb-hover);
+}
 .wb-nav-button:hover,
 .wb-icon-button:hover,
 .wb-session-row:hover {

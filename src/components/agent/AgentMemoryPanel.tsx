@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { BUILTIN_AGENT_NAME, BUILTIN_AGENT_NICKNAME } from "@/lib/branding";
 import { Brain, RefreshCw, Trash2, Pencil, Check, X } from "lucide-react";
 import {
   agentMemoryApi,
@@ -88,6 +89,10 @@ export function AgentMemoryPanel({
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
             记住你的偏好和项目约定，跨会话继续使用。
+          </p>
+          <p className="mt-2 text-xs text-muted-foreground">
+            默认角色：{BUILTIN_AGENT_NAME}（{BUILTIN_AGENT_NICKNAME}
+            ）。内置预设可编辑或删除，修改后不会自动恢复。
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-1">
@@ -210,8 +215,12 @@ export function AgentMemoryPanel({
                     {entry.content}
                   </p>
                   <p className="mt-2 text-xs text-muted-foreground">
-                    {entry.source === "user" ? "手动添加" : "Agent 记录"} ·{" "}
-                    {new Date(entry.updatedAt).toLocaleDateString()}
+                    {entry.source === "preset:sillyDog:v1"
+                      ? "内置预设"
+                      : entry.source === "user"
+                        ? "手动添加"
+                        : "Agent 记录"}{" "}
+                    · {new Date(entry.updatedAt).toLocaleDateString()}
                   </p>
                 </div>
                 <Button

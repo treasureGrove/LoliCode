@@ -1,0 +1,25 @@
+[Unit]
+Description=LoliCode forum identity and daily quota bridge
+Requires=lolicode-relay.service
+After=lolicode-relay.service network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/lolicode-relay
+ExecStart=/usr/bin/python3 /opt/lolicode-relay/bridge.py
+Restart=on-failure
+RestartSec=3
+User=root
+UMask=0077
+MemoryMax=192M
+CPUQuota=50%
+TasksMax=48
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/lolicode-relay/bridge-state
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

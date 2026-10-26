@@ -1,11 +1,19 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { BookHeart, Boxes, LoaderCircle, Plus } from "lucide-react";
+import {
+  BookHeart,
+  Boxes,
+  ChartNoAxesCombined,
+  Gift,
+  LoaderCircle,
+  Plus,
+} from "lucide-react";
 import { AppPageHeader } from "@/components/shell/AppPageHeader";
 import { Button } from "@/components/ui/button";
 import {
   builtinAppsApi,
+  BUILTIN_APP_IDS,
   builtinAppsKey,
   useBuiltinApps,
   type BuiltinAppId,
@@ -59,10 +67,15 @@ export function BuiltinApplicationsPage({
           </div>
         )}
         <div className="mx-auto grid max-w-4xl gap-5 md:grid-cols-2">
-          {(["tavern", "unreal"] as const).map((id) => {
+          {BUILTIN_APP_IDS.map((id) => {
             const enabled =
               apps.data?.find((item) => item.id === id)?.enabled === true;
-            const Icon = id === "tavern" ? BookHeart : Boxes;
+            const Icon = {
+              tavern: BookHeart,
+              unreal: Boxes,
+              rankings: ChartNoAxesCombined,
+              "free-ai": Gift,
+            }[id];
             return (
               <article
                 key={id}

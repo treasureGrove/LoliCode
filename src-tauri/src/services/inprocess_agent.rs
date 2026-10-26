@@ -23,6 +23,8 @@ pub struct InprocessAgentState {
     extensions: OnceCell<Arc<InprocessExtensionStore>>,
     remote: OnceCell<Arc<super::remote_projects::RemoteProjects>>,
     skill_snapshot: RwLock<Option<SkillSnapshot>>,
+    mcp: OnceCell<Arc<super::native_mcp::NativeMcpTools>>,
+    mcp_error: RwLock<Option<String>>,
 }
 
 pub struct NativeUpdateLease<'a> {
@@ -54,11 +56,21 @@ impl InprocessAgentState {
         }
         let engine =
             NativeEngine::open(crate::config::get_app_config_dir().join("agent/native")).await?;
+        engine.call("initializeMemoryDefaults", json!({})).await?;
         let state = app.state::<AppState>();
         let remote = self.remote_projects(&state).await;
-        engine.set_application_tools(Arc::new(super::remote_agent_tools::DesktopToolHost {
-            local: super::agent_applications::DesktopApplicationTools(state.inner().clone()), remote,
-        })).await;
+        let mcp = self
+            .mcp
+            .get_or_init(|| async { Arc::new(super::native_mcp::NativeMcpTools::new()) })
+            .await
+            .clone();
+        engine
+            .set_application_tools(Arc::new(super::remote_agent_tools::DesktopToolHost {
+                local: super::agent_applications::DesktopApplicationTools(state.inner().clone()),
+                remote,
+                mcp: Some(mcp),
+            }))
+            .await;
         let mut bundled = app
             .path()
             .resource_dir()
@@ -74,18 +86,110 @@ impl InprocessAgentState {
             let _ = self.extensions.set(Arc::new(store));
         }
         *self.engine.write().await = Some(engine.clone());
+        if let Err(error) = self.sync_mcp_config().await {
+            log::warn!("MCP 暂不可用：{error}");
+        }
         Ok(engine)
     }
 
-    pub async fn remote_projects(&self, state: &AppState) -> Arc<super::remote_projects::RemoteProjects> {
-        self.remote.get_or_init(|| async {
-            Arc::new(super::remote_projects::RemoteProjects::new(state.db.clone(), crate::config::get_app_config_dir().join("agent/remote-workspaces")))
-        }).await.clone()
+    async fn sync_mcp_config(&self) -> Result<(), String> {
+        let result = async {
+            if let (Some(store), Some(mcp)) = (self.extensions.get(), self.mcp.get()) {
+                let (revision, config) =
+                    store.store().raw_mcp_config().map_err(|e| e.to_string())?;
+                mcp.configure(revision, config).await?;
+            }
+            Ok::<(), String>(())
+        }
+        .await;
+        if let Err(error) = &result {
+            if let Some(mcp) = self.mcp.get() {
+                let _ = mcp.invalidate().await;
+            }
+            *self.mcp_error.write().await = Some(error.clone());
+        } else {
+            *self.mcp_error.write().await = None;
+        }
+        result
     }
 
-    async fn validate_remote_project(&self, state: &AppState, path: &Path) -> Result<Option<super::agent_host::RemoteWorkspace>, String> {
+    async fn discover_mcp(&self, project: &Path) -> Result<(), String> {
+        self.sync_mcp_config().await?;
+        if self.remote.get().is_some_and(|remote| remote.owns(project)) {
+            return Ok(());
+        }
+        if let Some(mcp) = self.mcp.get() {
+            let (_stop, cancel) = tokio::sync::watch::channel(false);
+            mcp.discover(project, cancel).await?;
+        }
+        Ok(())
+    }
+
+    pub async fn connect_mcp(&self) -> Result<(), String> {
+        let project = self.workspace_path().await.ok_or("请先打开一个本地项目")?;
+        if self
+            .remote
+            .get()
+            .is_some_and(|remote| remote.owns(Path::new(&project)))
+        {
+            return Err("MCP 连接属于本地项目；远程项目暂不连接本机服务".into());
+        }
+        self.discover_mcp(Path::new(&project)).await
+    }
+
+    fn decorate_mcp_catalog(&self, value: &mut Value, project: Option<&str>) {
+        value["mcpRuntime"] = json!(true);
+        value["mcpRuntimeError"] = json!(self.mcp_error.try_read().ok().and_then(|e| e.clone()));
+        let statuses = self
+            .mcp
+            .get()
+            .zip(project)
+            .map(|(mcp, project)| mcp.status_catalog(Path::new(project)))
+            .unwrap_or_default();
+        for entry in value["mcpServers"].as_array_mut().into_iter().flatten() {
+            let status = statuses.iter().find(|s| s["name"] == entry["id"]);
+            let connected = status.is_some_and(|s| s["status"] == "connected");
+            entry["loaded"] = json!(connected);
+            entry["runtimeStatus"] = status.map(|s| s["status"].clone()).unwrap_or_else(|| {
+                json!(if entry["enabled"] == true {
+                    "disconnected"
+                } else {
+                    "disabled"
+                })
+            });
+            entry["error"] = status.map(|s| s["error"].clone()).unwrap_or(Value::Null);
+            entry["toolCount"] = status.map(|s| s["toolCount"].clone()).unwrap_or(json!(0));
+        }
+        value["loadedMcpServers"] = json!(statuses
+            .into_iter()
+            .filter(|s| s["status"] == "connected")
+            .collect::<Vec<_>>());
+    }
+
+    pub async fn remote_projects(
+        &self,
+        state: &AppState,
+    ) -> Arc<super::remote_projects::RemoteProjects> {
+        self.remote
+            .get_or_init(|| async {
+                Arc::new(super::remote_projects::RemoteProjects::new(
+                    state.db.clone(),
+                    crate::config::get_app_config_dir().join("agent/remote-workspaces"),
+                ))
+            })
+            .await
+            .clone()
+    }
+
+    async fn validate_remote_project(
+        &self,
+        state: &AppState,
+        path: &Path,
+    ) -> Result<Option<super::agent_host::RemoteWorkspace>, String> {
         let remote = self.remote_projects(state).await;
-        if !remote.owns(path) { return Ok(None); }
+        if !remote.owns(path) {
+            return Ok(None);
+        }
         let resolved = remote.resolve(path)?;
         let (_stop, cancel) = tokio::sync::watch::channel(false);
         let checked = remote.call(path, "open_project", json!({}), cancel).await?;
@@ -93,8 +197,13 @@ impl InprocessAgentState {
             return Err("远程项目目录已改变，请在 SSH / WSL 中重新选择项目".into());
         }
         Ok(Some(super::agent_host::RemoteWorkspace {
-            connection_name: resolved.connection.name, root: resolved.project.root,
-            kind: match resolved.connection.target { super::remote_transport::RemoteTarget::Ssh{..} => "ssh", super::remote_transport::RemoteTarget::Wsl{..} => "wsl" }.into(),
+            connection_name: resolved.connection.name,
+            root: resolved.project.root,
+            kind: match resolved.connection.target {
+                super::remote_transport::RemoteTarget::Ssh { .. } => "ssh",
+                super::remote_transport::RemoteTarget::Wsl { .. } => "wsl",
+            }
+            .into(),
         }))
     }
 
@@ -110,7 +219,9 @@ impl InprocessAgentState {
         let path = tokio::task::spawn_blocking(move || canonical_project(&path))
             .await
             .map_err(|_| "项目目录检查未完成")??;
-        if remote_requested && !remote.owns(&path) { return Err("远程项目标识指向了其他目录，请检查应用数据；此次打开已取消".into()); }
+        if remote_requested && !remote.owns(&path) {
+            return Err("远程项目标识指向了其他目录，请检查应用数据；此次打开已取消".into());
+        }
         let _guard = self.lifecycle.lock().await;
         let engine = self.start_locked(app).await?;
         self.validate_remote_project(state, &path).await?;
@@ -288,6 +399,9 @@ impl InprocessAgentState {
             _ => return Ok(None),
         }
         self.sync_skills(engine).await?;
+        if let Err(error) = self.sync_mcp_config().await {
+            log::warn!("MCP 配置暂不可用：{error}");
+        }
         let loaded = engine
             .call("loadedSkills", json!({}))
             .await?
@@ -298,10 +412,12 @@ impl InprocessAgentState {
             .filter_map(|v| v.as_str().map(str::to_owned))
             .collect::<BTreeSet<_>>();
         let active = self.skill_snapshot.read().await;
-        store
+        let mut value = store
             .catalog(active.as_ref(), &loaded)
-            .map(Some)
-            .map_err(|e| e.to_string())
+            .map_err(|e| e.to_string())?;
+        let project = self.workspace_path().await;
+        self.decorate_mcp_catalog(&mut value, project.as_deref());
+        Ok(Some(value))
     }
 
     pub async fn call<T: DeserializeOwned>(
@@ -357,7 +473,9 @@ impl InprocessAgentState {
         let path = tokio::task::spawn_blocking(move || canonical_project(&path))
             .await
             .map_err(|_| "项目目录检查未完成")??;
-        if remote_requested && !remote.owns(&path) { return Err("远程项目标识指向了其他目录，请检查应用数据；此次打开已取消".into()); }
+        if remote_requested && !remote.owns(&path) {
+            return Err("远程项目标识指向了其他目录，请检查应用数据；此次打开已取消".into());
+        }
         let _guard = self.lifecycle.lock().await;
         let engine = self.start_locked(app).await?;
         let remote_name = self.validate_remote_project(state, &path).await?;
@@ -382,8 +500,21 @@ impl InprocessAgentState {
             return Err("返回项目与所选目录不一致".into());
         }
         if let Some(remote) = remote_name {
-            result.workspace.name = format!("{} · {}",remote.connection_name,remote.root.rsplit('/').next().filter(|s|!s.is_empty()).unwrap_or("/"));
+            result.workspace.name = format!(
+                "{} · {}",
+                remote.connection_name,
+                remote
+                    .root
+                    .rsplit('/')
+                    .next()
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or("/")
+            );
             result.workspace.remote = Some(remote);
+        }
+        result.workspace.standalone = super::agent_host::is_standalone_workspace(&path);
+        if result.workspace.standalone {
+            result.workspace.name = "独立任务".into();
         }
         let mut navigation = preferences::load(&state.db)?;
         let key = preferences::path_key(&result.workspace.path);
@@ -393,6 +524,7 @@ impl InprocessAgentState {
             preferences::AgentProject {
                 path: result.workspace.path.clone(),
                 name: result.workspace.name.clone(),
+                standalone: result.workspace.standalone,
                 pinned,
                 last_opened_at: chrono::Utc::now().timestamp_millis() as u64,
             },
@@ -484,9 +616,17 @@ impl InprocessAgentState {
         let engine = self.engine.write().await.take();
         self.binding.write().await.take();
         *self.skill_snapshot.write().await = None;
-        if let Some(engine) = engine {
-            engine.shutdown().await?;
-        }
-        Ok(())
+        let engine_result = if let Some(engine) = engine {
+            engine.shutdown().await
+        } else {
+            Ok(())
+        };
+        let mcp_result = if let Some(mcp) = self.mcp.get() {
+            mcp.shutdown().await
+        } else {
+            Ok(())
+        };
+        *self.mcp_error.write().await = None;
+        engine_result.and(mcp_result)
     }
 }

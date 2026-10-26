@@ -12,8 +12,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SimpleUsagePage } from "@/components/usage/SimpleUsagePage";
 import { usageApi } from "@/lib/api/usage";
 import { channelCenterApi } from "@/lib/api/channel-center";
-import { copilotListAccounts } from "@/lib/api/copilot";
-import { copilotBillingApi } from "@/lib/api/copilotBilling";
+import type { ProviderStats } from "@/types/usage";
 
 vi.mock("@/lib/api/usage", () => ({
   usageApi: {
@@ -27,21 +26,6 @@ vi.mock("@/lib/api/usage", () => ({
 }));
 vi.mock("@/lib/api/channel-center", () => ({
   channelCenterApi: { get: vi.fn(), listUsageLabels: vi.fn() },
-}));
-vi.mock("@/lib/api/copilotBilling", () => ({
-  COPILOT_BILLING_QUERY_KEY: ["copilot", "billing", "reports"],
-  copilotBillingApi: {
-    listReports: vi.fn().mockResolvedValue([]),
-    sync: vi.fn(),
-  },
-}));
-vi.mock("@/lib/api/copilot", () => ({
-  copilotListAccounts: vi.fn().mockResolvedValue([]),
-  copilotGetAuthStatus: vi.fn().mockResolvedValue({
-    authenticated: false,
-    default_account_id: null,
-    accounts: [],
-  }),
 }));
 function mount() {
   const client = new QueryClient({
@@ -58,8 +42,6 @@ function mount() {
 }
 beforeEach(() => {
   vi.mocked(usageApi.getDataSourceBreakdown).mockResolvedValue([]);
-  vi.mocked(copilotBillingApi.listReports).mockResolvedValue([]);
-  vi.mocked(copilotListAccounts).mockResolvedValue([]);
   vi.mocked(usageApi.getUsageFirstDate).mockResolvedValue(null);
   vi.mocked(usageApi.getUsageTrends).mockResolvedValue([]);
   vi.mocked(usageApi.getUsageSummary).mockResolvedValue({
@@ -133,7 +115,7 @@ describe("basic usage", () => {
     expect(sources.queryByText(/\$0\.00/)).not.toBeInTheDocument();
   });
 
-  it("syncs app logs and refreshes the aggregate without losing official billing separation", async () => {
+  it("syncs app logs and refreshes the aggregate", async () => {
     vi.mocked(usageApi.syncSessionUsage).mockResolvedValue({
       imported: 1,
       skipped: 0,
@@ -150,53 +132,9 @@ describe("basic usage", () => {
     await waitFor(() =>
       expect(usageApi.getDataSourceBreakdown).toHaveBeenCalledTimes(2),
     );
-  });
-  it("keeps official Copilot billing separate from local request estimates and time filters", async () => {
-    const now = new Date();
-    vi.mocked(copilotListAccounts).mockResolvedValue([
-      {
-        id: "personal-alice",
-        login: "alice",
-        avatar_url: null,
-        authenticated_at: 0,
-        github_domain: "github.com",
-      },
-    ]);
-    vi.mocked(copilotBillingApi.listReports).mockResolvedValue([
-      {
-        accountLogin: "alice",
-        year: now.getFullYear(),
-        month: now.getMonth() + 1,
-        kind: "ai_credits",
-        fetchedAt: Math.floor(now.getTime() / 1000),
-        source: "github-billing-api",
-        items: [
-          {
-            product: "Copilot AI Credits",
-            sku: "AI Credit",
-            model: "example-model",
-            unitType: "ai-credits",
-            pricePerUnit: 0.01,
-            grossQuantity: 900,
-            grossAmount: 9,
-            discountQuantity: 800,
-            discountAmount: 8,
-            netQuantity: 100,
-            netAmount: 1,
-          },
-        ],
-      },
-    ]);
-    mount();
-    const official = within(
-      screen.getByRole("region", { name: "GitHub Copilot 官方账单" }),
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "已更新 1 条用量记录",
     );
-    expect(await official.findAllByText("US$1.00")).toHaveLength(2);
-    expect(await screen.findByText("$0.1234")).toBeInTheDocument();
-    expect(screen.queryByText("$1.1234")).not.toBeInTheDocument();
-    await userEvent.setup().click(screen.getByRole("button", { name: "全部" }));
-    expect(official.getAllByText("US$1.00")).toHaveLength(2);
-    expect(screen.getByText("$0.1234")).toBeInTheDocument();
   });
   it("keeps recorded daily data if the first-date background refresh fails", async () => {
     vi.mocked(usageApi.getUsageFirstDate).mockResolvedValue("2024-01-01");
@@ -299,6 +237,122 @@ describe("basic usage", () => {
       "aria-pressed",
       "true",
     );
+  });
+  it("queries the last 30 calendar days from local midnight", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const now = new Date(2026, 10, 5, 15, 24, 30);
+    vi.setSystemTime(now);
+    try {
+      mount();
+      expect(await screen.findByText("$0.1234")).toBeInTheDocument();
+      await userEvent
+        .setup()
+        .click(screen.getByRole("button", { name: "近 30 天" }));
+      const start = new Date(2026, 9, 7, 0, 0, 0);
+      await waitFor(() =>
+        expect(usageApi.getUsageSummary).toHaveBeenLastCalledWith(
+          Math.floor(start.getTime() / 1000),
+          Math.floor(now.getTime() / 1000),
+        ),
+      );
+      expect(usageApi.getProviderStats).toHaveBeenLastCalledWith(
+        Math.floor(start.getTime() / 1000),
+        Math.floor(now.getTime() / 1000),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it("keeps the last recorded summary visible after a background refresh fails", async () => {
+    const { client } = mount();
+    expect(await screen.findByText("$0.1234")).toBeInTheDocument();
+    vi.mocked(usageApi.getUsageSummary).mockRejectedValue(
+      new Error("background summary read failed"),
+    );
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: ["channel-center-usage"] });
+    });
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "正在显示上次记录",
+    );
+    expect(screen.getByText("$0.1234")).toBeInTheDocument();
+    expect(screen.getByText("75.0%")).toBeInTheDocument();
+  });
+  it("keeps summary metrics available when channel details fail to load", async () => {
+    vi.mocked(usageApi.getProviderStats).mockRejectedValue(
+      new Error("provider statistics read failed"),
+    );
+    mount();
+    expect(await screen.findByText("$0.1234")).toBeInTheDocument();
+    expect(screen.getByText("75.0%")).toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toHaveTextContent("渠道明细");
+    expect(usageApi.getUsageSummary).toHaveBeenCalled();
+  });
+  it("searches resolved channel and app names and orders channels by the selected metric", async () => {
+    const providers: ProviderStats[] = [
+      {
+        providerId: "channel-deepseek",
+        providerName: "channel-deepseek",
+        appType: "channel-gateway",
+        requestCount: 12,
+        totalTokens: 2500,
+        totalCost: "0.33",
+        successRate: 100,
+        avgLatencyMs: 1250,
+      },
+      {
+        providerId: "claude-main",
+        providerName: "Anthropic",
+        appType: "claude",
+        requestCount: 8,
+        totalTokens: 12000,
+        totalCost: "0.55",
+        successRate: 87.5,
+        avgLatencyMs: 2100,
+      },
+      {
+        providerId: "workbuddy-session",
+        providerName: "本机会话",
+        appType: "workbuddy",
+        requestCount: 5,
+        totalTokens: 40000,
+        totalCost: "0.25",
+        successRate: 100,
+        avgLatencyMs: 3200,
+      },
+    ];
+    vi.mocked(usageApi.getProviderStats).mockResolvedValue(providers);
+    vi.mocked(channelCenterApi.listUsageLabels).mockResolvedValue([
+      { providerId: "channel-deepseek", name: "工作用 DeepSeek" },
+    ]);
+    mount();
+    const table = await screen.findByRole("table", { name: "各渠道用量" });
+    const providerNames = ["工作用 DeepSeek", "Anthropic", "本机会话"];
+    const visibleProviderOrder = () =>
+      within(table)
+        .getAllByRole("row")
+        .slice(1)
+        .map((row) =>
+          providerNames.find((name) => within(row).queryByText(name)),
+        );
+    expect(visibleProviderOrder()).toEqual(providerNames);
+    const user = userEvent.setup();
+    const search = screen.getByLabelText("搜索渠道或应用");
+    await user.type(search, "工作用");
+    expect(visibleProviderOrder()).toEqual(["工作用 DeepSeek"]);
+    await user.clear(search);
+    await user.type(search, "workbuddy");
+    expect(visibleProviderOrder()).toEqual(["本机会话"]);
+    await user.clear(search);
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "渠道排序" }),
+      "tokens",
+    );
+    expect(visibleProviderOrder()).toEqual([
+      "本机会话",
+      "Anthropic",
+      "工作用 DeepSeek",
+    ]);
   });
   it("reports a read failure instead of displaying fabricated zero usage", async () => {
     vi.mocked(usageApi.getUsageSummary).mockRejectedValue(

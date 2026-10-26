@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { productVersion } from "./lolicode-product-version.mjs";
 // Local, credential-free preparation of LoliCode's signed Windows updater files.
 // No private-key handling, networking or changes to the application's config.
 import { createHash } from "node:crypto";
@@ -232,6 +233,7 @@ function pubDate(value = new Date().toISOString()) {
 
 export async function prepareRelease(options) {
   const version = parseVersion(options.version).value;
+  const publicVersion = productVersion(version);
   const current = parseVersion(options["current-version"]).value;
   if (compareVersions(version, current) <= 0)
     throw new Error("Release version must increase above current-version.");
@@ -271,7 +273,7 @@ export async function prepareRelease(options) {
   const signature = readSmall(signatureFile, ".sig").trim();
   parseSignature(signature);
   await verifySignatureFile(installer, signature, publicKey.encoded);
-  const name = `LoliCode-${version}-Windows-x64-Setup.exe`;
+  const name = `LoliCode-${publicVersion}-Windows-x64-Setup.exe`;
   safeName(name);
   const notes = options["notes-file"]
     ? readSmall(options["notes-file"], ".md", 512 * 1024)
@@ -282,7 +284,7 @@ export async function prepareRelease(options) {
   const output = path.resolve(options["output-dir"]);
   mkdirSync(output, { recursive: true });
   const canonicalOutput = realpathSync(output),
-    destination = path.join(canonicalOutput, version);
+    destination = path.join(canonicalOutput, publicVersion);
   if (existsSync(destination))
     throw new Error(
       "Version directory already exists; releases are immutable and must not be overwritten.",
@@ -304,17 +306,18 @@ export async function prepareRelease(options) {
     }
     const latest = {
       version,
+      ...(publicVersion !== version ? { productVersion: publicVersion } : {}),
       notes,
       pub_date: pubDate(options["pub-date"]),
       platforms: {
-        [PLATFORM]: { signature, url: assetURL(base, version, name) },
+        [PLATFORM]: { signature, url: assetURL(base, publicVersion, name) },
       },
     };
     if (portable)
       latest.downloads = {
         [PORTABLE_PLATFORM]: {
           ...portable,
-          url: assetURL(base, version, PORTABLE_NAME),
+          url: assetURL(base, publicVersion, PORTABLE_NAME),
         },
       };
     json(path.join(stage, "latest.json"), latest);
@@ -327,6 +330,7 @@ export async function prepareRelease(options) {
       product: "LoliCode",
       installerKind: "NSIS",
       version,
+      ...(publicVersion !== version ? { productVersion: publicVersion } : {}),
       previousVersion: current,
       platform: PLATFORM,
       releaseBaseURL: base,
@@ -344,7 +348,7 @@ export async function prepareRelease(options) {
     json(path.join(stage, "upload-plan.json"), {
       schemaVersion: 1,
       version,
-      releaseDirectory: version,
+      releaseDirectory: publicVersion,
       publishLatestLast: true,
       uploads: [
         {
@@ -354,7 +358,7 @@ export async function prepareRelease(options) {
         },
         {
           file: `${name}.sig`,
-          url: assetURL(base, version, `${name}.sig`),
+          url: assetURL(base, publicVersion, `${name}.sig`),
           cacheControl: "public, max-age=31536000, immutable",
         },
         ...(portable
@@ -370,7 +374,7 @@ export async function prepareRelease(options) {
           : []),
         {
           file: "release-manifest.json",
-          url: assetURL(base, version, "release-manifest.json"),
+          url: assetURL(base, publicVersion, "release-manifest.json"),
           cacheControl: "public, max-age=31536000, immutable",
         },
         {
@@ -430,6 +434,14 @@ export async function verifyRelease(options) {
     options["tauri-config"],
   );
   parseVersion(release.version);
+  const publicVersion = productVersion(release.version);
+  if (
+    (release.productVersion ?? release.version) !== publicVersion ||
+    (latest.productVersion ?? latest.version) !== publicVersion
+  )
+    throw new Error(
+      "Public product version is not bound to the native build version.",
+    );
   if (
     release.schemaVersion !== 1 ||
     release.product !== "LoliCode" ||
@@ -446,7 +458,7 @@ export async function verifyRelease(options) {
   const portable = release.files.find((file) => file.name === PORTABLE_NAME);
   if (release.files.length !== (portable ? 4 : 3))
     throw new Error("Portable file metadata is inconsistent.");
-  const expectedName = `LoliCode-${release.version}-Windows-x64-Setup.exe`;
+  const expectedName = `LoliCode-${publicVersion}-Windows-x64-Setup.exe`;
   const expected = [
     expectedName,
     `${expectedName}.sig`,
@@ -487,7 +499,7 @@ export async function verifyRelease(options) {
     !latest.platforms ||
     Object.keys(latest.platforms).length !== 1 ||
     platform?.url !==
-      assetURL(release.releaseBaseURL, release.version, expectedName) ||
+      assetURL(release.releaseBaseURL, publicVersion, expectedName) ||
     httpsURL(release.latestURL).href !== release.latestURL ||
     config.plugins?.updater?.endpoints?.length !== 1 ||
     config.plugins.updater.endpoints[0] !== release.latestURL ||
@@ -518,7 +530,7 @@ export async function verifyRelease(options) {
       download?.bytes !== portable.bytes ||
       download?.sha256 !== portable.sha256 ||
       download?.url !==
-        assetURL(release.releaseBaseURL, release.version, PORTABLE_NAME)
+        assetURL(release.releaseBaseURL, publicVersion, PORTABLE_NAME)
     )
       throw new Error(
         "Portable download URL and checksum must describe the actual copied archive.",
@@ -538,7 +550,7 @@ export async function verifyRelease(options) {
   if (
     plan.schemaVersion !== 1 ||
     plan.version !== release.version ||
-    plan.releaseDirectory !== release.version ||
+    plan.releaseDirectory !== publicVersion ||
     plan.publishLatestLast !== true ||
     !Array.isArray(plan.uploads) ||
     plan.uploads.length !== uploadNames.length ||
@@ -548,7 +560,7 @@ export async function verifyRelease(options) {
         item.url !==
           (index === uploadNames.length - 1
             ? release.latestURL
-            : assetURL(release.releaseBaseURL, release.version, item.file)) ||
+            : assetURL(release.releaseBaseURL, publicVersion, item.file)) ||
         (index === uploadNames.length - 1
           ? item.publishLast !== true
           : item.publishLast === true),

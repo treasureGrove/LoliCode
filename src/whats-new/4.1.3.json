@@ -1,0 +1,33 @@
+{
+  "version": "4.1.3",
+  "items": [
+    {
+      "type": "improve",
+      "zh": "优化用量来源展示，支持对话图片与逐题作答",
+      "zh-TW": "改善用量來源顯示，支援對話圖片與逐題作答",
+      "en": "Clarify usage sources, display chat images and answer prompts one question at a time",
+      "ja": "使用量の表示を整理し、対話画像と一問ずつの回答に対応"
+    },
+    {
+      "type": "improve",
+      "zh": "改善酒馆上下文与角色节奏，保留旧故事和自定义角色",
+      "zh-TW": "改善酒館上下文與角色節奏，保留舊故事及自訂角色",
+      "en": "Improve Tavern context and dialogue pacing while preserving stories and custom characters",
+      "ja": "酒館の文脈と会話のテンポを改善し、既存の物語と独自キャラクターを保持"
+    },
+    {
+      "type": "new",
+      "zh": "新增 Office 文档预览与读取，MCP 按需发现并审批调用",
+      "zh-TW": "新增 Office 文件預覽與讀取，MCP 按需探索並審核呼叫",
+      "en": "Preview and read Office documents; discover MCP tools on demand with execution approval",
+      "ja": "Office文書の閲覧・読取と、実行承認付きMCPツールの必要時読み込みに対応"
+    },
+    {
+      "type": "improve",
+      "zh": "手机支持同账户登录和加密直连，任务内容不经服务器转发",
+      "zh-TW": "手機支援同帳戶登入及加密直連，任務內容不經伺服器轉發",
+      "en": "Sign in on your phone and connect directly with end-to-end encryption, without relaying task content",
+      "ja": "スマートフォンで同じアカウントにログインし、タスク内容を中継しない暗号化直接接続に対応"
+    }
+  ]
+}

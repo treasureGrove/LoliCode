@@ -31,7 +31,10 @@ const SITE_FILES = [
   "assets/logo.svg",
   "assets/maid.png",
 ];
-const OPTIONAL_SITE_FILES = ["assets/workbench.jpg"];
+const OPTIONAL_SITE_FILES = [
+  "assets/workbench.jpg",
+  "assets/discovery-v1.json",
+];
 const runFile = promisify(execFile);
 const REMOTE_PROGRAM = readFileSync(
   new URL("./lolicode-publish-remote.py", import.meta.url),
@@ -79,7 +82,7 @@ function localSiteFiles(directory) {
       if (entry.isSymbolicLink())
         throw new Error("Website source must not contain symlinks.");
       if (entry.isDirectory()) {
-        if (name !== "assets")
+        if (!["assets", "assets/rankings"].includes(name))
           throw new Error(
             "Only the dedicated LoliCode website files are accepted.",
           );
@@ -91,12 +94,39 @@ function localSiteFiles(directory) {
   if (
     SITE_FILES.some((file) => !actual.includes(file)) ||
     actual.some(
-      (file) => ![...SITE_FILES, ...OPTIONAL_SITE_FILES].includes(file),
+      (file) =>
+        ![...SITE_FILES, ...OPTIONAL_SITE_FILES].includes(file) &&
+        !/^assets\/rankings\/[a-z0-9-]+-[a-f0-9]{12}\.(?:png|jpg)$/.test(file),
     )
   )
     throw new Error(
       "Website directory must contain the approved LoliCode website files only.",
     );
+  const images = actual.filter((file) => file.startsWith("assets/rankings/"));
+  if (images.length) {
+    const catalog = JSON.parse(
+      readFileSync(within(directory, "assets/discovery-v1.json"), "utf8"),
+    );
+    const previews = catalog.entries
+      .filter((entry) => entry.preview)
+      .map((entry) => ({
+        ...entry.preview,
+        path: `assets/rankings/${entry.preview.filename}`,
+      }));
+    if (
+      images.length !== previews.length ||
+      images.some((name) => !previews.some((preview) => preview.path === name))
+    )
+      throw new Error("Discovery previews must match the directory.");
+    for (const preview of previews) {
+      const bytes = readFileSync(within(directory, preview.path));
+      if (
+        bytes.length > 2 * 1024 * 1024 ||
+        createHash("sha256").update(bytes).digest("hex") !== preview.sha256
+      )
+        throw new Error("Discovery preview checksum mismatch.");
+    }
+  }
   return actual;
 }
 
@@ -146,6 +176,9 @@ export async function preparePublishPlan(options) {
     namespace: REMOTE_NAMESPACE,
     stageId,
     version: checked.version,
+    ...(release.productVersion
+      ? { productVersion: release.productVersion }
+      : {}),
     resume: options["resume-stage"] !== undefined,
     files: files.map(({ source, ...file }) => file),
   };

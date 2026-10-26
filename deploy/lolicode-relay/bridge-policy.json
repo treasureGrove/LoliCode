@@ -1,0 +1,9 @@
+{
+  "daily_requests": 20,
+  "daily_tokens": 100000,
+  "max_output_tokens": 4096,
+  "max_request_bytes": 131072,
+  "max_concurrent_per_account": 2,
+  "require_confirmed_email": false,
+  "models": []
+}

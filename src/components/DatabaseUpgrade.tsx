@@ -13,6 +13,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { productVersion } from "@/lib/productVersion";
 
 const RELEASES_URL = "https://lolicode.com/";
 
@@ -186,7 +187,9 @@ export function DatabaseUpgrade({ payload }: DatabaseUpgradeProps) {
         {phase === "upgradable" && availableVersion && (
           <p className="text-sm text-fg-2">
             {t("dbUpgrade.updateAvailable", {
-              version: availableVersion,
+              version: availableVersion
+                ? productVersion(availableVersion)
+                : availableVersion,
               defaultValue: "发现新版本 v{{version}}，升级后即可继续使用。",
             })}
           </p>

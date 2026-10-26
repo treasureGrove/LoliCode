@@ -29,11 +29,11 @@ Windows, macOS, and Linux are product targets. Current public packages are **Win
 
 Use **Software updates** from the lower-left avatar menu or the update entry to check for new versions. The installer update channel uses the [signed LoliCode update manifest](https://tools.treasuregrove.art/lolicode/updates/latest.json). For portable editions, follow the download page and release notes to replace the application files while retaining your data.
 
-Existing data keeps the historical `~/.tai-switch` directory for compatibility. See the [installation guide](docs/user-manual/en/1-getting-started/1.2-installation.md) before moving or replacing an existing installation.
+LoliCode keeps the historical `~/.tai-switch` data directory for compatibility. See the [installation guide](docs/user-manual/en/1-getting-started/1.2-installation.md) before moving or replacing an existing installation.
 
 ## What comes next
 
-LoliCode will grow around the same main Agent. Planned built-in applications include **UE tools** and **Tavern-style character interaction** as peer applications, sharing selected Agent capabilities. Advanced memory providers, voice, richer companion interaction, and the lightweight frontend/3D-focused **sillyLoli** model are future directions.
+LoliCode will grow around the same main Agent. Planned built-in applications include **UE tools** and **Tavern-style character interaction** as peer applications, sharing selected Agent capabilities. Advanced memory providers, voice, richer companion interaction, and the lightweight frontend/3D-focused **sillyDog** model are future directions.
 
 These are plans, not shipped features. We adopt useful capabilities and components rather than bundling complete upstream products. Read the [product vision](docs/guides/lolicode-product-vision.md), [first milestone plan](docs/guides/lolicode-phase-one-plan.md), and [source/capability ledger](docs/guides/lolicode-platform-capabilities.json).
 

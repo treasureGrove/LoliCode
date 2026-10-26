@@ -1318,6 +1318,7 @@ pub fn run() {
             // 将同一个实例注入到全局状态，避免重复创建导致的不一致
             app.manage(app_state);
             app.manage(services::inprocess_agent::InprocessAgentState::default());
+            app.manage(services::mobile_companion::MobileCompanionState::new(app.state::<AppState>().db.clone()));
             app.manage(services::lolicode_account::LolicodeAccountState::default());
 
             // 初始化 SkillService
@@ -1414,6 +1415,7 @@ pub fn run() {
                     log::warn!("渠道中心后台连接未能恢复，请在渠道页面重试配置: {error}");
                 }
                 crate::services::agent_automation::start_worker(app_handle.clone());
+                app_handle.state::<services::mobile_companion::MobileCompanionState>().restore(app_handle.clone()).await;
                 // 启动流程走完：托盘这时才开始报「路由服务没在运行」，并记下退回直连的应用。
                 crate::tray::mark_startup_settled(&app_handle);
                 // Codex 官方做路由、发布了 Stack 模型时，官方模型列表过期就在后台刷新。
@@ -1554,9 +1556,21 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            commands::get_mobile_companion_status,
+            commands::start_mobile_companion_pairing,
+            commands::approve_mobile_companion_device,
+            commands::revoke_mobile_companion_device,
+            commands::get_mobile_companion_account_status,
+            commands::connect_mobile_companion_account,
+            commands::set_mobile_companion_account_visible,
+            commands::approve_mobile_companion_account_request,
+            commands::reject_mobile_companion_account_request,
+            commands::disconnect_mobile_companion_account,
             commands::lolicode_account_status,
             commands::lolicode_account_login,
             commands::lolicode_account_logout,
+            commands::lolicode_relay_status,
+            commands::lolicode_relay_connect,
             commands::get_providers,
             commands::get_current_provider,
             commands::add_provider,
@@ -1862,6 +1876,7 @@ pub fn run() {
             commands::get_agent_catalog,
             commands::get_agent_catalog_revision,
             commands::open_agent_project,
+            commands::open_agent_standalone,
             commands::list_agent_sessions,
             commands::list_agent_projects,
             commands::set_agent_project_metadata,
@@ -1887,12 +1902,21 @@ pub fn run() {
             commands::restart_renderer,
             commands::list_builtin_apps,
             commands::set_builtin_app_enabled,
+            commands::get_discovery_catalog,
+            commands::refresh_discovery_catalog,
+            commands::set_discovery_favorite,
+            commands::get_discovery_preview,
             commands::get_tavern_snapshot,
             commands::get_tavern_presets,
             commands::add_tavern_preset,
             commands::import_tavern_character,
             commands::get_tavern_avatar,
             commands::get_tavern_catalog,
+            commands::get_tavern_local_model,
+            commands::install_tavern_local_model,
+            commands::pause_tavern_local_model_install,
+            commands::set_tavern_local_model_enabled,
+            commands::stop_tavern_local_model,
             commands::create_tavern_story,
             commands::delete_tavern_story,
             commands::preview_tavern_context,
@@ -1937,6 +1961,8 @@ pub fn run() {
             commands::configure_agent_memory,
             commands::clear_agent_memory,
             commands::preview_agent_file,
+            commands::invoke_agent_document,
+            commands::connect_agent_mcp,
             commands::open_agent_path,
             commands::open_agent_project_directory,
             commands::get_channel_center,
@@ -2116,6 +2142,7 @@ pub fn run() {
         // RunEvent::Exit，回调一返回进程就结束，只能在这里同步补做退出清理。重启也会走到
         // 这里，照上面 DeferToTauriRestart 的约定交还 Tauri 默认流程，不清理。
         if matches!(event, RunEvent::Exit) {
+            services::tavern::local_model::manager().shutdown();
             if !RESTART_REQUESTED.load(Ordering::SeqCst) {
                 cleanup_before_system_exit(app_handle);
             }
@@ -2161,6 +2188,7 @@ pub fn run() {
 /// 把接上代理的客户端都指回直连（模式和代理路由保留，下次启动再接上），再停止代理。
 /// 客户端不能一直指着代理：开机自启默认关闭，LoliCode 一关客户端就连不上了。
 pub async fn cleanup_before_exit(app_handle: &tauri::AppHandle) {
+    services::tavern::local_model::manager().shutdown();
     let native_cleanup = async {
         if let Some(agent) =
             app_handle.try_state::<services::inprocess_agent::InprocessAgentState>()
@@ -2509,6 +2537,7 @@ pub fn destroy_single_instance_lock(app_handle: &tauri::AppHandle) {
 /// 图标，而 macOS 的 NSStatusItem 操作要求主线程；`set_visible(false)` 走
 /// `run_item_main_thread` 代理，跨线程安全（见 `remove_tray_icon_before_exit`）。
 pub fn restart_process(app_handle: &tauri::AppHandle) -> ! {
+    services::tavern::local_model::manager().shutdown();
     remove_tray_icon_before_exit(app_handle);
     destroy_single_instance_lock(app_handle);
     let env = app_handle.env();

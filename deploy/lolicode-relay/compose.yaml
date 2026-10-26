@@ -1,0 +1,134 @@
+name: lolicode-relay
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  new-api:
+    image: ${NEW_API_IMAGE:?Run deploy.py to initialize pinned images}
+    restart: unless-stopped
+    command: ["--log-dir", "/app/logs"]
+    ports:
+      - "127.0.0.1:13000:3000"
+    environment:
+      SQL_DSN: postgresql://lolicode_relay:${POSTGRES_PASSWORD:?Missing database password}@postgres:5432/lolicode_relay
+      SQL_MAX_OPEN_CONNS: "12"
+      SQL_MAX_IDLE_CONNS: "4"
+      SQL_MAX_LIFETIME: "300"
+      REDIS_CONN_STRING: redis://:${REDIS_PASSWORD:?Missing cache password}@redis:6379/0
+      SYNC_FREQUENCY: "10"
+      SESSION_SECRET: ${SESSION_SECRET:?Missing session secret}
+      CRYPTO_SECRET: ${CRYPTO_SECRET:?Missing crypto secret}
+      # install_admin.py enables HTTPS cookies and pins the exact proxy/origin.
+      SESSION_COOKIE_SECURE: ${RELAY_SESSION_COOKIE_SECURE:-false}
+      SESSION_COOKIE_TRUSTED_URL: ${RELAY_SESSION_COOKIE_TRUSTED_URL:-}
+      TRUSTED_PROXIES: ${RELAY_TRUSTED_PROXIES:-none}
+      DEFAULT_LANGUAGE: zh-CN
+      TZ: Asia/Singapore
+      NODE_NAME: ${NODE_NAME:-lolicode-relay}
+      GOMEMLIMIT: 320MiB
+      GOMAXPROCS: "2"
+      MAX_REQUEST_BODY_MB: "16"
+      ANONYMOUS_REQUEST_BODY_LIMIT_KB: "128"
+      STREAM_SCANNER_MAX_BUFFER_MB: "4"
+      STREAMING_TIMEOUT: "300"
+      RELAY_RESPONSE_HEADER_TIMEOUT: "300"
+      RELAY_MAX_IDLE_CONNS: "40"
+      RELAY_MAX_IDLE_CONNS_PER_HOST: "10"
+      GLOBAL_API_RATE_LIMIT_ENABLE: "true"
+      GLOBAL_API_RATE_LIMIT: "60"
+      GLOBAL_API_RATE_LIMIT_DURATION: "60"
+      GENERATE_DEFAULT_TOKEN: "false"
+      BATCH_UPDATE_ENABLED: "false"
+      TASK_PLUGIN_ENABLED: "false"
+      ERROR_LOG_ENABLED: "true"
+    volumes:
+      - ./data:/data
+      - ./logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    mem_limit: 512m
+    memswap_limit: 512m
+    mem_reservation: 192m
+    cpus: 1.5
+    pids_limit: 160
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    logging: *logging
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:3000/api/status | grep -q '\"success\":true'"]
+      interval: 30s
+      timeout: 5s
+      start_period: 90s
+      retries: 3
+    networks: [relay]
+
+  postgres:
+    image: ${POSTGRES_IMAGE:?Missing pinned database image}
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: lolicode_relay
+      POSTGRES_DB: lolicode_relay
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Missing database password}
+      TZ: Asia/Singapore
+    command:
+      - postgres
+      - -c
+      - shared_buffers=64MB
+      - -c
+      - max_connections=40
+      - -c
+      - work_mem=2MB
+      - -c
+      - maintenance_work_mem=32MB
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    mem_limit: 320m
+    memswap_limit: 320m
+    cpus: 0.75
+    pids_limit: 80
+    logging: *logging
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lolicode_relay -d lolicode_relay"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [relay]
+
+  redis:
+    image: ${REDIS_IMAGE:?Missing pinned cache image}
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Missing cache password}
+      TZ: Asia/Singapore
+    command:
+      - sh
+      - -c
+      - exec redis-server --requirepass "$$REDIS_PASSWORD" --maxmemory 64mb --maxmemory-policy noeviction --appendonly yes --appendfsync everysec --save ""
+    volumes:
+      - redis-data:/data
+    mem_limit: 96m
+    memswap_limit: 96m
+    cpus: 0.25
+    pids_limit: 40
+    logging: *logging
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$REDIS_PASSWORD\" redis-cli ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [relay]
+
+volumes:
+  postgres-data:
+  redis-data:
+
+networks:
+  relay:
+    driver: bridge

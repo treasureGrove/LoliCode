@@ -1,0 +1,137 @@
+import { act, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { MobileCompanionDialog } from "@/components/shell/MobileCompanionDialog";
+import type { MobileCompanionStatus } from "@/lib/api/mobile-companion";
+const api = vi.hoisted(() => ({
+  status: vi.fn(),
+  pair: vi.fn(),
+  approve: vi.fn(),
+  revoke: vi.fn(),
+  accountStatus: vi.fn(),
+  setAccountVisible: vi.fn(),
+}));
+vi.mock("@/lib/api/mobile-companion", () => ({ mobileCompanionApi: api }));
+vi.mock("@/lib/api/settings", () => ({
+  settingsApi: { openExternal: vi.fn() },
+}));
+const initial: MobileCompanionStatus = {
+  hostName: "Test computer",
+  protocol: 1,
+  quietMode: true,
+  pairs: [],
+};
+const device = {
+  roomId: "a".repeat(32),
+  relayUrl: "wss://example.com/companion/ws",
+  accountId: "7",
+  approved: true,
+  deviceId: "phone",
+  deviceName: "Xiaomi 8 Lite",
+  online: true,
+  transport: "direct" as const,
+  sessionCount: 0,
+  expiresAt: Date.now() + 300000,
+};
+beforeEach(() => {
+  vi.clearAllMocks();
+  api.status.mockResolvedValue(initial);
+  api.revoke.mockResolvedValue(undefined);
+  const account = {
+    protocol: 2,
+    enabled: false,
+    signedIn: false,
+    accountId: null,
+    device: null,
+    devices: [],
+    requests: [],
+    ticketExpiresAt: null,
+    lastError: null,
+    transportPolicy: "directOnly",
+    directAvailable: true,
+  };
+  api.accountStatus.mockResolvedValue(account);
+  api.setAccountVisible.mockResolvedValue(account);
+});
+describe("direct-only phone connection", () => {
+  it("does not register, pair or contact the backend while closed", () => {
+    render(<MobileCompanionDialog open={false} onOpenChange={vi.fn()} />);
+    expect(api.status).not.toHaveBeenCalled();
+    expect(api.accountStatus).not.toHaveBeenCalled();
+    expect(api.pair).not.toHaveBeenCalled();
+  });
+  it("defaults to the account workflow and never offers QR or relay fallback", async () => {
+    render(<MobileCompanionDialog open onOpenChange={vi.fn()} />);
+    await waitFor(() => expect(api.status).toHaveBeenCalledOnce());
+    expect(screen.getByText("登录同一账户，无需配对码")).toBeInTheDocument();
+    expect(screen.getByText(/仅直连：服务器只协助/)).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /二维码|配对码|中继/ }),
+    ).not.toBeInTheDocument();
+    expect(api.pair).not.toHaveBeenCalled();
+    expect(api.approve).not.toHaveBeenCalled();
+  });
+  it("hides legacy rooms and another account's devices", async () => {
+    api.status.mockResolvedValue({
+      ...initial,
+      pairs: [
+        { ...device, accountId: null, deviceName: "Legacy phone" },
+        { ...device, accountId: "8", deviceName: "Another account phone" },
+      ],
+    });
+    render(<MobileCompanionDialog open accountId="7" onOpenChange={vi.fn()} />);
+    await waitFor(() => expect(api.status).toHaveBeenCalledOnce());
+    expect(screen.queryByText("Legacy phone")).not.toBeInTheDocument();
+    expect(screen.queryByText("Another account phone")).not.toBeInTheDocument();
+  });
+  it("only marks an actual online direct route as connected and hides raw diagnostics", async () => {
+    api.status.mockResolvedValue({
+      ...initial,
+      pairs: [{ ...device, online: false, lastError: "secret-ticket" }],
+    });
+    render(<MobileCompanionDialog open accountId="7" onOpenChange={vi.fn()} />);
+    expect(await screen.findByText("未建立直连")).toBeInTheDocument();
+    expect(screen.queryByText("已直连 · 端到端加密")).not.toBeInTheDocument();
+    expect(screen.queryByText("secret-ticket")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("直连不可用，请切换网络后重试。"),
+    ).toBeInTheDocument();
+  });
+  it("revokes exactly the selected account connection after a local click", async () => {
+    api.status.mockResolvedValue({ ...initial, pairs: [device] });
+    render(<MobileCompanionDialog open accountId="7" onOpenChange={vi.fn()} />);
+    expect(await screen.findByText("已直连 · 端到端加密")).toBeInTheDocument();
+    expect(api.revoke).not.toHaveBeenCalled();
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "撤销连接" }));
+    expect(api.revoke).toHaveBeenCalledWith(device.roomId);
+  });
+  it("does not restore a late device list after the dialog is closed", async () => {
+    let finish!: (value: MobileCompanionStatus) => void;
+    api.status.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const view = render(
+      <MobileCompanionDialog open accountId="7" onOpenChange={vi.fn()} />,
+    );
+    await act(async () => {
+      view.rerender(
+        <MobileCompanionDialog
+          open={false}
+          accountId="7"
+          onOpenChange={vi.fn()}
+        />,
+      );
+    });
+    await act(async () => finish({ ...initial, pairs: [device] }));
+    await act(async () => {
+      view.rerender(
+        <MobileCompanionDialog open accountId="7" onOpenChange={vi.fn()} />,
+      );
+    });
+    expect(screen.queryByText("Xiaomi 8 Lite")).not.toBeInTheDocument();
+  });
+});

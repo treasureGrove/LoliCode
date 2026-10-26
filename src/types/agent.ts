@@ -46,6 +46,8 @@ export interface AgentCatalog {
 export interface AgentWorkspace {
   path: string;
   name: string;
+  /** App-managed task space with no user project attached. */
+  standalone?: boolean;
   remote?: { connectionName: string; root: string; kind: "ssh" | "wsl" };
 }
 
@@ -245,6 +247,8 @@ export interface AgentPlugin {
 }
 
 export interface AgentExtensions {
+  mcpRuntime?: boolean;
+  mcpRuntimeError?: string | null;
   revision: number;
   skills: AgentSkill[];
   plugins: AgentPlugin[];
@@ -256,6 +260,7 @@ export interface AgentExtensions {
     runtimeStatus?: string;
     runtimeId?: string | null;
     error?: string | null;
+    toolCount?: number;
   }[];
   runtimeRevision?: number | null;
   runtimeRunning?: boolean;

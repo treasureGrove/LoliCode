@@ -38,6 +38,8 @@ interface WhatsNewDialogProps {
   since?: string;
 }
 
+import { isLegacyVersion, productVersion } from "@/lib/productVersion";
+
 export function WhatsNewDialog({
   open,
   onClose,
@@ -85,12 +87,12 @@ export function WhatsNewDialog({
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-fg-1" />
             {updatedTo
-              ? t("whatsNew.updatedTo", { version: updatedTo })
+              ? t("whatsNew.updatedTo", { version: productVersion(updatedTo) })
               : t("whatsNew.recentTitle")}
           </DialogTitle>
           {since && (
             <DialogDescription>
-              {t("whatsNew.since", { version: since })}
+              {t("whatsNew.since", { version: productVersion(since) })}
             </DialogDescription>
           )}
         </DialogHeader>
@@ -99,7 +101,12 @@ export function WhatsNewDialog({
             <section key={entry.version}>
               <div className="flex items-center justify-between gap-3">
                 <h3 className="text-strong tabular-nums text-fg-1">
-                  v{entry.version}
+                  <span>v{productVersion(entry.version)}</span>
+                  {isLegacyVersion(entry.version) && (
+                    <span className="ml-2 text-xs font-normal text-fg-3">
+                      Legacy
+                    </span>
+                  )}
                 </h3>
                 <button
                   type="button"

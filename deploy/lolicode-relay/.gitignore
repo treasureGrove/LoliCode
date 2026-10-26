@@ -1,0 +1,16 @@
+.env
+admin-credentials.json
+bridge-service-credentials.json
+backups/
+data/
+logs/
+__pycache__/
+verification.json
+migration.json
+MIGRATED-TO.json
+bridge-state/
+bridge-verification.json
+admin-verification.json
+password-verification.json
+nginx-lolicode.pre-bridge.conf
+*.previous

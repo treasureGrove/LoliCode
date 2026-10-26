@@ -409,6 +409,7 @@ fn validate_channel(channel: &ChannelSource) -> Result<(), AppError> {
             | "xai_oauth"
             | "claude_subscription"
             | "gemini_subscription"
+            | "lolicode_account"
     ) || !valid_protocol(&channel.protocol)
     {
         return Err(AppError::InvalidInput(
@@ -424,6 +425,14 @@ fn validate_channel(channel: &ChannelSource) -> Result<(), AppError> {
         return Err(AppError::InvalidInput(
             "登录渠道必须绑定明确账户，请先完成账户授权".into(),
         ));
+    }
+    if channel.auth_kind == "lolicode_account"
+        && (channel.id != super::lolicode_relay::CHANNEL_ID
+            || channel.base_url != super::lolicode_relay::BASE_URL
+            || channel.protocol != "openai_chat"
+            || channel.models.iter().any(|model| model.protocol.as_deref().is_some_and(|p| p != "openai_chat")))
+    {
+        return Err(AppError::InvalidInput("公益模型必须使用固定的 LoliCode 服务地址。".into()));
     }
     if native_auth_target(&channel.auth_kind).is_some()
         && (channel.account_id.as_deref() != Some("native") || !channel.base_url.is_empty())
@@ -3145,6 +3154,23 @@ mod tests {
     }
 
     #[test]
+    fn sponsored_channel_pins_credentials_to_the_lolicode_origin_and_clears_supplied_keys() {
+        let mut sponsored = source(super::super::lolicode_relay::CHANNEL_ID);
+        sponsored.base_url = super::super::lolicode_relay::BASE_URL.into();
+        sponsored.auth_kind = "lolicode_account".into();
+        sponsored.account_id = Some("42".into());
+        assert!(validate_channel(&sponsored).is_ok());
+        let db = Database::memory().unwrap();
+        save(&db, ChannelCenterSnapshot { channels: vec![sponsored.clone()], ..Default::default() }).unwrap();
+        assert!(load(&db).unwrap().channels[0].api_key.is_empty());
+        sponsored.base_url = "https://untrusted.example/v1".into();
+        assert!(validate_channel(&sponsored).is_err());
+        sponsored.base_url = super::super::lolicode_relay::BASE_URL.into();
+        sponsored.models[0].protocol = Some("openai_responses".into());
+        assert!(validate_channel(&sponsored).is_err());
+    }
+
+    #[test]
     fn selected_context_windows_survive_refresh_and_project_to_agent_and_external_clients() {
         let mut saved = source("multi");
         saved.models = parse_channel_catalog(&json!({"data":[{"id":"model","context_window":128000,"context_windows":[128000,1000000]}]})).unwrap();
@@ -4482,3 +4508,7 @@ mod tests {
         assert!(!path.with_extension("yaml.lock").exists());
     }
 }
+
+#[cfg(test)]
+#[path = "channel_center_apply_tests.rs"]
+mod apply_tests;

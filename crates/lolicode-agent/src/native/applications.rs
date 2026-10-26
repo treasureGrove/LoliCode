@@ -14,7 +14,27 @@ pub fn core_tool_schemas() -> Vec<Value> {
 }
 
 pub trait ApplicationTools: Send + Sync {
+    /// Prepare project capabilities once after a turn is admitted, sharing its
+    /// cancellation signal. Background turns never call this hook.
+    fn prepare<'a>(
+        &'a self,
+        _project: &'a Path,
+        _cancel: watch::Receiver<bool>,
+    ) -> ApplicationResult<'a> {
+        Box::pin(async { Ok(String::new()) })
+    }
     fn schemas(&self) -> Vec<Value>;
+    /// Additive host capabilities scoped to a local project. Remote filesystem
+    /// replacement remains the separate project_schemas contract below.
+    fn schemas_for_project(&self, _project: &Path) -> Vec<Value> {
+        self.schemas()
+    }
+    /// Names from this host's current project catalog that are advertised only
+    /// after discovery. The engine filters project/background scope first and
+    /// retains discovered names per session; this never grants execution rights.
+    fn deferred_tool_names(&self, _project: &Path) -> Vec<String> {
+        Vec::new()
+    }
     fn allows_unreal(&self) -> bool {
         false
     }

@@ -1,7 +1,7 @@
 use crate::AgentSnapshot;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// A short-lived host gateway lease, never an upstream account credential.
 /// Deliberately neither Debug nor Serialize.
@@ -22,6 +22,9 @@ pub(super) struct CommandRecord {
 #[serde(rename_all = "camelCase")]
 pub(super) struct StoredSession {
     pub format: u32,
+    /// Persisted execution boundary for phone-origin tasks, independent of UI.
+    #[serde(default)]
+    pub background_only: bool,
     pub snapshot: AgentSnapshot,
     pub history: Vec<Value>,
     pub commands: BTreeMap<String, CommandRecord>,
@@ -37,6 +40,10 @@ pub(super) struct StoredSession {
     pub response_locale: Option<String>,
     #[serde(default)]
     pub usage_ledger: Option<super::usage::Ledger>,
+    /// Session-local discovery survives history compaction and restart. Names
+    /// are intersected with the live scoped host catalog before every request.
+    #[serde(default)]
+    pub discovered_tools: BTreeSet<String>,
 }
 
 #[derive(Clone, Default, Serialize, Deserialize, PartialEq, Eq)]

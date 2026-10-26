@@ -30,6 +30,8 @@ fn schema_and_inspection_expose_real_tools_and_plan_mutation_boundaries() {
             "view_image",
             "list_files",
             "search_files",
+            "glob",
+            "grep",
             "write_file",
             "apply_patch",
             "run_command"
@@ -93,6 +95,276 @@ fn schema_and_inspection_expose_real_tools_and_plan_mutation_boundaries() {
             "{command}"
         );
     }
+}
+
+#[tokio::test]
+async fn glob_finds_nested_files_filters_build_outputs_and_scopes_search_paths() {
+    let project = tempfile::tempdir().unwrap();
+    for directory in [
+        "src/nested",
+        "tests",
+        ".git",
+        "node_modules/pkg",
+        "target/debug",
+        "dist",
+        "build",
+    ] {
+        fs::create_dir_all(project.path().join(directory)).unwrap();
+    }
+    for file in [
+        "main.rs",
+        "src/lib.rs",
+        "src/nested/extra.rs",
+        "src/nested/readme.md",
+        "tests/check.rs",
+        ".git/hidden.rs",
+        "node_modules/pkg/hidden.rs",
+        "target/debug/hidden.rs",
+        "dist/hidden.rs",
+        "build/hidden.rs",
+    ] {
+        fs::write(project.path().join(file), "fixture\n").unwrap();
+    }
+    let all = run(project.path(), "glob", json!({"pattern":"**/*.rs"}))
+        .await
+        .unwrap();
+    assert_eq!(
+        all.text.lines().collect::<Vec<_>>(),
+        [
+            "main.rs",
+            "src/lib.rs",
+            "src/nested/extra.rs",
+            "tests/check.rs"
+        ]
+    );
+    assert!(all.diffs.is_empty() && all.file_changes.is_empty());
+    let subtree = run(
+        project.path(),
+        "glob",
+        json!({"path":"src","pattern":"**/*.rs"}),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        subtree.text.lines().collect::<Vec<_>>(),
+        ["src/lib.rs", "src/nested/extra.rs"]
+    );
+    let direct = run(
+        project.path(),
+        "glob",
+        json!({"path":"src","pattern":"*.rs"}),
+    )
+    .await
+    .unwrap();
+    assert_eq!(direct.text, "src/lib.rs\n");
+    let no_match = run(project.path(), "glob", json!({"pattern":"**/*.missing"}))
+        .await
+        .unwrap();
+    assert!(no_match.text.contains("未找到匹配文件"));
+    let capped = run(
+        project.path(),
+        "glob",
+        json!({"pattern":"**/*.rs","max_results":2}),
+    )
+    .await
+    .unwrap();
+    assert!(capped.text.starts_with("main.rs\nsrc/lib.rs\n"));
+    assert!(capped.text.contains("搜索已截断"));
+    assert!(!capped.text.contains("extra.rs"));
+}
+
+#[tokio::test]
+async fn grep_runs_real_regex_filters_and_case_options_without_changing_literal_search() {
+    let project = tempfile::tempdir().unwrap();
+    fs::create_dir_all(project.path().join("src/nested")).unwrap();
+    fs::create_dir_all(project.path().join("node_modules/pkg")).unwrap();
+    fs::write(
+        project.path().join("src/main.rs"),
+        "const Alpha = 1;\nconst Beta = 2;\nAlpha.*literal\n",
+    )
+    .unwrap();
+    fs::write(project.path().join("src/nested/other.rs"), "ALPHA\nalpha\n").unwrap();
+    fs::write(project.path().join("src/note.md"), "Alpha\n").unwrap();
+    fs::write(
+        project.path().join("node_modules/pkg/ignored.rs"),
+        "Alpha\n",
+    )
+    .unwrap();
+    fs::write(project.path().join("src/binary.rs"), b"Alpha\0binary").unwrap();
+    let regex = run(
+        project.path(),
+        "grep",
+        json!({"pattern":"^const (Alpha|Beta) = [0-9];$","include":"*.rs"}),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        regex.text,
+        "src/main.rs:1: const Alpha = 1;\nsrc/main.rs:2: const Beta = 2;\n"
+    );
+    let insensitive = run(
+        project.path(),
+        "grep",
+        json!({"path":"src","pattern":"^alpha$","include":"**/*.rs","case_sensitive":false}),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        insensitive.text,
+        "src/nested/other.rs:1: ALPHA\nsrc/nested/other.rs:2: alpha\n"
+    );
+    let sensitive = run(
+        project.path(),
+        "grep",
+        json!({"pattern":"^alpha$","include":"*.rs"}),
+    )
+    .await
+    .unwrap();
+    assert_eq!(sensitive.text, "src/nested/other.rs:2: alpha\n");
+    let single = run(
+        project.path(),
+        "grep",
+        json!({"path":"src/main.rs","pattern":"Beta"}),
+    )
+    .await
+    .unwrap();
+    assert_eq!(single.text, "src/main.rs:2: const Beta = 2;\n");
+    let literal = run(
+        project.path(),
+        "search_files",
+        json!({"pattern":"Alpha.*literal"}),
+    )
+    .await
+    .unwrap();
+    assert_eq!(literal.text, "src/main.rs:3: Alpha.*literal\n");
+    assert!(regex.diffs.is_empty() && regex.file_changes.is_empty());
+    let no_match = run(
+        project.path(),
+        "grep",
+        json!({"pattern":"not-in-the-files"}),
+    )
+    .await
+    .unwrap();
+    assert!(no_match.text.contains("未找到匹配内容"));
+    let capped = run(
+        project.path(),
+        "grep",
+        json!({"pattern":"Alpha|Beta","include":"*.rs","max_results":1}),
+    )
+    .await
+    .unwrap();
+    assert!(capped.text.starts_with("src/main.rs:1:"));
+    assert!(capped.text.contains("搜索已截断"));
+    assert!(!capped.text.contains("src/main.rs:2:"));
+}
+
+#[tokio::test]
+async fn grep_explicit_files_named_like_ignored_directories_remain_searchable() {
+    let project = tempfile::tempdir().unwrap();
+    for name in ["build", "target", "vendor"] {
+        fs::write(project.path().join(name), format!("needle in {name}\n")).unwrap();
+    }
+    fs::create_dir_all(project.path().join("deps/vendor")).unwrap();
+    fs::write(
+        project.path().join("deps/vendor/ignored.txt"),
+        "needle in dependency\n",
+    )
+    .unwrap();
+    let all = run(project.path(), "grep", json!({"pattern":"needle"}))
+        .await
+        .unwrap();
+    assert_eq!(
+        all.text,
+        "build:1: needle in build\ntarget:1: needle in target\nvendor:1: needle in vendor\n"
+    );
+    for name in ["build", "target", "vendor"] {
+        let direct = run(
+            project.path(),
+            "grep",
+            json!({"pattern":"needle","path":name}),
+        )
+        .await
+        .unwrap();
+        assert_eq!(direct.text, format!("{name}:1: needle in {name}\n"));
+    }
+    let ignored = run(
+        project.path(),
+        "grep",
+        json!({"pattern":"needle","path":"deps/vendor/ignored.txt"}),
+    )
+    .await
+    .unwrap();
+    assert!(ignored.text.contains("未找到匹配内容"));
+    assert!(!ignored.text.contains("needle in dependency"));
+}
+
+#[tokio::test]
+async fn new_search_tools_reject_invalid_patterns_paths_and_cancel_without_writes() {
+    let project = tempfile::tempdir().unwrap();
+    let outside = tempfile::tempdir().unwrap();
+    fs::write(project.path().join("safe.txt"), "keep unchanged\n").unwrap();
+    for (name, input) in [
+        ("glob", json!({"pattern":"["})),
+        ("glob", json!({"pattern":"../**"})),
+        ("glob", json!({"pattern":"/absolute/**"})),
+        ("glob", json!({"pattern":"C:/outside/**"})),
+        ("glob", json!({"pattern":"**","path":outside.path()})),
+        ("glob", json!({"pattern":"**","path":"safe.txt"})),
+        ("glob", json!({"pattern":"**","max_results":501})),
+        ("grep", json!({"pattern":"("})),
+        ("grep", json!({"pattern":"a","include":"../*"})),
+        ("grep", json!({"pattern":"a","case_sensitive":"false"})),
+        ("grep", json!({"pattern":"a","max_results":0})),
+        ("grep", json!({"pattern":"a","path":outside.path()})),
+        ("grep", json!({"pattern":"a","ignored":true})),
+    ] {
+        assert!(
+            inspect(project.path(), name, &input).is_err(),
+            "{name}: {input}"
+        );
+    }
+    for name in ["glob", "grep"] {
+        let input = json!({"pattern":"keep"});
+        let policy = inspect(project.path(), name, &input).unwrap();
+        assert!(!policy.mutating && !policy.requires_approval && !policy.dangerous);
+        assert_eq!(policy.action, "read");
+        let (cancel, stopped) = watch::channel(false);
+        cancel.send(true).unwrap();
+        assert_eq!(
+            execute(project.path(), name, &input, stopped)
+                .await
+                .err()
+                .as_deref(),
+            Some(CANCELLED)
+        );
+    }
+    assert_eq!(
+        fs::read_to_string(project.path().join("safe.txt")).unwrap(),
+        "keep unchanged\n"
+    );
+}
+
+#[tokio::test]
+async fn grep_bounds_unicode_matching_lines_and_skips_large_or_binary_files() {
+    let project = tempfile::tempdir().unwrap();
+    fs::write(
+        project.path().join("long.txt"),
+        format!("needle{}\n", "界".repeat(5000)),
+    )
+    .unwrap();
+    fs::write(
+        project.path().join("large.txt"),
+        "needle".repeat(MAX_FILE / 6 + 1),
+    )
+    .unwrap();
+    fs::write(project.path().join("binary.txt"), b"needle\0data").unwrap();
+    let result = run(project.path(), "grep", json!({"pattern":"needle"}))
+        .await
+        .unwrap();
+    assert!(result.text.starts_with("long.txt:1: needle"));
+    assert!(result.text.contains("匹配行已截断"));
+    assert!(result.text.len() < 8000);
+    assert!(!result.text.contains("large.txt") && !result.text.contains("binary.txt"));
 }
 
 #[test]

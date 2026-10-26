@@ -11,6 +11,7 @@ use std::{
 use tokio::sync::watch;
 
 mod command;
+mod search;
 #[cfg(test)]
 mod tests;
 
@@ -57,6 +58,8 @@ pub fn schemas() -> Vec<Value> {
         ("view_image", "View a raster image inside the project and inspect its visual contents. The file is sent to the model as an image, not decoded as text. Supports PNG, JPEG, WebP, GIF, BMP and AVIF up to 5 MiB.", json!({"path":{"type":"string"}}), vec!["path"]),
         ("list_files", "List project entries. Recursive listing skips .git, node_modules and target, and is bounded.", json!({"path":{"type":"string"},"recursive":{"type":"boolean"}}), vec![]),
         ("search_files", "Search literal, case-sensitive text in project UTF-8 files, not a regular expression. Skips dependency/build directories and binary or oversized files.", json!({"path":{"type":"string"},"pattern":{"type":"string","minLength":1},"max_results":{"type":"integer","minimum":1,"maximum":500}}), vec!["pattern"]),
+        ("glob", "Find project files using a relative glob pattern (*, ?, [] and **). pattern is relative to path, which defaults to the project. Returns project-relative paths; skips Git, dependency/build directories and symlinks. Traversal and results are bounded.", json!({"pattern":{"type":"string","minLength":1,"maxLength":4096},"path":{"type":"string"},"max_results":{"type":"integer","minimum":1,"maximum":500}}), vec!["pattern"]),
+        ("grep", "Search a Rust-compatible regular expression in project UTF-8 text files. Returns project-relative path:line:content. case_sensitive defaults to true. Optional include is a relative glob; patterns without a slash match filenames recursively. Skips Git, dependency/build directories, binary and oversized files. Scanning, matching lines and output are bounded; no shell runs.", json!({"pattern":{"type":"string","minLength":1,"maxLength":4096},"path":{"type":"string"},"include":{"type":"string","minLength":1,"maxLength":4096},"case_sensitive":{"type":"boolean"},"max_results":{"type":"integer","minimum":1,"maximum":500}}), vec!["pattern"]),
         ("write_file", "Atomically create or replace one UTF-8 project file. expected_content must exactly match an existing file; null means the file must not exist. Read existing files first. Parent directory must exist.", json!({"path":{"type":"string"},"content":{"type":"string"},"expected_content":{"type":["string","null"]}}), vec!["path","content","expected_content"]),
         ("apply_patch", "Atomically replace one exact, unique, non-empty old_text occurrence in an existing UTF-8 project file. Ambiguous or stale text is rejected.", json!({"path":{"type":"string"},"old_text":{"type":"string","minLength":1},"new_text":{"type":"string"}}), vec!["path","old_text","new_text"]),
         ("run_command", "Run a project shell command with bounded output and a 1–120 second timeout. Only a narrow set of read-only version/Git commands can bypass approval; scripts and shell operators require one-time approval.", json!({"command":{"type":"string","minLength":1},"workdir":{"type":"string"},"timeout_seconds":{"type":"integer","minimum":1,"maximum":120}}), vec!["command"]),
@@ -202,6 +205,8 @@ enum Call {
     ViewImage(PathBuf),
     List(PathBuf, bool),
     Search(PathBuf, String, usize),
+    Glob(PathBuf, search::GlobQuery),
+    Grep(PathBuf, search::GrepQuery),
     Write(PathBuf, String, Option<String>),
     Patch(PathBuf, String, String),
     Command(PathBuf, String, u64),
@@ -239,6 +244,42 @@ fn parse(project: &Path, name: &str, input: &Value) -> Result<(PathBuf, Call), S
                 resolve(&root, optional_path(a, "path")?, false)?,
                 pattern.into(),
                 number(a, "max_results", 100, 500)? as usize,
+            )
+        }
+        "glob" => {
+            let a = args(input, &["pattern", "path", "max_results"])?;
+            Call::Glob(
+                resolve(&root, optional_path(a, "path")?, false)?,
+                search::GlobQuery::new(
+                    text(a, "pattern")?,
+                    number(a, "max_results", 100, 500)? as usize,
+                )?,
+            )
+        }
+        "grep" => {
+            let a = args(
+                input,
+                &[
+                    "pattern",
+                    "path",
+                    "include",
+                    "case_sensitive",
+                    "max_results",
+                ],
+            )?;
+            let include = if a.contains_key("include") {
+                Some(text(a, "include")?)
+            } else {
+                None
+            };
+            Call::Grep(
+                resolve(&root, optional_path(a, "path")?, false)?,
+                search::GrepQuery::new(
+                    text(a, "pattern")?,
+                    include,
+                    boolean(a, "case_sensitive", true)?,
+                    number(a, "max_results", 100, 500)? as usize,
+                )?,
             )
         }
         "write_file" => {
@@ -286,12 +327,17 @@ fn parse(project: &Path, name: &str, input: &Value) -> Result<(PathBuf, Call), S
             }
             let params = a.get("params").cloned().unwrap_or_else(|| json!({}));
             if !params.is_object()
-                || serde_json::to_vec(&params).map_err(|_| "虚幻参数无法编码")?.len() > 64 * 1024
+                || serde_json::to_vec(&params)
+                    .map_err(|_| "虚幻参数无法编码")?
+                    .len()
+                    > 64 * 1024
             {
                 return Err("虚幻编辑器参数必须是 64 KiB 以内的 JSON 对象".into());
             }
             if !super::unreal::find_project_file(&root).is_some() {
-                return Err("主 Agent 当前项目不是 Unreal 工程；请先在虚幻工作区选择 .uproject 工程".into());
+                return Err(
+                    "主 Agent 当前项目不是 Unreal 工程；请先在虚幻工作区选择 .uproject 工程".into(),
+                );
             }
             Call::Unreal(method.to_string(), params)
         }
@@ -304,7 +350,7 @@ fn parse(project: &Path, name: &str, input: &Value) -> Result<(PathBuf, Call), S
         Call::Write(path, ..) if path.exists() && !path.is_file() => {
             return Err("不能用文件覆盖目录或设备".into())
         }
-        Call::List(path, ..) | Call::Command(path, ..) if !path.is_dir() => {
+        Call::List(path, ..) | Call::Glob(path, ..) | Call::Command(path, ..) if !path.is_dir() => {
             return Err("此工具需要工作目录".into())
         }
         _ => {}
@@ -329,7 +375,10 @@ pub fn inspect(project: &Path, name: &str, input: &Value) -> Result<ToolInspecti
             false,
             false,
         ),
-        Call::List(path, ..) | Call::Search(path, ..) => (
+        Call::List(path, ..)
+        | Call::Search(path, ..)
+        | Call::Glob(path, ..)
+        | Call::Grep(path, ..) => (
             "read",
             path.to_string_lossy().into_owned(),
             false,
@@ -353,7 +402,11 @@ pub fn inspect(project: &Path, name: &str, input: &Value) -> Result<ToolInspecti
             ("shell", command, !safe, !safe, !safe)
         }
         Call::Unreal(method, _) => (
-            if super::unreal::method_is_mutating(&method) { "unreal-edit" } else { "unreal-read" },
+            if super::unreal::method_is_mutating(&method) {
+                "unreal-edit"
+            } else {
+                "unreal-read"
+            },
             format!("{} · {}", project.display(), method),
             super::unreal::method_is_mutating(&method),
             super::unreal::method_is_mutating(&method),
@@ -735,6 +788,8 @@ pub async fn execute(
                 }
                 (output, vec![])
             }
+            Call::Glob(path, query) => (search::glob(&root, &path, query, &cancel)?, vec![]),
+            Call::Grep(path, query) => (search::grep(&root, &path, query, &cancel)?, vec![]),
             Call::Write(path, content, expected) => {
                 let diffs = atomic_write(&root, &path, expected.as_deref(), &content, &cancel)?;
                 if !diffs.is_empty() {

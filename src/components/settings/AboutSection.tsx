@@ -17,6 +17,11 @@ import { Button } from "@/components/ui/button";
 import { useTranslation } from "react-i18next";
 import { toast } from "@/lib/toast";
 import { getVersion } from "@tauri-apps/api/app";
+import {
+  PRODUCT_RELEASE,
+  isLegacyVersion,
+  productVersion,
+} from "@/lib/productVersion";
 import { settingsApi } from "@/lib/api";
 import { useUpdate } from "@/contexts/UpdateContext";
 import { Badge } from "@/components/ui/badge";
@@ -212,7 +217,9 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
       | "up_to_date"
   ];
 
-  const displayVersion = version ?? t("common.unknown");
+  const displayVersion = version
+    ? productVersion(version)
+    : t("common.unknown");
 
   return (
     <div className="divide-y divide-border overflow-hidden rounded-panel border border-border bg-surface">
@@ -231,6 +238,9 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
             ) : (
               <span className="tabular-nums">{`${t("common.version")} v${displayVersion}`}</span>
             )}
+            {version && isLegacyVersion(version) && (
+              <Badge variant="secondary">Legacy</Badge>
+            )}
             {isPortable && (
               <Badge
                 variant="secondary"
@@ -241,6 +251,11 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
               </Badge>
             )}
           </div>
+          {version && productVersion(version) !== version && (
+            <p className="mt-1 text-xs text-fg-3">
+              {t("productRelease.build", { version })}
+            </p>
+          )}
         </div>
       </div>
       <ResourceUpdatesSection />
@@ -385,7 +400,7 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
         <div className="space-y-1 px-5 py-4 text-body">
           <p className="font-medium text-fg-1">
             {t("settings.updateAvailable", {
-              version: updateInfo.availableVersion,
+              version: productVersion(updateInfo.availableVersion),
             })}
           </p>
           {updateInfo.notes && (
@@ -424,6 +439,17 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
           <ExternalLink className="h-3.5 w-3.5" />
           {t("settings.releaseNotes")}
         </Button>
+        <Button
+          type="button"
+          variant="neutral"
+          size="compact"
+          onClick={() =>
+            void settingsApi.openExternal(PRODUCT_RELEASE.legacyReleaseUrl)
+          }
+        >
+          <ExternalLink className="h-3.5 w-3.5" />
+          {t("productRelease.legacy")}
+        </Button>
         {recentEntries.length > 0 && (
           <Button
             type="button"
@@ -436,6 +462,10 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
           </Button>
         )}
       </div>
+
+      <p className="px-5 py-3 text-xs leading-6 text-fg-3">
+        {t("productRelease.note")}
+      </p>
 
       {/* 项目仓库入口与软件更新入口各自独立。 */}
       {!starPromptDismissed && (

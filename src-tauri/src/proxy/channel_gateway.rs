@@ -41,6 +41,7 @@ use bytes::Bytes;
 use futures::StreamExt;
 use serde_json::{json, Value};
 use std::net::{IpAddr, SocketAddr};
+use tauri::Manager;
 
 const MAX_REQUEST_BYTES: usize = 200 * 1024 * 1024;
 const MAX_SSE_EVENT_BYTES: usize = 4 * 1024 * 1024;
@@ -523,6 +524,27 @@ async fn handle(state: ProxyState, request: Request, wire: Wire) -> Result<Respo
         .ok_or_else(|| ProxyError::InvalidRequest("请求缺少 model".into()))?
         .to_string();
     let (source, model) = resolve_model(&snapshot.channels, &published_id)?;
+    let mut source = source;
+    if source.auth_kind == "lolicode_account" {
+        if !matches!(client, "lolicode" | "tavern")
+            || source.base_url != crate::services::lolicode_relay::BASE_URL
+            || source.protocol != "openai_chat"
+            || source.models.iter().any(|m| m.protocol.as_deref().is_some_and(|p| p != "openai_chat"))
+        {
+            return Err(ProxyError::AuthError("公益模型请在 LoliCode 内使用。".into()));
+        }
+        let account = state.app_handle.as_ref()
+            .and_then(|app| app.try_state::<crate::services::lolicode_account::LolicodeAccountState>())
+            .ok_or_else(|| ProxyError::AuthError("LoliCode 账户服务尚未就绪。".into()))?;
+        let (_, bearer) = account.relay_credential(source.account_id.as_deref())
+            .await.map_err(ProxyError::AuthError)?;
+        if let Some(secrets) = parts.extensions.get_mut::<GatewaySecrets>() {
+            secrets.0.push(bearer.clone());
+            if let Some(token) = bearer.rsplit('.').next() { secrets.0.push(token.to_owned()); }
+        }
+        source.api_key = bearer;
+        source.auth_kind = "api_key".into();
+    }
     let source = resolve_source_material(source).await?;
     validate_capabilities(&model, &body)?;
     body["model"] = json!(model.id);

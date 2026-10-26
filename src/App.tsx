@@ -4,7 +4,8 @@ import { FirstRunNoticeDialog } from "@/components/FirstRunNoticeDialog";
 import { WhatsNewNotice } from "@/components/WhatsNewDialog";
 import { AgentPage } from "@/components/agent/AgentPage";
 import { BuiltinApplicationsPage } from "@/components/apps/BuiltinApplicationsPage";
-import { useBuiltinApps } from "@/lib/api/builtin-apps";
+import { isBuiltinApp, useBuiltinApps } from "@/lib/api/builtin-apps";
+import { DiscoveryPage } from "@/components/discovery/DiscoveryPage";
 import { TavernPage } from "@/components/tavern/TavernPage";
 import { UnrealPage } from "@/components/unreal/UnrealPage";
 import {
@@ -472,12 +473,13 @@ function App() {
 
   const renderGlobalPage = () => {
     if (
-      (currentView === "tavern" || currentView === "unreal") &&
+      isBuiltinApp(currentView) &&
       !builtinApps.data?.some((app) => app.id === currentView && app.enabled)
     ) {
       return <BuiltinApplicationsPage onOpen={openPage} />;
     }
-    switch (productViewOf(currentView)) {
+    const productView = productViewOf(currentView);
+    switch (productView) {
       case "applications":
         return <BuiltinApplicationsPage onOpen={openPage} />;
       case "agent":
@@ -541,6 +543,9 @@ function App() {
         return <SimpleUsagePage />;
       case "tavern":
         return <TavernPage onOpenChannels={() => openPage("channels")} />;
+      case "rankings":
+      case "free-ai":
+        return <DiscoveryPage key={productView} kind={productView} />;
       case "unreal":
         return (
           <UnrealPage
