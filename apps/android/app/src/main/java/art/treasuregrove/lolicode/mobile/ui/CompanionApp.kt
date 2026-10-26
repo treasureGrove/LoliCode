@@ -113,7 +113,7 @@ private fun CompanionScreenContent(
                             detail -> IconButton(onClick = actions.refresh, enabled = state.usable && !state.busy) { AppGlyph(Glyph.Refresh, description = "刷新任务") }
                             tab == CompanionTab.Devices -> IconButton(onClick = { if (state.account == null) loginDialog = true else actions.discoverComputers() }, enabled = !state.accountBusy) { AppGlyph(Glyph.Refresh, tint = LoliColors.Rose, description = "刷新同账号电脑") }
                             tab == CompanionTab.Tasks -> IconButton(onClick = { startNewTask() }) { AppGlyph(Glyph.Plus, tint = LoliColors.Rose, description = "新建任务") }
-                            else -> StatusPill(if (state.transport == "direct") "原生直连" else "等待直连", if (state.transport == "direct") LoliColors.Green else LoliColors.Muted, if (state.transport == "direct") LoliColors.GreenSoft else Color(0xFFF2EEF3))
+                            else -> ComputerStatusPill(state)
                         }
                     }
                 },

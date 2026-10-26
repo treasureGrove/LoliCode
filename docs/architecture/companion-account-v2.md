@@ -63,8 +63,15 @@ tickets/device and sockets/account. Rate limiting must precede expensive auth.
 
 ## Device keys and enrollment envelope
 
-Each installation keeps a P-256 key pair. Desktop private PKCS8 stays in the OS
-credential vault. Android PKCS8 is sealed by AndroidKeyStore AES; API 26 support
+Each installation keeps a separate stable device UUID and P-256 key pair for
+each account. Desktop private PKCS8 stays in an account-scoped OS credential
+vault entry (`account:<canonical accountId>`); switching A to B and back must
+restore A's original identity, without reusing A's identity for B. Clear the
+in-memory identity cache on the account fence. Preserve the former unscoped
+`installation` entry; copy it only when saved room bindings uniquely prove the
+same account, device UUID and public-key fingerprint. Never overwrite a damaged
+scoped identity or silently assign an unknown legacy identity to a new account.
+Android PKCS8 is sealed by AndroidKeyStore AES; API 26 support
 must not rely on API 31 AndroidKeyStore ECDH. The public SPKI is safe to display.
 After enrollment, retain and verify the peer fingerprint; never silently replace
 an existing device key. Initial identity directory trust is the authenticated
@@ -109,6 +116,14 @@ credentials, private keys, device tickets, room keys or role tokens for v2.
 Local desktop approval is mandatory before the phone can dispatch tasks. Existing
 single-operation tool approval, request deduplication, room session ownership,
 authenticated packet timestamps/AAD and replay checks remain mandatory.
+
+Native discovery and heartbeats continue while the window is hidden or minimized
+to the tray; renderer visibility changes polling cadence only. A directory online
+indicator means a recent authenticated device heartbeat (120-second service TTL),
+not an open direct task channel. Phone UI keeps directory presence and direct
+connectivity separate. A failed or stale directory refresh becomes unknown rather
+than retaining an old green online indicator or inferring offline from a failed
+direct connection. Only a verified direct channel enables task actions.
 
 ## Direct transport direction
 

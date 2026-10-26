@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import art.treasuregrove.lolicode.mobile.BuildConfig
 import art.treasuregrove.lolicode.mobile.CompanionState
 import art.treasuregrove.lolicode.mobile.data.PairedComputer
+import art.treasuregrove.lolicode.mobile.data.DevicePresence
 
 @Composable
 internal fun DeviceScreen(state: CompanionState, actions: CompanionActions, notificationsAllowed: Boolean, onLogin: () -> Unit, onForget: (PairedComputer) -> Unit, onHelp: () -> Unit) {
@@ -42,7 +43,7 @@ internal fun DeviceScreen(state: CompanionState, actions: CompanionActions, noti
                     else TextButton(onClick = actions.logout, modifier = Modifier.testTag("account_logout")) { Text("退出登录") }
                 }
                 Text("账号服务仅协调设备与信令，任务通过独立加密直连传输。直连不可用时不会转经服务器。", style = MaterialTheme.typography.bodySmall, color = LoliColors.Muted)
-                StatusPill(if (state.transport == "direct") "原生直连" else "等待直连", if (state.transport == "direct") LoliColors.Green else LoliColors.Muted, if (state.transport == "direct") LoliColors.GreenSoft else LoliColors.VioletSoft, dot = state.transport == "direct")
+                ComputerStatusPill(state)
                 if (state.transport != "direct") Text(state.connection, style = MaterialTheme.typography.bodySmall, color = LoliColors.Muted)
             }
         }
@@ -60,13 +61,15 @@ internal fun DeviceScreen(state: CompanionState, actions: CompanionActions, noti
                 }
             }
             items(state.discoveredComputers.filter { it.kind == "desktop" }, key = { "account:${it.deviceId}" }) { device ->
+                val presence = state.presence(device)
+                val selected = state.computer?.desktopDeviceId == device.deviceId && state.computer?.desktopFingerprint == device.fingerprint
                 LoliCard {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        GlyphTile(Glyph.Devices, color = if (device.online) LoliColors.Green else LoliColors.Muted, background = if (device.online) LoliColors.GreenSoft else LoliColors.VioletSoft, size = 42.dp)
+                        GlyphTile(Glyph.Devices, color = if (presence == DevicePresence.Online) LoliColors.Green else LoliColors.Muted, background = if (presence == DevicePresence.Online) LoliColors.GreenSoft else LoliColors.VioletSoft, size = 42.dp)
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                             Text(device.deviceName, fontWeight = FontWeight.SemiBold)
-                            Text(if (device.online) "设备在线 · 连接后验证任务状态" else "设备暂时离线", color = LoliColors.Muted, style = MaterialTheme.typography.bodySmall)
+                            Text(deviceStatusText(presence, selected && state.transport == "direct", selected && state.hostVerified), color = LoliColors.Muted, style = MaterialTheme.typography.bodySmall)
                             Text("指纹 ${shortFingerprint(device.fingerprint)}", color = LoliColors.Muted, style = MaterialTheme.typography.labelSmall)
                         }
                     }
@@ -103,18 +106,14 @@ internal fun DeviceScreen(state: CompanionState, actions: CompanionActions, noti
         }
         items(state.computers, key = { it.id }) { computer ->
             val selected = computer.id == state.selectedRoom
+            val presence = state.presence(computer)
             LoliCard(onClick = { if (!selected && !state.busy) actions.selectComputer(computer.id) }) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    GlyphTile(Glyph.Devices, if (selected && state.usable) LoliColors.Green else LoliColors.Rose, if (selected && state.usable) LoliColors.GreenSoft else LoliColors.RoseSoft, 48.dp)
+                    GlyphTile(Glyph.Devices, if (presence == DevicePresence.Online) LoliColors.Green else LoliColors.Muted, if (presence == DevicePresence.Online) LoliColors.GreenSoft else LoliColors.VioletSoft, 48.dp)
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(computer.name, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        Text(if (selected) when {
-                            state.transport == "direct" && state.usable -> "原生直连 · 静默后台模式"
-                            !computer.approved -> "等待电脑确认授权"
-                            state.transport == "direct" -> "原生直连 · 正在验证电脑状态"
-                            else -> "等待直连"
-                        } else if (computer.approved) "已保存 · 点按连接" else "配对尚未确认", color = if (selected && state.usable) LoliColors.Green else LoliColors.Muted, style = MaterialTheme.typography.bodySmall)
+                        Text(deviceStatusText(presence, selected && state.transport == "direct", selected && state.hostVerified, computer.approved), color = if (presence == DevicePresence.Online) LoliColors.Green else LoliColors.Muted, style = MaterialTheme.typography.bodySmall)
                     }
                     if (selected) Box(Modifier.size(27.dp).background(Brush.linearGradient(listOf(LoliColors.RoseSoft, LoliColors.VioletSoft)), CircleShape), contentAlignment = Alignment.Center) { AppGlyph(Glyph.Check, tint = LoliColors.Rose, size = 14.dp) }
                     else AppGlyph(Glyph.Right, size = 16.dp)

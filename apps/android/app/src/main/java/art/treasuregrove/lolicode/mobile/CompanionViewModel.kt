@@ -2,6 +2,7 @@ package art.treasuregrove.lolicode.mobile
 
 import android.app.Application
 import android.os.Build
+import android.os.SystemClock
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import art.treasuregrove.lolicode.mobile.data.*
@@ -19,6 +20,7 @@ data class CompanionState(
     val account: AccountProfile? = null, val discoveredComputers: List<AccountDevice> = emptyList(),
     val enrollment: EnrollmentRequest? = null, val accountBusy: Boolean = false, val identityEpoch: Int = 0,
     val transport: String? = null,
+    val directoryFreshness: DirectoryFreshness = DirectoryFreshness(), val presenceNowElapsedMs: Long = 0,
     val computers: List<PairedComputer> = emptyList(), val selectedRoom: String? = null,
     val connection: String = "添加电脑，开始远程任务", val relayReady: Boolean = false, val desktopOnline: Boolean = false,
     val hostVerified: Boolean = false,
@@ -30,7 +32,21 @@ data class CompanionState(
     val pushError: String? = null,
 ) {
     val computer get() = computers.firstOrNull { it.id == selectedRoom }
-    val usable get() = relayReady && desktopOnline && hostVerified && computer?.approved == true
+    // desktopOnline is room-peer availability, not directory heartbeat presence.
+    val usable get() = transport == "direct" && relayReady && desktopOnline && hostVerified && computer?.approved == true
+    val selectedPresence get() = computer?.let(::presence) ?: DevicePresence.Unknown
+    fun presence(device: AccountDevice): DevicePresence {
+        if (device.kind != "desktop" || !directoryFreshness.isFreshFor(account?.id, presenceNowElapsedMs)) return DevicePresence.Unknown
+        val canonical = discoveredComputers.firstOrNull { it.kind == "desktop" && it.deviceId == device.deviceId && it.publicKey == device.publicKey && it.fingerprint == device.fingerprint }
+            ?: return DevicePresence.Unknown
+        return if (canonical.online) DevicePresence.Online else DevicePresence.Offline
+    }
+    fun presence(computer: PairedComputer): DevicePresence {
+        if (account == null || computer.accountId != account.id) return DevicePresence.Unknown
+        val device = discoveredComputers.firstOrNull { it.deviceId == computer.desktopDeviceId && it.fingerprint == computer.desktopFingerprint }
+            ?: return DevicePresence.Unknown
+        return presence(device)
+    }
 }
 
 class CompanionViewModel(application: Application) : AndroidViewModel(application) {
@@ -55,8 +71,10 @@ class CompanionViewModel(application: Application) : AndroidViewModel(applicatio
     private var ticketRenewal: Job? = null
     private var identityEpoch = 0
     private var enrollmentVisible = false
-    private var lastPresenceAt = 0L
-    private var lastDevicesAt = 0L
+    private var lastPresenceAt: Long? = null
+    private var lastDevicesAt: Long? = null
+    private var presenceExpiry: Job? = null
+    private var directoryGeneration = 0
     private var eventRefresh: Job? = null
     private var lastSnapshotAt = 0L
     private val snapshotLock = Mutex()
@@ -74,6 +92,7 @@ class CompanionViewModel(application: Application) : AndroidViewModel(applicatio
     fun foreground() {
         if (visible) return
         visible = true
+        invalidateDirectory()
         connect()
         startAccountPolling()
         if (BuildConfig.PUSH_CONFIGURED) {
@@ -88,6 +107,7 @@ class CompanionViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun background() {
         visible = false
+        invalidateDirectory()
         accountPoll?.cancel(); accountPoll = null
         accountJob?.cancel(); accountJob = null
         disconnect()
@@ -137,7 +157,7 @@ class CompanionViewModel(application: Application) : AndroidViewModel(applicatio
             disconnect(); accountPoll?.cancel()
             store.saveAccount(authenticated)
             val registered = store.accountIdentity(authenticated.account.id)
-            credential = authenticated; identity = registered; ticket = null; lastPresenceAt = 0L; lastDevicesAt = 0L
+            credential = authenticated; identity = registered; ticket = null; lastPresenceAt = null; lastDevicesAt = null
             notificationSession = null; identityEpoch++
             val computers = store.computers(authenticated.account.id)
             mutable.value = CompanionState(account = authenticated.account, identityEpoch = identityEpoch,
@@ -149,6 +169,7 @@ class CompanionViewModel(application: Application) : AndroidViewModel(applicatio
     fun logout() {
         identityEpoch++
         accountJob?.cancel(); accountJob = null; accountPoll?.cancel(); accountPoll = null
+        presenceExpiry?.cancel(); presenceExpiry = null
         disconnect(); credential = null; identity = null; ticket = null; notificationSession = null
         val failure = runCatching { store.logoutAccount() }.exceptionOrNull()
         mutable.value = CompanionState(identityEpoch = identityEpoch,
@@ -179,7 +200,28 @@ class CompanionViewModel(application: Application) : AndroidViewModel(applicatio
 
     private fun accountState(current: CompanionState) = CompanionState(account = current.account,
         discoveredComputers = current.discoveredComputers, enrollment = current.enrollment,
-        accountBusy = current.accountBusy, identityEpoch = current.identityEpoch)
+        accountBusy = current.accountBusy, identityEpoch = current.identityEpoch,
+        directoryFreshness = current.directoryFreshness, presenceNowElapsedMs = current.presenceNowElapsedMs)
+
+    private fun invalidateDirectory() {
+        directoryGeneration++
+        presenceExpiry?.cancel(); presenceExpiry = null
+        mutable.update { it.copy(directoryFreshness = it.directoryFreshness.copy(valid = false), presenceNowElapsedMs = SystemClock.elapsedRealtime()) }
+    }
+
+    private fun publishDirectory(accountId: String, devices: List<AccountDevice>) {
+        val observed = SystemClock.elapsedRealtime()
+        val expected = identityEpoch
+        mutable.update { it.copy(discoveredComputers = devices,
+            directoryFreshness = DirectoryFreshness(accountId, observed, valid = true), presenceNowElapsedMs = observed) }
+        presenceExpiry?.cancel()
+        presenceExpiry = viewModelScope.launch {
+            delay(DirectoryFreshness.MAX_AGE_MS)
+            if (identityEpoch == expected && mutable.value.directoryFreshness.fetchedAtElapsedMs == observed) {
+                mutable.update { it.copy(directoryFreshness = it.directoryFreshness.copy(valid = false), presenceNowElapsedMs = SystemClock.elapsedRealtime()) }
+            }
+        }
+    }
 
     private fun ensureAccount(expected: Int, accountId: String) {
         if (identityEpoch != expected || credential?.account?.id != accountId) throw CancellationException("Account changed")
@@ -216,15 +258,27 @@ class CompanionViewModel(application: Application) : AndroidViewModel(applicatio
         val account = credential?.account ?: return
         val local = identity ?: return
         val expected = identityEpoch
-        val session = ensureTicket()
-        val devices = if (recover || System.currentTimeMillis() - lastDevicesAt >= 30_000) {
-            withContext(Dispatchers.IO) { accountRelay.devices(session) }.also { lastDevicesAt = System.currentTimeMillis() }
+        val directoryAtStart = directoryGeneration
+        val session = try { ensureTicket() } catch (cancelled: CancellationException) { throw cancelled } catch (failure: Exception) {
+            if (identityEpoch == expected && credential?.account?.id == account.id && directoryGeneration == directoryAtStart) invalidateDirectory()
+            throw failure
+        }
+        val elapsed = SystemClock.elapsedRealtime()
+        val devices = if (recover || lastDevicesAt == null || elapsed - lastDevicesAt!! >= 30_000) {
+            lastDevicesAt = elapsed
+            val requestGeneration = ++directoryGeneration
+            val fetched = try { withContext(Dispatchers.IO) { accountRelay.devices(session) } } catch (cancelled: CancellationException) { throw cancelled } catch (failure: Exception) {
+                if (identityEpoch == expected && credential?.account?.id == account.id && directoryGeneration == requestGeneration) invalidateDirectory()
+                throw failure
+            }
+            ensureAccount(expected, account.id)
+            if (directoryGeneration == requestGeneration) { publishDirectory(account.id, fetched); fetched }
+            else mutable.value.discoveredComputers
         } else mutable.value.discoveredComputers
         ensureAccount(expected, account.id)
-        mutable.update { it.copy(discoveredComputers = devices) }
-        if (System.currentTimeMillis() - lastPresenceAt >= 60_000) {
+        if (lastPresenceAt == null || SystemClock.elapsedRealtime() - lastPresenceAt!! >= 60_000) {
             withContext(Dispatchers.IO) { accountRelay.presence(session) }
-            ensureAccount(expected, account.id); lastPresenceAt = System.currentTimeMillis()
+            ensureAccount(expected, account.id); lastPresenceAt = SystemClock.elapsedRealtime()
         }
         var pending = mutable.value.enrollment
         if (pending == null && recover) {
@@ -270,13 +324,13 @@ class CompanionViewModel(application: Application) : AndroidViewModel(applicatio
         accountPoll?.cancel()
         if (!visible || credential == null) return
         accountPoll = viewModelScope.launch {
-            var first = true
+            val cycle = AccountPollCycle()
             while (isActive && visible && credential != null) {
-                try { refreshAccount(recover = first); first = false }
+                try { cycle.refresh { recover -> refreshAccount(recover = recover) } }
                 catch (cancelled: CancellationException) { throw cancelled }
-                catch (failure: AccountExpired) { ticket = null; disconnect(); error(failure.message ?: "账号会话已失效，请重新连接"); break }
+                catch (failure: AccountExpired) { ticket = null; invalidateDirectory(); disconnect(); error(failure.message ?: "账号会话已失效，请重新连接"); break }
                 catch (failure: Exception) { error(failure.message ?: "无法刷新账号设备") }
-                delay(if (enrollmentVisible && mutable.value.enrollment?.status == "pending") 3_000 else 30_000)
+                delay(cycle.nextDelayMs(enrollmentVisible, mutable.value.enrollment?.status == "pending"))
             }
         }
     }
@@ -289,8 +343,10 @@ class CompanionViewModel(application: Application) : AndroidViewModel(applicatio
             try { block() }
             catch (cancelled: CancellationException) { throw cancelled }
             catch (failure: Exception) {
-                if (failure is AccountExpired) ticket = null
-                if (identityEpoch == expected) error(failure.message ?: "账号设备操作失败")
+                if (identityEpoch == expected) {
+                    if (failure is AccountExpired) { ticket = null; invalidateDirectory() }
+                    error(failure.message ?: "账号设备操作失败")
+                }
             }
             finally { if (identityEpoch == expected) mutable.update { it.copy(accountBusy = false) } }
         }
@@ -388,6 +444,7 @@ class CompanionViewModel(application: Application) : AndroidViewModel(applicatio
             catch (failure: Exception) {
                 if (failure is AccountExpired) ticket = null
                 if (generation == connectionGeneration) {
+                    invalidateDirectory()
                     error(failure.message ?: "无法连接账号设备")
                     mutable.update { it.copy(connection = "账号设备连接未就绪，请重试") }
                 }
@@ -412,7 +469,7 @@ class CompanionViewModel(application: Application) : AndroidViewModel(applicatio
                 }
                 is ConnectionEvent.Peer -> {
                     mutable.update { it.copy(desktopOnline = event.online, hostVerified = if (event.online) it.hostVerified else false, transport = if (event.online) it.transport else null, connection = when {
-                        !event.online -> "电脑离线；开机联网并保持 LoliCode 在后台运行"
+                        !event.online -> "直连尚未就绪；可在设备列表查看电脑在线状态"
                         it.computer?.approved != true -> "电脑在线，请在电脑上确认此次配对"
                         it.transport == "direct" -> "原生直连已建立 · 电脑静默后台执行"
                         else -> "正在建立加密直连，不会通过服务器转发任务"
@@ -530,7 +587,7 @@ class CompanionViewModel(application: Application) : AndroidViewModel(applicatio
     }
     private fun transport(): RemoteClient {
         val current = mutable.value
-        check(current.relayReady && current.desktopOnline && current.computer?.approved == true) { "请等待电脑上线并完成配对" }
+        check(current.transport == "direct" && current.relayReady && current.desktopOnline && current.computer?.approved == true) { "请等待电脑建立直连并完成授权" }
         return client ?: throw IllegalStateException("连接尚未就绪")
     }
     private fun registerPush() {
@@ -558,5 +615,5 @@ class CompanionViewModel(application: Application) : AndroidViewModel(applicatio
         client?.close(); client = null
         mutable.update { it.copy(relayReady = false, desktopOnline = false, hostVerified = false, transport = null) }
     }
-    override fun onCleared() { accountJob?.cancel(); accountPoll?.cancel(); disconnect(); super.onCleared() }
+    override fun onCleared() { accountJob?.cancel(); accountPoll?.cancel(); presenceExpiry?.cancel(); disconnect(); super.onCleared() }
 }

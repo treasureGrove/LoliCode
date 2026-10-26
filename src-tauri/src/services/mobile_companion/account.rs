@@ -87,13 +87,24 @@ pub(super) struct Ticket {
     device: Device,
 }
 pub(super) trait IdentityVault: Send + Sync {
-    fn read(&self) -> Result<Option<StoredIdentity>, String>;
-    fn write(&self, value: &StoredIdentity) -> Result<(), String>;
+    fn read(&self, account_id: &str) -> Result<Option<StoredIdentity>, String>;
+    fn write(&self, account_id: &str, value: &StoredIdentity) -> Result<(), String>;
+    fn read_legacy(&self) -> Result<Option<StoredIdentity>, String>;
 }
 struct OsIdentityVault;
-impl IdentityVault for OsIdentityVault {
-    fn read(&self) -> Result<Option<StoredIdentity>, String> {
-        match keyring::Entry::new(IDENTITY_SERVICE, "installation")
+fn identity_entry(account_id: &str) -> Result<String, String> {
+    if account_id
+        .parse::<u64>()
+        .ok()
+        .is_none_or(|id| id == 0 || id.to_string() != account_id)
+    {
+        return Err("账号身份无效，连接未建立".into());
+    }
+    Ok(format!("account:{account_id}"))
+}
+impl OsIdentityVault {
+    fn read_entry(&self, entry: &str) -> Result<Option<StoredIdentity>, String> {
+        match keyring::Entry::new(IDENTITY_SERVICE, entry)
             .map_err(|_| "设备系统凭据库不可用")?
             .get_password()
         {
@@ -104,16 +115,24 @@ impl IdentityVault for OsIdentityVault {
             Err(_) => Err("无法读取系统设备密钥，连接未建立".into()),
         }
     }
-    fn write(&self, value: &StoredIdentity) -> Result<(), String> {
-        keyring::Entry::new(IDENTITY_SERVICE, "installation")
+}
+impl IdentityVault for OsIdentityVault {
+    fn read(&self, account_id: &str) -> Result<Option<StoredIdentity>, String> {
+        self.read_entry(&identity_entry(account_id)?)
+    }
+    fn write(&self, account_id: &str, value: &StoredIdentity) -> Result<(), String> {
+        keyring::Entry::new(IDENTITY_SERVICE, &identity_entry(account_id)?)
             .map_err(|_| "设备系统凭据库不可用")?
             .set_password(&serde_json::to_string(value).map_err(|_| "设备密钥编码失败")?)
             .map_err(|_| "无法安全保存设备密钥，连接未建立".into())
     }
+    fn read_legacy(&self) -> Result<Option<StoredIdentity>, String> {
+        self.read_entry("installation")
+    }
 }
 pub(super) struct Runtime {
     settings: Settings,
-    identity: Option<Arc<Identity>>,
+    identity: Option<(String, Arc<Identity>)>,
     ticket: Option<Ticket>,
     account_id: Option<String>,
     devices: Vec<Device>,
@@ -159,6 +178,7 @@ impl Runtime {
 pub(super) struct AccountState {
     runtime: Mutex<Runtime>,
     gate: Mutex<()>,
+    identity_gate: Mutex<()>,
     epoch: AtomicU64,
     changes: tokio::sync::watch::Sender<u64>,
     vault: Arc<dyn IdentityVault>,
@@ -170,6 +190,7 @@ impl AccountState {
         Self {
             runtime: Mutex::new(Runtime::new(db)),
             gate: Mutex::new(()),
+            identity_gate: Mutex::new(()),
             epoch: AtomicU64::new(0),
             changes: tokio::sync::watch::channel(0).0,
             vault: Arc::new(OsIdentityVault),
@@ -308,23 +329,69 @@ impl MobileCompanionState {
             transport_policy: "directOnly",
         }
     }
-    async fn identity(&self) -> Result<Arc<Identity>, String> {
-        if let Some(identity) = self.0.account.runtime.lock().await.identity.clone() {
-            return Ok(identity);
+    async fn identity(&self, account_id: &str, epoch: u64) -> Result<Arc<Identity>, String> {
+        identity_entry(account_id)?;
+        // Separate from the request gate, which callers already hold. Logout
+        // never waits for this vault I/O; the epoch check below prevents a
+        // queued or completed lookup from restoring fenced memory state.
+        let _identity_gate = self.0.account.identity_gate.lock().await;
+        {
+            let runtime = self.0.account.runtime.lock().await;
+            self.check_epoch(epoch)?;
+            if let Some((_, identity)) =
+                runtime.identity.as_ref().filter(|(id, _)| id == account_id)
+            {
+                return Ok(identity.clone());
+            }
         }
+        let bindings = self
+            .0
+            .store
+            .lock()
+            .await
+            .rooms
+            .values()
+            .filter_map(|room| room.account.clone())
+            .collect::<Vec<_>>();
         let vault = self.0.account.vault.clone();
-        let identity = tokio::task::spawn_blocking(move || match vault.read()? {
+        let scope = account_id.to_owned();
+        let may_own_legacy = bindings.iter().any(|binding| binding.account_id == scope);
+        let identity = tokio::task::spawn_blocking(move || match vault.read(&scope)? {
             Some(value) => Identity::load(&value),
             None => {
+                if let Some(legacy) = if may_own_legacy {
+                    vault.read_legacy()?
+                } else {
+                    None
+                } {
+                    let identity = Identity::load(&legacy)?;
+                    let owners = bindings
+                        .iter()
+                        .filter(|binding| {
+                            binding.desktop_device_id == identity.device_id
+                                && binding.desktop_fingerprint == identity.fingerprint
+                        })
+                        .map(|binding| binding.account_id.as_str())
+                        .collect::<BTreeSet<_>>();
+                    // A legacy installation key has no account field. Copy it
+                    // only when persisted room bindings prove one owner; never
+                    // change or delete that entry, even after a successful copy.
+                    if owners.len() == 1 && owners.contains(scope.as_str()) {
+                        vault.write(&scope, &legacy)?;
+                        return Ok(identity);
+                    }
+                }
                 let (identity, stored) = Identity::generate()?;
-                vault.write(&stored)?;
+                vault.write(&scope, &stored)?;
                 Ok(identity)
             }
         })
         .await
         .map_err(|_| "设备凭据库无法响应")??;
         let identity = Arc::new(identity);
-        self.0.account.runtime.lock().await.identity = Some(identity.clone());
+        let mut runtime = self.0.account.runtime.lock().await;
+        self.check_epoch(epoch)?;
+        runtime.identity = Some((account_id.to_owned(), identity.clone()));
         Ok(identity)
     }
     pub async fn connect_account(
@@ -431,6 +498,7 @@ impl MobileCompanionState {
         {
             let mut runtime = self.0.account.runtime.lock().await;
             runtime.suspended = true;
+            runtime.identity = None;
             runtime.ticket = None;
             runtime.account_id = None;
             runtime.devices.clear();
@@ -564,7 +632,8 @@ impl MobileCompanionState {
             self.fence_account(app).await;
             return Err("账号已改变，请重新启用设备连接".into());
         }
-        let identity = self.identity().await?;
+        let identity = self.identity(&id, epoch).await?;
+        self.check_epoch(epoch)?;
         let existing = self.0.account.runtime.lock().await.ticket.clone();
         let ticket = if let Some(ticket) =
             existing.filter(|t| t.account_id == id && t.expires_at > now() + 120_000)
@@ -733,7 +802,8 @@ impl MobileCompanionState {
         let _account_gate = self.0.account.gate.lock().await;
         let epoch = self.0.account.epoch.load(Ordering::SeqCst);
         let ticket = self.current_ticket().await?;
-        let identity = self.identity().await?;
+        let identity = self.identity(&ticket.account_id, epoch).await?;
+        self.check_epoch(epoch)?;
         let value = self
             .0
             .account
@@ -950,7 +1020,7 @@ impl MobileCompanionState {
             )
             .await?;
         let request: EnrollmentRequest = serde_json::from_value(response).map_err(|_| FAILURE)?;
-        let identity = self.identity().await?;
+        let identity = self.identity(&ticket.account_id, epoch).await?;
         let settings = self.0.account.runtime.lock().await.settings.clone();
         validate_request(&request, &ticket.account_id, &identity, &settings, false)?;
         if request.request_id != id || request.status != "rejected" {

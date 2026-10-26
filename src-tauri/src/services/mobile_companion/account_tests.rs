@@ -3,6 +3,471 @@ use axum::{http::StatusCode, response::IntoResponse, routing::post, Json};
 use std::sync::{atomic::AtomicUsize, Mutex as SyncMutex};
 
 #[derive(Default)]
+struct MemoryIdentityVault {
+    entries: SyncMutex<BTreeMap<String, String>>,
+    legacy: SyncMutex<Option<String>>,
+    calls: SyncMutex<Vec<String>>,
+    paused_read: SyncMutex<Option<(Arc<tokio::sync::Notify>, std::sync::mpsc::Receiver<()>)>>,
+}
+impl IdentityVault for MemoryIdentityVault {
+    fn read(&self, account_id: &str) -> Result<Option<StoredIdentity>, String> {
+        let entry = identity_entry(account_id)?;
+        self.calls.lock().unwrap().push(format!("read:{entry}"));
+        let paused = self.paused_read.lock().unwrap().take();
+        if let Some((started, release)) = paused {
+            started.notify_one();
+            release
+                .recv_timeout(Duration::from_secs(5))
+                .map_err(|_| "fixture read timed out")?;
+        }
+        self.entries
+            .lock()
+            .unwrap()
+            .get(&entry)
+            .map(|text| serde_json::from_str(text).map_err(|_| "fixture corrupt identity".into()))
+            .transpose()
+    }
+    fn write(&self, account_id: &str, value: &StoredIdentity) -> Result<(), String> {
+        let entry = identity_entry(account_id)?;
+        self.calls.lock().unwrap().push(format!("write:{entry}"));
+        self.entries
+            .lock()
+            .unwrap()
+            .insert(entry, serde_json::to_string(value).unwrap());
+        Ok(())
+    }
+    fn read_legacy(&self) -> Result<Option<StoredIdentity>, String> {
+        self.calls.lock().unwrap().push("read:installation".into());
+        self.legacy
+            .lock()
+            .unwrap()
+            .as_ref()
+            .map(|text| serde_json::from_str(text).map_err(|_| "fixture corrupt legacy".into()))
+            .transpose()
+    }
+}
+fn identity_state(db: Arc<Database>, vault: Arc<MemoryIdentityVault>) -> MobileCompanionState {
+    let mut state = MobileCompanionState::with_vault(db, Arc::new(MemoryRoomVault::default()));
+    Arc::get_mut(&mut state.0).unwrap().account.vault = vault;
+    state
+}
+async fn scoped_identity(state: &MobileCompanionState, id: &str) -> Arc<Identity> {
+    state
+        .identity(id, state.0.account.epoch.load(Ordering::SeqCst))
+        .await
+        .unwrap()
+}
+async fn save_identity_binding(
+    state: &MobileCompanionState,
+    identity: &Identity,
+    owner: &str,
+    id: &str,
+) {
+    let mut store = state.0.store.lock().await;
+    store.rooms.insert(
+        id.into(),
+        Room {
+            account: Some(AccountRoom {
+                account_id: owner.into(),
+                challenge: "fixture".into(),
+                request_id: uuid::Uuid::new_v4().to_string(),
+                desktop_device_id: identity.device_id.clone(),
+                phone_device_id: uuid::Uuid::new_v4().to_string(),
+                desktop_fingerprint: identity.fingerprint.clone(),
+                phone_fingerprint: "a".repeat(64),
+                envelope_hash: "b".repeat(64),
+            }),
+            relay_url: RELAY.into(),
+            expires_at: now() + WINDOW_MS,
+            approved: true,
+            revoked: false,
+            device_id: None,
+            device_name: None,
+            sessions: BTreeSet::new(),
+            requests: BTreeMap::new(),
+            seen_packets: BTreeMap::new(),
+            events: BTreeMap::new(),
+            active_requests: BTreeMap::new(),
+            event_keys: BTreeSet::new(),
+        },
+    );
+    state.save(&store).unwrap();
+}
+
+#[tokio::test]
+async fn identity_scope_rejects_noncanonical_account_ids_before_any_vault_access() {
+    let vault = Arc::new(MemoryIdentityVault::default());
+    let state = identity_state(Arc::new(Database::memory().unwrap()), vault.clone());
+    for id in [
+        "",
+        "0",
+        "07",
+        "+7",
+        " 7",
+        "7\n",
+        "7:8",
+        "18446744073709551616",
+    ] {
+        assert!(state.identity(id, 0).await.is_err(), "{id:?}");
+    }
+    assert!(vault.calls.lock().unwrap().is_empty());
+    assert_eq!(
+        identity_entry("18446744073709551615").unwrap(),
+        "account:18446744073709551615"
+    );
+}
+
+#[tokio::test]
+async fn fence_during_vault_read_cannot_restore_an_old_identity_cache() {
+    let vault = Arc::new(MemoryIdentityVault::default());
+    let started = Arc::new(tokio::sync::Notify::new());
+    let (release, wait) = std::sync::mpsc::channel();
+    *vault.paused_read.lock().unwrap() = Some((started.clone(), wait));
+    let state = identity_state(Arc::new(Database::memory().unwrap()), vault);
+    let worker = state.clone();
+    let pending = tokio::spawn(async move { worker.identity("7", 0).await });
+    tokio::time::timeout(Duration::from_secs(5), started.notified())
+        .await
+        .unwrap();
+    state.fence_account_state().await;
+    release.send(()).unwrap();
+    assert!(pending.await.unwrap().is_err());
+    assert!(state.0.account.runtime.lock().await.identity.is_none());
+    // A request admitted before logout cannot start another vault operation in
+    // the new generation, even when it has not yet reached identity().
+    assert!(state.identity("7", 0).await.is_err());
+}
+
+#[tokio::test]
+async fn concurrent_first_identity_reads_write_once_per_account_and_keep_both_stable() {
+    let vault = Arc::new(MemoryIdentityVault::default());
+    let started = Arc::new(tokio::sync::Notify::new());
+    let (release, wait) = std::sync::mpsc::channel();
+    *vault.paused_read.lock().unwrap() = Some((started.clone(), wait));
+    let state = identity_state(Arc::new(Database::memory().unwrap()), vault.clone());
+    let first_state = state.clone();
+    let first = tokio::spawn(async move { first_state.identity("7", 0).await });
+    tokio::time::timeout(Duration::from_secs(5), started.notified())
+        .await
+        .unwrap();
+    let mut queued = Vec::new();
+    for id in ["7", "8", "7", "8"] {
+        let worker = state.clone();
+        queued.push((
+            id,
+            tokio::spawn(async move { worker.identity(id, 0).await }),
+        ));
+    }
+    // Keep the first OS-vault read blocked long enough for the other tasks to
+    // reach identity(). They must not read or write another key before it ends.
+    tokio::time::sleep(Duration::from_millis(30)).await;
+    assert_eq!(vault.calls.lock().unwrap().len(), 1);
+    assert!(vault.entries.lock().unwrap().is_empty());
+    release.send(()).unwrap();
+    let first = first.await.unwrap().unwrap();
+    let mut known = BTreeMap::from([("7", (first.device_id.clone(), first.fingerprint.clone()))]);
+    for (id, task) in queued {
+        let identity = task.await.unwrap().unwrap();
+        let value = (identity.device_id.clone(), identity.fingerprint.clone());
+        if let Some(expected) = known.get(id) {
+            assert_eq!(expected, &value);
+        } else {
+            known.insert(id, value);
+        }
+    }
+    assert_ne!(known["7"], known["8"]);
+    for id in ["7", "8"] {
+        let identity = scoped_identity(&state, id).await;
+        assert_eq!(
+            known[id],
+            (identity.device_id.clone(), identity.fingerprint.clone())
+        );
+        assert_eq!(
+            vault
+                .calls
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|call| *call == &format!("write:account:{id}"))
+                .count(),
+            1
+        );
+    }
+}
+
+#[tokio::test]
+async fn scoped_identity_survives_account_switches_and_real_relay_http_registration() {
+    use tokio::io::AsyncBufReadExt;
+    let directory = tempfile::tempdir().unwrap();
+    let repository = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap();
+    // Run the actual relay with a private state directory and fake forum API.
+    // kill_on_drop prevents a failed assertion from leaving a server behind.
+    let script = r#"
+      import { pathToFileURL } from 'node:url';
+      const root = process.argv[1];
+      const { createCompanionRelay } = await import(pathToFileURL(root + '/packages/companion-relay/src/server.mjs'));
+      const { forumFetch } = await import(pathToFileURL(root + '/packages/companion-relay/test/account-support.mjs'));
+      const relay = await createCompanionRelay({stateDirectory:process.argv[2], allowInsecureLocal:true, forumFetch});
+      console.log(JSON.stringify({port:relay.address.port}));
+    "#;
+    let mut server = tokio::process::Command::new("node")
+        .args(["--input-type=module", "-e", script])
+        .arg(repository)
+        .arg(directory.path())
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .kill_on_drop(true)
+        .spawn()
+        .expect("Node.js is required for the repository's relay fixture");
+    let mut lines = tokio::io::BufReader::new(server.stdout.take().unwrap()).lines();
+    let ready = tokio::time::timeout(Duration::from_secs(10), lines.next_line())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    let port = serde_json::from_str::<Value>(&ready).unwrap()["port"]
+        .as_u64()
+        .unwrap();
+    let api = Api::new(&format!("http://127.0.0.1:{port}/v2"), true).unwrap();
+    let vault = Arc::new(MemoryIdentityVault::default());
+    let state = identity_state(Arc::new(Database::memory().unwrap()), vault.clone());
+    let mut identities = Vec::new();
+    let mut first_binding = None;
+    for account_id in ["7", "8", "7"] {
+        let identity = scoped_identity(&state, account_id).await;
+        let response = api.call(reqwest::Method::POST, "/session", &format!("lc1.{account_id}.{}", "A".repeat(40)),
+            Some(json!({"deviceId":identity.device_id,"deviceName":"Fixture desktop","kind":"desktop","publicKey":identity.public_key}))).await.unwrap();
+        let ticket = parse_ticket(response, account_id, &identity, now()).unwrap();
+        {
+            let mut runtime = state.0.account.runtime.lock().await;
+            runtime.settings.enabled = true;
+            runtime.suspended = false;
+            runtime.account_id = Some(account_id.into());
+            runtime.ticket = Some(ticket);
+        }
+        if let Some(binding) = &first_binding {
+            assert_eq!(
+                state.account_room_ticket(binding).await.is_some(),
+                account_id == "7"
+            );
+            if account_id == "8" {
+                assert!(state.owned_sessions("first-account-room").await.is_err());
+            }
+        } else {
+            save_identity_binding(&state, &identity, "7", "first-account-room").await;
+            first_binding = state.0.store.lock().await.rooms["first-account-room"]
+                .account
+                .clone();
+            assert!(state
+                .account_room_ticket(first_binding.as_ref().unwrap())
+                .await
+                .is_some());
+        }
+        identities.push((identity.device_id.clone(), identity.fingerprint.clone()));
+        state.fence_account_state().await;
+        assert!(state.0.account.runtime.lock().await.identity.is_none());
+        assert!(state
+            .account_room_ticket(first_binding.as_ref().unwrap())
+            .await
+            .is_none());
+    }
+    assert_ne!(identities[0], identities[1]);
+    assert_eq!(identities[0], identities[2]);
+    assert_eq!(vault.entries.lock().unwrap().len(), 2);
+    let calls = vault.calls.lock().unwrap();
+    assert_eq!(
+        calls
+            .iter()
+            .filter(|call| call.as_str() == "write:account:7")
+            .count(),
+        1
+    );
+    assert_eq!(
+        calls
+            .iter()
+            .filter(|call| call.as_str() == "write:account:8")
+            .count(),
+        1
+    );
+    assert_eq!(
+        calls
+            .iter()
+            .filter(|call| call.as_str() == "read:account:7")
+            .count(),
+        2
+    );
+    assert_eq!(
+        calls
+            .iter()
+            .filter(|call| call.as_str() == "read:installation")
+            .count(),
+        0
+    );
+    drop(calls);
+    server.kill().await.unwrap();
+}
+
+#[tokio::test]
+async fn legacy_identity_is_copied_only_to_its_unique_persisted_account_owner() {
+    let (legacy, stored) = Identity::generate().unwrap();
+    let encoded = serde_json::to_string(&stored).unwrap();
+    let vault = Arc::new(MemoryIdentityVault::default());
+    *vault.legacy.lock().unwrap() = Some(encoded.clone());
+    let db = Arc::new(Database::memory().unwrap());
+    let initial = identity_state(db.clone(), vault.clone());
+    save_identity_binding(&initial, &legacy, "7", "first-room").await;
+    save_identity_binding(&initial, &legacy, "7", "second-room").await;
+    let original_rooms = db.get_setting(STORE_KEY).unwrap();
+    drop(initial);
+
+    // Reload the persisted bindings, rather than supplying a caller-owned
+    // account hint to the legacy credential.
+    let state = identity_state(db.clone(), vault.clone());
+    let migrated = scoped_identity(&state, "7").await;
+    assert_eq!(migrated.device_id, legacy.device_id);
+    assert_eq!(migrated.fingerprint, legacy.fingerprint);
+    assert_eq!(vault.entries.lock().unwrap()["account:7"], encoded);
+    assert_eq!(vault.legacy.lock().unwrap().as_ref(), Some(&encoded));
+    assert_eq!(db.get_setting(STORE_KEY).unwrap(), original_rooms);
+
+    // The cache is scoped even without an intervening fence. Another account
+    // must receive a different identity, and returning restores the first one.
+    let other = scoped_identity(&state, "8").await;
+    assert_ne!(other.device_id, migrated.device_id);
+    assert_ne!(other.fingerprint, migrated.fingerprint);
+    let returned = scoped_identity(&state, "7").await;
+    assert_eq!(returned.device_id, migrated.device_id);
+    assert_eq!(returned.fingerprint, migrated.fingerprint);
+    assert_eq!(vault.legacy.lock().unwrap().as_ref(), Some(&encoded));
+}
+
+#[tokio::test]
+async fn unbound_foreign_ambiguous_or_mismatched_legacy_identity_is_preserved_without_claiming_it()
+{
+    let (legacy, stored) = Identity::generate().unwrap();
+    let encoded = serde_json::to_string(&stored).unwrap();
+    for mode in [
+        "unbound",
+        "foreign",
+        "ambiguous",
+        "wrong-fingerprint",
+        "wrong-device-id",
+    ] {
+        let vault = Arc::new(MemoryIdentityVault::default());
+        *vault.legacy.lock().unwrap() = Some(encoded.clone());
+        let db = Arc::new(Database::memory().unwrap());
+        let initial = identity_state(db.clone(), vault.clone());
+        match mode {
+            "unbound" => {}
+            "foreign" => save_identity_binding(&initial, &legacy, "8", "other-room").await,
+            "ambiguous" => {
+                save_identity_binding(&initial, &legacy, "7", "first-room").await;
+                save_identity_binding(&initial, &legacy, "8", "other-room").await;
+            }
+            _ => {
+                save_identity_binding(&initial, &legacy, "7", "first-room").await;
+                let mut store = initial.0.store.lock().await;
+                let binding = store
+                    .rooms
+                    .get_mut("first-room")
+                    .unwrap()
+                    .account
+                    .as_mut()
+                    .unwrap();
+                if mode == "wrong-fingerprint" {
+                    binding.desktop_fingerprint = "0".repeat(64);
+                } else {
+                    binding.desktop_device_id = uuid::Uuid::new_v4().to_string();
+                }
+                initial.save(&store).unwrap();
+            }
+        }
+        let original_rooms = db.get_setting(STORE_KEY).unwrap();
+        drop(initial);
+        let state = identity_state(db.clone(), vault.clone());
+        let fresh = scoped_identity(&state, "7").await;
+        assert_ne!(fresh.device_id, legacy.device_id, "{mode}");
+        assert_ne!(fresh.fingerprint, legacy.fingerprint, "{mode}");
+        assert_eq!(
+            vault.legacy.lock().unwrap().as_ref(),
+            Some(&encoded),
+            "{mode}"
+        );
+        assert_eq!(db.get_setting(STORE_KEY).unwrap(), original_rooms, "{mode}");
+        assert!(vault.entries.lock().unwrap().contains_key("account:7"));
+        if mode == "foreign" {
+            let owner = scoped_identity(&state, "8").await;
+            assert_eq!(owner.device_id, legacy.device_id);
+            assert_eq!(owner.fingerprint, legacy.fingerprint);
+        }
+    }
+}
+
+#[tokio::test]
+async fn corrupt_scoped_identity_never_falls_back_to_or_overwrites_the_legacy_key() {
+    let (_, stored) = Identity::generate().unwrap();
+    let encoded_legacy = serde_json::to_string(&stored).unwrap();
+    for damaged in [
+        "not-json".to_owned(),
+        json!({"deviceId":uuid::Uuid::new_v4(),"privateKey":"invalid-key"}).to_string(),
+    ] {
+        let vault = Arc::new(MemoryIdentityVault::default());
+        *vault.legacy.lock().unwrap() = Some(encoded_legacy.clone());
+        vault
+            .entries
+            .lock()
+            .unwrap()
+            .insert("account:7".into(), damaged.clone());
+        let state = identity_state(Arc::new(Database::memory().unwrap()), vault.clone());
+        assert!(state.identity("7", 0).await.is_err());
+        assert!(state.0.account.runtime.lock().await.identity.is_none());
+        assert_eq!(vault.entries.lock().unwrap()["account:7"], damaged);
+        assert_eq!(vault.legacy.lock().unwrap().as_ref(), Some(&encoded_legacy));
+        assert_eq!(*vault.calls.lock().unwrap(), ["read:account:7"]);
+    }
+}
+
+#[tokio::test]
+async fn corrupt_legacy_key_only_blocks_accounts_with_existing_candidate_room_bindings() {
+    let (old, _) = Identity::generate().unwrap();
+    for owner in [None, Some("8"), Some("7")] {
+        let vault = Arc::new(MemoryIdentityVault::default());
+        *vault.legacy.lock().unwrap() = Some("corrupt legacy entry kept unchanged".into());
+        let db = Arc::new(Database::memory().unwrap());
+        let initial = identity_state(db.clone(), vault.clone());
+        if let Some(owner) = owner {
+            save_identity_binding(&initial, &old, owner, "old-room").await;
+        }
+        let original_rooms = db.get_setting(STORE_KEY).unwrap();
+        drop(initial);
+        let state = identity_state(db.clone(), vault.clone());
+        let result = state.identity("7", 0).await;
+        assert_eq!(result.is_ok(), owner != Some("7"));
+        assert_eq!(
+            vault.entries.lock().unwrap().contains_key("account:7"),
+            owner != Some("7")
+        );
+        assert_eq!(
+            vault
+                .calls
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|call| call == "read:installation"),
+            owner == Some("7")
+        );
+        assert_eq!(
+            vault.legacy.lock().unwrap().as_deref(),
+            Some("corrupt legacy entry kept unchanged")
+        );
+        assert_eq!(db.get_setting(STORE_KEY).unwrap(), original_rooms);
+    }
+}
+
+#[derive(Default)]
 struct MemoryRoomVault(SyncMutex<BTreeMap<String, Secret>>);
 impl Vault for MemoryRoomVault {
     fn read(&self, id: &str) -> Result<Secret, String> {

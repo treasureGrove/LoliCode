@@ -42,13 +42,29 @@ class CompanionUiTest {
         val state = mutableStateOf(paired("idle").copy(transport = null))
         compose.setContent { CompanionScreen(state.value) }
         // Saved approval and account/desktop readiness cannot claim a direct route.
-        compose.onNodeWithText("等待直连").assertIsDisplayed()
-        compose.onNodeWithText("原生直连").assertDoesNotExist()
+        compose.onAllNodesWithText("在线 · 未直连").onFirst().assertIsDisplayed()
+        compose.onNodeWithText("在线 · 已直连").assertDoesNotExist()
         compose.runOnIdle { state.value = state.value.copy(transport = "direct") }
-        compose.onNodeWithText("原生直连").assertIsDisplayed()
+        compose.onAllNodesWithText("在线 · 已直连").onFirst().assertIsDisplayed()
         compose.runOnIdle { state.value = state.value.copy(transport = null, relayReady = false, connection = "直连不可用，请切换网络后重试") }
-        compose.onNodeWithText("等待直连").assertIsDisplayed()
+        compose.onAllNodesWithText("在线 · 未直连").onFirst().assertIsDisplayed()
         compose.onNodeWithText("直连不可用，请切换网络后重试").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test fun expiredOrFailedDirectoryNeverLeavesCachedDevicesGreenOrCallsThemOffline() {
+        val state = mutableStateOf(paired("idle").copy(transport = null, relayReady = false, desktopOnline = false))
+        compose.setContent { CompanionScreen(state.value, initialTab = CompanionTab.Devices) }
+        compose.onAllNodesWithText("在线 · 未直连").onFirst().assertIsDisplayed()
+        compose.runOnIdle { state.value = state.value.copy(presenceNowElapsedMs = 61_000) }
+        compose.onAllNodesWithText("状态待确认 · 未直连").onFirst().assertIsDisplayed()
+        compose.onNodeWithText("在线 · 未直连").assertDoesNotExist()
+        compose.onNodeWithText("离线 · 未直连").assertDoesNotExist()
+        compose.runOnIdle { state.value = state.value.copy(directoryFreshness = state.value.directoryFreshness.copy(valid = false)) }
+        compose.onAllNodesWithText("状态待确认 · 未直连").onFirst().assertIsDisplayed()
+        compose.onNodeWithTag("nav_workbench").performClick()
+        compose.onAllNodesWithText("状态待确认 · 未直连").onFirst().assertIsDisplayed()
+        compose.runOnIdle { state.value = state.value.copy(directoryFreshness = DirectoryFreshness("42", 61_001, true), presenceNowElapsedMs = 61_001) }
+        compose.onAllNodesWithText("在线 · 未直连").onFirst().assertIsDisplayed()
     }
 
     @Test fun loginUsesTheEnteredPasswordOnceAndDoesNotRestoreIt() {
@@ -100,8 +116,8 @@ class CompanionUiTest {
         compose.onNodeWithTag("task_composer").assert(SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("")))
     }
 
-    @Test fun approvalCannotBeSubmittedWhileComputerIsOffline() {
-        val state = mutableStateOf(paired("waiting_permission").copy(hostVerified = false))
+    @Test fun approvalNeedsActualDirectAndVerifiedHostEvenWhenDirectoryIsOnline() {
+        val state = mutableStateOf(paired("waiting_permission").copy(transport = null))
         val replies = mutableListOf<Pair<String, Boolean>>()
         compose.setContent {
             CompanionScreen(state.value, CompanionActions(replyPermission = { id, allow -> replies += id to allow }),
@@ -110,6 +126,8 @@ class CompanionUiTest {
         compose.onNodeWithTag("approval_allow_approval-1").performScrollTo().assertIsNotEnabled()
         compose.onNodeWithTag("approval_reject_approval-1").assertIsNotEnabled()
         compose.runOnIdle { assertEquals(emptyList<Pair<String, Boolean>>(), replies) }
+        compose.runOnIdle { state.value = state.value.copy(transport = "direct", hostVerified = false) }
+        compose.onNodeWithTag("approval_allow_approval-1").assertIsNotEnabled()
         compose.runOnIdle { state.value = state.value.copy(hostVerified = true) }
         compose.onNodeWithTag("approval_allow_approval-1").assertIsEnabled().performClick()
         compose.runOnIdle { assertEquals(listOf("approval-1" to true), replies) }
@@ -187,9 +205,13 @@ class CompanionUiTest {
     }
 
     private fun paired(status: String): CompanionState {
-        val computer = PairedComputer(Pairing("wss://example.invalid/companion", "0".repeat(32), "0".repeat(64), "A".repeat(43), "测试电脑", 0), "ui-test-phone", true)
+        val identity = DeviceIdentity.generate()
+        val device = AccountDevice("00000000-0000-4000-8000-000000000010", "测试电脑", "desktop", identity.publicKeySpki, identity.fingerprint, true, 1)
+        val computer = PairedComputer(Pairing("wss://example.invalid/companion", "0".repeat(32), "0".repeat(64), "A".repeat(43), "测试电脑", 0), "ui-test-phone", true, "42", device.deviceId, device.fingerprint)
         val session = Session("lc:00000000-0000-4000-8000-000000000001", "检查项目配置", "D:/ui-test-project")
         return CompanionState(
+            account = AccountProfile("42", "fixture", "界面测试账号"), discoveredComputers = listOf(device),
+            directoryFreshness = DirectoryFreshness("42", 1_000, true), presenceNowElapsedMs = 1_000,
             computers = listOf(computer), selectedRoom = computer.id,
             connection = "UI测试连接", transport = "direct", relayReady = true, desktopOnline = true, hostVerified = true,
             projects = listOf(Project(session.projectPath, "ui-test-project")), selectedProject = session.projectPath,

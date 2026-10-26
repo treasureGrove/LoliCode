@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import art.treasuregrove.lolicode.mobile.CompanionState
 import art.treasuregrove.lolicode.mobile.R
+import art.treasuregrove.lolicode.mobile.data.DevicePresence
 
 @Composable
 internal fun WorkbenchScreen(state: CompanionState, onLogin: () -> Unit, onHelp: () -> Unit, onNewTask: () -> Unit, onDevices: () -> Unit, onTasks: () -> Unit, onOpenSession: (String) -> Unit) {
@@ -53,11 +54,11 @@ internal fun WorkbenchScreen(state: CompanionState, onLogin: () -> Unit, onHelp:
             item {
                 LoliCard(onClick = onDevices) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        GlyphTile(Glyph.Devices, color = if (state.usable) LoliColors.Green else LoliColors.Rose, background = if (state.usable) LoliColors.GreenSoft else LoliColors.RoseSoft)
+                        GlyphTile(Glyph.Devices, color = if (state.selectedPresence == DevicePresence.Online) LoliColors.Green else LoliColors.Muted, background = if (state.selectedPresence == DevicePresence.Online) LoliColors.GreenSoft else LoliColors.VioletSoft)
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                             Text(state.computer?.name ?: "选择一台电脑", fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text(if (state.transport == "direct") "原生直连 · 静默后台执行" else if (state.computer?.approved == false) "请在电脑端确认授权" else "等待直连 · 点此查看设备", style = MaterialTheme.typography.bodySmall, color = LoliColors.Muted)
+                            Text(deviceStatusText(state.selectedPresence, state.transport == "direct", state.hostVerified, state.computer?.approved == true), style = MaterialTheme.typography.bodySmall, color = LoliColors.Muted)
                         }
                         AppGlyph(Glyph.Right, size = 18.dp)
                     }

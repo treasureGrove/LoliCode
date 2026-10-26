@@ -70,7 +70,7 @@ class RemoteClient(
                             val online = frame.boolean("online")
                             if (computer.accountId != null) {
                                 if (online) ensureDirect()
-                                else if (direct != null) { end("电脑已离线，直连已关闭"); return }
+                                else if (direct != null) { end("直连已断开，电脑在线状态以设备列表为准"); return }
                                 if (ended.get()) return
                             }
                             if (online && ready && !pairingConfirmed) requestPairing(deviceName)
