@@ -3,6 +3,7 @@ package art.treasuregrove.lolicode.mobile.data
 interface DirectPeer {
     fun acceptOffer(negotiationId: String, sdp: String)
     fun send(frame: String): Boolean
+    fun bufferedBytes(): Long = 0
     fun close()
 }
 

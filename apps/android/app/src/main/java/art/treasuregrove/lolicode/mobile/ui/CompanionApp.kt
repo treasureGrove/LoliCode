@@ -149,12 +149,20 @@ private fun CompanionScreenContent(
                 },
             ) { padding ->
                 Column(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding)) {
-                    if (state.busy || state.accountBusy) LinearProgressIndicator(Modifier.fillMaxWidth(), color = LoliColors.Rose, trackColor = LoliColors.RoseSoft)
+                    if (state.busy || state.accountBusy || state.modelsLoading) LinearProgressIndicator(Modifier.fillMaxWidth(), color = LoliColors.Rose, trackColor = LoliColors.RoseSoft)
                     state.error?.let { error ->
                         Surface(color = MaterialTheme.colorScheme.errorContainer, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), shape = RoundedCornerShape(14.dp)) {
                             Row(Modifier.padding(start = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Text(error, modifier = Modifier.weight(1f).padding(vertical = 10.dp), color = MaterialTheme.colorScheme.onErrorContainer, style = MaterialTheme.typography.bodySmall)
                                 IconButton(onClick = actions.clearError) { AppGlyph(Glyph.Close, description = "关闭错误提示") }
+                            }
+                        }
+                    }
+                    state.modelError?.let { error ->
+                        Surface(color = MaterialTheme.colorScheme.errorContainer, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), shape = RoundedCornerShape(14.dp)) {
+                            Column(Modifier.padding(14.dp)) {
+                                Text("模型目录加载失败：$error", color = MaterialTheme.colorScheme.onErrorContainer, style = MaterialTheme.typography.bodySmall)
+                                TextButton(onClick = actions.refresh, enabled = state.usable && !state.busy && !state.modelsLoading) { Text("重新加载模型") }
                             }
                         }
                     }
@@ -188,8 +196,9 @@ private fun NewTaskSheet(state: CompanionState, actions: CompanionActions, creat
             Text("选择电脑上的项目与模型，再写下你想完成的事。", style = MaterialTheme.typography.bodyMedium, color = LoliColors.Muted)
             LoliChoice("项目", state.projects.firstOrNull { it.path == state.selectedProject }?.name.orEmpty(), state.projects.map { it.path to it.name }, state.usable && !state.busy, actions.selectProject)
             if (state.projects.isEmpty()) Text("还没有可用项目，请先在电脑端打开项目，再刷新。", color = LoliColors.Muted, style = MaterialTheme.typography.bodySmall)
-            LoliChoice("模型", state.models.firstOrNull { it.id == state.selectedModel }?.name.orEmpty(), state.models.map { it.id to it.name }, state.usable && !state.busy, actions.selectModel)
-            Button(onClick = onCreate, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp).testTag("create_session"), enabled = state.usable && !state.busy && !creating && state.selectedProject.isNotBlank() && state.selectedModel.isNotBlank(), shape = RoundedCornerShape(16.dp)) {
+            if (state.modelsLoading) Text("正在同步完整模型目录…", color = LoliColors.Muted, style = MaterialTheme.typography.bodySmall)
+            LoliChoice("模型", state.models.firstOrNull { it.id == state.selectedModel }?.name.orEmpty(), state.models.map { it.id to it.name }, state.usable && !state.busy && !state.modelsLoading && state.modelError == null, actions.selectModel)
+            Button(onClick = onCreate, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp).testTag("create_session"), enabled = state.usable && !state.busy && !creating && !state.modelsLoading && state.modelError == null && state.selectedProject.isNotBlank() && state.selectedModel.isNotBlank(), shape = RoundedCornerShape(16.dp)) {
                 if (creating) { CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp); Spacer(Modifier.width(10.dp)) }
                 Text(if (creating) "正在创建…" else "创建任务会话")
             }

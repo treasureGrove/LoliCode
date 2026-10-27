@@ -260,10 +260,10 @@ internal fun TaskComposer(state: CompanionState, snapshot: SessionSnapshot?, act
     val running = snapshot?.status in setOf("running", "waiting_permission", "waiting_question")
     Surface(color = Color.White.copy(alpha = 0.98f), shadowElevation = 3.dp) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (running) Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            if (running || state.sendingMessage) Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(5.dp).background(statusColor(snapshot?.status), CircleShape)); Spacer(Modifier.width(6.dp))
-                Text(if (snapshot?.status == "running") "电脑正在处理这项任务" else "先处理上方待办，再继续对话", color = LoliColors.Muted, style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
-                TextButton(onClick = actions.cancel, enabled = state.usable && !state.busy, contentPadding = PaddingValues(horizontal = 10.dp)) { Text("停止任务", style = MaterialTheme.typography.labelMedium) }
+                Text(when { state.sendingMessage -> "正在发送或确认任务"; snapshot?.status == "running" -> "电脑正在处理这项任务"; else -> "先处理上方待办，再继续对话" }, color = LoliColors.Muted, style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
+                TextButton(onClick = actions.cancel, enabled = state.usable && !state.controlBusy, contentPadding = PaddingValues(horizontal = 10.dp)) { Text("停止任务", style = MaterialTheme.typography.labelMedium) }
             }
             Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
                 OutlinedTextField(draft, { draft = it }, modifier = Modifier.weight(1f).testTag("task_composer"), placeholder = { Text("告诉电脑，接下来做什么…", style = MaterialTheme.typography.bodyMedium) },
@@ -272,6 +272,7 @@ internal fun TaskComposer(state: CompanionState, snapshot: SessionSnapshot?, act
                 FilledIconButton(onClick = { actions.sendMessage(draft) { draft = "" } }, enabled = state.usable && !state.busy && state.selectedSession == sessionId && draft.isNotBlank() && !running && snapshot != null,
                     modifier = Modifier.size(52.dp).testTag("send_task"), shape = RoundedCornerShape(17.dp)) { AppGlyph(Glyph.Send, tint = if (state.usable && !running && draft.isNotBlank()) Color.White else LoliColors.Muted, description = "发送任务") }
             }
+            Text("消息连同请求信息最多 1 MiB。", color = LoliColors.Muted, style = MaterialTheme.typography.labelSmall)
         }
     }
 }

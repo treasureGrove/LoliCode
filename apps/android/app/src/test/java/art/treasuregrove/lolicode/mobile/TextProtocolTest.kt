@@ -41,7 +41,8 @@ class TextProtocolTest {
         validateTextRequest("permission.reply", buildJsonObject { put("decision", "reject") })
         assertThrows(Exception::class.java) { validateTextRequest("permission.reply", buildJsonObject { put("decision", "once") }) }
         assertThrows(Exception::class.java) { validateTextRequest("file.read", buildJsonObject {}) }
-        assertThrows(Exception::class.java) { validateTextRequest("message.send", buildJsonObject { put("text", "中".repeat(1500)) }) }
+        validateTextRequest("message.send", buildJsonObject { put("text", "中".repeat(1500)) })
+        assertThrows(Exception::class.java) { validateTextRequest("message.send", buildJsonObject { put("text", "a".repeat(LogicalJson.MAX_BYTES)) }) }
         listOf("""{"text":"data:image/png;base64,AAAA"}""", """{"answers":{"x":{"type":"image_url","url":"https://example.invalid/a.png"}}}""", """{"answers":{"x":{"base64":"AAAA"}}}""").forEach { raw ->
             assertThrows(Exception::class.java) { validateTextValue(wireJson.parseToJsonElement(raw)) }
         }

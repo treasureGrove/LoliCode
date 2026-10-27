@@ -29,6 +29,13 @@ fun applyDirectoryResponse(value: JsonElement, previous: SessionDirectory?, know
     return SessionDirectory.parse(value)
 }
 
+/** Both direct and restricted text transports use the same page/cursor contract. */
+fun snapshotPageRequest(sessionId: String, previous: SessionSnapshot?, cursor: Pair<String, String>?): JsonObject = buildJsonObject {
+    put("sessionId", sessionId); put("limit", 6)
+    cursor?.takeIf { it.first == sessionId && previous?.session?.id == sessionId && previous.revision == it.second }
+        ?.second?.let { put("knownRevision", it) }
+}
+
 fun firstDirectoryRows(directory: SessionDirectory, cached: List<Session>, selected: String?): List<Session> =
     directory.sessions + if (directory.nextOffset != null) cached.filter { row -> row.id == selected && directory.sessions.none { it.id == row.id } } else emptyList()
 

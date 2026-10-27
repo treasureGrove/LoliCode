@@ -3,8 +3,10 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 
-pub(super) const MAX_RESULT_BYTES: usize = 4_000;
-pub(super) const MAX_REQUEST_PARAMS_BYTES: usize = 4_096;
+pub(super) const MAX_RESULT_BYTES: usize = 1_048_576;
+pub(super) const MAX_PAGE_BYTES: usize = 4_000;
+pub(super) const MAX_DIRECT_RESULT_BYTES: usize = 27 * 1024;
+pub(super) const MAX_REQUEST_PARAMS_BYTES: usize = 1_048_576;
 const RESULT_RESERVE: usize = 80; // SHA-256 revision plus its JSON key and quotes.
 const DIRECT: &str = "内容超过文本中继范围，请直连查看完整内容；未执行任何审批";
 const NOTICE: &str = "文本模式仅显示文字和有限历史；工具详情、媒体和差异请直连查看。";
@@ -147,12 +149,12 @@ fn label(value: &Value, key: &str, max: usize) -> String {
 
 pub(super) fn validate_request(method: &str, params: &Value) -> Result<(), String> {
     if size(params)? > MAX_REQUEST_PARAMS_BYTES {
-        return Err("文本请求超过 4096 字节，请缩短输入或使用直连".into());
+        return Err("请求参数超过 1 MiB UTF-8 上限，请缩短输入".into());
     }
     let allowed: &[&str] = match method {
         "status" | "projects.list" => &[],
         "sessions.list" => &["offset", "limit", "knownRevision"],
-        "models.list" => &["projectPath"],
+        "models.list" => &["projectPath", "offset", "limit", "knownRevision"],
         "session.create" => &["projectPath", "modelId", "title"],
         "session.get" => &["sessionId", "knownRevision", "offset", "limit"],
         "session.attach" => &["sessionId"],
@@ -186,7 +188,7 @@ pub(super) fn validate_request(method: &str, params: &Value) -> Result<(), Strin
                 return Err("文本消息不能为空".into());
             }
         }
-        "session.get" | "sessions.list" | "message.get" => {
+        "session.get" | "sessions.list" | "message.get" | "models.list" => {
             if let Some(value) = params.get("knownRevision") {
                 let revision = value.as_str().ok_or("修订编号无效")?;
                 if revision.len() != 64
@@ -332,7 +334,7 @@ pub(super) fn session_directory(params: &Value, value: Value) -> Result<Value, S
         let mut candidate = selected.clone();
         candidate.push(item.clone());
         let overhead = json!({"sessions":candidate,"offset":offset,"nextOffset":offset+candidate.len(),"hasMore":true,"total":sessions.len(),"directoryRevision":generation});
-        if size(&overhead)? > MAX_RESULT_BYTES - RESULT_RESERVE {
+        if size(&overhead)? > MAX_PAGE_BYTES - RESULT_RESERVE {
             break;
         }
         selected = candidate;
@@ -348,6 +350,78 @@ pub(super) fn session_directory(params: &Value, value: Value) -> Result<Value, S
         return Ok(json!({"notModified":true,"revision":page_revision}));
     }
     result["revision"] = json!(page_revision);
+    Ok(result)
+}
+
+/// All models remain addressable; the transport budget only determines page
+/// length. Both the complete safe catalog and page scope have stable revisions.
+pub(super) fn model_directory(params: &Value, value: &Value) -> Result<Value, String> {
+    validate_request("models.list", params)?;
+    let project = exact(params, "projectPath", 2048)?;
+    let source = value["models"]
+        .as_array()
+        .filter(|models| models.len() <= 20_000)
+        .ok_or("模型目录格式无效或超过手机目录限制")?;
+    let mut seen = std::collections::BTreeSet::new();
+    let models = source
+        .iter()
+        .map(|model| {
+            let id = exact(model, "id", 512)?;
+            if !seen.insert(id.clone()) {
+                return Err("模型目录包含重复编号，请刷新电脑目录".into());
+            }
+            Ok(json!({"id":id,"name":label(model,"name",160)}))
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+    let catalog_revision = revision(&json!({"projectPath":project,"models":models}))?;
+    let full = !["offset", "limit", "knownRevision"]
+        .iter()
+        .any(|key| params.get(*key).is_some());
+    if full {
+        let mut result = json!({"models":models,"offset":0,"nextOffset":null,"hasMore":false,"total":models.len(),"catalogRevision":catalog_revision});
+        let full_revision =
+            revision(&json!({"projectPath":project,"scope":"complete","catalog":result}))?;
+        result["revision"] = json!(full_revision);
+        if size(&result)? > MAX_RESULT_BYTES {
+            return Err("完整模型目录超过 1 MiB UTF-8 上限，请使用分页读取".into());
+        }
+        return Ok(result);
+    }
+    let offset = params["offset"].as_u64().unwrap_or(0) as usize;
+    let limit = params["limit"].as_u64().unwrap_or(6) as usize;
+    if offset > models.len() {
+        return Err("模型分页位置已失效，请从第一页刷新".into());
+    }
+    let page = |selected: &Vec<Value>| {
+        let next = offset + selected.len();
+        let more = next < models.len();
+        json!({"models":selected,"offset":offset,"nextOffset":if more {json!(next)}else{Value::Null},
+            "hasMore":more,"total":models.len(),"catalogRevision":catalog_revision})
+    };
+    let mut selected = Vec::new();
+    for model in models.iter().skip(offset).take(limit) {
+        let mut candidate = selected.clone();
+        candidate.push(model.clone());
+        if size(&page(&candidate))? > MAX_PAGE_BYTES - RESULT_RESERVE {
+            break;
+        }
+        selected = candidate;
+    }
+    if offset < models.len() && selected.is_empty() {
+        return Err("单条模型元数据超过手机页预算，请在电脑端缩短模型名称或编号".into());
+    }
+    let mut result = page(&selected);
+    // Bind the requested limit too: the final short page may otherwise have
+    // identical visible rows for two different request scopes.
+    let page_revision =
+        revision(&json!({"projectPath":project,"offset":offset,"limit":limit,"page":result}))?;
+    if params["knownRevision"].as_str() == Some(page_revision.as_str()) {
+        return Ok(json!({"notModified":true,"revision":page_revision}));
+    }
+    result["revision"] = json!(page_revision);
+    if size(&result)? > MAX_PAGE_BYTES {
+        return Err("模型目录页超过文本预算".into());
+    }
     Ok(result)
 }
 
@@ -382,7 +456,7 @@ pub(super) fn message_page(params: &Value, snapshot: &Value) -> Result<Value, St
     loop {
         let more = end < text.len();
         let result = json!({"sessionId":params["sessionId"],"messageId":id,"text":&text[offset..end],"offset":offset,"nextOffset":if more{json!(end)}else{Value::Null},"hasMore":more,"total":text.len(),"revision":message_revision});
-        if size(&result)? <= MAX_RESULT_BYTES {
+        if size(&result)? <= MAX_PAGE_BYTES {
             return Ok(result);
         }
         if end <= offset {
@@ -409,6 +483,64 @@ fn canonical(value: &Value) -> Value {
 }
 
 fn snapshot(params: &Value, value: &Value) -> Result<Value, String> {
+    snapshot_page(params, value, true)
+}
+
+/// Direct clients opt into the same stable pagination and message text protocol,
+/// while retaining exact pending approval inputs in the larger native budget.
+pub(super) fn direct_snapshot_page(params: &Value, snapshot: &Value) -> Result<Value, String> {
+    validate_request("session.get", params)?;
+    snapshot_page(params, snapshot, false)
+}
+
+fn direct_pending(value: &Value, key: &str) -> Result<Vec<Value>, String> {
+    let items = value[key].as_array().ok_or("直连待处理信息格式无效")?;
+    if size(&value[key])? > MAX_DIRECT_RESULT_BYTES || items.len() > 1024 {
+        return Err(
+            "待审批或提问信息超过直连页预算，请在电脑端处理；未省略或执行任何待处理项".into(),
+        );
+    }
+    items
+        .iter()
+        .map(|item| {
+            exact(item, "id", 128)?;
+            exact(item, "sessionId", 128)?;
+            let mut item = item.clone();
+            if key == "permissions" {
+                // Missing historical input must never be represented as reviewable.
+                item["canApprove"] =
+                    json!(item.get("toolInput").is_some_and(|input| !input.is_null()));
+                item["requiresDirect"] = json!(false);
+            }
+            Ok(item)
+        })
+        .collect()
+}
+
+fn direct_diffs(value: &Value) -> Result<(Vec<Value>, bool), String> {
+    let original = value["diffs"].as_array().ok_or("直连差异格式无效")?;
+    let mut selected = Vec::new();
+    for item in original {
+        if selected.len() >= 16 || size(item)? > 8192 {
+            break;
+        }
+        let mut candidate = selected.clone();
+        candidate.push(item.clone());
+        if size(&json!(candidate))? > 8192 {
+            break;
+        }
+        selected = candidate;
+    }
+    let truncated = selected.len() < original.len();
+    Ok((selected, truncated))
+}
+
+fn snapshot_page(params: &Value, value: &Value, text_only: bool) -> Result<Value, String> {
+    let budget = if text_only {
+        MAX_PAGE_BYTES
+    } else {
+        MAX_DIRECT_RESULT_BYTES
+    };
     let status = value["status"]
         .as_str()
         .filter(|s| {
@@ -447,11 +579,29 @@ fn snapshot(params: &Value, value: &Value) -> Result<Value, String> {
     }
     selected.reverse();
     let minimum = selected.len().min(2);
+    let permissions = if text_only {
+        pending(value, "permissions")?
+    } else {
+        direct_pending(value, "permissions")?
+    };
+    let questions = if text_only {
+        pending(value, "questions")?
+    } else {
+        direct_pending(value, "questions")?
+    };
+    let (diffs, diffs_truncated) = if text_only {
+        (vec![], false)
+    } else {
+        direct_diffs(value)?
+    };
     let mut result = json!({"session":session(&value["session"])?,"status":status,"messages":selected,
-        "permissions":pending(value,"permissions")?,"questions":pending(value,"questions")?,"diffs":[],
+        "permissions":permissions,"questions":questions,"diffs":diffs,
         "error":if value["error"].as_str().is_some_and(|s|!s.is_empty()) {"会话发生错误，请直连查看完整详情"} else {""},
-        "truncated":true,"truncationMessage":NOTICE,"historyOffset":offset,"historyTotal":eligible.len(),
+        "truncated":true,"truncationMessage":if text_only {NOTICE}else{"手机按页显示文字预览；可继续加载历史和长消息。"},"historyOffset":offset,"historyTotal":eligible.len(),
         "historyRevision":revision(&json!(eligible.iter().map(|m|m["id"].clone()).collect::<Vec<_>>()))?});
+    if !text_only {
+        result["diffsTruncated"] = json!(diffs_truncated);
+    }
     loop {
         let count = result["messages"].as_array().map_or(0, Vec::len);
         result["hasMore"] = json!(offset.saturating_add(count) < eligible.len());
@@ -460,7 +610,7 @@ fn snapshot(params: &Value, value: &Value) -> Result<Value, String> {
         } else {
             Value::Null
         };
-        if size(&result)? <= MAX_RESULT_BYTES - RESULT_RESERVE {
+        if size(&result)? <= budget - RESULT_RESERVE {
             break;
         }
         let messages = result["messages"].as_array_mut().ok_or(DIRECT)?;
@@ -476,10 +626,20 @@ fn snapshot(params: &Value, value: &Value) -> Result<Value, String> {
             messages[index]["textTruncated"] = json!(true);
         } else if messages.len() > minimum {
             messages.remove(0);
+        } else if !text_only
+            && result["diffs"]
+                .as_array()
+                .is_some_and(|diffs| !diffs.is_empty())
+        {
+            result["diffs"].as_array_mut().ok_or(DIRECT)?.pop();
+            result["diffsTruncated"] = json!(true);
         } else {
-            return Err(
-                "审批、提问或会话元数据超出文本预算，请直连查看；待处理项未被省略或处理".into(),
-            );
+            return Err(if text_only {
+                "审批、提问或会话元数据超出文本预算，请直连查看；待处理项未被省略或处理"
+            } else {
+                "审批、提问或会话元数据超出直连页预算，请在电脑端处理；待处理项未被省略或执行"
+            }
+            .into());
         }
     }
     let bytes = serde_json::to_vec(&canonical(&result)).map_err(|_| DIRECT)?;
@@ -509,13 +669,7 @@ pub(super) fn project(method: &str, params: &Value, result: Value) -> Result<Val
             )
         }
         "sessions.list" => session_directory(params, result)?,
-        "models.list" => {
-            let models = result["models"]
-                .as_array()
-                .filter(|a| a.len() <= 128)
-                .ok_or(DIRECT)?;
-            json!({"models":models.iter().map(|m|Ok(json!({"id":exact(m,"id",512)?,"name":label(m,"name",160)}))).collect::<Result<Vec<_>,String>>()?})
-        }
+        "models.list" => model_directory(params, &result)?,
         "session.create" | "session.attach" => session(&result)?,
         "session.get" => snapshot(params, &result)?,
         "message.get" => message_page(params, &result)?,
@@ -774,7 +928,7 @@ mod tests {
         .is_err());
         assert!(validate_request(
             "message.send",
-            &json!({"sessionId":"s","text":"汉".repeat(1400)})
+            &json!({"sessionId":"s","text":"汉".repeat(MAX_REQUEST_PARAMS_BYTES/3+1)})
         )
         .is_err());
         assert!(validate_request(
@@ -806,7 +960,10 @@ mod tests {
             json!({"models":[{"id":"m","name":"模型","apiKey":"secret"}],"config":"secret"}),
         )
         .unwrap();
-        assert_eq!(model, json!({"models":[{"id":"m","name":"模型"}]}));
+        assert_eq!(model["models"], json!([{"id":"m","name":"模型"}]));
+        assert_eq!(model["total"], 1);
+        assert_eq!(model["hasMore"], false);
+        assert!(!model.to_string().contains("secret"));
         assert_eq!(
             project(
                 "message.send",
@@ -819,7 +976,14 @@ mod tests {
         let projects = json!((0..64)
             .map(|i| json!({"path":format!("D:/{}", "路径".repeat(100)),"name":format!("p{i}")}))
             .collect::<Vec<_>>());
-        assert!(project("projects.list", &json!({}), projects).is_err());
+        assert_eq!(
+            project("projects.list", &json!({}), projects)
+                .unwrap()
+                .as_array()
+                .unwrap()
+                .len(),
+            64
+        );
     }
     #[test]
     fn old_direct_receipt_is_reprojected_without_forwarding_its_blob() {
@@ -867,5 +1031,265 @@ mod tests {
             &json!({"ok":true,"result":{"output":"SECRET_OUTPUT"}})
         )
         .is_err());
+    }
+
+    #[test]
+    fn direct_history_pages_cover_all_messages_and_keep_page_scoped_revisions() {
+        let mut source = fixture();
+        source["messages"]=json!((0..14).map(|i|json!({"id":format!("m{i:02}"),"role":if i%2==0{"user"}else{"assistant"},"parts":[{"type":"text","text":format!("中文历史第{i}条") }]})).collect::<Vec<_>>());
+        let mut ids = std::collections::BTreeSet::new();
+        let mut offset = 0;
+        let mut generation = None;
+        loop {
+            let params = json!({"sessionId":"lc:test","offset":offset,"limit":6});
+            let page = direct_snapshot_page(&params, &source).unwrap();
+            assert!(size(&page).unwrap() <= MAX_DIRECT_RESULT_BYTES);
+            assert_eq!(page["historyTotal"], 14);
+            if let Some(previous) = &generation {
+                assert_eq!(&page["historyRevision"], previous);
+            } else {
+                generation = Some(page["historyRevision"].clone());
+            }
+            for message in page["messages"].as_array().unwrap() {
+                assert!(ids.insert(message["id"].as_str().unwrap().to_owned()));
+            }
+            let acknowledged=direct_snapshot_page(&json!({"sessionId":"lc:test","offset":offset,"limit":6,"knownRevision":page["revision"]}),&source).unwrap();
+            assert_eq!(
+                acknowledged,
+                json!({"notModified":true,"revision":page["revision"]})
+            );
+            if page["hasMore"] != true {
+                break;
+            }
+            offset = page["nextOffset"].as_u64().unwrap();
+        }
+        assert_eq!(ids, (0..14).map(|i| format!("m{i:02}")).collect());
+        assert!(direct_snapshot_page(&json!({"sessionId":"lc:test","limit":0}), &source).is_err());
+    }
+
+    #[test]
+    fn direct_approval_keeps_exact_input_and_questions_while_text_stays_reject_only() {
+        let mut source = fixture();
+        let input = json!({"command":"printf 'review' && echo next | cat > report.txt","content":"准确输入".repeat(700),"nested":{"file":"exact.txt"}});
+        source["permissions"] = json!([{"id":"permission","sessionId":"lc:test","action":"write","resources":["report.txt"],"description":"检查完整输入","toolName":"write_file","toolInput":input,"approvalMode":"user-once"}]);
+        source["questions"] = json!([{"id":"question","sessionId":"lc:test","title":"问题","fields":[{"key":"choice","type":"select","options":[{"value":"yes","label":"保留"}],"default":"yes","when":{"key":"mode","equals":"review"}}]}]);
+        let direct =
+            direct_snapshot_page(&json!({"sessionId":"lc:test","limit":6}), &source).unwrap();
+        assert!(size(&direct).unwrap() > MAX_PAGE_BYTES);
+        assert_eq!(direct["permissions"][0]["toolInput"], input);
+        assert_eq!(direct["permissions"][0]["approvalMode"], "user-once");
+        assert_eq!(direct["permissions"][0]["canApprove"], true);
+        assert_eq!(direct["questions"], source["questions"]);
+        let text = project(
+            "session.get",
+            &json!({"sessionId":"lc:test","limit":6}),
+            source,
+        )
+        .unwrap();
+        assert!(text["permissions"][0].get("toolInput").is_none());
+        assert_eq!(text["permissions"][0]["canApprove"], false);
+        assert!(validate_request(
+            "permission.reply",
+            &json!({"sessionId":"lc:test","permissionId":"permission","decision":"once"})
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn direct_page_never_drops_pending_items_to_fit_and_marks_omitted_diffs() {
+        let mut source = fixture();
+        source["permissions"] = json!([{"id":"p","sessionId":"lc:test","toolInput":{"content":"超大输入".repeat(5000)}}]);
+        assert!(
+            direct_snapshot_page(&json!({"sessionId":"lc:test"}), &source)
+                .unwrap_err()
+                .contains("未省略")
+        );
+        source["permissions"] = json!([]);
+        source["questions"] =
+            json!([{"id":"q","sessionId":"lc:test","fields":[{"title":"保留问题".repeat(5000)}]}]);
+        assert!(direct_snapshot_page(&json!({"sessionId":"lc:test"}), &source).is_err());
+        source["questions"] = json!([{"id":"q","sessionId":"lc:test","fields":[]}]);
+        source["diffs"] = json!([{"path":"large.txt","patch":"大差异".repeat(2000)}]);
+        let page = direct_snapshot_page(&json!({"sessionId":"lc:test"}), &source).unwrap();
+        assert_eq!(page["questions"], source["questions"]);
+        assert_eq!(page["diffsTruncated"], true);
+        assert_eq!(page["diffs"], json!([]));
+    }
+
+    fn large_model_fixture() -> Value {
+        json!({"models":(0..45).map(|i|json!({
+            "id":format!("lolicode/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/provider-model-{i:02}"),
+            "name":format!("公开渠道 · 自有工具模型 {i:02}"),"apiKey":"NEVER_COPY_MODEL_SECRET"
+        })).collect::<Vec<_>>(),"config":"NEVER_COPY_CATALOG_SECRET"})
+    }
+
+    #[test]
+    fn real_sized_45_model_directory_reconstructs_without_loss_or_oversized_frames() {
+        let source = large_model_fixture();
+        let expected = source["models"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|m| json!({"id":m["id"],"name":m["name"]}))
+            .collect::<Vec<_>>();
+        assert!(size(&json!({"models":expected})).unwrap() > 5000);
+        let mut all = Vec::new();
+        let mut offset = 0;
+        let mut generation = None;
+        let mut pages = 0;
+        loop {
+            let params = json!({"projectPath":"D:/registered","offset":offset,"limit":6});
+            let page = project("models.list", &params, source.clone()).unwrap();
+            assert!(size(&page).unwrap() <= MAX_RESULT_BYTES);
+            assert_eq!(page["offset"], offset);
+            assert_eq!(page["total"], 45);
+            assert!(size(&page).unwrap() <= MAX_PAGE_BYTES);
+            assert!(!page.to_string().contains("SECRET"));
+            if let Some(previous) = &generation {
+                assert_eq!(&page["catalogRevision"], previous);
+            } else {
+                generation = Some(page["catalogRevision"].clone());
+            }
+            all.extend(page["models"].as_array().unwrap().iter().cloned());
+            pages += 1;
+            if page["hasMore"] != true {
+                assert!(page["nextOffset"].is_null());
+                break;
+            }
+            let next = page["nextOffset"].as_u64().unwrap();
+            assert!(next > offset);
+            offset = next;
+        }
+        assert_eq!(pages, 8);
+        assert_eq!(all.len(), 45);
+        assert_eq!(
+            revision(&json!(all)).unwrap(),
+            revision(&json!(expected)).unwrap()
+        );
+        let legacy = project(
+            "models.list",
+            &json!({"projectPath":"D:/registered"}),
+            source,
+        )
+        .unwrap();
+        assert_eq!(legacy["models"].as_array().unwrap().len(), 45);
+        assert_eq!(legacy["hasMore"], false);
+        assert!(size(&legacy).unwrap() > MAX_PAGE_BYTES);
+        assert!(size(&legacy).unwrap() <= MAX_RESULT_BYTES);
+        assert_eq!(
+            revision(&legacy["models"]).unwrap(),
+            revision(&json!(expected)).unwrap()
+        );
+    }
+
+    #[test]
+    fn model_revisions_bind_project_limit_and_complete_safe_catalog_generation() {
+        let source = large_model_fixture();
+        let params = json!({"projectPath":"D:/a","offset":42,"limit":6});
+        let first = model_directory(&params, &source).unwrap();
+        let ack = model_directory(
+            &json!({"projectPath":"D:/a","offset":42,"limit":6,"knownRevision":first["revision"]}),
+            &source,
+        )
+        .unwrap();
+        assert_eq!(
+            ack,
+            json!({"notModified":true,"revision":first["revision"]})
+        );
+        let other_limit = model_directory(
+            &json!({"projectPath":"D:/a","offset":42,"limit":12,"knownRevision":first["revision"]}),
+            &source,
+        )
+        .unwrap();
+        assert_ne!(other_limit["revision"], first["revision"]);
+        assert_eq!(other_limit["models"], first["models"]);
+        let other_project = model_directory(
+            &json!({"projectPath":"D:/b","offset":42,"limit":6,"knownRevision":first["revision"]}),
+            &source,
+        )
+        .unwrap();
+        assert_ne!(other_project["catalogRevision"], first["catalogRevision"]);
+        let mut changed = source.clone();
+        changed["models"][0]["name"] = json!("另一页的模型更新");
+        let new_catalog = model_directory(&params, &changed).unwrap();
+        assert_ne!(new_catalog["catalogRevision"], first["catalogRevision"]);
+        assert_ne!(new_catalog["revision"], first["revision"]);
+        changed = source;
+        changed["models"][0]["apiKey"] = json!("HIDDEN_CHANGED");
+        assert_eq!(model_directory(&params, &changed).unwrap(), first);
+    }
+
+    #[test]
+    fn model_page_budget_counts_chinese_and_json_escaping_and_always_advances() {
+        let source = json!({"models":(0..12).map(|i|json!({"id":format!("model-{i:02}:{}","\\\"".repeat(150)),"name":"汉字\"\\\n".repeat(45)})).collect::<Vec<_>>()});
+        let first = model_directory(&json!({"projectPath":"D:/中文","limit":12}), &source).unwrap();
+        assert!(first["models"].as_array().unwrap().len() < 12);
+        let mut ids = std::collections::BTreeSet::new();
+        let mut offset = 0;
+        loop {
+            let page = model_directory(
+                &json!({"projectPath":"D:/中文","offset":offset,"limit":12}),
+                &source,
+            )
+            .unwrap();
+            assert!(size(&page).unwrap() <= MAX_RESULT_BYTES);
+            for m in page["models"].as_array().unwrap() {
+                assert!(ids.insert(m["id"].as_str().unwrap().to_owned()));
+            }
+            assert!(size(&page).unwrap() <= MAX_PAGE_BYTES);
+            if page["hasMore"] != true {
+                break;
+            }
+            let next = page["nextOffset"].as_u64().unwrap();
+            assert!(next > offset);
+            offset = next;
+        }
+        assert_eq!(ids.len(), 12);
+    }
+
+    #[test]
+    fn model_page_validation_requires_project_and_rejects_invalid_cursors_and_duplicates() {
+        for params in [
+            json!({}),
+            json!({"projectPath":""}),
+            json!({"projectPath":"D:/p","offset":-1}),
+            json!({"projectPath":"D:/p","offset":100001}),
+            json!({"projectPath":"D:/p","limit":0}),
+            json!({"projectPath":"D:/p","limit":13}),
+            json!({"projectPath":"D:/p","knownRevision":"A".repeat(64)}),
+            json!({"projectPath":"D:/p","attachments":[]}),
+        ] {
+            assert!(validate_request("models.list", &params).is_err());
+        }
+        assert!(model_directory(
+            &json!({"projectPath":"D:/p","offset":46}),
+            &large_model_fixture()
+        )
+        .is_err());
+        assert!(model_directory(
+            &json!({"projectPath":"D:/p"}),
+            &json!({"models":[{"id":"same","name":"a"},{"id":"same","name":"b"}]})
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn logical_parameter_budget_accepts_one_mib_but_rejects_the_next_utf8_byte() {
+        let empty = json!({"sessionId":"s","text":""});
+        let remaining = MAX_REQUEST_PARAMS_BYTES - size(&empty).unwrap();
+        let text = format!(
+            "{}{}",
+            "汉".repeat(remaining / 3),
+            "x".repeat(remaining % 3)
+        );
+        let exact = json!({"sessionId":"s","text":text});
+        assert_eq!(size(&exact).unwrap(), MAX_REQUEST_PARAMS_BYTES);
+        assert!(validate_request("message.send", &exact).is_ok());
+        let mut over = exact;
+        let mut text = over["text"].as_str().unwrap().to_owned();
+        text.push('x');
+        over["text"] = json!(text);
+        assert_eq!(size(&over).unwrap(), MAX_REQUEST_PARAMS_BYTES + 1);
+        assert!(validate_request("message.send", &over).is_err());
     }
 }

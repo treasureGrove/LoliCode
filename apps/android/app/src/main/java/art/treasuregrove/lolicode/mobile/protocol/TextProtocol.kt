@@ -18,7 +18,7 @@ class TextCipher(
     init { require(validEpoch(epoch)); require(role == "phone" || role == "desktop") }
 
     fun seal(message: JsonObject): String {
-        validateTextValue(message)
+        validateTextFrame(message)
         val bytes = message.toString().toByteArray(UTF_8)
         require(bytes.size <= MAX_PLAINTEXT) { "受限文本消息过大，请缩短输入或使用直连" }
         val id = UUID.randomUUID().toString()
@@ -57,7 +57,7 @@ class TextCipher(
         val sent = message.long("sentAt")
         require((message["sentAt"] as? JsonPrimitive)?.isString == false && sent >= 0)
         require(sent >= now - 300_000 && sent <= now + 300_000) { "文本消息过期，请检查设备时间" }
-        validateTextValue(message)
+        validateTextFrame(message)
         seen[id] = now
         return message
     }
@@ -75,10 +75,15 @@ class TextCipher(
 private val mediaKeys = setOf("base64", "image", "images", "image_url", "imageurl", "attachment", "attachments", "binary", "blob", "audio", "video")
 private val mediaTypes = setOf("image", "image_url", "input_image", "file", "input_file", "audio", "video", "attachment", "binary")
 
+fun validateTextFrame(message: JsonObject) {
+    if (message.string("type") in setOf("logical.part", "logical.cancel")) LogicalJson.validateEnvelope(message)
+    else validateTextValue(message)
+}
+
 fun validateTextValue(value: JsonElement) {
     var nodes = 0
     fun visit(item: JsonElement, depth: Int) {
-        require(depth <= 20 && ++nodes <= 2048) { "文本结构过于复杂" }
+        require(depth <= 20 && ++nodes <= LogicalJson.MAX_BYTES) { "文本结构过于复杂" }
         when (item) {
             is JsonObject -> item.forEach { (key, child) ->
                 require(key.lowercase() !in mediaKeys) { "受限文本模式不传输图片或附件" }
@@ -94,7 +99,7 @@ fun validateTextValue(value: JsonElement) {
 
 fun validateTextRequest(method: String, params: JsonObject) {
     require(method in setOf("status", "projects.list", "models.list", "sessions.list", "session.create", "session.attach", "session.get", "message.get", "message.send", "run.cancel", "permission.reply", "question.reply")) { "此操作不支持受限文本模式" }
-    require(params.toString().toByteArray(UTF_8).size <= 4096) { "受限文本参数过大，请缩短输入或使用直连" }
+    require(params.toString().toByteArray(UTF_8).size <= LogicalJson.MAX_BYTES) { "受限文本参数过大，请缩短输入或使用直连" }
     validateTextValue(params)
     if (method == "permission.reply") require(params.string("decision") == "reject") { "请直连查看完整操作后批准；文本模式仍可拒绝" }
 }

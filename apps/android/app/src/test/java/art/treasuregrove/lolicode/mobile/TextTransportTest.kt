@@ -114,6 +114,86 @@ class TextTransportTest {
         }
     }
 
+    @Test fun logicalReplyIsAtomicAndTicketRefreshKeepsItsEpochAndPendingAssembly() = Harness().use { h ->
+        h.start(); h.textHandshake(); h.approve(logical = true)
+        runBlocking {
+            val waiting = async(Dispatchers.Default) { h.client.request("session.get", buildJsonObject { put("sessionId", "s1") }) }
+            val request = h.readPhone()
+            val text = syntheticText(24_000)
+            val response = buildJsonObject { put("type", "response"); put("requestId", request.string("requestId")); put("ok", true); put("sentAt", System.currentTimeMillis()); put("result", buildJsonObject { put("text", text) }) }
+            val encoded = LogicalJson.encode(response)
+            assertTrue(encoded.frames.size > 2)
+            h.sendPart(encoded.frames.first())
+            delay(100); assertFalse(waiting.isCompleted)
+            val expiry = System.currentTimeMillis() + 900_000
+            val refresh = async(Dispatchers.Default) { h.client.requestAuthRefresh("q".repeat(40), expiry) }
+            val raw = h.wire.poll(5, TimeUnit.SECONDS) ?: error("missing auth refresh")
+            assertEquals("auth.refresh", raw.string("type"))
+            h.socket.send(buildJsonObject { put("type", "auth.renewed"); put("v", 1); put("requestId", raw.string("requestId")); put("expiresAt", expiry) }.toString())
+            assertEquals(expiry, withTimeout(3000) { refresh.await() })
+            assertFalse(waiting.isCompleted)
+            encoded.frames.drop(1).forEach(h::sendPart)
+            assertEquals(text, withTimeout(5000) { waiting.await() }.jsonObject.string("text"))
+        }
+    }
+
+    @Test fun stopCancelsAMultiPartUploadWithoutSendingItsRemainderOrReplayingMutation() = Harness().use { h ->
+        h.start(); h.textHandshake(); h.approve(logical = true)
+        runBlocking {
+            val uploading = async(Dispatchers.Default) { runCatching { h.client.request("message.send", buildJsonObject { put("sessionId", "s1"); put("text", syntheticText(60_000)) }) } }
+            val first = h.readPhone(); assertEquals("logical.part", first.string("type")); assertTrue(first.long("total") > 2)
+            val stopping = async(Dispatchers.Default) { h.client.request("run.cancel", buildJsonObject { put("sessionId", "s1") }) }
+            var cancel: JsonObject? = null; var transferCancelled = false
+            repeat(2) {
+                val next = h.readPhone()
+                when (next.string("type")) {
+                    "logical.cancel" -> { assertEquals(first.string("transferId"), next.string("transferId")); transferCancelled = true }
+                    "request" -> { assertEquals("run.cancel", next.string("method")); cancel = next }
+                    else -> fail("an aborted upload must not send another part")
+                }
+            }
+            assertTrue(transferCancelled); assertNotNull(cancel)
+            h.send(buildJsonObject { put("type", "response"); put("requestId", cancel!!.string("requestId")); put("ok", true); put("sentAt", System.currentTimeMillis()); put("result", buildJsonObject {}) })
+            withTimeout(3000) { stopping.await() }
+            assertTrue(withTimeout(3000) { uploading.await() }.isFailure)
+            assertNull(h.wire.poll(5, TimeUnit.SECONDS))
+        }
+    }
+
+    @Test fun malformedRefreshAckFailsClosedAndOldPeerCannotReceiveLargeLogicalMessages() {
+        Harness().use { h ->
+            h.start(); h.textHandshake(); h.approve()
+            assertThrows(Exception::class.java) { runBlocking { h.client.request("message.send", buildJsonObject { put("sessionId", "s1"); put("text", "x".repeat(6000)) }) } }
+            assertNull(h.wire.poll(100, TimeUnit.MILLISECONDS))
+        }
+        Harness().use { h ->
+            h.start(); h.textHandshake(); h.approve(logical = true)
+            runBlocking {
+                val expiry = System.currentTimeMillis() + 900_000
+                val refresh = async(Dispatchers.Default) { runCatching { h.client.requestAuthRefresh("q".repeat(40), expiry) } }
+                val raw = h.wire.poll(5, TimeUnit.SECONDS) ?: error("missing auth refresh")
+                h.socket.send(buildJsonObject { put("type", "auth.renewed"); put("v", 1); put("requestId", raw.string("requestId")); put("expiresAt", expiry + 1) }.toString())
+                assertTrue(withTimeout(3000) { refresh.await() }.isFailure)
+                assertFalse((h.event { it is ConnectionEvent.Closed } as ConnectionEvent.Closed).authenticationRejected)
+            }
+        }
+    }
+
+    private fun syntheticText(size: Int): String { val random = java.util.Random(7); return buildString { repeat(size) { append(if (it % 17 == 0) ' ' else ('a'.code + random.nextInt(26)).toChar()) } } }
+
+    @Test fun textLogicalReplyStillRejectsEmbeddedMediaAfterCompleteAssembly() = Harness().use { h ->
+        h.start(); h.textHandshake(); h.approve(logical = true)
+        runBlocking {
+            val waiting = async(Dispatchers.Default) { runCatching { h.client.request("session.get", buildJsonObject { put("sessionId", "s1") }) } }
+            val command = h.readPhone()
+            val response = buildJsonObject { put("type", "response"); put("requestId", command.string("requestId")); put("ok", true); put("sentAt", System.currentTimeMillis())
+                put("result", buildJsonObject { put("toolInput", buildJsonObject { put("data", "data:text/plain;base64,AAAA") }); put("padding", "x".repeat(6000)) }) }
+            LogicalJson.encode(response).frames.forEach(h::sendPart)
+            assertTrue(withTimeout(3000) { waiting.await() }.isFailure)
+            assertFalse((h.event { it is ConnectionEvent.Closed } as ConnectionEvent.Closed).authenticationRejected)
+        }
+    }
+
     private class Peer(val events: DirectPeerEvents) : DirectPeer {
         val closed = AtomicInteger()
         override fun acceptOffer(negotiationId: String, sdp: String) = Unit
@@ -141,7 +221,7 @@ class TextTransportTest {
                     val frame = wireJson.parseToJsonElement(text).jsonObject
                     synchronized(sentTypes) { sentTypes.add(frame.string("type")) }; wire.put(frame)
                     if (frame.string("type") == "hello") {
-                        webSocket.send("""{"type":"ready","v":1,"textRelay":true}""")
+                        webSocket.send("""{"type":"ready","v":1,"textRelay":true,"authRefresh":true}""")
                         webSocket.send("""{"type":"peer","online":true,"textRelay":false}""")
                     }
                 }
@@ -165,8 +245,9 @@ class TextTransportTest {
             val frame = wireJson.parseToJsonElement(cipher.seal(message)).jsonObject
             assertTrue(socket.send(JsonObject(frame + ("from" to text("desktop"))).toString()))
         }
+        fun sendPart(message: JsonObject) = send(JsonObject(message + ("sentAt" to JsonPrimitive(System.currentTimeMillis()))))
         fun readPhone(): JsonObject {
-            val frame = wire.poll(5, TimeUnit.SECONDS) ?: error("missing text frame")
+            val frame = wire.poll(10, TimeUnit.SECONDS) ?: error("missing text frame")
             lastWireBytes = frame.toString().toByteArray(Charsets.UTF_8).size
             assertEquals("text", frame.string("type"))
             return cipher.open(JsonObject(frame + ("from" to text("phone"))))
@@ -179,8 +260,11 @@ class TextTransportTest {
             assertEquals("c".repeat(32), readPhone().string("challenge"))
             assertEquals(epoch, (event { it is ConnectionEvent.TransportReady } as ConnectionEvent.TransportReady).epoch)
         }
-        fun approve() {
-            send(buildJsonObject { put("type", "pair.approved"); put("deviceId", "phone-id"); put("sentAt", System.currentTimeMillis()) })
+        fun approve(logical: Boolean = false) {
+            send(buildJsonObject { put("type", "pair.approved"); put("deviceId", "phone-id"); put("sentAt", System.currentTimeMillis())
+                if (logical) { put("logicalJsonMaxBytes", LogicalJson.MAX_BYTES); put("logicalCodec", LogicalJson.CODEC) }
+            })
+            if (logical) assertEquals("client.hello", readPhone().string("type"))
             event { it is ConnectionEvent.Plaintext && it.message.string("type") == "pair.approved" }
         }
         override fun close() { client.close(); server.close() }

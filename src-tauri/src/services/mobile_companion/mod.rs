@@ -1,13 +1,20 @@
 //! Phone-owned tasks in the normal desktop process. No window API or renderer
 //! event is used here; a hidden/destroyed WebView never owns task delivery.
+#[cfg(all(debug_assertions, feature = "test-hooks"))]
+mod acceptance;
 mod account;
 mod account_crypto;
 mod account_transport;
 mod crypto;
 mod direct;
+mod logical;
 mod session_sync;
 mod text;
 mod text_projection;
+#[cfg(all(debug_assertions, feature = "test-hooks"))]
+pub(crate) fn start_real_acceptance(app: AppHandle) {
+    acceptance::start_real_acceptance(app);
+}
 pub use account::AccountCompanionStatus;
 #[cfg(test)]
 mod tests;
@@ -124,6 +131,7 @@ struct Connection {
     last_error: Option<String>,
     tx: Option<mpsc::Sender<Control>>,
     transport: Option<&'static str>,
+    logical_json: bool,
 }
 enum Control {
     Approved,
@@ -639,7 +647,7 @@ impl MobileCompanionState {
             .get(room)
             .filter(|r| r.approved && !r.revoked)
             .and_then(|r| r.device_id.clone())
-            .map(|device|json!({"type":"pair.approved","deviceId":device,"hostName":self.0.host_name,"sentAt":now()}))
+            .map(|device|json!({"type":"pair.approved","deviceId":device,"hostName":self.0.host_name,"logicalCodec":"zlib-parts-v1","logicalJsonMaxBytes":logical::MAX_LOGICAL_BYTES,"sentAt":now()}))
     }
     async fn room_enabled(&self, room: &str) -> bool {
         let room = self.0.store.lock().await.rooms.get(room).cloned();
@@ -659,6 +667,15 @@ impl MobileCompanionState {
         secret: &Secret,
         packet: &Value,
     ) -> Result<Option<Value>, String> {
+        let payload = self.decode_packet(room_id, secret, packet).await?;
+        self.receive_payload(app, room_id, payload, false).await
+    }
+    async fn decode_packet(
+        &self,
+        room_id: &str,
+        secret: &Secret,
+        packet: &Value,
+    ) -> Result<Value, String> {
         if !self.room_enabled(room_id).await {
             return Err("手机连接已停止或账号认证已失效".into());
         }
@@ -683,7 +700,7 @@ impl MobileCompanionState {
             self.save(&next)?;
             *store = next;
         }
-        self.receive_payload(app, room_id, payload, false).await
+        Ok(payload)
     }
     async fn receive_payload(
         &self,
@@ -694,6 +711,23 @@ impl MobileCompanionState {
     ) -> Result<Option<Value>, String> {
         if !self.room_enabled(room_id).await {
             return Err("手机连接已停止或账号认证已失效".into());
+        }
+        if payload["type"] == "client.hello" {
+            let object = payload.as_object().ok_or("客户端能力格式无效")?;
+            if object.len() != 4
+                || object.keys().any(|key| {
+                    !["type", "logicalCodec", "logicalJsonMaxBytes", "sentAt"]
+                        .contains(&key.as_str())
+                })
+                || payload["logicalCodec"] != "zlib-parts-v1"
+                || payload["logicalJsonMaxBytes"] != logical::MAX_LOGICAL_BYTES
+            {
+                return Err("客户端消息能力不兼容，请更新手机端".into());
+            }
+            if let Some(connection) = self.0.connections.lock().await.get_mut(room_id) {
+                connection.logical_json = true;
+            }
+            return Ok(None);
         }
         if payload["type"] == "event.ack" {
             let event_id = bounded(&payload, "eventId", 128)?;
@@ -715,7 +749,7 @@ impl MobileCompanionState {
             }
             if room.approved {
                 return Ok(Some(
-                    json!({"type":"pair.approved","deviceId":device,"hostName":self.0.host_name,"sentAt":now()}),
+                    json!({"type":"pair.approved","deviceId":device,"hostName":self.0.host_name,"logicalCodec":"zlib-parts-v1","logicalJsonMaxBytes":logical::MAX_LOGICAL_BYTES,"sentAt":now()}),
                 ));
             }
             if room.expires_at < now() {
@@ -865,9 +899,10 @@ impl MobileCompanionState {
         let allowed: &[&str] = match method {
             "status" | "projects.list" => &[],
             "sessions.list" => &["offset", "limit", "knownRevision"],
-            "models.list" => &["projectPath"],
+            "models.list" => &["projectPath", "offset", "limit", "knownRevision"],
             "session.create" => &["projectPath", "modelId", "title"],
-            "session.get" | "session.attach" | "run.cancel" => &["sessionId"],
+            "session.get" => &["sessionId", "offset", "limit", "knownRevision"],
+            "session.attach" | "run.cancel" => &["sessionId"],
             "message.get" => &["sessionId", "messageId", "offset", "limit"],
             "message.send" => &["sessionId", "text"],
             "permission.reply" => &["sessionId", "permissionId", "decision"],
@@ -900,7 +935,12 @@ impl MobileCompanionState {
                     )
                     .await?;
                 if method == "models.list" {
-                    return serde_json::to_value(catalog).map_err(|_| "模型目录编码失败".into());
+                    let value = serde_json::to_value(catalog).map_err(|_| "模型目录编码失败")?;
+                    return if !text_only && object.keys().any(|key| key != "projectPath") {
+                        text_projection::model_directory(params, &value)
+                    } else {
+                        Ok(value)
+                    };
                 }
                 if self
                     .0
@@ -977,6 +1017,12 @@ impl MobileCompanionState {
                     "session.get" | "message.get" if text_only => {
                         serde_json::to_value(snapshot).map_err(|_| "会话编码失败".into())
                     }
+                    "session.get" if object.keys().any(|key| key != "sessionId") => {
+                        text_projection::direct_snapshot_page(
+                            params,
+                            &serde_json::to_value(snapshot).map_err(|_| "会话编码失败")?,
+                        )
+                    }
                     "session.get" => bounded_snapshot(snapshot),
                     "message.get" => text_projection::message_page(
                         params,
@@ -989,9 +1035,11 @@ impl MobileCompanionState {
                         let text = params["text"]
                             .as_str()
                             .filter(|s| {
-                                !s.trim().is_empty() && s.len() <= 20 * 1024 && !s.contains('\0')
+                                !s.trim().is_empty()
+                                    && s.len() <= logical::MAX_LOGICAL_BYTES
+                                    && !s.contains('\0')
                             })
-                            .ok_or("消息为空或超过 20 KiB")?;
+                            .ok_or("消息为空或完整请求超过 1 MiB")?;
                         host.bind_background_project(
                             app,
                             app.state::<AppState>().inner(),
@@ -1310,13 +1358,19 @@ fn receipt_replay(receipt: &Receipt, id: &str, fingerprint: &str) -> Result<Opti
     })))
 }
 fn response(id: &str, result: Result<Value, String>) -> Value {
-    match result {
+    let reply = match result {
         Ok(value) => {
             json!({"type":"response","requestId":id,"ok":true,"result":value,"sentAt":now()})
         }
         Err(error) => {
             json!({"type":"response","requestId":id,"ok":false,"error":{"code":"request_rejected","message":error.chars().take(500).collect::<String>()},"sentAt":now()})
         }
+    };
+    // The public size contract covers the entire logical RPC envelope.
+    if serde_json::to_vec(&reply).is_ok_and(|bytes| bytes.len() <= logical::MAX_LOGICAL_BYTES) {
+        reply
+    } else {
+        json!({"type":"response","requestId":id,"ok":false,"error":{"code":"request_rejected","message":"完整响应超过 1 MiB，请分批读取"},"sentAt":now()})
     }
 }
 #[cfg(test)]
@@ -1418,7 +1472,7 @@ fn bound_result(value: Value) -> Result<Value, String> {
     if serde_json::to_vec(&value)
         .map_err(|_| "结果编码失败")?
         .len()
-        > 28 * 1024
+        > logical::MAX_LOGICAL_BYTES
     {
         Err("结果超过移动端传输上限，请在电脑端查看完整内容".into())
     } else {

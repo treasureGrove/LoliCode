@@ -71,6 +71,11 @@ class NativeDirectPeer(context: Context, private val events: DirectPeerEvents,
         }
     }
 
+    override fun bufferedBytes(): Long = synchronized(channelLock) {
+        if (closed.get() || failureQueued.get()) Long.MAX_VALUE
+        else channel?.let { runCatching { it.bufferedAmount() }.getOrDefault(Long.MAX_VALUE) } ?: Long.MAX_VALUE
+    }
+
     private val observer = object : PeerConnection.Observer {
         override fun onSignalingChange(state: PeerConnection.SignalingState) = Unit
         override fun onIceConnectionChange(state: PeerConnection.IceConnectionState) {

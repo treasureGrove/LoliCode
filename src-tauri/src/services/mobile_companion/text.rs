@@ -1,6 +1,6 @@
 //! Account-scoped, bounded text fallback. This is a separate AEAD domain from
 //! both native task packets and signaling; no media or opaque packet tunnel.
-use super::{crypto, Secret};
+use super::{account_transport::AuthRefresh, crypto, Secret};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use futures::{SinkExt, StreamExt};
 use ring::aead;
@@ -28,8 +28,12 @@ pub(super) struct TextChannel {
     seen: BTreeSet<String>,
     ping: Interval,
     next_send: Instant,
+    auth_refresh: AuthRefresh,
 }
 impl TextChannel {
+    pub(super) fn ready_at(&self) -> Instant {
+        self.next_send
+    }
     pub(super) async fn connect(
         url: &str,
         room: &str,
@@ -70,10 +74,14 @@ impl TextChannel {
             .await
             .map_err(|_| ERROR)?;
         let mut ready = false;
+        let mut auth_refresh = false;
         let epoch = loop {
             let value = read(&mut socket).await?;
             match value["type"].as_str() {
-                Some("ready") if value["v"] == 1 && value["textRelay"] == true => ready = true,
+                Some("ready") if value["v"] == 1 && value["textRelay"] == true => {
+                    ready = true;
+                    auth_refresh = value["authRefresh"] == true;
+                }
                 Some("peer") if value["online"] == false => {}
                 Some("peer") if ready && value["online"] == true && value["textRelay"] == true => {
                     let epoch = value["textEpoch"]
@@ -93,6 +101,7 @@ impl TextChannel {
             seen: BTreeSet::new(),
             ping: interval(Duration::from_secs(25)),
             next_send: Instant::now(),
+            auth_refresh: AuthRefresh::new(auth_refresh),
         };
         let challenge = crypto::hex(&crypto::random::<16>()?);
         channel
@@ -122,6 +131,25 @@ impl TextChannel {
             + Duration::from_millis(((frame.len() as u64 + 17) * 1000).div_ceil(1500));
         Ok(())
     }
+    pub(super) async fn refresh_authorization(
+        &mut self,
+        ticket: &str,
+        expires: u64,
+    ) -> Result<(), String> {
+        if let Some(message) = self.auth_refresh.request(ticket, expires)? {
+            timeout(
+                Duration::from_secs(3),
+                self.socket.send(Message::Text(message.to_string())),
+            )
+            .await
+            .map_err(|_| ERROR)?
+            .map_err(|_| ERROR)?;
+        }
+        Ok(())
+    }
+    pub(super) fn take_renewed_expiry(&mut self) -> Option<u64> {
+        self.auth_refresh.take_renewed()
+    }
     pub(super) async fn recv(&mut self) -> Result<Option<Value>, String> {
         loop {
             let value = tokio::select! {
@@ -136,6 +164,10 @@ impl TextChannel {
                 && value["textEpoch"] == self.epoch
             {
                 continue;
+            }
+            if value["type"] == "auth.renewed" {
+                self.auth_refresh.accept(&value)?;
+                return Ok(Some(json!({"type":"transport.auth.renewed"})));
             }
             let (id, plain) = open(
                 &self.key,

@@ -33,6 +33,19 @@ class SessionSyncTest {
         assertEquals(rows, firstDirectoryRows(SessionDirectory(listOf(rows.first()), 1, 2), rows, "desktop-b"))
     }
 
+    @Test fun snapshotPagingAndRevisionBaselineAreTransportIndependentAndSessionScoped() {
+        val previous = page(6, 11)
+        for (transport in listOf("direct", "text")) {
+            val request = snapshotPageRequest("s1", previous, "s1" to previous.revision!!)
+            assertEquals(transport, 6L, request.long("limit"))
+            assertEquals(previous.revision, request.string("knownRevision"))
+        }
+        assertFalse("cursor from another session must not acknowledge this page", "knownRevision" in snapshotPageRequest("s1", previous, "other" to previous.revision!!))
+        assertFalse("cached page must belong to the selected session", "knownRevision" in snapshotPageRequest("other", previous, "other" to previous.revision!!))
+        assertFalse("epoch reset clears acknowledgement even while old text remains visible", "knownRevision" in snapshotPageRequest("s1", previous, null))
+        assertFalse("mutated baseline cannot acknowledge an older page", "knownRevision" in snapshotPageRequest("s1", previous.copy(revision = "new"), "s1" to previous.revision!!))
+    }
+
     @Test fun boundedDirectorySupportsLegacyArraysAndPageScopedRevision() {
         val raw = wireJson.parseToJsonElement("""{"sessions":[{"id":"desktop-a","title":"Existing"}],"offset":0,"nextOffset":1,"hasMore":true,"total":7,"revision":"r1"}""")
         val first = SessionDirectory.parse(raw)

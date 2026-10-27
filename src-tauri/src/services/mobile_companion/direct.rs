@@ -71,6 +71,7 @@ pub(super) struct DirectChannel {
     ping: Interval,
     faulted: Arc<AtomicBool>,
     pending_packet: Option<String>,
+    auth_refresh: super::account_transport::AuthRefresh,
 }
 
 impl DirectChannel {
@@ -113,11 +114,15 @@ impl DirectChannel {
             .await
             .map_err(|_| UNAVAILABLE)?;
         let mut ready = false;
+        let mut auth_refresh = false;
         let mut online = false;
         while !ready || !online {
             let value = control_frame(&mut socket).await?;
             match value["type"].as_str() {
-                Some("ready") if value["v"] == 1 => ready = true,
+                Some("ready") if value["v"] == 1 => {
+                    ready = true;
+                    auth_refresh = value["authRefresh"] == true;
+                }
                 Some("peer") => online = value["online"] == true,
                 _ => return Err(UNAVAILABLE.into()),
             }
@@ -210,9 +215,34 @@ impl DirectChannel {
             ping: interval(Duration::from_secs(25)),
             faulted,
             pending_packet,
+            auth_refresh: super::account_transport::AuthRefresh::new(auth_refresh),
         })
     }
 
+    pub(super) async fn ready_to_send(&self) -> bool {
+        !self.faulted.load(Ordering::Acquire)
+            && self.data.ready_state() == RTCDataChannelState::Open
+            && self.data.buffered_amount().await <= 16 * 1024
+    }
+    pub(super) async fn refresh_authorization(
+        &mut self,
+        ticket: &str,
+        expires: u64,
+    ) -> Result<(), String> {
+        if let Some(message) = self.auth_refresh.request(ticket, expires)? {
+            timeout(
+                Duration::from_secs(3),
+                self.socket.send(Message::Text(message.to_string())),
+            )
+            .await
+            .map_err(|_| UNAVAILABLE)?
+            .map_err(|_| UNAVAILABLE)?;
+        }
+        Ok(())
+    }
+    pub(super) fn take_renewed_expiry(&mut self) -> Option<u64> {
+        self.auth_refresh.take_renewed()
+    }
     pub(super) async fn send(&mut self, mut packet: Value) -> Result<(), String> {
         if self.faulted.load(Ordering::Acquire)
             || packet["type"] != "packet"
@@ -250,6 +280,10 @@ impl DirectChannel {
                 },
                 control = control_frame(&mut self.socket) => {
                     let control = control?;
+                    if control["type"] == "auth.renewed" {
+                        self.auth_refresh.accept(&control)?;
+                        return Ok(Some(json!({"type":"transport.auth.renewed"})));
+                    }
                     if control["type"] != "peer" || control["online"] != true {
                         self.close().await;
                         return Err(UNAVAILABLE.into());

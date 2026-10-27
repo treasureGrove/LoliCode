@@ -10,11 +10,13 @@ import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 import javax.crypto.Cipher
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.*
@@ -167,10 +169,58 @@ class DirectTransportTest {
         }
     }
 
+    @Test fun directUploadWaitsAtLowWatermarkWhileStopCanBypassIt() = Harness().use { h ->
+        val peer = h.openDirect()
+        peer.events.frame(h.desktopPacket(buildJsonObject {
+            put("type", "pair.approved"); put("deviceId", "00000000-0000-4000-8000-000000000002")
+            put("logicalJsonMaxBytes", LogicalJson.MAX_BYTES); put("logicalCodec", LogicalJson.CODEC); put("sentAt", System.currentTimeMillis())
+        }).toString())
+        assertTrue(h.nextEvent() is ConnectionEvent.Plaintext)
+        assertEquals("client.hello", h.decryptPhone(wireJson.parseToJsonElement(peer.sent.poll(3, TimeUnit.SECONDS)!!).jsonObject).string("type"))
+        peer.buffered.set(20 * 1024)
+        runBlocking {
+            val uploading = async(Dispatchers.Default) { runCatching { h.client.request("message.send", buildJsonObject { put("sessionId", "s1"); put("text", "x".repeat(6000)) }) } }
+            delay(100); assertNull(peer.sent.poll())
+            val stop = async(Dispatchers.Default) { h.client.request("run.cancel", buildJsonObject { put("sessionId", "s1") }) }
+            var command: JsonObject? = null
+            repeat(2) {
+                val sent = h.decryptPhone(wireJson.parseToJsonElement(peer.sent.poll(3, TimeUnit.SECONDS) ?: error("control blocked behind direct data")).jsonObject)
+                if (sent.string("type") == "request") { assertEquals("run.cancel", sent.string("method")); command = sent }
+                else assertEquals("logical.cancel", sent.string("type"))
+            }
+            assertNotNull(command)
+            peer.events.frame(h.desktopPacket(buildJsonObject { put("type", "response"); put("requestId", command!!.string("requestId")); put("ok", true); put("sentAt", System.currentTimeMillis()); put("result", buildJsonObject {}) }).toString())
+            withTimeout(3000) { stop.await() }
+            assertTrue(withTimeout(3000) { uploading.await() }.isFailure)
+            peer.buffered.set(0); delay(100); assertNull(peer.sent.poll())
+        }
+    }
+
+    @Test fun directLogicalReplyPreservesCompleteApprovalInputData() = Harness().use { h ->
+        val peer = h.openDirect()
+        peer.events.frame(h.desktopPacket(buildJsonObject {
+            put("type", "pair.approved"); put("deviceId", "00000000-0000-4000-8000-000000000002")
+            put("logicalJsonMaxBytes", LogicalJson.MAX_BYTES); put("logicalCodec", LogicalJson.CODEC); put("sentAt", System.currentTimeMillis())
+        }).toString())
+        assertTrue(h.nextEvent() is ConnectionEvent.Plaintext)
+        peer.sent.poll(3, TimeUnit.SECONDS) ?: error("missing logical capability acknowledgement")
+        runBlocking {
+            val waiting = async(Dispatchers.Default) { h.client.request("session.get", buildJsonObject { put("sessionId", "s1") }) }
+            val command = h.decryptPhone(wireJson.parseToJsonElement(peer.sent.poll(3, TimeUnit.SECONDS)!!).jsonObject)
+            val detail = "data:text/plain;base64,AAAA"
+            val response = buildJsonObject { put("type", "response"); put("requestId", command.string("requestId")); put("ok", true); put("sentAt", System.currentTimeMillis())
+                put("result", buildJsonObject { put("toolInput", buildJsonObject { put("data", detail) }); put("padding", "x".repeat(6000)) }) }
+            LogicalJson.encode(response).frames.forEach { part -> peer.events.frame(h.desktopPacket(JsonObject(part + ("sentAt" to JsonPrimitive(System.currentTimeMillis())))).toString()) }
+            assertEquals(detail, withTimeout(3000) { waiting.await() }.jsonObject.getValue("toolInput").jsonObject.string("data"))
+        }
+    }
+
     private class FakePeer(val events: DirectPeerEvents) : DirectPeer {
         val offers = LinkedBlockingQueue<Pair<String, String>>()
         val sent = LinkedBlockingQueue<String>()
         val closed = AtomicInteger()
+        val buffered = AtomicLong()
+        override fun bufferedBytes() = buffered.get()
         override fun acceptOffer(negotiationId: String, sdp: String) { offers.put(negotiationId to sdp) }
         override fun send(frame: String): Boolean { sent.put(frame); return true }
         override fun close() { closed.incrementAndGet() }

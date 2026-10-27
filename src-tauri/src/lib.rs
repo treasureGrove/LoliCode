@@ -1416,6 +1416,8 @@ pub fn run() {
                 }
                 crate::services::agent_automation::start_worker(app_handle.clone());
                 app_handle.state::<services::mobile_companion::MobileCompanionState>().restore(app_handle.clone()).await;
+                #[cfg(all(debug_assertions, feature = "test-hooks"))]
+                services::mobile_companion::start_real_acceptance(app_handle.clone());
                 // 启动流程走完：托盘这时才开始报「路由服务没在运行」，并记下退回直连的应用。
                 crate::tray::mark_startup_settled(&app_handle);
                 // Codex 官方做路由、发布了 Stack 模型时，官方模型列表过期就在后台刷新。

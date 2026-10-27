@@ -111,6 +111,6 @@ class PacketCipher(private val pairing: Pairing, private val clock: () -> Long =
         const val MAX_FRAME = 64 * 1024
         const val MAX_CIPHERTEXT = 48 * 1024
         const val MAX_PLAINTEXT = 30 * 1024
-        const val MAX_TASK_TEXT = 20 * 1024
+        const val MAX_TASK_TEXT = LogicalJson.MAX_BYTES
     }
 }

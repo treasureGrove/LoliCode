@@ -20,6 +20,11 @@ import kotlinx.serialization.json.*
 import okhttp3.*
 import okio.ByteString
 
+enum class ConnectionReasonCode { ROLE_CONNECTED, PEER_NOT_READY, AUTH_REJECTED, SERVICE_LIMIT, PROTOCOL_INVALID, NETWORK_IO, PEER_OFFLINE, DIRECT_UNAVAILABLE, AUTH_REFRESH_FAILED, SERVER_REJECTED, NORMAL_CLOSED, OTHER }
+
+fun handshakeRetryDelay(reason: ConnectionReasonCode, attempt: Int): Long? =
+    if (reason in setOf(ConnectionReasonCode.ROLE_CONNECTED, ConnectionReasonCode.PEER_NOT_READY) && attempt in 0..2) listOf(500L, 1000L, 2000L)[attempt] else null
+
 sealed interface ConnectionEvent {
     data object Ready : ConnectionEvent
     data class TransportReady(val transport: String, val epoch: String) : ConnectionEvent
@@ -27,7 +32,8 @@ sealed interface ConnectionEvent {
     data class Peer(val online: Boolean) : ConnectionEvent
     data class Plaintext(val message: JsonObject) : ConnectionEvent
     data class PushStatus(val configured: Boolean, val registered: Boolean) : ConnectionEvent
-    data class Closed(val reason: String, val retryable: Boolean = true, val authenticationRejected: Boolean = false) : ConnectionEvent
+    data class Closed(val reason: String, val retryable: Boolean = true, val authenticationRejected: Boolean = false,
+        val reasonCode: ConnectionReasonCode = ConnectionReasonCode.OTHER) : ConnectionEvent
 }
 
 class RemoteClient(
@@ -43,6 +49,13 @@ class RemoteClient(
     private val cipher = PacketCipher(computer.pairing)
     private val signalCipher = DirectSignalCipher(computer.pairing)
     private val pending = ConcurrentHashMap<String, CompletableDeferred<JsonElement>>()
+    private val pendingActivity = ConcurrentHashMap<String, Long>()
+    private val outgoingTransfers = ConcurrentHashMap<String, String>()
+    private val logical = LogicalJson.Receiver()
+    @Volatile private var logicalCapable = false
+    private data class AuthRefresh(val requestId: String, val expiresAt: Long, val result: CompletableDeferred<Long>)
+    private val authRefreshGate = Mutex()
+    @Volatile private var authRefresh: AuthRefresh? = null
     private val ended = AtomicBoolean(false)
     private var socket: WebSocket? = null
     @Volatile private var ready = false
@@ -50,6 +63,7 @@ class RemoteClient(
     private var direct: DirectPeer? = null
     private var negotiationId: String? = null
     @Volatile private var serverTextRelay = false
+    @Volatile private var authRefreshSupported = false
     @Volatile private var peerOnline = false
     @Volatile private var activeTransport: String? = null
     @Volatile private var textCipher: TextCipher? = null
@@ -64,6 +78,15 @@ class RemoteClient(
     private val jobs = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val queuedMutations = ConcurrentHashMap<String, Pair<String, CompletableDeferred<JsonElement>>>()
     private var acknowledgementWorker = startAcknowledgements()
+    private val logicalExpiry = jobs.launch {
+        while (isActive) {
+            delay(1000)
+            logical.expire()?.let { expired ->
+                pending[expired.requestId]?.completeExceptionally(IOException("完整消息接收超时，请刷新确认；任务不会自动重试"))
+                sendLogicalCancel(expired.transferId)
+            }
+        }
+    }
     private fun startAcknowledgements() = jobs.launch {
             for (id in acknowledgementQueue) {
                 runCatching {
@@ -97,6 +120,7 @@ class RemoteClient(
                         "ready" -> {
                             require(frame.long("v") == 1L)
                             serverTextRelay = frame.boolean("textRelay")
+                            authRefreshSupported = computer.accountId != null && frame.boolean("authRefresh")
                             if (computer.accountId != null) return
                             ready = true
                             // A saved pending phone can miss an approval while
@@ -127,10 +151,25 @@ class RemoteClient(
                             onEvent(ConnectionEvent.Peer(online))
                         }
                         "push.status" -> onEvent(ConnectionEvent.PushStatus(frame.boolean("configured"), frame.boolean("registered")))
+                        "auth.renewed" -> {
+                            val pending = authRefresh ?: error("未请求设备会话续期")
+                            require(frame.keys == setOf("type", "v", "requestId", "expiresAt") && frame["v"] == JsonPrimitive(1))
+                            require(frame.string("requestId") == pending.requestId && (frame["expiresAt"] as? JsonPrimitive)?.isString == false && frame.long("expiresAt") == pending.expiresAt)
+                            require(pending.result.complete(pending.expiresAt))
+                        }
                         "error" -> {
                             val code = frame.string("code")
                             val auth = code in setOf("unauthorized", "revoked", "device_revoked", "invalid_token", "expired_token", "authentication_required")
-                            end(if (auth) "设备会话无效或已撤销，请重新登录" else "受限文本服务达到限额或暂时不可用，请稍后重连", retryable = false, authenticationRejected = auth)
+                            val temporary = code in setOf("role_connected", "peer_not_ready")
+                            val reasonCode = when {
+                                code == "role_connected" -> ConnectionReasonCode.ROLE_CONNECTED
+                                code == "peer_not_ready" -> ConnectionReasonCode.PEER_NOT_READY
+                                auth -> ConnectionReasonCode.AUTH_REJECTED
+                                code in setOf("text_rate_limited", "text_monthly_quota_exhausted", "text_budget_unavailable", "text_slow_peer", "rate_limited", "monthly_limit", "capacity") -> ConnectionReasonCode.SERVICE_LIMIT
+                                code in setOf("replayed_text", "text_epoch_invalid", "text_not_negotiated", "invalid_message", "invalid_frame") -> ConnectionReasonCode.PROTOCOL_INVALID
+                                else -> ConnectionReasonCode.SERVER_REJECTED
+                            }
+                            end(when { auth -> "设备会话无效或已撤销，请重新登录"; temporary -> "上一条连接正在关闭，正在重新建立安全连接"; else -> "受限文本服务达到限额或暂时不可用，请稍后重连" }, retryable = temporary, authenticationRejected = auth, reasonCode = reasonCode)
                         }
                         "signal" -> {
                             require(computer.accountId != null) { "旧版连接不接受直连信令" }
@@ -153,7 +192,7 @@ class RemoteClient(
                     }
                 } catch (_: Exception) {
                     // Never include received data or cryptographic material in logs or errors.
-                    end("连接数据未通过验证；请检查设备时间并重新连接", retryable = false)
+                    end("连接数据未通过验证；请检查设备时间并重新连接", retryable = false, reasonCode = ConnectionReasonCode.PROTOCOL_INVALID)
                 }
             }
 
@@ -162,10 +201,12 @@ class RemoteClient(
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                 val limited = reason.startsWith("text_") || reason == "replayed_text"
                 val rejected = !limited && (code == 4003 || code == 4001 || (code == 1008 && reason in setOf("unauthorized", "revoked", "device_revoked", "invalid_token", "expired_token", "authentication_required")))
-                end(when { rejected -> "设备会话无效或已撤销，请重新连接或登录"; limited -> "受限文本通道已停止：服务限额或连接校验未通过，请稍后重连"; else -> "连接已断开，正在等待重连" }, retryable = !limited, authenticationRejected = rejected)
+                val temporary = reason in setOf("role_connected", "peer_not_ready")
+                val reasonCode = when { reason == "role_connected" -> ConnectionReasonCode.ROLE_CONNECTED; reason == "peer_not_ready" -> ConnectionReasonCode.PEER_NOT_READY; rejected -> ConnectionReasonCode.AUTH_REJECTED; limited -> ConnectionReasonCode.SERVICE_LIMIT; code == 1008 -> ConnectionReasonCode.PROTOCOL_INVALID; else -> ConnectionReasonCode.NORMAL_CLOSED }
+                end(when { rejected -> "设备会话无效或已撤销，请重新连接或登录"; limited -> "受限文本通道已停止：服务限额或连接校验未通过，请稍后重连"; temporary -> "上一条连接正在关闭，正在重新建立安全连接"; else -> "连接已断开，正在等待重连" }, retryable = temporary || (!limited && !rejected && code != 1008), authenticationRejected = rejected, reasonCode = reasonCode)
             }
             override fun onFailure(webSocket: WebSocket, failure: Throwable, response: Response?) {
-                end("暂时无法连接中转，检查网络后将自动重连")
+                end("暂时无法连接中转，检查网络后将自动重连", reasonCode = ConnectionReasonCode.NETWORK_IO)
             }
         })
     }
@@ -217,6 +258,7 @@ class RemoteClient(
         directGeneration++; directDeadline?.cancel(false); directDeadline = null
         val old = direct; direct = null; old?.close()
         negotiationId = null; textCipher = null
+        logicalCapable = false; logical.clear(); outgoingTransfers.clear(); pendingActivity.clear()
         while (acknowledgementQueue.tryReceive().isSuccess) { /* Discard the old epoch's unsent ACKs. */ }
         acknowledgementWorker.cancel(); acknowledgementWorker = startAcknowledgements()
         pending.values.forEach { it.completeExceptionally(IOException("通道已变化；任务不会自动重试，请刷新确认状态")) }; pending.clear()
@@ -246,6 +288,20 @@ class RemoteClient(
     }
 
     private fun receive(message: JsonObject) {
+        if (message.string("type").startsWith("logical.")) require(logicalCapable) { "电脑尚未协商完整消息协议" }
+        val outcome = logical.ingest(message)
+        if (outcome.cancelled != null) {
+            outcome.progress?.requestId?.let { pending[it]?.completeExceptionally(IOException("电脑已取消未完成的消息")) }
+            outgoingTransfers[outcome.cancelled]?.let { pending[it]?.completeExceptionally(IOException("电脑已取消未完整接收的请求；任务不会自动重试")) }
+            return
+        }
+        outcome.progress?.requestId?.let { if (pending.containsKey(it)) pendingActivity[it] = monotonic() }
+        val complete = outcome.message ?: return
+        if (activeTransport == "text") validateTextValue(complete)
+        receiveNormal(complete)
+    }
+
+    private fun receiveNormal(message: JsonObject) {
         if (message.string("type") == "response") {
             val waiter = pending.remove(message.string("requestId")) ?: return
             if (message.boolean("ok")) waiter.complete(message["result"] ?: JsonNull)
@@ -254,7 +310,17 @@ class RemoteClient(
                 waiter.completeExceptionally(IOException(error?.string("message")?.ifBlank { null } ?: "电脑拒绝该操作"))
             }
         } else {
-            if (message.string("type") == "pair.approved" && message.string("deviceId") == computer.deviceId) pairingConfirmed = true
+            if (message.string("type") == "pair.approved" && message.string("deviceId") == computer.deviceId) {
+                pairingConfirmed = true
+                val maximum = message["logicalJsonMaxBytes"] as? JsonPrimitive
+                val capable = maximum?.isString == false && maximum.intOrNull == LogicalJson.MAX_BYTES && message.string("logicalCodec") == LogicalJson.CODEC
+                if (capable && !logicalCapable) {
+                    logicalCapable = true
+                    sendProtocolControl(buildJsonObject {
+                        put("type", "client.hello"); put("logicalCodec", LogicalJson.CODEC); put("logicalJsonMaxBytes", LogicalJson.MAX_BYTES); put("sentAt", System.currentTimeMillis())
+                    })
+                }
+            }
             onEvent(ConnectionEvent.Plaintext(message))
         }
     }
@@ -273,31 +339,73 @@ class RemoteClient(
     suspend fun request(method: String, params: JsonObject = buildJsonObject { }): JsonElement {
         check(ready && !ended.get()) { "连接尚未就绪" }
         val useText = activeTransport == "text"
-        val urgent = useText && (method == "run.cancel" || (method == "permission.reply" && params.string("decision") == "reject"))
+        val regulated = useText || logicalCapable
+        val urgent = regulated && (method == "run.cancel" || (method == "permission.reply" && params.string("decision") == "reject"))
         val gate = if (urgent) controlRequests else normalRequests
         if (useText) {
             check(textConfirmed) { "电脑尚未确认文本通道授权" }
             validateTextRequest(method, params)
-            check(gate.tryLock()) { "文本通道繁忙，请稍后重试" }
         }
+        if (regulated) check(gate.tryLock()) { "文本通道繁忙，请稍后重试" }
         val requestId = UUID.randomUUID().toString()
         val result = CompletableDeferred<JsonElement>()
         pending[requestId] = result
-        if (useText && method == "run.cancel") cancelUnsentMutations(params.string("sessionId"))
-        if (useText && method in setOf("message.send", "question.reply")) queuedMutations[requestId] = params.string("sessionId") to result
+        pendingActivity[requestId] = monotonic()
+        if (regulated && method == "run.cancel") cancelUnsentMutations(params.string("sessionId"))
+        if (regulated && method in setOf("message.send", "question.reply")) queuedMutations[requestId] = params.string("sessionId") to result
         try {
             val message = buildJsonObject {
                 put("type", "request"); put("requestId", requestId); put("method", method)
                 put("params", params); put("sentAt", System.currentTimeMillis())
             }
-            return withTimeout(25_000) {
-                if (useText) sendTextPaced(message, result, urgent) else sendEncrypted(message)
-                result.await()
+            return withTimeout(if (logicalCapable) LogicalJson.HARD_MS else 25_000) {
+                if (useText) sendTextPaced(message, result, urgent) else sendDirectLogical(message, result, urgent)
+                if (logicalCapable) awaitLogicalResponse(requestId, result) else result.await()
             }
-        } finally { pending.remove(requestId); queuedMutations.remove(requestId); if (useText) gate.unlock() }
+        } finally {
+            logical.cancelRequest(requestId)?.let(::sendLogicalCancel)
+            outgoingTransfers.entries.filter { it.value == requestId }.forEach { entry -> outgoingTransfers.remove(entry.key); sendLogicalCancel(entry.key) }
+            pending.remove(requestId); pendingActivity.remove(requestId); queuedMutations.remove(requestId)
+            if (regulated) gate.unlock()
+        }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private suspend fun awaitLogicalResponse(requestId: String, result: CompletableDeferred<JsonElement>): JsonElement {
+        while (true) {
+            val remaining = LogicalJson.IDLE_MS - (monotonic() - (pendingActivity[requestId] ?: monotonic()))
+            if (remaining <= 0) throw IOException("30 秒未收到消息进度，请刷新确认；任务不会自动重试")
+            val response = select<JsonElement?> { result.onAwait { it }; onTimeout(remaining) { null } }
+            if (response != null) return response
+        }
     }
 
     fun close() { end("已暂停前台连接", notify = false) }
+    fun failAuthRefresh(authenticationRejected: Boolean = false) {
+        end("设备会话续期失败，请重新连接或登录", retryable = !authenticationRejected, authenticationRejected = authenticationRejected)
+    }
+
+    /** Replace only this socket's short-lived account ticket; keep its epoch, cipher and assemblies intact. */
+    suspend fun requestAuthRefresh(deviceToken: String, expiresAt: Long): Long {
+        require(computer.accountId != null && deviceToken.matches(Regex("^[A-Za-z0-9_-]{32,256}$")))
+        require(expiresAt > System.currentTimeMillis() && expiresAt - System.currentTimeMillis() <= 930_000)
+        check(authRefreshSupported) { "电脑设备服务尚未支持连接内续期，请升级后重新连接" }
+        check(authRefreshGate.tryLock()) { "设备会话正在续期" }
+        val refresh = AuthRefresh(UUID.randomUUID().toString(), expiresAt, CompletableDeferred())
+        try {
+            synchronized(this) {
+                check(!ended.get() && socket != null) { "设备连接已关闭" }
+                authRefresh = refresh
+                check(socket?.send(buildJsonObject {
+                    put("type", "auth.refresh"); put("v", 1); put("requestId", refresh.requestId); put("deviceToken", deviceToken)
+                }.toString()) == true)
+            }
+            return withTimeout(15_000) { refresh.result.await() }
+        } catch (failure: Exception) {
+            end("设备会话续期未确认，请重新连接", retryable = true)
+            throw IOException("设备会话续期未确认，请重新连接")
+        } finally { if (authRefresh === refresh) authRefresh = null; authRefreshGate.unlock() }
+    }
 
     @Synchronized private fun sendEncrypted(message: JsonObject) {
         check(ready && !ended.get()) { "连接尚未就绪" }
@@ -322,22 +430,89 @@ class RemoteClient(
         else select<Unit> { onTimeout(milliseconds) { }; abort.onAwait { throw IOException("通道已变化，未发送的请求已取消") } }
     }
 
+    private fun encodeLogical(message: JsonObject): LogicalJson.Encoded {
+        if (activeTransport == "text") validateTextValue(message)
+        val encoded = LogicalJson.encode(message)
+        require(encoded.transferId == null || logicalCapable) { "电脑尚未支持 1 MiB 完整消息，请升级电脑端" }
+        return encoded
+    }
+
     private suspend fun sendTextPaced(message: JsonObject, abort: CompletableDeferred<JsonElement>? = null, urgent: Boolean = false) {
         val current = textCipher ?: throw IOException("文本通道已失效")
-        val frame = current.seal(message)
-        // The relay appends ,"from":"phone" before forwarding/accounting.
-        val bytes = frame.toByteArray(Charsets.UTF_8).size + 15
-        if (urgent) {
-            require(bytes <= 1024) { "停止或拒绝请求超过文本控制上限，请直连确认" }
-            val now = System.nanoTime() / 1_000_000
-            paceDelay((1000 - (now - lastControlAt)).coerceAtLeast(0), abort)
-            writeTextFrame(frame, current, abort, message.string("requestId"))
-            lastControlAt = System.nanoTime() / 1_000_000
-        } else textWrites.withLock {
-            // Charge before each frame: no accumulated idle burst, including ACKs.
-            paceDelay((bytes.toLong() * 1000 + 499) / 500, abort)
-            writeTextFrame(frame, current, abort, message.string("requestId"))
+        val encoded = encodeLogical(message)
+        val requestId = message.string("requestId")
+        encoded.transferId?.let { outgoingTransfers[it] = requestId }
+        var complete = false
+        try {
+            suspend fun sendParts(rate: Int) {
+                for ((index, part) in encoded.frames.withIndex()) {
+                    check(abort?.isCompleted != true && textCipher === current && ready && !ended.get()) { "尚未发送的消息已取消或通道已变化" }
+                    val fresh = if (encoded.transferId != null) JsonObject(part + ("sentAt" to JsonPrimitive(System.currentTimeMillis()))) else part
+                    val frame = current.seal(fresh)
+                    val bytes = frame.toByteArray(Charsets.UTF_8).size + 15
+                    if (urgent) {
+                        require(bytes <= 1024) { "停止或拒绝请求超过文本控制上限，请直连确认" }
+                        paceDelay((1000 - (monotonic() - lastControlAt)).coerceAtLeast(0), abort)
+                    } else paceDelay((bytes.toLong() * 1000 + rate - 1) / rate, abort)
+                    writeTextFrame(frame, current, abort, requestId, index == encoded.frames.lastIndex)
+                    if (requestId.isNotBlank()) pendingActivity[requestId] = monotonic()
+                    if (urgent) lastControlAt = monotonic()
+                }
+            }
+            if (urgent) sendParts(500)
+            else textWrites.withLock { sendParts(if (encoded.transferId != null) 1500 else 500) }
+            complete = true
+        } finally {
+            encoded.transferId?.let { id -> outgoingTransfers.remove(id); if (!complete && textCipher === current) sendLogicalCancel(id) }
         }
+    }
+
+    private suspend fun sendDirectLogical(message: JsonObject, abort: CompletableDeferred<JsonElement>, urgent: Boolean) {
+        val generation = directGeneration
+        val encoded = encodeLogical(message)
+        val requestId = message.string("requestId")
+        encoded.transferId?.let { outgoingTransfers[it] = requestId }
+        var complete = false
+        try {
+            for ((index, part) in encoded.frames.withIndex()) {
+                kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                val queueWaitStarted = monotonic()
+                while (!urgent && computer.accountId != null && (direct?.bufferedBytes() ?: Long.MAX_VALUE) > 16 * 1024) {
+                    check(!abort.isCompleted && !ended.get() && ready && directGeneration == generation) { "尚未发送的消息已取消或通道已变化" }
+                    check(monotonic() - queueWaitStarted < LogicalJson.IDLE_MS) { "直连发送队列 30 秒没有进度，请刷新确认" }
+                    delay(20)
+                }
+                val fresh = if (encoded.transferId != null) JsonObject(part + ("sentAt" to JsonPrimitive(System.currentTimeMillis()))) else part
+                writeDirectFrame(fresh, abort, requestId, generation, index == encoded.frames.lastIndex)
+                pendingActivity[requestId] = monotonic()
+                // Yield between chunks so a stop/control coroutine can cancel an unfinished upload.
+                if (encoded.transferId != null) delay(20)
+            }
+            complete = true
+        } finally {
+            encoded.transferId?.let { id -> outgoingTransfers.remove(id); if (!complete && directGeneration == generation) sendLogicalCancel(id) }
+        }
+    }
+
+    @Synchronized private fun writeDirectFrame(message: JsonObject, abort: CompletableDeferred<JsonElement>, requestId: String, generation: Int, complete: Boolean) {
+        check(!ended.get() && ready && directGeneration == generation && activeTransport != "text" && !abort.isCompleted) { "尚未发送的消息已取消或通道已变化" }
+        sendEncrypted(message)
+        if (complete) queuedMutations.remove(requestId)
+    }
+
+    @Synchronized private fun sendProtocolControl(message: JsonObject) {
+        check(!ended.get() && ready)
+        if (activeTransport == "text") {
+            check(textConfirmed)
+            val frame = (textCipher ?: error("文本通道已失效")).seal(message)
+            check((socket?.queueSize() ?: Long.MAX_VALUE) <= 16 * 1024 - frame.toByteArray(Charsets.UTF_8).size)
+            check(socket?.send(frame) == true)
+        } else sendEncrypted(message)
+    }
+
+    private fun sendLogicalCancel(transferId: String) {
+        if (!logicalCapable || !ready || ended.get()) return
+        runCatching { sendProtocolControl(JsonObject(LogicalJson.cancel(transferId) + ("sentAt" to JsonPrimitive(System.currentTimeMillis())))) }
     }
 
     @Synchronized private fun cancelUnsentMutations(session: String) {
@@ -346,27 +521,32 @@ class RemoteClient(
         }
     }
 
-    @Synchronized private fun writeTextFrame(frame: String, epochCipher: TextCipher, abort: CompletableDeferred<JsonElement>?, requestId: String) {
+    @Synchronized private fun writeTextFrame(frame: String, epochCipher: TextCipher, abort: CompletableDeferred<JsonElement>?, requestId: String, complete: Boolean = true) {
         check(!ended.get() && ready && textConfirmed && activeTransport == "text" && textCipher === epochCipher) { "文本通道已变化，请重新确认任务状态" }
         check(abort?.isCompleted != true) { "尚未发送的请求已取消" }
         check((socket?.queueSize() ?: Long.MAX_VALUE) <= 16 * 1024 - frame.toByteArray(Charsets.UTF_8).size) { "文本通道繁忙，请稍后重试" }
         check(socket?.send(frame) == true) { "文本通道发送失败，请刷新任务状态" }
-        queuedMutations.remove(requestId)
+        if (complete) queuedMutations.remove(requestId)
     }
 
-    @Synchronized private fun end(reason: String, notify: Boolean = true, retryable: Boolean = true, authenticationRejected: Boolean = false) {
+    @Synchronized private fun end(reason: String, notify: Boolean = true, retryable: Boolean = true, authenticationRejected: Boolean = false, reasonCode: ConnectionReasonCode = ConnectionReasonCode.OTHER) {
         if (!ended.compareAndSet(false, true)) return
         ready = false
         directGeneration++; directDeadline?.cancel(false); directDeadline = null
         activeTransport = null; textCipher = null; textConfirmed = false
+        authRefreshSupported = false
+        logicalCapable = false; logical.clear(); outgoingTransfers.clear(); pendingActivity.clear()
+        authRefresh?.result?.completeExceptionally(IOException("设备连接已关闭")); authRefresh = null
         acknowledgementQueue.close(); jobs.cancel()
         queuedMutations.clear()
         socket?.close(1000, null)
         direct?.close(); direct = null
         pending.values.forEach { it.completeExceptionally(IOException("连接中断，请刷新任务状态；发送过的任务不会自动重试")) }
         pending.clear()
-        if (notify) onEvent(ConnectionEvent.Closed(reason, retryable, authenticationRejected))
+        if (notify) onEvent(ConnectionEvent.Closed(reason, retryable, authenticationRejected, reasonCode))
     }
+
+    private fun monotonic() = System.nanoTime() / 1_000_000
 
     companion object {
         private val deadlines = Executors.newSingleThreadScheduledExecutor { runnable -> Thread(runnable, "companion-direct-deadline").apply { isDaemon = true } }
