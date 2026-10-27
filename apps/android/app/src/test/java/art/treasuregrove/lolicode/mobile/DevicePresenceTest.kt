@@ -80,4 +80,14 @@ class DevicePresenceTest {
         assertFalse(disconnected.usable)
         assertEquals(DevicePresence.Unknown, disconnected.copy(presenceNowElapsedMs = 61_000).selectedPresence)
     }
+
+    @Test fun textTransportRequiresSeparateHostApprovalAndVerification() {
+        val text = state().copy(transport = "text", relayReady = true, desktopOnline = true, hostVerified = true)
+        assertTrue(text.usable)
+        assertFalse(text.copy(hostVerified = false).usable)
+        assertFalse(text.copy(relayReady = false).usable)
+        assertFalse(text.copy(desktopOnline = false).usable)
+        assertFalse(text.copy(computers = listOf(computer.copy(approved = false))).usable)
+        assertFalse(text.copy(transport = "ws").usable)
+    }
 }

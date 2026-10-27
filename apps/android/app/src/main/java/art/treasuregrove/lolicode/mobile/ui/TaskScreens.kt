@@ -110,6 +110,9 @@ internal fun SessionRow(session: Session, snapshot: SessionSnapshot?, enabled: B
 @Composable
 internal fun TaskDetailScreen(state: CompanionState, snapshot: SessionSnapshot?, actions: CompanionActions) {
     LazyColumn(Modifier.fillMaxSize().testTag("task_detail"), contentPadding = PaddingValues(horizontal = 18.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        if (state.transport == "text") item {
+            Text("受限文本模式 · 仅同步文字，图片、文件和完整操作审批请使用直连。", color = LoliColors.Muted, style = MaterialTheme.typography.bodySmall)
+        }
         if (!state.usable) item { OfflineNotice() }
         if (snapshot == null) item {
             LoliCard {
@@ -199,11 +202,12 @@ private fun ApprovalCard(approval: Approval, enabled: Boolean, actions: Companio
             }
         }
         Text(approval.action, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleMedium)
+        if (!approval.canApprove) Text("受限文本模式仅可拒绝；批准前请直连查看完整操作。", color = LoliColors.Muted, style = MaterialTheme.typography.bodySmall)
         SelectionContainer { Text(approval.detail, style = MaterialTheme.typography.bodySmall, lineHeight = 20.sp) }
         Text("仅授权本次操作，提交前会重新核对有效性。", color = LoliColors.Muted, style = MaterialTheme.typography.labelSmall)
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             OutlinedButton(onClick = { actions.replyPermission(approval.id, false) }, enabled = enabled, modifier = Modifier.weight(1f).heightIn(min = 50.dp).testTag("approval_reject_${approval.id}"), shape = RoundedCornerShape(14.dp)) { Text("拒绝") }
-            Button(onClick = { actions.replyPermission(approval.id, true) }, enabled = enabled, modifier = Modifier.weight(1f).heightIn(min = 50.dp).testTag("approval_allow_${approval.id}"), shape = RoundedCornerShape(14.dp)) { AppGlyph(Glyph.Check, tint = Color.White, size = 16.dp); Spacer(Modifier.width(6.dp)); Text("允许一次") }
+            Button(onClick = { actions.replyPermission(approval.id, true) }, enabled = enabled && approval.canApprove, modifier = Modifier.weight(1f).heightIn(min = 50.dp).testTag("approval_allow_${approval.id}"), shape = RoundedCornerShape(14.dp)) { AppGlyph(Glyph.Check, tint = Color.White, size = 16.dp); Spacer(Modifier.width(6.dp)); Text("允许一次") }
         }
     }
 }

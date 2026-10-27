@@ -53,18 +53,20 @@ beforeEach(() => {
   api.accountStatus.mockResolvedValue(account);
   api.setAccountVisible.mockResolvedValue(account);
 });
-describe("direct-only phone connection", () => {
+describe("account phone connection", () => {
   it("does not register, pair or contact the backend while closed", () => {
     render(<MobileCompanionDialog open={false} onOpenChange={vi.fn()} />);
     expect(api.status).not.toHaveBeenCalled();
     expect(api.accountStatus).not.toHaveBeenCalled();
     expect(api.pair).not.toHaveBeenCalled();
   });
-  it("defaults to the account workflow and never offers QR or relay fallback", async () => {
+  it("explains bounded text fallback while retaining account enrollment", async () => {
     render(<MobileCompanionDialog open onOpenChange={vi.fn()} />);
     await waitFor(() => expect(api.status).toHaveBeenCalledOnce());
     expect(screen.getByText("登录同一账户，无需配对码")).toBeInTheDocument();
-    expect(screen.getByText(/仅直连：服务器只协助/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/文本通道只同步有大小和流量限制/),
+    ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /二维码|配对码|中继/ }),
     ).not.toBeInTheDocument();
@@ -90,12 +92,23 @@ describe("direct-only phone connection", () => {
       pairs: [{ ...device, online: false, lastError: "secret-ticket" }],
     });
     render(<MobileCompanionDialog open accountId="7" onOpenChange={vi.fn()} />);
-    expect(await screen.findByText("未建立直连")).toBeInTheDocument();
+    expect(await screen.findByText("连接未就绪")).toBeInTheDocument();
     expect(screen.queryByText("已直连 · 端到端加密")).not.toBeInTheDocument();
     expect(screen.queryByText("secret-ticket")).not.toBeInTheDocument();
     expect(
-      screen.getByText("直连不可用，请切换网络后重试。"),
+      screen.getByText("连接受限或文本额度已用尽，请查看设备状态后重试。"),
     ).toBeInTheDocument();
+  });
+  it("identifies text fallback separately from an actual direct route", async () => {
+    api.status.mockResolvedValue({
+      ...initial,
+      pairs: [{ ...device, transport: "text" }],
+    });
+    render(<MobileCompanionDialog open accountId="7" onOpenChange={vi.fn()} />);
+    expect(
+      await screen.findByText("受限文本 · 端到端加密"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("已直连 · 端到端加密")).not.toBeInTheDocument();
   });
   it("revokes exactly the selected account connection after a local click", async () => {
     api.status.mockResolvedValue({ ...initial, pairs: [device] });

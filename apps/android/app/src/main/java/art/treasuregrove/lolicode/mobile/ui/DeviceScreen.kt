@@ -69,7 +69,7 @@ internal fun DeviceScreen(state: CompanionState, actions: CompanionActions, noti
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                             Text(device.deviceName, fontWeight = FontWeight.SemiBold)
-                            Text(deviceStatusText(presence, selected && state.transport == "direct", selected && state.hostVerified), color = LoliColors.Muted, style = MaterialTheme.typography.bodySmall)
+                            Text(deviceStatusText(presence, selected && state.transport == "direct", selected && state.hostVerified, limitedText = selected && state.transport == "text"), color = LoliColors.Muted, style = MaterialTheme.typography.bodySmall)
                             Text("指纹 ${shortFingerprint(device.fingerprint)}", color = LoliColors.Muted, style = MaterialTheme.typography.labelSmall)
                         }
                     }
@@ -113,7 +113,7 @@ internal fun DeviceScreen(state: CompanionState, actions: CompanionActions, noti
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(computer.name, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        Text(deviceStatusText(presence, selected && state.transport == "direct", selected && state.hostVerified, computer.approved), color = if (presence == DevicePresence.Online) LoliColors.Green else LoliColors.Muted, style = MaterialTheme.typography.bodySmall)
+                        Text(deviceStatusText(presence, selected && state.transport == "direct", selected && state.hostVerified, computer.approved, selected && state.transport == "text"), color = if (presence == DevicePresence.Online) LoliColors.Green else LoliColors.Muted, style = MaterialTheme.typography.bodySmall)
                     }
                     if (selected) Box(Modifier.size(27.dp).background(Brush.linearGradient(listOf(LoliColors.RoseSoft, LoliColors.VioletSoft)), CircleShape), contentAlignment = Alignment.Center) { AppGlyph(Glyph.Check, tint = LoliColors.Rose, size = 14.dp) }
                     else AppGlyph(Glyph.Right, size = 16.dp)

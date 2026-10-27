@@ -5,6 +5,8 @@ mod account_crypto;
 mod account_transport;
 mod crypto;
 mod direct;
+mod text;
+mod text_projection;
 pub use account::AccountCompanionStatus;
 #[cfg(test)]
 mod tests;
@@ -116,6 +118,7 @@ struct Connection {
     online: bool,
     last_error: Option<String>,
     tx: Option<mpsc::Sender<Control>>,
+    transport: Option<&'static str>,
 }
 enum Control {
     Approved,
@@ -243,7 +246,10 @@ impl MobileCompanionState {
                     PairStatus {
                         account_id: r.account.as_ref().map(|a| a.account_id.clone()),
                         peer_fingerprint: r.account.as_ref().map(|a| a.phone_fingerprint.clone()),
-                        transport: connection.filter(|c| c.online).map(|_| {
+                        transport: connection.filter(|c| c.online).map(|c| {
+                            if let Some(transport) = c.transport {
+                                return transport;
+                            }
                             if r.account.is_some() {
                                 "direct"
                             } else {
@@ -251,7 +257,9 @@ impl MobileCompanionState {
                             }
                         }),
                         connection_state: if connection.is_some_and(|c| c.online) {
-                            if r.account.is_some() {
+                            if let Some(transport) = connection.and_then(|c| c.transport) {
+                                transport
+                            } else if r.account.is_some() {
                                 "direct"
                             } else {
                                 "relay"
@@ -671,6 +679,23 @@ impl MobileCompanionState {
             self.save(&next)?;
             *store = next;
         }
+        self.receive_payload(app, room_id, payload, false).await
+    }
+    async fn receive_payload(
+        &self,
+        app: &AppHandle,
+        room_id: &str,
+        payload: Value,
+        text_only: bool,
+    ) -> Result<Option<Value>, String> {
+        if !self.room_enabled(room_id).await {
+            return Err("手机连接已停止或账号认证已失效".into());
+        }
+        if payload["type"] == "event.ack" {
+            let event_id = bounded(&payload, "eventId", 128)?;
+            self.ack_event(room_id, event_id).await;
+            return Ok(None);
+        }
         if payload["type"] == "pair.request" {
             let device = bounded(&payload, "deviceId", 128)?;
             let name = bounded(&payload, "deviceName", 128)?;
@@ -701,13 +726,30 @@ impl MobileCompanionState {
         if payload["type"] != "request" {
             return Err("未知消息类型".into());
         }
-        Ok(Some(self.request(app, room_id, payload).await))
+        Ok(Some(
+            self.request_with_mode(app, room_id, payload, text_only)
+                .await,
+        ))
     }
-    async fn request(&self, app: &AppHandle, room_id: &str, payload: Value) -> Value {
+    async fn request_with_mode(
+        &self,
+        app: &AppHandle,
+        room_id: &str,
+        payload: Value,
+        text_only: bool,
+    ) -> Value {
         let request_id = match bounded(&payload, "requestId", 128) {
             Ok(id) => id.to_string(),
             Err(error) => return response("", Err(error)),
         };
+        if text_only {
+            if let Err(error) = text_projection::validate_request(
+                payload["method"].as_str().unwrap_or(""),
+                &payload["params"],
+            ) {
+                return response(&request_id, Err(error));
+            }
+        }
         let _gate = self.0.gate.lock().await;
         if !self.room_enabled(room_id).await {
             return response(&request_id, Err("手机连接已停止或账号认证已失效".into()));
@@ -731,7 +773,19 @@ impl MobileCompanionState {
                 );
             };
             match admit_request(room, &request_id, &fingerprint, read_only) {
-                Ok(Some(reply)) => return reply,
+                Ok(Some(reply)) => {
+                    if !text_only {
+                        return reply;
+                    }
+                    // A receipt may have been created over direct transport.
+                    // Re-project it without re-executing the mutation.
+                    let projected = text_projection::project_receipt(
+                        payload["method"].as_str().unwrap_or(""),
+                        &payload["params"],
+                        &reply,
+                    );
+                    return response(&request_id, projected);
+                }
                 Err(error) => return response(&request_id, Err(error)),
                 Ok(None) => {}
             }
@@ -742,10 +796,27 @@ impl MobileCompanionState {
                 *store = next;
             }
         }
-        let result = self
-            .dispatch(app, room_id, &request_id, &payload)
-            .await
-            .and_then(bound_result);
+        let mut dispatched = payload.clone();
+        if text_only && payload["method"] == "session.get" {
+            if let Some(params) = dispatched["params"].as_object_mut() {
+                params.remove("knownRevision");
+                params.remove("offset");
+                params.remove("limit");
+            }
+        }
+        let outcome = self
+            .dispatch(app, room_id, &request_id, &dispatched, text_only)
+            .await;
+        let result = if text_only {
+            text_projection::project_outcome(
+                payload["method"].as_str().unwrap_or(""),
+                &payload["params"],
+                outcome,
+            )
+        } else {
+            outcome
+        }
+        .and_then(bound_result);
         let reply = response(&request_id, result);
         if read_only {
             return reply;
@@ -776,6 +847,7 @@ impl MobileCompanionState {
         room_id: &str,
         request_id: &str,
         payload: &Value,
+        text_only: bool,
     ) -> Result<Value, String> {
         let method = bounded(payload, "method", 64)?;
         let params = &payload["params"];
@@ -873,6 +945,9 @@ impl MobileCompanionState {
                 let id = bounded(params, "sessionId", 128)?;
                 let snapshot = self.owned_snapshot(app, room_id, id).await?;
                 match method {
+                    "session.get" if text_only => {
+                        serde_json::to_value(snapshot).map_err(|_| "会话编码失败".into())
+                    }
                     "session.get" => bounded_snapshot(snapshot),
                     "message.send" => {
                         if !matches!(snapshot.status, AgentStatus::Idle | AgentStatus::Error) {

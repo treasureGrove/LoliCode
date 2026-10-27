@@ -326,7 +326,7 @@ impl MobileCompanionState {
             last_error: runtime.last_error.clone(),
             transport: "direct",
             direct_available: true,
-            transport_policy: "directOnly",
+            transport_policy: "directPreferredTextFallback",
         }
     }
     async fn identity(&self, account_id: &str, epoch: u64) -> Result<Arc<Identity>, String> {

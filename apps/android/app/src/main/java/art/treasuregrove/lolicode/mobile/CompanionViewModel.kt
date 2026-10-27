@@ -33,7 +33,7 @@ data class CompanionState(
 ) {
     val computer get() = computers.firstOrNull { it.id == selectedRoom }
     // desktopOnline is room-peer availability, not directory heartbeat presence.
-    val usable get() = transport == "direct" && relayReady && desktopOnline && hostVerified && computer?.approved == true
+    val usable get() = transport in setOf("direct", "text") && relayReady && desktopOnline && hostVerified && computer?.approved == true
     val selectedPresence get() = computer?.let(::presence) ?: DevicePresence.Unknown
     fun presence(device: AccountDevice): DevicePresence {
         if (device.kind != "desktop" || !directoryFreshness.isFreshFor(account?.id, presenceNowElapsedMs)) return DevicePresence.Unknown
@@ -78,6 +78,8 @@ class CompanionViewModel(application: Application) : AndroidViewModel(applicatio
     private var eventRefresh: Job? = null
     private var lastSnapshotAt = 0L
     private val snapshotLock = Mutex()
+    private var textRevision: Pair<String, String>? = null
+    private val seenEvents = linkedSetOf<String>()
 
     init {
         runCatching {
@@ -453,6 +455,7 @@ class CompanionViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     private fun openConnection(computer: PairedComputer, deviceToken: String?, connectionGeneration: Int) {
+        textRevision = null; seenEvents.clear()
         // QR expiration applies only when importing a new enrollment. A saved
         // pending room may already be approved while this phone was offline.
         // Re-authenticate and let the desktop decide its current authorization.
@@ -462,19 +465,29 @@ class CompanionViewModel(application: Application) : AndroidViewModel(applicatio
             if (!visible || generation != connectionGeneration) return@launch
             when (event) {
                 ConnectionEvent.Ready -> {
+                    textRevision = null
                     retries = 0
                     mutable.update { it.copy(relayReady = true, transport = "direct", connection = "原生直连已建立，正在验证电脑任务状态") }
                     if (mutable.value.computer?.approved == true) registerPush()
                     if (mutable.value.desktopOnline && mutable.value.computer?.approved == true) bootstrap()
+                }
+                is ConnectionEvent.TransportReady -> {
+                    textRevision = null; seenEvents.clear(); retries = 0
+                    mutable.update { it.copy(relayReady = true, hostVerified = false, transport = "text", connection = "受限文本通道已验证 · 正在确认电脑授权") }
+                }
+                is ConnectionEvent.WaitingForTransport -> {
+                    textRevision = null; seenEvents.clear(); poll?.cancel(); eventRefresh?.cancel()
+                    mutable.update { it.copy(relayReady = false, hostVerified = false, transport = null, connection = event.reason) }
                 }
                 is ConnectionEvent.Peer -> {
                     mutable.update { it.copy(desktopOnline = event.online, hostVerified = if (event.online) it.hostVerified else false, transport = if (event.online) it.transport else null, connection = when {
                         !event.online -> "直连尚未就绪；可在设备列表查看电脑在线状态"
                         it.computer?.approved != true -> "电脑在线，请在电脑上确认此次配对"
                         it.transport == "direct" -> "原生直连已建立 · 电脑静默后台执行"
+                        it.transport == "text" -> "受限文本模式 · 电脑静默后台执行"
                         else -> "正在建立加密直连，不会通过服务器转发任务"
                     }) }
-                    if (event.online && mutable.value.relayReady && mutable.value.computer?.approved == true) bootstrap()
+                    if (event.online && mutable.value.transport == "direct" && mutable.value.relayReady && mutable.value.computer?.approved == true) bootstrap()
                 }
                 is ConnectionEvent.PushStatus -> mutable.update { it.copy(pushConfigured = event.configured, pushRegistered = event.registered) }
                 is ConnectionEvent.Plaintext -> handlePlaintext(event.message)
@@ -510,11 +523,18 @@ class CompanionViewModel(application: Application) : AndroidViewModel(applicatio
                 disconnect()
                 mutable.update { it.copy(relayReady = false, desktopOnline = false, hostVerified = false, connection = "电脑已拒绝配对；请移除后重新申请") }
             }
-            "event" -> if (mutable.value.usable && eventRefresh?.isActive != true) {
+            "event" -> if (mutable.value.usable) {
+                val id = message.string("eventId")
+                if (id.isNotBlank()) {
+                    runCatching { client?.acknowledgeEvent(id) }
+                    if (!seenEvents.add(id)) return
+                    if (seenEvents.size > 1024) seenEvents.remove(seenEvents.first())
+                }
+                if (eventRefresh?.isActive == true) return
                 val expected = generation
                 eventRefresh = viewModelScope.launch {
-                    delay(250)
-                    if (generation == expected) runCatching { loadSnapshot(minimumInterval = 1_000) }
+                    delay(if (mutable.value.transport == "text") 500 else 250)
+                    if (generation == expected) runCatching { loadSnapshot(minimumInterval = if (mutable.value.transport == "text") 3_000 else 1_000) }
                 }
             }
         }
@@ -525,8 +545,8 @@ class CompanionViewModel(application: Application) : AndroidViewModel(applicatio
         poll = viewModelScope.launch {
             runCatching { refreshAll() }.onFailure { if (visible) error(it.message ?: "读取电脑状态失败") }
             while (isActive && visible) {
-                delay(2_000)
-                if (mutable.value.usable && !mutable.value.busy && mutable.value.snapshot?.status == "running") runCatching { loadSnapshot(minimumInterval = 1_000) }
+                delay(if (mutable.value.transport == "text") 3_000 else 2_000)
+                if (mutable.value.usable && !mutable.value.busy && mutable.value.snapshot?.status == "running") runCatching { loadSnapshot(minimumInterval = if (mutable.value.transport == "text") 3_000 else 1_000) }
             }
         }
     }
@@ -566,20 +586,24 @@ class CompanionViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     private suspend fun loadSnapshot(minimumInterval: Long = 0) = snapshotLock.withLock {
-        if (minimumInterval > 0) delay((minimumInterval - (System.currentTimeMillis() - lastSnapshotAt)).coerceAtLeast(0))
+        if (minimumInterval > 0) delay((minimumInterval - (SystemClock.elapsedRealtime() - lastSnapshotAt)).coerceAtLeast(0))
         val id = mutable.value.selectedSession ?: return@withLock
         val room = mutable.value.selectedRoom
         val snapshot = readSnapshot(id)
         if (mutable.value.selectedSession == id && mutable.value.selectedRoom == room) {
-            lastSnapshotAt = System.currentTimeMillis()
+            lastSnapshotAt = SystemClock.elapsedRealtime()
             mutable.update { it.copy(snapshot = snapshot, sessions = it.sessions.map { session -> if (session.id == id) snapshot.session else session }) }
         }
     }
     private suspend fun readSnapshot(id: String): SessionSnapshot {
         val expected = generation
-        val value = remote().request("session.get", buildJsonObject { put("sessionId", id) })
+        val previous = mutable.value.snapshot?.takeIf { it.session.id == id }
+        val known = if (mutable.value.transport == "text" && previous != null) textRevision?.takeIf { it.first == id && it.second == previous.revision }?.second else null
+        val value = remote().request("session.get", buildJsonObject { put("sessionId", id); known?.let { put("knownRevision", it) } }).jsonObject
         ensureCurrent(expected)
-        return SessionSnapshot.parse(value.jsonObject)
+        val snapshot = applySnapshotResponse(value, previous, known)
+        if (mutable.value.transport == "text") textRevision = snapshot.revision?.let { id to it }
+        return snapshot
     }
     private fun remote(): RemoteClient {
         check(mutable.value.usable) { "请等待电脑上线并完成配对" }
@@ -587,7 +611,7 @@ class CompanionViewModel(application: Application) : AndroidViewModel(applicatio
     }
     private fun transport(): RemoteClient {
         val current = mutable.value
-        check(current.transport == "direct" && current.relayReady && current.desktopOnline && current.computer?.approved == true) { "请等待电脑建立直连并完成授权" }
+        check(current.transport in setOf("direct", "text") && current.relayReady && current.desktopOnline && current.computer?.approved == true) { "请等待电脑建立加密通道并完成授权" }
         return client ?: throw IllegalStateException("连接尚未就绪")
     }
     private fun registerPush() {

@@ -63,7 +63,12 @@ export async function runDirectSmoke({ httpBase = 'https://lolicode.com/companio
   const healthUrl = new URL(allowInsecureLocal ? '/health' : '/companion/health', http);
   const health = await json(healthUrl, 200);
   assert.equal(health.accountProtocol, 2);
-  assert.equal(health.transportPolicy, 'directOnly');
+  assert.equal(health.transportPolicy, 'directPreferredTextFallback');
+  assert.equal(health.textRelay, true);
+  assert.equal(health.textLimits?.frameBytes, 8192);
+  for (const [name, ceiling] of Object.entries({ bytesPerSecond: 8192, accountBytesPerSecond: 2048, monthlyBytes: 2 * 1024 ** 3 })) {
+    assert(Number.isSafeInteger(health.textLimits?.[name]) && health.textLimits[name] > 0 && health.textLimits[name] <= ceiling);
+  }
   assert.equal(health.legacyDataRelay, false);
   assert.equal(health.pushConfigured, false);
   assert.deepEqual(await json(`${http.href}/devices`, 401), { error: { code: 'unauthorized', message: 'Authentication required.' } });
@@ -71,11 +76,11 @@ export async function runDirectSmoke({ httpBase = 'https://lolicode.com/companio
     token: randomBytes(32).toString('hex'), phoneToken: randomBytes(32).toString('hex') }, ['direct_only']);
   await rejection(ws, { type: 'packet', v: 1, id: randomUUID(), nonce: randomBytes(12).toString('base64url'),
     ciphertext: randomBytes(16).toString('base64url') }, ['invalid_hello']);
-  return { directOnly: true, accountProtocol: 2, unauthenticatedDirectory401: true,
+  return { directPreferredTextFallback: true, accountProtocol: 2, unauthenticatedDirectory401: true,
     anonymousLegacyRejected: true, unauthenticatedPacketRejected: true, realAccountUsed: false };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try { console.info(JSON.stringify(await runDirectSmoke())); }
-  catch { console.error('Direct-only control smoke failed; no credentials or provider response logged.'); process.exitCode = 1; }
+  catch { console.error('Companion control smoke failed; no credentials or provider response logged.'); process.exitCode = 1; }
 }

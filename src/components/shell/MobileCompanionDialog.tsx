@@ -76,7 +76,7 @@ export function MobileCompanionDialog({
       if (generation.current === current) setBusy(false);
     }
   };
-  // Native code enforces the same account ownership and direct-only boundary.
+  // Native code enforces account ownership and both transport boundaries.
   const devices =
     status?.pairs.filter(
       (device) =>
@@ -93,8 +93,8 @@ export function MobileCompanionDialog({
           </DialogTitle>
           <DialogDescription>
             {text(
-              "手机与电脑直接通信，任务在电脑后台执行。电脑需要保持开机、联网并运行 LoliCode。",
-              "Connect directly to your computer and run tasks quietly in the background. Keep the computer online and LoliCode running.",
+              "优先直连，连接受限时使用加密文本通道，任务在电脑后台执行。电脑需要保持开机、联网并运行 LoliCode。",
+              "Direct connections are preferred, with encrypted text fallback when needed. Tasks run on your computer. Keep it online with LoliCode running.",
             )}
           </DialogDescription>
         </DialogHeader>
@@ -115,8 +115,8 @@ export function MobileCompanionDialog({
           />
           <p className="rounded-lg bg-muted/40 p-3 text-sm text-fg-2">
             {text(
-              "仅直连：服务器只协助登录、发现设备和建立连接，不转发任务、回复、图片或文件。无法打通时，请切换网络后重试。",
-              "Direct only: the server helps sign in, find devices and establish connections. It never forwards task content, replies, images or files. If a direct connection fails, switch networks and retry.",
+              "文本通道只同步有大小和流量限制的文字、状态与问题卡片，由手机本地显示。图片、文件和桌面视频不经此通道转发；额度用尽会停止并提示。",
+              "Text fallback syncs bounded text, status and question cards for local display on your phone. Images, files and desktop video are excluded. Forwarding stops when its quota is exhausted.",
             )}
           </p>
           {devices.map((device) => (
@@ -134,14 +134,19 @@ export function MobileCompanionDialog({
                         "已直连 · 端到端加密",
                         "Direct · End-to-end encrypted",
                       )
-                    : text("未建立直连", "Direct connection unavailable")}
+                    : device.online && device.transport === "text"
+                      ? text(
+                          "受限文本 · 端到端加密",
+                          "Limited text · End-to-end encrypted",
+                        )
+                      : text("连接未就绪", "Connection unavailable")}
                 </span>
               </div>
               {device.lastError && (
                 <p className="text-xs text-fg-2">
                   {text(
-                    "直连不可用，请切换网络后重试。",
-                    "A direct connection is unavailable. Switch networks and retry.",
+                    "连接受限或文本额度已用尽，请查看设备状态后重试。",
+                    "The connection is unavailable or the text quota is exhausted. Check device status and retry.",
                   )}
                 </p>
               )}
@@ -165,7 +170,7 @@ export function MobileCompanionDialog({
                     void action(() => mobileCompanionApi.connectAccount())
                   }
                 >
-                  {text("重试直连", "Retry direct connection")}
+                  {text("重试连接", "Retry connection")}
                 </Button>
               )}
             </section>

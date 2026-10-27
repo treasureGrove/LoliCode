@@ -207,7 +207,7 @@ class DirectTransportTest {
             val computer = PairedComputer(pairing, "00000000-0000-4000-8000-000000000002", approved = true, accountId = "7",
                 desktopDeviceId = "00000000-0000-4000-8000-000000000001", desktopFingerprint = "c".repeat(64))
             val factory = if (factoryEnabled) DirectPeerFactory { callback -> FakePeer(callback).also { peers.put(it) } } else null
-            client = RemoteClient(computer, "Fixture phone", "fixture_device_ticket_${"d".repeat(32)}", factory, events::put)
+            client = RemoteClient(computer, "Fixture phone", "fixture_device_ticket_${"d".repeat(32)}", factory, onEvent = events::put)
         }
         fun connect() {
             client.connect()

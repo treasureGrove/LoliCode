@@ -126,7 +126,7 @@ test('global signaling budget is shared by all rooms and cannot be reset by reco
   assert.equal(relay.metrics().signalsOut, 2);
   assert.equal(relay.metrics().signalBytesOut <= 600, true);
   assert.equal(relay.metrics().taskForwardedBytes, 0);
-  assert.equal(relay.metrics().transportPolicy, 'directOnly');
+  assert.equal(relay.metrics().transportPolicy, 'directPreferredTextFallback');
   now += 60_000;
   a.send(signal()); await b.next('signal');
   assert.equal(relay.metrics().signalsOut, 3);

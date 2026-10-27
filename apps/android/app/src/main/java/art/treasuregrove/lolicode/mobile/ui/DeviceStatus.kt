@@ -5,7 +5,7 @@ import art.treasuregrove.lolicode.mobile.CompanionState
 import art.treasuregrove.lolicode.mobile.data.DevicePresence
 import art.treasuregrove.lolicode.mobile.data.PairedComputer
 
-internal fun deviceStatusText(presence: DevicePresence, direct: Boolean, verified: Boolean, approved: Boolean = true): String {
+internal fun deviceStatusText(presence: DevicePresence, direct: Boolean, verified: Boolean, approved: Boolean = true, limitedText: Boolean = false): String {
     val heartbeat = when (presence) {
         DevicePresence.Online -> "在线"
         DevicePresence.Offline -> "离线"
@@ -13,6 +13,8 @@ internal fun deviceStatusText(presence: DevicePresence, direct: Boolean, verifie
     }
     val connection = when {
         !approved -> "待电脑授权"
+        limitedText && verified -> "受限文本"
+        limitedText -> "文本验证中"
         direct && verified -> "已直连"
         direct -> "直连验证中"
         else -> "未直连"
@@ -28,7 +30,7 @@ internal fun ComputerStatusPill(state: CompanionState, computer: PairedComputer?
     }
     val presence = state.presence(computer)
     val selected = state.selectedRoom == computer.id
-    StatusPill(deviceStatusText(presence, selected && state.transport == "direct", selected && state.hostVerified, computer.approved),
+    StatusPill(deviceStatusText(presence, selected && state.transport == "direct", selected && state.hostVerified, computer.approved, selected && state.transport == "text"),
         if (presence == DevicePresence.Online) LoliColors.Green else LoliColors.Muted,
         if (presence == DevicePresence.Online) LoliColors.GreenSoft else LoliColors.VioletSoft,
         dot = presence == DevicePresence.Online)

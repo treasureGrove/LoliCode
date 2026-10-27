@@ -20,11 +20,11 @@ UPDATE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(UPDATE)
 REQUIRED = ('Dockerfile', 'package.json', 'package-lock.json', 'src/server.mjs', 'src/main.mjs',
             'src/accounts.mjs', 'src/account-http.mjs', 'src/account-validation.mjs', 'src/forum.mjs',
-            'src/store.mjs', 'deploy/nginx-http.conf', 'deploy/nginx-locations.conf')
+            'src/store.mjs', 'src/text-budget.mjs', 'deploy/nginx-http.conf', 'deploy/nginx-locations.conf')
 
 
-def bundle(path, extras=()):
-    files = {name: ('audited fixture ' + name).encode() for name in REQUIRED}
+def bundle(path, extras=(), omit=()):
+    files = {name: ('audited fixture ' + name).encode() for name in REQUIRED if name not in omit}
     with tarfile.open(path, 'w:gz') as output:
         for name, data in [*files.items(), *extras]:
             info = tarfile.TarInfo(name)
@@ -33,7 +33,97 @@ def bundle(path, extras=()):
     return files, UPDATE.digest(path.read_bytes())
 
 
+def new_health():
+    return {'ok': True, 'ready': True, 'protocol': 1, 'accountProtocol': 2,
+            'transportPolicy': UPDATE.TRANSPORT_POLICY, 'textRelay': True,
+            'textLimits': dict(UPDATE.TEXT_LIMIT_CEILINGS), 'legacyDataRelay': False, 'pushConfigured': False}
+
+
+def ledger(month='2026-10', reserved=65536):
+    return json.dumps({'v': 1, 'month': month, 'reservedBytes': reserved}).encode()
+
+
+class TextReadinessTests(unittest.TestCase):
+    def test_only_new_runtime_with_bounded_ready_text_is_promoted(self):
+        self.assertTrue(UPDATE.valid_text_health(new_health()))
+        for key, value in [('transportPolicy', 'directOnly'), ('textRelay', False), ('textRelay', 1),
+                           ('legacyDataRelay', True), ('ready', 1), ('protocol', True)]:
+            with self.subTest(key=key, value=value):
+                health = new_health(); health[key] = value
+                self.assertFalse(UPDATE.valid_text_health(health))
+        for key, value in [('frameBytes', 8191), ('bytesPerSecond', 8193),
+                           ('accountBytesPerSecond', 2049), ('monthlyBytes', 2 * 1024**3 + 1),
+                           ('monthlyBytes', True), ('bytesPerSecond', 0)]:
+            with self.subTest(key=key, value=value):
+                health = new_health(); health['textLimits'][key] = value
+                self.assertFalse(UPDATE.valid_text_health(health))
+        health = new_health(); del health['textLimits']['monthlyBytes']
+        self.assertFalse(UPDATE.valid_text_health(health))
+        health = new_health(); health['textLimits']['unknownCap'] = 1
+        self.assertFalse(UPDATE.valid_text_health(health))
+        health = new_health(); health['unexpectedPrivateConfig'] = 'must never enter a receipt'
+        self.assertFalse(UPDATE.valid_text_health(health))
+        self.assertFalse(UPDATE.valid_text_health(None))
+
+    def test_stricter_rates_and_monthly_ceiling_are_valid_without_refilling_quota(self):
+        health = new_health()
+        health['textLimits'].update(bytesPerSecond=4096, accountBytesPerSecond=1024, monthlyBytes=1024**3)
+        self.assertTrue(UPDATE.valid_text_health(health))
+
+    def test_readiness_retries_old_schema_but_never_accepts_it_as_new(self):
+        old = {'ready': True, 'protocol': 1, 'accountProtocol': 2, 'transportPolicy': 'directOnly',
+               'legacyDataRelay': False, 'pushConfigured': False}
+        probe = mock.Mock(side_effect=[old, new_health()])
+        update = UPDATE.Update(types.SimpleNamespace(), check_endpoint=probe)
+        with mock.patch.object(UPDATE.time, 'sleep', return_value=None):
+            self.assertEqual(update.validate_new_health(), new_health())
+        self.assertEqual(probe.call_count, 2)
+        update = UPDATE.Update(types.SimpleNamespace(), check_endpoint=mock.Mock(return_value=old))
+        with mock.patch.object(UPDATE.time, 'sleep', return_value=None), self.assertRaises(UPDATE.UpdateError):
+            update.validate_new_health()
+
+
+class QuotaLedgerTests(unittest.TestCase):
+    def test_exact_high_water_bytes_survive_rollback_and_month_changes(self):
+        before, spent = ledger(reserved=65536), ledger(reserved=131072)
+        self.assertEqual(UPDATE.preserve_text_ledger(before, spent), spent)
+        self.assertEqual(UPDATE.preserve_text_ledger(spent, before), spent)
+        newer = ledger('2026-11', 65536)
+        self.assertEqual(UPDATE.preserve_text_ledger(spent, newer), newer)
+        self.assertEqual(UPDATE.preserve_text_ledger(newer, spent), newer)
+        self.assertEqual(UPDATE.preserve_text_ledger(None, spent), spent)
+        self.assertEqual(UPDATE.preserve_text_ledger(spent, None), spent)
+        self.assertIsNone(UPDATE.preserve_text_ledger(None, None))
+
+    def test_corruption_is_preserved_fail_closed_instead_of_replaced_by_credit(self):
+        valid, corrupt = ledger(), b'broken ledger; must not reset'
+        self.assertEqual(UPDATE.preserve_text_ledger(valid, corrupt), corrupt)
+        self.assertEqual(UPDATE.preserve_text_ledger(corrupt, valid), corrupt)
+        self.assertFalse(UPDATE.quota_not_regressed(corrupt, valid))
+        self.assertFalse(UPDATE.quota_not_regressed(valid, corrupt))
+        self.assertFalse(UPDATE.quota_not_regressed(valid, None))
+        self.assertFalse(UPDATE.quota_not_regressed(ledger(reserved=131072), valid))
+        self.assertTrue(UPDATE.quota_not_regressed(valid, ledger(reserved=131072)))
+        self.assertTrue(UPDATE.quota_not_regressed(None, None))
+        self.assertIsNone(UPDATE.text_ledger_version(ledger(reserved=True)))
+        self.assertIsNone(UPDATE.text_ledger_version(ledger('２０２６-10')))
+        self.assertIsNone(UPDATE.text_ledger_version(ledger(reserved=2 * 1024**3 + 1)))
+
+    def test_only_committed_or_exact_owned_temporary_ledger_names_are_accepted(self):
+        for name in ['text-budget.json', 'text-budget.json.' + 'a'*16 + '.tmp', 'rooms.json.'+'b'*16+'.tmp']:
+            self.assertTrue(UPDATE.state_member(name))
+        for name in ['text-budget.json.bak', 'text-budget.json.'+'A'*16+'.tmp', '../text-budget.json', 'accounts.json']:
+            self.assertFalse(UPDATE.state_member(name))
+
+
 class ArchiveTests(unittest.TestCase):
+    def test_archive_without_text_quota_module_cannot_be_activated(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = pathlib.Path(directory) / 'source.tar.gz'
+            _, digest = bundle(path, omit=('src/text-budget.mjs',))
+            with self.assertRaises(UPDATE.UpdateError):
+                UPDATE.archive_files(path, digest)
+
     def test_pinned_complete_archive_and_digest(self):
         with tempfile.TemporaryDirectory() as directory:
             path = pathlib.Path(directory) / 'source.tar.gz'
@@ -143,6 +233,7 @@ class FakeDocker:
         self.fail_rename_after_effect = False
         self.public_route_failures = 0
         self.wrong_error_body = False
+        self.new_text_ledger = None
 
     def __call__(self, *args, check=True, timeout=600):
         self.calls.append(args)
@@ -175,6 +266,14 @@ class FakeDocker:
         elif args[:2] == ('docker', 'run'):
             self.current = {**self.old, 'imageId': 'sha256:' + 'b' * 64, 'image': args[-1], 'running': True}
             (self.base / 'state' / 'rooms.json').write_bytes(b'{"v":2,"fixture":"new-private-state"}')
+            if self.new_text_ledger is not None:
+                path = self.base / 'state' / UPDATE.TEXT_LEDGER
+                if path.exists():
+                    path.write_bytes(self.new_text_ledger)
+                else:
+                    UPDATE.exclusive(path, self.new_text_ledger)
+                    if os.name != 'nt':
+                        os.chown(path, 1000, 1000)
         elif args[:2] == ('docker', 'start'):
             self.current['running'] = True
         elif args == ('nginx', '-t') and self.fail_nginx_once:
@@ -192,16 +291,16 @@ class FakeDocker:
                 return {'error': {'code': 'unauthorized', 'message': 'wrong response'}}
             return {'error': {'code': 'unauthorized', 'message': 'Authentication required.'}}
         if self.current and self.current['image'].startswith('lolicode-companion:account-v2-'):
-            return {'ok': True, 'ready': True, 'protocol': 1, 'accountProtocol': 2,
-                    'transportPolicy': 'directOnly', 'legacyDataRelay': False, 'pushConfigured': False}
-        return {'ok': True, 'ready': True, 'protocol': 1, 'pushConfigured': False}
+            return new_health()
+        return {'ok': True, 'ready': True, 'protocol': 1, 'accountProtocol': 2,
+                'transportPolicy': 'directOnly', 'legacyDataRelay': False, 'pushConfigured': False}
 
 
 @unittest.skipUnless(os.name == 'posix' and hasattr(os, 'geteuid') and os.geteuid() == 0,
                      'Lifecycle tests require isolated Linux root fixtures for real uid/gid/modes')
 class LifecycleTests(unittest.TestCase):
     @contextlib.contextmanager
-    def fixture(self):
+    def fixture(self, text_ledger=None):
         with tempfile.TemporaryDirectory() as directory:
             root = pathlib.Path(directory).resolve()
             base = root / 'companion'
@@ -213,6 +312,9 @@ class LifecycleTests(unittest.TestCase):
             for name, data in [('push-state.key', b'fixture-key-never-log'.ljust(32, b'x')), ('rooms.json', b'{"v":1,"rooms":[]}')]:
                 UPDATE.exclusive(state / name, data)
                 os.chown(state / name, 1000, 1000)
+            if text_ledger is not None:
+                UPDATE.exclusive(state / UPDATE.TEXT_LEDGER, text_ledger)
+                os.chown(state / UPDATE.TEXT_LEDGER, 1000, 1000)
             site, rates, locations = (root / name for name in ('site.conf', 'rates.conf', 'locations.conf'))
             site.write_bytes(b'include /etc/nginx/snippets/lolicode-companion.conf;\n')
             rates.write_bytes(b'old rates')
@@ -231,7 +333,9 @@ class LifecycleTests(unittest.TestCase):
         with self.fixture() as (update, fake, root):
             before = {str(path): path.read_bytes() for path in root.rglob('*') if path.is_file()}
             plan = update.plan()
-            self.assertEqual(plan['transportPolicy'], 'directOnly')
+            self.assertEqual(plan['transportPolicy'], UPDATE.TRANSPORT_POLICY)
+            self.assertTrue(plan['textRelay'])
+            self.assertEqual(plan['textLimits'], UPDATE.TEXT_LIMIT_CEILINGS)
             self.assertFalse(plan['stunActivation'])
             self.assertEqual(before, {str(path): path.read_bytes() for path in root.rglob('*') if path.is_file()})
             self.assertTrue(all(call[:2] == ('docker', 'inspect') for call in fake.calls))
@@ -250,11 +354,12 @@ class LifecycleTests(unittest.TestCase):
                 self.assertFalse(any(call[:2] == ('docker', 'stop') for call in fake.calls))
 
     def test_atomic_backup_contains_only_private_owned_state_and_config(self):
-        with self.fixture() as (update, _, _):
+        with self.fixture(text_ledger=ledger(reserved=131072)) as (update, _, _):
             update.plan()
             backup = update.backup_bundle()
             self.assertEqual(stat.S_IMODE(backup.stat().st_mode), 0o700)
             self.assertEqual((backup / 'state' / 'rooms.json').read_bytes(), b'{"v":1,"rooms":[]}')
+            self.assertEqual((backup / 'state' / UPDATE.TEXT_LEDGER).read_bytes(), ledger(reserved=131072))
             for path in backup.rglob('*'):
                 self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o700 if path.is_dir() else 0o600)
             manifest = (backup / 'manifest.json').read_text()
@@ -288,6 +393,32 @@ class LifecycleTests(unittest.TestCase):
             self.assertEqual((root / 'rates.conf').read_bytes(), b'old rates')
             self.assertEqual((root / 'locations.conf').read_bytes(), b'old locations')
             self.assertIn(UPDATE.NAME + '-failed-' + update.identifier, fake.saved)
+
+    def test_rollback_preserves_quota_reserved_by_failed_new_runtime(self):
+        for previous in [None, ledger(reserved=65536)]:
+            with self.subTest(previous=previous), self.fixture(text_ledger=previous) as (update, fake, _):
+                update.plan(); fake.new_text_ledger = ledger(reserved=131072); fake.fail_nginx_once = True
+                with self.assertRaises(UPDATE.UpdateError):
+                    update.activate()
+                self.assertEqual((UPDATE.BASE / 'state' / UPDATE.TEXT_LEDGER).read_bytes(), ledger(reserved=131072))
+                self.assertEqual((update.backup / 'failed-state' / UPDATE.TEXT_LEDGER).read_bytes(), ledger(reserved=131072))
+                self.assertTrue(fake.current['running'])
+
+    def test_rollback_preserves_corrupt_ledger_fail_closed(self):
+        with self.fixture(text_ledger=ledger()) as (update, fake, _):
+            update.plan(); fake.new_text_ledger = b'corrupt ledger'; fake.fail_nginx_once = True
+            with self.assertRaises(UPDATE.UpdateError):
+                update.activate()
+            self.assertEqual((UPDATE.BASE / 'state' / UPDATE.TEXT_LEDGER).read_bytes(), b'corrupt ledger')
+            self.assertTrue(fake.current['running'])
+
+    def test_new_runtime_cannot_silently_reset_an_existing_quota(self):
+        with self.fixture(text_ledger=ledger(reserved=131072)) as (update, fake, _):
+            update.plan(); fake.new_text_ledger = ledger(reserved=65536)
+            with self.assertRaises(UPDATE.UpdateError):
+                update.activate()
+            self.assertEqual((UPDATE.BASE / 'state' / UPDATE.TEXT_LEDGER).read_bytes(), ledger(reserved=131072))
+            self.assertTrue(fake.current['running'])
 
     def test_stop_after_effect_failure_recovers_owned_baseline_without_touching_state(self):
         with self.fixture() as (update, fake, _):

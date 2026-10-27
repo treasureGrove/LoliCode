@@ -232,7 +232,9 @@ test('aggregate queue is bounded across rooms, expired packets are not replayed,
   assert.deepEqual(await phone.next('packet'), { ...fresh, from: 'desktop' });
   const health = await fetch(relay.url.replace('ws:', 'http:').replace('/companion', '/health'));
   assert.deepEqual(await health.json(), { ok: true, ready: true, protocol: 1, accountProtocol: 2,
-    transportPolicy: 'directOnly', legacyDataRelay: true, pushConfigured: false });
+    transportPolicy: 'directPreferredTextFallback', textRelay: true,
+    textLimits: { frameBytes: 8192, bytesPerSecond: 8192, accountBytesPerSecond: 2048, monthlyBytes: 2 * 1024 ** 3 },
+    legacyDataRelay: true, pushConfigured: false });
 });
 
 test('cleartext websocket is refused by default, secure loopback proxy is accepted', async t => {

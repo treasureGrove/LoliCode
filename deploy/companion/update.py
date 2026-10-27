@@ -28,6 +28,10 @@ LOCATIONS = pathlib.Path('/etc/nginx/snippets/lolicode-companion.conf')
 NAME = 'lolicode-companion'
 OWNER = 'lolicode-android-companion-v1'
 HASH = re.compile(r'^[a-f0-9]{64}$')
+TRANSPORT_POLICY = 'directPreferredTextFallback'
+TEXT_LIMIT_CEILINGS = {'frameBytes': 8192, 'bytesPerSecond': 8192,
+                       'accountBytesPerSecond': 2048, 'monthlyBytes': 2 * 1024 * 1024 * 1024}
+TEXT_LEDGER = 'text-budget.json'
 INSPECT = ('{"imageId":{{json .Image}},"image":{{json .Config.Image}},'
            '"owner":{{json (index .Config.Labels "art.treasuregrove.owner")}},'
            '"running":{{json .State.Running}},"network":{{json .HostConfig.NetworkMode}},'
@@ -46,6 +50,66 @@ class ProbeError(UpdateError):
 
 def digest(data):
     return hashlib.sha256(data).hexdigest()
+
+
+def valid_text_health(value):
+    if not isinstance(value, dict):
+        return False
+    limits = value.get('textLimits')
+    return (set(value) == {'ok', 'ready', 'protocol', 'accountProtocol', 'transportPolicy',
+                           'textRelay', 'textLimits', 'legacyDataRelay', 'pushConfigured'}
+            and value.get('ok') is True and value.get('ready') is True and type(value.get('protocol')) is int and value['protocol'] == 1
+            and type(value.get('accountProtocol')) is int and value['accountProtocol'] == 2
+            and value.get('transportPolicy') == TRANSPORT_POLICY and value.get('textRelay') is True
+            and value.get('legacyDataRelay') is False and value.get('pushConfigured') is False
+            and isinstance(limits, dict) and set(limits) == set(TEXT_LIMIT_CEILINGS)
+            and all(type(limits[key]) is int and 0 < limits[key] <= ceiling
+                    for key, ceiling in TEXT_LIMIT_CEILINGS.items())
+            and limits['frameBytes'] == TEXT_LIMIT_CEILINGS['frameBytes'])
+
+
+def state_member(name):
+    return (name in ('rooms.json', 'push-state.key', TEXT_LEDGER)
+            or re.fullmatch(r'(?:rooms\.json|text-budget\.json)\.[a-f0-9]{16}\.tmp', name) is not None)
+
+
+def text_ledger_version(data):
+    try:
+        if len(data) > 1024:
+            return None
+        value = json.loads(data)
+        if (not isinstance(value, dict) or set(value) != {'v', 'month', 'reservedBytes'}
+                or type(value['v']) is not int or value['v'] != 1
+                or not isinstance(value['month'], str) or not re.fullmatch(r'[0-9]{4}-(0[1-9]|1[0-2])', value['month'])
+                or type(value['reservedBytes']) is not int or not 0 <= value['reservedBytes'] <= TEXT_LIMIT_CEILINGS['monthlyBytes']):
+            return None
+        return value['month'], value['reservedBytes']
+    except (ValueError, UnicodeError):
+        return None
+
+
+def preserve_text_ledger(previous, failed):
+    """Return original bytes conservatively; never issue a fresh quota on rollback."""
+    if failed is None:
+        return previous
+    if previous is None:
+        return failed
+    old_version, failed_version = text_ledger_version(previous), text_ledger_version(failed)
+    # A corrupt ledger remains corrupt so the runtime continues to fail closed.
+    if failed_version is None:
+        return failed
+    if old_version is None:
+        return previous
+    return failed if failed_version > old_version else previous
+
+
+def quota_not_regressed(previous, current):
+    if previous is None and current is None:
+        return True  # No text has reserved credit yet.
+    if current is None or text_ledger_version(current) is None:
+        return False
+    return previous is None or (text_ledger_version(previous) is not None
+                                and text_ledger_version(current) >= text_ledger_version(previous))
 
 
 def fsync_directory(path):
@@ -125,7 +189,7 @@ def archive_files(path, expected):
             files[name] = bundle.extractfile(member).read()
     required = ('Dockerfile', 'package.json', 'package-lock.json', 'src/server.mjs', 'src/main.mjs',
                 'src/accounts.mjs', 'src/account-http.mjs', 'src/account-validation.mjs', 'src/forum.mjs',
-                'src/store.mjs', 'deploy/nginx-http.conf', 'deploy/nginx-locations.conf')
+                'src/store.mjs', 'src/text-budget.mjs', 'deploy/nginx-http.conf', 'deploy/nginx-locations.conf')
     if any(name not in files for name in required):
         raise UpdateError('Incomplete account-v2 source archive')
     if any(str(parent) in files for name in files for parent in pathlib.PurePosixPath(name).parents):
@@ -244,7 +308,8 @@ class Update:
         return {'plan': True, 'sourceSha256': self.args.sha256, 'newImage': self.image,
                 'previousImageId': current['imageId'], 'owner': OWNER, 'statePath': str(state),
                 'websiteUnchanged': True, 'publicHttp': 'https://lolicode.com/companion/v2',
-                'transportPolicy': 'directOnly', 'stunActivation': False,
+                'transportPolicy': TRANSPORT_POLICY, 'textRelay': True,
+                'textLimits': dict(TEXT_LIMIT_CEILINGS), 'textQuotaLedgerBackup': True, 'stunActivation': False,
                 'configBefore': {str(path): digest(data) for path, (data, _) in self.original.items()}}
 
     def stage_source(self):
@@ -282,7 +347,7 @@ class Update:
             raise UpdateError('Unexpected state file count')
         total = 0
         for path in entries:
-            if path.name not in ('rooms.json', 'push-state.key') and not re.fullmatch(r'rooms\.json\.[a-f0-9]{16}\.tmp', path.name):
+            if not state_member(path.name):
                 raise UpdateError('Unexpected state member; preserved')
             before = path.stat()
             if path.is_symlink() or not path.is_file() or before.st_mode & 0o077 or before.st_uid != 1000 or before.st_gid != 1000:
@@ -315,12 +380,24 @@ class Update:
         for _ in range(30):
             try:
                 value = self.probe('http://127.0.0.1:13010/health')
-                if value.get('ready') is True and value.get('protocol') == 1 and value.get('accountProtocol') == 2 and value.get('transportPolicy') == 'directOnly' and value.get('legacyDataRelay') is False and value.get('pushConfigured') is False:
+                if valid_text_health(value):
                     return value
             except Exception:
                 pass
             time.sleep(0.5)
         raise UpdateError('New control-service health failed')
+
+    def private_ledger(self, directory, owner=1000):
+        path = directory / TEXT_LEDGER
+        if path.is_symlink():
+            raise UpdateError('Unsafe quota ledger; preserved')
+        if not path.exists():
+            return None
+        metadata = path.stat()
+        if (not path.is_file() or metadata.st_mode & 0o077
+                or (os.name != 'nt' and (metadata.st_uid != owner or metadata.st_gid != owner))):
+            raise UpdateError('Unsafe quota ledger; preserved')
+        return ordinary(path)
 
     def public_smoke(self, health):
         # Reload signals the master; it does not wait for the new worker to
@@ -363,13 +440,24 @@ class Update:
                 self.run('docker', 'rename', NAME, NAME + '-failed-' + self.identifier)
             # Preserve any newly written state; an old v1 binary must never read it.
             os.rename(BASE / 'state', self.backup / 'failed-state')
+            # Text egress may have reserved quota before readiness later failed.
+            # Carry its high water mark (or corruption) into the restored state.
+            ledger = preserve_text_ledger(self.private_ledger(self.backup / 'state', owner=0),
+                                          self.private_ledger(self.backup / 'failed-state'))
             replacement = BASE / ('state-rollback-' + self.identifier)
             replacement.mkdir(mode=0o700)
             if os.name != 'nt':
                 os.chown(replacement, 1000, 1000)
             for path in (self.backup / 'state').iterdir():
+                if path.name == TEXT_LEDGER:
+                    continue
                 target = replacement / path.name
                 exclusive(target, ordinary(path))
+                if os.name != 'nt':
+                    os.chown(target, 1000, 1000)
+            if ledger is not None:
+                target = replacement / TEXT_LEDGER
+                exclusive(target, ledger)
                 if os.name != 'nt':
                     os.chown(target, 1000, 1000)
             fsync_directory(replacement)
@@ -434,9 +522,12 @@ class Update:
             self.run('systemctl', 'reload', 'nginx')
             self.phase = 'public-smoke'
             self.public_smoke(health)
+            if not quota_not_regressed(self.private_ledger(self.backup / 'state', owner=0), self.private_ledger(BASE / 'state')):
+                raise UpdateError('Text quota ledger changed or regressed; preserved')
             receipt = {'updated': True, 'sourceSha256': self.args.sha256, 'image': self.image,
                        'previousImageId': self.args.expected_image_id, 'backup': str(self.backup), 'health': health,
-                       'websiteSha256': digest(ordinary(SITE)), 'transportPolicy': 'directOnly', 'stunActivated': False,
+                       'websiteSha256': digest(ordinary(SITE)), 'transportPolicy': TRANSPORT_POLICY,
+                       'textRelay': True, 'textLimits': health['textLimits'], 'textQuotaLedgerPreserved': True, 'stunActivated': False,
                        'publicProbeAttempts': self.public_attempts, 'firstMismatch': self.first_mismatch}
             exclusive(self.backup / 'success.json', json.dumps(receipt, sort_keys=True).encode())
             self.phase = 'complete'

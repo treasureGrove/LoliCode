@@ -22,13 +22,14 @@ data class Session(val id: String, val title: String, val projectPath: String) {
     }
 }
 data class ChatMessage(val role: String, val body: String)
-data class Approval(val id: String, val action: String, val detail: String)
+data class Approval(val id: String, val action: String, val detail: String, val canApprove: Boolean = true)
 data class Question(val id: String, val title: String, val fields: List<JsonObject>)
 data class FileDiff(val path: String, val patch: String)
 data class SessionSnapshot(
     val session: Session, val status: String,
     val messages: List<ChatMessage>, val approvals: List<Approval>, val questions: List<Question>,
     val diffs: List<FileDiff>, val error: String, val truncated: Boolean, val truncationMessage: String,
+    val revision: String? = null,
 ) {
     companion object {
         fun parse(data: JsonObject): SessionSnapshot = SessionSnapshot(
@@ -51,14 +52,23 @@ data class SessionSnapshot(
                     obj.string("description"), obj.string("toolName"),
                     obj.array("resources").joinToString("\n") { it.jsonPrimitive.content },
                     obj["toolInput"]?.takeUnless { it is JsonNull }?.toString().orEmpty(),
-                ).filter(String::isNotBlank).joinToString("\n"))
+                ).filter(String::isNotBlank).joinToString("\n"), !obj.boolean("requiresDirect") && (obj["canApprove"] == null || obj.boolean("canApprove")))
             },
             data.array("questions").map { element ->
                 val obj = element.jsonObject
                 Question(obj.string("id"), obj.string("title"), obj.array("fields").map(JsonElement::jsonObject))
             },
             data.array("diffs").map { FileDiff(it.jsonObject.string("path"), it.jsonObject.string("patch")) },
-            data.string("error"), data.boolean("truncated"), data.string("truncationMessage"),
+            data.string("error"), data.boolean("truncated"), data.string("truncationMessage"), data.string("revision").ifBlank { null },
         )
     }
+}
+
+/** A revision acknowledgement must never erase the locally rendered baseline. */
+fun applySnapshotResponse(data: JsonObject, previous: SessionSnapshot?, knownRevision: String?): SessionSnapshot {
+    if (data.boolean("notModified")) {
+        require(previous != null && knownRevision != null && previous.revision == knownRevision && data.string("revision") == knownRevision) { "会话增量基线已失效，请重新连接" }
+        return previous
+    }
+    return SessionSnapshot.parse(data)
 }

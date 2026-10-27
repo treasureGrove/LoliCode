@@ -1,6 +1,31 @@
-//! Account task packets travel only over native DataChannel, never signaling.
+//! Native direct preferred, with separately encrypted and bounded text fallback.
 use super::direct::DirectChannel;
+use super::text::TextChannel;
 use super::*;
+
+pub(super) async fn fence_text_work<F>(
+    work: F,
+    mut teardown: tokio::sync::watch::Receiver<u64>,
+    expires: u64,
+    controls: &mut mpsc::Receiver<Control>,
+) -> Result<(), String>
+where
+    F: std::future::Future<Output = Result<(), String>>,
+{
+    let mut work = Box::pin(work);
+    loop {
+        tokio::select! {
+            biased;
+            _ = teardown.changed() => return Ok(()),
+            _ = tokio::time::sleep(Duration::from_millis(expires.saturating_sub(now()))) => return Err("账号设备认证已到期，文本通道已关闭".into()),
+            control = controls.recv() => match control {
+                Some(Control::Approved) => continue,
+                Some(Control::Stop | Control::Revoke) | None => return Ok(()),
+            },
+            result = &mut work => return result,
+        }
+    }
+}
 async fn connect_direct(
     room: &Room,
     id: &str,
@@ -25,9 +50,15 @@ impl MobileCompanionState {
         id: String,
         mut controls: mpsc::Receiver<Control>,
     ) {
-        let outcome = self.run_direct_room(&app, &id, &mut controls).await;
+        let mut outcome = self.run_direct_room(&app, &id, &mut controls).await;
+        if outcome.is_err() && self.room_enabled(&id).await {
+            self.connection(&id, false, Some("直连未建立，正在尝试受限文本通道".into()))
+                .await;
+            outcome = self.run_text_room(&app, &id, &mut controls).await;
+        }
         if let Some(connection) = self.0.connections.lock().await.get_mut(&id) {
             connection.online = false;
+            connection.transport = None;
             connection.tx = None;
             if let Err(error) = outcome {
                 connection.last_error = Some(error);
@@ -76,6 +107,9 @@ impl MobileCompanionState {
             return Ok(());
         }
         self.connection(id, true, None).await;
+        if let Some(c) = self.0.connections.lock().await.get_mut(id) {
+            c.transport = Some("direct");
+        }
         let result=async{
             if let Some(message)=self.approval_message(id).await{self.send_direct_payload(&mut channel,&secret,id,message).await?;}
             let mut tick=tokio::time::interval(Duration::from_secs(2));
@@ -118,6 +152,87 @@ impl MobileCompanionState {
         }
         value["sentAt"] = json!(now());
         channel.send(crypto::seal(&secret.key, room, &value)?).await
+    }
+    async fn run_text_room(
+        &self,
+        app: &AppHandle,
+        id: &str,
+        controls: &mut mpsc::Receiver<Control>,
+    ) -> Result<(), String> {
+        let (epoch, mut lifetime) = self.account_lifetime();
+        let room = self
+            .0
+            .store
+            .lock()
+            .await
+            .rooms
+            .get(id)
+            .cloned()
+            .filter(|r| r.approved && !r.revoked)
+            .ok_or("手机连接已停止")?;
+        let binding = room.account.as_ref().ok_or("账号房间缺少身份绑定")?;
+        let (ticket, expires) = self
+            .account_room_ticket(binding)
+            .await
+            .ok_or("账号设备认证已到期")?;
+        let secret = self.0.vault.read(id)?;
+        let connected = tokio::select! {
+            biased;
+            _ = lifetime.changed() => return Ok(()),
+            _ = tokio::time::sleep(Duration::from_millis(expires.saturating_sub(now()))) => return Err("账号设备认证已到期".into()),
+            _ = controls.recv() => return Ok(()),
+            channel = TextChannel::connect(&room.relay_url, id, &secret, &ticket) => channel?,
+        };
+        let mut channel = connected;
+        if !self.room_enabled(id).await {
+            channel.close().await;
+            return Ok(());
+        }
+        self.connection(id, true, None).await;
+        if let Some(c) = self.0.connections.lock().await.get_mut(id) {
+            c.transport = Some("text");
+        }
+        let teardown = lifetime.clone();
+        let work = async {
+            if let Some(message) = self.approval_message(id).await {
+                channel.send(message).await?;
+            }
+            let mut tick = tokio::time::interval(Duration::from_secs(3));
+            let deadline = tokio::time::sleep(Duration::from_millis(expires.saturating_sub(now())));
+            tokio::pin!(deadline);
+            let mut attempts = BTreeMap::<String, u64>::new();
+            loop {
+                tokio::select! {
+                    biased;
+                    _ = lifetime.changed() => return Ok(()),
+                    _ = &mut deadline => return Err("账号设备认证已到期，文本通道已关闭".into()),
+                    incoming = channel.recv() => {
+                        let Some(payload) = incoming? else { return Err("文本通道已断开".into()); };
+                        if let Some(reply) = self.receive_payload(app, id, payload, true).await? {
+                            if !self.room_enabled(id).await { return Ok(()); }
+                            channel.send(reply).await?;
+                        }
+                    },
+                    _ = tick.tick() => {
+                        if self.check_epoch(epoch).is_err() || !self.room_enabled(id).await { return Ok(()); }
+                        self.monitor(app,id).await?;
+                        let pending = self.0.store.lock().await.rooms.get(id).map(|r| r.events.values().cloned().collect::<Vec<_>>()).unwrap_or_default();
+                        // Bounded replay, with an authenticated event.ack removing
+                        // delivered notifications from persistent storage.
+                        for event in pending.into_iter().filter(|event| !attempts.contains_key(event["eventId"].as_str().unwrap_or(""))).take(2).collect::<Vec<_>>() {
+                            let event_id = event["eventId"].as_str().unwrap_or("").to_owned();
+                            channel.send(event).await?;
+                            attempts.insert(event_id, now());
+                        }
+                    }
+                }
+            }
+        };
+        // Fence the whole operation, including a pending dispatch or paced send.
+        // Dropping it never retries a mutation; its durable receipt remains.
+        let result = fence_text_work(work, teardown, expires, controls).await;
+        channel.close().await;
+        result
     }
 }
 

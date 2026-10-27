@@ -1,5 +1,27 @@
 # Companion account-v2 direct-only update
 
+## Pending text fallback update (2026-10-27; not activated)
+
+The records below describe the earlier direct-only deployment and remain its
+rollback baseline. Current source adds account-only `text-v1`, while keeping
+anonymous rooms, legacy task packets and push forwarding disabled. The target
+health policy is now `directPreferredTextFallback`, with explicit public
+`textLimits`: 8192-byte frames, at most 8192 text egress bytes/second globally,
+2048/account and 2 GiB per UTC month. These are serialized text-body limits;
+signaling, authentication and network overhead are accounted separately.
+
+A future activation must build a new pinned source archive containing
+`src/text-budget.mjs`, review fresh live image/config hashes, and retain
+`text-budget.json` with private state. The updater preserves the highest durable
+monthly reservation when rolling back; restoring an older room snapshot must
+never refund text quota. Corrupt ledgers remain fail-closed. The updated updater
+passed 26 isolated Linux FakeDocker tests, without accessing live private state
+or changing Docker/Nginx. Desktop and Android transport tests are separate from
+physical-phone cross-network acceptance, which is still pending. No new image,
+public route, desktop release or mobile release has been activated by this work.
+
+## Previous direct-only deployment (2026-10-26)
+
 2026-10-26 delivery. Only the owned companion container and its two nginx
 includes are updated. The website main file, model inference relay, desktop
 stable feeds, STUN service and cloud firewall are outside this updater.

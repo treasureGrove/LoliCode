@@ -24,10 +24,10 @@
     },
     {
       "type": "improve",
-      "zh": "手机支持同账户登录和加密直连，任务内容不经服务器转发",
-      "zh-TW": "手機支援同帳戶登入及加密直連，任務內容不經伺服器轉發",
-      "en": "Sign in on your phone and connect directly with end-to-end encryption, without relaying task content",
-      "ja": "スマートフォンで同じアカウントにログインし、タスク内容を中継しない暗号化直接接続に対応"
+      "zh": "手机支持同账户登录与加密直连，连接受限时可使用有流量上限的加密文本通道",
+      "zh-TW": "手機支援同帳戶登入與加密直連，連線受限時可使用有流量上限的加密文字通道",
+      "en": "Sign in on your phone with encrypted direct connections and a quota-limited encrypted text fallback",
+      "ja": "スマートフォンの同一アカウント接続に対応し、直接接続できない場合は通信量を制限した暗号化テキスト経路を使用"
     }
   ]
 }

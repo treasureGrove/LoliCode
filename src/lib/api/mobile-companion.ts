@@ -12,7 +12,7 @@ export interface MobileCompanionPair {
   expiresAt: number;
   accountId?: string | null;
   peerFingerprint?: string | null;
-  transport?: "relay" | "direct" | null;
+  transport?: "relay" | "direct" | "text" | null;
 }
 
 export interface CompanionAccountDevice {
@@ -48,7 +48,7 @@ export interface CompanionAccountStatus {
   requests: CompanionAccountRequest[];
   ticketExpiresAt: number | null;
   lastError: string | null;
-  transportPolicy: "directOnly";
+  transportPolicy: "directOnly" | "directPreferredTextFallback";
   directAvailable: true;
 }
 

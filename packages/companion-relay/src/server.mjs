@@ -1,23 +1,27 @@
 import { createServer } from 'node:http';
 import { isIP } from 'node:net';
+import { randomBytes } from 'node:crypto';
 import { WebSocket, WebSocketServer } from 'ws';
 import { FcmProvider, NOTICE_KINDS } from './fcm.mjs';
 import { matchesCredential, ROOM_ID, RoomStore, TOKEN } from './store.mjs';
 import { Accounts } from './accounts.mjs';
 import { createAccountHandler } from './account-http.mjs';
 import { AccountError, DEFAULT_ACCOUNT_LIMITS } from './account-validation.mjs';
+import { DEFAULT_TEXT_LIMITS, TextBudget, TextBudgetError } from './text-budget.mjs';
 
 const ID = /^[A-Za-z0-9_-]{1,180}$/;
 const SESSION_ID = /^[A-Za-z0-9_:-]{1,180}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const PUSH_TOKEN = /^[A-Za-z0-9_:.\-]{16,4096}$/;
 const FIVE_MINUTES = 300_000;
+const TEXT_EPOCH = /^[a-f0-9]{32}$/;
+const TRANSPORT_POLICY = 'directPreferredTextFallback';
 const opposite = role => role === 'desktop' ? 'phone' : 'desktop';
 const loopback = address => address === '127.0.0.1' || address === '::1' || address === '::ffff:127.0.0.1';
 const exactKeys = (value, allowed) => Object.keys(value).every(key => allowed.includes(key));
 const stringMatches = (value, expression) => typeof value === 'string' && expression.test(value);
 
-export const DEFAULT_LIMITS = Object.freeze({ ...DEFAULT_ACCOUNT_LIMITS, maxFrameBytes: 64 * 1024, maxCipherBytes: 48 * 1024,
+export const DEFAULT_LIMITS = Object.freeze({ ...DEFAULT_ACCOUNT_LIMITS, ...DEFAULT_TEXT_LIMITS, maxFrameBytes: 64 * 1024, maxCipherBytes: 48 * 1024,
   maxRooms: 1000, maxConnections: 256, maxQueuePackets: 32, maxQueueBytes: 512 * 1024,
   maxTotalQueueBytes: 16 * 1024 * 1024,
   maxBufferedBytes: 512 * 1024, maxMessagesPerMinute: 600, maxBytesPerMinute: 8 * 1024 * 1024,
@@ -44,6 +48,7 @@ export async function createCompanionRelay({ stateDirectory, host = '127.0.0.1',
   const limits = { ...DEFAULT_LIMITS, ...overrides };
   for (const value of Object.values(limits)) if (!Number.isSafeInteger(value) || value < 1) throw new Error('Invalid relay limit');
   const store = suppliedStore ?? new RoomStore(stateDirectory, { ...limits, now });
+  const textBudget = new TextBudget(store.directory, { limits, now });
   const connections = new Set();
   const rooms = new Map();
   const ips = new Map();
@@ -53,7 +58,9 @@ export async function createCompanionRelay({ stateDirectory, host = '127.0.0.1',
   const traffic = { httpRequests: 0, httpBytesIn: 0, httpBytesOut: 0, httpMetadataBytesOut: 0, wsControlBytesIn: 0,
     wsControlBytesOut: 0, signalBytesIn: 0, signalBytesOut: 0, signalsOut: 0,
     signalBudgetRejected: 0, httpBudgetRejected: 0,
-    relayPacketBytesIn: 0, relayPacketBytesOut: 0, relayPacketsOut: 0 };
+    relayPacketBytesIn: 0, relayPacketBytesOut: 0, relayPacketsOut: 0,
+    textBytesIn: 0, textBytesOut: 0, textsOut: 0, textBudgetRejected: 0, textRejected: 0 };
+  const textDrops = Object.create(null);
   const signalBudget = { at: now(), frames: 0, bytes: 0 };
   const addTraffic = (key, value) => { traffic[key] = Math.min(Number.MAX_SAFE_INTEGER, traffic[key] + value); };
   const accounts = new Accounts(store, { limits, now,
@@ -77,7 +84,9 @@ export async function createCompanionRelay({ stateDirectory, host = '127.0.0.1',
     response.setHeader('x-content-type-options', 'nosniff');
     if (request.method === 'GET' && request.url === '/health') {
       response.writeHead(200).end(JSON.stringify({ ok: true, ready: true, protocol: 1,
-        accountProtocol: 2, transportPolicy: 'directOnly', legacyDataRelay: Boolean(allowLegacyDataRelay),
+        accountProtocol: 2, transportPolicy: TRANSPORT_POLICY, textRelay: !textBudget.unavailable, legacyDataRelay: Boolean(allowLegacyDataRelay),
+        textLimits: { frameBytes: limits.maxTextFrameBytes, bytesPerSecond: limits.maxTextBytesPerSecond,
+          accountBytesPerSecond: limits.maxTextAccountBytesPerSecond, monthlyBytes: limits.maxTextMonthlyBytes },
         pushConfigured: Boolean(pushProvider.configured) }));
     } else void accountHttp(request, response);
   });
@@ -111,39 +120,40 @@ export async function createCompanionRelay({ stateDirectory, host = '127.0.0.1',
     let state = rooms.get(room.id);
     if (!state) {
       state = { record: room, desktop: null, phone: null, queues: { desktop: [], phone: [] },
-        seen: new Map(), notices: new Map(), pendingPush: 0, signalWindow: now(), signalCount: 0, signalBytes: 0 };
+        seen: new Map(), textSeen: new Map(), textEpoch: null, notices: new Map(), pendingPush: 0, signalWindow: now(), signalCount: 0, signalBytes: 0 };
       rooms.set(room.id, state);
     }
     return state;
   }
 
-  function send(connection, value) {
+  function send(connection, value, envelopeType) {
     if (connection.ws.readyState !== WebSocket.OPEN) return false;
     if (connection.ticketHash && !connection.failed) {
       try { accounts.authorizeHash(connection.ticketHash); } catch { fail(connection, 'unauthorized'); return false; }
     }
     const encoded = typeof value === 'string' ? value : JSON.stringify(value);
-    if (connection.ws.bufferedAmount + Buffer.byteLength(encoded) > limits.maxBufferedBytes) {
+    if (connection.ws.bufferedAmount + Buffer.byteLength(encoded) > (envelopeType === 'text' ? limits.maxTextBufferedBytes : limits.maxBufferedBytes)) {
       connection.ws.close(1008, 'slow_peer');
       return false;
     }
     connection.ws.send(encoded, error => { if (error) connection.ws.terminate(); });
-    const envelope = typeof value === 'string' || value.type === 'packet' || value.type === 'signal';
-    const signal = envelope && connection.room?.record.accountId !== undefined;
-    addTraffic(signal ? 'signalBytesOut' : envelope ? 'relayPacketBytesOut' : 'wsControlBytesOut', Buffer.byteLength(encoded));
-    if (envelope) addTraffic(signal ? 'signalsOut' : 'relayPacketsOut', 1);
+    const type = envelopeType ?? (typeof value === 'string' ? 'packet' : value.type);
+    addTraffic(type === 'text' ? 'textBytesOut' : type === 'signal' ? 'signalBytesOut' : type === 'packet' ? 'relayPacketBytesOut' : 'wsControlBytesOut', Buffer.byteLength(encoded));
+    if (['text', 'signal', 'packet'].includes(type)) addTraffic(type === 'text' ? 'textsOut' : type === 'signal' ? 'signalsOut' : 'relayPacketsOut', 1);
     return true;
   }
 
   function fail(connection, code) {
     if (connection.failed) return;
     connection.failed = true;
+    invalidateText(connection.room);
     send(connection, { type: 'error', code });
     connection.ws.close(1008, code);
   }
 
   function revokeRuntime(state, initiator) {
     if (!state) return;
+    invalidateText(state);
     for (const role of ['phone', 'desktop']) {
       for (const item of state.queues[role]) queuedBytes -= item.bytes;
       state[role]?.ws.close(state[role] === initiator ? 1000 : 1008, 'revoked');
@@ -160,6 +170,7 @@ export async function createCompanionRelay({ stateDirectory, host = '127.0.0.1',
       return false;
     });
     for (const [id, at] of state.seen) if (time - at >= limits.replayTtlMs) state.seen.delete(id);
+    for (const [id, at] of state.textSeen) if (time - at >= limits.replayTtlMs) state.textSeen.delete(id);
     for (const [id, result] of state.notices) if (time - result.at >= FIVE_MINUTES && !result.pending) state.notices.delete(id);
   }
 
@@ -189,7 +200,7 @@ export async function createCompanionRelay({ stateDirectory, host = '127.0.0.1',
       signalBudget.bytes += Buffer.byteLength(encoded);
     }
     const target = state[targetRole];
-    if (target && send(target, encoded)) {
+    if (target && send(target, encoded, signal ? 'signal' : 'packet')) {
       state.seen.set(replayKey, now());
       return;
     }
@@ -203,10 +214,59 @@ export async function createCompanionRelay({ stateDirectory, host = '127.0.0.1',
     state.seen.set(replayKey, now());
   }
 
+  function invalidateText(state) {
+    if (state) { state.textEpoch = null; state.textSeen.clear(); }
+  }
+
+  function peerMessage(state) {
+    const capable = state.record.accountId !== undefined && state.desktop?.textCapable && state.phone?.textCapable
+      && !state.desktop.failed && !state.phone.failed && !textBudget.unavailable;
+    if (capable && !state.textEpoch) state.textEpoch = randomBytes(16).toString('hex');
+    if (!capable) invalidateText(state);
+    return { textRelay: Boolean(capable), ...(capable ? { textEpoch: state.textEpoch } : {}) };
+  }
+
+  function rejectText(code) {
+    addTraffic('textRejected', 1);
+    textDrops[code] = Math.min(Number.MAX_SAFE_INTEGER, (textDrops[code] ?? 0) + 1);
+    if (code.startsWith('text_budget') || code === 'text_rate_limited' || code === 'text_monthly_quota_exhausted') addTraffic('textBudgetRejected', 1);
+    reject(code);
+  }
+
+  function forwardText(connection, value, inputBytes) {
+    const state = connection.room;
+    if (state.record.accountId === undefined || !connection.textCapable) rejectText('text_not_negotiated');
+    const target = state[opposite(connection.role)];
+    if (!target || target.failed || target.ws.readyState !== WebSocket.OPEN) rejectText('peer_offline');
+    if (!target.textCapable || !state.textEpoch) rejectText('text_not_negotiated');
+    if (inputBytes > limits.maxTextFrameBytes || !exactKeys(value, ['type', 'v', 'id', 'epoch', 'nonce', 'ciphertext'])
+      || value.v !== 1 || !stringMatches(value.id, UUID) || !canonicalBase64(value.nonce, 12, 12)
+      || !canonicalBase64(value.ciphertext, 16, limits.maxTextFrameBytes)) rejectText('invalid_text');
+    if (!stringMatches(value.epoch, TEXT_EPOCH) || value.epoch !== state.textEpoch) rejectText('text_epoch_invalid');
+    prune(state);
+    const replayKey = `${connection.role}:${value.id}`;
+    if (state.textSeen.has(replayKey)) rejectText('replayed_text');
+    if (state.textSeen.size >= 4096) rejectText('text_replay_capacity');
+    const encoded = JSON.stringify({ type: 'text', v: 1, id: value.id, epoch: value.epoch,
+      nonce: value.nonce, ciphertext: value.ciphertext, from: connection.role });
+    const bytes = Buffer.byteLength(encoded);
+    if (bytes > limits.maxTextFrameBytes) rejectText('invalid_text');
+    if (target.ws.bufferedAmount + bytes > limits.maxTextBufferedBytes) rejectText('text_slow_peer');
+    try { accounts.authorizeHash(target.ticketHash); } catch { rejectText('unauthorized'); }
+    // No await between shared reservation, debit and socket write. Reservations
+    // survive restart; a failed socket write never refunds or retries a command.
+    try { textBudget.consume(connection.accountId, bytes); }
+    catch (error) { rejectText(error instanceof TextBudgetError ? error.code : 'text_budget_unavailable'); }
+    if (!send(target, encoded, 'text')) rejectText('text_slow_peer');
+    state.textSeen.set(replayKey, now());
+  }
+
   function greet(connection, value) {
     if (value.type !== 'hello' || value.v !== 1 || !['desktop', 'phone'].includes(value.role)
-      || !exactKeys(value, ['type', 'v', 'role', 'roomId', 'token', 'phoneToken', 'deviceToken'])
+      || !exactKeys(value, ['type', 'v', 'role', 'roomId', 'token', 'phoneToken', 'deviceToken', 'capabilities'])
       || !stringMatches(value.roomId, ROOM_ID) || !stringMatches(value.token, TOKEN)
+      || (value.capabilities !== undefined && (!Array.isArray(value.capabilities) || value.capabilities.length > 1
+        || value.capabilities.some(capability => capability !== 'text-v1')))
       || (value.role === 'phone' && 'phoneToken' in value)) reject('invalid_hello');
     let record = store.rooms.get(value.roomId);
     if (!allowLegacyDataRelay && record?.accountId === undefined) reject('direct_only');
@@ -236,6 +296,7 @@ export async function createCompanionRelay({ stateDirectory, host = '127.0.0.1',
     state[value.role] = connection;
     connection.room = state;
     connection.role = value.role;
+    connection.textCapable = Boolean(ticket && value.capabilities?.includes('text-v1'));
     if (ticket) {
       connection.ticketHash = ticket.digest;
       connection.accountId = ticket.accountId;
@@ -244,12 +305,14 @@ export async function createCompanionRelay({ stateDirectory, host = '127.0.0.1',
       accounts.presence(ticket);
     }
     clearTimeout(connection.helloTimer);
-    send(connection, { type: 'ready', v: 1 });
-    send(connection, { type: 'peer', online: Boolean(state[opposite(value.role)]) });
-    if (state[opposite(value.role)]) send(state[opposite(value.role)], { type: 'peer', online: true });
+    send(connection, { type: 'ready', v: 1, ...(connection.textCapable ? { textRelay: !textBudget.unavailable } : {}) });
+    const textPeer = peerMessage(state);
+    send(connection, { type: 'peer', online: Boolean(state[opposite(value.role)]), ...(connection.textCapable ? textPeer : {}) });
+    if (state[opposite(value.role)]) send(state[opposite(value.role)], { type: 'peer', online: true,
+      ...(state[opposite(value.role)].textCapable ? textPeer : {}) });
     prune(state);
     const pending = state.queues[value.role];
-    while (pending.length && send(connection, pending[0].encoded)) queuedBytes -= pending.shift().bytes;
+    while (pending.length && send(connection, pending[0].encoded, 'packet')) queuedBytes -= pending.shift().bytes;
   }
 
   async function pushNotice(connection, value) {
@@ -291,7 +354,7 @@ export async function createCompanionRelay({ stateDirectory, host = '127.0.0.1',
     let value;
     try { value = JSON.parse(data.toString('utf8')); } catch { reject('invalid_json'); }
     if (!value || typeof value !== 'object' || Array.isArray(value)) reject('invalid_message');
-    addTraffic(value.type === 'signal' ? 'signalBytesIn' : value.type === 'packet' ? 'relayPacketBytesIn' : 'wsControlBytesIn', data.byteLength);
+    addTraffic(value.type === 'text' ? 'textBytesIn' : value.type === 'signal' ? 'signalBytesIn' : value.type === 'packet' ? 'relayPacketBytesIn' : 'wsControlBytesIn', data.byteLength);
     if (!connection.room) { greet(connection, value); return; }
     if (connection.room.record.revoked) reject('unauthorized');
     if (connection.ticketHash) {
@@ -304,6 +367,8 @@ export async function createCompanionRelay({ stateDirectory, host = '127.0.0.1',
       case 'signal':
         if (connection.room.record.accountId === undefined) reject('unsupported_message');
         forward(connection, value); break;
+      case 'text':
+        forwardText(connection, value, data.byteLength); break;
       case 'push.register':
         if (connection.room.record.accountId !== undefined || !allowLegacyDataRelay) reject('direct_only');
         if (connection.role !== 'phone') reject('forbidden');
@@ -357,9 +422,10 @@ export async function createCompanionRelay({ stateDirectory, host = '127.0.0.1',
         connections.delete(connection);
         const state = connection.room;
         if (state && state[connection.role] === connection) {
+          invalidateText(state);
           state[connection.role] = null;
           const peer = state[opposite(connection.role)];
-          if (peer) send(peer, { type: 'peer', online: false });
+          if (peer) send(peer, { type: 'peer', online: false, ...(peer.textCapable ? { textRelay: false } : {}) });
         }
       });
     });
@@ -388,8 +454,8 @@ export async function createCompanionRelay({ stateDirectory, host = '127.0.0.1',
   return { server, store, accounts, address, url: `ws://${address.address.includes(':') ? `[${address.address}]` : address.address}:${address.port}/companion`,
     // Aggregate process counters distinguish discovery/control from actual
     // relayed ciphertext. They reveal no identities, room IDs or payloads.
-    metrics() { return { transportPolicy: 'directOnly', legacyDataRelay: Boolean(allowLegacyDataRelay),
-      ...traffic, taskForwardedBytes: traffic.relayPacketBytesOut, queuedBytes, connections: connections.size,
+    metrics() { return { transportPolicy: TRANSPORT_POLICY, textRelay: !textBudget.unavailable, legacyDataRelay: Boolean(allowLegacyDataRelay),
+      ...traffic, taskForwardedBytes: traffic.relayPacketBytesOut + traffic.textBytesOut, textDrops: { ...textDrops }, textBudget: textBudget.metrics(), queuedBytes, connections: connections.size,
       budgets: { signalFramesPerMinute: limits.maxTotalSignalsPerMinute,
         signalBytesPerMinute: limits.maxTotalSignalBytesPerMinute, httpMetadataBytesPerMinute: limits.maxHttpMetadataBytesPerMinute } }; },
     async close() {
