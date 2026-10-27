@@ -25,7 +25,7 @@ class NativeDirectPeer(context: Context, private val events: DirectPeerEvents,
     private var peer: PeerConnection? = null
     private var channel: DataChannel? = null
     private var negotiationId: String? = null
-    private var answerSent = false
+    private val answerGate = LocalAnswerGatherGate()
     private var gatherTimeout: ScheduledFuture<*>? = null
     private val deadline: ScheduledFuture<*>
     init {
@@ -49,9 +49,11 @@ class NativeDirectPeer(context: Context, private val events: DirectPeerEvents,
             connection.setAudioPlayout(false); connection.setAudioRecording(false)
             connection.setRemoteDescription(sdpObserver(set = {
                 connection.createAnswer(sdpObserver(created = { answer ->
-                    connection.setLocalDescription(sdpObserver(set = {
-                        if (connection.iceGatheringState() == PeerConnection.IceGatheringState.COMPLETE) publishAnswer()
-                        else gatherTimeout = queue.schedule({ publishAnswer() }, 10, TimeUnit.SECONDS)
+                    connection.setLocalDescription(sdpObserver(set = localSet@{
+                        if (!answerGate.localDescriptionSet()) return@localSet
+                        gatherTimeout = queue.schedule({ checkAnswer(gatherDeadline = true) }, 10, TimeUnit.SECONDS)
+                        if (closed.get() || failureQueued.get()) { gatherTimeout?.cancel(false); return@localSet }
+                        checkAnswer()
                     }), answer)
                 }), MediaConstraints())
             }), SessionDescription(SessionDescription.Type.OFFER, sdp))
@@ -78,8 +80,8 @@ class NativeDirectPeer(context: Context, private val events: DirectPeerEvents,
             if (state in listOf(PeerConnection.PeerConnectionState.FAILED, PeerConnection.PeerConnectionState.DISCONNECTED, PeerConnection.PeerConnectionState.CLOSED)) post { fail() }
         }
         override fun onIceConnectionReceivingChange(receiving: Boolean) = Unit
-        override fun onIceGatheringChange(state: PeerConnection.IceGatheringState) { if (state == PeerConnection.IceGatheringState.COMPLETE) post { publishAnswer() } }
-        override fun onIceCandidate(candidate: IceCandidate) = Unit
+        override fun onIceGatheringChange(state: PeerConnection.IceGatheringState) { if (state == PeerConnection.IceGatheringState.COMPLETE) post { checkAnswer(event = AnswerGatherEvent.COMPLETE) } }
+        override fun onIceCandidate(candidate: IceCandidate) = post { checkAnswer(event = AnswerGatherEvent.CANDIDATE) }
         override fun onIceCandidatesRemoved(candidates: Array<out IceCandidate>) = Unit
         override fun onAddStream(stream: MediaStream) { post { fail() } }
         override fun onRemoveStream(stream: MediaStream) = Unit
@@ -122,13 +124,24 @@ class NativeDirectPeer(context: Context, private val events: DirectPeerEvents,
             else -> Unit
         }
     }
-    private fun publishAnswer() {
-        if (closed.get() || failureQueued.get() || answerSent) return
-        val answer = peer?.localDescription ?: return
+    private fun checkAnswer(gatherDeadline: Boolean = false, event: AnswerGatherEvent = AnswerGatherEvent.LOCAL_DESCRIPTION) {
+        if (closed.get() || failureQueued.get()) return
         try {
-            validateDirectSdp(answer.description)
-            answerSent = true; gatherTimeout?.cancel(false)
-            events.answer(negotiationId ?: error("missing negotiation"), answer.description)
+            val connection = peer
+            val answer = connection?.localDescription
+            val hasCandidate = answer?.description?.let(::hasUsableLocalCandidate) == true
+            val decision = if (gatherDeadline) answerGate.deadline(hasCandidate)
+                else answerGate.observe(connection?.iceGatheringState() == PeerConnection.IceGatheringState.COMPLETE, hasCandidate, event)
+            when (decision) {
+                AnswerGatherDecision.PUBLISH -> {
+                    val current = answer ?: error("missing local answer")
+                    validateDirectSdp(current.description)
+                    gatherTimeout?.cancel(false)
+                    if (!closed.get() && !failureQueued.get()) events.answer(negotiationId ?: error("missing negotiation"), current.description)
+                }
+                AnswerGatherDecision.FAIL -> fail()
+                AnswerGatherDecision.WAIT, AnswerGatherDecision.IGNORE -> Unit
+            }
         } catch (_: Exception) { fail() }
     }
     private fun sdpObserver(set: () -> Unit = {}, created: (SessionDescription) -> Unit = {}) = object : SdpObserver {
@@ -142,8 +155,11 @@ class NativeDirectPeer(context: Context, private val events: DirectPeerEvents,
     private fun fail() { if (!closed.get()) try { events.failed() } finally { close() } }
     override fun close() {
         if (!closed.compareAndSet(false, true)) return
+        answerGate.close()
         deadline.cancel(false); gatherTimeout?.cancel(false)
         queue.execute {
+            // A setLocal success already running on this queue may have just scheduled it.
+            gatherTimeout?.cancel(false)
             synchronized(channelLock) { channel?.let { it.unregisterObserver(); it.close(); it.dispose() }; channel = null }
             peer?.dispose(); peer = null; factory?.dispose(); factory = null
             queue.shutdown()

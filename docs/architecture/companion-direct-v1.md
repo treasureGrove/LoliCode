@@ -24,6 +24,15 @@ SHA-256 fingerprint or missing application data channel. Limit total connection
 setup to 40 seconds; report failure and allow explicit retry. No task may be sent
 before the data channel opens and the normal authenticated host status succeeds.
 
+Android may report an initial COMPLETE before its network callbacks produce any
+candidates. Never latch or publish an empty answer. Keep the 10-second gathering
+deadline even in that state. After an empty COMPLETE, a late candidate must wait
+for a fresh COMPLETE notification or that existing deadline; a stale COMPLETE
+getter must not publish only the first host candidate and omit a later srflx.
+At the deadline, publish the current nonempty SDP once or close on no usable
+candidate. Local-description readiness, cancellation and closing fence all late
+callbacks. This does not extend the 40-second connection limit.
+
 ## Encrypted signaling
 
 WebSocket hello is account-v2 hello with scoped deviceToken. The only encrypted
@@ -74,3 +83,7 @@ rejection and a payload whose bytes are absent from server forwarding counters.
 Prove signaling tamper/foreign negotiation/revoked ticket closure and no task
 WebSocket fallback when the remote peer is absent or UDP is blocked. Distinguish
 local host-candidate proof from real phone Wi-Fi/mobile-network NAT traversal.
+The final user requirement is operation across different primary networks, not
+merely two devices behind one router. Same-router tests are diagnostics only.
+Before final acceptance, test authenticated task dispatch, approval, questions
+and stopping over two independent upstream networks and verify no task relay.
