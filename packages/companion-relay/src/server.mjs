@@ -28,6 +28,7 @@ export const DEFAULT_LIMITS = Object.freeze({ ...DEFAULT_ACCOUNT_LIMITS, ...DEFA
   maxIpEntries: 2048, maxHandshakesPerMinute: 60, maxCreatesPerIpPerHour: 20,
   maxSignalFrameBytes: 16 * 1024, maxSignalsPerMinute: 32, maxSignalBytesPerMinute: 256 * 1024,
   maxTotalSignalsPerMinute: 512, maxTotalSignalBytesPerMinute: 2 * 1024 * 1024,
+  maxAuthRefreshPerMinute: 4,
   helloTimeoutMs: 5000, heartbeatMs: 30_000, queueTtlMs: FIVE_MINUTES, replayTtlMs: FIVE_MINUTES });
 
 class ProtocolError extends Error {
@@ -261,6 +262,39 @@ export async function createCompanionRelay({ stateDirectory, host = '127.0.0.1',
     state.textSeen.set(replayKey, now());
   }
 
+  function refreshAuthentication(connection, value) {
+    if (!connection.ticketHash || connection.room.record.accountId === undefined) reject('unsupported_message');
+    const time = now();
+    if (time - connection.authWindowAt >= 60_000) { connection.authWindowAt = time; connection.authRefreshes = 0; }
+    if (++connection.authRefreshes > limits.maxAuthRefreshPerMinute) reject('auth_refresh_rate_limited');
+    if (!exactKeys(value, ['type', 'v', 'requestId', 'deviceToken']) || value.v !== 1
+      || !stringMatches(value.requestId, UUID) || value.requestId !== value.requestId.toLowerCase()) reject('invalid_auth_refresh');
+    for (const [id, at] of connection.authRefreshIds) if (time - at >= FIVE_MINUTES) connection.authRefreshIds.delete(id);
+    if (connection.authRefreshIds.has(value.requestId)) reject('replayed_auth_refresh');
+    if (connection.authRefreshIds.size >= 64) reject('auth_refresh_capacity');
+    let current, renewed;
+    try {
+      // Both capabilities must still be valid. A newer ticket can never revive
+      // an expired/revoked connection or change its immutable room identity.
+      current = accounts.authorizeHash(connection.ticketHash);
+      renewed = accounts.authorize(value.deviceToken);
+    } catch { reject('unauthorized'); }
+    const room = connection.room.record;
+    if (renewed.accountId !== current.accountId || renewed.deviceId !== current.deviceId
+      || renewed.kind !== current.kind || renewed.kind !== connection.role
+      || renewed.accountId !== connection.accountId || renewed.accountId !== room.accountId
+      || renewed.deviceId !== room[connection.role === 'desktop' ? 'desktopDeviceId' : 'phoneDeviceId']
+      || renewed.expiresAt <= current.expiresAt) reject('unauthorized');
+    // No await: replace the authorization and timer as one event-loop action.
+    // Epoch, AEAD replay windows, queues and all shared quotas are untouched.
+    clearTimeout(connection.ticketTimer);
+    connection.ticketHash = renewed.digest;
+    connection.ticketTimer = setTimeout(() => fail(connection, 'unauthorized'), Math.max(1, renewed.expiresAt - now()));
+    connection.ticketTimer.unref();
+    connection.authRefreshIds.set(value.requestId, time);
+    send(connection, { type: 'auth.renewed', v: 1, requestId: value.requestId, expiresAt: renewed.expiresAt });
+  }
+
   function greet(connection, value) {
     if (value.type !== 'hello' || value.v !== 1 || !['desktop', 'phone'].includes(value.role)
       || !exactKeys(value, ['type', 'v', 'role', 'roomId', 'token', 'phoneToken', 'deviceToken', 'capabilities'])
@@ -305,7 +339,8 @@ export async function createCompanionRelay({ stateDirectory, host = '127.0.0.1',
       accounts.presence(ticket);
     }
     clearTimeout(connection.helloTimer);
-    send(connection, { type: 'ready', v: 1, ...(connection.textCapable ? { textRelay: !textBudget.unavailable } : {}) });
+    send(connection, { type: 'ready', v: 1, ...(ticket ? { authRefresh: true } : {}),
+      ...(connection.textCapable ? { textRelay: !textBudget.unavailable } : {}) });
     const textPeer = peerMessage(state);
     send(connection, { type: 'peer', online: Boolean(state[opposite(value.role)]), ...(connection.textCapable ? textPeer : {}) });
     if (state[opposite(value.role)]) send(state[opposite(value.role)], { type: 'peer', online: true,
@@ -361,6 +396,8 @@ export async function createCompanionRelay({ stateDirectory, host = '127.0.0.1',
       try { accounts.authorizeHash(connection.ticketHash); } catch { reject('unauthorized'); }
     }
     switch (value.type) {
+      case 'auth.refresh':
+        refreshAuthentication(connection, value); break;
       case 'packet':
         if (connection.room.record.accountId !== undefined || !allowLegacyDataRelay) reject('direct_only');
         forward(connection, value); break;
@@ -403,7 +440,8 @@ export async function createCompanionRelay({ stateDirectory, host = '127.0.0.1',
       if (++ipState(ip).handshakes > limits.maxHandshakesPerMinute) reject('rate_limited');
     } catch { deny('429 Too Many Requests'); return; }
     wss.handleUpgrade(request, socket, head, ws => {
-      const connection = { ws, ip, room: null, role: null, alive: true, messages: 0, bytes: 0, windowAt: now() };
+      const connection = { ws, ip, room: null, role: null, alive: true, messages: 0, bytes: 0, windowAt: now(),
+        authWindowAt: now(), authRefreshes: 0, authRefreshIds: new Map() };
       connections.add(connection);
       connection.helloTimer = setTimeout(() => fail(connection, 'hello_timeout'), limits.helloTimeoutMs);
       connection.helloTimer.unref();

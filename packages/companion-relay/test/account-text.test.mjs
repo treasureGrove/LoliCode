@@ -13,7 +13,7 @@ async function pair(relay, accountId = '1') {
 async function attach(relay, p, session, capabilities = ['text-v1']) {
   const client = await peer(relay.url);
   client.send({ ...hello(p.enrollment, session), capabilities });
-  assert.deepEqual(await client.next('ready'), { type: 'ready', v: 1, textRelay: true });
+  assert.deepEqual(await client.next('ready'), { type: 'ready', v: 1, authRefresh: true, textRelay: true });
   return { client, state: await client.next('peer') };
 }
 async function connect(relay, p) {

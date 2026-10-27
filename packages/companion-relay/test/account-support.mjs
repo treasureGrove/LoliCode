@@ -92,7 +92,7 @@ export function hello(enrollment, session, role = session.device.kind) {
 export async function authenticated(relay, enrollment, session) {
   const client = await peer(relay.url);
   client.send(hello(enrollment, session));
-  assert.deepEqual(await client.next('ready'), { type: 'ready', v: 1 });
+  assert.deepEqual(await client.next('ready'), { type: 'ready', v: 1, authRefresh: true });
   return client;
 }
 export const signal = (extra = {}) => ({ type: 'signal', v: 1, id: randomUUID(),
