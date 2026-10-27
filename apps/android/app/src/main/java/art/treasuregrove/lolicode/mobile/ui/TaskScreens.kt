@@ -35,7 +35,7 @@ import art.treasuregrove.lolicode.mobile.R
 import art.treasuregrove.lolicode.mobile.data.*
 
 @Composable
-internal fun TaskListScreen(state: CompanionState, onNewTask: () -> Unit, onDevices: () -> Unit, onOpenSession: (String) -> Unit) {
+internal fun TaskListScreen(state: CompanionState, onNewTask: () -> Unit, onDevices: () -> Unit, onOpenSession: (String) -> Unit, onLoadMore: () -> Unit = {}) {
     var search by rememberSaveable { mutableStateOf("") }
     val sessions = state.sessions.filter { search.isBlank() || it.title.contains(search, ignoreCase = true) || it.projectPath.contains(search, ignoreCase = true) }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -63,6 +63,10 @@ internal fun TaskListScreen(state: CompanionState, onNewTask: () -> Unit, onDevi
             else if (sessions.isEmpty()) item { Text("没有找到相关会话，试试其他关键词。", modifier = Modifier.padding(vertical = 28.dp), color = LoliColors.Muted) }
             else items(sessions, key = { it.id }) { session ->
                 SessionRow(session, state.snapshot?.takeIf { it.session.id == session.id }, enabled = !state.busy || state.selectedSession == session.id, onClick = { onOpenSession(session.id) })
+            }
+            if (state.sessionsNextOffset != null) item {
+                OutlinedButton(onClick = onLoadMore, enabled = state.usable && !state.busy,
+                    modifier = Modifier.fillMaxWidth().testTag("load_more_sessions")) { Text("加载更多会话 · 已同步 ${state.sessions.size} / ${state.sessionsTotal}") }
             }
         }
     }
@@ -162,7 +166,23 @@ internal fun TaskDetailScreen(state: CompanionState, snapshot: SessionSnapshot?,
                     Text("任务记录", color = LoliColors.Violet, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Medium)
                 }
             }
-            items(snapshot.messages) { message -> MessageCard(message) }
+            if (snapshot.nextHistoryOffset != null) item {
+                OutlinedButton(onClick = actions.loadOlderHistory, enabled = state.usable && !state.busy,
+                    modifier = Modifier.fillMaxWidth().testTag("load_older_history")) { Text("加载更早记录 · 已同步 ${snapshot.messages.size} / ${snapshot.historyTotal}") }
+            }
+            if (snapshot.historyCapped) item { Text("手机已保留最近 500 条或 512 KiB 文字；更早记录请在电脑查看。", color = LoliColors.Muted, style = MaterialTheme.typography.bodySmall) }
+            items(snapshot.messages) { message ->
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    MessageCard(message)
+                    if (message.textTruncated && message.id.isNotBlank()) {
+                        OutlinedButton(onClick = { actions.loadMessageText(message.id) }, enabled = state.usable && !state.busy && !message.textCapped,
+                            modifier = Modifier.testTag("expand_message_${message.id}")) {
+                            Text(if (message.loadedBytes == 0) "展开完整消息" else "加载后续文字 · ${message.loadedBytes} / ${message.textTotal} 字节")
+                        }
+                    }
+                    if (message.textCapped) Text("手机文字缓存已达上限，后续内容请在电脑查看。", color = LoliColors.Muted, style = MaterialTheme.typography.bodySmall)
+                }
+            }
             if (snapshot.diffs.isNotEmpty()) item { SectionHeading("文件变更 · ${snapshot.diffs.size}") }
             items(snapshot.diffs) { diff ->
                 var expanded by rememberSaveable(snapshot.session.id, diff.path) { mutableStateOf(false) }

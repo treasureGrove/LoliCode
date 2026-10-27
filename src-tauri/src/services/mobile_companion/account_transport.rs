@@ -290,6 +290,7 @@ mod tests {
                 device_id: None,
                 device_name: None,
                 sessions: BTreeSet::new(),
+                shared_sessions: BTreeSet::new(),
                 requests: BTreeMap::new(),
                 seen_packets: BTreeMap::new(),
                 events: BTreeMap::new(),

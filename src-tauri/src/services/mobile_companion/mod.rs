@@ -5,6 +5,7 @@ mod account_crypto;
 mod account_transport;
 mod crypto;
 mod direct;
+mod session_sync;
 mod text;
 mod text_projection;
 pub use account::AccountCompanionStatus;
@@ -95,6 +96,10 @@ struct Room {
     device_id: Option<String>,
     device_name: Option<String>,
     sessions: BTreeSet<String>,
+    /// Explicitly selected desktop sessions. Browsing metadata does not grant
+    /// history access, and merely viewing one never makes it a phone-owned run.
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    shared_sessions: BTreeSet<String>,
     #[serde(default)]
     requests: BTreeMap<String, Receipt>,
     #[serde(default)]
@@ -276,7 +281,7 @@ impl MobileCompanionState {
                         device_name: r.device_name.clone(),
                         online: connection.is_some_and(|c| c.online),
                         last_error: connection.and_then(|c| c.last_error.clone()),
-                        session_count: r.sessions.len(),
+                        session_count: r.sessions.union(&r.shared_sessions).count(),
                         expires_at: r.expires_at,
                     }
                 })
@@ -317,6 +322,7 @@ impl MobileCompanionState {
                 device_id: None,
                 device_name: None,
                 sessions: BTreeSet::new(),
+                shared_sessions: BTreeSet::new(),
                 requests: BTreeMap::new(),
                 seen_packets: BTreeMap::new(),
                 events: BTreeMap::new(),
@@ -379,7 +385,7 @@ impl MobileCompanionState {
         let room = next.rooms.get_mut(room_id).ok_or("未找到此配对")?;
         room.revoked = true;
         let account = room.account.clone();
-        let sessions = room.sessions.clone();
+        let active_requests = room.active_requests.clone();
         self.save(&next)?;
         *store = next;
         drop(store);
@@ -393,9 +399,7 @@ impl MobileCompanionState {
         {
             let _ = tx.send(Control::Stop).await;
         }
-        for session in sessions {
-            let _ = agent_dispatch::interrupt_agent_session(app.clone(), session).await;
-        }
+        self.interrupt_mobile_runs(app, &active_requests).await;
         // Account revocation retains its authenticated remote cleanup. Legacy
         // records are archived locally; never reopen an anonymous relay or
         // delete an old vault key whose remote registration cannot be verified.
@@ -757,7 +761,14 @@ impl MobileCompanionState {
         let fingerprint = request_fingerprint(&payload);
         let read_only = matches!(
             payload["method"].as_str(),
-            Some("status" | "projects.list" | "models.list" | "sessions.list" | "session.get")
+            Some(
+                "status"
+                    | "projects.list"
+                    | "models.list"
+                    | "sessions.list"
+                    | "session.get"
+                    | "message.get"
+            )
         );
         {
             let mut store = self.0.store.lock().await;
@@ -852,10 +863,12 @@ impl MobileCompanionState {
         let method = bounded(payload, "method", 64)?;
         let params = &payload["params"];
         let allowed: &[&str] = match method {
-            "status" | "projects.list" | "sessions.list" => &[],
+            "status" | "projects.list" => &[],
+            "sessions.list" => &["offset", "limit", "knownRevision"],
             "models.list" => &["projectPath"],
             "session.create" => &["projectPath", "modelId", "title"],
-            "session.get" | "run.cancel" => &["sessionId"],
+            "session.get" | "session.attach" | "run.cancel" => &["sessionId"],
+            "message.get" => &["sessionId", "messageId", "offset", "limit"],
             "message.send" => &["sessionId", "text"],
             "permission.reply" => &["sessionId", "permissionId", "decision"],
             "question.reply" => &["sessionId", "questionId", "answers"],
@@ -918,37 +931,57 @@ impl MobileCompanionState {
                 serde_json::to_value(session).map_err(|_| "会话编码失败".into())
             }
             "sessions.list" => {
-                let ids = self.owned_sessions(room_id).await?;
-                let mut values = Vec::new();
-                host.ensure_started(app).await?;
-                // List surviving sessions in explicitly registered projects.
-                // Deleted sessions and removed projects must not poison the
-                // entire phone workspace, and no current-project fallback runs.
-                for project in agent_dispatch::list_agent_projects(app.clone()).await? {
-                    let sessions: Vec<AgentSession> = host
-                        .call(
-                            "listSessions",
-                            json!({"projectPath":project.path,"includeArchived":false}),
-                            false,
-                        )
-                        .await?;
-                    for session in sessions
+                let sessions = self.visible_sessions(app, room_id).await?;
+                let values = Value::Array(
+                    sessions
                         .into_iter()
-                        .filter(|session| ids.contains(&session.id))
-                    {
-                        values.push(serde_json::to_value(session).map_err(|_| "会话编码失败")?);
-                    }
+                        .map(|s| serde_json::to_value(s).map_err(|_| "会话编码失败"))
+                        .collect::<Result<_, _>>()?,
+                );
+                if !text_only && !object.is_empty() {
+                    text_projection::session_directory(params, values)
+                } else {
+                    Ok(values)
                 }
-                Ok(Value::Array(values))
+            }
+            "session.attach" => {
+                let id = bounded(params, "sessionId", 128)?;
+                let session = self
+                    .visible_sessions(app, room_id)
+                    .await?
+                    .into_iter()
+                    .find(|s| s.id == id)
+                    .ok_or("此会话不在当前账户已注册项目目录中")?;
+                let mut store = self.0.store.lock().await;
+                let mut next = store.clone();
+                let room = next
+                    .rooms
+                    .get_mut(room_id)
+                    .filter(|r| r.approved && !r.revoked && r.account.is_some())
+                    .ok_or("手机未授权")?;
+                if !room.sessions.contains(id)
+                    && !room.shared_sessions.contains(id)
+                    && room.shared_sessions.len() >= MAX_SESSIONS
+                {
+                    return Err("此手机共享会话已达上限，请先移除不再使用的会话".into());
+                }
+                room.shared_sessions.insert(id.into());
+                self.save(&next)?;
+                *store = next;
+                serde_json::to_value(session).map_err(|_| "会话编码失败".into())
             }
             _ => {
                 let id = bounded(params, "sessionId", 128)?;
                 let snapshot = self.owned_snapshot(app, room_id, id).await?;
                 match method {
-                    "session.get" if text_only => {
+                    "session.get" | "message.get" if text_only => {
                         serde_json::to_value(snapshot).map_err(|_| "会话编码失败".into())
                     }
                     "session.get" => bounded_snapshot(snapshot),
+                    "message.get" => text_projection::message_page(
+                        params,
+                        &serde_json::to_value(snapshot).map_err(|_| "会话编码失败")?,
+                    ),
                     "message.send" => {
                         if !matches!(snapshot.status, AgentStatus::Idle | AgentStatus::Error) {
                             return Err("此会话仍在执行或等待审批，请先停止或等待完成".into());
@@ -978,7 +1011,7 @@ impl MobileCompanionState {
                         self.save(&next)?;
                         *store = next;
                         drop(store);
-                        let accepted:Result<Value,String>=host.call("sendMessage",json!({"sessionId":id,"text":text,"requestId":format!("mobile:{request_id}"),"locale":"zh"}),true).await;
+                        let accepted:Result<Value,String>=host.call("sendMessage",json!({"sessionId":id,"text":text,"requestId":format!("mobile:{request_id}"),"locale":"zh","backgroundOnly":true}),true).await;
                         if let Err(error) = accepted {
                             let mut store = self.0.store.lock().await;
                             let mut next = store.clone();
@@ -1063,8 +1096,54 @@ impl MobileCompanionState {
             .rooms
             .get(room)
             .filter(|r| r.approved && !r.revoked)
-            .map(|r| r.sessions.clone())
+            .map(|r| r.sessions.union(&r.shared_sessions).cloned().collect())
             .ok_or("手机未授权".into())
+    }
+    async fn visible_sessions(
+        &self,
+        app: &AppHandle,
+        room_id: &str,
+    ) -> Result<Vec<AgentSession>, String> {
+        if !self.room_enabled(room_id).await {
+            return Err("手机未授权或账号认证已失效".into());
+        }
+        let projects = agent_dispatch::list_agent_projects(app.clone()).await?;
+        let registered = projects
+            .iter()
+            .map(|p| p.path.clone())
+            .collect::<BTreeSet<_>>();
+        let host = app.state::<InprocessAgentState>();
+        host.ensure_started(app).await?;
+        let mut candidates = Vec::new();
+        for project in projects {
+            let values: Vec<AgentSession> = host
+                .call(
+                    "listSessions",
+                    json!({"projectPath":project.path,"includeArchived":false}),
+                    false,
+                )
+                .await?;
+            if candidates.len().saturating_add(values.len()) > 20_000 {
+                return Err("会话目录过大，请在电脑端归档后重试".into());
+            }
+            candidates.extend(values);
+        }
+        let store = self.0.store.lock().await;
+        Ok(session_sync::visible(
+            &store,
+            room_id,
+            &registered,
+            candidates,
+        ))
+    }
+    async fn interrupt_mobile_runs(&self, app: &AppHandle, active: &BTreeMap<String, String>) {
+        for (id, request) in active {
+            if let Ok(snapshot) = agent_dispatch::get_agent_session(app.clone(), id.clone()).await {
+                if session_sync::is_mobile_flight(&snapshot, request) {
+                    let _ = agent_dispatch::interrupt_agent_session(app.clone(), id.clone()).await;
+                }
+            }
+        }
     }
     async fn owned_snapshot(
         &self,

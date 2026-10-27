@@ -16,9 +16,16 @@ A future activation must build a new pinned source archive containing
 monthly reservation when rolling back; restoring an older room snapshot must
 never refund text quota. Corrupt ledgers remain fail-closed. The updated updater
 passed 26 isolated Linux FakeDocker tests, without accessing live private state
-or changing Docker/Nginx. Desktop and Android transport tests are separate from
-physical-phone cross-network acceptance, which is still pending. No new image,
-public route, desktop release or mobile release has been activated by this work.
+or changing Docker/Nginx. A subsequent isolated Xiaomi 8 Lite cross-network text
+fixture passed: 3 directory pages, 14 history records, a complete 3348-byte reply,
+updates and reconnect recovery. It used the production TextChannel/RemoteClient
+and projection with synthetic sessions, without real-account enrollment,
+SessionEngine tasks or a native ICE attempt. Test text egress was 47,568 bytes;
+combined application ingress/egress was 96,094 bytes. Its exact temporary TLS
+route, service and private credentials were removed; the original nginx SHA and
+production image were verified unchanged. Real-account/app-UI acceptance and the
+formal release remain pending. No new production image, permanent public route,
+desktop release or mobile release has been activated by this work.
 
 ## Previous direct-only deployment (2026-10-26)
 

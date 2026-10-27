@@ -54,11 +54,6 @@ fn has_encoded_or_media(text: &str) -> bool {
         "data:video/",
         "data:application/",
         ";base64,",
-        "file://",
-        "![",
-        "```diff",
-        "diff --git ",
-        "\n@@ ",
     ]
     .iter()
     .any(|p| lower.contains(p))
@@ -155,10 +150,13 @@ pub(super) fn validate_request(method: &str, params: &Value) -> Result<(), Strin
         return Err("文本请求超过 4096 字节，请缩短输入或使用直连".into());
     }
     let allowed: &[&str] = match method {
-        "status" | "projects.list" | "sessions.list" => &[],
+        "status" | "projects.list" => &[],
+        "sessions.list" => &["offset", "limit", "knownRevision"],
         "models.list" => &["projectPath"],
         "session.create" => &["projectPath", "modelId", "title"],
         "session.get" => &["sessionId", "knownRevision", "offset", "limit"],
+        "session.attach" => &["sessionId"],
+        "message.get" => &["sessionId", "messageId", "offset", "limit"],
         "message.send" => &["sessionId", "text"],
         "run.cancel" => &["sessionId"],
         "permission.reply" => &["sessionId", "permissionId", "decision"],
@@ -188,7 +186,7 @@ pub(super) fn validate_request(method: &str, params: &Value) -> Result<(), Strin
                 return Err("文本消息不能为空".into());
             }
         }
-        "session.get" => {
+        "session.get" | "sessions.list" | "message.get" => {
             if let Some(value) = params.get("knownRevision") {
                 let revision = value.as_str().ok_or("修订编号无效")?;
                 if revision.len() != 64
@@ -199,14 +197,24 @@ pub(super) fn validate_request(method: &str, params: &Value) -> Result<(), Strin
                     return Err("修订编号无效".into());
                 }
             }
-            if params
-                .get("offset")
-                .is_some_and(|v| v.as_u64().is_none_or(|n| n > 100_000))
-                || params
-                    .get("limit")
-                    .is_some_and(|v| v.as_u64().is_none_or(|n| n == 0 || n > 12))
-            {
+            if params.get("offset").is_some_and(|v| {
+                v.as_u64().is_none_or(|n| {
+                    n > if method == "message.get" {
+                        1024 * 1024
+                    } else {
+                        100_000
+                    }
+                })
+            }) || params.get("limit").is_some_and(|v| {
+                v.as_u64().is_none_or(|n| {
+                    n < if method == "message.get" { 4 } else { 1 }
+                        || n > if method == "message.get" { 2500 } else { 12 }
+                })
+            }) {
                 return Err("历史分页参数无效".into());
+            }
+            if method == "message.get" {
+                exact(params, "messageId", 128)?;
             }
         }
         "permission.reply" => {
@@ -279,34 +287,112 @@ fn pending(snapshot: &Value, key: &str) -> Result<Vec<Value>, String> {
     }).collect()
 }
 
-fn message_text(message: &Value) -> String {
+fn full_message_text(message: &Value) -> String {
     let mut pieces = Vec::new();
-    let mut remaining: usize = 1024;
     if let Some(parts) = message["parts"].as_array() {
-        for part in parts
-            .iter()
-            .rev()
-            .filter(|part| part["type"] == "text")
-            .take(64)
-        {
+        for part in parts.iter().filter(|part| part["type"] == "text") {
             let Some(text) = part["text"].as_str().filter(|s| !s.is_empty()) else {
                 continue;
             };
-            if remaining <= 3 {
-                break;
-            }
             let text = if has_encoded_or_media(text) {
                 "媒体、编码内容或差异请直连查看。"
             } else {
                 text
             };
-            let text = tail(text, remaining);
-            remaining = remaining.saturating_sub(text.len() + 1);
-            pieces.push(text);
+            pieces.push(text.to_owned());
         }
     }
-    pieces.reverse();
     pieces.join("\n")
+}
+
+fn revision(value: &Value) -> Result<String, String> {
+    let bytes = serde_json::to_vec(&canonical(value)).map_err(|_| DIRECT)?;
+    Ok(Sha256::digest(bytes)
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect())
+}
+
+/// Small pages make a large desktop directory usable without sending the whole
+/// directory at every poll. The generation fences cross-page inserts/deletes.
+pub(super) fn session_directory(params: &Value, value: Value) -> Result<Value, String> {
+    validate_request("sessions.list", params)?;
+    let sessions = value
+        .as_array()
+        .filter(|a| a.len() <= 20_000)
+        .ok_or(DIRECT)?
+        .iter()
+        .map(session)
+        .collect::<Result<Vec<_>, _>>()?;
+    let generation = revision(&json!(sessions))?;
+    let offset = params["offset"].as_u64().unwrap_or(0) as usize;
+    let limit = params["limit"].as_u64().unwrap_or(6) as usize;
+    let mut selected = Vec::new();
+    for item in sessions.iter().skip(offset).take(limit) {
+        let mut candidate = selected.clone();
+        candidate.push(item.clone());
+        let overhead = json!({"sessions":candidate,"offset":offset,"nextOffset":offset+candidate.len(),"hasMore":true,"total":sessions.len(),"directoryRevision":generation});
+        if size(&overhead)? > MAX_RESULT_BYTES - RESULT_RESERVE {
+            break;
+        }
+        selected = candidate;
+    }
+    if offset < sessions.len() && selected.is_empty() {
+        return Err("此会话元数据超出文本页预算，请在电脑端缩短标题或项目路径后重试".into());
+    }
+    let next = offset.saturating_add(selected.len());
+    let more = next < sessions.len();
+    let mut result = json!({"sessions":selected,"offset":offset,"nextOffset":if more{json!(next)}else{Value::Null},"hasMore":more,"total":sessions.len(),"directoryRevision":generation});
+    let page_revision = revision(&result)?;
+    if params["knownRevision"].as_str() == Some(page_revision.as_str()) {
+        return Ok(json!({"notModified":true,"revision":page_revision}));
+    }
+    result["revision"] = json!(page_revision);
+    Ok(result)
+}
+
+/// Offset and limit are UTF-8 byte positions. No long text is irretrievably
+/// discarded merely because its preview must fit in a small snapshot frame.
+pub(super) fn message_page(params: &Value, snapshot: &Value) -> Result<Value, String> {
+    validate_request("message.get", params)?;
+    if snapshot["session"]["id"] != params["sessionId"] {
+        return Err("会话身份不匹配".into());
+    }
+    let id = params["messageId"].as_str().ok_or(DIRECT)?;
+    let message = snapshot["messages"]
+        .as_array()
+        .ok_or(DIRECT)?
+        .iter()
+        .find(|m| m["id"] == id && matches!(m["role"].as_str(), Some("user" | "assistant")))
+        .ok_or("消息已移除，请刷新会话")?;
+    let text = full_message_text(message);
+    if text.len() > 1024 * 1024 {
+        return Err("此消息超过手机文字预算，请在电脑端查看完整内容".into());
+    }
+    let offset = params["offset"].as_u64().unwrap_or(0) as usize;
+    if offset > text.len() || !text.is_char_boundary(offset) {
+        return Err("消息分页位置已失效，请从头重新加载".into());
+    }
+    let limit = params["limit"].as_u64().unwrap_or(2000) as usize;
+    let message_revision = revision(&json!({"id":id,"text":text}))?;
+    let mut end = text.len().min(offset.saturating_add(limit));
+    while end > offset && !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    loop {
+        let more = end < text.len();
+        let result = json!({"sessionId":params["sessionId"],"messageId":id,"text":&text[offset..end],"offset":offset,"nextOffset":if more{json!(end)}else{Value::Null},"hasMore":more,"total":text.len(),"revision":message_revision});
+        if size(&result)? <= MAX_RESULT_BYTES {
+            return Ok(result);
+        }
+        if end <= offset {
+            return Err(DIRECT.into());
+        }
+        end = offset + (end - offset) / 2;
+        while end > offset && !text.is_char_boundary(end) {
+            end -= 1;
+        }
+    }
 }
 
 fn canonical(value: &Value) -> Value {
@@ -351,8 +437,9 @@ fn snapshot(params: &Value, value: &Value) -> Result<Value, String> {
     let limit = params["limit"].as_u64().unwrap_or(6) as usize;
     let mut selected = Vec::new();
     for m in eligible.iter().rev().skip(offset).take(limit) {
-        let mut message =
-            json!({"role":m["role"],"parts":[{"type":"text","text":message_text(m)}]});
+        let body = full_message_text(m);
+        let preview = tail(&body, 1024);
+        let mut message = json!({"role":m["role"],"parts":[{"type":"text","text":preview}],"textTruncated":body.len()>1024,"textTotal":body.len(),"textRevision":revision(&json!({"id":m["id"],"text":body}))?});
         if m.get("id").is_some() {
             message["id"] = json!(exact(m, "id", 128)?);
         }
@@ -363,7 +450,8 @@ fn snapshot(params: &Value, value: &Value) -> Result<Value, String> {
     let mut result = json!({"session":session(&value["session"])?,"status":status,"messages":selected,
         "permissions":pending(value,"permissions")?,"questions":pending(value,"questions")?,"diffs":[],
         "error":if value["error"].as_str().is_some_and(|s|!s.is_empty()) {"会话发生错误，请直连查看完整详情"} else {""},
-        "truncated":true,"truncationMessage":NOTICE,"historyOffset":offset,"historyTotal":eligible.len()});
+        "truncated":true,"truncationMessage":NOTICE,"historyOffset":offset,"historyTotal":eligible.len(),
+        "historyRevision":revision(&json!(eligible.iter().map(|m|m["id"].clone()).collect::<Vec<_>>()))?});
     loop {
         let count = result["messages"].as_array().map_or(0, Vec::len);
         result["hasMore"] = json!(offset.saturating_add(count) < eligible.len());
@@ -385,6 +473,7 @@ fn snapshot(params: &Value, value: &Value) -> Result<Value, String> {
         {
             let text = messages[index]["parts"][0]["text"].as_str().unwrap_or("");
             messages[index]["parts"][0]["text"] = json!(tail(text, (length / 2).max(64)));
+            messages[index]["textTruncated"] = json!(true);
         } else if messages.len() > minimum {
             messages.remove(0);
         } else {
@@ -419,15 +508,7 @@ pub(super) fn project(method: &str, params: &Value, result: Value) -> Result<Val
                     .collect::<Result<_, String>>()?,
             )
         }
-        "sessions.list" => Value::Array(
-            result
-                .as_array()
-                .filter(|a| a.len() <= 128)
-                .ok_or(DIRECT)?
-                .iter()
-                .map(session)
-                .collect::<Result<_, _>>()?,
-        ),
+        "sessions.list" => session_directory(params, result)?,
         "models.list" => {
             let models = result["models"]
                 .as_array()
@@ -435,8 +516,9 @@ pub(super) fn project(method: &str, params: &Value, result: Value) -> Result<Val
                 .ok_or(DIRECT)?;
             json!({"models":models.iter().map(|m|Ok(json!({"id":exact(m,"id",512)?,"name":label(m,"name",160)}))).collect::<Result<Vec<_>,String>>()?})
         }
-        "session.create" => session(&result)?,
+        "session.create" | "session.attach" => session(&result)?,
         "session.get" => snapshot(params, &result)?,
+        "message.get" => message_page(params, &result)?,
         "message.send" => {
             json!({"accepted":result["accepted"].as_bool().ok_or(DIRECT)?,"requestId":exact(&result,"requestId",128)?})
         }
@@ -549,13 +631,93 @@ mod tests {
         assert_eq!(tail("中文🙂尾", 7), "…尾");
     }
     #[test]
-    fn media_encoded_and_diff_text_are_replaced_instead_of_relayed() {
+    fn embedded_media_bytes_are_replaced_instead_of_relayed() {
         let mut source = fixture();
         source["messages"][1]["parts"] =
             json!([{"type":"text","text":format!("data:image/png;base64,{}","A".repeat(400))}]);
         let value = project("session.get", &json!({"sessionId":"lc:test"}), source).unwrap();
         assert!(!value.to_string().contains("data:image"));
         assert!(!value.to_string().contains(&"A".repeat(256)));
+    }
+    #[test]
+    fn directory_pages_are_bounded_complete_and_fenced_against_same_count_reordering() {
+        let source=json!((0..80).map(|i|json!({"id":format!("session-{i}"),"title":format!("会话{i}"),"projectPath":format!("D:/{}", "项目目录".repeat(80))})).collect::<Vec<_>>());
+        let first = session_directory(&json!({"offset":0,"limit":6}), source.clone()).unwrap();
+        assert!(first["sessions"].as_array().unwrap().len() < 6);
+        let mut offset = 0;
+        let mut ids = BTreeMap::new();
+        loop {
+            let page =
+                session_directory(&json!({"offset":offset,"limit":6}), source.clone()).unwrap();
+            assert!(size(&page).unwrap() <= MAX_RESULT_BYTES);
+            assert_eq!(page["directoryRevision"], first["directoryRevision"]);
+            for s in page["sessions"].as_array().unwrap() {
+                assert!(ids
+                    .insert(s["id"].as_str().unwrap().to_owned(), ())
+                    .is_none());
+            }
+            if page["hasMore"] == false {
+                break;
+            }
+            let next = page["nextOffset"].as_u64().unwrap();
+            assert!(next > offset);
+            offset = next;
+        }
+        assert_eq!(ids.len(), 80);
+        assert_eq!(
+            session_directory(
+                &json!({"offset":0,"limit":6,"knownRevision":first["revision"]}),
+                source.clone()
+            )
+            .unwrap()["notModified"],
+            true
+        );
+        let mut reordered = source.clone();
+        reordered.as_array_mut().unwrap().swap(1, 70);
+        let changed = session_directory(&json!({"offset":0,"limit":6}), reordered).unwrap();
+        assert_ne!(first["directoryRevision"], changed["directoryRevision"]);
+    }
+    #[test]
+    fn long_chinese_message_pages_reconstruct_the_complete_text_without_utf8_gaps() {
+        let mut source = fixture();
+        let body = "完整文字与代码🙂\n```diff\n+新增一行\n```\n".repeat(180);
+        source["messages"][1]["parts"] = json!([{"type":"text","text":body}]);
+        let preview = project(
+            "session.get",
+            &json!({"sessionId":"lc:test"}),
+            source.clone(),
+        )
+        .unwrap();
+        assert_eq!(preview["messages"][1]["textTruncated"], true);
+        let generation = preview["historyRevision"].clone();
+        let mut rebuilt = String::new();
+        let mut offset = 0;
+        loop {
+            let page = message_page(
+                &json!({"sessionId":"lc:test","messageId":"b","offset":offset,"limit":2000}),
+                &source,
+            )
+            .unwrap();
+            assert!(size(&page).unwrap() <= MAX_RESULT_BYTES);
+            assert_eq!(page["offset"], offset);
+            rebuilt.push_str(page["text"].as_str().unwrap());
+            if page["hasMore"] == false {
+                break;
+            }
+            let next = page["nextOffset"].as_u64().unwrap();
+            assert!(next > offset);
+            offset = next;
+        }
+        assert_eq!(rebuilt, body);
+        assert!(message_page(
+            &json!({"sessionId":"lc:test","messageId":"b","offset":1}),
+            &source
+        )
+        .is_err());
+        source["messages"][1]["parts"][0]["text"] = json!(format!("{body}新回复"));
+        let changed = project("session.get", &json!({"sessionId":"lc:test"}), source).unwrap();
+        assert_eq!(changed["historyRevision"], generation);
+        assert_ne!(changed["revision"], preview["revision"]);
     }
     #[test]
     fn pending_permissions_are_present_but_cannot_be_blindly_approved() {

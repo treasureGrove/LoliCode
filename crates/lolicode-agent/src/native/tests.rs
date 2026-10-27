@@ -422,6 +422,7 @@ mod image_output_cases;
 mod memory_cases;
 mod tool_search_cases;
 mod deferred_tool_cases;
+mod background_flight_cases;
 
 #[tokio::test]
 async fn long_tool_tasks_complete_real_edits_after_more_than_twenty_four_rounds() {

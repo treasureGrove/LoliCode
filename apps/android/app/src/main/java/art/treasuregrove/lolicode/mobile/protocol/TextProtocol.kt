@@ -93,7 +93,7 @@ fun validateTextValue(value: JsonElement) {
 }
 
 fun validateTextRequest(method: String, params: JsonObject) {
-    require(method in setOf("status", "projects.list", "models.list", "sessions.list", "session.create", "session.get", "message.send", "run.cancel", "permission.reply", "question.reply")) { "此操作不支持受限文本模式" }
+    require(method in setOf("status", "projects.list", "models.list", "sessions.list", "session.create", "session.attach", "session.get", "message.get", "message.send", "run.cancel", "permission.reply", "question.reply")) { "此操作不支持受限文本模式" }
     require(params.toString().toByteArray(UTF_8).size <= 4096) { "受限文本参数过大，请缩短输入或使用直连" }
     validateTextValue(params)
     if (method == "permission.reply") require(params.string("decision") == "reject") { "请直连查看完整操作后批准；文本模式仍可拒绝" }

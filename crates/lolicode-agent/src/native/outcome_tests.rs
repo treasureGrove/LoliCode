@@ -18,6 +18,7 @@ async fn fixture() -> (
     {
         let mut state = entry.lock().await;
         state.flight = Some(Flight {
+            background_only: false,
             request_id: "fixture-request".into(),
             cancel: tx,
         });

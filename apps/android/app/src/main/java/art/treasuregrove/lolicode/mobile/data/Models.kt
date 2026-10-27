@@ -21,7 +21,9 @@ data class Session(val id: String, val title: String, val projectPath: String) {
         fun parse(value: JsonObject) = Session(value.string("id"), value.string("title").ifBlank { "新会话" }, value.string("projectPath"))
     }
 }
-data class ChatMessage(val role: String, val body: String)
+data class ChatMessage(val role: String, val body: String, val id: String = "",
+    val textTruncated: Boolean = false, val textTotal: Int = body.toByteArray(Charsets.UTF_8).size,
+    val revision: String? = null, val loadedBytes: Int = 0, val textCapped: Boolean = false)
 data class Approval(val id: String, val action: String, val detail: String, val canApprove: Boolean = true)
 data class Question(val id: String, val title: String, val fields: List<JsonObject>)
 data class FileDiff(val path: String, val patch: String)
@@ -30,6 +32,9 @@ data class SessionSnapshot(
     val messages: List<ChatMessage>, val approvals: List<Approval>, val questions: List<Question>,
     val diffs: List<FileDiff>, val error: String, val truncated: Boolean, val truncationMessage: String,
     val revision: String? = null,
+    val historyOffset: Int = 0, val historyTotal: Int = messages.size,
+    val nextHistoryOffset: Int? = null, val historyCapped: Boolean = false,
+    val historyRevision: String? = null,
 ) {
     companion object {
         fun parse(data: JsonObject): SessionSnapshot = SessionSnapshot(
@@ -44,7 +49,9 @@ data class SessionSnapshot(
                         "tool" -> "${obj.string("name")} · ${obj.string("state")}\n${obj.string("output")}\n${obj.string("error")}".trim()
                         else -> ""
                     }
-                }.trim())
+                }.trim(), message.string("id"), message.boolean("textTruncated"),
+                    (message["textTotal"] as? JsonPrimitive)?.intOrNull ?: message.array("parts").sumOf { it.jsonObject.string("text").toByteArray(Charsets.UTF_8).size },
+                    message.string("textRevision").ifBlank { message.string("revision") }.ifBlank { null })
             }.filter { it.body.isNotEmpty() },
             data.array("permissions").map { element ->
                 val obj = element.jsonObject
@@ -60,6 +67,10 @@ data class SessionSnapshot(
             },
             data.array("diffs").map { FileDiff(it.jsonObject.string("path"), it.jsonObject.string("patch")) },
             data.string("error"), data.boolean("truncated"), data.string("truncationMessage"), data.string("revision").ifBlank { null },
+            ((data["historyOffset"] as? JsonPrimitive)?.intOrNull ?: 0).coerceAtLeast(0),
+            if (data["historyTotal"] != null) data.long("historyTotal").toInt().coerceAtLeast(0) else data.array("messages").size,
+            if (data.boolean("hasMore")) (data["nextOffset"] as? JsonPrimitive)?.intOrNull?.takeIf { it > 0 } else null,
+            false, data.string("historyRevision").ifBlank { null },
         )
     }
 }

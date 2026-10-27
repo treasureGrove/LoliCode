@@ -107,8 +107,8 @@ export function MobileCompanionAccountPanel({
         </strong>
         <p className="text-sm text-fg-2">
           {text(
-            "手机登录同一个 LoliCode 账户，选择这台电脑，再在此处确认。每台设备使用独立密钥，任务内容端到端加密。",
-            "Sign in to the same LoliCode account on your phone, select this computer, then confirm here. Each device has its own key; task content is end-to-end encrypted.",
+            "手机登录同一个 LoliCode 账户，选择这台电脑，再在此处确认。确认后的手机可浏览已注册项目的会话目录，选中后读取历史并续聊。每台设备使用独立密钥，内容端到端加密。",
+            "Sign in to the same LoliCode account on your phone, select this computer, then confirm here. Your approved phone can browse registered project sessions, select one to read its history and continue the conversation. Each device has its own key; content is end-to-end encrypted.",
           )}
         </p>
       </div>

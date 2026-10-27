@@ -27,6 +27,7 @@ data class CompanionState(
     val projects: List<Project> = emptyList(), val selectedProject: String = "",
     val models: List<Model> = emptyList(), val selectedModel: String = "",
     val sessions: List<Session> = emptyList(), val selectedSession: String? = null,
+    val sessionsNextOffset: Int? = null, val sessionsTotal: Int = 0,
     val snapshot: SessionSnapshot? = null, val busy: Boolean = false, val error: String? = null,
     val pushConfigured: Boolean = false, val pushRegistered: Boolean = false,
     val pushError: String? = null,
@@ -77,8 +78,11 @@ class CompanionViewModel(application: Application) : AndroidViewModel(applicatio
     private var directoryGeneration = 0
     private var eventRefresh: Job? = null
     private var lastSnapshotAt = 0L
+    private var lastSessionsAt = 0L
     private val snapshotLock = Mutex()
     private var textRevision: Pair<String, String>? = null
+    private var sessionSyncEpoch = 0
+    private var directoryBaseline: SessionDirectory? = null
     private val seenEvents = linkedSetOf<String>()
 
     init {
@@ -362,8 +366,58 @@ class CompanionViewModel(application: Application) : AndroidViewModel(applicatio
     fun selectModel(id: String) { mutable.update { it.copy(selectedModel = id) } }
     fun selectSession(id: String) = operation {
         require(mutable.value.sessions.any { it.id == id }) { "此会话不属于当前设备" }
-        mutable.update { it.copy(selectedSession = id, snapshot = null) }
+        val expected = generation
+        val scope = sessionSyncEpoch
+        val attached = Session.parse(remote().request("session.attach", buildJsonObject { put("sessionId", id) }).jsonObject)
+        ensureCurrent(expected); check(sessionSyncEpoch == scope) { "连接已变化，请重新选择会话" }
+        require(attached.id == id) { "电脑返回的会话身份不匹配" }
+        textRevision = null
+        mutable.update { it.copy(selectedSession = id, snapshot = null, sessions = it.sessions.map { row -> if (row.id == id) attached else row }) }
         loadSnapshot()
+    }
+
+    fun loadMoreSessions() = operation { refreshSessions(append = true) }
+
+    fun loadOlderHistory() = operation {
+        snapshotLock.withLock {
+            val expected = generation
+            val scope = sessionSyncEpoch
+            val selected = mutable.value.selectedSession ?: return@withLock
+            val current = mutable.value.snapshot?.takeIf { it.session.id == selected } ?: return@withLock
+            val offset = current.nextHistoryOffset ?: return@withLock
+            val page = remote().request("session.get", buildJsonObject { put("sessionId", selected); put("offset", offset); put("limit", 6) }).jsonObject
+            ensureCurrent(expected)
+            check(sessionSyncEpoch == scope) { "连接已变化，请重新读取历史" }
+            val older = SessionSnapshot.parse(page)
+            if (mutable.value.selectedSession != selected) return@withLock
+            val merged = mergeOlderSnapshot(current, older, offset)
+            mutable.update { it.copy(snapshot = merged) }
+        }
+    }
+
+    fun loadMessageText(messageId: String) = operation {
+        snapshotLock.withLock {
+            val expected = generation
+            val scope = sessionSyncEpoch
+            val selected = mutable.value.selectedSession ?: return@withLock
+            val current = mutable.value.snapshot?.takeIf { it.session.id == selected } ?: return@withLock
+            val message = current.messages.firstOrNull { it.id == messageId } ?: return@withLock
+            var offset = message.loadedBytes
+            suspend fun fetch(position: Int) = MessageTextPage.parse(remote().request("message.get", buildJsonObject {
+                put("sessionId", selected); put("messageId", messageId); put("offset", position); put("limit", 2000)
+            }).jsonObject)
+            var page = fetch(offset)
+            ensureCurrent(expected); check(sessionSyncEpoch == scope) { "连接已变化，请重新展开消息" }
+            if (offset > 0 && page.revision != message.revision) { offset = 0; page = fetch(0) }
+            ensureCurrent(expected); check(sessionSyncEpoch == scope) { "连接已变化，请重新展开消息" }
+            if (mutable.value.selectedSession != selected) return@withLock
+            val expanded = applyMessagePage(selected, message, page, offset)
+            val cachedBytes = current.messages.filterNot { it.id == messageId }.sumOf { it.body.toByteArray(Charsets.UTF_8).size } + expanded.body.toByteArray(Charsets.UTF_8).size
+            if (cachedBytes > 512 * 1024) {
+                mutable.update { it.copy(snapshot = current.copy(messages = current.messages.map { row -> if (row.id == messageId) row.copy(textCapped = true) else row }, historyCapped = true)) }
+                error("手机文字缓存已达 512 KiB，请在电脑查看后续内容")
+            } else mutable.update { it.copy(snapshot = current.copy(messages = current.messages.map { row -> if (row.id == messageId) expanded else row })) }
+        }
     }
 
     fun createSession() = operation {
@@ -455,7 +509,7 @@ class CompanionViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     private fun openConnection(computer: PairedComputer, deviceToken: String?, connectionGeneration: Int) {
-        textRevision = null; seenEvents.clear()
+        sessionSyncEpoch++; directoryBaseline = null; textRevision = null; seenEvents.clear()
         // QR expiration applies only when importing a new enrollment. A saved
         // pending room may already be approved while this phone was offline.
         // Re-authenticate and let the desktop decide its current authorization.
@@ -465,18 +519,18 @@ class CompanionViewModel(application: Application) : AndroidViewModel(applicatio
             if (!visible || generation != connectionGeneration) return@launch
             when (event) {
                 ConnectionEvent.Ready -> {
-                    textRevision = null
+                    sessionSyncEpoch++; directoryBaseline = null; textRevision = null
                     retries = 0
                     mutable.update { it.copy(relayReady = true, transport = "direct", connection = "原生直连已建立，正在验证电脑任务状态") }
                     if (mutable.value.computer?.approved == true) registerPush()
                     if (mutable.value.desktopOnline && mutable.value.computer?.approved == true) bootstrap()
                 }
                 is ConnectionEvent.TransportReady -> {
-                    textRevision = null; seenEvents.clear(); retries = 0
+                    sessionSyncEpoch++; directoryBaseline = null; textRevision = null; seenEvents.clear(); retries = 0
                     mutable.update { it.copy(relayReady = true, hostVerified = false, transport = "text", connection = "受限文本通道已验证 · 正在确认电脑授权") }
                 }
                 is ConnectionEvent.WaitingForTransport -> {
-                    textRevision = null; seenEvents.clear(); poll?.cancel(); eventRefresh?.cancel()
+                    sessionSyncEpoch++; directoryBaseline = null; textRevision = null; seenEvents.clear(); poll?.cancel(); eventRefresh?.cancel()
                     mutable.update { it.copy(relayReady = false, hostVerified = false, transport = null, connection = event.reason) }
                 }
                 is ConnectionEvent.Peer -> {
@@ -492,6 +546,7 @@ class CompanionViewModel(application: Application) : AndroidViewModel(applicatio
                 is ConnectionEvent.PushStatus -> mutable.update { it.copy(pushConfigured = event.configured, pushRegistered = event.registered) }
                 is ConnectionEvent.Plaintext -> handlePlaintext(event.message)
                 is ConnectionEvent.Closed -> {
+                    sessionSyncEpoch++; directoryBaseline = null; textRevision = null
                     poll?.cancel()
                     if (event.authenticationRejected) ticket = null
                     mutable.update { it.copy(relayReady = false, desktopOnline = false, hostVerified = false, transport = null, connection = event.reason) }
@@ -546,34 +601,76 @@ class CompanionViewModel(application: Application) : AndroidViewModel(applicatio
             runCatching { refreshAll() }.onFailure { if (visible) error(it.message ?: "读取电脑状态失败") }
             while (isActive && visible) {
                 delay(if (mutable.value.transport == "text") 3_000 else 2_000)
-                if (mutable.value.usable && !mutable.value.busy && mutable.value.snapshot?.status == "running") runCatching { loadSnapshot(minimumInterval = if (mutable.value.transport == "text") 3_000 else 1_000) }
+                if (mutable.value.usable && !mutable.value.busy) {
+                    // Desktop-created sessions and idle-session edits must appear without reconnecting.
+                    if (SystemClock.elapsedRealtime() - lastSessionsAt >= 15_000) runCatching { refreshSessions() }
+                    runCatching { loadSnapshot(minimumInterval = if (mutable.value.transport == "text") 3_000 else 1_000) }
+                }
             }
         }
     }
 
     private suspend fun refreshAll() {
         val refreshGeneration = generation
+        val scope = sessionSyncEpoch
         val connection = transport()
         val status = connection.request("status").jsonObject
         ensureCurrent(refreshGeneration)
+        check(sessionSyncEpoch == scope) { "连接已变化，请重新同步会话" }
         require(status.long("protocol") == 1L && status.boolean("quietMode")) { "电脑未确认静默后台模式，已暂停操作，请更新电脑端" }
         mutable.update { it.copy(hostVerified = true) }
         val projects = connection.request("projects.list").jsonArray.map { Project(it.jsonObject.string("path"), it.jsonObject.string("name")) }
-        val sessions = connection.request("sessions.list").jsonArray.map { Session.parse(it.jsonObject) }
+        val directory = SessionDirectory.parse(connection.request("sessions.list", buildJsonObject { put("offset", 0); put("limit", 6) }))
         ensureCurrent(refreshGeneration)
+        check(sessionSyncEpoch == scope) { "连接已变化，请重新同步会话" }
         val current = mutable.value
+        val sessions = firstDirectoryRows(directory, current.sessions, current.selectedSession)
         val project = current.selectedProject.takeIf { selected -> projects.any { it.path == selected } } ?: projects.firstOrNull()?.path.orEmpty()
         val requested = notificationSession
-        val selected = requested?.takeIf { id -> sessions.any { it.id == id } }
-            ?: current.selectedSession?.takeIf { id -> sessions.any { it.id == id } }
-            ?: sessions.firstOrNull()?.id
+        val selected = selectSyncedSession(sessions, current.selectedSession, requested)
         if (requested != null) {
             notificationSession = null
             if (sessions.none { it.id == requested }) error("通知对应的会话已失效，不能使用旧通知审批")
         }
-        mutable.update { it.copy(projects = projects, selectedProject = project, sessions = sessions, selectedSession = selected) }
+        lastSessionsAt = SystemClock.elapsedRealtime()
+        directoryBaseline = directory
+        mutable.update { it.copy(projects = projects, selectedProject = project, sessions = sessions, selectedSession = selected,
+            sessionsNextOffset = directory.nextOffset, sessionsTotal = directory.total, snapshot = it.snapshot?.takeIf { snapshot -> snapshot.session.id == selected }) }
         if (project.isNotBlank() && (current.selectedProject != project || current.models.isEmpty())) loadModels(project)
+        if (selected != null) {
+            val attached = Session.parse(connection.request("session.attach", buildJsonObject { put("sessionId", selected) }).jsonObject)
+            ensureCurrent(refreshGeneration)
+            check(sessionSyncEpoch == scope) { "连接已变化，请重新选择会话" }
+            require(attached.id == selected) { "电脑返回的会话身份不匹配" }
+            mutable.update { it.copy(sessions = it.sessions.map { row -> if (row.id == selected) attached else row }) }
+        }
         loadSnapshot()
+    }
+
+    private suspend fun refreshSessions(append: Boolean = false) {
+        val expected = generation
+        val scope = sessionSyncEpoch
+        val current = mutable.value
+        val offset = if (append) current.sessionsNextOffset ?: return else 0
+        val baseline = if (offset == 0) directoryBaseline else null
+        val known = baseline?.revision
+        val directory = applyDirectoryResponse(remote().request("sessions.list", buildJsonObject {
+            put("offset", offset); put("limit", 6); known?.let { put("knownRevision", it) }
+        }), baseline, known)
+        ensureCurrent(expected)
+        check(sessionSyncEpoch == scope) { "连接已变化，请重新同步会话" }
+        require(directory.offset == offset) { "电脑返回的会话目录页位置无效" }
+        require(!append || directory.total == current.sessionsTotal) { "电脑会话目录已更新，请刷新后重新翻页" }
+        require(!append || directory.directoryRevision == directoryBaseline?.directoryRevision) { "电脑会话目录顺序已更新，请刷新后重新翻页" }
+        if (!append) directoryBaseline = directory
+        lastSessionsAt = SystemClock.elapsedRealtime()
+        if (directory === baseline) return
+        mutable.update { state ->
+            val sessions = if (append) (state.sessions + directory.sessions).distinctBy { it.id }.take(500) else firstDirectoryRows(directory, state.sessions, state.selectedSession)
+            val selected = selectSyncedSession(sessions, state.selectedSession)
+            state.copy(sessions = sessions, selectedSession = selected, sessionsNextOffset = if (sessions.size < 500) directory.nextOffset else null,
+                sessionsTotal = directory.total, snapshot = state.snapshot?.takeIf { it.session.id == selected })
+        }
     }
 
     private suspend fun loadModels(path: String) {
@@ -597,11 +694,15 @@ class CompanionViewModel(application: Application) : AndroidViewModel(applicatio
     }
     private suspend fun readSnapshot(id: String): SessionSnapshot {
         val expected = generation
+        val scope = sessionSyncEpoch
         val previous = mutable.value.snapshot?.takeIf { it.session.id == id }
         val known = if (mutable.value.transport == "text" && previous != null) textRevision?.takeIf { it.first == id && it.second == previous.revision }?.second else null
         val value = remote().request("session.get", buildJsonObject { put("sessionId", id); known?.let { put("knownRevision", it) } }).jsonObject
         ensureCurrent(expected)
-        val snapshot = applySnapshotResponse(value, previous, known)
+        check(sessionSyncEpoch == scope) { "连接已变化，请重新同步会话" }
+        val parsed = applySnapshotResponse(value, previous, known)
+        require(parsed.session.id == id) { "电脑返回了其他会话，已停止同步" }
+        val snapshot = if (known != null && parsed === previous) parsed else mergeLatestSnapshot(parsed, previous)
         if (mutable.value.transport == "text") textRevision = snapshot.revision?.let { id to it }
         return snapshot
     }
@@ -631,9 +732,10 @@ class CompanionViewModel(application: Application) : AndroidViewModel(applicatio
     private fun error(message: String) { mutable.update { it.copy(error = message.take(500)) } }
     private fun disconnect() {
         generation++
+        sessionSyncEpoch++; directoryBaseline = null; textRevision = null
         connectionJob?.cancel(); connectionJob = null
         ticketRenewal?.cancel(); ticketRenewal = null
-        eventRefresh?.cancel(); eventRefresh = null; lastSnapshotAt = 0L
+        eventRefresh?.cancel(); eventRefresh = null; lastSnapshotAt = 0L; lastSessionsAt = 0L
         retry?.cancel(); retry = null
         poll?.cancel(); poll = null
         client?.close(); client = null

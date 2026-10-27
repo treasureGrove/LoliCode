@@ -22,7 +22,7 @@ impl Vault for MemoryVault {
         Ok(())
     }
 }
-fn fixture_room(approved: bool) -> Room {
+pub(super) fn fixture_room(approved: bool) -> Room {
     Room {
         account: None,
         relay_url: "wss://example.invalid/companion".into(),
@@ -32,6 +32,7 @@ fn fixture_room(approved: bool) -> Room {
         device_id: Some("phone-a".into()),
         device_name: Some("Pixel".into()),
         sessions: BTreeSet::from(["lc:owned".into()]),
+        shared_sessions: BTreeSet::new(),
         requests: BTreeMap::new(),
         seen_packets: BTreeMap::new(),
         events: BTreeMap::new(),

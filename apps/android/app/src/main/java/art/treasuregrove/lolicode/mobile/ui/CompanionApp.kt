@@ -160,7 +160,7 @@ private fun CompanionScreenContent(
                     }
                     when (tab) {
                         CompanionTab.Workbench -> WorkbenchScreen(state, onLogin = { loginDialog = true }, onHelp = { helpSheet = true }, onNewTask = { startNewTask() }, onDevices = { tab = CompanionTab.Devices }, onTasks = { tab = CompanionTab.Tasks; detailId = null }, onOpenSession = ::openSession)
-                        CompanionTab.Tasks -> if (detail) TaskDetailScreen(state, snapshot, actions) else TaskListScreen(state, onNewTask = { startNewTask() }, onDevices = { tab = CompanionTab.Devices }, onOpenSession = ::openSession)
+                        CompanionTab.Tasks -> if (detail) TaskDetailScreen(state, snapshot, actions) else TaskListScreen(state, onNewTask = { startNewTask() }, onDevices = { tab = CompanionTab.Devices }, onOpenSession = ::openSession, onLoadMore = actions.loadMoreSessions)
                         CompanionTab.Devices -> DeviceScreen(state, actions, notificationsAllowed, onLogin = { loginDialog = true }, onForget = { forget = it }, onHelp = { helpSheet = true })
                     }
                 }

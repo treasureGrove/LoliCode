@@ -22,7 +22,8 @@ pub(super) struct CommandRecord {
 #[serde(rename_all = "camelCase")]
 pub(super) struct StoredSession {
     pub format: u32,
-    /// Persisted execution boundary for phone-origin tasks, independent of UI.
+    /// Permanent boundary for phone-created sessions. A phone continuation of a
+    /// desktop session uses a stricter in-memory Flight instead of changing this.
     #[serde(default)]
     pub background_only: bool,
     pub snapshot: AgentSnapshot,

@@ -38,9 +38,20 @@ struct SessionState {
     question: Option<QuestionWait>,
     title_in_flight: bool,
 }
+impl SessionState {
+    fn effective_background_only(&self) -> bool {
+        self.stored.background_only
+            || self
+                .flight
+                .as_ref()
+                .is_some_and(|flight| flight.background_only)
+    }
+}
 struct Flight {
     request_id: String,
     cancel: watch::Sender<bool>,
+    // A phone may continue a desktop session without changing its saved policy.
+    background_only: bool,
 }
 struct PermissionWait {
     id: String,
@@ -161,15 +172,15 @@ impl NativeEngine {
         *self.inner.applications.write().await = Some(tools);
     }
 
-    /// Read the persisted execution boundary before preparing host transports.
-    /// This is session-owned scope, independent of the desktop's selected tab.
+    /// Read the effective execution boundary before preparing host transports.
+    /// This combines permanent session scope with its admitted flight's scope.
     /// In particular, background sessions must not start local MCP processes.
     pub async fn session_tool_scope(&self, id: &str) -> Result<(PathBuf, bool), String> {
         let entry = self.entry(id).await?;
         let state = entry.lock().await;
         Ok((
             PathBuf::from(&state.stored.snapshot.session.project_path),
-            state.stored.background_only,
+            state.effective_background_only(),
         ))
     }
 
@@ -247,7 +258,9 @@ impl NativeEngine {
         let result = super::tool_search::search(&schemas, input)?;
         let receipt: Value = serde_json::from_str(&result).map_err(|_| "工具搜索结果无效")?;
         let mut state = entry.lock().await;
-        state.stored.discovered_tools.retain(|name| deferred.contains(name));
+        if !background_only {
+            state.stored.discovered_tools.retain(|name| deferred.contains(name));
+        }
         for tool in receipt["tools"].as_array().into_iter().flatten() {
             if let Some(name) = tool["name"].as_str().filter(|name| deferred.contains(*name)) {
                 state.stored.discovered_tools.insert(name.into());
@@ -770,6 +783,11 @@ impl NativeEngine {
         let id = arg(args, "sessionId")?;
         let text = arg(args, "text")?;
         let request_id = arg(args, "requestId")?;
+        let background_only = match args.get("backgroundOnly") {
+            None => false,
+            Some(Value::Bool(value)) => *value,
+            Some(_) => return Err("后台执行标记必须为布尔值".into()),
+        };
         let attachments = args["attachments"]
             .as_array()
             .map(Vec::as_slice)
@@ -871,6 +889,7 @@ impl NativeEngine {
         state.flight = Some(Flight {
             request_id: request_id.into(),
             cancel,
+            background_only,
         });
         drop(state);
         let engine = self.clone();
@@ -909,7 +928,7 @@ impl NativeEngine {
         let mut needs_final_answer = false;
         let (background_only, preparation_project) = {
             let state = entry.lock().await;
-            (state.stored.background_only, PathBuf::from(&state.stored.snapshot.session.project_path))
+            (state.effective_background_only(), PathBuf::from(&state.stored.snapshot.session.project_path))
         };
         // Host discovery belongs to this admitted flight. It must not outlive
         // stopGeneration or run again at each model/tool round.
@@ -955,7 +974,9 @@ impl NativeEngine {
             let schemas = {
                 let mut state = entry.lock().await;
                 let previous = state.stored.discovered_tools.clone();
-                state.stored.discovered_tools.retain(|name| deferred.contains(name));
+                if !background_only {
+                    state.stored.discovered_tools.retain(|name| deferred.contains(name));
+                }
                 if previous != state.stored.discovered_tools {
                     persistence::save(&self.inner.root, &state.stored).await?;
                 }
@@ -1170,7 +1191,9 @@ impl NativeEngine {
         let discovered = {
             let mut state = entry.lock().await;
             let previous = state.stored.discovered_tools.clone();
-            state.stored.discovered_tools.retain(|name| deferred.contains(name));
+            if !background_only {
+                state.stored.discovered_tools.retain(|name| deferred.contains(name));
+            }
             if previous != state.stored.discovered_tools {
                 persistence::save(&self.inner.root, &state.stored).await?;
             }
@@ -1680,10 +1703,15 @@ impl NativeEngine {
     ) -> Result<bool, String> {
         let (policy, project, background_only) = {
             let state = entry.lock().await;
+            let background_only = state.effective_background_only();
             (
-                state.stored.snapshot.session.permission_mode.clone(),
+                if background_only {
+                    "ask".into()
+                } else {
+                    state.stored.snapshot.session.permission_mode.clone()
+                },
                 state.stored.snapshot.session.project_path.clone(),
-                state.stored.background_only,
+                background_only,
             )
         };
         let grant = Grant {
@@ -1715,7 +1743,7 @@ impl NativeEngine {
                 description: Some(inspection.description.clone()),
                 tool_name: Some(name.into()),
                 tool_input: Some(input.clone()),
-                approval_mode: if inspection.dangerous {
+                approval_mode: if inspection.dangerous || background_only {
                     Some("user-once".into())
                 } else {
                     None
@@ -1743,7 +1771,7 @@ impl NativeEngine {
             .filter(|p| p.id == id)
             .ok_or("此权限请求已结束或不属于该会话")?;
         let decision = arg(args, "decision")?;
-        if state.stored.background_only && decision == "always" {
+        if state.effective_background_only() && decision == "always" {
             return Err("手机后台会话不允许长期授权".into());
         }
         if !matches!(decision, "once" | "always" | "reject") {

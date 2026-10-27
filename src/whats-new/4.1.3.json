@@ -28,6 +28,13 @@
       "zh-TW": "手機支援同帳戶登入與加密直連，連線受限時可使用有流量上限的加密文字通道",
       "en": "Sign in on your phone with encrypted direct connections and a quota-limited encrypted text fallback",
       "ja": "スマートフォンの同一アカウント接続に対応し、直接接続できない場合は通信量を制限した暗号化テキスト経路を使用"
+    },
+    {
+      "type": "improve",
+      "zh": "手机可选择电脑已有会话续聊，按需读取历史与完整长回复，并在重连后恢复",
+      "zh-TW": "手機可選擇電腦既有對話繼續交談，按需讀取歷史與完整長回覆，並於重新連線後恢復",
+      "en": "Continue existing desktop sessions on your phone, load history and complete long replies on demand, and restore the conversation after reconnecting",
+      "ja": "スマートフォンで既存のPC会話を再開し、履歴や長い返信を必要に応じて読み込み、再接続後も会話を復元"
     }
   ]
 }

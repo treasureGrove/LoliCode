@@ -474,9 +474,9 @@ impl MobileCompanionState {
             .rooms
             .iter()
             .filter(|(_, r)| r.account.is_some())
-            .map(|(id, r)| (id.clone(), r.sessions.clone()))
+            .map(|(id, r)| (id.clone(), r.active_requests.clone()))
             .collect::<Vec<_>>();
-        for (id, sessions) in rooms {
+        for (id, active_requests) in rooms {
             if let Some(tx) = self
                 .0
                 .connections
@@ -487,9 +487,7 @@ impl MobileCompanionState {
             {
                 let _ = tx.try_send(Control::Stop);
             }
-            for session in sessions {
-                let _ = agent_dispatch::interrupt_agent_session(app.clone(), session).await;
-            }
+            self.interrupt_mobile_runs(app, &active_requests).await;
         }
     }
     pub(super) async fn fence_account_state(&self) {
@@ -911,6 +909,7 @@ impl MobileCompanionState {
                 device_id: Some(request.phone.device_id.clone()),
                 device_name: Some(request.phone.device_name.clone()),
                 sessions: BTreeSet::new(),
+                shared_sessions: BTreeSet::new(),
                 requests: BTreeMap::new(),
                 seen_packets: BTreeMap::new(),
                 events: BTreeMap::new(),
