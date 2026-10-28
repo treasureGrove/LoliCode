@@ -47,7 +47,7 @@ function mount() {
 
 function lolicodeRow() {
   return screen
-    .getByRole("heading", { name: "LoliCode", exact: true })
+    .getByRole("heading", { name: "LoliCode" })
     .closest("li")!;
 }
 
@@ -84,11 +84,11 @@ describe("DesktopUsageSources", () => {
     const rows = within(list).getAllByRole("listitem");
     expect(rows).toHaveLength(5);
     expect(
-      within(rows[0]).getByRole("heading", { name: "LoliCode", exact: true }),
+      within(rows[0]).getByRole("heading", { name: "LoliCode" }),
     ).toBeInTheDocument();
     for (const app of ["WorkBuddy", "DeepSeek Harness", "ZCode", "MiMo"]) {
       expect(
-        within(list).getByRole("heading", { name: app, exact: true }),
+        within(list).getByRole("heading", { name: app }),
       ).toBeInTheDocument();
     }
   });
