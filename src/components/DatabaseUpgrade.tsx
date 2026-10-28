@@ -14,6 +14,8 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { productVersion } from "@/lib/productVersion";
+import { APP_UPDATES_ENABLED } from "@/lib/branding";
+import { IS_DEVELOPMENT_BUILD } from "@/lib/buildChannel";
 
 const RELEASES_URL = "https://lolicode.com/";
 
@@ -49,7 +51,9 @@ interface DownloadProgress {
  */
 export function DatabaseUpgrade({ payload }: DatabaseUpgradeProps) {
   const { t } = useTranslation();
-  const [phase, setPhase] = useState<Phase>("checking");
+  const [phase, setPhase] = useState<Phase>(
+    APP_UPDATES_ENABLED ? "checking" : "incompatible",
+  );
   const [availableVersion, setAvailableVersion] = useState<string | null>(null);
   const [progress, setProgress] = useState<DownloadProgress | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -60,6 +64,7 @@ export function DatabaseUpgrade({ payload }: DatabaseUpgradeProps) {
 
   // 启动时检查可用更新，决定 upgradable / incompatible
   useEffect(() => {
+    if (!APP_UPDATES_ENABLED) return;
     let cancelled = false;
     (async () => {
       try {
@@ -90,6 +95,7 @@ export function DatabaseUpgrade({ payload }: DatabaseUpgradeProps) {
   }, []);
 
   const startUpgrade = useCallback(async () => {
+    if (!APP_UPDATES_ENABLED) return;
     setPhase("updating");
     setProgress(null);
     setErrorMsg(null);
@@ -198,15 +204,22 @@ export function DatabaseUpgrade({ payload }: DatabaseUpgradeProps) {
         {phase === "incompatible" && (
           <div className="space-y-2 rounded-lg border border-transparent bg-danger-soft p-3 text-sm text-danger-text">
             <p className="font-medium">
-              {t("dbUpgrade.incompatibleTitle", "升级也无法解决")}
+              {IS_DEVELOPMENT_BUILD
+                ? t("buildChannel.rebuildRequired", "请重新构建开发版")
+                : t("dbUpgrade.incompatibleTitle", "升级也无法解决")}
             </p>
             <p className="leading-relaxed">
-              {t("dbUpgrade.incompatibleDescription", {
-                db: dbVersion,
-                supported: supportedVersion,
-                defaultValue:
-                  "你已是最新版本，但数据库版本（v{{db}}）仍高于本应用支持的版本（v{{supported}}）。该数据库可能由第三方客户端或更高版本创建，升级当前官方应用也无法兼容。",
-              })}
+              {IS_DEVELOPMENT_BUILD
+                ? t("buildChannel.databaseRebuildHelp", {
+                    defaultValue:
+                      "开发版数据库高于当前构建支持的版本，请保留数据并运行 pnpm build:dev 构建兼容版本。开发版不通过正式更新通道升级。",
+                  })
+                : t("dbUpgrade.incompatibleDescription", {
+                    db: dbVersion,
+                    supported: supportedVersion,
+                    defaultValue:
+                      "你已是最新版本，但数据库版本（v{{db}}）仍高于本应用支持的版本（v{{supported}}）。该数据库可能由第三方客户端或更高版本创建，升级当前官方应用也无法兼容。",
+                  })}
             </p>
           </div>
         )}

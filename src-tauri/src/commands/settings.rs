@@ -279,6 +279,7 @@ pub async fn restart_app(app: AppHandle) -> Result<bool, String> {
 /// 这里把退出清理、安装和重启串在同一个后端流程中，避免依赖旧前端继续执行。
 #[tauri::command]
 pub async fn install_update_and_restart(app: AppHandle) -> Result<bool, String> {
+    crate::channel::require_stable_updates()?;
     // The frontend's async metadata can be late or fail. Never let a portable
     // build dispatch an NSIS installer into the installed application's path.
     if crate::commands::misc::is_portable_mode().await? {
@@ -428,6 +429,9 @@ async fn install_update_and_restart_inner(app: &AppHandle) -> Result<bool, Strin
 /// 升级无法解决，而不是让其反复尝试。
 #[tauri::command]
 pub async fn check_app_update_available(app: AppHandle) -> Result<Option<String>, String> {
+    if crate::channel::is_development() {
+        return Ok(None);
+    }
     let updater = app
         .updater_builder()
         .build()

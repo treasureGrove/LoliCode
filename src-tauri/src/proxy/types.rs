@@ -43,7 +43,7 @@ impl Default for ProxyConfig {
     fn default() -> Self {
         Self {
             listen_address: "127.0.0.1".to_string(),
-            listen_port: 15721, // 使用较少占用的高位端口
+            listen_port: crate::channel::default_proxy_port(),
             max_retries: 3,
             request_timeout: 600,
             enable_logging: true,

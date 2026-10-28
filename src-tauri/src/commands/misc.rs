@@ -73,6 +73,7 @@ pub async fn copy_text_to_clipboard(text: String) -> Result<bool, String> {
 /// 检查更新
 #[tauri::command]
 pub async fn check_for_updates(handle: AppHandle) -> Result<bool, String> {
+    crate::channel::require_stable_updates()?;
     handle
         .opener()
         .open_url("https://tools.treasuregrove.art/lolicode/", None::<String>)

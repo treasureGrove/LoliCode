@@ -54,6 +54,16 @@ Frontend changes reload through Vite. Rust changes rebuild and restart the devel
 pnpm dev --additional-watch-folders ../crates/lolicode-agent
 ```
 
+For a desktop development build on Windows, run:
+
+```sh
+pnpm build
+```
+
+This builds **LoliCode Dev**, installs it under `%LOCALAPPDATA%\Programs\LoliCode Dev`, and creates **LoliCode 开发版** shortcuts on the desktop and in the Start menu. Each build displays a development number such as `DEV-20261028-174243` and its source revision. The shortcut opens the last successful build; use `pnpm dev` for live reload. Development builds use `~/.lolicode-dev` and do not install stable-channel updates. The downloaded **LoliCode** application keeps its existing installation and `~/.tai-switch` data.
+
+Use `pnpm build:release` for stable installer acceptance and signing. Remote [development builds](https://github.com/treasureGrove/LoliCode/actions/workflows/development.yml) are labeled **Development**; public stable downloads remain in [LoliCode Releases](https://github.com/treasureGrove/LoliCode-Releases/releases). See the [development guide](docs/guides/lolicode-development.md) for registration and channel details.
+
 Useful checks:
 
 ```sh

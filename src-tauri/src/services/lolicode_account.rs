@@ -79,7 +79,11 @@ struct SystemVault;
 
 impl CredentialVault for SystemVault {
     fn read(&self) -> Result<Option<Credential>, ()> {
-        let entry = keyring::Entry::new(VAULT_SERVICE, VAULT_USER).map_err(|_| ())?;
+        let entry = keyring::Entry::new(
+            &crate::channel::credential_service(VAULT_SERVICE),
+            VAULT_USER,
+        )
+        .map_err(|_| ())?;
         match entry.get_password() {
             Ok(secret) => {
                 let credential: Credential = serde_json::from_str(&secret).map_err(|_| ())?;
@@ -93,16 +97,22 @@ impl CredentialVault for SystemVault {
 
     fn write(&self, credential: &Credential) -> Result<(), ()> {
         let secret = serde_json::to_string(credential).map_err(|_| ())?;
-        keyring::Entry::new(VAULT_SERVICE, VAULT_USER)
-            .map_err(|_| ())?
-            .set_password(&secret)
-            .map_err(|_| ())
+        keyring::Entry::new(
+            &crate::channel::credential_service(VAULT_SERVICE),
+            VAULT_USER,
+        )
+        .map_err(|_| ())?
+        .set_password(&secret)
+        .map_err(|_| ())
     }
 
     fn delete(&self) -> Result<(), ()> {
-        match keyring::Entry::new(VAULT_SERVICE, VAULT_USER)
-            .map_err(|_| ())?
-            .delete_credential()
+        match keyring::Entry::new(
+            &crate::channel::credential_service(VAULT_SERVICE),
+            VAULT_USER,
+        )
+        .map_err(|_| ())?
+        .delete_credential()
         {
             Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
             Err(_) => Err(()),

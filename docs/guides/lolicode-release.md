@@ -2,6 +2,8 @@
 
 本流程是 LoliCode 自己的发布链路，不复用 CCSwitch 的公钥、更新地址、GitHub workflow 或下载站清单。`scripts/lolicode-release.mjs` 仅在本地产生并验证发布目录，不上传文件，不读取私钥或 `.env`。
 
+本指南用于 **LoliCode 正式版**的安装验收、签名和发布。普通 `pnpm build` / `pnpm build:dev` 生成 **LoliCode Dev**，在 Windows 自动注册「LoliCode 开发版」入口，使用独立数据目录并禁用正式更新；详见[开发指南](lolicode-development.md)。正式构建入口为 `pnpm build:release`，下文直接执行 `pnpm tauri build` 的命令同样属于正式打包。GitHub 的 **LoliCode Windows stable release** 与 **LoliCode Windows development** 是独立工作流，Development 产物不能作为正式发布验收凭据。
+
 当前正式产品版本为 **v1.0.3**、原生更新版本为 **4.1.3**，见[本次交付记录](lolicode-v1.0.3-delivery.md)。公开分发提供 **Windows x64 NSIS 安装版与便携 ZIP**，另提供 Android **0.1.0-alpha.4** 测试包；macOS 和 Linux 是产品目标，尚未发布对应安装包。真实发布结果记录在每版交付文档中，不能用待发布清单替代发布证据。
 
 `product-release.json` 区分展示版本和原生构建版本，`scripts/lolicode-product-version.mjs` 负责映射。Cargo、package、Tauri 和 feed.version 继续使用递增的 4.1.3；官网、GitHub tag、下载文件名和目录使用 1.0.3，feed.productVersion 用于展示，不能把 updater 版本回退成产品版本号。维护者可使用 `$lolicode-release` skill。

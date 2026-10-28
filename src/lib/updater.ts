@@ -1,4 +1,5 @@
 import { getVersion } from "@tauri-apps/api/app";
+import { APP_UPDATES_ENABLED } from "./branding";
 
 export type UpdateChannel = "stable" | "beta";
 
@@ -27,6 +28,8 @@ export async function checkForUpdate(
 ): Promise<
   { status: "up-to-date" } | { status: "available"; info: UpdateInfo }
 > {
+  if (!APP_UPDATES_ENABLED)
+    throw new Error("开发版通过本地构建更新，不使用正式更新通道。");
   // 动态引入，避免在未安装插件时导致打包期问题
   const { check } = await import("@tauri-apps/plugin-updater");
 

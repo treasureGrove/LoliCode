@@ -1,0 +1,19 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "LoliCode Dev",
+  "mainBinaryName": "LoliCode Dev",
+  "identifier": "art.treasuregrove.lolicode.dev",
+  "build": {
+    "frontendDist": "../dist-dev",
+    "devUrl": "http://localhost:3001"
+  },
+  "bundle": {
+    "active": false,
+    "createUpdaterArtifacts": false
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": []
+    }
+  }
+}

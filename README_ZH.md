@@ -54,6 +54,16 @@ pnpm dev
 pnpm dev --additional-watch-folders ../crates/lolicode-agent
 ```
 
+需要可直接点击的 Windows 开发版入口时，运行：
+
+```sh
+pnpm build
+```
+
+构建成功后会安装 **LoliCode Dev** 到 `%LOCALAPPDATA%\Programs\LoliCode Dev`，并在桌面和 Windows 开始菜单创建 **LoliCode 开发版**。每次构建显示 `DEV-20261028-174243` 形式的开发号及源码版本。这个入口打开最后一次成功构建的程序；需要实时热重载时使用 `pnpm dev`。开发版数据使用独立的 `~/.lolicode-dev`，不安装正式渠道更新；官网下载的 **LoliCode** 继续使用原安装目录和 `~/.tai-switch` 数据。
+
+正式安装包验收与签名使用 `pnpm build:release`。远端 [开发构建](https://github.com/treasureGrove/LoliCode/actions/workflows/development.yml) 的产物明确标注 **Development**，公开正式下载仍在 [LoliCode Releases](https://github.com/treasureGrove/LoliCode-Releases/releases)。入口注册和渠道说明见[开发指南](docs/guides/lolicode-development.md)。
+
 常用验证：
 
 ```sh

@@ -25,6 +25,12 @@ import {
 import { settingsApi } from "@/lib/api";
 import { useUpdate } from "@/contexts/UpdateContext";
 import { Badge } from "@/components/ui/badge";
+import { BuildChannelBadge } from "@/components/shell/BuildChannelBadge";
+import {
+  BUILD_NUMBER,
+  BUILD_REVISION,
+  IS_DEVELOPMENT_BUILD,
+} from "@/lib/buildChannel";
 import { WhatsNewDialog } from "@/components/WhatsNewDialog";
 import { WHATS_NEW_ENTRIES, entriesUpTo } from "@/lib/whatsNew";
 import appIcon from "@/assets/brand/lolicode-icon.png";
@@ -233,6 +239,7 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
             })}
           </div>
           <div className="flex flex-wrap items-center gap-2 text-caption text-fg-2">
+            <BuildChannelBadge />
             {isLoadingVersion ? (
               <Loader2 className="h-3 w-3 animate-spin" />
             ) : (
@@ -256,10 +263,39 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
               {t("productRelease.build", { version })}
             </p>
           )}
+          {IS_DEVELOPMENT_BUILD && (
+            <div className="mt-1 space-y-1 text-xs text-fg-3">
+              {BUILD_NUMBER && (
+                <p>
+                  {t("buildChannel.buildNumber", {
+                    defaultValue: "开发号：",
+                  })}
+                  <span className="font-mono">{BUILD_NUMBER}</span>
+                </p>
+              )}
+              {BUILD_REVISION && (
+                <p>
+                  {t("buildChannel.sourceRevision", {
+                    defaultValue: "源码：",
+                  })}
+                  <span className="font-mono">{BUILD_REVISION}</span>
+                </p>
+              )}
+              <p>
+                {t("buildChannel.localBuild", {
+                  defaultValue: "本地开发构建 · 与正式版独立安装和保存数据",
+                })}
+              </p>
+            </div>
+          )}
         </div>
       </div>
-      <ResourceUpdatesSection />
-      <RendererUpdatesSection />
+      {!IS_DEVELOPMENT_BUILD && (
+        <>
+          <ResourceUpdatesSection />
+          <RendererUpdatesSection />
+        </>
+      )}
       <section
         aria-label={t("nav.softwareUpdates", { defaultValue: "软件更新" })}
         className="space-y-3 px-5 py-4"
@@ -268,9 +304,13 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
           <h2 className="text-body font-semibold text-fg-1">
             {t("nav.softwareUpdates", { defaultValue: "软件更新" })}
             <span className="ml-2 text-caption font-normal text-fg-2">
-              {t("settings.stableUpdateChannel", {
-                defaultValue: "正式更新通道 · 测试版单独下载",
-              })}
+              {IS_DEVELOPMENT_BUILD
+                ? t("buildChannel.localChannel", {
+                    defaultValue: "开发通道 · 本地构建更新",
+                  })
+                : t("settings.stableUpdateChannel", {
+                    defaultValue: "正式更新通道 · 测试版单独下载",
+                  })}
             </span>
           </h2>
           <div className="flex flex-wrap gap-2">
@@ -287,8 +327,8 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
               }
             >
               {!APP_UPDATES_ENABLED ? (
-                t("settings.manualUpdateOnly", {
-                  defaultValue: "Test build · manual updates",
+                t("buildChannel.rebuildToUpdate", {
+                  defaultValue: "开发版 · 本地构建更新",
                 })
               ) : isChecking ? (
                 <>
@@ -338,20 +378,25 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
           </div>
         </div>
         <p className="text-caption text-fg-2">
-          {isPortable === null
-            ? t("settings.appUpdate.unknownModeHelp", {
+          {IS_DEVELOPMENT_BUILD
+            ? t("buildChannel.updateHelp", {
                 defaultValue:
-                  "尚未确认安装方式，请从下载页面获取新版本，完成任务后手动安装。",
+                  "运行 pnpm build:dev 更新此开发版，再从桌面「LoliCode 开发版」启动。正式版继续从官网下载并验收。",
               })
-            : isPortable
-              ? t("settings.appUpdate.portableHelp", {
+            : isPortable === null
+              ? t("settings.appUpdate.unknownModeHelp", {
                   defaultValue:
-                    "便携版请从下载页面获取新版本，完成任务后替换程序。",
+                    "尚未确认安装方式，请从下载页面获取新版本，完成任务后手动安装。",
                 })
-              : t("settings.appUpdate.restartHelp", {
-                  defaultValue:
-                    "检查更新不会中断任务。安装会重启 LoliCode；请先完成正在运行的任务和待处理的授权。",
-                })}
+              : isPortable
+                ? t("settings.appUpdate.portableHelp", {
+                    defaultValue:
+                      "便携版请从下载页面获取新版本，完成任务后替换程序。",
+                  })
+                : t("settings.appUpdate.restartHelp", {
+                    defaultValue:
+                      "检查更新不会中断任务。安装会重启 LoliCode；请先完成正在运行的任务和待处理的授权。",
+                  })}
         </p>
         {phaseLabel && (
           <p role="status" className="text-caption text-fg-2">

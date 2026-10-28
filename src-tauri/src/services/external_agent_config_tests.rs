@@ -164,7 +164,8 @@ fn external_zcode_preserves_plugins_and_config_comments_and_rolls_back_multifile
     assert_eq!(fs::read_to_string(&cli).unwrap(), old_cli);
     assert!(!directory
         .path()
-        .join(".tai-switch/external-model-config/zcode.json")
+        .join(crate::channel::profile_directory())
+        .join("external-model-config/zcode.json")
         .exists());
     apply_at("zcode", &source(), "channel/model", directory.path()).unwrap();
     assert!(fs::read_to_string(&desktop)
@@ -562,7 +563,8 @@ fn external_windows_junction_cannot_redirect_model_config_writes() {
     assert!(result.is_err());
     assert!(!escaped, "no file may be written through the junction");
     assert!(!home
-        .join(".tai-switch/external-model-config/workbuddy.json")
+        .join(crate::channel::profile_directory())
+        .join("external-model-config/workbuddy.json")
         .exists());
 }
 
@@ -637,7 +639,8 @@ fn external_mimo_reapply_repairs_owned_partial_limits_with_a_backup() {
     fs::write(&path, &before).unwrap();
     let marker = directory
         .path()
-        .join(".tai-switch/external-model-config/mimocode.json");
+        .join(crate::channel::profile_directory())
+        .join("external-model-config/mimocode.json");
     let mut ledger: Ownership = serde_json::from_slice(&fs::read(&marker).unwrap()).unwrap();
     ledger
         .files
@@ -710,7 +713,8 @@ fn external_zcode_missing_ledger_preserves_imported_personal_rules_and_does_not_
     fs::remove_file(
         directory
             .path()
-            .join(".tai-switch/external-model-config/zcode.json"),
+            .join(crate::channel::profile_directory())
+            .join("external-model-config/zcode.json"),
     )
     .unwrap();
     let mut changed = source();
@@ -808,7 +812,8 @@ fn external_zcode_accepts_ownership_hashes_from_the_previous_adapter() {
         };
         let ledger_path = directory
             .path()
-            .join(".tai-switch/external-model-config/zcode.json");
+            .join(crate::channel::profile_directory())
+            .join("external-model-config/zcode.json");
         let mut ledger = parsed(&ledger_path);
         ledger["files"][path.to_string_lossy().as_ref()]["lolicode"] =
             json!(json_digest(&owned).unwrap());

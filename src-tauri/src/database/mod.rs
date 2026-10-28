@@ -140,6 +140,16 @@ impl Database {
         }
 
         db.apply_schema_migrations()?;
+        // Give a new development profile its own listener without rewriting a
+        // saved port or changing the stable schema/defaults during migrations.
+        if !db_exists && crate::channel::is_development() {
+            let conn = lock_conn!(db.conn);
+            conn.execute(
+                "UPDATE proxy_config SET listen_port = ?1",
+                [crate::channel::default_proxy_port()],
+            )
+            .map_err(|e| AppError::Database(e.to_string()))?;
+        }
         if let Err(e) = db.ensure_incremental_auto_vacuum() {
             log::warn!("Failed to ensure incremental auto-vacuum: {e}");
         }

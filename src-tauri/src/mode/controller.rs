@@ -985,6 +985,12 @@ pub async fn exit_all(state: &AppState) -> Result<(), String> {
 /// 代理服务。
 pub async fn detach_all(state: &AppState) {
     for app in PROXY_APPS {
+        // Development startup leaves shared external configuration untouched.
+        // Do not settle a prior process's pending writes merely to discover
+        // that this process never attached this client.
+        if crate::channel::is_development() && !current::mode_state(&app).attached {
+            continue;
+        }
         let result = match lock_settled(state, &app).await {
             Ok(_guard) => exit_locked(state, &app, true),
             Err(error) => Err(error.to_string()),

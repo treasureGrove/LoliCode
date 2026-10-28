@@ -17,7 +17,13 @@ use std::{
 };
 use uuid::Uuid;
 
-pub const TARGETS: [&str; 5] = ["workbuddy", "deepseek-harness", "zcode", "mimocode", "codebuddy"];
+pub const TARGETS: [&str; 5] = [
+    "workbuddy",
+    "deepseek-harness",
+    "zcode",
+    "mimocode",
+    "codebuddy",
+];
 const LIMIT: u64 = 4 * 1024 * 1024;
 static WRITE_GATE: Mutex<()> = Mutex::new(());
 
@@ -1321,7 +1327,8 @@ fn apply_inner(
     let modern_zcode = target == "zcode" && configs.len() == 1;
     let marker = locations
         .home
-        .join(".tai-switch/external-model-config")
+        .join(crate::channel::profile_directory())
+        .join("external-model-config")
         .join(format!("{target}.json"));
     let marker_before = read(&marker)?;
     let previous: Ownership = match &marker_before {

@@ -11,6 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { isLinux } from "@/lib/platform";
+import { APP_UPDATES_ENABLED } from "@/lib/branding";
 import { TerminalSelect } from "@/components/settings/TerminalSettings";
 import { InterfaceAppearanceSettings } from "@/components/settings/InterfaceAppearanceSettings";
 import {
@@ -141,7 +142,15 @@ export function GeneralSection({ settings, onAutoSave }: GeneralSectionProps) {
                 defaultValue: "检查新版本并显示提醒，由你点击下载并安装。",
               }),
             }}
-            checked={settings.checkUpdates ?? true}
+            checked={APP_UPDATES_ENABLED && (settings.checkUpdates ?? true)}
+            disabled={!APP_UPDATES_ENABLED}
+            description={
+              !APP_UPDATES_ENABLED
+                ? t("buildChannel.localChannel", {
+                    defaultValue: "开发通道 · 本地构建更新",
+                  })
+                : undefined
+            }
             onCheckedChange={(value) =>
               void onAutoSave({ checkUpdates: value })
             }

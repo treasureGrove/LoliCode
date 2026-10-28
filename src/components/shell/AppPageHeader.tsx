@@ -1,6 +1,7 @@
 import { createContext, useContext, type ReactNode } from "react";
 import { DRAG_REGION_ATTR, DRAG_REGION_STYLE } from "@/lib/platform";
 import { cn } from "@/lib/utils";
+import { BuildChannelBadge } from "./BuildChannelBadge";
 
 /** Linux window controls follow the actions on every page. */
 export const WindowControlsContext = createContext<ReactNode>(null);
@@ -82,6 +83,7 @@ export function AppPageHeader({
             </span>
           )}
         </div>
+        <BuildChannelBadge developmentOnly />
         {titleExtra && (
           <div className="tai-shell-heading-extra" style={NO_DRAG}>
             {titleExtra}

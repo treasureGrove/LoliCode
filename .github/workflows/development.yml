@@ -1,0 +1,57 @@
+name: LoliCode Windows development
+
+# Development artifacts stay separate from signed stable releases and feeds.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lolicode-development-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-development:
+    name: LoliCode Dev (Windows x64)
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+      - name: Read pinned Rust toolchain
+        id: rust
+        shell: pwsh
+        run: |
+          $toolchain = Select-String -Path rust-toolchain.toml -Pattern '^channel\s*=\s*"([^"]+)"'
+          "channel=$($toolchain.Matches[0].Groups[1].Value)" >> $env:GITHUB_OUTPUT
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ steps.rust.outputs.channel }}
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          corepack enable
+          corepack install
+          pnpm install --frozen-lockfile
+          exit $LASTEXITCODE
+      - name: Build development application
+        shell: pwsh
+        run: |
+          pnpm build:dev --no-register
+          exit $LASTEXITCODE
+      - name: Read development build number
+        id: development
+        shell: pwsh
+        run: |
+          $developmentManifest = Get-Content -LiteralPath 'src-tauri/target/development/app/development-build.json' -Raw -Encoding utf8 | ConvertFrom-Json
+          $developmentBuildNumber = $developmentManifest.developmentBuildNumber
+          if ($developmentBuildNumber -notmatch '^DEV-[0-9]{8}-[0-9]{6}$') { throw 'Invalid development build number.' }
+          "build_number=$developmentBuildNumber" >> $env:GITHUB_OUTPUT
+      - uses: actions/upload-artifact@v7
+        with:
+          name: LoliCode-Development-Windows-x64-${{ steps.development.outputs.build_number }}-${{ github.sha }}
+          path: src-tauri/target/development/app/
+          if-no-files-found: error
+          retention-days: 14

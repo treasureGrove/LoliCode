@@ -42,6 +42,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Notice } from "@/components/ui/notice";
 import { settingsApi } from "@/lib/api";
+import { APP_NAME, APP_UPDATES_ENABLED } from "@/lib/branding";
+import { BuildChannelBadge } from "@/components/shell/BuildChannelBadge";
 import { agentApi } from "@/lib/api/agent";
 import {
   readAgentDocumentAttachments,
@@ -427,11 +429,14 @@ function AgentHelpMenu({
         <DropdownMenuItem onSelect={openLogs}>
           <ScrollText aria-hidden="true" /> 查看应用日志
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={onCheckUpdate}>
+        <DropdownMenuItem
+          onSelect={onCheckUpdate}
+          disabled={!APP_UPDATES_ENABLED}
+        >
           <RefreshCw aria-hidden="true" /> 检查更新
         </DropdownMenuItem>
         <DropdownMenuItem onSelect={onOpenAbout}>
-          <Info aria-hidden="true" /> 关于 LoliCode
+          <Info aria-hidden="true" /> 关于 {APP_NAME}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -2298,7 +2303,7 @@ export function AgentPage({
               <Sparkles />
             </span>
             <div className="wb-brand-label">
-              LoliCode <span>工作台</span>
+              {APP_NAME} <span>工作台</span>
             </div>
           </div>
           <nav className="wb-nav" aria-label="工作台操作">
@@ -2709,6 +2714,7 @@ export function AgentPage({
               {selectedSession?.title || "编程工作台"}
             </h1>
           </div>
+          <BuildChannelBadge developmentOnly />
           {workspace && (
             <button
               type="button"

@@ -104,7 +104,7 @@ fn identity_entry(account_id: &str) -> Result<String, String> {
 }
 impl OsIdentityVault {
     fn read_entry(&self, entry: &str) -> Result<Option<StoredIdentity>, String> {
-        match keyring::Entry::new(IDENTITY_SERVICE, entry)
+        match keyring::Entry::new(&crate::channel::credential_service(IDENTITY_SERVICE), entry)
             .map_err(|_| "设备系统凭据库不可用")?
             .get_password()
         {
@@ -121,10 +121,13 @@ impl IdentityVault for OsIdentityVault {
         self.read_entry(&identity_entry(account_id)?)
     }
     fn write(&self, account_id: &str, value: &StoredIdentity) -> Result<(), String> {
-        keyring::Entry::new(IDENTITY_SERVICE, &identity_entry(account_id)?)
-            .map_err(|_| "设备系统凭据库不可用")?
-            .set_password(&serde_json::to_string(value).map_err(|_| "设备密钥编码失败")?)
-            .map_err(|_| "无法安全保存设备密钥，连接未建立".into())
+        keyring::Entry::new(
+            &crate::channel::credential_service(IDENTITY_SERVICE),
+            &identity_entry(account_id)?,
+        )
+        .map_err(|_| "设备系统凭据库不可用")?
+        .set_password(&serde_json::to_string(value).map_err(|_| "设备密钥编码失败")?)
+        .map_err(|_| "无法安全保存设备密钥，连接未建立".into())
     }
     fn read_legacy(&self) -> Result<Option<StoredIdentity>, String> {
         self.read_entry("installation")
@@ -647,7 +650,13 @@ impl MobileCompanionState {
                 .settings
                 .device_name
                 .clone()
-                .unwrap_or_else(|| self.0.host_name.clone());
+                .unwrap_or_else(|| {
+                    if crate::channel::is_development() {
+                        format!("{} (LoliCode Dev)", self.0.host_name)
+                    } else {
+                        self.0.host_name.clone()
+                    }
+                });
             let value=self.0.account.api.call(reqwest::Method::POST,"/session",&bearer,Some(json!({"deviceId":identity.device_id,"deviceName":name,"kind":"desktop","publicKey":identity.public_key}))).await?;
             self.check_epoch(epoch)?;
             parse_ticket(value, &id, &identity, now())?

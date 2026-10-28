@@ -63,7 +63,7 @@ trait Vault: Send + Sync {
 struct SystemVault;
 impl Vault for SystemVault {
     fn read(&self, room: &str) -> Result<Secret, String> {
-        let text = keyring::Entry::new(VAULT_SERVICE, room)
+        let text = keyring::Entry::new(&crate::channel::credential_service(VAULT_SERVICE), room)
             .map_err(|_| "系统凭据库不可用")?
             .get_password()
             .map_err(|_| "无法读取手机配对凭据")?;
@@ -71,13 +71,13 @@ impl Vault for SystemVault {
     }
     fn write(&self, room: &str, secret: &Secret) -> Result<(), String> {
         let text = serde_json::to_string(secret).map_err(|_| "配对凭据编码失败")?;
-        keyring::Entry::new(VAULT_SERVICE, room)
+        keyring::Entry::new(&crate::channel::credential_service(VAULT_SERVICE), room)
             .map_err(|_| "系统凭据库不可用")?
             .set_password(&text)
             .map_err(|_| "无法安全保存配对凭据；配对未开启".into())
     }
     fn delete(&self, room: &str) -> Result<(), String> {
-        match keyring::Entry::new(VAULT_SERVICE, room)
+        match keyring::Entry::new(&crate::channel::credential_service(VAULT_SERVICE), room)
             .map_err(|_| "系统凭据库不可用")?
             .delete_credential()
         {

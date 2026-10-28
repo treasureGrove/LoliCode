@@ -79,7 +79,7 @@ impl RendererHost {
         store.confirm(id, ticket)
     }
     fn initialize(&self, app: &tauri::AppHandle) {
-        if cfg!(debug_assertions) {
+        if crate::channel::is_development() {
             let _ = self.session.set(Session {
                 store: None,
                 boot: Boot::default(),

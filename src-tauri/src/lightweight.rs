@@ -34,6 +34,9 @@ pub fn exit_lightweight_mode(app: &tauri::AppHandle) -> Result<(), String> {
     use tauri::WebviewWindowBuilder;
 
     if let Some(window) = app.get_webview_window("main") {
+        if crate::channel::is_development() {
+            let _ = window.set_title("LoliCode Dev — 开发版");
+        }
         let _ = window.unminimize();
         let _ = window.show();
         let _ = window.set_focus();
@@ -69,6 +72,9 @@ pub fn exit_lightweight_mode(app: &tauri::AppHandle) -> Result<(), String> {
         .map_err(|e| format!("创建主窗口失败: {e}"))?;
 
     if let Some(window) = app.get_webview_window("main") {
+        if crate::channel::is_development() {
+            let _ = window.set_title("LoliCode Dev — 开发版");
+        }
         let _ = window.unminimize();
         let _ = window.show();
         let _ = window.set_focus();

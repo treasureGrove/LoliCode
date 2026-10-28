@@ -9,6 +9,7 @@ packages/platform-client/dist/
 packages/platform-host/dist/
 packages/adapters/opencode/dist/
 dist/
+dist-dev/
 release/
 src-tauri/resources/agent/
 src-tauri/resources/zcode-runtime/

@@ -33,6 +33,7 @@ import { initializeInputModality } from "@/lib/inputModality";
 import { ResourcePackProvider } from "@/components/shell/ResourcePackProvider";
 import { InterfaceAppearanceRoot } from "@/components/shell/InterfaceAppearanceRoot";
 import { RendererBootHealth } from "@/components/shell/RendererBootHealth";
+import { APP_WINDOW_TITLE } from "@/lib/branding";
 import {
   applyInterfaceAppearance,
   parseInterfaceAppearance,
@@ -40,6 +41,7 @@ import {
 } from "@/lib/interfaceAppearance";
 
 installGlobalErrorHandlers();
+document.title = APP_WINDOW_TITLE;
 applyInterfaceAppearance(
   parseInterfaceAppearance(readInterfaceAppearanceSnapshot()),
 );

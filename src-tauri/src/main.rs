@@ -2,6 +2,18 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
+    if std::env::args_os().skip(1).any(|arg| arg == "--build-info") {
+        // Offline identity check for build/registration scripts. This runs
+        // before Tauri, logging, database initialization or settings loading.
+        match serde_json::to_string(&lolicode_lib::get_build_info()) {
+            Ok(info) => println!("{info}"),
+            Err(error) => {
+                eprintln!("Unable to serialize build identity: {error}");
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
     if std::env::args_os()
         .skip(1)
         .any(|arg| arg == "--check-agent-runtime")

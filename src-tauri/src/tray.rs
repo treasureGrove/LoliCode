@@ -2168,6 +2168,14 @@ fn update_problem_indicator(app: &tauri::AppHandle, texts: &TrayTexts, problems:
     };
     let has_dot = !problems.is_empty();
     let tooltip = tray_tooltip(texts, problems);
+    let tooltip = if crate::channel::is_development() {
+        truncate_chars(
+            &tooltip.replacen("LoliCode", "LoliCode Dev", 1),
+            MAX_TOOLTIP_CHARS,
+        )
+    } else {
+        tooltip
+    };
     // 只在锁里比对和记账：换图标要回主线程执行，不能拿着锁等。
     let icon_changed = {
         let mut applied = lock(&APPLIED_INDICATOR);

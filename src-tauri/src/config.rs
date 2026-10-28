@@ -311,7 +311,7 @@ pub fn get_claude_settings_path() -> PathBuf {
 
 /// 本机设备状态与设置目录，独立于 CC Switch 和配置同步目录。
 pub fn get_device_config_dir() -> PathBuf {
-    get_home_dir().join(".tai-switch")
+    get_home_dir().join(crate::channel::profile_directory())
 }
 
 /// 获取应用配置目录路径 (~/.tai-switch)
@@ -1068,7 +1068,7 @@ mod tests {
             None => std::env::remove_var("HOME"),
         }
 
-        let expected = test_home.path().join(".tai-switch");
+        let expected = test_home.path().join(crate::channel::profile_directory());
         assert_eq!(
             dir, expected,
             "测试 home 优先：不得回退到 HOME 下的旧库目录"

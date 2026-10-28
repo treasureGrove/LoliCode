@@ -51,6 +51,9 @@ pub async fn get_resource_pack() -> Result<PackView, String> {
 
 #[tauri::command]
 pub async fn check_resource_update() -> Result<Option<u64>, String> {
+    if crate::channel::is_development() {
+        return Ok(None);
+    }
     let _operation = updates()
         .operation
         .try_lock()
@@ -60,6 +63,7 @@ pub async fn check_resource_update() -> Result<Option<u64>, String> {
 
 #[tauri::command]
 pub async fn install_resource_update() -> Result<PackView, String> {
+    crate::channel::require_stable_updates()?;
     let _operation = updates()
         .operation
         .try_lock()
