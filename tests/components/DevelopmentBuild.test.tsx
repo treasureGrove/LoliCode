@@ -4,6 +4,8 @@ import { AboutSection } from "@/components/settings/AboutSection";
 import { AppPageHeader } from "@/components/shell/AppPageHeader";
 
 const buildState = vi.hoisted(() => ({ development: true, dirty: true }));
+const nativeBuild = vi.hoisted(() => ({ invoke: vi.fn() }));
+vi.mock("@tauri-apps/api/core", () => ({ invoke: nativeBuild.invoke }));
 vi.mock("@/lib/buildChannel", () => ({
   get IS_DEVELOPMENT_BUILD() {
     return buildState.development;
@@ -45,6 +47,11 @@ describe("development application identity", () => {
   beforeEach(() => {
     buildState.development = true;
     buildState.dirty = true;
+    nativeBuild.invoke.mockResolvedValue({
+      developmentBuildNumber: "DEV-20261027-100000",
+      sourceBranch: "TG/native-build",
+      sourceRevision: "def5678",
+    });
   });
   it("labels every page header while leaving the page heading readable", () => {
     render(<AppPageHeader title="项目" />);
@@ -65,7 +72,7 @@ describe("development application identity", () => {
     expect(await screen.findByText("LoliCode 开发版")).toBeInTheDocument();
     expect(screen.getByText("abc1234+dirty")).toBeInTheDocument();
     expect(screen.getByText("DEV-20261028-174243")).toBeInTheDocument();
-    expect(screen.getByText("开发号：")).toBeInTheDocument();
+    expect(screen.getByText("界面开发号：")).toBeInTheDocument();
     expect(screen.getByText("构建分支：")).toBeInTheDocument();
     expect(screen.getByText("构建时工作区：含未提交改动")).toBeInTheDocument();
     expect(
@@ -74,18 +81,22 @@ describe("development application identity", () => {
     expect(
       screen.getByRole("button", { name: "开发版 · 本地构建更新" }),
     ).toBeDisabled();
-    expect(screen.getByText(/运行 pnpm build:dev/)).toBeInTheDocument();
+    expect(screen.getByText(/后端改动运行 pnpm build:dev/)).toBeInTheDocument();
     expect(
       screen.queryByText("Stable resource updates"),
     ).not.toBeInTheDocument();
+    expect(await screen.findByText("DEV-20261027-100000")).toBeInTheDocument();
+    expect(screen.getByText("原生开发号：")).toBeInTheDocument();
+    expect(screen.getByText("TG/native-build · def5678")).toBeInTheDocument();
     expect(
       screen.queryByText("Stable renderer updates"),
     ).not.toBeInTheDocument();
   });
 
-  it("distinguishes a clean source snapshot", () => {
+  it("distinguishes a clean source snapshot", async () => {
     buildState.dirty = false;
     render(<AboutSection isPortable={false} />);
+    await screen.findByText("DEV-20261027-100000");
     expect(screen.getByText("构建时工作区：无未提交改动")).toBeInTheDocument();
     expect(
       screen.queryByText("构建时工作区：含未提交改动"),
@@ -100,5 +111,16 @@ describe("development application identity", () => {
     expect(screen.queryByText("abc1234+dirty")).not.toBeInTheDocument();
     expect(screen.queryByText("构建时工作区：")).not.toBeInTheDocument();
     expect(document.querySelector("time")).not.toBeInTheDocument();
+    expect(nativeBuild.invoke).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole("button", { name: "热更新界面" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps About usable when an older native build has no source metadata", async () => {
+    nativeBuild.invoke.mockResolvedValue({ channel: "development" });
+    render(<AboutSection isPortable={false} />);
+    expect(await screen.findByText("LoliCode 开发版")).toBeInTheDocument();
+    expect(screen.queryByText("原生开发号：")).not.toBeInTheDocument();
   });
 });

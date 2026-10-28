@@ -37,6 +37,10 @@ import {
 import { WhatsNewDialog } from "@/components/WhatsNewDialog";
 import { WHATS_NEW_ENTRIES, entriesUpTo } from "@/lib/whatsNew";
 import appIcon from "@/assets/brand/lolicode-icon.png";
+import {
+  getNativeDevelopmentBuildInfo,
+  type NativeDevelopmentBuildInfo,
+} from "@/lib/developmentFrontend";
 import { extractErrorMessage } from "@/utils/errorUtils";
 import {
   APP_CHANGELOG,
@@ -79,6 +83,8 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
     () => appVersionCache === null,
   );
   const [openingDownloadPage, setOpeningDownloadPage] = useState(false);
+  const [nativeBuild, setNativeBuild] =
+    useState<NativeDevelopmentBuildInfo | null>(null);
   const openingDownload = useRef(false);
   const [whatsNewOpen, setWhatsNewOpen] = useState(false);
   const [starPromptDismissed, setStarPromptDismissed] = useState(
@@ -124,6 +130,21 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
     };
 
     void loadAppVersion();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!IS_DEVELOPMENT_BUILD) return;
+    let active = true;
+    void getNativeDevelopmentBuildInfo()
+      .then((info) => {
+        if (active && info && typeof info === "object") setNativeBuild(info);
+      })
+      .catch(() => {
+        // Older native builds may not expose source metadata; the About page stays usable.
+      });
     return () => {
       active = false;
     };
@@ -279,7 +300,7 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
               {BUILD_NUMBER && (
                 <p>
                   {t("buildChannel.buildNumber", {
-                    defaultValue: "开发号：",
+                    defaultValue: "界面开发号：",
                   })}
                   <span className="font-mono">{BUILD_NUMBER}</span>
                 </p>
@@ -308,6 +329,28 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
                       ? BUILD_TIMESTAMP
                       : new Date(BUILD_TIMESTAMP).toLocaleString(i18n.language)}
                   </time>
+                </p>
+              )}
+              {nativeBuild?.developmentBuildNumber && (
+                <p>
+                  {t("buildChannel.nativeBuildNumber", {
+                    defaultValue: "原生开发号：",
+                  })}
+                  <span className="break-all font-mono">
+                    {nativeBuild.developmentBuildNumber}
+                  </span>
+                </p>
+              )}
+              {(nativeBuild?.sourceBranch || nativeBuild?.sourceRevision) && (
+                <p>
+                  {t("buildChannel.nativeSource", {
+                    defaultValue: "原生源码：",
+                  })}
+                  <span className="break-all font-mono">
+                    {[nativeBuild.sourceBranch, nativeBuild.sourceRevision]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </span>
                 </p>
               )}
               <p>
@@ -410,7 +453,7 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
           {IS_DEVELOPMENT_BUILD
             ? t("buildChannel.updateHelp", {
                 defaultValue:
-                  "运行 pnpm build:dev 更新此开发版，再从桌面「LoliCode 开发版」启动。正式版继续从官网下载并验收。",
+                  "界面改动点击「热更新界面」；后端改动运行 pnpm build:dev 完整构建，再从桌面「LoliCode 开发版」启动。",
               })
             : isPortable === null
               ? t("settings.appUpdate.unknownModeHelp", {

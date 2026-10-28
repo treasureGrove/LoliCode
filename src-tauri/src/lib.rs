@@ -1946,6 +1946,7 @@ pub fn run() {
             commands::confirm_resource_pack,
             commands::rollback_resource_pack,
             commands::get_renderer_status,
+            commands::rebuild_development_frontend,
             commands::check_renderer_update,
             commands::install_renderer_update,
             commands::confirm_renderer_boot,

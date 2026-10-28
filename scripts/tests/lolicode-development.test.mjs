@@ -84,10 +84,17 @@ test("development build number uses Singapore time across a UTC date boundary", 
   );
 });
 
-test("development entry rejects installer and identity overrides before building", () => {
-  assert.throws(() => main(["build", "--bundles", "nsis"]), /build:release/);
-  assert.throws(
+test("development entry rejects installer and identity overrides before building", async () => {
+  await assert.rejects(
+    () => main(["build", "--bundles", "nsis"]),
+    /build:release/,
+  );
+  await assert.rejects(
     () => main(["build", "--config", "src-tauri/tauri.conf.json"]),
     /build:release/,
+  );
+  await assert.rejects(
+    () => main(["renderer", "--outDir", "dist"]),
+    /does not accept/,
   );
 });

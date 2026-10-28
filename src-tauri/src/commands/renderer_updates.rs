@@ -1,9 +1,16 @@
 use crate::services::{
-    renderer_host::{RendererHost, RendererStatus},
+    renderer_host::{DevelopmentFrontendBuild, RendererHost, RendererStatus},
     renderer_updates::PackView,
 };
 use std::sync::Arc;
 use tauri::Manager;
+
+#[tauri::command]
+pub async fn rebuild_development_frontend(
+    host: tauri::State<'_, Arc<RendererHost>>,
+) -> Result<DevelopmentFrontendBuild, String> {
+    host.rebuild_development_frontend().await
+}
 
 #[tauri::command]
 pub async fn get_renderer_status(

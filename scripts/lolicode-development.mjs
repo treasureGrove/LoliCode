@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { spawnSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import {
   cpSync,
   existsSync,
@@ -13,6 +14,7 @@ import {
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { nativeContract } from "./lolicode-renderer-pack.mjs";
 
 export const DEVELOPMENT_ID = "art.treasuregrove.lolicode.dev";
 export const DEVELOPMENT_NAME = "LoliCode Dev";
@@ -81,6 +83,8 @@ export function buildEnvironment(channel, source = process.env) {
     env.LOLICODE_BUILD_TIMESTAMP = env.VITE_LOLICODE_BUILD_TIMESTAMP =
       timestamp;
     env.LOLICODE_BUILD_DIRTY = env.VITE_LOLICODE_BUILD_DIRTY = String(dirty);
+    env.LOLICODE_DEV_SOURCE_DIR = root;
+    env.LOLICODE_DEV_NODE_PATH = process.execPath;
     // Development needs fast repeat builds, without release-only whole-program LTO.
     env.CARGO_PROFILE_RELEASE_LTO = "false";
     // Local development never consumes a release signing credential.
@@ -94,6 +98,8 @@ export function buildEnvironment(channel, source = process.env) {
       delete env[`VITE_LOLICODE_BUILD_${field}`];
     }
     delete env.LOLICODE_BUILD_REVISION;
+    delete env.LOLICODE_DEV_SOURCE_DIR;
+    delete env.LOLICODE_DEV_NODE_PATH;
     // An inherited development shell must not redirect a stable build.
     if (
       env.CARGO_TARGET_DIR &&
@@ -311,6 +317,50 @@ export function stageDevelopmentApp(env) {
   return manifest;
 }
 
+export async function buildDevelopmentRenderer(env) {
+  const before = await nativeContract(root);
+  const outputDirectory = path.join(
+    targetDirectory,
+    "renderers",
+    `${env.LOLICODE_BUILD_NUMBER}-${randomUUID()}`,
+  );
+  mkdirSync(outputDirectory, { recursive: true });
+  run(
+    process.execPath,
+    [
+      path.join(root, "node_modules/vite/bin/vite.js"),
+      "build",
+      "--outDir",
+      outputDirectory,
+    ],
+    env,
+  );
+  const after = await nativeContract(root);
+  if (before.contract !== after.contract)
+    throw new Error(
+      "Backend source changed during the frontend build. Retry after the source is saved.",
+    );
+  if (!existsSync(path.join(outputDirectory, "index.html")))
+    throw new Error("Development frontend did not produce an index.html.");
+  const manifest = {
+    schemaVersion: 1,
+    channel: "development",
+    developmentBuildNumber: env.LOLICODE_BUILD_NUMBER,
+    sourceBranch: env.LOLICODE_BUILD_BRANCH,
+    revision: env.LOLICODE_BUILD_REVISION,
+    builtAt: env.LOLICODE_BUILD_TIMESTAMP,
+    workingTreeDirty: env.LOLICODE_BUILD_DIRTY === "true",
+    nativeContract: before.contract,
+    nativeVersion: before.version,
+    outputDirectory,
+  };
+  writeFileSync(
+    path.join(outputDirectory, "development-renderer.json"),
+    JSON.stringify(manifest, null, 2) + "\n",
+  );
+  return manifest;
+}
+
 function registration(action) {
   if (process.platform !== "win32")
     throw new Error("Windows registration requires Windows.");
@@ -329,7 +379,7 @@ function registration(action) {
   ]);
 }
 
-export function main(args) {
+export async function main(args) {
   const [command, ...options] = args;
   const devEnv = buildEnvironment("development");
   switch (command) {
@@ -360,6 +410,13 @@ export function main(args) {
     case "release":
       tauri(["build", ...options], buildEnvironment("stable"));
       break;
+    case "renderer":
+      if (options.length)
+        throw new Error(
+          "The renderer build does not accept output or identity overrides.",
+        );
+      console.log(JSON.stringify(await buildDevelopmentRenderer(devEnv)));
+      break;
     case "register":
       registration("Register");
       break;
@@ -368,7 +425,7 @@ export function main(args) {
       break;
     default:
       throw new Error(
-        "Use dev, build [--no-register], release, register, or unregister.",
+        "Use dev, build [--no-register], renderer, release, register, or unregister.",
       );
   }
 }
@@ -378,7 +435,7 @@ if (
   path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 ) {
   try {
-    main(process.argv.slice(2));
+    await main(process.argv.slice(2));
   } catch (error) {
     console.error(error.message);
     process.exitCode = 1;

@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 import { GitBranch } from "lucide-react";
+import { DevelopmentFrontendRefreshButton } from "./DevelopmentFrontendRefreshButton";
 import {
   BUILD_BRANCH,
   BUILD_DIRTY,
@@ -38,21 +39,26 @@ export function BuildChannelBadge({
       <span className="truncate">{buildLabel}</span>
     </Badge>
   );
-  if (!IS_DEVELOPMENT_BUILD || !BUILD_BRANCH) return badge;
+  if (!IS_DEVELOPMENT_BUILD) return badge;
   const branchLabel = t("buildChannel.buildBranch", {
     defaultValue: "构建分支：",
   });
   return (
     <div className="inline-flex min-w-0 max-w-[18rem] flex-col items-start gap-0.5">
       {badge}
-      <span
-        className="inline-flex max-w-full items-center gap-1 text-[11px] leading-3 text-fg-2"
-        title={`${branchLabel}${BUILD_BRANCH}${BUILD_DIRTY ? " · " + t("buildChannel.dirty", { defaultValue: "含未提交改动" }) : ""}`}
-      >
-        <GitBranch className="h-3 w-3 shrink-0" aria-hidden="true" />
-        <span className="truncate font-mono">{BUILD_BRANCH}</span>
-        {BUILD_DIRTY && <span aria-hidden="true">*</span>}
-      </span>
+      <div className="inline-flex max-w-full items-center gap-1.5">
+        {BUILD_BRANCH && (
+          <span
+            className="inline-flex max-w-full items-center gap-1 text-[11px] leading-3 text-fg-2"
+            title={`${branchLabel}${BUILD_BRANCH}${BUILD_DIRTY ? " · " + t("buildChannel.dirty", { defaultValue: "含未提交改动" }) : ""}`}
+          >
+            <GitBranch className="h-3 w-3 shrink-0" aria-hidden="true" />
+            <span className="truncate font-mono">{BUILD_BRANCH}</span>
+            {BUILD_DIRTY && <span aria-hidden="true">*</span>}
+          </span>
+        )}
+        <DevelopmentFrontendRefreshButton />
+      </div>
     </div>
   );
 }
