@@ -28,6 +28,7 @@ import { DesktopUsageSources } from "./DesktopUsageSources";
 import { DESKTOP_USAGE_APPS } from "./desktopSources";
 import { KNOWN_APP_TYPES, type ProviderStats } from "@/types/usage";
 import { useTauriEvent } from "@/hooks/useTauriEvent";
+import { usageCostSource } from "@/lib/usageCostSource";
 import "./simple-usage.css";
 
 type Period = "today" | "week" | "month" | "all";
@@ -260,6 +261,10 @@ export function SimpleUsagePage() {
       summary.totalCacheCreationTokens
     : 0;
   const pricingStatus = summary ? pricingIssues(summary) : "";
+  const costSource = usageCostSource(
+    summary ?? {},
+    summary?.totalRequests ?? 0,
+  );
   const refresh = () => {
     void usage.refetch();
     void channelOptions.refetch();
@@ -271,7 +276,7 @@ export function SimpleUsagePage() {
       <AppPageHeader
         title="用量"
         icon={<ChartColumn className="h-5 w-5" strokeWidth={1.75} />}
-        subtitle="查看请求、Token 消耗与估算费用"
+        subtitle="查看请求、Token 消耗与模型费用"
         actions={
           <Button
             variant="neutral"
@@ -418,13 +423,20 @@ export function SimpleUsagePage() {
                     tone: "tokens",
                   },
                   {
-                    label: "已定价估算（美元）",
+                    label: costSource.known
+                      ? `${costSource.label}（美元）`
+                      : "已定价估算（美元）",
                     value:
-                      Number(summary.totalCost) === 0 && pricingStatus
+                      Number(summary.totalCost) === 0 &&
+                      pricingStatus &&
+                      !costSource.allReported
                         ? "待定价"
                         : estimatedCost(summary.totalCost),
                     icon: Coins,
-                    detail: pricingStatus || "仅含已知单价，实际以渠道账单为准",
+                    detail:
+                      [costSource.detail, pricingStatus]
+                        .filter(Boolean)
+                        .join(" · ") || "仅含已知单价，实际以渠道账单为准",
                     tone: "cost",
                   },
                   {
@@ -555,7 +567,7 @@ export function SimpleUsagePage() {
                   >
                     <option value="requests">按请求次数</option>
                     <option value="tokens">按 Token 用量</option>
-                    <option value="cost">按估算费用</option>
+                    <option value="cost">按费用</option>
                   </select>
                 </div>
               </div>
@@ -578,7 +590,7 @@ export function SimpleUsagePage() {
                       <th scope="col">渠道 / 应用</th>
                       <th scope="col">请求次数 / 占比</th>
                       <th scope="col">消耗 Tokens</th>
-                      <th scope="col">估算费用（美元）</th>
+                      <th scope="col">费用（美元）</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -589,6 +601,10 @@ export function SimpleUsagePage() {
                             100
                           : 0;
                       const pendingPricing = pricingIssues(provider);
+                      const source = usageCostSource(
+                        provider,
+                        provider.requestCount,
+                      );
                       const hasPricingStatus =
                         typeof provider.unpricedRequests === "number" ||
                         typeof provider.partialRequests === "number" ||
@@ -618,6 +634,7 @@ export function SimpleUsagePage() {
                           <td>{fmtInt(provider.totalTokens)}</td>
                           <td>
                             {Number(provider.totalCost) === 0 &&
+                            !source.allReported &&
                             (pendingPricing ||
                               (!hasPricingStatus &&
                                 DESKTOP_USAGE_APPS[provider.appType])) ? (
@@ -626,6 +643,14 @@ export function SimpleUsagePage() {
                               </span>
                             ) : (
                               estimatedCost(provider.totalCost)
+                            )}
+                            {source.known && source.detail && (
+                              <span
+                                className="lolicode-usage-price-status"
+                                title={source.detail}
+                              >
+                                {source.label}
+                              </span>
                             )}
                             {pendingPricing && (
                               <span className="lolicode-usage-price-status">
@@ -665,7 +690,8 @@ export function SimpleUsagePage() {
               )
             )}
             <p className="lolicode-usage-footnote">
-              费用按本地记录和已知单价估算，未定价记录不代表免费，实际扣费以渠道账单为准。
+              优先采用渠道回报的本次美元费用，未回报时按模型价格库和实际 Token
+              本地估算。未定价记录不代表免费，最终以渠道账单为准。
             </p>
           </section>
           <div className="lolicode-usage-history">

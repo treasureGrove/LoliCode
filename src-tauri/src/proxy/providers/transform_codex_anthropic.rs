@@ -199,6 +199,7 @@ pub(crate) fn build_responses_usage_from_anthropic(usage: Option<&Value>) -> Val
     if cache_creation > 0 {
         result["cache_creation_input_tokens"] = json!(cache_creation);
     }
+    crate::proxy::usage::parser::copy_reported_cost_usd(u, &mut result);
     result
 }
 
@@ -1538,13 +1539,17 @@ pub fn anthropic_sse_to_message_value(body: &str) -> Result<Value, ProxyError> {
                 if let Some(reason) = value.pointer("/delta/stop_reason").and_then(|v| v.as_str()) {
                     *stop_reason = Some(reason.to_string());
                 }
-                if let Some(usage) = value.get("usage").and_then(Value::as_object) {
+                if let Some(usage) = value.get("usage").filter(|usage| usage.is_object()) {
                     let target = delta_usage.get_or_insert_with(|| json!({}));
-                    if let Some(target) = target.as_object_mut() {
+                    if let (Some(target), Some(usage)) = (target.as_object_mut(), usage.as_object())
+                    {
                         for (key, value) in usage {
                             target.insert(key.clone(), value.clone());
                         }
                     }
+                    // A final reported zero is authoritative; normalize it before
+                    // merging token stubs so a previous positive amount cannot win.
+                    crate::proxy::usage::parser::copy_reported_cost_usd(usage, target);
                 }
             }
             "message_stop" => *saw_message_stop = true,
@@ -1617,7 +1622,9 @@ pub fn anthropic_sse_to_message_value(body: &str) -> Result<Value, ProxyError> {
         }
         if let Some(usage) = message.get_mut("usage").and_then(Value::as_object_mut) {
             for (key, value) in delta_usage {
-                if value.as_u64() == Some(0)
+                if key != "cost"
+                    && key != "cost_usd"
+                    && value.as_u64() == Some(0)
                     && usage
                         .get(&key)
                         .and_then(Value::as_u64)
@@ -1646,6 +1653,32 @@ fn append_str_field(block: &mut Value, field: &str, text: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_anthropic_usage_preserves_reported_cost_usd() {
+        let usage = build_responses_usage_from_anthropic(Some(&json!({
+            "input_tokens": 10, "output_tokens": 2, "cost_usd": "0.0042"
+        })));
+        assert_eq!(usage["cost_usd"], "0.0042");
+        assert_eq!(usage["total_tokens"], 12);
+    }
+
+    #[test]
+    fn test_anthropic_sse_aggregation_preserves_final_reported_zero_cost() {
+        let events = [
+            json!({"type":"message_start","message":{"id":"msg_cost","model":"claude","usage":{"input_tokens":10,"cost_usd":"0.0042"}}}),
+            json!({"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":2,"cost":0}}),
+            json!({"type":"message_stop"}),
+        ];
+        let input = events
+            .iter()
+            .map(|value| format!("data: {value}\n\n"))
+            .collect::<String>();
+        let message = anthropic_sse_to_message_value(&input).unwrap();
+        let result = anthropic_response_to_responses(message).unwrap();
+        assert_eq!(result["usage"]["cost_usd"], "0");
+        assert_eq!(result["usage"]["input_tokens"], 10);
+    }
 
     // ==================== Request: Responses → Anthropic ====================
 

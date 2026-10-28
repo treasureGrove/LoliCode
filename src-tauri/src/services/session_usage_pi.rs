@@ -800,6 +800,7 @@ fn insert_pi_record(conn: &rusqlite::Connection, record: &PiUsageRecord) -> Resu
         cache_read_tokens: record.cache_read_tokens,
         cache_creation_tokens: record.cache_write_tokens,
         cache_creation_1h_tokens: 0,
+        reported_cost_usd: None,
         model: Some(record.model.clone()),
         message_id: None,
     };

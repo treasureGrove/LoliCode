@@ -337,6 +337,50 @@ pub fn anthropic_to_openai_with_reasoning_content(
     Ok(result)
 }
 
+/// Merge cumulative usage snapshots without treating an absent counter as zero.
+/// Only token fields and a validated request cost cross this internal boundary.
+pub(crate) fn merge_stream_usage(previous: &mut Value, incoming: &Value) {
+    if !previous.is_object() {
+        *previous = json!({});
+    }
+    if let Some(fields) = incoming.as_object() {
+        for (key, value) in fields {
+            match key.as_str() {
+                "prompt_tokens"
+                | "input_tokens"
+                | "completion_tokens"
+                | "output_tokens"
+                | "total_tokens"
+                | "cache_read_input_tokens"
+                | "cache_creation_input_tokens"
+                | "prompt_cache_hit_tokens"
+                    if value.as_u64().is_some() =>
+                {
+                    previous[key] = value.clone();
+                }
+                "prompt_tokens_details"
+                | "input_tokens_details"
+                | "completion_tokens_details"
+                | "output_tokens_details"
+                | "cache_creation"
+                    if value.is_object() =>
+                {
+                    if !previous.get(key).is_some_and(Value::is_object) {
+                        previous[key] = json!({});
+                    }
+                    for (detail, count) in value.as_object().into_iter().flatten() {
+                        if count.as_u64().is_some() {
+                            previous[key][detail] = count.clone();
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    crate::proxy::usage::parser::copy_reported_cost_usd(incoming, previous);
+}
+
 /// 为 OpenAI Chat Completions 流式请求注入 `stream_options.include_usage`。
 ///
 /// OpenAI 兼容上游在流式下默认不在 SSE 里返回 usage，必须显式声明 include_usage
@@ -796,6 +840,7 @@ pub fn openai_to_anthropic(body: Value) -> Result<Value, ProxyError> {
     if cache_creation > 0 {
         usage_json["cache_creation_input_tokens"] = json!(cache_creation);
     }
+    crate::proxy::usage::parser::copy_reported_cost_usd(&usage, &mut usage_json);
 
     let result = json!({
         "id": body.get("id").and_then(|i| i.as_str()).unwrap_or(""),
@@ -814,6 +859,19 @@ pub fn openai_to_anthropic(body: Value) -> Result<Value, ProxyError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_openai_response_preserves_reported_cost_usd() {
+        for amount in [json!(0), json!("0.0042")] {
+            let result = openai_to_anthropic(json!({
+                "choices": [{ "message": { "content": "Hello" }, "finish_reason": "stop" }],
+                "usage": { "prompt_tokens": 10, "completion_tokens": 2, "cost": amount }
+            }))
+            .unwrap();
+            let expected = if amount == json!(0) { "0" } else { "0.0042" };
+            assert_eq!(result["usage"]["cost_usd"], expected);
+        }
+    }
 
     #[test]
     fn test_anthropic_to_openai_simple() {

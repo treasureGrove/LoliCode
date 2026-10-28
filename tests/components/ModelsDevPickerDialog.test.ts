@@ -8,6 +8,7 @@ import { normalizeModelsDevModelId } from "@/lib/modelsDev";
 import {
   getCommonModelKeys,
   resolveModelsDevSelection,
+  resolveModelsDevSyncSelection,
   toModelPricing,
 } from "@/lib/modelsDevPricing";
 
@@ -68,22 +69,23 @@ describe("formatPrice", () => {
     expect(formatPrice(1.0395)).toBe("1.0395");
   });
 
-  it("keeps up to six decimal places", () => {
+  it("preserves small positive prices instead of rounding them to free", () => {
     expect(formatPrice(0.000001)).toBe("0.000001");
-    expect(formatPrice(0.0000004)).toBe("0");
+    expect(formatPrice(0.0000004)).toBe("0.0000004");
   });
 
-  it("returns 0 for zero, negative and non-finite values", () => {
+  it("distinguishes a true zero from missing or invalid prices", () => {
     expect(formatPrice(0)).toBe("0");
-    expect(formatPrice(-1)).toBe("0");
-    expect(formatPrice(NaN)).toBe("0");
-    expect(formatPrice(Infinity)).toBe("0");
+    expect(formatPrice(undefined)).toBe("—");
+    expect(formatPrice(-1)).toBe("—");
+    expect(formatPrice(NaN)).toBe("—");
+    expect(formatPrice(Infinity)).toBe("—");
   });
 
   it("never produces exponent notation", () => {
     // 后端 Decimal::from_str 不接受科学计数法
-    expect(formatPrice(1e-8)).toBe("0");
-    expect(formatPrice(1e21)).toBe("0");
+    expect(formatPrice(1e-8)).toBe("0.00000001");
+    expect(formatPrice(1e21)).toBe("—");
     for (const value of [5, 0.5, 0.000123, 123456.789]) {
       expect(formatPrice(value)).toMatch(/^\d+(\.\d+)?$/);
     }
@@ -119,7 +121,7 @@ describe("flattenModels", () => {
         models: {
           "Vendor/Some-Model:free": {
             release_date: "2025-01",
-            cost: { input: 0.1 },
+            cost: { input: 0.1, output: 0.2 },
           },
         },
       },
@@ -136,12 +138,12 @@ describe("flattenModels", () => {
     expect(newModel.cacheRead).toBe(0.3);
     expect(newModel.cacheWrite).toBe(3.75);
 
-    // 没有 name 的 provider 用 id 兜底；缺失的成本字段补 0
+    // 没有 name 的 provider 用 id 兜底；未知缓存价格保留为未知。
     const bareModel = entries[1];
     expect(bareModel.providerName).toBe("bare");
     expect(bareModel.normalizedId).toBe("some-model");
-    expect(bareModel.output).toBe(0);
-    expect(bareModel.cacheRead).toBe(0);
+    expect(bareModel.output).toBe(0.2);
+    expect(bareModel.cacheRead).toBeUndefined();
 
     // 完全没有定价的模型被过滤
     expect(entries.some((e) => e.modelId === "free-model")).toBe(false);
@@ -157,7 +159,7 @@ describe("flattenModels", () => {
               input: ["text", "image", "audio", "video"],
               output: ["text"],
             },
-            cost: { input: 1, output: 2 },
+            cost: { input: 1, output: 2, cache_read: 0.1, cache_write: 0 },
           },
           "legacy-chat": {
             status: "deprecated",
@@ -314,15 +316,198 @@ describe("flattenModels", () => {
       "relay/custom-model",
     ]);
 
-    const pricing = toModelPricing([
-      entries.find((entry) => entry.key === "openai/gpt-5")!,
-      entries.find((entry) => entry.key === "relay/vendor/GPT-5")!,
-    ]);
+    const pricing = toModelPricing(
+      [
+        entries.find((entry) => entry.key === "openai/gpt-5")!,
+        entries.find((entry) => entry.key === "relay/vendor/GPT-5")!,
+      ],
+      [
+        {
+          modelId: "gpt-5",
+          displayName: "Existing",
+          inputCostPerMillion: "4",
+          outputCostPerMillion: "8",
+          cacheReadCostPerMillion: "0.1",
+          cacheCreationCostPerMillion: "0",
+        },
+      ],
+    );
     expect(pricing).toHaveLength(1);
     expect(pricing[0]).toMatchObject({
       modelId: "gpt-5",
       displayName: "GPT-5 Official",
       inputCostPerMillion: "1",
     });
+  });
+});
+
+describe("automatic reference dictionary", () => {
+  const config = {
+    autoSyncEnabled: true,
+    includeCommonModels: true,
+    selectedModelKeys: [],
+    excludedCommonModelKeys: [],
+    lastSyncAt: null,
+    lastSyncError: null,
+  };
+  it("rejects partial, negative and non-finite input/output prices while preserving true zero", () => {
+    const entries = flattenModels({
+      openai: {
+        models: {
+          missingOutput: { cost: { input: 1 } },
+          missingInput: { cost: { output: 2 } },
+          negative: { cost: { input: -1, output: 2 } },
+          invalid: { cost: { input: NaN, output: 2 } },
+          free: {
+            cost: { input: 0, output: 0, cache_read: 0, cache_write: 0 },
+          },
+        },
+      },
+    });
+    expect(entries.map((entry) => entry.modelId)).toEqual(["free"]);
+    expect(toModelPricing(entries)[0].inputCostPerMillion).toBe("0");
+  });
+
+  it("syncs older first-party models beyond the six-row UI shortlist and excludes resellers by default", () => {
+    const models = Object.fromEntries(
+      Array.from({ length: 9 }, (_, i) => [
+        `gpt-${i}`,
+        { release_date: `2026-0${i + 1}-01`, cost: { input: 1, output: 2 } },
+      ]),
+    );
+    const entries = flattenModels({ openai: { models }, reseller: { models } });
+    expect(getCommonModelKeys(entries).size).toBe(6);
+    expect(resolveModelsDevSyncSelection(entries, config)).toHaveLength(9);
+    const selected = resolveModelsDevSyncSelection(entries, {
+      ...config,
+      excludedCommonModelKeys: ["openai/gpt-0"],
+      selectedModelKeys: ["reseller/gpt-0"],
+    });
+    expect(selected.some((entry) => entry.key === "openai/gpt-0")).toBe(false);
+    expect(selected.some((entry) => entry.key === "reseller/gpt-0")).toBe(true);
+    expect(
+      resolveModelsDevSyncSelection(entries, {
+        ...config,
+        includeCommonModels: false,
+      }),
+    ).toEqual([]);
+  });
+
+  it("preserves known local cache rates and skips unknown cache prices instead of inserting free rates", () => {
+    const entries = flattenModels({
+      openai: {
+        models: { "gpt-reference": { cost: { input: 1, output: 2 } } },
+      },
+    });
+    expect(formatPrice(entries[0].cacheRead)).toBe("—");
+    expect(toModelPricing(entries)).toEqual([]);
+    expect(
+      toModelPricing(entries, [
+        {
+          modelId: "gpt-reference",
+          displayName: "Existing",
+          inputCostPerMillion: "3",
+          outputCostPerMillion: "6",
+          cacheReadCostPerMillion: "0.2",
+          cacheCreationCostPerMillion: "0.4",
+        },
+      ])[0],
+    ).toMatchObject({
+      inputCostPerMillion: "1",
+      cacheReadCostPerMillion: "0.2",
+      cacheCreationCostPerMillion: "0.4",
+    });
+  });
+
+  it("prefers original provider pricing regardless of feed order and rejects ambiguous reseller collisions", () => {
+    const entries = flattenModels({
+      relay: {
+        models: {
+          "vendor/gpt-reference": {
+            release_date: "2026-10-01",
+            cost: { input: 9, output: 18, cache_read: 0, cache_write: 0 },
+          },
+        },
+      },
+      openai: {
+        models: {
+          "gpt-reference": {
+            release_date: "2026-01-01",
+            cost: { input: 1, output: 2, cache_read: 0.1, cache_write: 0 },
+          },
+        },
+      },
+    });
+    for (const ordered of [entries, [...entries].reverse()]) {
+      expect(toModelPricing(ordered)[0].inputCostPerMillion).toBe("1");
+    }
+    const reseller = entries[0];
+    expect(
+      toModelPricing([
+        reseller,
+        {
+          ...reseller,
+          key: "other/gpt-reference",
+          providerId: "other",
+          input: 4,
+        },
+      ]),
+    ).toEqual([]);
+  });
+
+  it("distinguishes a model's original provider from another first-party provider hosting that model", () => {
+    const entries = flattenModels({
+      alibaba: {
+        models: {
+          "deepseek-ai/DeepSeek-Chat": {
+            release_date: "2026-10-01",
+            cost: { input: 9, output: 18, cache_read: 0, cache_write: 0 },
+          },
+          "qwen-own": {
+            cost: { input: 1, output: 2, cache_read: 0, cache_write: 0 },
+          },
+        },
+      },
+      deepseek: {
+        models: {
+          "deepseek-chat": {
+            release_date: "2026-01-01",
+            cost: { input: 1, output: 2, cache_read: 0.1, cache_write: 0 },
+          },
+        },
+      },
+      openai: {
+        models: {
+          "unknown-family": {
+            cost: { input: 1, output: 2, cache_read: 0, cache_write: 0 },
+          },
+          o3: { cost: { input: 1, output: 2, cache_read: 0, cache_write: 0 } },
+        },
+      },
+    });
+    for (const ordered of [entries, [...entries].reverse()]) {
+      expect(
+        toModelPricing(ordered).find(
+          (entry) => entry.modelId === "deepseek-chat",
+        ),
+      ).toMatchObject({
+        inputCostPerMillion: "1",
+        cacheReadCostPerMillion: "0.1",
+      });
+    }
+    const selected = resolveModelsDevSyncSelection(entries, config);
+    expect(selected.map((entry) => entry.key).sort()).toEqual([
+      "alibaba/qwen-own",
+      "deepseek/deepseek-chat",
+      "openai/o3",
+    ]);
+    const explicit = resolveModelsDevSyncSelection(entries, {
+      ...config,
+      selectedModelKeys: [
+        "openai/unknown-family",
+        "alibaba/deepseek-ai/DeepSeek-Chat",
+      ],
+    });
+    expect(explicit).toHaveLength(5);
   });
 });

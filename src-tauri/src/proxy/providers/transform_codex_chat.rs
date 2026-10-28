@@ -2223,6 +2223,7 @@ pub(crate) fn chat_usage_to_responses_usage(usage: Option<&Value>) -> Value {
         result["cache_creation_input_tokens"] = json!(cache_write);
     }
 
+    crate::proxy::usage::parser::copy_reported_cost_usd(usage, &mut result);
     result
 }
 
@@ -2319,6 +2320,18 @@ pub fn chat_error_to_response_error(body: Option<&Value>) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_chat_usage_preserves_reported_cost_usd() {
+        let usage = chat_usage_to_responses_usage(Some(&json!({
+            "prompt_tokens": 10, "completion_tokens": 2, "cost": 0
+        })));
+        assert_eq!(usage["cost_usd"], "0");
+        let usage = chat_usage_to_responses_usage(Some(&json!({
+            "prompt_tokens": 10, "completion_tokens": 2, "cost": "0.0042", "currency": "EUR"
+        })));
+        assert!(usage.get("cost_usd").is_none());
+    }
     use base64::{engine::general_purpose::STANDARD, Engine as _};
 
     fn large_test_image_data_url() -> String {

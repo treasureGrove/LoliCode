@@ -26,6 +26,8 @@ export interface RequestLog {
   cacheReadCostUsd: string;
   cacheCreationCostUsd: string;
   totalCostUsd: string;
+  /** Upstream request charge, local token estimate, or an older unclassified amount. */
+  costSource?: "upstream" | "local" | "unknown";
   isStreaming: boolean;
   latencyMs: number;
   /** 路由服务记的是精确首字；会话日志导入的是按时间戳推出来的估算值（看 dataSource） */
@@ -106,6 +108,10 @@ export interface UsageSummary {
   partialRequests?: number;
   /** Requests with incomplete cache counters or cache pricing. */
   cachePartialRequests?: number;
+  /** Requests whose USD charge was explicitly reported by the upstream. */
+  reportedCostRequests?: number;
+  /** Requests estimated locally with the model price dictionary. */
+  estimatedCostRequests?: number;
 }
 
 export interface UsageSummaryByApp {
@@ -149,6 +155,8 @@ export interface ProviderStats {
   unpricedRequests?: number;
   partialRequests?: number;
   cachePartialRequests?: number;
+  reportedCostRequests?: number;
+  estimatedCostRequests?: number;
 }
 
 export interface ModelStats {
@@ -370,7 +378,7 @@ type UsageCostLog = Pick<
   | "totalCostUsd"
   | "statusCode"
 > &
-  Partial<Pick<RequestLog, "costMultiplier">>;
+  Partial<Pick<RequestLog, "costMultiplier" | "costSource">>;
 
 export function hasUsageTokens(log: UsageCostLog): boolean {
   return (
@@ -382,6 +390,7 @@ export function hasUsageTokens(log: UsageCostLog): boolean {
 }
 
 export function isUnpricedUsage(log: UsageCostLog): boolean {
+  if (log.costSource === "upstream") return false;
   const totalCost = Number.parseFloat(log.totalCostUsd);
   const multiplier =
     log.costMultiplier == null

@@ -216,6 +216,39 @@ fn schema_migration_rejects_future_version() {
 }
 
 #[test]
+fn schema_v21_preserves_historical_costs_and_adds_provenance() {
+    let conn = Connection::open_in_memory().unwrap();
+    conn.execute_batch(
+        "CREATE TABLE proxy_request_logs (request_id TEXT PRIMARY KEY,total_cost_usd TEXT);
+         INSERT INTO proxy_request_logs VALUES ('old','0');
+         PRAGMA user_version=20;",
+    )
+    .unwrap();
+    Database::apply_schema_migrations_on_conn(&conn).unwrap();
+    let row: (String, String) = conn
+        .query_row(
+            "SELECT total_cost_usd,cost_source FROM proxy_request_logs WHERE request_id='old'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(row, ("0".to_string(), "unknown".to_string()));
+    conn.execute("UPDATE proxy_request_logs SET cost_source='upstream'", [])
+        .unwrap();
+    Database::apply_schema_migrations_on_conn(&conn).unwrap();
+    assert_eq!(
+        conn.query_row("SELECT cost_source FROM proxy_request_logs", [], |row| {
+            row.get::<_, String>(0)
+        })
+        .unwrap(),
+        "upstream"
+    );
+    assert!(conn
+        .execute("UPDATE proxy_request_logs SET cost_source='invented'", [])
+        .is_err());
+}
+
+#[test]
 fn schema_migration_adds_missing_columns_for_providers() {
     let conn = Connection::open_in_memory().expect("open memory db");
 

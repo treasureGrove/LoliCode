@@ -456,6 +456,7 @@ fn insert_opencode_message(
                 cache_read_tokens: msg.cache_read_tokens,
                 cache_creation_tokens: msg.cache_write_tokens,
                 cache_creation_1h_tokens: 0,
+                reported_cost_usd: None,
                 model: Some(msg.model_id.clone()),
                 message_id: None,
             };

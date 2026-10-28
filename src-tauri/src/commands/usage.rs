@@ -262,8 +262,19 @@ pub fn update_model_pricing(
 pub fn update_model_pricing_batch(
     state: State<'_, AppState>,
     entries: Vec<ModelPricingInfo>,
+    source: Option<String>,
 ) -> Result<usize, AppError> {
-    crate::services::model_pricing::update_model_pricing_batch(&state.db, entries)
+    match source.as_deref() {
+        None | Some("manual") => {
+            crate::services::model_pricing::update_model_pricing_batch(&state.db, entries)
+        }
+        Some("models-dev") => {
+            crate::services::model_pricing::sync_models_dev_pricing(&state.db, entries)
+        }
+        Some(_) => Err(AppError::Config(
+            "Unknown model pricing update source".into(),
+        )),
+    }
 }
 
 #[tauri::command]

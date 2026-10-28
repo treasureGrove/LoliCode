@@ -131,6 +131,12 @@ impl AnthropicToResponsesState {
                 self.anthropic_usage.insert(key.clone(), value.clone());
             }
         }
+        let mut normalized = json!({});
+        crate::proxy::usage::parser::copy_reported_cost_usd(usage, &mut normalized);
+        if let Some(cost) = normalized.get("cost_usd") {
+            self.anthropic_usage
+                .insert("cost_usd".to_string(), cost.clone());
+        }
     }
 
     fn ensure_response_started(&mut self) -> Vec<Bytes> {
@@ -831,6 +837,22 @@ pub(crate) fn create_responses_sse_stream_from_anthropic_with_context<
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_anthropic_to_responses_stream_retains_latest_reported_cost_usd() {
+        let mut state = AnthropicToResponsesState::default();
+        for usage in [
+            json!({"input_tokens":10,"cost_usd":"0.0042"}),
+            json!({"output_tokens":2,"cost":0}),
+            json!({"output_tokens":2,"cost":0}),
+            json!({"output_tokens":2}),
+        ] {
+            state.merge_usage(&usage);
+        }
+        let usage = state.responses_usage();
+        assert_eq!(usage["cost_usd"], "0");
+        assert_eq!(usage["input_tokens"], 10);
+    }
     use futures::stream;
 
     async fn run(input: &str) -> String {

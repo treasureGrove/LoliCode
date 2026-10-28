@@ -10,7 +10,7 @@ use super::{
     hyper_client::{ProxyResponse, MAX_RESPONSE_BODY_BYTES},
     server::ProxyState,
     sse::{strip_sse_field, take_sse_block},
-    usage::parser::TokenUsage,
+    usage::parser::{reported_cost_from_headers, TokenUsage},
     ProxyError,
 };
 use crate::database::PRICING_SOURCE_REQUEST;
@@ -195,7 +195,13 @@ pub async fn handle_streaming(
     let stream = response.bytes_stream();
 
     // 创建使用量收集器；关闭 usage logging 时不要在流式热路径上解析每个 SSE event。
-    let usage_collector = create_usage_collector(ctx, state, status.as_u16(), parser_config);
+    let usage_collector = create_usage_collector(
+        ctx,
+        state,
+        status.as_u16(),
+        parser_config,
+        reported_cost_from_headers(&response_headers),
+    );
 
     // 获取流式超时配置
     let timeout_config = ctx.streaming_timeout_config();
@@ -249,7 +255,10 @@ pub async fn handle_non_streaming(
     if usage_logging_enabled(state) {
         if let Ok(json_value) = serde_json::from_slice::<Value>(&body_bytes) {
             // 解析使用量
-            if let Some(usage) = (parser_config.response_parser)(&json_value) {
+            if let Some(usage) = TokenUsage::with_optional_reported_cost(
+                (parser_config.response_parser)(&json_value),
+                reported_cost_from_headers(&response_headers),
+            ) {
                 let usage = normalize_gateway_usage(
                     ctx.app_type_str,
                     parser_config.input_includes_cache,
@@ -291,7 +300,8 @@ pub async fn handle_non_streaming(
                 spawn_log_usage(
                     state,
                     ctx,
-                    TokenUsage::default(),
+                    TokenUsage::default()
+                        .with_reported_cost(reported_cost_from_headers(&response_headers)),
                     &model,
                     &ctx.request_model,
                     status.as_u16(),
@@ -311,7 +321,8 @@ pub async fn handle_non_streaming(
             spawn_log_usage(
                 state,
                 ctx,
-                TokenUsage::default(),
+                TokenUsage::default()
+                    .with_reported_cost(reported_cost_from_headers(&response_headers)),
                 ctx.outbound_model.as_deref().unwrap_or(&ctx.request_model),
                 &ctx.request_model,
                 status.as_u16(),
@@ -503,6 +514,7 @@ pub(crate) fn create_usage_collector(
     state: &ProxyState,
     status_code: u16,
     parser_config: &UsageParserConfig,
+    reported_cost_usd: Option<rust_decimal::Decimal>,
 ) -> Option<SseUsageCollector> {
     let logging_enabled = state
         .config
@@ -537,7 +549,9 @@ pub(crate) fn create_usage_collector(
         start_time,
         parser_config.stream_event_filter,
         move |events, first_token_ms| {
-            if let Some(usage) = stream_parser(&events) {
+            if let Some(usage) =
+                TokenUsage::with_optional_reported_cost(stream_parser(&events), reported_cost_usd)
+            {
                 let usage = normalize_gateway_usage(app_type_str, input_includes_cache, usage);
                 let model = model_extractor(&events, &fallback_model);
                 let latency_ms = start_time.elapsed().as_millis() as u64;
@@ -605,8 +619,7 @@ pub(crate) fn normalize_gateway_usage(
     input_includes_cache: bool,
     mut usage: TokenUsage,
 ) -> TokenUsage {
-    if (app_type == "channel-gateway"
-        || super::channel_gateway::is_attributed_client(app_type))
+    if (app_type == "channel-gateway" || super::channel_gateway::is_attributed_client(app_type))
         && input_includes_cache
     {
         usage.input_tokens = usage
@@ -1042,43 +1055,43 @@ mod tests {
                 ] {
                     let mut usage =
                         normalize_gateway_usage(app, parser.input_includes_cache, usage.clone());
-                  assert_eq!(usage.input_tokens, fresh, "{name}/{suffix}");
-                  assert_eq!(usage.cache_read_tokens, 200);
-                  assert_eq!(usage.cache_creation_tokens, cache_creation);
-                  assert_eq!(usage.output_tokens, 50);
-                  let id = format!("usage-{app}-{name}-{suffix}");
-                  usage.message_id = Some(id.clone());
-                  log_usage_internal(
-                      &state,
-                      "usage-channel",
-                      app,
-                      "usage-model",
-                      "usage-model",
-                      "usage-model",
-                      usage,
-                      10,
-                      None,
-                      suffix == "sse",
-                      200,
-                      None,
-                  )
-                  .await;
-                  let conn = db.conn.lock().unwrap();
-                  let row: (u32,u32,u32,i64,String) = conn.query_row(
+                    assert_eq!(usage.input_tokens, fresh, "{name}/{suffix}");
+                    assert_eq!(usage.cache_read_tokens, 200);
+                    assert_eq!(usage.cache_creation_tokens, cache_creation);
+                    assert_eq!(usage.output_tokens, 50);
+                    let id = format!("usage-{app}-{name}-{suffix}");
+                    usage.message_id = Some(id.clone());
+                    log_usage_internal(
+                        &state,
+                        "usage-channel",
+                        app,
+                        "usage-model",
+                        "usage-model",
+                        "usage-model",
+                        usage,
+                        10,
+                        None,
+                        suffix == "sse",
+                        200,
+                        None,
+                    )
+                    .await;
+                    let conn = db.conn.lock().unwrap();
+                    let row: (u32,u32,u32,i64,String) = conn.query_row(
                       "SELECT input_tokens,cache_read_tokens,cache_creation_tokens,input_token_semantics,total_cost_usd
                        FROM proxy_request_logs WHERE request_id LIKE ?1",
                       [format!("%:{id}")],
                       |row| Ok((row.get(0)?,row.get(1)?,row.get(2)?,row.get(3)?,row.get(4)?)),
                   ).unwrap();
-                  assert_eq!((row.0, row.1, row.2), (fresh, 200, cache_creation));
-                  assert_eq!(
-                      row.3,
-                      crate::services::sql_helpers::INPUT_TOKEN_SEMANTICS_FRESH
-                  );
-                  assert_eq!(
-                      Decimal::from_str(&row.4).unwrap(),
-                      Decimal::from_str(expected_cost).unwrap()
-                  );
+                    assert_eq!((row.0, row.1, row.2), (fresh, 200, cache_creation));
+                    assert_eq!(
+                        row.3,
+                        crate::services::sql_helpers::INPUT_TOKEN_SEMANTICS_FRESH
+                    );
+                    assert_eq!(
+                        Decimal::from_str(&row.4).unwrap(),
+                        Decimal::from_str(expected_cost).unwrap()
+                    );
                 }
             }
         }
@@ -1429,6 +1442,7 @@ mod tests {
             cache_read_tokens: 0,
             cache_creation_tokens: 0,
             cache_creation_1h_tokens: 0,
+            reported_cost_usd: None,
             model: None,
             message_id: None,
         };
@@ -1494,6 +1508,7 @@ mod tests {
             cache_read_tokens: 0,
             cache_creation_tokens: 0,
             cache_creation_1h_tokens: 0,
+            reported_cost_usd: None,
             model: None,
             message_id: None,
         };
@@ -1579,6 +1594,7 @@ mod tests {
             cache_read_tokens: 0,
             cache_creation_tokens: 0,
             cache_creation_1h_tokens: 0,
+            reported_cost_usd: None,
             model: None,
             message_id: None,
         };

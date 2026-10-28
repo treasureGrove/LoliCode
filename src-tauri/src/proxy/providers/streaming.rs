@@ -78,6 +78,12 @@ struct Usage {
     /// 真值只放这里，#8041）
     #[serde(default)]
     prompt_cache_hit_tokens: Option<u32>,
+    #[serde(default)]
+    cost: Option<Value>,
+    #[serde(default)]
+    cost_usd: Option<Value>,
+    #[serde(default)]
+    currency: Option<Value>,
 }
 
 /// Nested token details from OpenAI format
@@ -125,6 +131,20 @@ fn build_anthropic_usage_json(usage: &Usage) -> Value {
     if cache_creation > 0 {
         usage_json["cache_creation_input_tokens"] = json!(cache_creation);
     }
+    let mut cost_fields = serde_json::Map::new();
+    for (key, value) in [
+        ("cost", usage.cost.as_ref()),
+        ("cost_usd", usage.cost_usd.as_ref()),
+        ("currency", usage.currency.as_ref()),
+    ] {
+        if let Some(value) = value {
+            cost_fields.insert(key.to_string(), value.clone());
+        }
+    }
+    crate::proxy::usage::parser::copy_reported_cost_usd(
+        &Value::Object(cost_fields),
+        &mut usage_json,
+    );
     usage_json
 }
 
@@ -259,6 +279,7 @@ pub fn create_anthropic_sse_stream<E: std::error::Error + Send + 'static>(
         let mut has_sent_message_stop = false;
         let mut stream_ended_with_error = false;
         let mut latest_usage: Option<Value> = None;
+        let mut latest_wire_usage = json!({});
         let mut current_non_tool_block_type: Option<&'static str> = None;
         let mut current_non_tool_block_index: Option<u32> = None;
         let mut inline_think = InlineThinkSplitter::default();
@@ -330,7 +351,13 @@ pub fn create_anthropic_sse_stream<E: std::error::Error + Send + 'static>(
                                     continue;
                                 }
 
-                                if let Ok(chunk) = serde_json::from_str::<OpenAIStreamChunk>(data) {
+                                if let Ok(chunk) = serde_json::from_str::<Value>(data).and_then(|mut raw| {
+                                    if let Some(usage) = raw.get("usage").filter(|usage| usage.is_object()) {
+                                        super::transform::merge_stream_usage(&mut latest_wire_usage, usage);
+                                        raw["usage"] = latest_wire_usage.clone();
+                                    }
+                                    serde_json::from_value::<OpenAIStreamChunk>(raw)
+                                }) {
                                     log::debug!("[Claude/OpenRouter] <<< SSE chunk received");
 
                                     if message_id.is_none() && !chunk.id.is_empty() {
@@ -340,8 +367,13 @@ pub fn create_anthropic_sse_stream<E: std::error::Error + Send + 'static>(
                                         current_model = Some(chunk.model.clone());
                                     }
 
-                                    let chunk_usage_json =
+                                    let mut chunk_usage_json =
                                         chunk.usage.as_ref().map(build_anthropic_usage_json);
+                                    if let (Some(current), Some(previous)) = (chunk_usage_json.as_mut(), latest_usage.as_ref()) {
+                                        if current.get("cost_usd").is_none() {
+                                            crate::proxy::usage::parser::copy_reported_cost_usd(previous, current);
+                                        }
+                                    }
                                     if let Some(usage_json) = &chunk_usage_json {
                                         latest_usage = Some(usage_json.clone());
                                         if let Some((_, pending_usage)) = pending_message_delta.as_mut() {
@@ -372,6 +404,9 @@ pub fn create_anthropic_sse_stream<E: std::error::Error + Send + 'static>(
                                                     start_usage["cache_creation_input_tokens"] =
                                                         json!(cache_creation);
                                                 }
+                                            }
+                                            if let Some(usage) = chunk_usage_json.as_ref() {
+                                                crate::proxy::usage::parser::copy_reported_cost_usd(usage, &mut start_usage);
                                             }
 
                                             let event = json!({
@@ -912,6 +947,69 @@ mod tests {
 
     fn event_type(event: &Value) -> Option<&str> {
         event.get("type").and_then(|v| v.as_str())
+    }
+
+    #[tokio::test]
+    async fn test_chat_stream_preserves_reported_cost_without_summing_totals() {
+        for final_cost in [Some(0), None] {
+            let initial = json!({
+                "id": "chat_cost", "model": "model", "choices": [{"delta":{"content":"Hello"}}],
+                "usage":{"prompt_tokens":10,"completion_tokens":0,"cost":"0.0042"}
+            });
+            let mut final_usage = json!({"prompt_tokens":10,"completion_tokens":2});
+            if let Some(cost) = final_cost {
+                final_usage["cost"] = json!(cost);
+            }
+            let finish =
+                json!({"choices":[{"delta":{},"finish_reason":"stop"}],"usage":final_usage});
+            let duplicate = json!({"choices":[],"usage":final_usage});
+            let no_cost = json!({"choices":[],"usage":{"prompt_tokens":10,"completion_tokens":2}});
+            let input = format!("data: {initial}\n\ndata: {finish}\n\ndata: {duplicate}\n\ndata: {no_cost}\n\ndata: [DONE]\n\n");
+            let events = collect_anthropic_events(&input).await;
+            let deltas = events
+                .iter()
+                .filter(|event| event_type(event) == Some("message_delta"))
+                .collect::<Vec<_>>();
+            assert_eq!(deltas.len(), 1);
+            assert_eq!(
+                deltas[0]["usage"]["cost_usd"],
+                if final_cost.is_some() { "0" } else { "0.0042" }
+            );
+            assert_eq!(deltas[0]["usage"]["input_tokens"], 10);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_chat_stream_cost_only_and_empty_usage_preserve_token_counters() {
+        for (tail, input_tokens, output_tokens) in [
+            (json!({"cost":0}), 4, 2),
+            (
+                json!({"prompt_tokens":0,"completion_tokens":0,"cost":0}),
+                0,
+                0,
+            ),
+        ] {
+            let initial = json!({
+                "id":"chat_cost","model":"model","choices":[{"delta":{"content":"Hello"}}]
+            });
+            let finish = json!({
+                "choices":[{"delta":{},"finish_reason":"stop"}],
+                "usage":{"prompt_tokens":10,"completion_tokens":2,"prompt_tokens_details":{"cached_tokens":6},"cost":"0.0042"}
+            });
+            let tail = json!({"choices":[],"usage":tail});
+            let empty = json!({"choices":[],"usage":{}});
+            let input = format!("data: {initial}\n\ndata: {finish}\n\ndata: {tail}\n\ndata: {empty}\n\ndata: [DONE]\n\n");
+            let events = collect_anthropic_events(&input).await;
+            let deltas = events
+                .iter()
+                .filter(|event| event_type(event) == Some("message_delta"))
+                .collect::<Vec<_>>();
+            assert_eq!(deltas.len(), 1);
+            assert_eq!(deltas[0]["usage"]["cost_usd"], "0");
+            assert_eq!(deltas[0]["usage"]["input_tokens"], input_tokens);
+            assert_eq!(deltas[0]["usage"]["output_tokens"], output_tokens);
+            assert_eq!(deltas[0]["usage"]["cache_read_input_tokens"], 6);
+        }
     }
 
     /// 收集某一类 content_block_delta 的文本字段并拼接，用于断言流式增量的最终内容。

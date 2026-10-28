@@ -448,7 +448,7 @@ fn prepare_claude_usage_log(
     is_streaming: bool,
 ) -> Option<ClaudeUsageLog> {
     let usage =
-        TokenUsage::from_claude_response(response).filter(TokenUsage::has_billable_tokens)?;
+        TokenUsage::from_claude_response(response).filter(TokenUsage::has_accounting_data)?;
 
     let model = response
         .get("model")
@@ -522,6 +522,7 @@ pub(super) async fn handle_claude_transform(
     connection_guard: Option<ActiveConnectionGuard>,
 ) -> Result<axum::response::Response, ProxyError> {
     let status = response.status();
+    let header_cost_usd = super::usage::parser::reported_cost_from_headers(response.headers());
     let is_codex_oauth = ctx
         .provider
         .meta
@@ -603,7 +604,10 @@ pub(super) async fn handle_claude_transform(
                 start_time,
                 Some(claude_stream_usage_event_filter),
                 move |events, first_token_ms| {
-                    if let Some(usage) = TokenUsage::from_claude_stream_events(&events) {
+                    if let Some(usage) = TokenUsage::with_optional_reported_cost(
+                        TokenUsage::from_claude_stream_events(&events),
+                        header_cost_usd,
+                    ) {
                         let model = usage
                             .model
                             .clone()
@@ -784,7 +788,7 @@ pub(super) async fn handle_claude_transform(
             "Missing upstream response after Claude format conversion".to_string(),
         )),
     };
-    let anthropic_response = match transform_result {
+    let mut anthropic_response = match transform_result {
         Ok(response) => response,
         Err(error) => {
             log::error!("[Claude] 转换响应失败: {error}");
@@ -800,6 +804,8 @@ pub(super) async fn handle_claude_transform(
             return Err(error);
         }
     };
+
+    super::usage::parser::apply_reported_cost_to_response(&mut anthropic_response, header_cost_usd);
 
     // 记录使用量
     // 全 0 usage 不落账（对齐 Codex 流式收集器的 skip）：SSE 聚合兜底救回的流
@@ -1191,11 +1197,18 @@ async fn handle_codex_native_compaction_response(
     }
 
     let builder = rewritten_sse_response_builder(status, response.headers());
+    let header_cost_usd = super::usage::parser::reported_cost_from_headers(response.headers());
 
     let compaction_stream = super::providers::codex_compaction::create_native_compaction_sse_stream(
         response.bytes_stream(),
     );
-    let usage_collector = create_usage_collector(ctx, state, status.as_u16(), &CODEX_PARSER_CONFIG);
+    let usage_collector = create_usage_collector(
+        ctx,
+        state,
+        status.as_u16(),
+        &CODEX_PARSER_CONFIG,
+        header_cost_usd,
+    );
     let logged_stream = create_logged_passthrough_stream(
         compaction_stream,
         ctx.tag,
@@ -1491,11 +1504,18 @@ async fn handle_codex_late_arguments_repair(
     }
 
     let builder = rewritten_sse_response_builder(status, response.headers());
+    let header_cost_usd = super::usage::parser::reported_cost_from_headers(response.headers());
     let repair_stream =
         super::providers::responses_late_arguments::create_late_arguments_repair_stream(
             response.bytes_stream(),
         );
-    let usage_collector = create_usage_collector(ctx, state, status.as_u16(), &CODEX_PARSER_CONFIG);
+    let usage_collector = create_usage_collector(
+        ctx,
+        state,
+        status.as_u16(),
+        &CODEX_PARSER_CONFIG,
+        header_cost_usd,
+    );
     let logged_stream = create_logged_passthrough_stream(
         repair_stream,
         ctx.tag,
@@ -1544,14 +1564,20 @@ async fn handle_codex_xai_native_responses_rewrite(
 
     if response.is_sse() {
         let builder = rewritten_sse_response_builder(status, response.headers());
+        let header_cost_usd = super::usage::parser::reported_cost_from_headers(response.headers());
 
         let restore_stream =
             transform_codex_responses_xai_sanitize::create_xai_native_responses_sse_stream(
                 response.bytes_stream(),
                 restore_map,
             );
-        let usage_collector =
-            create_usage_collector(ctx, state, status.as_u16(), &CODEX_PARSER_CONFIG);
+        let usage_collector = create_usage_collector(
+            ctx,
+            state,
+            status.as_u16(),
+            &CODEX_PARSER_CONFIG,
+            header_cost_usd,
+        );
         let logged_stream = create_logged_passthrough_stream(
             restore_stream,
             ctx.tag,
@@ -1592,8 +1618,11 @@ async fn handle_codex_xai_native_responses_rewrite(
             transform_codex_responses_xai_sanitize::normalize_xai_function_call_integer_arguments(
                 &mut value,
             );
-            if let Some(usage) =
-                TokenUsage::from_codex_response_auto(&value).filter(TokenUsage::has_billable_tokens)
+            if let Some(usage) = TokenUsage::with_optional_reported_cost(
+                TokenUsage::from_codex_response_auto(&value),
+                super::usage::parser::reported_cost_from_headers(&response_headers),
+            )
+            .filter(TokenUsage::has_accounting_data)
             {
                 let usage = normalize_gateway_usage(
                     ctx.app_type_str,
@@ -1676,6 +1705,7 @@ pub(super) async fn handle_codex_chat_to_responses_transform(
     tool_context: transform_codex_chat::CodexToolContext,
 ) -> Result<axum::response::Response, ProxyError> {
     let status = response.status();
+    let header_cost_usd = super::usage::parser::reported_cost_from_headers(response.headers());
 
     if !status.is_success() {
         // 上游 Chat 错误体形状与 Responses 不一致（如 MiniMax 的 base_resp、自定义 detail 字段）；
@@ -1706,8 +1736,9 @@ pub(super) async fn handle_codex_chat_to_responses_transform(
                 start_time,
                 Some(codex_stream_usage_event_filter),
                 move |events, first_token_ms| {
-                    let usage =
-                        TokenUsage::from_codex_stream_events_auto(&events).unwrap_or_default();
+                    let usage = TokenUsage::from_codex_stream_events_auto(&events)
+                        .unwrap_or_default()
+                        .with_reported_cost(header_cost_usd);
                     let usage = normalize_gateway_usage(
                         app_type_str,
                         CODEX_PARSER_CONFIG.input_includes_cache,
@@ -1718,7 +1749,7 @@ pub(super) async fn handle_codex_chat_to_responses_transform(
                     // 存在（哪怕=0）即返回 Some。缺 nonzero 闸门会让全 0 usage 也被写入：
                     // message_id=None → dedup_request_id 退化为随机 UUID，无法去重，每笔
                     // 请求插入一条无意义空行、虚增请求数。对齐 Claude transform handler 的 skip。
-                    if !usage.has_billable_tokens() {
+                    if !usage.has_accounting_data() {
                         log::debug!("[Codex] 流式响应 usage 全 0 或缺失，跳过消费记录");
                         return;
                     }
@@ -1818,7 +1849,7 @@ pub(super) async fn handle_codex_chat_to_responses_transform(
             ));
         }
     };
-    let responses_response = transform_codex_chat::chat_completion_to_response_with_context(
+    let mut responses_response = transform_codex_chat::chat_completion_to_response_with_context(
         chat_response,
         &tool_context,
     )
@@ -1826,6 +1857,8 @@ pub(super) async fn handle_codex_chat_to_responses_transform(
         log::error!("[Codex] Chat → Responses 响应转换失败: {e}");
         e
     })?;
+    super::usage::parser::apply_reported_cost_to_response(&mut responses_response, header_cost_usd);
+
     state
         .codex_chat_history
         .record_response(&responses_response)
@@ -1836,7 +1869,7 @@ pub(super) async fn handle_codex_chat_to_responses_transform(
     // 即返回 Some。用 has_billable_tokens 闸门跳过全 0，避免空行虚增请求数——与流式分支
     // 及 Claude transform handler 的 skip 行为对齐。
     if let Some(usage) = TokenUsage::from_codex_response_auto(&responses_response)
-        .filter(TokenUsage::has_billable_tokens)
+        .filter(TokenUsage::has_accounting_data)
     {
         let usage = normalize_gateway_usage(
             ctx.app_type_str,
@@ -1925,6 +1958,7 @@ pub(super) async fn handle_codex_anthropic_to_responses_transform(
     codex_tool_context: transform_codex_chat::CodexToolContext,
 ) -> Result<axum::response::Response, ProxyError> {
     let status = response.status();
+    let header_cost_usd = super::usage::parser::reported_cost_from_headers(response.headers());
 
     if !status.is_success() {
         return handle_codex_chat_error_response(response, ctx, status).await;
@@ -1943,6 +1977,7 @@ pub(super) async fn handle_codex_anthropic_to_responses_transform(
             state,
             status,
             connection_guard,
+            header_cost_usd,
         );
     }
 
@@ -1955,7 +1990,7 @@ pub(super) async fn handle_codex_anthropic_to_responses_transform(
     let (mut response_headers, status, body_bytes) =
         read_decoded_body(response, ctx.tag, body_timeout).await?;
     let body_str = String::from_utf8_lossy(&body_bytes);
-    let anthropic_response: Value = match serde_json::from_slice(&body_bytes) {
+    let mut anthropic_response: Value = match serde_json::from_slice(&body_bytes) {
         Ok(value) => value,
         // Fallback sniffing symmetric to the chat / claude side (#2234): when the
         // upstream returns an Anthropic SSE body with an unmarked Content-Type,
@@ -1981,6 +2016,8 @@ pub(super) async fn handle_codex_anthropic_to_responses_transform(
         }
     };
 
+    super::usage::parser::apply_reported_cost_to_response(&mut anthropic_response, header_cost_usd);
+
     if is_stream {
         let events =
             responses_sse_events_from_anthropic_message(&anthropic_response, codex_tool_context);
@@ -1991,6 +2028,7 @@ pub(super) async fn handle_codex_anthropic_to_responses_transform(
             state,
             status,
             connection_guard,
+            header_cost_usd,
         );
     }
 
@@ -2006,7 +2044,7 @@ pub(super) async fn handle_codex_anthropic_to_responses_transform(
         })?;
 
     if let Some(usage) = TokenUsage::from_codex_response_auto(&responses_response)
-        .filter(TokenUsage::has_billable_tokens)
+        .filter(TokenUsage::has_accounting_data)
     {
         let usage = normalize_gateway_usage(
             ctx.app_type_str,
@@ -2083,6 +2121,7 @@ fn build_codex_anthropic_sse_response(
     state: &ProxyState,
     status: StatusCode,
     connection_guard: Option<ActiveConnectionGuard>,
+    header_cost_usd: Option<rust_decimal::Decimal>,
 ) -> Result<axum::response::Response, ProxyError> {
     let usage_collector = if usage_logging_enabled(state) {
         let state = state.clone();
@@ -2100,13 +2139,15 @@ fn build_codex_anthropic_sse_response(
             start_time,
             Some(codex_stream_usage_event_filter),
             move |events, first_token_ms| {
-                let usage = TokenUsage::from_codex_stream_events_auto(&events).unwrap_or_default();
+                let usage = TokenUsage::from_codex_stream_events_auto(&events)
+                    .unwrap_or_default()
+                    .with_reported_cost(header_cost_usd);
                 let usage = normalize_gateway_usage(
                     app_type_str,
                     CODEX_PARSER_CONFIG.input_includes_cache,
                     usage,
                 );
-                if !usage.has_billable_tokens() {
+                if !usage.has_accounting_data() {
                     log::debug!("[Codex] Anthropic streaming response usage is all-zero or missing, skipping usage recording");
                     return;
                 }

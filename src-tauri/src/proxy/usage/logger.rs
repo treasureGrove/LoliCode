@@ -24,6 +24,19 @@ struct UsageSemantic {
 }
 
 impl UsageSemantic {
+    fn same_identity(&self, other: &Self) -> bool {
+        self.app_type == other.app_type
+            && self.provider_id == other.provider_id
+            && self.model == other.model
+            && self.status_code == other.status_code
+    }
+
+    fn has_tokens(&self) -> bool {
+        self.input_tokens > 0
+            || self.output_tokens > 0
+            || self.cache_read_tokens > 0
+            || self.cache_creation_tokens > 0
+    }
     fn from_log(log: &RequestLog, input_token_semantics: i64) -> Self {
         Self {
             app_type: log.app_type.clone(),
@@ -100,8 +113,29 @@ impl<'a> UsageLogger<'a> {
     pub fn log_request(&self, log: &RequestLog) -> Result<(), AppError> {
         let conn = crate::database::lock_conn!(self.db.conn);
 
+        let reported_cost = log
+            .usage
+            .reported_cost_usd
+            .filter(|cost| *cost >= Decimal::ZERO);
+        let cost_source = if reported_cost.is_some() {
+            "upstream"
+        } else if log.cost.is_some() {
+            "local"
+        } else {
+            "unknown"
+        };
         let (input_cost, output_cost, cache_read_cost, cache_creation_cost, total_cost) =
-            if let Some(cost) = &log.cost {
+            if let Some(total) = reported_cost {
+                // The upstream total is authoritative. A component breakdown is
+                // unknown, and must not be fabricated from local list prices.
+                (
+                    "0".into(),
+                    "0".into(),
+                    "0".into(),
+                    "0".into(),
+                    total.to_string(),
+                )
+            } else if let Some(cost) = &log.cost {
                 (
                     cost.input_cost.to_string(),
                     cost.output_cost.to_string(),
@@ -140,6 +174,37 @@ impl<'a> UsageLogger<'a> {
                 if data_source.as_deref().unwrap_or("proxy") == "proxy"
                     && existing_semantic == semantic =>
             {
+                Self::upgrade_reported_cost(&conn, &log.request_id, reported_cost)?;
+                return Ok(());
+            }
+            Some((data_source, existing_semantic))
+                if data_source.as_deref().unwrap_or("proxy") == "proxy"
+                    && existing_semantic.same_identity(&semantic)
+                    && (!existing_semantic.has_tokens() || !semantic.has_tokens()) =>
+            {
+                // A cost-only trailer and a token summary share one response id.
+                // Preserve already-known counters and enrich a partial row rather
+                // than treating that trailer as a second billable request.
+                if !existing_semantic.has_tokens() && semantic.has_tokens() {
+                    conn.execute(
+                        "UPDATE proxy_request_logs SET input_tokens=?1,output_tokens=?2,
+                            cache_read_tokens=?3,cache_creation_tokens=?4,input_token_semantics=?5,
+                            pricing_model=?6,
+                            input_cost_usd=CASE WHEN cost_source='upstream' THEN input_cost_usd ELSE ?7 END,
+                            output_cost_usd=CASE WHEN cost_source='upstream' THEN output_cost_usd ELSE ?8 END,
+                            cache_read_cost_usd=CASE WHEN cost_source='upstream' THEN cache_read_cost_usd ELSE ?9 END,
+                            cache_creation_cost_usd=CASE WHEN cost_source='upstream' THEN cache_creation_cost_usd ELSE ?10 END,
+                            total_cost_usd=CASE WHEN cost_source='upstream' THEN total_cost_usd ELSE ?11 END,
+                            cost_source=CASE WHEN cost_source='upstream' THEN cost_source ELSE ?12 END
+                         WHERE request_id=?13",
+                        rusqlite::params![log.usage.input_tokens,log.usage.output_tokens,
+                            log.usage.cache_read_tokens,log.usage.cache_creation_tokens,input_token_semantics,
+                            log.pricing_model,input_cost,output_cost,cache_read_cost,cache_creation_cost,
+                            total_cost,cost_source,log.request_id],
+                    ).map_err(|error| AppError::Database(format!("补全上游用量失败: {error}")))?;
+                    crate::usage_events::notify_log_recorded();
+                }
+                Self::upgrade_reported_cost(&conn, &log.request_id, reported_cost)?;
                 return Ok(());
             }
             Some(_) => {
@@ -150,6 +215,7 @@ impl<'a> UsageLogger<'a> {
                     if data_source.as_deref().unwrap_or("proxy") == "proxy"
                         && existing_semantic == semantic
                     {
+                        Self::upgrade_reported_cost(&conn, &fallback, reported_cost)?;
                         return Ok(());
                     }
                     return Err(AppError::Database(format!(
@@ -172,8 +238,8 @@ impl<'a> UsageLogger<'a> {
                 input_token_semantics,
                 input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_creation_cost_usd, total_cost_usd,
                 latency_ms, first_token_ms, status_code, error_message, session_id,
-                provider_type, is_streaming, cost_multiplier, created_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25)"
+                provider_type, is_streaming, cost_multiplier, created_at, cost_source
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26)"
         );
         let affected_rows = conn
             .execute(
@@ -204,6 +270,7 @@ impl<'a> UsageLogger<'a> {
                     log.is_streaming as i64,
                     log.cost_multiplier,
                     created_at,
+                    cost_source,
                 ],
             )
             .map_err(|e| AppError::Database(format!("记录请求日志失败: {e}")))?;
@@ -218,6 +285,28 @@ impl<'a> UsageLogger<'a> {
             crate::usage_events::notify_log_recorded();
         }
 
+        Ok(())
+    }
+
+    fn upgrade_reported_cost(
+        conn: &rusqlite::Connection,
+        request_id: &str,
+        amount: Option<Decimal>,
+    ) -> Result<(), AppError> {
+        let Some(amount) = amount else {
+            return Ok(());
+        };
+        // A final upstream bill may arrive after an earlier locally estimated
+        // usage event. Upgrade that same request; retries must not add a charge.
+        let changed = conn.execute(
+            "UPDATE proxy_request_logs SET total_cost_usd=?1,cost_source='upstream',
+                input_cost_usd='0',output_cost_usd='0',cache_read_cost_usd='0',cache_creation_cost_usd='0'
+             WHERE request_id=?2 AND (cost_source<>'upstream' OR total_cost_usd<>?1)",
+            rusqlite::params![amount.to_string(), request_id],
+        ).map_err(|error| AppError::Database(format!("更新上游费用失败: {error}")))?;
+        if changed > 0 {
+            crate::usage_events::notify_log_recorded();
+        }
         Ok(())
     }
 
@@ -387,14 +476,25 @@ impl<'a> UsageLogger<'a> {
         provider_type: Option<String>,
         is_streaming: bool,
     ) -> Result<(), AppError> {
-        let pricing = self.get_model_pricing(&pricing_model)?;
+        let reported_cost = usage
+            .reported_cost_usd
+            .filter(|cost| *cost >= Decimal::ZERO);
+        let pricing = if reported_cost.is_some() {
+            None
+        } else {
+            self.get_model_pricing(&pricing_model)?
+        };
 
         let has_usage = usage.input_tokens > 0
             || usage.output_tokens > 0
             || usage.cache_read_tokens > 0
             || usage.cache_creation_tokens > 0;
 
-        if pricing.is_none() && has_usage && !is_placeholder_pricing_model(&pricing_model) {
+        if reported_cost.is_none()
+            && pricing.is_none()
+            && has_usage
+            && !is_placeholder_pricing_model(&pricing_model)
+        {
             log::warn!("[USG-002] 模型定价未找到，成本将记录为 0: {pricing_model}");
         }
 
@@ -446,6 +546,7 @@ mod tests {
                 cache_read_tokens: 2,
                 cache_creation_tokens: 0,
                 cache_creation_1h_tokens: 0,
+                reported_cost_usd: None,
                 model: None,
                 message_id: Some("resp-1".to_string()),
             },
@@ -459,6 +560,118 @@ mod tests {
             is_streaming: true,
             cost_multiplier: "1".to_string(),
         }
+    }
+
+    #[test]
+    fn reported_cost_wins_over_local_components_and_deduplicates_final_bill() -> Result<(), AppError>
+    {
+        let db = Database::memory()?;
+        let logger = UsageLogger::new(&db);
+        let mut log = request_log("actual-bill", 20);
+        log.cost = Some(CostBreakdown {
+            input_cost: Decimal::ONE,
+            output_cost: Decimal::ONE,
+            cache_read_cost: Decimal::ZERO,
+            cache_creation_cost: Decimal::ZERO,
+            total_cost: Decimal::from(2),
+        });
+        logger.log_request(&log)?;
+        log.usage.reported_cost_usd = Some(Decimal::new(7, 3));
+        logger.log_request(&log)?;
+        logger.log_request(&log)?;
+        let conn = crate::database::lock_conn!(db.conn);
+        let row: (i64, String, String, String) = conn.query_row(
+            "SELECT COUNT(*),total_cost_usd,cost_source,input_cost_usd FROM proxy_request_logs",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )?;
+        assert_eq!(row, (1, "0.007".into(), "upstream".into(), "0".into()));
+        Ok(())
+    }
+
+    #[test]
+    fn zero_reported_bill_and_cost_only_trailer_keep_one_request_and_known_tokens(
+    ) -> Result<(), AppError> {
+        let db = Database::memory()?;
+        let logger = UsageLogger::new(&db);
+        let mut log = request_log("zero-bill", 20);
+        logger.log_request(&log)?;
+        log.usage.input_tokens = 0;
+        log.usage.output_tokens = 0;
+        log.usage.cache_read_tokens = 0;
+        log.usage.reported_cost_usd = Some(Decimal::ZERO);
+        logger.log_request(&log)?;
+        logger.log_request(&log)?;
+        let conn = crate::database::lock_conn!(db.conn);
+        let row:(i64,u32,u32,String,String)=conn.query_row(
+            "SELECT COUNT(*),input_tokens,output_tokens,total_cost_usd,cost_source FROM proxy_request_logs",
+            [],|row|Ok((row.get(0)?,row.get(1)?,row.get(2)?,row.get(3)?,row.get(4)?)),
+        )?;
+        assert_eq!(row, (1, 20, 5, "0".into(), "upstream".into()));
+        Ok(())
+    }
+
+    #[test]
+    fn token_summary_enriches_cost_only_row_without_replacing_actual_zero() -> Result<(), AppError>
+    {
+        let db = Database::memory()?;
+        let logger = UsageLogger::new(&db);
+        let mut log = request_log("cost-first", 0);
+        log.usage.output_tokens = 0;
+        log.usage.cache_read_tokens = 0;
+        log.usage.reported_cost_usd = Some(Decimal::ZERO);
+        logger.log_request(&log)?;
+        log.usage.input_tokens = 100;
+        log.usage.output_tokens = 10;
+        log.usage.reported_cost_usd = None;
+        log.cost = Some(CostBreakdown {
+            input_cost: Decimal::ONE,
+            output_cost: Decimal::ONE,
+            cache_read_cost: Decimal::ZERO,
+            cache_creation_cost: Decimal::ZERO,
+            total_cost: Decimal::from(2),
+        });
+        logger.log_request(&log)?;
+        let conn = crate::database::lock_conn!(db.conn);
+        let row: (i64, u32, String, String) = conn.query_row(
+            "SELECT COUNT(*),input_tokens,total_cost_usd,cost_source FROM proxy_request_logs",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )?;
+        assert_eq!(row, (1, 100, "0".into(), "upstream".into()));
+        Ok(())
+    }
+
+    #[test]
+    fn reported_bill_does_not_require_a_local_model_price() -> Result<(), AppError> {
+        let db = Database::memory()?;
+        let logger = UsageLogger::new(&db);
+        logger.log_with_calculation(
+            "unlisted-actual".into(),
+            "p".into(),
+            "lolicode".into(),
+            "unlisted-model".into(),
+            "unlisted-model".into(),
+            "unlisted-model".into(),
+            TokenUsage {
+                input_tokens: 10,
+                reported_cost_usd: Some(Decimal::new(5, 3)),
+                ..Default::default()
+            },
+            1,
+            None,
+            200,
+            None,
+            None,
+            true,
+        )?;
+        let conn = crate::database::lock_conn!(db.conn);
+        let row:(String,String)=conn.query_row(
+            "SELECT total_cost_usd,cost_source FROM proxy_request_logs WHERE request_id='unlisted-actual'",
+            [],|row|Ok((row.get(0)?,row.get(1)?)),
+        )?;
+        assert_eq!(row, ("0.005".into(), "upstream".into()));
+        Ok(())
     }
 
     #[test]
@@ -484,6 +697,7 @@ mod tests {
             cache_read_tokens: 0,
             cache_creation_tokens: 0,
             cache_creation_1h_tokens: 0,
+            reported_cost_usd: None,
             model: None,
             message_id: None,
         };
@@ -637,6 +851,7 @@ mod tests {
             cache_read_tokens: 2,
             cache_creation_tokens: 1,
             cache_creation_1h_tokens: 0,
+            reported_cost_usd: None,
             model: Some("claude-sonnet-4-5".to_string()),
             message_id: Some("msg_desktop".to_string()),
         };

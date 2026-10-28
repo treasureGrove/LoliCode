@@ -50,6 +50,7 @@ fn sync_from_database(
             cache_read_tokens: row.get(7)?,
             cache_creation_tokens: row.get(8)?,
             cache_creation_1h_tokens: 0,
+            reported_cost_usd: None,
             model: Some(model.into()),
             message_id: None,
         };

@@ -571,6 +571,7 @@ fn insert(conn: &Connection, source: DesktopSource, record: &Record) -> Result<b
         cache_read_tokens: record.read.unwrap_or(0),
         cache_creation_tokens: record.write.unwrap_or(0),
         cache_creation_1h_tokens: 0,
+        reported_cost_usd: None,
         model: Some(record.model.clone()),
         message_id: None,
     };

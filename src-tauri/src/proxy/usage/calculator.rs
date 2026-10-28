@@ -158,6 +158,7 @@ mod tests {
             cache_read_tokens: 200,
             cache_creation_tokens: 100,
             cache_creation_1h_tokens: 0,
+            reported_cost_usd: None,
             model: None,
             message_id: None,
         };
@@ -227,6 +228,7 @@ mod tests {
             cache_read_tokens: 200,
             cache_creation_tokens: 100,
             cache_creation_1h_tokens: 0,
+            reported_cost_usd: None,
             model: None,
             message_id: None,
         };
@@ -255,6 +257,7 @@ mod tests {
             cache_read_tokens: 600,
             cache_creation_tokens: 0,
             cache_creation_1h_tokens: 0,
+            reported_cost_usd: None,
             model: None,
             message_id: None,
         };
@@ -275,6 +278,7 @@ mod tests {
             cache_read_tokens: 0,
             cache_creation_tokens: 0,
             cache_creation_1h_tokens: 0,
+            reported_cost_usd: None,
             model: None,
             message_id: None,
         };
@@ -298,6 +302,7 @@ mod tests {
             cache_read_tokens: 1,
             cache_creation_tokens: 1,
             cache_creation_1h_tokens: 0,
+            reported_cost_usd: None,
             model: None,
             message_id: None,
         };

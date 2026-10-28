@@ -15,8 +15,8 @@ export interface ModelsDevEntry {
   releaseDate: string;
   input: number;
   output: number;
-  cacheRead: number;
-  cacheWrite: number;
+  cacheRead?: number;
+  cacheWrite?: number;
 }
 
 const NON_TEXT_MODEL_MARKERS = [
@@ -54,11 +54,25 @@ const isTextPricingModel = (modelId: string, model?: ModelsDevModel) => {
   );
 };
 
-export function formatPrice(value: number): string {
-  if (!Number.isFinite(value) || value <= 0) return "0";
-  if (value >= 1e12) return "0";
-  const trimmed = value.toFixed(6).replace(/0+$/, "").replace(/\.$/, "");
-  return trimmed || "0";
+const isPrice = (value: unknown): value is number =>
+  typeof value === "number" &&
+  Number.isFinite(value) &&
+  value >= 0 &&
+  value < 1e12 &&
+  (value === 0 || value >= 1e-28);
+
+export function formatPrice(value: number | undefined): string {
+  if (!isPrice(value)) return "—";
+  const [coefficient, exponent] = String(value).split("e");
+  if (exponent === undefined) return coefficient;
+  const digits = coefficient.replace(".", "");
+  const point =
+    (coefficient.includes(".")
+      ? coefficient.indexOf(".")
+      : coefficient.length) + Number(exponent);
+  if (point <= 0) return `0.${"0".repeat(-point)}${digits}`;
+  if (point >= digits.length) return digits + "0".repeat(point - digits.length);
+  return `${digits.slice(0, point)}.${digits.slice(point)}`;
 }
 
 export function flattenModels(data: ModelsDevResponse): ModelsDevEntry[] {
@@ -69,9 +83,9 @@ export function flattenModels(data: ModelsDevResponse): ModelsDevEntry[] {
     for (const [modelId, model] of Object.entries(provider.models ?? {})) {
       if (!isTextPricingModel(modelId, model)) continue;
       const cost = model?.cost;
-      const input = typeof cost?.input === "number" ? cost.input : null;
-      const output = typeof cost?.output === "number" ? cost.output : null;
-      if (input === null && output === null) continue;
+      const input = cost?.input;
+      const output = cost?.output;
+      if (!isPrice(input) || !isPrice(output)) continue;
       const normalizedId = normalizeModelsDevModelId(modelId);
       if (!normalizedId) continue;
       entries.push({
@@ -83,11 +97,10 @@ export function flattenModels(data: ModelsDevResponse): ModelsDevEntry[] {
         modelName: model?.name || modelId,
         releaseDate:
           typeof model?.release_date === "string" ? model.release_date : "",
-        input: input ?? 0,
-        output: output ?? 0,
-        cacheRead: typeof cost?.cache_read === "number" ? cost.cache_read : 0,
-        cacheWrite:
-          typeof cost?.cache_write === "number" ? cost.cache_write : 0,
+        input,
+        output,
+        cacheRead: isPrice(cost?.cache_read) ? cost.cache_read : undefined,
+        cacheWrite: isPrice(cost?.cache_write) ? cost.cache_write : undefined,
       });
     }
   }
@@ -117,10 +130,7 @@ const COMMON_FAMILY_RULES: CommonFamilyRule[] = [
     id: "gpt",
     providers: new Set(["openai"]),
     matches: (modelId) =>
-      modelId.startsWith("gpt-") ||
-      modelId.startsWith("o1-") ||
-      modelId.startsWith("o3-") ||
-      modelId.startsWith("o4-"),
+      modelId.startsWith("gpt-") || /^(o1|o3|o4)(-|$)/.test(modelId),
   },
   {
     id: "gemini",
@@ -177,7 +187,7 @@ export function getCommonModelKeys(entries: ModelsDevEntry[]): Set<string> {
     for (const entry of entries) {
       if (
         rule.providers.has(entry.providerId) &&
-        rule.matches(entry.modelId.toLowerCase())
+        rule.matches(entry.normalizedId)
       ) {
         keys.add(entry.key);
         count += 1;
@@ -204,18 +214,73 @@ export function resolveModelsDevSelection(
   );
 }
 
-export function toModelPricing(entries: ModelsDevEntry[]): ModelPricing[] {
-  const byModelId = new Map<string, ModelPricing>();
+const isOriginalProviderEntry = (entry: ModelsDevEntry): boolean =>
+  COMMON_FAMILY_RULES.some(
+    (rule) =>
+      rule.providers.has(entry.providerId) && rule.matches(entry.normalizedId),
+  );
+
+/** Cover known model families at their original provider, excluding third-party hosting. */
+export function resolveModelsDevSyncSelection(
+  entries: ModelsDevEntry[],
+  config: ModelsDevSyncConfig,
+): ModelsDevEntry[] {
+  const explicit = new Set(config.selectedModelKeys);
+  const excluded = new Set(config.excludedCommonModelKeys);
+  return entries.filter(
+    (entry) =>
+      explicit.has(entry.key) ||
+      (config.includeCommonModels &&
+        isOriginalProviderEntry(entry) &&
+        !excluded.has(entry.key)),
+  );
+}
+
+export function toModelPricing(
+  entries: ModelsDevEntry[],
+  existing: ModelPricing[] = [],
+): ModelPricing[] {
+  const existingById = new Map(existing.map((entry) => [entry.modelId, entry]));
+  const groups = new Map<string, ModelsDevEntry[]>();
   for (const entry of entries) {
-    if (byModelId.has(entry.normalizedId)) continue;
-    byModelId.set(entry.normalizedId, {
-      modelId: entry.normalizedId,
-      displayName: entry.modelName,
-      inputCostPerMillion: formatPrice(entry.input),
-      outputCostPerMillion: formatPrice(entry.output),
-      cacheReadCostPerMillion: formatPrice(entry.cacheRead),
-      cacheCreationCostPerMillion: formatPrice(entry.cacheWrite),
-    });
+    const group = groups.get(entry.normalizedId) ?? [];
+    group.push(entry);
+    groups.set(entry.normalizedId, group);
   }
-  return Array.from(byModelId.values());
+  const result: ModelPricing[] = [];
+  for (const [modelId, group] of groups) {
+    const official = group.filter(isOriginalProviderEntry);
+    const candidates = (official.length ? official : group).sort((a, b) =>
+      a.key.localeCompare(b.key),
+    );
+    const previous = existingById.get(modelId);
+    const prices = candidates.flatMap((entry): ModelPricing[] => {
+      if (!isPrice(entry.input) || !isPrice(entry.output)) return [];
+      const cacheRead = isPrice(entry.cacheRead)
+        ? entry.cacheRead
+        : previous && Number(previous.cacheReadCostPerMillion);
+      const cacheWrite = isPrice(entry.cacheWrite)
+        ? entry.cacheWrite
+        : previous && Number(previous.cacheCreationCostPerMillion);
+      // Missing cache prices are unknown, not free. Keep a known local rate;
+      // otherwise wait for a complete entry instead of persisting a false zero.
+      if (!isPrice(cacheRead) || !isPrice(cacheWrite)) return [];
+      return [
+        {
+          modelId,
+          displayName: entry.modelName,
+          inputCostPerMillion: formatPrice(entry.input),
+          outputCostPerMillion: formatPrice(entry.output),
+          cacheReadCostPerMillion: formatPrice(cacheRead),
+          cacheCreationCostPerMillion: formatPrice(cacheWrite),
+        },
+      ];
+    });
+    const distinctRates = new Set(
+      prices.map(({ displayName: _, ...rates }) => JSON.stringify(rates)),
+    );
+    // Conflicting host prices must not depend on feed ordering.
+    if (distinctRates.size === 1) result.push(prices[0]);
+  }
+  return result;
 }

@@ -22,10 +22,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useUpdateModelPricing } from "@/lib/query/usage";
+import { usageApi } from "@/lib/api/usage";
 import { modelsDevQueryOptions } from "@/lib/modelsDev";
 import {
   flattenModels,
   formatPrice,
+  toModelPricing,
   type ModelsDevEntry,
 } from "@/lib/modelsDevPricing";
 import { isTextEditableTarget } from "@/utils/domUtils";
@@ -116,13 +118,25 @@ export function ModelsDevPickerDialog({
     if (!selected) return;
 
     try {
+      const [pricing] = toModelPricing(
+        [selected],
+        await usageApi.getModelPricing(),
+      );
+      if (!pricing) {
+        toast.error(
+          t("usage.modelsDevIncompletePricing", {
+            defaultValue: "该模型缺少完整缓存单价，请先在本地补充定价。",
+          }),
+        );
+        return;
+      }
       await updatePricing.mutateAsync({
-        modelId: selected.normalizedId,
-        displayName: selected.modelName,
-        inputCost: formatPrice(selected.input),
-        outputCost: formatPrice(selected.output),
-        cacheReadCost: formatPrice(selected.cacheRead),
-        cacheCreationCost: formatPrice(selected.cacheWrite),
+        modelId: pricing.modelId,
+        displayName: pricing.displayName,
+        inputCost: pricing.inputCostPerMillion,
+        outputCost: pricing.outputCostPerMillion,
+        cacheReadCost: pricing.cacheReadCostPerMillion,
+        cacheCreationCost: pricing.cacheCreationCostPerMillion,
       });
 
       toast.success(

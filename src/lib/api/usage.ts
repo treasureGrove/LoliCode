@@ -186,8 +186,14 @@ export const usageApi = {
     });
   },
 
-  updateModelPricingBatch: async (entries: ModelPricing[]): Promise<number> => {
-    return invoke("update_model_pricing_batch", { entries });
+  updateModelPricingBatch: async (
+    entries: ModelPricing[],
+    source?: "manual" | "models-dev",
+  ): Promise<number> => {
+    return invoke("update_model_pricing_batch", {
+      entries,
+      ...(source ? { source } : {}),
+    });
   },
 
   getModelsDevSyncConfig: async (): Promise<ModelsDevSyncState> => {

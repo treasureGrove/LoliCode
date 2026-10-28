@@ -63,6 +63,71 @@ beforeEach(() => {
   vi.mocked(channelCenterApi.listUsageLabels).mockResolvedValue([]);
 });
 describe("basic usage", () => {
+  it("labels recorded upstream charges separately from missing token usage", async () => {
+    vi.mocked(usageApi.getUsageSummary).mockResolvedValue({
+      totalRequests: 1,
+      totalCost: "0",
+      realTotalTokens: 0,
+      successRate: 100,
+      totalInputTokens: 0,
+      totalOutputTokens: 0,
+      totalCacheCreationTokens: 0,
+      totalCacheReadTokens: 0,
+      cacheHitRate: 0,
+      unpricedRequests: 0,
+      partialRequests: 1,
+      cachePartialRequests: 0,
+      reportedCostRequests: 1,
+      estimatedCostRequests: 0,
+    });
+    mount();
+    const heading = await screen.findByText("渠道回报（美元）");
+    const card = heading.closest(".lolicode-usage-metric")!;
+    expect(
+      within(card as HTMLElement).getByText("$0.0000"),
+    ).toBeInTheDocument();
+    expect(card).toHaveTextContent("1 次渠道回报 · 1 次用量待回报");
+    expect(within(card as HTMLElement).queryByText("待定价")).toBeNull();
+  });
+
+  it("explains mixed billing sources in overview and channel rows", async () => {
+    vi.mocked(usageApi.getUsageSummary).mockResolvedValue({
+      totalRequests: 4,
+      totalCost: "0.1234",
+      realTotalTokens: 2200,
+      successRate: 100,
+      totalInputTokens: 1200,
+      totalOutputTokens: 1000,
+      totalCacheCreationTokens: 0,
+      totalCacheReadTokens: 0,
+      cacheHitRate: 0,
+      reportedCostRequests: 1,
+      estimatedCostRequests: 3,
+    });
+    vi.mocked(usageApi.getProviderStats).mockResolvedValue([
+      {
+        providerId: "channel-reported",
+        providerName: "回报渠道",
+        appType: "lolicode",
+        requestCount: 1,
+        totalTokens: 100,
+        totalCost: "0.02",
+        successRate: 100,
+        avgLatencyMs: 10,
+        reportedCostRequests: 1,
+        estimatedCostRequests: 0,
+      },
+    ]);
+    mount();
+    await screen.findByText("混合费用（美元）");
+    expect(screen.getByText("1 次渠道回报 · 3 次本地估算")).toBeInTheDocument();
+    const row = await screen.findByRole("row", { name: /回报渠道/ });
+    expect(within(row).getByText("渠道回报")).toHaveAttribute(
+      "title",
+      "1 次渠道回报",
+    );
+  });
+
   it("keeps historical app usage visible after detail pruning without claiming an unknown history price is free", async () => {
     vi.mocked(usageApi.getDataSourceBreakdown).mockResolvedValue([
       {

@@ -2299,6 +2299,7 @@ pub(crate) fn build_anthropic_usage_from_responses(usage: Option<&Value>) -> Val
         result["input_tokens"] = json!(input.saturating_sub(cached).saturating_sub(cache_creation));
     }
 
+    crate::proxy::usage::parser::copy_reported_cost_usd(u, &mut result);
     result
 }
 
@@ -2836,6 +2837,18 @@ pub(crate) fn responses_to_anthropic_with_web_search_options(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_responses_usage_preserves_reported_cost_usd() {
+        let usage = build_anthropic_usage_from_responses(Some(&json!({
+            "input_tokens": 10, "output_tokens": 2, "cost": 0
+        })));
+        assert_eq!(usage["cost_usd"], "0");
+        let usage = build_anthropic_usage_from_responses(Some(&json!({
+            "input_tokens": 10, "output_tokens": 2, "cost": -1
+        })));
+        assert!(usage.get("cost_usd").is_none());
+    }
 
     #[test]
     fn test_text_with_url_citations_preserves_unicode_character_ranges() {

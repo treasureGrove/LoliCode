@@ -432,6 +432,7 @@ fn insert_grok_session_entry(
         cache_read_tokens: clamp(turn.cached),
         cache_creation_tokens: 0,
         cache_creation_1h_tokens: 0,
+        reported_cost_usd: None,
         model: Some(model.to_string()),
         message_id: None,
     };

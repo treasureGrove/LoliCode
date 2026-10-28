@@ -1854,6 +1854,7 @@ fn insert_codex_session_entry_on_conn(
         cache_read_tokens: delta.cached_input,
         cache_creation_tokens: delta.cache_write_input,
         cache_creation_1h_tokens: 0,
+        reported_cost_usd: None,
         model: Some(model.to_string()),
         message_id: None,
     };

@@ -44,6 +44,12 @@ pub struct UsageSummary {
     /// Requests with incomplete cache counters or cache pricing.
     #[serde(default)]
     pub cache_partial_requests: u64,
+    /// Retained requests with a per-request USD amount returned by the upstream.
+    #[serde(default)]
+    pub reported_cost_requests: u64,
+    /// Retained requests calculated from the local model pricing dictionary.
+    #[serde(default)]
+    pub estimated_cost_requests: u64,
 }
 
 /// Per-app-type usage summary used by the dashboard breakdown rail.
@@ -109,6 +115,8 @@ fn usage_summary_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<UsageSumm
         unpriced_requests: 0,
         partial_requests: 0,
         cache_partial_requests: 0,
+        reported_cost_requests: 0,
+        estimated_cost_requests: 0,
     })
 }
 
@@ -177,6 +185,10 @@ pub struct ProviderStats {
     pub partial_requests: u64,
     #[serde(default)]
     pub cache_partial_requests: u64,
+    #[serde(default)]
+    pub reported_cost_requests: u64,
+    #[serde(default)]
+    pub estimated_cost_requests: u64,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -184,6 +196,8 @@ struct UsageQuality {
     unpriced: u64,
     partial: u64,
     cache_partial: u64,
+    reported: u64,
+    estimated: u64,
 }
 
 impl UsageQuality {
@@ -191,12 +205,16 @@ impl UsageQuality {
         self.unpriced += other.unpriced;
         self.partial += other.partial;
         self.cache_partial += other.cache_partial;
+        self.reported += other.reported;
+        self.estimated += other.estimated;
     }
 
     fn apply(self, summary: &mut UsageSummary) {
         summary.unpriced_requests = self.unpriced;
         summary.partial_requests = self.partial;
         summary.cache_partial_requests = self.cache_partial;
+        summary.reported_cost_requests = self.reported;
+        summary.estimated_cost_requests = self.estimated;
     }
 }
 
@@ -219,7 +237,7 @@ fn usage_quality_by_provider(
     let sql = format!(
         "SELECT l.provider_id,l.app_type,l.model,l.request_model,l.pricing_model,
             l.provider_type,l.cost_multiplier,l.total_cost_usd,
-            {fresh_input},l.output_tokens,l.cache_read_tokens,l.cache_creation_tokens
+            {fresh_input},l.output_tokens,l.cache_read_tokens,l.cache_creation_tokens,l.cost_source
          {from_and_where} {connector} (
             CAST(l.total_cost_usd AS REAL)<=0 OR l.provider_type LIKE '%:cache-partial'
             OR (l.input_tokens=0 AND l.output_tokens=0 AND l.cache_read_tokens=0 AND l.cache_creation_tokens=0)
@@ -229,6 +247,29 @@ fn usage_quality_by_provider(
     let mut rows = stmt.query(params)?;
     let mut prices: HashMap<String, Option<[Option<Decimal>; 4]>> = HashMap::new();
     let mut result: HashMap<(String, String), UsageQuality> = HashMap::new();
+    // Keep provenance aggregation in SQL so positive, already-priced requests
+    // do not need to be deserialized just to count their source. Older rollups
+    // have no provenance and remain unknown rather than being relabelled.
+    let mut source_stmt = conn.prepare(&format!(
+        "SELECT l.provider_id,l.app_type,
+                SUM(CASE WHEN l.cost_source='upstream' THEN 1 ELSE 0 END),
+                SUM(CASE WHEN l.cost_source='local' THEN 1 ELSE 0 END)
+         {from_and_where} GROUP BY l.provider_id,l.app_type"
+    ))?;
+    let sources = source_stmt.query_map(params, |row| {
+        Ok((
+            (row.get::<_, String>(0)?, row.get::<_, String>(1)?),
+            UsageQuality {
+                reported: row.get::<_, i64>(2)? as u64,
+                estimated: row.get::<_, i64>(3)? as u64,
+                ..UsageQuality::default()
+            },
+        ))
+    })?;
+    for source in sources {
+        let (key, quality) = source?;
+        result.insert(key, quality);
+    }
     while let Some(row) = rows.next()? {
         let provider: String = row.get(0)?;
         let app: String = row.get(1)?;
@@ -256,7 +297,9 @@ fn usage_quality_by_provider(
         let stored = Decimal::from_str(&amount)
             .ok()
             .filter(|n| *n >= Decimal::ZERO);
-        if has_usage && stored.is_none_or(|n| n == Decimal::ZERO) {
+        let cost_source: String = row.get(12)?;
+        let has_reported_cost = cost_source == "upstream" && stored.is_some();
+        if !has_reported_cost && has_usage && stored.is_none_or(|n| n == Decimal::ZERO) {
             let multiplier = Decimal::from_str(multiplier.as_deref().unwrap_or("1"))
                 .ok()
                 .filter(|n| *n >= Decimal::ZERO);
@@ -492,17 +535,19 @@ pub struct RequestLogDetail {
     /// 写入时实际用于计价的模型名。None = v11 前的历史行，"" = 未计价的错误行。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pricing_model: Option<String>,
+    #[serde(default)]
+    pub cost_source: Option<String>,
 }
 
-/// 把 26 列的查询结果映射为 `RequestLogDetail`。
+/// 把 27 列的查询结果映射为 `RequestLogDetail`。
 ///
-/// 调用方的 SELECT **必须**按以下顺序返回 26 列：
+/// 调用方的 SELECT **必须**按以下顺序返回 27 列：
 /// `request_id, provider_id, provider_name, app_type, model, request_model,
 ///  cost_multiplier, input_tokens, output_tokens, cache_read_tokens,
 ///  cache_creation_tokens, input_cost_usd, output_cost_usd, cache_read_cost_usd,
 ///  cache_creation_cost_usd, total_cost_usd, is_streaming, latency_ms,
 ///  first_token_ms, duration_ms, status_code, error_message, created_at,
-///  data_source, pricing_model, input_token_semantics`
+///  data_source, pricing_model, input_token_semantics, cost_source`
 ///
 /// 不需要 provider_name 时（如 backfill）SELECT `NULL AS provider_name` 占位即可。
 fn row_to_request_log_detail(row: &rusqlite::Row<'_>) -> rusqlite::Result<RequestLogDetail> {
@@ -535,6 +580,7 @@ fn row_to_request_log_detail(row: &rusqlite::Row<'_>) -> rusqlite::Result<Reques
         data_source: row.get(23)?,
         pricing_model: row.get(24)?,
         input_token_semantics: row.get::<_, i64>(25)?,
+        cost_source: row.get(26)?,
     })
 }
 
@@ -1494,6 +1540,8 @@ impl Database {
                     unpriced_requests: app_quality.unpriced,
                     partial_requests: app_quality.partial,
                     cache_partial_requests: app_quality.cache_partial,
+                    reported_cost_requests: app_quality.reported,
+                    estimated_cost_requests: app_quality.estimated,
                 },
             })
         })?;
@@ -2129,6 +2177,12 @@ impl Database {
                 cache_partial_requests: quality
                     .get(&(provider_id.clone(), app_type.clone()))
                     .map_or(0, |q| q.cache_partial),
+                reported_cost_requests: quality
+                    .get(&(provider_id.clone(), app_type.clone()))
+                    .map_or(0, |q| q.reported),
+                estimated_cost_requests: quality
+                    .get(&(provider_id.clone(), app_type.clone()))
+                    .map_or(0, |q| q.estimated),
                 provider_id,
                 app_type,
                 provider_name: row.get(2)?,
@@ -2450,7 +2504,7 @@ impl Database {
                     l.input_cost_usd, l.output_cost_usd, l.cache_read_cost_usd, l.cache_creation_cost_usd, l.total_cost_usd,
                     l.is_streaming, l.latency_ms, l.first_token_ms, l.duration_ms,
                     l.status_code, l.error_message, l.created_at, l.data_source, l.pricing_model,
-                    l.input_token_semantics
+                    l.input_token_semantics, l.cost_source
              FROM proxy_request_logs l
              LEFT JOIN providers p ON l.provider_id = p.id AND l.app_type = p.app_type
              {where_clause}
@@ -2494,7 +2548,7 @@ impl Database {
                     l.input_cost_usd, l.output_cost_usd, l.cache_read_cost_usd, l.cache_creation_cost_usd, l.total_cost_usd,
                     l.is_streaming, l.latency_ms, l.first_token_ms, l.duration_ms,
                     l.status_code, l.error_message, l.created_at, l.data_source, l.pricing_model,
-                    l.input_token_semantics
+                    l.input_token_semantics, l.cost_source
              FROM proxy_request_logs l
              LEFT JOIN providers p ON l.provider_id = p.id AND l.app_type = p.app_type
              WHERE l.request_id = ?"
@@ -2650,9 +2704,10 @@ impl Database {
                         input_cost_usd, output_cost_usd, cache_read_cost_usd,
                         cache_creation_cost_usd, total_cost_usd, is_streaming, latency_ms,
                         first_token_ms, duration_ms, status_code, error_message, created_at,
-                        data_source, pricing_model, input_token_semantics
+                        data_source, pricing_model, input_token_semantics, cost_source
              FROM proxy_request_logs
              WHERE CAST(total_cost_usd AS REAL) <= 0
+               AND cost_source <> 'upstream'
                AND (input_tokens > 0 OR output_tokens > 0
                     OR cache_read_tokens > 0 OR cache_creation_tokens > 0)";
 
@@ -2710,7 +2765,7 @@ impl Database {
             || log.cache_read_tokens > 0
             || log.cache_creation_tokens > 0;
 
-        if has_cost || !has_usage {
+        if log.cost_source.as_deref() == Some("upstream") || has_cost || !has_usage {
             return Ok(false);
         }
 
@@ -2783,6 +2838,7 @@ impl Database {
         log.cache_read_cost_usd = format_backfilled_cost(cache_read_cost);
         log.cache_creation_cost_usd = format_backfilled_cost(cache_creation_cost);
         log.total_cost_usd = format_backfilled_cost(total_cost);
+        log.cost_source = Some("local".to_string());
 
         conn.execute(
             "UPDATE proxy_request_logs
@@ -2790,7 +2846,8 @@ impl Database {
                  output_cost_usd = ?2,
                  cache_read_cost_usd = ?3,
                  cache_creation_cost_usd = ?4,
-                 total_cost_usd = ?5
+                 total_cost_usd = ?5,
+                 cost_source = 'local'
              WHERE request_id = ?6",
             params![
                 log.input_cost_usd,
@@ -2895,6 +2952,19 @@ pub(crate) fn find_model_pricing_row(
         return Ok(None);
     }
 
+    // A provider-specific explicit entry takes precedence over shared aliases.
+    // Stripping namespaces before this lookup used to ignore custom prices.
+    let exact = model_id.trim();
+    if let Some(row) = query_model_pricing_exact(conn, exact)? {
+        return Ok(Some(row));
+    }
+    let folded = exact.to_ascii_lowercase();
+    if folded != exact {
+        if let Some(row) = query_model_pricing_exact(conn, &folded)? {
+            return Ok(Some(row));
+        }
+    }
+
     for candidate in &candidates {
         if let Some(row) = query_model_pricing_exact(conn, candidate)? {
             return Ok(Some(row));
@@ -2969,25 +3039,42 @@ fn query_model_pricing_prefix(
     model_id: &str,
 ) -> Result<Option<(String, String, String, String)>, AppError> {
     let pattern = format!("{model_id}-%");
-    conn.query_row(
-        "SELECT input_cost_per_million, output_cost_per_million,
+    let mut stmt = conn.prepare(
+        "SELECT model_id, input_cost_per_million, output_cost_per_million,
                 cache_read_cost_per_million, cache_creation_cost_per_million
          FROM model_pricing
          WHERE model_id LIKE ?1
-         ORDER BY LENGTH(model_id) ASC
-         LIMIT 1",
-        [pattern],
-        |row| {
-            Ok((
-                row.get::<_, String>(0)?,
+         ORDER BY model_id",
+    )?;
+    let rows = stmt.query_map([pattern], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            (
                 row.get::<_, String>(1)?,
                 row.get::<_, String>(2)?,
                 row.get::<_, String>(3)?,
-            ))
-        },
-    )
-    .optional()
-    .map_err(|e| AppError::Database(format!("查询模型前缀定价失败: {e}")))
+                row.get::<_, String>(4)?,
+            ),
+        ))
+    })?;
+    let mut matched = None;
+    for row in rows {
+        let (candidate, price) = row?;
+        // Only documented normalization aliases (dated snapshots, effort,
+        // Bedrock version) may stand in for an absent base model. A mini/pro
+        // model sharing a prefix is a different price, not an alias.
+        if !model_pricing_candidates(&candidate)
+            .iter()
+            .any(|alias| alias == model_id)
+        {
+            continue;
+        }
+        if matched.as_ref().is_some_and(|previous| previous != &price) {
+            return Ok(None);
+        }
+        matched = Some(price);
+    }
+    Ok(matched)
 }
 
 fn model_pricing_candidates(model_id: &str) -> Vec<String> {
@@ -6596,6 +6683,97 @@ mod tests {
         let result = find_model_pricing_row(&conn, "unknown-model-123")?;
         assert!(result.is_none(), "不应该匹配不存在的模型");
 
+        Ok(())
+    }
+
+    #[test]
+    fn test_pricing_prefers_exact_namespace_and_rejects_ambiguous_variants() -> Result<(), AppError>
+    {
+        let db = Database::memory()?;
+        let conn = lock_conn!(db.conn);
+        for (model, input) in [
+            ("vendor/gpt-5.5", "9.99"),
+            ("gpt-99-codex-mini", "0.1"),
+            ("gpt-99-codex-pro", "20"),
+            ("gpt-98-codex-20260901", "1"),
+            ("gpt-98-codex-20261001", "2"),
+            ("gpt-97-codex-20261001", "3"),
+        ] {
+            conn.execute(
+                "INSERT INTO model_pricing
+                (model_id,display_name,input_cost_per_million,output_cost_per_million,
+                 cache_read_cost_per_million,cache_creation_cost_per_million)
+                VALUES (?1,?1,?2,'10','0','0')",
+                params![model, input],
+            )?;
+        }
+        assert_eq!(
+            find_model_pricing_row(&conn, "vendor/gpt-5.5")?.unwrap().0,
+            "9.99"
+        );
+        assert!(find_model_pricing_row(&conn, "gpt-99-codex")?.is_none());
+        assert!(find_model_pricing_row(&conn, "gpt-98-codex")?.is_none());
+        assert_eq!(
+            find_model_pricing_row(&conn, "gpt-97-codex")?.unwrap().0,
+            "3"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_reported_zero_is_not_backfilled_or_marked_unpriced() -> Result<(), AppError> {
+        let db = Database::memory()?;
+        let session = "68cc21c7-630e-4d80-a9fa-a626c462386c";
+        {
+            let conn = lock_conn!(db.conn);
+            for (id, model, tokens, cost, source) in [
+                ("reported-zero", "gpt-5.5", 10, "0", "upstream"),
+                (
+                    "reported-no-tokens",
+                    "no-public-price",
+                    0,
+                    "2.5",
+                    "upstream",
+                ),
+                ("local-estimate", "gpt-5.5", 10, "0.5", "local"),
+                ("unpriced", "no-public-price", 10, "0", "unknown"),
+            ] {
+                insert_usage_log(
+                    &conn,
+                    id,
+                    "lolicode",
+                    "channel-test",
+                    model,
+                    "proxy",
+                    1000,
+                    tokens,
+                    0,
+                    0,
+                    0,
+                    200,
+                    cost,
+                )?;
+                conn.execute("UPDATE proxy_request_logs SET cost_source=?1,session_id=?2 WHERE request_id=?3",
+                    params![source, format!("lc:{session}"), id])?;
+            }
+        }
+        assert_eq!(db.backfill_missing_usage_costs()?, 0);
+        let summary = db.get_usage_summary(None, None, Some("lolicode"), None, None)?;
+        assert_eq!(summary.total_requests, 4);
+        assert_eq!(summary.total_cost, "3.000000");
+        assert_eq!(summary.reported_cost_requests, 2);
+        assert_eq!(summary.estimated_cost_requests, 1);
+        assert_eq!(summary.unpriced_requests, 1);
+        assert_eq!(summary.partial_requests, 1);
+        let session_summary = db.get_session_usage_summary("lolicode", &format!("lc:{session}"))?;
+        assert_eq!(session_summary.reported_cost_requests, 2);
+        assert_eq!(session_summary.unpriced_requests, 1);
+        let providers = db.get_provider_stats(None, None, Some("lolicode"), None, None)?;
+        assert_eq!(providers[0].reported_cost_requests, 2);
+        assert_eq!(providers[0].estimated_cost_requests, 1);
+        let detail = db.get_request_detail("reported-zero")?.unwrap();
+        assert_eq!(detail.total_cost_usd, "0");
+        assert_eq!(detail.cost_source.as_deref(), Some("upstream"));
         Ok(())
     }
 }

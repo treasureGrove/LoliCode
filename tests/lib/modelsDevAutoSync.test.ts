@@ -2,10 +2,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   getModelsDevSyncConfig,
+  getModelPricing,
   updateModelPricingBatch,
   recordModelsDevSyncResult,
 } = vi.hoisted(() => ({
   getModelsDevSyncConfig: vi.fn(),
+  getModelPricing: vi.fn(),
   updateModelPricingBatch: vi.fn(),
   recordModelsDevSyncResult: vi.fn(),
 }));
@@ -13,6 +15,7 @@ const {
 vi.mock("@/lib/api/usage", () => ({
   usageApi: {
     getModelsDevSyncConfig,
+    getModelPricing,
     updateModelPricingBatch,
     recordModelsDevSyncResult,
   },
@@ -39,6 +42,7 @@ describe("syncModelsDevPricing", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     updateModelPricingBatch.mockResolvedValue(2);
+    getModelPricing.mockResolvedValue([]);
     recordModelsDevSyncResult.mockResolvedValue(undefined);
     vi.stubGlobal(
       "fetch",
@@ -50,7 +54,7 @@ describe("syncModelsDevPricing", () => {
               "gpt-5": {
                 name: "GPT-5",
                 release_date: "2025-08-01",
-                cost: { input: 1, output: 2 },
+                cost: { input: 1, output: 2, cache_read: 0.1, cache_write: 0 },
               },
             },
           },
@@ -59,7 +63,7 @@ describe("syncModelsDevPricing", () => {
               "custom-model": {
                 name: "Custom Model",
                 release_date: "2025-07-01",
-                cost: { input: 0.5, output: 1 },
+                cost: { input: 0.5, output: 1, cache_read: 0, cache_write: 0 },
               },
             },
           },
@@ -110,13 +114,16 @@ describe("syncModelsDevPricing", () => {
     const result = await syncModelsDevPricing();
 
     expect(updateModelPricingBatch).toHaveBeenCalledTimes(1);
-    expect(updateModelPricingBatch).toHaveBeenCalledWith([
-      expect.objectContaining({ modelId: "gpt-5", inputCostPerMillion: "1" }),
-      expect.objectContaining({
-        modelId: "custom-model",
-        inputCostPerMillion: "0.5",
-      }),
-    ]);
+    expect(updateModelPricingBatch).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({ modelId: "gpt-5", inputCostPerMillion: "1" }),
+        expect.objectContaining({
+          modelId: "custom-model",
+          inputCostPerMillion: "0.5",
+        }),
+      ],
+      "models-dev",
+    );
     expect(result).toMatchObject({
       skipped: false,
       selected: 2,
@@ -163,9 +170,10 @@ describe("syncModelsDevPricing", () => {
 
     await syncModelsDevPricing();
 
-    expect(updateModelPricingBatch).toHaveBeenCalledWith([
-      expect.objectContaining({ modelId: "custom-model" }),
-    ]);
+    expect(updateModelPricingBatch).toHaveBeenCalledWith(
+      [expect.objectContaining({ modelId: "custom-model" })],
+      "models-dev",
+    );
   });
 
   it("uses the latest selection for a forced sync even when automatic sync is disabled", async () => {
@@ -183,9 +191,10 @@ describe("syncModelsDevPricing", () => {
     const result = await syncModelsDevPricing(state, true);
 
     expect(result.skipped).toBe(false);
-    expect(updateModelPricingBatch).toHaveBeenCalledWith([
-      expect.objectContaining({ modelId: "custom-model" }),
-    ]);
+    expect(updateModelPricingBatch).toHaveBeenCalledWith(
+      [expect.objectContaining({ modelId: "custom-model" })],
+      "models-dev",
+    );
   });
 
   it("persists the last error without replacing the previous success time", async () => {
@@ -195,5 +204,41 @@ describe("syncModelsDevPricing", () => {
 
     await expect(syncModelsDevPricing()).rejects.toThrow("offline");
     expect(recordModelsDevSyncResult).toHaveBeenCalledWith(null, "offline");
+  });
+
+  it("keeps existing cache prices when the feed omits them and marks the batch as automatic", async () => {
+    getModelsDevSyncConfig.mockResolvedValue(state);
+    getModelPricing.mockResolvedValue([
+      {
+        modelId: "gpt-5",
+        displayName: "Local",
+        inputCostPerMillion: "3",
+        outputCostPerMillion: "6",
+        cacheReadCostPerMillion: "0.3",
+        cacheCreationCostPerMillion: "0.5",
+      },
+    ]);
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        openai: { models: { "gpt-5": { cost: { input: 1, output: 2 } } } },
+        relay: {
+          models: { "custom-model": { cost: { input: 1, output: 2 } } },
+        },
+      }),
+    } as Response);
+    const result = await syncModelsDevPricing();
+    expect(result.imported).toBe(1);
+    expect(updateModelPricingBatch).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({
+          modelId: "gpt-5",
+          inputCostPerMillion: "1",
+          cacheReadCostPerMillion: "0.3",
+          cacheCreationCostPerMillion: "0.5",
+        }),
+      ],
+      "models-dev",
+    );
   });
 });

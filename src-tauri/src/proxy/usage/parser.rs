@@ -6,8 +6,67 @@
 //! - Codex API (非流式和流式)
 //! - Gemini API (非流式和流式)
 
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::str::FromStr;
+
+/// Only consume documented per-request USD amounts, never account quota/balance
+/// or OpenRouter's separate upstream_inference_cost (a different billing basis).
+pub(crate) fn parse_reported_cost_usd(usage: &Value) -> Option<Decimal> {
+    fn amount(value: &Value) -> Option<Decimal> {
+        let raw = match value {
+            Value::Number(number) => number.to_string(),
+            Value::String(text) if text.len() <= 128 => text.trim().to_owned(),
+            _ => return None,
+        };
+        Decimal::from_str(&raw)
+            .or_else(|_| Decimal::from_scientific(&raw))
+            .ok()
+            .filter(|amount| *amount >= Decimal::ZERO)
+    }
+    if let Some(cost) = usage.get("cost_usd").and_then(amount) {
+        return Some(cost);
+    }
+    if usage.get("currency").is_some_and(|currency| {
+        !currency
+            .as_str()
+            .is_some_and(|currency| currency.eq_ignore_ascii_case("USD"))
+    }) {
+        return None;
+    }
+    // OpenRouter usage.cost is the total charged in USD-denominated credits.
+    usage.get("cost").and_then(amount)
+}
+
+/// Keep only the validated amount while translating between wire formats.
+pub(crate) fn copy_reported_cost_usd(source: &Value, target: &mut Value) {
+    if let Some(cost) = parse_reported_cost_usd(source) {
+        target["cost_usd"] = Value::String(cost.to_string());
+    }
+}
+
+/// LiteLLM documents this header as the USD cost of this request. No generic
+/// x-cost/remaining-credit header is interpreted as money.
+pub(crate) fn reported_cost_from_headers(headers: &http::HeaderMap) -> Option<Decimal> {
+    let raw = headers.get("x-litellm-response-cost")?.to_str().ok()?;
+    parse_reported_cost_usd(&serde_json::json!({"cost_usd": raw}))
+}
+
+pub(crate) fn apply_reported_cost_to_response(body: &mut Value, amount: Option<Decimal>) {
+    let Some(amount) = amount.filter(|value| *value >= Decimal::ZERO) else {
+        return;
+    };
+    if !body.is_object() {
+        return;
+    }
+    if !body.get("usage").is_some_and(Value::is_object) {
+        body["usage"] = serde_json::json!({});
+    }
+    if parse_reported_cost_usd(&body["usage"]).is_none() {
+        body["usage"]["cost_usd"] = Value::String(amount.to_string());
+    }
+}
 
 fn openai_cache_read_tokens(usage: &Value) -> u32 {
     // 每环要求「存在且非 0」：显式 0 按未上报处理，链继续向后找（#8041：
@@ -76,6 +135,10 @@ pub struct TokenUsage {
     pub cache_creation_tokens: u32,
     /// `cache_creation_tokens` 中按 1 小时 TTL 写入的部分（Claude 单独计价）
     pub cache_creation_1h_tokens: u32,
+    /// Total explicitly reported by the upstream, including a genuine zero.
+    /// Internal metadata; do not synthesize component costs from this total.
+    #[serde(skip)]
+    pub reported_cost_usd: Option<Decimal>,
     /// 从响应中提取的实际模型名称（如果可用）
     pub model: Option<String>,
     /// 从响应中提取的消息 ID（用于跨源去重）
@@ -112,12 +175,42 @@ impl TokenUsage {
             || self.cache_read_tokens > 0
             || self.cache_creation_tokens > 0
     }
+
+    pub fn has_accounting_data(&self) -> bool {
+        self.has_billable_tokens() || self.reported_cost_usd.is_some()
+    }
+
+    pub fn with_reported_cost(mut self, amount: Option<Decimal>) -> Self {
+        self.reported_cost_usd = self.reported_cost_usd.or(amount);
+        self
+    }
+
+    pub fn with_optional_reported_cost(
+        usage: Option<Self>,
+        amount: Option<Decimal>,
+    ) -> Option<Self> {
+        if usage.is_none() && amount.is_none() {
+            return None;
+        }
+        Some(usage.unwrap_or_default().with_reported_cost(amount))
+    }
+
+    fn reported_cost_from_events(events: &[Value]) -> Option<Decimal> {
+        events.iter().rev().find_map(|event| {
+            event
+                .get("usage")
+                .or_else(|| event.pointer("/response/usage"))
+                .or_else(|| event.pointer("/message/usage"))
+                .and_then(parse_reported_cost_usd)
+        })
+    }
 }
 
 impl TokenUsage {
     /// 从 Claude API 非流式响应解析
     pub fn from_claude_response(body: &Value) -> Option<Self> {
         let usage = body.get("usage")?;
+        let reported_cost_usd = parse_reported_cost_usd(usage);
         // 提取响应中的模型名称
         let model = body
             .get("model")
@@ -126,8 +219,14 @@ impl TokenUsage {
         let message_id = response_id(body, "id");
 
         Some(Self {
-            input_tokens: usage.get("input_tokens")?.as_u64()? as u32,
-            output_tokens: usage.get("output_tokens")?.as_u64()? as u32,
+            input_tokens: usage
+                .get("input_tokens")
+                .and_then(Value::as_u64)
+                .or_else(|| reported_cost_usd.map(|_| 0))? as u32,
+            output_tokens: usage
+                .get("output_tokens")
+                .and_then(Value::as_u64)
+                .or_else(|| reported_cost_usd.map(|_| 0))? as u32,
             cache_read_tokens: usage
                 .get("cache_read_input_tokens")
                 .and_then(|v| v.as_u64())
@@ -137,6 +236,7 @@ impl TokenUsage {
                 .and_then(|v| v.as_u64())
                 .unwrap_or(0) as u32,
             cache_creation_1h_tokens: claude_cache_creation_1h_tokens(usage),
+            reported_cost_usd,
             model,
             message_id,
         })
@@ -167,6 +267,8 @@ impl TokenUsage {
                             }
                         }
                         if let Some(msg_usage) = event.get("message").and_then(|m| m.get("usage")) {
+                            usage.reported_cost_usd =
+                                parse_reported_cost_usd(msg_usage).or(usage.reported_cost_usd);
                             // 从 message_start 获取 input_tokens（原生 Claude API）
                             if let Some(input) =
                                 msg_usage.get("input_tokens").and_then(|v| v.as_u64())
@@ -189,6 +291,8 @@ impl TokenUsage {
                     }
                     "message_delta" => {
                         if let Some(delta_usage) = event.get("usage") {
+                            usage.reported_cost_usd =
+                                parse_reported_cost_usd(delta_usage).or(usage.reported_cost_usd);
                             // 从 message_delta 获取 output_tokens
                             if let Some(output) =
                                 delta_usage.get("output_tokens").and_then(|v| v.as_u64())
@@ -258,7 +362,7 @@ impl TokenUsage {
         // （input==0 && output==0 但 cache_read>0）是真实的 cache-read 计费，必须保留。
         // Gemini→Anthropic 路径在 input 改为 fresh(promptTokenCount - cachedContentTokenCount)
         // 后尤其会出现这种全缓存场景；旧 gate 会把它当成"无 usage"丢弃。
-        if usage.has_billable_tokens() {
+        if usage.has_accounting_data() {
             usage.model = model;
             usage.message_id = message_id;
             Some(usage)
@@ -279,8 +383,15 @@ impl TokenUsage {
         }
         let usage = usage?;
 
-        let input_tokens = usage.get("input_tokens").and_then(|v| v.as_u64());
-        let output_tokens = usage.get("output_tokens").and_then(|v| v.as_u64());
+        let reported_cost_usd = parse_reported_cost_usd(usage);
+        let input_tokens = usage
+            .get("input_tokens")
+            .and_then(|v| v.as_u64())
+            .or_else(|| reported_cost_usd.map(|_| 0));
+        let output_tokens = usage
+            .get("output_tokens")
+            .and_then(|v| v.as_u64())
+            .or_else(|| reported_cost_usd.map(|_| 0));
 
         if input_tokens.is_none() || output_tokens.is_none() {
             log::debug!("[Codex] usage 字段缺少 input_tokens 或 output_tokens，usage: {usage:?}");
@@ -302,6 +413,7 @@ impl TokenUsage {
             cache_read_tokens: cached_tokens,
             cache_creation_tokens: cache_write_tokens,
             cache_creation_1h_tokens: 0,
+            reported_cost_usd,
             model,
             message_id: response_id(body, "id"),
         })
@@ -321,7 +433,7 @@ impl TokenUsage {
         if usage.get("prompt_tokens").is_some() {
             log::debug!("[Codex] 检测到 OpenAI 格式 (prompt_tokens)");
             Self::from_openai_response(body)
-        } else if usage.get("input_tokens").is_some() {
+        } else if usage.get("input_tokens").is_some() || parse_reported_cost_usd(usage).is_some() {
             log::debug!("[Codex] 检测到 Codex 格式 (input_tokens)");
             // 使用非调整版本，记录原始 input_tokens
             Self::from_codex_response(body)
@@ -336,12 +448,15 @@ impl TokenUsage {
         log::debug!("[Codex] 智能解析流式事件，共 {} 个事件", events.len());
 
         // 先尝试 Codex Responses API 格式 (response.completed 事件)
-        for event in events {
+        for event in events.iter().rev() {
             if let Some(event_type) = event.get("type").and_then(|v| v.as_str()) {
                 if event_type == "response.completed" {
                     if let Some(response) = event.get("response") {
                         log::debug!("[Codex] 找到 response.completed 事件");
-                        return Self::from_codex_response_auto(response);
+                        return Self::with_optional_reported_cost(
+                            Self::from_codex_response_auto(response),
+                            Self::reported_cost_from_events(events),
+                        );
                     }
                 }
             }
@@ -358,7 +473,7 @@ impl TokenUsage {
             .find_map(Self::from_codex_response)
         {
             log::debug!("[Codex] 找到顶层 usage.input_tokens 事件");
-            return Some(usage);
+            return Some(usage.with_reported_cost(Self::reported_cost_from_events(events)));
         }
 
         // 回退到 OpenAI Chat Completions 格式 (最后一个 chunk 包含 usage)
@@ -369,10 +484,17 @@ impl TokenUsage {
     /// 从 OpenAI Chat Completions API 响应解析 (prompt_tokens, completion_tokens)
     pub fn from_openai_response(body: &Value) -> Option<Self> {
         let usage = body.get("usage")?;
+        let reported_cost_usd = parse_reported_cost_usd(usage);
 
         // OpenAI 使用 prompt_tokens 和 completion_tokens
-        let prompt_tokens = usage.get("prompt_tokens").and_then(|v| v.as_u64())?;
-        let completion_tokens = usage.get("completion_tokens").and_then(|v| v.as_u64())?;
+        let prompt_tokens = usage
+            .get("prompt_tokens")
+            .and_then(|v| v.as_u64())
+            .or_else(|| reported_cost_usd.map(|_| 0))?;
+        let completion_tokens = usage
+            .get("completion_tokens")
+            .and_then(|v| v.as_u64())
+            .or_else(|| reported_cost_usd.map(|_| 0))?;
 
         // 获取 cached_tokens (可能在 prompt_tokens_details 中)
         let cached_tokens = openai_cache_read_tokens(usage);
@@ -390,6 +512,7 @@ impl TokenUsage {
             cache_read_tokens: cached_tokens,
             cache_creation_tokens: cache_write_tokens,
             cache_creation_1h_tokens: 0,
+            reported_cost_usd,
             model,
             message_id: response_id(body, "id"),
         })
@@ -403,7 +526,30 @@ impl TokenUsage {
             if let Some(usage) = event.get("usage") {
                 if !usage.is_null() {
                     log::debug!("[Codex] 找到 usage: {usage:?}");
-                    let mut parsed = Self::from_openai_response(event)?;
+                    let Some(mut parsed) = Self::from_openai_response(event) else {
+                        continue;
+                    };
+                    // Some gateways send money in a separate final usage block.
+                    // Keep the most recent actual token summary instead of
+                    // replacing it with default zero counters from that trailer.
+                    if usage.get("prompt_tokens").and_then(Value::as_u64).is_none()
+                        || usage
+                            .get("completion_tokens")
+                            .and_then(Value::as_u64)
+                            .is_none()
+                    {
+                        if let Some(counters) = events.iter().rev().find_map(|chunk| {
+                            let summary = chunk.get("usage")?;
+                            summary.get("prompt_tokens")?.as_u64()?;
+                            summary.get("completion_tokens")?.as_u64()?;
+                            Self::from_openai_response(chunk)
+                        }) {
+                            let reported = parsed.reported_cost_usd;
+                            parsed = counters;
+                            parsed.reported_cost_usd = reported.or(parsed.reported_cost_usd);
+                        }
+                    }
+                    parsed = parsed.with_reported_cost(Self::reported_cost_from_events(events));
                     if parsed.message_id.is_none() {
                         parsed.message_id =
                             events.iter().find_map(|chunk| response_id(chunk, "id"));
@@ -419,14 +565,21 @@ impl TokenUsage {
     /// 从 Gemini API 非流式响应解析
     pub fn from_gemini_response(body: &Value) -> Option<Self> {
         let usage = body.get("usageMetadata")?;
+        let reported_cost_usd = parse_reported_cost_usd(usage);
         // 提取实际使用的模型名称（modelVersion 字段）
         let model = body
             .get("modelVersion")
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
 
-        let prompt_tokens = usage.get("promptTokenCount")?.as_u64()? as u32;
-        let total_tokens = usage.get("totalTokenCount")?.as_u64()? as u32;
+        let prompt_tokens = usage
+            .get("promptTokenCount")
+            .and_then(Value::as_u64)
+            .or_else(|| reported_cost_usd.map(|_| 0))? as u32;
+        let total_tokens = usage
+            .get("totalTokenCount")
+            .and_then(Value::as_u64)
+            .or_else(|| reported_cost_usd.map(|_| 0))? as u32;
 
         // 输出 tokens = 总 tokens - 输入 tokens
         // 这包含了 candidatesTokenCount + thoughtsTokenCount
@@ -441,6 +594,7 @@ impl TokenUsage {
                 .unwrap_or(0) as u32,
             cache_creation_tokens: 0,
             cache_creation_1h_tokens: 0,
+            reported_cost_usd,
             model,
             message_id: response_id(body, "responseId"),
         })
@@ -452,28 +606,30 @@ impl TokenUsage {
         let mut total_input = 0u32;
         let mut total_tokens = 0u32;
         let mut total_cache_read = 0u32;
+        let mut reported_cost_usd = None;
         let mut model: Option<String> = None;
         let mut message_id: Option<String> = None;
 
         for chunk in chunks {
             if let Some(usage) = chunk.get("usageMetadata") {
+                reported_cost_usd = parse_reported_cost_usd(usage).or(reported_cost_usd);
                 // 输入 tokens (通常在所有 chunk 中保持不变)
                 total_input = usage
                     .get("promptTokenCount")
                     .and_then(|v| v.as_u64())
-                    .unwrap_or(0) as u32;
+                    .unwrap_or(total_input as u64) as u32;
 
                 // 总 tokens (包含输入 + 输出 + 思考)
                 total_tokens = usage
                     .get("totalTokenCount")
                     .and_then(|v| v.as_u64())
-                    .unwrap_or(0) as u32;
+                    .unwrap_or(total_tokens as u64) as u32;
 
                 // 缓存读取 tokens
                 total_cache_read = usage
                     .get("cachedContentTokenCount")
                     .and_then(|v| v.as_u64())
-                    .unwrap_or(0) as u32;
+                    .unwrap_or(total_cache_read as u64) as u32;
             }
 
             // 提取实际使用的模型名称（modelVersion 字段）
@@ -490,13 +646,14 @@ impl TokenUsage {
         // 输出 tokens = 总 tokens - 输入 tokens
         let total_output = total_tokens.saturating_sub(total_input);
 
-        if total_input > 0 || total_output > 0 {
+        if total_input > 0 || total_output > 0 || reported_cost_usd.is_some() {
             Some(Self {
                 input_tokens: total_input,
                 output_tokens: total_output,
                 cache_read_tokens: total_cache_read,
                 cache_creation_tokens: 0,
                 cache_creation_1h_tokens: 0,
+                reported_cost_usd,
                 model,
                 message_id,
             })
@@ -510,6 +667,115 @@ impl TokenUsage {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn reported_cost_accepts_explicit_zero_and_usd_only_without_guessing_quota() {
+        assert_eq!(
+            parse_reported_cost_usd(&json!({"cost":0})),
+            Some(Decimal::ZERO)
+        );
+        assert_eq!(
+            parse_reported_cost_usd(&json!({"cost_usd":"1.25e-6"})),
+            Some(Decimal::new(125, 8))
+        );
+        assert_eq!(
+            parse_reported_cost_usd(&json!({"cost":"0.14","currency":"usd"})),
+            Some(Decimal::new(14, 2))
+        );
+        for usage in [
+            json!({"cost":-1}),
+            json!({"cost":"NaN"}),
+            json!({"cost":true}),
+            json!({"cost":0.2,"currency":"CNY"}),
+            json!({"quota":15,"balance":8}),
+            json!({"cost_details":{"upstream_inference_cost":2}}),
+        ] {
+            assert_eq!(parse_reported_cost_usd(&usage), None, "{usage}");
+        }
+    }
+
+    #[test]
+    fn cost_only_response_and_stream_final_totals_are_preserved_without_summing() {
+        let usage = TokenUsage::from_openai_response(&json!({"id":"cost-only","usage":{"cost":0}}))
+            .unwrap();
+        assert!(!usage.has_billable_tokens());
+        assert!(usage.has_accounting_data());
+        let events = vec![
+            json!({"id":"r","usage":{"prompt_tokens":20,"completion_tokens":1,"cost":0.01}}),
+            json!({"id":"r","usage":{"prompt_tokens":20,"completion_tokens":2,"cost":0.02}}),
+            json!({"id":"r","usage":{"prompt_tokens":20,"completion_tokens":2,"cost":0.02}}),
+        ];
+        assert_eq!(
+            TokenUsage::from_openai_stream_events(&events)
+                .unwrap()
+                .reported_cost_usd,
+            Some(Decimal::new(2, 2))
+        );
+        let mut trailer_events = events;
+        trailer_events.push(json!({"id":"r","usage":{"cost":0.04}}));
+        let trailer = TokenUsage::from_openai_stream_events(&trailer_events).unwrap();
+        assert_eq!((trailer.input_tokens, trailer.output_tokens), (20, 2));
+        assert_eq!(trailer.reported_cost_usd, Some(Decimal::new(4, 2)));
+        trailer_events.push(json!({"id":"r","usage":{}}));
+        trailer_events.push(json!({"id":"r","usage":{"cost":"NaN"}}));
+        let trailer = TokenUsage::from_openai_stream_events(&trailer_events).unwrap();
+        assert_eq!((trailer.input_tokens, trailer.output_tokens), (20, 2));
+        assert_eq!(trailer.reported_cost_usd, Some(Decimal::new(4, 2)));
+        let events = vec![
+            json!({"type":"message_start","message":{"model":"m","usage":{"input_tokens":10,"output_tokens":0,"cost":0.03}}}),
+            json!({"type":"message_delta","usage":{"output_tokens":2,"cost":0}}),
+        ];
+        assert_eq!(
+            TokenUsage::from_claude_stream_events(&events)
+                .unwrap()
+                .reported_cost_usd,
+            Some(Decimal::ZERO)
+        );
+    }
+
+    #[test]
+    fn cost_only_non_streaming_responses_preserve_all_protocols_and_zero_cost() {
+        let gemini = TokenUsage::from_gemini_response(&json!({
+            "responseId":"gemini-cost","modelVersion":"gemini-m",
+            "usageMetadata":{"cost_usd":"0.003"},
+        }))
+        .unwrap();
+        assert_eq!((gemini.input_tokens, gemini.output_tokens), (0, 0));
+        assert_eq!(gemini.reported_cost_usd, Some(Decimal::new(3, 3)));
+        assert_eq!(gemini.message_id.as_deref(), Some("gemini-cost"));
+        assert_eq!(gemini.model.as_deref(), Some("gemini-m"));
+        for parsed in [
+            TokenUsage::from_claude_response(&json!({"usage":{"cost_usd":0}})),
+            TokenUsage::from_openai_response(&json!({"usage":{"cost_usd":0}})),
+            TokenUsage::from_codex_response_auto(&json!({"usage":{"cost_usd":0}})),
+            TokenUsage::from_gemini_response(&json!({"usageMetadata":{"cost_usd":0}})),
+        ] {
+            let usage = parsed.unwrap();
+            assert_eq!((usage.input_tokens, usage.output_tokens), (0, 0));
+            assert_eq!(usage.reported_cost_usd, Some(Decimal::ZERO));
+            assert!(usage.has_accounting_data());
+        }
+        assert!(
+            TokenUsage::from_gemini_response(&json!({"usageMetadata":{"cost_usd":"NaN"}}))
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn documented_litellm_header_is_usd_and_body_amount_has_priority() {
+        let mut headers = http::HeaderMap::new();
+        headers.insert("x-litellm-response-cost", "0.00025".parse().unwrap());
+        let amount = reported_cost_from_headers(&headers);
+        assert_eq!(amount, Some(Decimal::new(25, 5)));
+        let mut response = json!({"usage":{"cost":0}});
+        apply_reported_cost_to_response(&mut response, amount);
+        assert_eq!(
+            parse_reported_cost_usd(&response["usage"]),
+            Some(Decimal::ZERO)
+        );
+        headers.insert("x-litellm-response-cost", "-1".parse().unwrap());
+        assert_eq!(reported_cost_from_headers(&headers), None);
+    }
 
     #[test]
     fn response_ids_produce_scoped_dedup_keys_and_empty_ids_fall_back() {

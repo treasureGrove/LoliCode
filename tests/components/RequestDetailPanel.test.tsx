@@ -60,6 +60,25 @@ describe("RequestDetailPanel", () => {
     expect(screen.getByText("$0.0670")).toBeInTheDocument();
   });
 
+  it("shows an authoritative upstream zero without inventing component charges or applying a local multiplier", () => {
+    renderWith(
+      log({
+        costSource: "upstream",
+        inputCostUsd: "0",
+        outputCostUsd: "0",
+        cacheReadCostUsd: "0",
+        cacheCreationCostUsd: "0",
+        totalCostUsd: "0",
+        costMultiplier: "3",
+      }),
+    );
+    expect(screen.getAllByText("usage.detail.costNotProvided")).toHaveLength(4);
+    expect(screen.getAllByText("$0.0000")).toHaveLength(1);
+    expect(screen.getByText(/usage.detail.costReported/)).toBeInTheDocument();
+    expect(screen.queryByText("usage.unpriced")).not.toBeInTheDocument();
+    expect(screen.queryByText("×3")).not.toBeInTheDocument();
+  });
+
   it("explains why short outputs have no speed", () => {
     renderWith(
       log({ outputTokens: 64, latencyMs: 2_400, firstTokenMs: 1_900 }),

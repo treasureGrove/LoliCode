@@ -2,7 +2,7 @@ import { usageApi } from "@/lib/api/usage";
 import { fetchModelsDev } from "@/lib/modelsDev";
 import {
   flattenModels,
-  resolveModelsDevSelection,
+  resolveModelsDevSyncSelection,
   toModelPricing,
 } from "@/lib/modelsDevPricing";
 import type { ModelsDevSyncState } from "@/types/usage";
@@ -54,13 +54,14 @@ export async function syncModelsDevPricing(
         syncedAt: latestState.config.lastSyncAt,
       };
     }
-    const selectedEntries = resolveModelsDevSelection(
+    const selectedEntries = resolveModelsDevSyncSelection(
       flattenModels(data),
       latestState.config,
     );
-    const pricing = toModelPricing(selectedEntries);
+    const existingPricing = await usageApi.getModelPricing();
+    const pricing = toModelPricing(selectedEntries, existingPricing);
     const changed = pricing.length
-      ? await usageApi.updateModelPricingBatch(pricing)
+      ? await usageApi.updateModelPricingBatch(pricing, "models-dev")
       : 0;
     const syncedAt = Date.now();
     await usageApi.recordModelsDevSyncResult(syncedAt, null);

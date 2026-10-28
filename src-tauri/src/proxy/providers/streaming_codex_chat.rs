@@ -64,6 +64,7 @@ struct ChatToResponsesState {
     next_tool_index_to_add: usize,
     output_items: Vec<(u32, Value)>,
     latest_usage: Option<Value>,
+    latest_wire_usage: Value,
     finish_reason: Option<String>,
     tool_context: CodexToolContext,
     /// 本回合因缺少合法函数名而被丢弃的工具调用数（见 `finalize_tools`）。
@@ -86,6 +87,7 @@ impl Default for ChatToResponsesState {
             next_tool_index_to_add: 0,
             output_items: Vec::new(),
             latest_usage: None,
+            latest_wire_usage: json!({}),
             finish_reason: None,
             tool_context: CodexToolContext::default(),
             dropped_tool_calls: 0,
@@ -119,7 +121,14 @@ impl ChatToResponsesState {
         events.extend(self.ensure_response_started());
 
         if let Some(usage) = chunk.get("usage").filter(|v| !v.is_null()) {
-            self.latest_usage = Some(chat_usage_to_responses_usage(Some(usage)));
+            super::transform::merge_stream_usage(&mut self.latest_wire_usage, usage);
+            let mut current = chat_usage_to_responses_usage(Some(&self.latest_wire_usage));
+            if current.get("cost_usd").is_none() {
+                if let Some(previous) = self.latest_usage.as_ref() {
+                    crate::proxy::usage::parser::copy_reported_cost_usd(previous, &mut current);
+                }
+            }
+            self.latest_usage = Some(current);
         }
 
         let Some(choice) = chunk
@@ -863,6 +872,32 @@ fn extract_chat_sse_error(value: &Value) -> (String, Option<String>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_chat_to_responses_stream_retains_latest_reported_cost_usd() {
+        let mut state = ChatToResponsesState::default();
+        for usage in [
+            json!({"prompt_tokens":10,"completion_tokens":2,"prompt_tokens_details":{"cached_tokens":6},"cost":"0.0042"}),
+            json!({"cost":0}),
+            json!({}),
+            json!({"completion_tokens":3}),
+        ] {
+            state.handle_chat_chunk(&json!({"usage":usage,"choices":[]}));
+        }
+        let usage = state.latest_usage.as_ref().unwrap();
+        assert_eq!(usage["cost_usd"], "0");
+        assert_eq!(usage["input_tokens"], 10);
+        assert_eq!(usage["output_tokens"], 3);
+        assert_eq!(usage["input_tokens_details"]["cached_tokens"], 6);
+
+        state.handle_chat_chunk(
+            &json!({"usage":{"prompt_tokens":0,"completion_tokens":0},"choices":[]}),
+        );
+        let usage = state.latest_usage.unwrap();
+        assert_eq!(usage["input_tokens"], 0);
+        assert_eq!(usage["output_tokens"], 0);
+        assert_eq!(usage["cost_usd"], "0");
+    }
     use futures::{stream, StreamExt};
 
     async fn collect(chunks: Vec<&str>) -> String {

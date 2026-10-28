@@ -97,6 +97,11 @@ function useDetailSections(
   const freshInput = getFreshInputTokens(request);
   const isCacheInclusive = request.inputTokens !== freshInput;
   const unpriced = isUnpricedUsage(request);
+  const isReportedCost = request.costSource === "upstream";
+  const componentCost = (value: string) =>
+    isReportedCost
+      ? t("usage.detail.costNotProvided", { defaultValue: "未提供" })
+      : usd(value);
   const multiplier = parseFiniteNumber(request.costMultiplier);
   const isProxy = !request.dataSource || request.dataSource === "proxy";
   const tps = formatOutputTokensPerSecond(request);
@@ -199,25 +204,25 @@ function useDetailSections(
     {
       key: "input",
       label: t("usage.freshInput"),
-      value: usd(request.inputCostUsd),
+      value: componentCost(request.inputCostUsd),
     },
     {
       key: "output",
       label: t("usage.outputTokens"),
-      value: usd(request.outputCostUsd),
+      value: componentCost(request.outputCostUsd),
     },
     {
       key: "read",
       label: t("usage.cacheReadTokens"),
-      value: usd(request.cacheReadCostUsd),
+      value: componentCost(request.cacheReadCostUsd),
     },
     {
       key: "write",
       label: t("usage.pricing.cacheWrite"),
-      value: usd(request.cacheCreationCostUsd),
+      value: componentCost(request.cacheCreationCostUsd),
     },
   ];
-  if (multiplier != null && multiplier !== 1) {
+  if (!isReportedCost && multiplier != null && multiplier !== 1) {
     cost.push({
       key: "multiplier",
       label: t("usage.costMultiplier"),
@@ -226,8 +231,9 @@ function useDetailSections(
   }
   cost.push({
     key: "total",
-    label:
-      multiplier != null && multiplier !== 1
+    label: isReportedCost
+      ? `${t("usage.detail.total")} (${t("usage.detail.costReported", { defaultValue: "渠道返回" })})`
+      : multiplier != null && multiplier !== 1
         ? `${t("usage.detail.total")} (${t("usage.withMultiplier")})`
         : t("usage.detail.total"),
     value: unpriced ? t("usage.unpriced") : usd(request.totalCostUsd),

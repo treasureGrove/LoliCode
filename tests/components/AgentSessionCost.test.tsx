@@ -188,4 +188,48 @@ describe("AgentSessionCost", () => {
     setup();
     await screen.findByText("估算费用 <$0.0001");
   });
+
+  it("shows an explicitly reported zero charge even when token usage is absent", async () => {
+    vi.mocked(usageApi.getSessionUsageSummary).mockResolvedValue(
+      summary({
+        totalCost: "0",
+        partialRequests: 3,
+        reportedCostRequests: 3,
+        estimatedCostRequests: 0,
+      }),
+    );
+    setup();
+    await screen.findByText("渠道回报 $0.0000");
+    expect(screen.getByLabelText("本会话费用").title).toContain("3 次渠道回报");
+    expect(screen.getByText("3 次请求用量待确认")).toBeInTheDocument();
+  });
+
+  it("identifies dictionary estimates and mixed amounts without calling them upstream charges", async () => {
+    vi.mocked(usageApi.getSessionUsageSummary).mockResolvedValue(
+      summary({ reportedCostRequests: 0, estimatedCostRequests: 3 }),
+    );
+    const view = setup();
+    await screen.findByText("本地估算 $0.1235");
+    vi.mocked(usageApi.getSessionUsageSummary).mockResolvedValue(
+      summary({ reportedCostRequests: 1, estimatedCostRequests: 2 }),
+    );
+    await act(async () => {
+      await view.client.invalidateQueries();
+    });
+    await screen.findByText("混合费用 $0.1235");
+    expect(screen.getByLabelText("本会话费用").title).toContain(
+      "1 次渠道回报 · 2 次本地估算",
+    );
+  });
+
+  it("keeps unclassified historical amounts distinct from entirely reported charges", async () => {
+    vi.mocked(usageApi.getSessionUsageSummary).mockResolvedValue(
+      summary({ reportedCostRequests: 1, estimatedCostRequests: 0 }),
+    );
+    setup();
+    await screen.findByText("费用 $0.1235");
+    expect(screen.getByLabelText("本会话费用").title).toContain(
+      "2 次费用来源未区分",
+    );
+  });
 });

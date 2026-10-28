@@ -11,7 +11,7 @@ use std::str::FromStr;
 use std::sync::{Mutex, OnceLock};
 
 const MODEL_PRICING_FILE_NAME: &str = "model-pricing.json";
-const MODEL_PRICING_FILE_VERSION: u32 = 1;
+const MODEL_PRICING_FILE_VERSION: u32 = 2;
 
 static MODEL_PRICING_FILE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
@@ -77,6 +77,9 @@ struct ModelPricingFile {
     models_dev_sync: ModelsDevSyncConfig,
     #[serde(default)]
     models: Vec<ModelPricingInfo>,
+    /// Entries last written by automatic sync. Unmarked v1 overrides are manual.
+    #[serde(default)]
+    models_dev_model_ids: Vec<String>,
     #[serde(default)]
     deleted_model_ids: Vec<String>,
 }
@@ -87,6 +90,7 @@ impl Default for ModelPricingFile {
             version: MODEL_PRICING_FILE_VERSION,
             models_dev_sync: ModelsDevSyncConfig::default(),
             models: Vec::new(),
+            models_dev_model_ids: Vec::new(),
             deleted_model_ids: Vec::new(),
         }
     }
@@ -199,6 +203,14 @@ fn normalize_file(mut file: ModelPricingFile) -> Result<ModelPricingFile, AppErr
         }
     }
 
+    file.models_dev_model_ids = if file.version < 2 {
+        Vec::new()
+    } else {
+        normalize_key_list(file.models_dev_model_ids)
+            .into_iter()
+            .filter(|id| models.contains_key(id))
+            .collect()
+    };
     file.version = MODEL_PRICING_FILE_VERSION;
     file.models_dev_sync = normalize_sync_config(file.models_dev_sync);
     file.models = models.into_values().collect();
@@ -360,10 +372,17 @@ pub fn record_models_dev_sync_result(
     write_file_unlocked(&file)
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum PricingUpdateSource {
+    Manual,
+    ModelsDev,
+}
+
 fn update_model_pricing_batch_inner(
     db: &Database,
     entries: Vec<ModelPricingInfo>,
     backfill_all: bool,
+    source: PricingUpdateSource,
 ) -> Result<usize, AppError> {
     if entries.is_empty() {
         return Ok(0);
@@ -390,16 +409,45 @@ fn update_model_pricing_batch_inner(
             .into_iter()
             .map(|entry| (entry.model_id.clone(), entry))
             .collect::<BTreeMap<_, _>>();
+        let mut automatic_ids = file
+            .models_dev_model_ids
+            .into_iter()
+            .collect::<BTreeSet<_>>();
+        let deleted_ids = file
+            .deleted_model_ids
+            .iter()
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        let entries = entries
+            .iter()
+            .filter(|entry| {
+                source == PricingUpdateSource::Manual
+                    || (!deleted_ids.contains(&entry.model_id)
+                        && (!file_models.contains_key(&entry.model_id)
+                            || automatic_ids.contains(&entry.model_id)))
+            })
+            .collect::<Vec<_>>();
         let updated_ids = entries
             .iter()
             .map(|entry| entry.model_id.clone())
             .collect::<BTreeSet<_>>();
         for entry in &entries {
-            file_models.insert(entry.model_id.clone(), entry.clone());
+            file_models.insert(entry.model_id.clone(), (**entry).clone());
+            match source {
+                PricingUpdateSource::ModelsDev => {
+                    automatic_ids.insert(entry.model_id.clone());
+                }
+                PricingUpdateSource::Manual => {
+                    automatic_ids.remove(&entry.model_id);
+                }
+            }
         }
         file.models = file_models.into_values().collect();
-        file.deleted_model_ids
-            .retain(|model_id| !updated_ids.contains(model_id));
+        file.models_dev_model_ids = automatic_ids.into_iter().collect();
+        if source == PricingUpdateSource::Manual {
+            file.deleted_model_ids
+                .retain(|model_id| !updated_ids.contains(model_id));
+        }
 
         let mut conn = lock_conn!(db.conn);
         let transaction = conn.transaction()?;
@@ -429,14 +477,21 @@ fn update_model_pricing_batch_inner(
 }
 
 pub fn update_model_pricing(db: &Database, entry: ModelPricingInfo) -> Result<usize, AppError> {
-    update_model_pricing_batch_inner(db, vec![entry], false)
+    update_model_pricing_batch_inner(db, vec![entry], false, PricingUpdateSource::Manual)
 }
 
 pub fn update_model_pricing_batch(
     db: &Database,
     entries: Vec<ModelPricingInfo>,
 ) -> Result<usize, AppError> {
-    update_model_pricing_batch_inner(db, entries, true)
+    update_model_pricing_batch_inner(db, entries, true, PricingUpdateSource::Manual)
+}
+
+pub fn sync_models_dev_pricing(
+    db: &Database,
+    entries: Vec<ModelPricingInfo>,
+) -> Result<usize, AppError> {
+    update_model_pricing_batch_inner(db, entries, true, PricingUpdateSource::ModelsDev)
 }
 
 pub fn delete_model_pricing(db: &Database, model_id: &str) -> Result<(), AppError> {
@@ -455,6 +510,7 @@ pub fn delete_model_pricing(db: &Database, model_id: &str) -> Result<(), AppErro
         .map_err(|error| AppError::Config(format!("模型定价文件锁失败: {error}")))?;
     let mut file = load_or_create_file_unlocked()?;
     file.models.retain(|entry| entry.model_id != model_id);
+    file.models_dev_model_ids.retain(|id| id != model_id);
     if !file.deleted_model_ids.iter().any(|entry| entry == model_id) {
         file.deleted_model_ids.push(model_id.to_string());
         file.deleted_model_ids.sort();
@@ -577,7 +633,7 @@ mod tests {
 
     #[test]
     #[serial]
-    fn models_dev_batch_sync_overwrites_existing_manual_pricing() {
+    fn explicit_manual_batch_update_can_replace_existing_manual_pricing() {
         with_test_home(|db, path| {
             let mut manual = sample_pricing();
             manual.input_cost_per_million = "9".to_string();
@@ -606,6 +662,99 @@ mod tests {
                 .find(|entry| entry.model_id == "custom-model")
                 .expect("saved synced pricing");
             assert_eq!(saved, &synced);
+        });
+    }
+
+    #[test]
+    #[serial]
+    fn automatic_sync_preserves_manual_overrides_and_deleted_models() {
+        with_test_home(|db, path| {
+            let mut manual = sample_pricing();
+            manual.input_cost_per_million = "9".into();
+            update_model_pricing(db, manual.clone()).expect("manual override");
+            let mut deleted = sample_pricing();
+            deleted.model_id = "deleted-model".into();
+            delete_model_pricing(db, &deleted.model_id).expect("delete model");
+
+            assert_eq!(
+                sync_models_dev_pricing(db, vec![sample_pricing(), deleted]).unwrap(),
+                0
+            );
+            let file: ModelPricingFile =
+                serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap();
+            assert_eq!(file.version, 2);
+            assert_eq!(file.models, vec![manual]);
+            assert!(file.models_dev_model_ids.is_empty());
+            assert!(file
+                .deleted_model_ids
+                .contains(&"deleted-model".to_string()));
+            let conn = db.conn.lock().expect("lock test database");
+            let input: String = conn.query_row("SELECT input_cost_per_million FROM model_pricing WHERE model_id = 'custom-model'", [], |row| row.get(0)).unwrap();
+            assert_eq!(input, "9");
+            let count: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM model_pricing WHERE model_id = 'deleted-model'",
+                    [],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert_eq!(count, 0);
+        });
+    }
+
+    #[test]
+    #[serial]
+    fn automatic_sync_can_update_owned_prices_until_user_edits_or_deletes_them() {
+        with_test_home(|db, path| {
+            let mut entry = sample_pricing();
+            entry.model_id = "claude-sonnet-5".into();
+            assert_eq!(sync_models_dev_pricing(db, vec![entry.clone()]).unwrap(), 1);
+            entry.input_cost_per_million = "2".into();
+            assert_eq!(sync_models_dev_pricing(db, vec![entry.clone()]).unwrap(), 1);
+            let file: ModelPricingFile =
+                serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap();
+            assert_eq!(file.models_dev_model_ids, vec![entry.model_id.clone()]);
+
+            entry.input_cost_per_million = "9".into();
+            update_model_pricing(db, entry.clone()).expect("manual edit claims ownership");
+            let mut automatic = entry.clone();
+            automatic.input_cost_per_million = "3".into();
+            assert_eq!(
+                sync_models_dev_pricing(db, vec![automatic.clone()]).unwrap(),
+                0
+            );
+            let file: ModelPricingFile =
+                serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap();
+            assert!(file.models_dev_model_ids.is_empty());
+            assert_eq!(file.models[0].input_cost_per_million, "9");
+
+            delete_model_pricing(db, &entry.model_id).unwrap();
+            assert_eq!(sync_models_dev_pricing(db, vec![automatic]).unwrap(), 0);
+        });
+    }
+
+    #[test]
+    #[serial]
+    fn version_one_overrides_are_treated_as_manual_during_upgrade() {
+        with_test_home(|db, path| {
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            let mut manual = sample_pricing();
+            manual.input_cost_per_million = "9".into();
+            fs::write(
+                path,
+                serde_json::to_vec(&serde_json::json!({"version": 1, "models": [manual.clone()]}))
+                    .unwrap(),
+            )
+            .unwrap();
+            assert_eq!(
+                sync_models_dev_pricing(db, vec![sample_pricing()]).unwrap(),
+                0
+            );
+            let file: ModelPricingFile =
+                serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap();
+            assert_eq!(file.version, 2);
+            assert!(file.models_dev_model_ids.is_empty());
+            assert_eq!(file.models, vec![manual]);
         });
     }
 
