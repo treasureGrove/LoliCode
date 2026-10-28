@@ -51,6 +51,14 @@ export function developmentBuildNumber(date = new Date()) {
 }
 
 export function buildEnvironment(channel, source = process.env) {
+  const revision = git(["rev-parse", "--short=8", "HEAD"]) || "local";
+  const dirty = Boolean(git(["status", "--porcelain"]));
+  const branch =
+    git(["symbolic-ref", "--quiet", "--short", "HEAD"]) ||
+    source.GITHUB_HEAD_REF ||
+    source.GITHUB_REF_NAME ||
+    "detached HEAD";
+  const timestamp = new Date().toISOString();
   const cargoBin = path.join(
     source.CARGO_HOME || path.join(os.homedir(), ".cargo"),
     "bin",
@@ -62,12 +70,17 @@ export function buildEnvironment(channel, source = process.env) {
     [pathKey]: `${cargoBin}${path.delimiter}${source[pathKey] || ""}`,
     LOLICODE_BUILD_CHANNEL: channel,
     VITE_LOLICODE_BUILD_CHANNEL: channel,
-    VITE_LOLICODE_BUILD_REVISION: `${git(["rev-parse", "--short=8", "HEAD"]) || "local"}${git(["status", "--porcelain"]) ? "+dirty" : ""}`,
+    VITE_LOLICODE_BUILD_REVISION: `${revision}${dirty ? "+dirty" : ""}`,
   };
   if (channel === "development") {
     env.CARGO_TARGET_DIR = targetDirectory;
     env.LOLICODE_BUILD_NUMBER = developmentBuildNumber();
     env.VITE_LOLICODE_BUILD_NUMBER = env.LOLICODE_BUILD_NUMBER;
+    env.LOLICODE_BUILD_BRANCH = env.VITE_LOLICODE_BUILD_BRANCH = branch;
+    env.LOLICODE_BUILD_REVISION = env.VITE_LOLICODE_BUILD_REVISION;
+    env.LOLICODE_BUILD_TIMESTAMP = env.VITE_LOLICODE_BUILD_TIMESTAMP =
+      timestamp;
+    env.LOLICODE_BUILD_DIRTY = env.VITE_LOLICODE_BUILD_DIRTY = String(dirty);
     // Development needs fast repeat builds, without release-only whole-program LTO.
     env.CARGO_PROFILE_RELEASE_LTO = "false";
     // Local development never consumes a release signing credential.
@@ -76,6 +89,11 @@ export function buildEnvironment(channel, source = process.env) {
   } else {
     delete env.LOLICODE_BUILD_NUMBER;
     delete env.VITE_LOLICODE_BUILD_NUMBER;
+    for (const field of ["BRANCH", "TIMESTAMP", "DIRTY"]) {
+      delete env[`LOLICODE_BUILD_${field}`];
+      delete env[`VITE_LOLICODE_BUILD_${field}`];
+    }
+    delete env.LOLICODE_BUILD_REVISION;
     // An inherited development shell must not redirect a stable build.
     if (
       env.CARGO_TARGET_DIR &&
@@ -254,7 +272,9 @@ export function stageDevelopmentApp(env) {
     buildVersion: product.buildVersion,
     developmentBuildNumber: env.LOLICODE_BUILD_NUMBER,
     revision: env.VITE_LOLICODE_BUILD_REVISION,
-    builtAt: new Date().toISOString(),
+    sourceBranch: env.VITE_LOLICODE_BUILD_BRANCH,
+    workingTreeDirty: env.VITE_LOLICODE_BUILD_DIRTY === "true",
+    builtAt: env.VITE_LOLICODE_BUILD_TIMESTAMP,
     sourceDirectory: root,
     files: fileList(staging),
   };

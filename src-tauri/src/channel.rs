@@ -65,6 +65,10 @@ pub struct BuildInfo {
     data_directory: String,
     default_proxy_port: u16,
     development_build_number: Option<&'static str>,
+    source_branch: Option<&'static str>,
+    source_revision: Option<&'static str>,
+    built_at: Option<&'static str>,
+    working_tree_dirty: Option<bool>,
 }
 
 #[tauri::command]
@@ -79,6 +83,17 @@ pub fn get_build_info() -> BuildInfo {
         data_directory: crate::config::get_app_config_dir().display().to_string(),
         default_proxy_port: default_proxy_port(),
         development_build_number: development_build_number(),
+        source_branch: is_development()
+            .then_some(option_env!("LOLICODE_BUILD_BRANCH"))
+            .flatten(),
+        source_revision: is_development()
+            .then_some(option_env!("LOLICODE_BUILD_REVISION"))
+            .flatten(),
+        built_at: is_development()
+            .then_some(option_env!("LOLICODE_BUILD_TIMESTAMP"))
+            .flatten(),
+        working_tree_dirty: is_development()
+            .then_some(option_env!("LOLICODE_BUILD_DIRTY") == Some("true")),
     }
 }
 

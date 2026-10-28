@@ -2,6 +2,9 @@ mod native_contract;
 fn main() {
     println!("cargo:rerun-if-env-changed=LOLICODE_BUILD_CHANNEL");
     println!("cargo:rerun-if-env-changed=LOLICODE_BUILD_NUMBER");
+    for field in ["BRANCH", "REVISION", "TIMESTAMP", "DIRTY"] {
+        println!("cargo:rerun-if-env-changed=LOLICODE_BUILD_{field}");
+    }
     native_contract::emit();
     tauri_build::build();
 

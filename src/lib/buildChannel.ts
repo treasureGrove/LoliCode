@@ -25,6 +25,11 @@ export const BUILD_NUMBER =
   import.meta.env.VITE_LOLICODE_BUILD_NUMBER?.trim() || "";
 export const BUILD_REVISION =
   import.meta.env.VITE_LOLICODE_BUILD_REVISION?.trim() || "";
+export const BUILD_BRANCH =
+  import.meta.env.VITE_LOLICODE_BUILD_BRANCH?.trim() || "";
+export const BUILD_TIMESTAMP =
+  import.meta.env.VITE_LOLICODE_BUILD_TIMESTAMP?.trim() || "";
+export const BUILD_DIRTY = import.meta.env.VITE_LOLICODE_BUILD_DIRTY === "true";
 
 export function buildChannelLabel(language: string): string {
   if (language === "zh-TW") return IS_DEVELOPMENT_BUILD ? "開發版" : "正式版";

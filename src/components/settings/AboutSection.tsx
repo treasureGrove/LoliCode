@@ -27,8 +27,11 @@ import { useUpdate } from "@/contexts/UpdateContext";
 import { Badge } from "@/components/ui/badge";
 import { BuildChannelBadge } from "@/components/shell/BuildChannelBadge";
 import {
+  BUILD_BRANCH,
+  BUILD_DIRTY,
   BUILD_NUMBER,
   BUILD_REVISION,
+  BUILD_TIMESTAMP,
   IS_DEVELOPMENT_BUILD,
 } from "@/lib/buildChannel";
 import { WhatsNewDialog } from "@/components/WhatsNewDialog";
@@ -66,7 +69,7 @@ function readStarPromptDismissed(): boolean {
  * 命令行应用的安装与升级在侧栏「应用」页。
  */
 export function AboutSection({ isPortable }: AboutSectionProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   // Unknown installation mode must never authorize the native installer.
   const requiresManualDownload = isPortable !== false;
   // 惰性初始化自模块缓存：重挂时首帧即渲染上次的值，避免 loading 闪烁；首次挂载缓存
@@ -265,6 +268,14 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
           )}
           {IS_DEVELOPMENT_BUILD && (
             <div className="mt-1 space-y-1 text-xs text-fg-3">
+              {BUILD_BRANCH && (
+                <p>
+                  {t("buildChannel.buildBranch", {
+                    defaultValue: "构建分支：",
+                  })}
+                  <span className="break-all font-mono">{BUILD_BRANCH}</span>
+                </p>
+              )}
               {BUILD_NUMBER && (
                 <p>
                   {t("buildChannel.buildNumber", {
@@ -279,6 +290,24 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
                     defaultValue: "源码：",
                   })}
                   <span className="font-mono">{BUILD_REVISION}</span>
+                </p>
+              )}
+              <p>
+                {t("buildChannel.worktree", {
+                  defaultValue: "构建时工作区：",
+                })}
+                {BUILD_DIRTY
+                  ? t("buildChannel.dirty", { defaultValue: "含未提交改动" })
+                  : t("buildChannel.clean", { defaultValue: "无未提交改动" })}
+              </p>
+              {BUILD_TIMESTAMP && (
+                <p>
+                  {t("buildChannel.builtAt", { defaultValue: "构建时间：" })}
+                  <time dateTime={BUILD_TIMESTAMP}>
+                    {Number.isNaN(Date.parse(BUILD_TIMESTAMP))
+                      ? BUILD_TIMESTAMP
+                      : new Date(BUILD_TIMESTAMP).toLocaleString(i18n.language)}
+                  </time>
                 </p>
               )}
               <p>
