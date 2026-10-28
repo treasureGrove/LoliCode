@@ -3,12 +3,15 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
   ArrowDownUp,
+  Bot,
   ChartColumn,
+  ChevronDown,
   CircleCheck,
   Coins,
   Layers3,
   RefreshCw,
   Search,
+  Waypoints,
 } from "lucide-react";
 import { usageApi } from "@/lib/api/usage";
 import { channelCenterApi } from "@/lib/api/channel-center";
@@ -304,42 +307,70 @@ export function SimpleUsagePage() {
             />
           </div>
           <div className="lolicode-usage-filters" aria-label="用量筛选">
-            <label>
-              <span>Agent 来源</span>
-              <select
-                className={fieldClass}
-                aria-label="按 Agent 筛选"
-                value={agent}
-                onChange={(event) => setAgent(event.target.value)}
+            <label className="lolicode-usage-filter lolicode-usage-filter-agent">
+              <span className="lolicode-usage-filter-label">Agent 来源</span>
+              <span
+                className="lolicode-usage-filter-control"
+                data-active={agent !== "all"}
               >
-                <option value="all">全部 Agent</option>
-                {agents.map((app) => (
-                  <option key={app} value={app}>
-                    {appLabel(app)}
-                  </option>
-                ))}
-              </select>
+                <Bot
+                  aria-hidden="true"
+                  className="lolicode-usage-filter-icon"
+                />
+                <select
+                  className="lolicode-usage-filter-select"
+                  aria-label="按 Agent 筛选"
+                  title={agent === "all" ? "全部 Agent" : appLabel(agent)}
+                  value={agent}
+                  onChange={(event) => setAgent(event.target.value)}
+                >
+                  <option value="all">全部 Agent</option>
+                  {agents.map((app) => (
+                    <option key={app} value={app}>
+                      {appLabel(app)}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown
+                  aria-hidden="true"
+                  className="lolicode-usage-filter-chevron"
+                />
+              </span>
             </label>
-            <label>
-              <span>渠道</span>
-              <select
-                className={fieldClass}
-                aria-label="按渠道筛选"
-                value={providerFilter ?? ""}
-                onChange={(event) =>
-                  setChannel(optionsByValue.get(event.target.value) ?? null)
-                }
+            <label className="lolicode-usage-filter lolicode-usage-filter-channel">
+              <span className="lolicode-usage-filter-label">渠道</span>
+              <span
+                className="lolicode-usage-filter-control"
+                data-active={Boolean(channel)}
               >
-                <option value="">全部渠道</option>
-                {providerOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                    {(optionLabels.get(option.label) ?? 0) > 1
-                      ? `（${option.providerId}）`
-                      : ""}
-                  </option>
-                ))}
-              </select>
+                <Waypoints
+                  aria-hidden="true"
+                  className="lolicode-usage-filter-icon"
+                />
+                <select
+                  className="lolicode-usage-filter-select"
+                  aria-label="按渠道筛选"
+                  title={channel?.label ?? "全部渠道"}
+                  value={providerFilter ?? ""}
+                  onChange={(event) =>
+                    setChannel(optionsByValue.get(event.target.value) ?? null)
+                  }
+                >
+                  <option value="">全部渠道</option>
+                  {providerOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                      {(optionLabels.get(option.label) ?? 0) > 1
+                        ? `（${option.providerId}）`
+                        : ""}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown
+                  aria-hidden="true"
+                  className="lolicode-usage-filter-chevron"
+                />
+              </span>
             </label>
             {filtered && (
               <Button

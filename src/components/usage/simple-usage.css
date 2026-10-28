@@ -28,19 +28,90 @@
   margin-bottom: 20px;
 }
 
-.lolicode-usage-filters > label {
+.lolicode-usage-filter {
   display: grid;
   gap: 6px;
-  min-width: 180px;
-  max-width: 360px;
-  flex: 1 1 180px;
-  font-size: 12px;
+  width: 196px;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.lolicode-usage-filter-channel {
+  width: 280px;
+}
+
+.lolicode-usage-filter-label {
+  padding-left: 2px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.5;
   color: var(--text-2);
 }
 
-.lolicode-usage-filters select {
+.lolicode-usage-filter-control {
+  position: relative;
+  display: flex;
+  align-items: center;
+  color: var(--text-3);
+}
+
+.lolicode-usage-filter-select {
+  appearance: none;
   width: 100%;
   min-width: 0;
+  height: 38px;
+  padding: 0 34px;
+  border: 1px solid hsl(var(--border) / 0.85);
+  border-radius: 10px;
+  background: var(--bg-card);
+  color: var(--text-1);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.lolicode-usage-filter-select:hover {
+  border-color: var(--border-strong);
+  background: color-mix(in srgb, var(--bg-card) 94%, var(--action-bg));
+}
+
+.lolicode-usage-filter-select:focus-visible {
+  outline: none;
+  border-color: var(--action-bg);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--action-bg) 14%, transparent);
+}
+
+.lolicode-usage-filter-control[data-active="true"] {
+  color: var(--action-bg);
+}
+
+.lolicode-usage-filter-control[data-active="true"] select {
+  border-color: color-mix(in srgb, var(--action-bg) 40%, hsl(var(--border)));
+  background: color-mix(in srgb, var(--bg-card) 95%, var(--action-bg));
+}
+
+.lolicode-usage-filter-icon,
+.lolicode-usage-filter-chevron {
+  position: absolute;
+  width: 15px;
+  height: 15px;
+  pointer-events: none;
+}
+
+.lolicode-usage-filter-icon {
+  left: 12px;
+}
+
+.lolicode-usage-filter-chevron {
+  right: 11px;
+  width: 14px;
+  height: 14px;
 }
 
 .lolicode-usage-price-status {
@@ -581,6 +652,10 @@
 @media (max-width: 600px) {
   .lolicode-usage-content {
     padding: 20px 16px 32px;
+  }
+  .lolicode-usage-filter {
+    flex: 1 1 180px;
+    width: auto;
   }
   .lolicode-usage-metric {
     padding: 16px;
