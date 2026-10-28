@@ -31,7 +31,7 @@ jobs:
       # on push it needs a local git history to diff against.
       - name: Checkout
         if: github.event_name == 'push'
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Detect changed paths
         id: filter
@@ -68,7 +68,7 @@ jobs:
     if: needs.changes.outputs.frontend == 'true'
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -121,7 +121,7 @@ jobs:
         os: [ubuntu-22.04, windows-latest, macos-latest]
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       # rust-toolchain.toml 是编译器版本的唯一来源：直接装它，免得先装 stable 再被 rustup 换掉
       - name: Read pinned Rust toolchain
@@ -188,7 +188,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Read pinned Rust toolchain
         id: rust-toolchain
