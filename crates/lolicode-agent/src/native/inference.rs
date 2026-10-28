@@ -80,6 +80,7 @@ pub(super) fn validate_gateway(value: &NativeGateway) -> Result<String, String> 
 pub(super) async fn infer(
     client: &Client,
     gateway: &NativeGateway,
+    session_id: &str,
     model: &str,
     reasoning_effort: Option<&str>,
     messages: Vec<Value>,
@@ -97,6 +98,7 @@ pub(super) async fn infer(
         tx,
         cancel,
         ReadPolicy::default(),
+        Some(session_id),
     )
     .await
 }
@@ -110,17 +112,27 @@ pub(super) async fn infer_with_policy(
     tx: mpsc::UnboundedSender<Delta>,
     mut cancel: watch::Receiver<bool>,
     policy: ReadPolicy,
+    session_id: Option<&str>,
 ) -> Result<Turn, String> {
     let endpoint = validate_gateway(gateway)?;
+    if session_id.is_some_and(|session| {
+        !session.strip_prefix("lc:").and_then(|id| uuid::Uuid::parse_str(id).ok())
+            .is_some_and(|id| session == format!("lc:{id}"))
+    }) {
+        return Err("模型请求的 LoliCode 会话标识无效".into());
+    }
     let mut body = json!({"model":model,"messages":messages,"tools":tools,"stream":true,"stream_options":{"include_usage":true}});
     if let Some(effort) = reasoning_effort {
         body["reasoning_effort"] = json!(effort);
     }
-    let request = client
+    let mut request = client
         .post(endpoint)
         .bearer_auth(&gateway.bearer_token)
-        .json(&body)
-        .send();
+        .json(&body);
+    if let Some(session_id) = session_id {
+        request = request.header("x-lolicode-session-id", session_id);
+    }
+    let request = request.send();
     let response = tokio::select! { _ = cancelled(&mut cancel) => return Err(CANCELLED.into()), result = tokio::time::timeout(policy.progress_timeout, request) => result.map_err(|_| "模型等待首个响应超时；尚未执行新的工具，可以重试或切换模型。")?.map_err(|_| "无法连接模型网关，请检查渠道后重试")? };
     if !response.status().is_success() {
         let status = response.status().as_u16();

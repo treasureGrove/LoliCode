@@ -1,4 +1,5 @@
 import type { AgentUsage } from "@/types/agent";
+import { AgentSessionCost } from "./AgentSessionCost";
 
 const validCount = (value?: number): value is number =>
   value !== undefined && Number.isSafeInteger(value) && value >= 0;
@@ -12,7 +13,15 @@ const compact = (value?: number) =>
       }).format(value)
     : "—";
 
-export function AgentUsageFooter({ usage }: { usage?: AgentUsage }) {
+export function AgentUsageFooter({
+  usage,
+  sessionId,
+  active,
+}: {
+  usage?: AgentUsage;
+  sessionId?: string | null;
+  active?: boolean;
+}) {
   const session = usage?.session;
   const total = validCount(session?.totalTokens)
     ? session.totalTokens
@@ -62,6 +71,14 @@ export function AgentUsageFooter({ usage }: { usage?: AgentUsage }) {
           ? `${formatCount(session.modelRequests)} 轮`
           : "暂无请求记录"}
       </span>
+      {sessionId?.startsWith("lc:") && (
+        <AgentSessionCost
+          key={sessionId}
+          sessionId={sessionId}
+          active={active}
+          hasRecordedCalls={Boolean(session?.modelRequests)}
+        />
+      )}
     </div>
   );
 }

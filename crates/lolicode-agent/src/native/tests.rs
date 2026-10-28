@@ -39,6 +39,7 @@ struct Fake {
     requests: Arc<StdMutex<Vec<Value>>>,
     title_requests: Arc<StdMutex<Vec<Value>>>,
     compaction_requests: Arc<StdMutex<Vec<Value>>>,
+    session_attributions: Arc<StdMutex<Vec<(String, String)>>>,
     task: tokio::task::JoinHandle<()>,
     children: Arc<StdMutex<Vec<tokio::task::JoinHandle<()>>>>,
     resume: Arc<tokio::sync::Notify>,
@@ -70,6 +71,8 @@ impl Fake {
         let recorded_titles = title_requests.clone();
         let compaction_requests = Arc::new(StdMutex::new(Vec::new()));
         let recorded_compactions = compaction_requests.clone();
+        let session_attributions = Arc::new(StdMutex::new(Vec::new()));
+        let recorded_attributions = session_attributions.clone();
         let child_list = children.clone();
         let resume = Arc::new(tokio::sync::Notify::new());
         let response_resume = resume.clone();
@@ -80,6 +83,7 @@ impl Fake {
                 let requests = recorded.clone();
                 let title_requests = recorded_titles.clone();
                 let compaction_requests = recorded_compactions.clone();
+                let session_attributions = recorded_attributions.clone();
                 let resume = response_resume.clone();
                 let child = tokio::spawn(async move {
                     let mut input = Vec::new();
@@ -122,6 +126,15 @@ impl Fake {
                     let is_title = body["messages"][0]["content"].as_str()
                         .is_some_and(|prompt| prompt.starts_with("You generate a short session title"));
                     let is_compaction = is_compaction(&body);
+                    if let Some(session) = headers.lines().find_map(|line| {
+                        let (name, value) = line.split_once(':')?;
+                        name.eq_ignore_ascii_case("x-lolicode-session-id").then(|| value.trim().to_owned())
+                    }) {
+                        session_attributions.lock().unwrap().push((
+                            if is_title { "title" } else if is_compaction { "compaction" } else { "main" }.into(),
+                            session,
+                        ));
+                    }
                     let reply = if is_title {
                         title_requests.lock().unwrap().push(body.clone());
                         title_handler(&body)
@@ -169,6 +182,7 @@ impl Fake {
             requests,
             title_requests,
             compaction_requests,
+            session_attributions,
             task,
             children,
             resume,
@@ -598,6 +612,10 @@ async fn generated_titles_persist_and_manual_titles_win_over_late_summaries() {
     let listed = engine.call("listSessions", json!({})).await.unwrap();
     assert_eq!(listed[0]["activity"], json!({"status":"idle","titlePending":false}));
     assert_eq!(fake.title_requests.lock().unwrap().len(), 1);
+    let attributions = fake.session_attributions.lock().unwrap().clone();
+    assert!(attributions.iter().any(|(kind, _)| kind == "main"));
+    assert!(attributions.iter().any(|(kind, _)| kind == "title"));
+    assert!(attributions.iter().all(|(_, session)| session == &id));
     assert!(fake.title_requests.lock().unwrap()[0]["tools"].as_array().unwrap().is_empty());
     engine.shutdown().await.unwrap();
     let reopened = NativeEngine::open(data.path().into()).await.unwrap();

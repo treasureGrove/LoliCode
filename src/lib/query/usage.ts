@@ -397,13 +397,18 @@ export function useSessionUsageLastSync() {
   });
 }
 
-/** 单个会话的用量汇总（会话阅读页头部），只数会话日志导入的行。 */
-export function useSessionUsageSummary(appType: string, sessionId: string) {
+/** 单个会话的用量；LoliCode 使用原生网关账，其它来源使用会话日志。 */
+export function useSessionUsageSummary(
+  appType: string,
+  sessionId: string,
+  options?: UsageQueryOptions,
+) {
   return useQuery({
     queryKey: usageKeys.session(appType, sessionId),
     queryFn: () => usageApi.getSessionUsageSummary(appType, sessionId),
-    refetchInterval: DEFAULT_REFETCH_INTERVAL_MS,
-    refetchIntervalInBackground: false,
+    refetchInterval: options?.refetchInterval ?? DEFAULT_REFETCH_INTERVAL_MS,
+    refetchIntervalInBackground: options?.refetchIntervalInBackground ?? false,
+    enabled: options?.enabled ?? true,
   });
 }
 

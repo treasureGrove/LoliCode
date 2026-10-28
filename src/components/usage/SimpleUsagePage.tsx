@@ -23,6 +23,8 @@ import { UsageHeatmap } from "./UsageHeatmap";
 import { usageKeys } from "@/lib/query/usage";
 import { DesktopUsageSources } from "./DesktopUsageSources";
 import { DESKTOP_USAGE_APPS } from "./desktopSources";
+import { KNOWN_APP_TYPES, type ProviderStats } from "@/types/usage";
+import { useTauriEvent } from "@/hooks/useTauriEvent";
 import "./simple-usage.css";
 
 type Period = "today" | "week" | "month" | "all";
@@ -53,20 +55,88 @@ function appLabel(app: string) {
   return DESKTOP_USAGE_APPS[app] ?? APP_DISPLAY_NAME[app as AppId] ?? app;
 }
 
+type ChannelOption = {
+  value: string;
+  label: string;
+  providerId: string;
+  app: string;
+};
+
+function agentScope(app: string) {
+  return app === "claude-desktop" ? "claude" : app;
+}
+
+function channelOption(
+  provider: ProviderStats,
+  channelNames: Record<string, string>,
+): ChannelOption {
+  const shared = provider.providerId.startsWith("channel-");
+  const scope = shared ? "*" : agentScope(provider.appType);
+  const name = channelNames[provider.providerId] ?? provider.providerName;
+  return {
+    value: "@provider:v1:" + JSON.stringify([provider.providerId, scope]),
+    label: `${name} · ${shared ? "共享渠道" : appLabel(scope)}`,
+    providerId: provider.providerId,
+    app: scope,
+  };
+}
+
+function pricingIssues(value: {
+  unpricedRequests?: number;
+  partialRequests?: number;
+  cachePartialRequests?: number;
+}) {
+  return [
+    value.unpricedRequests ? `${fmtInt(value.unpricedRequests)} 次待定价` : "",
+    value.partialRequests
+      ? `${fmtInt(value.partialRequests)} 次用量待回报`
+      : "",
+    value.cachePartialRequests
+      ? `${fmtInt(value.cachePartialRequests)} 次缓存计费待确认`
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+function estimatedCost(value: string) {
+  const amount = Number(value);
+  return Number.isFinite(amount) && amount > 0 && amount < 0.0001
+    ? "<$0.0001"
+    : fmtUsd(value, 4);
+}
+
 export function SimpleUsagePage() {
   const queryClient = useQueryClient();
   const [period, setPeriod] = useState<Period>("today");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<ProviderSort>("requests");
+  const [agent, setAgent] = useState("all");
+  const [channel, setChannel] = useState<ChannelOption | null>(null);
+  const appType = agent === "all" ? undefined : agent;
+  const providerFilter = channel?.value;
+  const filtered = Boolean(appType || providerFilter);
+  useTauriEvent("usage-log-recorded", () => {
+    void queryClient.invalidateQueries({ queryKey: ["channel-center-usage"] });
+    void queryClient.invalidateQueries({ queryKey: usageKeys.all });
+  });
   const usage = useQuery({
-    queryKey: ["channel-center-usage", "summary", period],
+    queryKey: [
+      "channel-center-usage",
+      "summary",
+      period,
+      appType,
+      providerFilter,
+    ],
     queryFn: () => {
       const { from, to } = periodBounds(period);
-      return usageApi.getUsageSummary(from, to);
+      return filtered
+        ? usageApi.getUsageSummary(from, to, appType, providerFilter)
+        : usageApi.getUsageSummary(from, to);
     },
     refetchInterval: 60_000,
   });
-  const channels = useQuery({
+  const channelOptions = useQuery({
     queryKey: ["channel-center-usage", "providers", period],
     queryFn: async () => {
       const { from, to } = periodBounds(period);
@@ -81,14 +151,55 @@ export function SimpleUsagePage() {
     },
     refetchInterval: 60_000,
   });
+  const scopedChannels = useQuery({
+    queryKey: [
+      "channel-center-usage",
+      "filtered-providers",
+      period,
+      appType,
+      providerFilter,
+    ],
+    queryFn: () => {
+      const { from, to } = periodBounds(period);
+      return usageApi.getProviderStats(from, to, appType, providerFilter);
+    },
+    enabled: filtered,
+    refetchInterval: 60_000,
+  });
+  const channels = filtered ? scopedChannels : channelOptions;
   const summary = usage.data;
-  const providers = channels.data?.providers ?? [];
+  const providers = filtered
+    ? (scopedChannels.data ?? [])
+    : (channelOptions.data?.providers ?? []);
+  const names = channelOptions.data?.channelNames ?? {};
+  const optionsByValue = new Map<string, ChannelOption>();
+  for (const provider of channelOptions.data?.providers ?? []) {
+    const option = channelOption(provider, names);
+    optionsByValue.set(option.value, option);
+  }
+  if (channel && !optionsByValue.has(channel.value))
+    optionsByValue.set(channel.value, channel);
+  const optionLabels = new Map<string, number>();
+  for (const option of optionsByValue.values())
+    optionLabels.set(option.label, (optionLabels.get(option.label) ?? 0) + 1);
+  const providerOptions = [...optionsByValue.values()].sort((a, b) =>
+    a.label.localeCompare(b.label, "zh-CN"),
+  );
+  const agents = [
+    ...new Set([
+      "lolicode",
+      ...KNOWN_APP_TYPES,
+      ...(channelOptions.data?.providers ?? []).map((provider) =>
+        agentScope(provider.appType),
+      ),
+      ...(appType ? [appType] : []),
+    ]),
+  ];
   const providerRows = providers.map((provider) => ({
     ...provider,
     name:
       provider.appType === "lolicode" || provider.appType === "channel-gateway"
-        ? (channels.data?.channelNames[provider.providerId] ??
-          provider.providerName)
+        ? (names[provider.providerId] ?? provider.providerName)
         : provider.providerName,
     app: appLabel(provider.appType),
   }));
@@ -110,7 +221,8 @@ export function SimpleUsagePage() {
     (sum, provider) => sum + provider.requestCount,
     0,
   );
-  const fetching = usage.isFetching || channels.isFetching;
+  const fetching =
+    usage.isFetching || channels.isFetching || channelOptions.isFetching;
   const updatedAt = usage.dataUpdatedAt;
   const { from } = periodBounds(period, new Date(updatedAt || Date.now()));
   const dateLabel = (date: Date) =>
@@ -144,9 +256,11 @@ export function SimpleUsagePage() {
       summary.totalCacheReadTokens +
       summary.totalCacheCreationTokens
     : 0;
+  const pricingStatus = summary ? pricingIssues(summary) : "";
   const refresh = () => {
     void usage.refetch();
-    void channels.refetch();
+    void channelOptions.refetch();
+    if (filtered) void scopedChannels.refetch();
     void queryClient.invalidateQueries({ queryKey: usageKeys.all });
   };
   return (
@@ -179,7 +293,7 @@ export function SimpleUsagePage() {
             <div>
               <h2 className="lolicode-usage-range">{rangeLabel}</h2>
               <p className="lolicode-usage-caption">
-                时间筛选适用于概览和渠道明细
+                时间适用于概览和明细；Agent 与渠道可独立组合筛选
               </p>
             </div>
             <SegmentedControl<Period>
@@ -189,6 +303,63 @@ export function SimpleUsagePage() {
               items={PERIODS}
             />
           </div>
+          <div className="lolicode-usage-filters" aria-label="用量筛选">
+            <label>
+              <span>Agent 来源</span>
+              <select
+                className={fieldClass}
+                aria-label="按 Agent 筛选"
+                value={agent}
+                onChange={(event) => setAgent(event.target.value)}
+              >
+                <option value="all">全部 Agent</option>
+                {agents.map((app) => (
+                  <option key={app} value={app}>
+                    {appLabel(app)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>渠道</span>
+              <select
+                className={fieldClass}
+                aria-label="按渠道筛选"
+                value={providerFilter ?? ""}
+                onChange={(event) =>
+                  setChannel(optionsByValue.get(event.target.value) ?? null)
+                }
+              >
+                <option value="">全部渠道</option>
+                {providerOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                    {(optionLabels.get(option.label) ?? 0) > 1
+                      ? `（${option.providerId}）`
+                      : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {filtered && (
+              <Button
+                type="button"
+                variant="quiet"
+                size="compact"
+                onClick={() => {
+                  setAgent("all");
+                  setChannel(null);
+                }}
+              >
+                清除筛选
+              </Button>
+            )}
+          </div>
+          {filtered && channelOptions.isError && (
+            <p role="alert" className="lolicode-usage-notice">
+              筛选选项暂时读取失败，已保留当前选择，请点击刷新重试。
+            </p>
+          )}
           {usage.isError && (
             <p role="alert" className="lolicode-usage-notice">
               用量暂时加载失败，
@@ -217,9 +388,12 @@ export function SimpleUsagePage() {
                   },
                   {
                     label: "已定价估算（美元）",
-                    value: fmtUsd(summary.totalCost, 4),
+                    value:
+                      Number(summary.totalCost) === 0 && pricingStatus
+                        ? "待定价"
+                        : estimatedCost(summary.totalCost),
                     icon: Coins,
-                    detail: "仅含已知单价，实际以渠道账单为准",
+                    detail: pricingStatus || "仅含已知单价，实际以渠道账单为准",
                     tone: "cost",
                   },
                   {
@@ -383,6 +557,11 @@ export function SimpleUsagePage() {
                           ? (provider.requestCount / totalProviderRequests) *
                             100
                           : 0;
+                      const pendingPricing = pricingIssues(provider);
+                      const hasPricingStatus =
+                        typeof provider.unpricedRequests === "number" ||
+                        typeof provider.partialRequests === "number" ||
+                        typeof provider.cachePartialRequests === "number";
                       return (
                         <tr key={`${provider.appType}:${provider.providerId}`}>
                           <th scope="row">
@@ -407,13 +586,20 @@ export function SimpleUsagePage() {
                           </td>
                           <td>{fmtInt(provider.totalTokens)}</td>
                           <td>
-                            {DESKTOP_USAGE_APPS[provider.appType] &&
-                            Number(provider.totalCost) === 0 ? (
+                            {Number(provider.totalCost) === 0 &&
+                            (pendingPricing ||
+                              (!hasPricingStatus &&
+                                DESKTOP_USAGE_APPS[provider.appType])) ? (
                               <span className="lolicode-usage-unpriced">
                                 待定价
                               </span>
                             ) : (
-                              fmtUsd(provider.totalCost, 4)
+                              estimatedCost(provider.totalCost)
+                            )}
+                            {pendingPricing && (
+                              <span className="lolicode-usage-price-status">
+                                {pendingPricing}
+                              </span>
                             )}
                           </td>
                         </tr>
@@ -429,7 +615,9 @@ export function SimpleUsagePage() {
                   <p>
                     {query
                       ? "没有匹配的渠道或应用。"
-                      : "这个时间段还没有用量记录。"}
+                      : filtered
+                        ? "当前 Agent 与渠道组合没有用量记录。"
+                        : "这个时间段还没有用量记录。"}
                   </p>
                   {query ? (
                     <Button
@@ -451,10 +639,17 @@ export function SimpleUsagePage() {
           </section>
           <div className="lolicode-usage-history">
             <p className="lolicode-usage-caption">
-              历史活动 · 展示完整的每日记录，不受上方时间筛选影响
+              历史活动 · 跟随 Agent 与渠道筛选，展示完整的每日记录
             </p>
-            <UsageHeatmap refreshIntervalMs={60_000} />
+            <UsageHeatmap
+              appType={appType}
+              providerName={providerFilter}
+              refreshIntervalMs={60_000}
+            />
           </div>
+          <p className="lolicode-usage-caption">
+            以下为本机累计来源检测与同步，不受上方统计筛选影响。
+          </p>
           <DesktopUsageSources />
         </div>
       </div>

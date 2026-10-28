@@ -3446,7 +3446,15 @@ export function AgentPage({
                   <kbd>Shift ↵</kbd> 换行
                 </span>
               </div>
-              <AgentUsageFooter usage={snapshot?.usage} />
+              <AgentUsageFooter
+                usage={snapshot?.usage}
+                sessionId={sessionId}
+                active={
+                  snapshot?.status === "running" ||
+                  snapshot?.titlePending ||
+                  snapshot?.compacting
+                }
+              />
             </div>
           </>
         )}

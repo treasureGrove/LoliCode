@@ -57,6 +57,21 @@ pub(crate) struct GatewaySecrets(pub Vec<String>);
 #[derive(Clone, Copy)]
 struct GatewayClient(&'static str);
 
+/// Billing-only identity accepted from the authenticated native client. It is
+/// carried locally as an extension and never forwarded as an upstream header.
+#[derive(Clone)]
+struct GatewaySession(String);
+
+fn take_native_session(client: &str, headers: &mut HeaderMap) -> Option<String> {
+    let value = headers.remove("x-lolicode-session-id")?;
+    if client != "lolicode" {
+        return None;
+    }
+    let session = value.to_str().ok()?;
+    let id = uuid::Uuid::parse_str(session.strip_prefix("lc:")?).ok()?;
+    (session == format!("lc:{id}")).then(|| session.to_owned())
+}
+
 pub(crate) fn is_attributed_client(client: &str) -> bool {
     matches!(
         client,
@@ -418,6 +433,7 @@ pub(crate) async fn handle_gemini(
         "x-goog-api-key",
         "cookie",
         "proxy-authorization",
+        "x-lolicode-session-id",
     ] {
         parts.headers.remove(name);
     }
@@ -495,6 +511,9 @@ async fn handle(state: ProxyState, request: Request, wire: Wire) -> Result<Respo
     let snapshot = snapshot_for_uri(&state, request.uri())?;
     let (mut parts, raw_body) = request.into_parts();
     parts.extensions.insert(GatewayClient(client));
+    if let Some(session) = take_native_session(client, &mut parts.headers) {
+        parts.extensions.insert(GatewaySession(session));
+    }
     parts
         .extensions
         .insert(GatewaySecrets(vec![channel_center::gateway_token(
@@ -834,6 +853,14 @@ async fn forward(
         Some(explicit),
     )
     .await?;
+    if ctx.app_type_str == "lolicode" {
+        // Other native clients and generic metadata cannot claim an lc: session.
+        // Keep this billing identity out of upstream cache/session hints too.
+        ctx.session_id = extensions.get::<GatewaySession>()
+            .map(|session| session.0.clone())
+            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+        ctx.session_client_provided = false;
+    }
     // Capability failures belong to this channel's result. Do not turn an
     // unsupported image into a successful text-only request via global fallback.
     ctx.rectifier_config.request_media_fallback = false;
@@ -1834,6 +1861,25 @@ mod tests {
         upstream_task.abort();
     }
 
+    #[test]
+    fn private_native_session_is_canonical_scoped_and_always_removed() {
+        let session = "lc:12345678-1234-4234-8234-123456789abc";
+        for (client, value, expected) in [
+            ("lolicode", session, Some(session)),
+            ("channel-gateway", session, None),
+            ("tavern", session, None),
+            ("lolicode", "12345678-1234-4234-8234-123456789abc", None),
+            ("lolicode", "lc:12345678-1234-4234-8234-123456789ABC", None),
+            ("lolicode", "lc:not-a-session", None),
+        ] {
+            let mut headers = HeaderMap::new();
+            headers.insert("x-lolicode-session-id", value.parse().unwrap());
+            assert_eq!(take_native_session(client, &mut headers).as_deref(), expected);
+            assert!(!headers.contains_key("x-lolicode-session-id"));
+        }
+        assert_eq!(take_native_session("lolicode", &mut HeaderMap::new()), None);
+    }
+
     #[tokio::test]
     async fn native_lolicode_streamed_requests_are_billed_once_under_the_app_and_channel() {
         use super::super::{server::ProxyServer, types::ProxyConfig};
@@ -1843,6 +1889,7 @@ mod tests {
         let capture=move |request:Request| {
             let id=sequence.fetch_add(1,Ordering::SeqCst);
             async move {
+                assert!(!request.headers().contains_key("x-lolicode-session-id"));
                 let path=request.uri().path();
                 if path.ends_with("/chat/completions") {
                     let sse=format!("data: {}\n\ndata: {}\n\ndata: [DONE]\n\n",
@@ -1881,10 +1928,12 @@ mod tests {
         let client=reqwest::Client::builder().no_proxy().build().unwrap();
         let mut source=source();
         source.base_url=format!("http://{address}/v1"); source.models.truncate(1); source.models[0].id="meter-model".into();
+        let session = "lc:12345678-1234-4234-8234-123456789abc";
         for (index,protocol) in ["openai_chat","anthropic","openai_responses"].into_iter().enumerate() {
             source.protocol=protocol.into();
             db.set_setting("channel_center_catalog_42",&serde_json::to_string(&ChannelCenterSnapshot {channels:vec![source.clone()],..Default::default()}).unwrap()).unwrap();
             let response=client.post(format!("{base}/chat/completions")).bearer_auth(&token)
+                .header("x-lolicode-session-id", session)
                 .json(&json!({"model":"test/meter-model","messages":[{"role":"user","content":"hello"}],"stream":true,"stream_options":{"include_usage":true}}))
                 .send().await.unwrap();
             assert!(response.status().is_success(),"{protocol}: {}",response.text().await.unwrap());
@@ -1905,6 +1954,28 @@ mod tests {
         assert_eq!(channels[0].request_count,3); assert_eq!(channels[0].total_tokens,330);
         assert_eq!(db.get_usage_summary(None,None,Some("channel-gateway"),None,None).unwrap().total_requests,0);
         assert_eq!(db.get_usage_summary(None,None,None,None,None).unwrap().total_requests,3);
+        assert_eq!(db.conn.lock().unwrap().query_row(
+            "SELECT COUNT(*) FROM proxy_request_logs WHERE app_type='lolicode' AND session_id=?1",
+            [session], |row| row.get::<_, i64>(0)).unwrap(), 3);
+        // Generic metadata and malformed private IDs cannot claim this native
+        // session; their actual global usage still remains recorded once.
+        for (index, header) in [None, Some("not-a-native-session")].into_iter().enumerate() {
+            let mut request = client.post(format!("{base}/chat/completions")).bearer_auth(&token)
+                .json(&json!({"model":"test/meter-model","messages":[{"role":"user","content":"hello"}],
+                    "metadata":{"session_id":session},"stream":true,"stream_options":{"include_usage":true}}));
+            if let Some(header) = header { request = request.header("x-lolicode-session-id", header); }
+            let response = request.send().await.unwrap();
+            assert!(response.status().is_success());
+            let _ = response.text().await.unwrap();
+            tokio::time::timeout(std::time::Duration::from_secs(5), async {
+                while db.get_usage_summary(None,None,Some("lolicode"),None,None).unwrap().total_requests != (index+4) as u64 {
+                    tokio::task::yield_now().await;
+                }
+            }).await.unwrap();
+        }
+        assert_eq!(db.conn.lock().unwrap().query_row(
+            "SELECT COUNT(*) FROM proxy_request_logs WHERE app_type='lolicode' AND session_id=?1",
+            [session], |row| row.get::<_, i64>(0)).unwrap(), 3);
         proxy.stop().await.unwrap(); task.abort();
     }
 

@@ -20,6 +20,37 @@
   margin-bottom: 22px;
 }
 
+.lolicode-usage-filters {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.lolicode-usage-filters > label {
+  display: grid;
+  gap: 6px;
+  min-width: 180px;
+  max-width: 360px;
+  flex: 1 1 180px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.lolicode-usage-filters select {
+  width: 100%;
+  min-width: 0;
+}
+
+.lolicode-usage-price-status {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-3);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
 .lolicode-usage-range {
   font-size: 18px;
   font-weight: 650;

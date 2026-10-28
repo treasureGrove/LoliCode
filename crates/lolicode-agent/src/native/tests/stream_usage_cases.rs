@@ -26,6 +26,7 @@ async fn explicit_finish_does_not_wait_for_a_kept_open_socket_and_collects_trail
                 progress_timeout: Duration::from_secs(1),
                 terminal_grace: Duration::from_millis(60),
             },
+            None,
         )
         .await
     });
@@ -91,6 +92,7 @@ async fn heartbeats_do_not_keep_first_output_or_mid_stream_stalls_alive() {
                 progress_timeout: Duration::from_millis(80),
                 terminal_grace: Duration::from_millis(10),
             },
+            None,
         )
         .await;
         let error = result.err().unwrap();
@@ -313,6 +315,7 @@ async fn finished_responses_survive_partial_or_broken_trailers_but_invalid_tools
                     progress_timeout: Duration::from_millis(80),
                     terminal_grace: Duration::from_millis(20),
                 },
+                None,
             ),
         )
         .await

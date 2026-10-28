@@ -34,6 +34,16 @@ pub struct UsageSummary {
     /// cache_read / (input + cache_creation + cache_read). Range 0.0–1.0.
     /// Reported as a fraction; multiply by 100 in UI for percentage display.
     pub cache_hit_rate: f64,
+    /// Requests without a complete price estimate. A zero amount is not proof
+    /// that the upstream request was free.
+    #[serde(default)]
+    pub unpriced_requests: u64,
+    /// Requests whose token usage was absent or incomplete.
+    #[serde(default)]
+    pub partial_requests: u64,
+    /// Requests with incomplete cache counters or cache pricing.
+    #[serde(default)]
+    pub cache_partial_requests: u64,
 }
 
 /// Per-app-type usage summary used by the dashboard breakdown rail.
@@ -88,7 +98,7 @@ fn usage_summary_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<UsageSumm
 
     Ok(UsageSummary {
         total_requests: total_requests as u64,
-        total_cost: format!("{total_cost:.6}"),
+        total_cost: format_usage_cost(total_cost),
         total_input_tokens: total_input_tokens as u64,
         total_output_tokens: total_output_tokens as u64,
         total_cache_creation_tokens: total_cache_creation_tokens as u64,
@@ -96,7 +106,26 @@ fn usage_summary_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<UsageSumm
         success_rate,
         real_total_tokens,
         cache_hit_rate,
+        unpriced_requests: 0,
+        partial_requests: 0,
+        cache_partial_requests: 0,
     })
+}
+
+fn format_usage_cost(amount: f64) -> String {
+    if amount > 0.0 && amount < 0.000001 {
+        amount.to_string()
+    } else {
+        format!("{amount:.6}")
+    }
+}
+
+fn format_backfilled_cost(amount: rust_decimal::Decimal) -> String {
+    if amount > rust_decimal::Decimal::ZERO && amount < rust_decimal::Decimal::new(1, 6) {
+        amount.normalize().to_string()
+    } else {
+        format!("{amount:.6}")
+    }
 }
 
 /// 每日统计
@@ -142,6 +171,141 @@ pub struct ProviderStats {
     /// 估算首字中位数（毫秒）：会话日志导入、按时间戳推出了首字的明细请求。
     /// 和上面分开：口径不同，界面上只在没有精确值时显示，带 ≈。
     pub est_first_token_median_ms: Option<u64>,
+    #[serde(default)]
+    pub unpriced_requests: u64,
+    #[serde(default)]
+    pub partial_requests: u64,
+    #[serde(default)]
+    pub cache_partial_requests: u64,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+struct UsageQuality {
+    unpriced: u64,
+    partial: u64,
+    cache_partial: u64,
+}
+
+impl UsageQuality {
+    fn add(&mut self, other: Self) {
+        self.unpriced += other.unpriced;
+        self.partial += other.partial;
+        self.cache_partial += other.cache_partial;
+    }
+
+    fn apply(self, summary: &mut UsageSummary) {
+        summary.unpriced_requests = self.unpriced;
+        summary.partial_requests = self.partial;
+        summary.cache_partial_requests = self.cache_partial;
+    }
+}
+
+/// Read-side confidence for retained request rows. No request is duplicated or
+/// rewritten, and absent cache fields are not inferred from a numeric zero.
+/// Historical rollups lack per-request quality and session dimensions.
+fn usage_quality_by_provider(
+    conn: &Connection,
+    from_and_where: &str,
+    params: &[&dyn rusqlite::ToSql],
+) -> Result<HashMap<(String, String), UsageQuality>, AppError> {
+    use rust_decimal::Decimal;
+
+    let connector = if from_and_where.contains("WHERE") {
+        "AND"
+    } else {
+        "WHERE"
+    };
+    let fresh_input = fresh_input_sql("l");
+    let sql = format!(
+        "SELECT l.provider_id,l.app_type,l.model,l.request_model,l.pricing_model,
+            l.provider_type,l.cost_multiplier,l.total_cost_usd,
+            {fresh_input},l.output_tokens,l.cache_read_tokens,l.cache_creation_tokens
+         {from_and_where} {connector} (
+            CAST(l.total_cost_usd AS REAL)<=0 OR l.provider_type LIKE '%:cache-partial'
+            OR (l.input_tokens=0 AND l.output_tokens=0 AND l.cache_read_tokens=0 AND l.cache_creation_tokens=0)
+         )"
+    );
+    let mut stmt = conn.prepare(&sql)?;
+    let mut rows = stmt.query(params)?;
+    let mut prices: HashMap<String, Option<[Option<Decimal>; 4]>> = HashMap::new();
+    let mut result: HashMap<(String, String), UsageQuality> = HashMap::new();
+    while let Some(row) = rows.next()? {
+        let provider: String = row.get(0)?;
+        let app: String = row.get(1)?;
+        let model: String = row.get(2)?;
+        let requested: Option<String> = row.get(3)?;
+        let priced_model: Option<String> = row.get(4)?;
+        let metadata: Option<String> = row.get(5)?;
+        let multiplier: Option<String> = row.get(6)?;
+        let amount: String = row.get(7)?;
+        let counts = [
+            row.get::<_, i64>(8)?.max(0),
+            row.get::<_, i64>(9)?.max(0),
+            row.get::<_, i64>(10)?.max(0),
+            row.get::<_, i64>(11)?.max(0),
+        ];
+        let has_usage = counts.iter().any(|n| *n > 0);
+        let marked_cache_partial = metadata
+            .as_deref()
+            .is_some_and(|value| value.ends_with(":cache-partial"));
+        let mut quality = UsageQuality {
+            partial: u64::from(!has_usage),
+            cache_partial: u64::from(marked_cache_partial),
+            ..UsageQuality::default()
+        };
+        let stored = Decimal::from_str(&amount)
+            .ok()
+            .filter(|n| *n >= Decimal::ZERO);
+        if has_usage && stored.is_none_or(|n| n == Decimal::ZERO) {
+            let multiplier = Decimal::from_str(multiplier.as_deref().unwrap_or("1"))
+                .ok()
+                .filter(|n| *n >= Decimal::ZERO);
+            if multiplier != Some(Decimal::ZERO) {
+                let model = priced_model
+                    .as_deref()
+                    .filter(|name| !is_placeholder_pricing_model(name))
+                    .or_else(|| (!is_placeholder_pricing_model(&model)).then_some(model.as_str()))
+                    .or(requested.as_deref())
+                    .unwrap_or("unknown");
+                if !prices.contains_key(model) {
+                    let found = find_model_pricing_row(conn, model)?.map(|(a, b, c, d)| {
+                        [a, b, c, d]
+                            .map(|raw| Decimal::from_str(&raw).ok().filter(|n| *n >= Decimal::ZERO))
+                    });
+                    prices.insert(model.to_owned(), found);
+                }
+                let price = prices.get(model).and_then(Option::as_ref);
+                let known_zero = multiplier.is_some()
+                    && price.is_some_and(|price| {
+                        counts
+                            .iter()
+                            .zip(price)
+                            .all(|(count, price)| *count == 0 || *price == Some(Decimal::ZERO))
+                            && (!marked_cache_partial
+                                || (price[2] == Some(Decimal::ZERO)
+                                    && price[3] == Some(Decimal::ZERO)))
+                    });
+                quality.unpriced = u64::from(!known_zero || stored.is_none());
+                if let Some(price) = price {
+                    if (counts[2] > 0 && price[2].is_none())
+                        || (counts[3] > 0 && price[3].is_none())
+                    {
+                        quality.cache_partial = 1;
+                    }
+                }
+            }
+        }
+        result.entry((provider, app)).or_default().add(quality);
+    }
+    Ok(result)
+}
+
+fn total_usage_quality(qualities: &HashMap<(String, String), UsageQuality>) -> UsageQuality {
+    let mut total = UsageQuality::default();
+    for quality in qualities.values() {
+        total.add(*quality);
+    }
+    total
 }
 
 /// 计速度的门槛：输出少于这个数的请求（工具调用这类）不算速度，避免 0.1 秒回 15 个 token 算出离谱的数。
@@ -466,11 +630,40 @@ fn push_provider_model_filters(
     model: Option<&str>,
 ) {
     if let Some(name) = provider_name {
-        conditions.push(format!(
-            "{} = ?",
-            provider_name_coalesce(log_alias, provider_alias)
-        ));
-        params.push(Box::new(name.to_string()));
+        let identity = name
+            .strip_prefix("@provider:v1:")
+            .filter(|encoded| encoded.len() <= 2048)
+            .and_then(|encoded| serde_json::from_str::<[String; 2]>(encoded).ok())
+            .filter(|[id, app]| {
+                !id.is_empty()
+                    && id.len() <= 512
+                    && !app.is_empty()
+                    && app.len() <= 128
+                    && (app != "*" || id.starts_with("channel-"))
+            });
+        if let Some([id, app]) = identity {
+            conditions.push(format!("{log_alias}.provider_id = ?"));
+            params.push(Box::new(id));
+            // Channel-center IDs are shared by all Agent sources. Other
+            // providers retain their application scope even when names match.
+            if app != "*" {
+                conditions.push(format!(
+                    "{} = ?",
+                    folded_app_type_sql(&format!("{log_alias}.app_type"))
+                ));
+                params.push(Box::new(if app == "claude-desktop" {
+                    "claude".to_string()
+                } else {
+                    app
+                }));
+            }
+        } else {
+            conditions.push(format!(
+                "{} = ?",
+                provider_name_coalesce(log_alias, provider_alias)
+            ));
+            params.push(Box::new(name.to_string()));
+        }
     }
     if let Some(m) = model {
         conditions.push(format!("{} = ?", effective_model_sql(log_alias)));
@@ -1058,29 +1251,51 @@ impl Database {
         );
 
         // Combine params: detail params first, then rollup params
+        let detail_param_count = params_vec.len();
         let mut all_params: Vec<Box<dyn rusqlite::ToSql>> = params_vec;
         all_params.extend(rollup_params);
         let param_refs: Vec<&dyn rusqlite::ToSql> = all_params.iter().map(|p| p.as_ref()).collect();
 
-        let result = conn.query_row(&sql, param_refs.as_slice(), usage_summary_from_row)?;
+        let mut result = conn.query_row(&sql, param_refs.as_slice(), usage_summary_from_row)?;
+        total_usage_quality(&usage_quality_by_provider(
+            &conn,
+            &format!("FROM proxy_request_logs l {detail_join} {where_clause}"),
+            &param_refs[..detail_param_count],
+        )?)
+        .apply(&mut result);
 
         Ok(result)
     }
 
     /// 单个会话的用量汇总（会话阅读页头部）：总 Token 和花费的口径同 Dashboard。
     ///
-    /// 只数会话日志导入的行：它们带客户端自己的会话 ID，经不经过路由都会导入；
-    /// 代理行的会话 ID 是代理侧推断的，未必对得上，两边都数还会重复。
+    /// LoliCode uses only its canonical, explicitly attributed gateway rows.
+    /// Other clients keep their session-import-only behavior: inferred proxy
+    /// session IDs must not be added to imported logs a second time.
     /// 明细 30 天后汇总进按天表并删除（按天表没有会话维度），更早的会话查不到。
     pub fn get_session_usage_summary(
         &self,
         app_type: &str,
         session_id: &str,
     ) -> Result<UsageSummary, AppError> {
+        if app_type == "lolicode" {
+            let canonical = session_id
+                .strip_prefix("lc:")
+                .and_then(|id| uuid::Uuid::parse_str(id).ok())
+                .map(|id| format!("lc:{id}"));
+            if canonical.as_deref() != Some(session_id) {
+                return Err(AppError::Message("LoliCode 会话标识无效".into()));
+            }
+        }
         let conn = lock_conn!(self.conn);
         let fresh_input = fresh_input_sql("l");
         let app_type_expr = folded_app_type_sql("l.app_type");
         let data_source = data_source_expr("l");
+        let source_filter = if app_type == "lolicode" {
+            format!("{data_source} = 'proxy'")
+        } else {
+            format!("{data_source} <> 'proxy'")
+        };
         let sql = format!(
             "SELECT
                 COUNT(*),
@@ -1091,14 +1306,19 @@ impl Database {
                 COALESCE(SUM(l.cache_read_tokens), 0),
                 COALESCE(SUM(CASE WHEN l.status_code >= 200 AND l.status_code < 300 THEN 1 ELSE 0 END), 0)
              FROM proxy_request_logs l
-             WHERE l.session_id = ?1 AND {app_type_expr} = ?2 AND {data_source} <> 'proxy'"
+             WHERE l.session_id = ?1 AND {app_type_expr} = ?2 AND {source_filter}"
         );
 
-        let result = conn.query_row(
+        let mut result = conn.query_row(
             &sql,
             rusqlite::params![session_id, app_type],
             usage_summary_from_row,
         )?;
+        total_usage_quality(&usage_quality_by_provider(
+            &conn,
+            &format!("FROM proxy_request_logs l WHERE l.session_id=?1 AND {app_type_expr}=?2 AND {source_filter}"),
+            &[&session_id, &app_type],
+        )?).apply(&mut result);
 
         Ok(result)
     }
@@ -1213,6 +1433,13 @@ impl Database {
             GROUP BY app_type"
         );
 
+        let quality_refs: Vec<&dyn rusqlite::ToSql> =
+            detail_params.iter().map(|p| p.as_ref()).collect();
+        let quality = usage_quality_by_provider(
+            &conn,
+            &format!("FROM proxy_request_logs l {detail_join} {detail_where}"),
+            &quality_refs,
+        )?;
         let mut combined: Vec<Box<dyn rusqlite::ToSql>> = detail_params;
         combined.extend(rollup_params);
         let refs: Vec<&dyn rusqlite::ToSql> = combined.iter().map(|p| p.as_ref()).collect();
@@ -1240,11 +1467,23 @@ impl Database {
                 total_cache_read_tokens as u64,
             );
 
+            let mut app_quality = UsageQuality::default();
+            for ((_, app), value) in &quality {
+                let app = if app == "claude-desktop" {
+                    "claude"
+                } else {
+                    app.as_str()
+                };
+                if app == app_type {
+                    app_quality.add(*value);
+                }
+            }
+
             Ok(UsageSummaryByApp {
                 app_type,
                 summary: UsageSummary {
                     total_requests: total_requests as u64,
-                    total_cost: format!("{total_cost:.6}"),
+                    total_cost: format_usage_cost(total_cost),
                     total_input_tokens: total_input_tokens as u64,
                     total_output_tokens: total_output_tokens as u64,
                     total_cache_creation_tokens: total_cache_creation_tokens as u64,
@@ -1252,6 +1491,9 @@ impl Database {
                     success_rate,
                     real_total_tokens,
                     cache_hit_rate,
+                    unpriced_requests: app_quality.unpriced,
+                    partial_requests: app_quality.partial,
+                    cache_partial_requests: app_quality.cache_partial,
                 },
             })
         })?;
@@ -1355,7 +1597,7 @@ impl Database {
                     DailyStats {
                         date: String::new(),
                         request_count: row.get::<_, i64>(1)? as u64,
-                        total_cost: format!("{:.6}", row.get::<_, f64>(2)?),
+                        total_cost: format_usage_cost(row.get::<_, f64>(2)?),
                         total_tokens: row.get::<_, i64>(3)? as u64,
                         total_input_tokens: row.get::<_, i64>(4)? as u64,
                         total_output_tokens: row.get::<_, i64>(5)? as u64,
@@ -1469,7 +1711,7 @@ impl Database {
                 DailyStats {
                     date: String::new(),
                     request_count: row.get::<_, i64>(1)? as u64,
-                    total_cost: format!("{:.6}", row.get::<_, f64>(2)?),
+                    total_cost: format_usage_cost(row.get::<_, f64>(2)?),
                     total_tokens: row.get::<_, i64>(3)? as u64,
                     total_input_tokens: row.get::<_, i64>(4)? as u64,
                     total_output_tokens: row.get::<_, i64>(5)? as u64,
@@ -1579,7 +1821,7 @@ impl Database {
             });
             entry.request_count += req;
             let existing_cost: f64 = entry.total_cost.parse().unwrap_or(0.0);
-            entry.total_cost = format!("{:.6}", existing_cost + cost);
+            entry.total_cost = format_usage_cost(existing_cost + cost);
             entry.total_tokens += tok;
             entry.total_input_tokens += inp;
             entry.total_output_tokens += out;
@@ -1855,6 +2097,10 @@ impl Database {
             )
         };
 
+        let quality_refs: Vec<&dyn rusqlite::ToSql> =
+            detail_params.iter().map(|p| p.as_ref()).collect();
+        let quality = usage_quality_by_provider(&conn,
+            &format!("FROM proxy_request_logs l LEFT JOIN providers p ON l.provider_id=p.id AND l.app_type=p.app_type {detail_where}"), &quality_refs)?;
         let mut stmt = conn.prepare(&sql)?;
         let mut params: Vec<Box<dyn rusqlite::ToSql>> = detail_params;
         params.extend(rollup_params);
@@ -1874,12 +2120,21 @@ impl Database {
             };
 
             Ok(ProviderStats {
+                unpriced_requests: quality
+                    .get(&(provider_id.clone(), app_type.clone()))
+                    .map_or(0, |q| q.unpriced),
+                partial_requests: quality
+                    .get(&(provider_id.clone(), app_type.clone()))
+                    .map_or(0, |q| q.partial),
+                cache_partial_requests: quality
+                    .get(&(provider_id.clone(), app_type.clone()))
+                    .map_or(0, |q| q.cache_partial),
                 provider_id,
                 app_type,
                 provider_name: row.get(2)?,
                 request_count: request_count as u64,
                 total_tokens: row.get::<_, i64>(4)? as u64,
-                total_cost: format!("{:.6}", row.get::<_, f64>(5)?),
+                total_cost: format_usage_cost(row.get::<_, f64>(5)?),
                 success_rate,
                 avg_latency_ms: row.get::<_, f64>(7)? as u64,
                 speed_output_tokens: row.get::<_, i64>(8)?.max(0) as u64,
@@ -2081,8 +2336,8 @@ impl Database {
                 model,
                 request_count: request_count as u64,
                 total_tokens: row.get::<_, i64>(2)? as u64,
-                total_cost: format!("{total_cost:.6}"),
-                avg_cost_per_request: format!("{avg_cost:.6}"),
+                total_cost: format_usage_cost(total_cost),
+                avg_cost_per_request: format_usage_cost(avg_cost),
                 success_rate,
                 speed_output_tokens: row.get::<_, i64>(5)?.max(0) as u64,
                 speed_generation_ms: row.get::<_, i64>(6)?.max(0) as u64,
@@ -2337,10 +2592,10 @@ impl Database {
 
         Ok(ProviderLimitStatus {
             provider_id: provider_id.to_string(),
-            daily_usage: format!("{daily_usage:.6}"),
+            daily_usage: format_usage_cost(daily_usage),
             daily_limit: limit_daily.map(|l| format!("{l:.2}")),
             daily_exceeded,
-            monthly_usage: format!("{monthly_usage:.6}"),
+            monthly_usage: format_usage_cost(monthly_usage),
             monthly_limit: limit_monthly.map(|l| format!("{l:.2}")),
             monthly_exceeded,
         })
@@ -2460,14 +2715,20 @@ impl Database {
         }
 
         if crate::services::session_usage_desktop::DesktopSource::ALL
-            .iter().any(|source| source.app() == log.app_type)
+            .iter()
+            .any(|source| source.app() == log.app_type)
         {
             let incomplete_cache: bool = conn.query_row(
                 "SELECT COALESCE(provider_type LIKE 'desktop-usage:%:cache-partial',0)
-                 FROM proxy_request_logs WHERE request_id=?1", [&log.request_id], |row| row.get(0))?;
+                 FROM proxy_request_logs WHERE request_id=?1",
+                [&log.request_id],
+                |row| row.get(0),
+            )?;
             // Missing counters are unknown, not zero. A pricing refresh must
             // not silently turn a partial usage report into a complete cost.
-            if incomplete_cache { return Ok(false); }
+            if incomplete_cache {
+                return Ok(false);
+            }
         }
 
         let pricing = match Self::get_log_model_pricing_cached(conn, pricing_cache, log)? {
@@ -2517,11 +2778,11 @@ impl Database {
         let base_total = input_cost + output_cost + cache_read_cost + cache_creation_cost;
         let total_cost = base_total * multiplier;
 
-        log.input_cost_usd = format!("{input_cost:.6}");
-        log.output_cost_usd = format!("{output_cost:.6}");
-        log.cache_read_cost_usd = format!("{cache_read_cost:.6}");
-        log.cache_creation_cost_usd = format!("{cache_creation_cost:.6}");
-        log.total_cost_usd = format!("{total_cost:.6}");
+        log.input_cost_usd = format_backfilled_cost(input_cost);
+        log.output_cost_usd = format_backfilled_cost(output_cost);
+        log.cache_read_cost_usd = format_backfilled_cost(cache_read_cost);
+        log.cache_creation_cost_usd = format_backfilled_cost(cache_creation_cost);
+        log.total_cost_usd = format_backfilled_cost(total_cost);
 
         conn.execute(
             "UPDATE proxy_request_logs
@@ -4201,6 +4462,296 @@ mod tests {
         let empty = db.get_session_usage_summary("claude", "missing")?;
         assert_eq!(empty.total_requests, 0);
 
+        Ok(())
+    }
+
+    #[test]
+    fn test_lolicode_session_bill_uses_only_its_gateway_rows_and_reports_unknowns(
+    ) -> Result<(), AppError> {
+        let db = Database::memory()?;
+        let session = "lc:12345678-1234-4234-8234-123456789abc";
+        {
+            let conn = lock_conn!(db.conn);
+            conn.execute(
+                "INSERT INTO model_pricing VALUES ('billing-free','Free','0','0','0','0')",
+                [],
+            )?;
+            conn.execute(
+                "INSERT INTO model_pricing VALUES ('billing-positive','Paid','1','1','0.2','0.4')",
+                [],
+            )?;
+            for (id, model, cost, tokens, status, metadata) in [
+                ("main", "billing-main", "0.10", [100, 20, 5, 2], 200, None),
+                ("title", "billing-main", "0.02", [10, 5, 0, 0], 200, None),
+                ("compact", "billing-main", "0.03", [20, 10, 0, 0], 200, None),
+                (
+                    "unpriced",
+                    "billing-unknown",
+                    "0",
+                    [30, 15, 0, 0],
+                    200,
+                    None,
+                ),
+                ("free", "billing-free", "0", [40, 10, 0, 0], 200, None),
+                (
+                    "missing-usage",
+                    "billing-main",
+                    "0",
+                    [0, 0, 0, 0],
+                    502,
+                    None,
+                ),
+                (
+                    "cache-partial",
+                    "billing-main",
+                    "0.04",
+                    [10, 5, 10, 0],
+                    200,
+                    Some("desktop-usage:estimated:cache-partial"),
+                ),
+                (
+                    "awaiting-price",
+                    "billing-positive",
+                    "0",
+                    [10, 0, 0, 0],
+                    200,
+                    None,
+                ),
+            ] {
+                insert_usage_log(
+                    &conn,
+                    id,
+                    "lolicode",
+                    "channel-a",
+                    model,
+                    "proxy",
+                    1000,
+                    tokens[0],
+                    tokens[1],
+                    tokens[2],
+                    tokens[3],
+                    status,
+                    cost,
+                )?;
+                conn.execute("UPDATE proxy_request_logs SET session_id=?1,provider_type=?2,input_token_semantics=?3 WHERE request_id=?4",
+                    params![session,metadata,INPUT_TOKEN_SEMANTICS_FRESH,id])?;
+            }
+            for (id, app, sid, source) in [
+                ("import-duplicate", "lolicode", session, "session_log"),
+                (
+                    "other-session",
+                    "lolicode",
+                    "lc:12345678-1234-4234-8234-123456789abd",
+                    "proxy",
+                ),
+                ("other-app", "codex", session, "proxy"),
+                ("gateway-unknown", "channel-gateway", session, "proxy"),
+            ] {
+                insert_usage_log(
+                    &conn,
+                    id,
+                    app,
+                    "channel-a",
+                    "billing-main",
+                    source,
+                    1000,
+                    1,
+                    1,
+                    0,
+                    0,
+                    200,
+                    "99",
+                )?;
+                conn.execute(
+                    "UPDATE proxy_request_logs SET session_id=?1 WHERE request_id=?2",
+                    params![sid, id],
+                )?;
+            }
+        }
+        let summary = db.get_session_usage_summary("lolicode", session)?;
+        assert_eq!(summary.total_requests, 8);
+        assert_eq!(summary.total_cost, "0.190000");
+        assert_eq!(summary.real_total_tokens, 302);
+        assert_eq!(summary.unpriced_requests, 2);
+        assert_eq!(summary.partial_requests, 1);
+        assert_eq!(summary.cache_partial_requests, 1);
+        assert!(db
+            .get_session_usage_summary("lolicode", "12345678-1234-4234-8234-123456789abc")
+            .is_err());
+        assert!(db
+            .get_session_usage_summary("lolicode", "lc:12345678-1234-4234-8234-123456789ABC")
+            .is_err());
+        let empty =
+            db.get_session_usage_summary("lolicode", "lc:12345678-1234-4234-8234-123456789abe")?;
+        assert_eq!(empty.total_requests, 0);
+        Ok(())
+    }
+
+    #[test]
+    fn test_agent_and_stable_channel_identity_filters_remain_orthogonal() -> Result<(), AppError> {
+        let db = Database::memory()?;
+        {
+            let conn = lock_conn!(db.conn);
+            for (id, app) in [
+                ("channel-one", "lolicode"),
+                ("channel-two", "lolicode"),
+                ("channel-one", "codex"),
+                ("ordinary", "claude"),
+                ("ordinary", "claude-desktop"),
+            ] {
+                conn.execute("INSERT INTO providers(id,app_type,name,settings_config) VALUES(?1,?2,'Same display name','{}')",params![id,app])?;
+            }
+            for (id, provider, app, cost) in [
+                ("a", "channel-one", "lolicode", "0.1"),
+                ("b", "channel-two", "lolicode", "0.2"),
+                ("c", "channel-one", "codex", "0.3"),
+                ("d", "ordinary", "claude", "0.5"),
+                ("e", "ordinary", "claude-desktop", "0.6"),
+            ] {
+                insert_usage_log(
+                    &conn,
+                    id,
+                    app,
+                    provider,
+                    "billing-model",
+                    "proxy",
+                    1000,
+                    10,
+                    2,
+                    0,
+                    0,
+                    200,
+                    cost,
+                )?;
+            }
+            conn.execute("INSERT INTO usage_daily_rollups(date,app_type,provider_id,model,request_count,success_count,total_cost_usd)
+                VALUES('2024-03-01','lolicode','channel-two','billing-model',1,1,'0.4')",[])?;
+        }
+        let one = "@provider:v1:[\"channel-one\",\"*\"]";
+        let two = "@provider:v1:[\"channel-two\",\"*\"]";
+        assert_eq!(
+            db.get_usage_summary(None, None, None, Some(one), None)?
+                .total_requests,
+            2
+        );
+        let own = db.get_usage_summary(None, None, Some("lolicode"), Some(one), None)?;
+        assert_eq!(own.total_requests, 1);
+        assert_eq!(own.total_cost, "0.100000");
+        assert_eq!(
+            db.get_usage_summary(None, None, Some("codex"), Some(two), None)?
+                .total_requests,
+            0
+        );
+        let second = db.get_usage_summary(None, None, Some("lolicode"), Some(two), None)?;
+        assert_eq!(second.total_requests, 2);
+        assert_eq!(second.total_cost, "0.600000");
+        let apps = db.get_usage_summary_by_app(None, None, Some(one), None)?;
+        assert_eq!(apps.len(), 2);
+        let logs = db.get_request_logs(
+            &LogFilters {
+                app_type: Some("lolicode".into()),
+                provider_name: Some(two.into()),
+                ..LogFilters::default()
+            },
+            0,
+            20,
+        )?;
+        assert_eq!(logs.total, 1);
+        assert_eq!(logs.data[0].provider_id, "channel-two");
+        let models = db.get_model_stats(None, None, Some("lolicode"), Some(two), None)?;
+        assert_eq!(
+            models.iter().map(|entry| entry.request_count).sum::<u64>(),
+            2
+        );
+        assert_eq!(
+            db.get_usage_summary(
+                None,
+                None,
+                None,
+                Some("@provider:v1:[\"ordinary\",\"claude\"]"),
+                None
+            )?
+            .total_requests,
+            2
+        );
+        assert_eq!(
+            db.get_usage_summary(
+                None,
+                None,
+                None,
+                Some("@provider:v1:[\"ordinary\",\"*\"]"),
+                None
+            )?
+            .total_requests,
+            0
+        );
+        assert_eq!(
+            db.get_usage_summary(
+                None,
+                None,
+                None,
+                Some("@provider:v1:[\"channel-one\",\"*\"] OR 1=1"),
+                None
+            )?
+            .total_requests,
+            0
+        );
+        assert_eq!(
+            db.get_usage_summary(None, None, None, Some("Same display name"), None)?
+                .total_requests,
+            6
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_small_positive_cost_survives_summary_provider_and_daily_aggregation(
+    ) -> Result<(), AppError> {
+        let db = Database::memory()?;
+        let session = "lc:12345678-1234-4234-8234-123456789abc";
+        {
+            let conn = lock_conn!(db.conn);
+            insert_usage_log(
+                &conn,
+                "tiny",
+                "lolicode",
+                "channel-small",
+                "billing-model",
+                "proxy",
+                1000,
+                1,
+                0,
+                0,
+                0,
+                200,
+                "0.0000001",
+            )?;
+            conn.execute(
+                "UPDATE proxy_request_logs SET session_id=?1 WHERE request_id='tiny'",
+                [session],
+            )?;
+        }
+        let total = db.get_usage_summary(None, None, Some("lolicode"), None, None)?;
+        assert_eq!(total.total_cost.parse::<f64>().unwrap(), 0.0000001);
+        assert_eq!(total.unpriced_requests, 0);
+        assert_eq!(
+            db.get_session_usage_summary("lolicode", session)?
+                .total_cost
+                .parse::<f64>()
+                .unwrap(),
+            0.0000001
+        );
+        assert_eq!(
+            db.get_provider_stats(None, None, Some("lolicode"), None, None)?[0]
+                .total_cost
+                .parse::<f64>()
+                .unwrap(),
+            0.0000001
+        );
+        assert!(db
+            .get_daily_trends(Some(0), Some(2000), Some("lolicode"), None, None)?
+            .iter()
+            .any(|day| day.total_cost.parse::<f64>().unwrap() > 0.0));
         Ok(())
     }
 

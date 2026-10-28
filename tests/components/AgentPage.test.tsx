@@ -2,13 +2,16 @@ import {
   act,
   cleanup,
   fireEvent,
-  render,
+  render as testingRender,
   screen,
 } from "@testing-library/react";
+import type { ReactElement } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AgentPage } from "@/components/agent/AgentPage";
 import { agentApi } from "@/lib/api/agent";
 import { settingsApi } from "@/lib/api";
+import { usageApi } from "@/lib/api/usage";
 import { toast } from "@/lib/toast";
 import {
   captureAgentDraft,
@@ -17,6 +20,21 @@ import {
 } from "@/lib/agentInputLedger";
 import type { AgentCatalog, AgentSession, AgentSnapshot } from "@/types/agent";
 import { emitTauriEvent } from "../msw/tauriMocks";
+
+function render(ui: ReactElement) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+  });
+  return testingRender(ui, {
+    wrapper: ({ children }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    ),
+  });
+}
+
+vi.mock("@/lib/api/usage", () => ({
+  usageApi: { getSessionUsageSummary: vi.fn() },
+}));
 
 vi.mock("@/lib/api/agent", () => ({
   agentApi: {
@@ -127,6 +145,20 @@ function selectModel(name: string) {
 }
 
 beforeEach(() => {
+  vi.mocked(usageApi.getSessionUsageSummary).mockReset().mockResolvedValue({
+    totalRequests: 0,
+    totalCost: "0",
+    totalInputTokens: 0,
+    totalOutputTokens: 0,
+    totalCacheCreationTokens: 0,
+    totalCacheReadTokens: 0,
+    realTotalTokens: 0,
+    cacheHitRate: 0,
+    successRate: 0,
+    unpricedRequests: 0,
+    partialRequests: 0,
+    cachePartialRequests: 0,
+  });
   vi.useFakeTimers();
   vi.spyOn(toast, "warning").mockClear().mockReturnValue(0);
   sessionStorage.clear();

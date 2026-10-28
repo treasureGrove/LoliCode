@@ -100,6 +100,12 @@ export interface UsageSummary {
   realTotalTokens: number;
   /** cache_read / (input + cache_creation + cache_read), range 0–1 */
   cacheHitRate: number;
+  /** Missing/incomplete prices; a zero estimate does not imply free usage. */
+  unpricedRequests?: number;
+  /** Requests whose token usage was absent or incomplete. */
+  partialRequests?: number;
+  /** Requests with incomplete cache counters or cache pricing. */
+  cachePartialRequests?: number;
 }
 
 export interface UsageSummaryByApp {
@@ -140,6 +146,9 @@ export interface ProviderStats {
   firstTokenMedianMs?: number | null;
   /** 估算首字中位数（毫秒）：会话日志导入、按时间戳推出了首字的请求；没有精确值时才显示，带 ≈ */
   estFirstTokenMedianMs?: number | null;
+  unpricedRequests?: number;
+  partialRequests?: number;
+  cachePartialRequests?: number;
 }
 
 export interface ModelStats {

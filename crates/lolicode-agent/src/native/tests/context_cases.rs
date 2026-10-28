@@ -153,6 +153,10 @@ async fn long_tasks_compact_multiple_complete_batches_and_resume_after_restart_w
     );
     assert_eq!(fake.count(), 41);
     assert!(fake.compaction_requests.lock().unwrap().len() >= 3);
+    let attributions = fake.session_attributions.lock().unwrap().clone();
+    assert!(attributions.iter().any(|(kind, _)| kind == "compaction"));
+    assert!(attributions.iter().any(|(kind, _)| kind == "main"));
+    assert!(attributions.iter().all(|(_, session)| session == &id));
     assert_eq!(
         result["messages"].as_array().unwrap().len(),
         42,
