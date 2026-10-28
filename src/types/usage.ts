@@ -58,6 +58,9 @@ export interface DataSourceSummary {
   unpricedRequests?: number;
   cachePartialRequests?: number;
   historicalRequests?: number;
+  partialRequests?: number;
+  reportedCostRequests?: number;
+  estimatedCostRequests?: number;
 }
 
 export interface PaginatedLogs {

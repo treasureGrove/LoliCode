@@ -40,6 +40,10 @@ function mount() {
     ),
   };
 }
+async function overviewMetrics() {
+  const label = await screen.findByText("请求次数");
+  return within(label.closest("dl")!);
+}
 beforeEach(() => {
   vi.mocked(usageApi.getDataSourceBreakdown).mockResolvedValue([]);
   vi.mocked(usageApi.getUsageFirstDate).mockResolvedValue(null);
@@ -120,7 +124,9 @@ describe("basic usage", () => {
     ]);
     mount();
     await screen.findByText("混合费用（美元）");
-    expect(screen.getByText("1 次渠道回报 · 3 次本地估算")).toBeInTheDocument();
+    expect(
+      (await overviewMetrics()).getByText("1 次渠道回报 · 3 次本地估算"),
+    ).toBeInTheDocument();
     const row = await screen.findByRole("row", { name: /回报渠道/ });
     expect(within(row).getByText("渠道回报")).toHaveAttribute(
       "title",
@@ -334,7 +340,8 @@ describe("basic usage", () => {
   });
   it("keeps the last recorded summary visible after a background refresh fails", async () => {
     const { client } = mount();
-    expect(await screen.findByText("$0.1234")).toBeInTheDocument();
+    const overview = await overviewMetrics();
+    expect(await overview.findByText("$0.1234")).toBeInTheDocument();
     vi.mocked(usageApi.getUsageSummary).mockRejectedValue(
       new Error("background summary read failed"),
     );
@@ -344,7 +351,7 @@ describe("basic usage", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "正在显示上次记录",
     );
-    expect(screen.getByText("$0.1234")).toBeInTheDocument();
+    expect(overview.getByText("$0.1234")).toBeInTheDocument();
     expect(screen.getByText("75.0%")).toBeInTheDocument();
   });
   it("keeps summary metrics available when channel details fail to load", async () => {
@@ -352,7 +359,9 @@ describe("basic usage", () => {
       new Error("provider statistics read failed"),
     );
     mount();
-    expect(await screen.findByText("$0.1234")).toBeInTheDocument();
+    expect(
+      await (await overviewMetrics()).findByText("$0.1234"),
+    ).toBeInTheDocument();
     expect(screen.getByText("75.0%")).toBeInTheDocument();
     expect(await screen.findByRole("alert")).toHaveTextContent("渠道明细");
     expect(usageApi.getUsageSummary).toHaveBeenCalled();
@@ -437,7 +446,9 @@ describe("basic usage", () => {
       successRate: 75,
     } as Awaited<ReturnType<typeof usageApi.getUsageSummary>>);
     await userEvent.setup().click(screen.getByRole("button", { name: "刷新" }));
-    expect(await screen.findByText("$0.1234")).toBeInTheDocument();
+    expect(
+      await (await overviewMetrics()).findByText("$0.1234"),
+    ).toBeInTheDocument();
   });
   it("combines independent Agent and shared channel filters across metrics, rows and daily activity", async () => {
     const data: ProviderStats[] = [
