@@ -163,9 +163,16 @@ jobs:
         with:
           tool: cargo-nextest
 
-      - name: Create frontend dist placeholder
+      - name: Setup Node.js for bundled assets
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+
+      - name: Prepare frontend placeholder and bundled agent assets
         shell: bash
-        run: mkdir -p dist
+        run: |
+          mkdir -p dist
+          node scripts/build/prepare-agent-assets.mjs
 
       - name: Check Rust formatting
         run: cargo fmt --check --manifest-path src-tauri/Cargo.toml
@@ -218,9 +225,16 @@ jobs:
           shared-key: backend
           save-if: false
 
-      - name: Create frontend dist placeholder
+      - name: Setup Node.js for bundled assets
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+
+      - name: Prepare frontend placeholder and bundled agent assets
         shell: bash
-        run: mkdir -p dist
+        run: |
+          mkdir -p dist
+          node scripts/build/prepare-agent-assets.mjs
 
       - name: Prepare WSL2-backed test environment
         shell: pwsh
