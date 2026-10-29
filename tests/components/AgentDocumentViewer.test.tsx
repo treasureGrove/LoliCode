@@ -592,7 +592,7 @@ describe("Office document viewer", () => {
     );
     const view = viewer("report.pdf#page:2");
     await waitFor(() => expect(pdfMocks.render).toHaveBeenCalled());
-    const canvas = screen.getByLabelText("PDF 第 2 页");
+    const canvas = await screen.findByLabelText("PDF 第 2 页");
     await waitFor(() => expect(canvas).toBeVisible());
     expect(pdfMocks.getPage).toHaveBeenLastCalledWith(2);
     expect(pdfMocks.getDocument).toHaveBeenCalledWith(
