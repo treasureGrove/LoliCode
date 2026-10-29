@@ -1,8 +1,8 @@
 use serde_json::json;
 
 use lolicode_lib::{
-    get_claude_settings_path, read_json_file, write_codex_live_atomic, AppError, AppType, McpApps,
-    McpServer, MultiAppConfig, Provider, ProviderMeta, ProviderService,
+    get_claude_settings_path, get_database_path, read_json_file, write_codex_live_atomic, AppError,
+    AppType, McpApps, McpServer, MultiAppConfig, Provider, ProviderMeta, ProviderService,
 };
 
 #[path = "support.rs"]
@@ -3561,7 +3561,7 @@ fn claude_add_dialog_keeps_the_users_exclusive_fields_out_of_the_new_row() {
 fn claude_editor_never_leaves_the_row_and_live_apart() {
     let _guard = test_mutex().lock().unwrap_or_else(|e| e.into_inner());
     reset_test_fs();
-    let home = ensure_test_home();
+    let _home = ensure_test_home();
 
     let a = json!({ "env": { "ANTHROPIC_BASE_URL": "https://a.example", "ANTHROPIC_AUTH_TOKEN": "sk-old" } });
     let state = seed_claude_switch_state(
@@ -3575,7 +3575,7 @@ fn claude_editor_never_leaves_the_row_and_live_apart() {
     let (row, base) = open_claude_editor(&state, "a");
     let mut edited = base.clone();
     edited["env"]["ANTHROPIC_AUTH_TOKEN"] = json!("sk-new");
-    let db = rusqlite::Connection::open(home.join(".tai-switch/cc-switch.db")).expect("open db");
+    let db = rusqlite::Connection::open(get_database_path()).expect("open db");
     db.execute_batch(
         "CREATE TRIGGER fail_edit BEFORE UPDATE OF settings_config ON providers \
          BEGIN SELECT RAISE(ABORT, 'injected save failure'); END;",

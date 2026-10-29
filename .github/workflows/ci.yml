@@ -163,10 +163,13 @@ jobs:
         with:
           tool: cargo-nextest
 
-      - name: Setup Node.js for bundled assets
+      - name: Setup Node.js for bundled assets and relay fixtures
         uses: actions/setup-node@v6
         with:
-          node-version-file: .node-version
+          node-version: "24"
+
+      - name: Install companion relay fixture dependencies
+        run: npm ci --prefix packages/companion-relay --ignore-scripts --no-audit --no-fund
 
       - name: Prepare frontend placeholder and bundled agent assets
         shell: bash

@@ -219,16 +219,16 @@ async fn scoped_identity_survives_account_switches_and_real_relay_http_registrat
         .arg(directory.path())
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::null())
+        .stderr(std::process::Stdio::inherit())
         .kill_on_drop(true)
         .spawn()
         .expect("Node.js is required for the repository's relay fixture");
     let mut lines = tokio::io::BufReader::new(server.stdout.take().unwrap()).lines();
     let ready = tokio::time::timeout(Duration::from_secs(10), lines.next_line())
         .await
-        .unwrap()
-        .unwrap()
-        .unwrap();
+        .expect("local relay fixture did not become ready within 10 seconds")
+        .expect("local relay fixture readiness could not be read")
+        .expect("local relay fixture exited before readiness; inspect its startup stderr");
     let port = serde_json::from_str::<Value>(&ready).unwrap()["port"]
         .as_u64()
         .unwrap();

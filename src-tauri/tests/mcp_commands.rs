@@ -4,9 +4,10 @@ use std::fs;
 use serde_json::json;
 
 use lolicode_lib::{
-    get_claude_mcp_path, get_claude_mcp_status, get_claude_settings_path, get_grok_config_path,
-    import_default_config_test_hook, read_claude_mcp_config, update_settings, AppError,
-    AppSettings, AppType, McpApps, McpServer, McpService, MultiAppConfig, ProviderService,
+    get_claude_mcp_path, get_claude_mcp_status, get_claude_settings_path, get_database_path,
+    get_grok_config_path, import_default_config_test_hook, read_claude_mcp_config, update_settings,
+    AppError, AppSettings, AppType, McpApps, McpServer, McpService, MultiAppConfig,
+    ProviderService,
 };
 
 #[path = "support.rs"]
@@ -284,7 +285,7 @@ fn pi_import_keeps_disabled_entries_unchecked() {
 fn import_default_config_claude_persists_provider() {
     let _guard = test_mutex().lock().unwrap_or_else(|e| e.into_inner());
     reset_test_fs();
-    let home = ensure_test_home();
+    let _home = ensure_test_home();
 
     let settings_path = get_claude_settings_path();
     if let Some(parent) = settings_path.parent() {
@@ -326,10 +327,10 @@ fn import_default_config_claude_persists_provider() {
     );
 
     // 验证数据已持久化到数据库（v3.7.0+ 使用 SQLite 而非 config.json）
-    let db_path = home.join(".tai-switch").join("cc-switch.db");
+    let db_path = get_database_path();
     assert!(
         db_path.exists(),
-        "importing default config should persist to cc-switch.db"
+        "importing default config should persist to the active application database"
     );
 }
 
@@ -552,7 +553,7 @@ fn import_default_config_without_live_file_returns_error() {
 fn import_mcp_from_claude_creates_config_and_enables_servers() {
     let _guard = test_mutex().lock().unwrap_or_else(|e| e.into_inner());
     reset_test_fs();
-    let home = ensure_test_home();
+    let _home = ensure_test_home();
 
     let mcp_path = get_claude_mcp_path();
     let claude_json = json!({
@@ -588,10 +589,10 @@ fn import_mcp_from_claude_creates_config_and_enables_servers() {
     );
 
     // 验证数据已持久化到数据库
-    let db_path = home.join(".tai-switch").join("cc-switch.db");
+    let db_path = get_database_path();
     assert!(
         db_path.exists(),
-        "state.save should persist to cc-switch.db when changes detected"
+        "state.save should persist to the active application database when changes detected"
     );
 }
 
