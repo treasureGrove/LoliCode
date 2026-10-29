@@ -183,6 +183,16 @@ jobs:
       - name: Clippy
         run: cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
 
+      - name: Prepare a physical macOS test temporary root
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          test -d "$RUNNER_TEMP"
+          lolicode_test_temp="$(mktemp -d "$RUNNER_TEMP/lolicode-tests.XXXXXX")"
+          lolicode_test_temp="$(cd "$lolicode_test_temp" && pwd -P)"
+          test -O "$lolicode_test_temp"
+          printf 'TMPDIR=%s\n' "$lolicode_test_temp" >> "$GITHUB_ENV"
+
       # 每个测试一个进程，单测超时见 src-tauri/.config/nextest.toml。doctest 目前只有两个
       # ignored，nextest 不跑 doctest 也不漏。
       - name: Run tests
