@@ -11,7 +11,7 @@ import {
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { SessionReader } from "@/components/sessions/reader/SessionReader";
+import { SessionReader } from "@/features/sessions/reader/SessionReader";
 import { sessionsApi } from "@/lib/api/sessions";
 import {
   clearSessionImageCache,

@@ -1,0 +1,115 @@
+.wb-tool-panel-content {
+  min-height: 100%;
+}
+.wb-tool-panel.wb-extensions {
+  width: 100%;
+  max-width: 1200px;
+  min-height: 100%;
+  margin: 0 auto;
+  padding: clamp(20px, 3vw, 40px);
+  background: transparent;
+}
+.wb-tool-panel-intro {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 28px;
+}
+.wb-tool-panel-icon {
+  display: grid;
+  flex: 0 0 54px;
+  height: 54px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--wb-accent) 15%, var(--wb-border));
+  border-radius: 18px;
+  background: var(--wb-accent-soft);
+  color: var(--wb-accent);
+}
+.wb-tool-panel-copy {
+  flex: 1;
+  min-width: 0;
+}
+.wb-tool-panel-copy h2 {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.035em;
+}
+.wb-tool-panel-copy p {
+  max-width: 660px;
+  margin-top: 5px;
+  color: var(--wb-muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+.wb-tool-panel-project {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 220px;
+  padding: 7px 11px;
+  border: 1px solid var(--wb-border);
+  border-radius: 9px;
+  color: var(--wb-muted);
+  background: var(--wb-panel);
+  font-size: 12px;
+}
+.wb-tool-panel-project svg {
+  flex-shrink: 0;
+}
+.wb-tool-panel-project span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wb-tool-panel > .wb-extension-tabs {
+  gap: 6px;
+  padding: 0 0 16px;
+  margin-bottom: 20px;
+}
+.wb-tool-panel > .wb-extension-tabs button {
+  min-height: 36px;
+  padding: 7px 16px;
+}
+.wb-tool-panel > .wb-extension-list {
+  overflow: visible;
+  padding: 0;
+  gap: 16px;
+}
+.wb-tool-panel .wb-extension-card {
+  padding: 18px;
+  background: var(--wb-panel);
+  border-radius: 15px;
+}
+.wb-tool-panel .wb-extension-card-heading h3 {
+  font-size: 14px;
+}
+.wb-tool-panel .wb-extension-card > p {
+  line-height: 1.7;
+}
+.wb-tool-panel .wb-extension-hint {
+  padding: 18px;
+  border: 1px solid var(--wb-border);
+  border-radius: 12px;
+  background: var(--wb-hover);
+  line-height: 1.8;
+}
+.wb-tool-panel .wb-extension-hint strong {
+  color: var(--wb-text);
+}
+@media (max-width: 720px) {
+  .wb-tool-panel-intro {
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 22px;
+  }
+  .wb-tool-panel-copy h2 {
+    font-size: 20px;
+  }
+  .wb-tool-panel-project {
+    max-width: 100%;
+    margin-left: 66px;
+  }
+  .wb-tool-panel > .wb-extension-tabs {
+    flex-wrap: wrap;
+  }
+}

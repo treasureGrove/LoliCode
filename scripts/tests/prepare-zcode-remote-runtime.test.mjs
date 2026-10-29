@@ -17,12 +17,12 @@ import {
   PLATFORM,
   validateArchivePaths,
   verifyRemoteAssets,
-} from "../prepare-zcode-remote-runtime.mjs";
+} from "../build/prepare-zcode-remote-runtime.mjs";
 import {
   SOURCE_REVISION,
   UPSTREAM_VERSION,
   ownedTransformManifest,
-} from "../prepare-zcode-runtime.mjs";
+} from "../build/prepare-zcode-runtime.mjs";
 
 test("Linux assets reject Windows executables, wrong ELF architecture and truncation", () => {
   const elf = Buffer.alloc(64);

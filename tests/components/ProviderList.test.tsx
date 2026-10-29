@@ -7,7 +7,7 @@ import type { Provider } from "@/types";
 import {
   ProviderList,
   type SwitchModeProps,
-} from "@/components/providers/ProviderList";
+} from "@/features/providers/ProviderList";
 import { server } from "../msw/server";
 
 vi.mock("sonner", () => ({
@@ -35,7 +35,7 @@ vi.mock("@/hooks/useDragSort", () => ({
   useDragSort: (...args: unknown[]) => useDragSortMock(...args),
 }));
 
-vi.mock("@/components/providers/ProviderCard", () => ({
+vi.mock("@/features/providers/ProviderCard", () => ({
   ProviderCard: (props: any) => {
     providerCardRenderSpy(props);
     const { provider, presentation, onEdit, onDelete, onDuplicate } = props;

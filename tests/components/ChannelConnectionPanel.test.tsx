@@ -6,7 +6,7 @@ import {
   within,
 } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ChannelConnectionPanel } from "@/components/channels/ChannelConnectionPanel";
+import { ChannelConnectionPanel } from "@/features/channels/ChannelConnectionPanel";
 import {
   channelCenterApi,
   type ChannelConnection,

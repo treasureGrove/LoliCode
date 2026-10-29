@@ -9,7 +9,7 @@
 - 逐文件校验：1,568 个上游文件的 Git blob 哈希全部一致，文件执行标记亦按原 Git tree 保留。
 - 许可证：原 `LICENSE` 完整保留，MIT，Copyright (c) 2025 Jason Young。
 
-以上描述纯复制提交 `b04540d`。该提交的 README、产品名称、图标、数据格式、代理、计费、客户端切换、MCP、Skills 和其他模块均保持上游原样。后续用户授权的测试修复和隔离测试打包在其上单独提交，交付说明见 `TESTING_LOLICODE.md`。
+以上描述纯复制提交 `b04540d`。该提交的 README、产品名称、图标、数据格式、代理、计费、客户端切换、MCP、Skills 和其他模块均保持上游原样。后续用户授权的测试修复和隔离测试打包在其上单独提交，交付说明见 `docs/history/TESTING_LOLICODE.md`。
 
 ## 目录与保留版本
 
@@ -27,6 +27,6 @@
 
 本地验证使用外部 Tauri 配置覆盖测试应用标识，关闭验证包的更新产物签名，并将测试 deeplink scheme 和 updater endpoints 留空；这些仅用于隔离验证，不写入原始 tauri.conf.json。
 
-完整复制后的验证结果记录在 `FORK_VALIDATION.md`。类型检查或构建通过不代表所有客户端、真实提供商与干净系统均已验收。
+完整复制后的验证结果记录在 `docs/history/FORK_VALIDATION.md`。类型检查或构建通过不代表所有客户端、真实提供商与干净系统均已验收。
 
 后续产品演进统一使用 LoliCode 品牌，并按各自交付记录推进 Astra UI、网站导航和免费额度功能；不能将早期自研网关标为 CC Switch 的完整实现。

@@ -2,8 +2,8 @@ import { useState } from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CodexOAuthSection } from "@/components/providers/forms/CodexOAuthSection";
-import { AuthCenterPanel } from "@/components/settings/AuthCenterPanel";
+import { CodexOAuthSection } from "@/features/providers/forms/CodexOAuthSection";
+import { AuthCenterPanel } from "@/features/settings/AuthCenterPanel";
 
 const mocks = vi.hoisted(() => ({
   useCodexOauth: vi.fn(),
@@ -11,11 +11,11 @@ const mocks = vi.hoisted(() => ({
   accountUsers: vi.fn(),
 }));
 
-vi.mock("@/components/providers/forms/hooks/useManagedAccountUsers", () => ({
+vi.mock("@/features/providers/forms/hooks/useManagedAccountUsers", () => ({
   useManagedAccountUsers: () => mocks.accountUsers,
 }));
 
-vi.mock("@/components/providers/forms/hooks/useCodexOauth", () => ({
+vi.mock("@/features/providers/forms/hooks/useCodexOauth", () => ({
   useCodexOauth: mocks.useCodexOauth,
 }));
 
@@ -26,11 +26,11 @@ vi.mock("@/components/CodexOauthAccountQuota", () => ({
   },
 }));
 
-vi.mock("@/components/providers/forms/CopilotAuthSection", () => ({
+vi.mock("@/features/providers/forms/CopilotAuthSection", () => ({
   CopilotAuthSection: () => <div />,
 }));
 
-vi.mock("@/components/providers/forms/XaiOAuthSection", () => ({
+vi.mock("@/features/providers/forms/XaiOAuthSection", () => ({
   XaiOAuthSection: () => <div />,
 }));
 

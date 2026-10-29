@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { AgentActivityStatus } from "@/components/agent/AgentActivityStatus";
+import { AgentActivityStatus } from "@/features/agent/AgentActivityStatus";
 import type { AgentMessage, AgentSnapshot } from "@/types/agent";
 
 const message = (

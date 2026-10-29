@@ -4,12 +4,12 @@ import { describe, expect, it, vi } from "vitest";
 import {
   AgentTranscript,
   groupAgentTranscript,
-} from "@/components/agent/AgentTranscript";
-import { AgentRunError } from "@/components/agent/AgentRunError";
-import { AgentFileActionsContext } from "@/components/agent/AgentFilePath";
+} from "@/features/agent/AgentTranscript";
+import { AgentRunError } from "@/features/agent/AgentRunError";
+import { AgentFileActionsContext } from "@/features/agent/AgentFilePath";
 import type { AgentMessage, AgentPart } from "@/types/agent";
 
-vi.mock("@/components/sessions/reader/SessionMarkdown", () => ({
+vi.mock("@/features/sessions/reader/SessionMarkdown", () => ({
   SessionMarkdown: ({ content }: { content: string }) => <p>{content}</p>,
 }));
 

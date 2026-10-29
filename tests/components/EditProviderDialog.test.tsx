@@ -50,7 +50,7 @@ vi.mock("@/components/common/FullScreenPanel", () => ({
     ) : null,
 }));
 
-vi.mock("@/components/providers/forms/ProviderForm", () => ({
+vi.mock("@/features/providers/forms/ProviderForm", () => ({
   ProviderForm: ({
     initialData,
     onSubmit,
@@ -130,12 +130,12 @@ vi.mock("@/components/providers/forms/ProviderForm", () => ({
   },
 }));
 
-vi.mock("@/components/providers/AuthSettingsPanel", () => ({
+vi.mock("@/features/providers/AuthSettingsPanel", () => ({
   AuthSettingsPanel: ({ target }: { target: string | null }) =>
     target ? <div data-testid="auth-settings-panel">{target}</div> : null,
 }));
 
-import { EditProviderDialog } from "@/components/providers/EditProviderDialog";
+import { EditProviderDialog } from "@/features/providers/EditProviderDialog";
 
 describe("EditProviderDialog", () => {
   beforeEach(() => {

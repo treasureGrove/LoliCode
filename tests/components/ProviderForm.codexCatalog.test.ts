@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { normalizeCodexCatalogModelsForSave } from "@/components/providers/forms/ProviderForm";
-import { mapCodexCatalogModelForForm } from "@/components/providers/forms/hooks/useCodexConfigState";
+import { normalizeCodexCatalogModelsForSave } from "@/features/providers/forms/ProviderForm";
+import { mapCodexCatalogModelForForm } from "@/features/providers/forms/hooks/useCodexConfigState";
 
 describe("ProviderForm Codex catalog helpers", () => {
   it("normalizes catalog rows and removes empty or duplicate models", () => {

@@ -6,8 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ResourcePackProvider,
   useResourceImage,
-} from "@/components/shell/ResourcePackProvider";
-import { ResourceUpdatesSection } from "@/components/settings/ResourceUpdatesSection";
+} from "@/app/shell/ResourcePackProvider";
+import { ResourceUpdatesSection } from "@/features/settings/ResourceUpdatesSection";
 import {
   resourcePackKey,
   resourceUpdatesApi,

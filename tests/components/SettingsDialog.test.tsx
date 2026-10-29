@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import "@testing-library/jest-dom";
 import type { ComponentProps } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { SettingsPage } from "@/components/settings/SettingsPage";
+import { SettingsPage } from "@/features/settings/SettingsPage";
 
 const toastSuccessMock = vi.fn();
 const toastErrorMock = vi.fn();
@@ -132,25 +132,25 @@ vi.mock("@/components/ui/dialog", () => ({
   DialogDescription: ({ children }: any) => <div>{children}</div>,
 }));
 
-vi.mock("@/components/settings/AboutSection", () => ({
+vi.mock("@/features/settings/AboutSection", () => ({
   AboutSection: ({ isPortable }: any) => <div>about:{String(isPortable)}</div>,
 }));
-vi.mock("@/components/settings/WebdavSyncSection", () => ({
+vi.mock("@/features/settings/WebdavSyncSection", () => ({
   WebdavSyncSection: () => <div>webdav-sync-section</div>,
 }));
-vi.mock("@/components/settings/BackupListSection", () => ({
+vi.mock("@/features/settings/BackupListSection", () => ({
   BackupListSection: () => <div>backup-list-section</div>,
 }));
-vi.mock("@/components/settings/LogConfigPanel", () => ({
+vi.mock("@/features/settings/LogConfigPanel", () => ({
   LogConfigPanel: () => <div>log-config-panel</div>,
 }));
-vi.mock("@/components/settings/ProxyTabContent", () => ({
+vi.mock("@/features/settings/ProxyTabContent", () => ({
   ProxyTabContent: () => <div>proxy-tab-content</div>,
 }));
-vi.mock("@/components/settings/GlobalProxySettings", () => ({
+vi.mock("@/features/settings/GlobalProxySettings", () => ({
   GlobalProxySettings: () => <div>global-proxy-settings</div>,
 }));
-vi.mock("@/components/settings/CodexAuthSettings", () => ({
+vi.mock("@/features/settings/CodexAuthSettings", () => ({
   CodexAuthSettings: () => <div>codex-auth-settings</div>,
 }));
 

@@ -6,7 +6,7 @@ import {
   developmentBuildNumber,
   main,
   targetDirectory,
-} from "../lolicode-development.mjs";
+} from "../dev/lolicode-development.mjs";
 
 test("development builds isolate output and do not consume release signing credentials", () => {
   const env = buildEnvironment("development", {

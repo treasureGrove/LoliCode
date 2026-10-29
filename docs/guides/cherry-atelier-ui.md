@@ -37,8 +37,8 @@
 - `src/styles/atelier-workbench.css`：Agent 侧栏、阅读区、输入区、预览、技能与工具面板。
 - `src/assets/atelier/`：真实产品使用的本地 PNG 和素材来源说明。
 - `src/lib/interfaceAppearance.ts`、`src/hooks/useInterfaceAppearance.ts`：装饰偏好与同步。
-- `src/components/settings/InterfaceAppearanceSettings.tsx`：自动保存的外观控件。
-- `src/components/agent/AgentProjectMenu.tsx`：项目浮层菜单。
+- `src/features/settings/InterfaceAppearanceSettings.tsx`：自动保存的外观控件。
+- `src/features/agent/AgentProjectMenu.tsx`：项目浮层菜单。
 
 新增胸针使用内置 image_gen 生成，完整提示词在 `design/ip/D-pinkdog-ui-v1/costume-raster-v4/generation.json`。没有从 DSH 截图中裁切素材。
 

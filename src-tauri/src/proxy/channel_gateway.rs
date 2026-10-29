@@ -314,12 +314,42 @@ pub(crate) async fn handle_models(
                 if !model_enabled(model) || normalize_protocol(protocol(source, model)).is_err() {
                     return None;
                 }
-                Some(json!({
+                let mut entry = json!({
                     "id": format!("{}/{}", source.id, model.id),
                     "object": "model",
                     "created": 0,
                     "owned_by": source.name,
-                }))
+                });
+                // Explicitly project public capabilities; a ChannelSource also
+                // contains credentials and must never be serialized here.
+                if let Some(name) = &model.name {
+                    entry["name"] = json!(name);
+                }
+                if let Some(context) = model.effective_context_limit() {
+                    entry["contextLimit"] = json!(context);
+                }
+                if let Some(windows) = &model.context_limits {
+                    entry["contextLimits"] = json!(windows);
+                }
+                if let Some(limit) = model.max_request_bytes.or_else(|| {
+                    (source.auth_kind == "lolicode_account")
+                        .then_some(crate::services::lolicode_relay::DEFAULT_REQUEST_BYTES)
+                }) {
+                    entry["maxRequestBytes"] = json!(limit);
+                }
+                if let Some(output) = model.output_limit {
+                    entry["outputLimit"] = json!(output);
+                }
+                if let Some(efforts) = &model.reasoning_efforts {
+                    entry["reasoningEfforts"] = json!(efforts);
+                }
+                if let Some(tools) = model.supports_tools {
+                    entry["supportsTools"] = json!(tools);
+                }
+                if let Some(modalities) = &model.input_modalities {
+                    entry["inputModalities"] = json!(modalities);
+                }
+                Some(entry)
             })
         })
         .collect();
@@ -1656,7 +1686,14 @@ mod tests {
             assert!(provider_for(channel, &channel.models[0], Wire::Messages).is_err());
         }
         let db = std::sync::Arc::new(crate::database::Database::memory().unwrap());
-        let mut channels = vec![source()];
+        let mut api = source();
+        api.models[0].context_limit = Some(128000);
+        api.models[0].context_limits = Some(vec![128000, 1000000]);
+        api.models[0].selected_context_limit = Some(1000000);
+        api.models[0].max_request_bytes = Some(131072);
+        api.models[0].output_limit = Some(4096);
+        api.models[0].reasoning_efforts = Some(vec!["low".into(), "high".into()]);
+        let mut channels = vec![api];
         channels.extend(native);
         let snapshot = channel_center::ChannelCenterSnapshot {
             revision: 1,
@@ -1682,6 +1719,12 @@ mod tests {
         let Json(catalog) = handle_models(State(state), request).await.unwrap();
         assert_eq!(catalog["data"].as_array().unwrap().len(), 1);
         assert_eq!(catalog["data"][0]["id"], "test/vendor/model");
+        assert_eq!(catalog["data"][0]["contextLimit"], 1000000);
+        assert_eq!(catalog["data"][0]["contextLimits"], json!([128000, 1000000]));
+        assert_eq!(catalog["data"][0]["maxRequestBytes"], 131072);
+        assert_eq!(catalog["data"][0]["outputLimit"], 4096);
+        assert_eq!(catalog["data"][0]["reasoningEfforts"], json!(["low", "high"]));
+        assert!(!catalog.to_string().contains("test-secret"));
         assert!(!catalog.to_string().contains("native-default"));
     }
 
@@ -2502,6 +2545,76 @@ mod tests {
         }
         proxy.stop().await.unwrap();
         upstream_task.abort();
+    }
+
+    #[tokio::test]
+    async fn gateway_preserves_bounded_retry_after_and_safe_error_code_over_real_http() {
+        use super::super::{server::ProxyServer, types::ProxyConfig};
+        use crate::database::Database;
+        use std::sync::Arc;
+
+        for (status, retry_header, expected) in [
+            (429, "3", Some("3")),
+            (429, "0", Some("0")),
+            (429, "86401", None),
+            (429, "invalid-secret-header", None),
+            (429, "Wed, 21 Oct 2026 00:00:00 GMT", None),
+            (503, "3", None),
+        ] {
+            let db = Arc::new(Database::memory().unwrap());
+            let token = channel_center::gateway_token(db.as_ref()).unwrap();
+            let echo = token.clone();
+            let upstream = axum::Router::new().route(
+                "/v1/chat/completions",
+                axum::routing::post(move || {
+                    let echo = echo.clone();
+                    async move {
+                        (
+                            http::StatusCode::from_u16(status).unwrap(),
+                            [
+                                ("retry-after", retry_header),
+                                ("x-upstream-secret", "must-not-forward"),
+                                ("set-cookie", "secret=must-not-forward"),
+                            ],
+                            Json(json!({"error":{
+                                "code":"service_rate_limited",
+                                "message":format!("upstream-static-secret {echo}")
+                            }})),
+                        )
+                    }
+                }),
+            );
+            let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+            let address = listener.local_addr().unwrap();
+            let upstream_task = tokio::spawn(async move {
+                axum::serve(listener, upstream).await.unwrap();
+            });
+            let mut channel = source();
+            channel.base_url = format!("http://{address}/v1");
+            channel.api_key = "upstream-static-secret".into();
+            let snapshot = ChannelCenterSnapshot { channels: vec![channel], ..Default::default() };
+            db.set_setting("channel_center_applied", &serde_json::to_string(&snapshot).unwrap()).unwrap();
+            let proxy = ProxyServer::new(ProxyConfig { listen_port: 0, ..Default::default() }, db, None);
+            let info = proxy.start().await.unwrap();
+            let base = gateway_base_url(&info.address, info.port).unwrap();
+            let client = reqwest::Client::builder().no_proxy().build().unwrap();
+            for is_stream in [false, true] {
+                let response = client.post(format!("{base}/chat/completions"))
+                    .bearer_auth(&token)
+                    .json(&json!({"model":"test/vendor/model","messages":[{"role":"user","content":"limited"}],"stream":is_stream}))
+                    .send().await.unwrap();
+                assert_eq!(response.status().as_u16(), status);
+                assert_eq!(response.headers().get("retry-after").and_then(|value|value.to_str().ok()), expected);
+                assert!(!response.headers().contains_key("x-upstream-secret"));
+                assert!(!response.headers().contains_key("set-cookie"));
+                let body: Value = response.json().await.unwrap();
+                assert_eq!(body["error"]["code"], "service_rate_limited");
+                assert!(!body.to_string().contains("upstream-static-secret"));
+                assert!(!body.to_string().contains(&token));
+            }
+            proxy.stop().await.unwrap();
+            upstream_task.abort();
+        }
     }
 
     #[test]

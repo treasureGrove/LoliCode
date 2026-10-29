@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { AboutSection } from "@/components/settings/AboutSection";
-import { AppPageHeader } from "@/components/shell/AppPageHeader";
+import { AboutSection } from "@/features/settings/AboutSection";
+import { AppPageHeader } from "@/app/shell/AppPageHeader";
 
 const buildState = vi.hoisted(() => ({ development: true, dirty: true }));
 const nativeBuild = vi.hoisted(() => ({ invoke: vi.fn() }));
@@ -36,10 +36,10 @@ vi.mock("@/contexts/UpdateContext", () => ({
   }),
 }));
 vi.mock("@/components/WhatsNewDialog", () => ({ WhatsNewDialog: () => null }));
-vi.mock("@/components/settings/ResourceUpdatesSection", () => ({
+vi.mock("@/features/settings/ResourceUpdatesSection", () => ({
   ResourceUpdatesSection: () => <div>Stable resource updates</div>,
 }));
-vi.mock("@/components/settings/RendererUpdatesSection", () => ({
+vi.mock("@/features/settings/RendererUpdatesSection", () => ({
   RendererUpdatesSection: () => <div>Stable renderer updates</div>,
 }));
 

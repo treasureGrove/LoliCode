@@ -3,7 +3,7 @@ import type { SessionMessage } from "@/types";
 import {
   AGENT_READER_STYLES,
   getAgentReaderStyle,
-} from "@/components/sessions/reader/agentStyles";
+} from "@/features/sessions/reader/agentStyles";
 import {
   buildTurnIndex,
   buildTurns,
@@ -23,7 +23,7 @@ import {
   type ReaderRow,
   type SessionTurn,
   type TimelineStep,
-} from "@/components/sessions/reader/turns";
+} from "@/features/sessions/reader/turns";
 import { call, event, fixtures, msg, result, text, thinking } from "./helpers";
 
 const turnsOf = (id: keyof typeof fixtures) =>

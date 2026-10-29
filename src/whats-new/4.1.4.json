@@ -1,0 +1,33 @@
+{
+  "version": "4.1.4",
+  "items": [
+    {
+      "type": "improve",
+      "zh": "改进 Agent 上下文预算、限流恢复与模型参数选择",
+      "zh-TW": "改善 Agent 上下文預算、限流恢復與模型參數選擇",
+      "en": "Improve Agent context budgets, rate-limit recovery and model options",
+      "ja": "Agentのコンテキスト予算、制限時の復帰とモデル設定を改善"
+    },
+    {
+      "type": "new",
+      "zh": "新增模型榜单，优化渠道配置与账户额度展示",
+      "zh-TW": "新增模型排行榜，改善渠道設定與帳戶額度顯示",
+      "en": "Add model rankings and improve channel settings and account quota display",
+      "ja": "モデルランキングを追加し、接続設定とアカウント残量表示を改善"
+    },
+    {
+      "type": "improve",
+      "zh": "完善工作台工具面板与界面字号设置",
+      "zh-TW": "完善工作台工具面板與介面字級設定",
+      "en": "Refine workspace tool panels and interface text-size settings",
+      "ja": "ワークスペースのツールパネルと画面の文字サイズ設定を改善"
+    },
+    {
+      "type": "improve",
+      "zh": "整理应用启动与工具管理，完善构建和更新验证",
+      "zh-TW": "整理應用程式啟動與工具管理，完善建置和更新驗證",
+      "en": "Organize application startup and tool management, with stronger build and update checks",
+      "ja": "アプリ起動とツール管理を整理し、ビルドと更新の検証を改善"
+    }
+  ]
+}

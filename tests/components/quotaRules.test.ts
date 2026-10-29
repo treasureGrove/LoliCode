@@ -12,7 +12,7 @@ import {
   resetCreditsLine,
   tierLine,
   toneForLeft,
-} from "@/components/quota/quotaRules";
+} from "@/features/quota/quotaRules";
 
 const t = ((key: string, options?: Record<string, unknown>) => {
   const templates: Record<string, string> = {

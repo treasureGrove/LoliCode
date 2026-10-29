@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Publish only the relay portal and a stylesheet for the existing admin app."""
+"""Publish the simple member/admin consoles over the existing relay engine."""
 import argparse
 from pathlib import Path
+import subprocess
 from migrate import remote
 
 
@@ -10,12 +11,17 @@ def main():
     parser.add_argument('--host', default='lolicode')
     args = parser.parse_args()
     here = Path(__file__).resolve().parent
+    subprocess.run(['node', str(here.parent.parent / 'scripts' / 'export-relay-channel-presets.mjs')],
+                   check=True, cwd=here.parent.parent)
     payload = {'files': {name: (here / 'portal' / name).read_text(encoding='utf8')
                          for name in ('index.html', 'portal.css', 'portal.js', 'portal-host.js', 'admin-theme.css',
-                                      'account.html', 'account.css', 'account.js', 'public-account.css', 'public-account.js')},
+                                      'account.html', 'account.css', 'account.js', 'public-account.css', 'public-account.js',
+                                      'public-settings.html', 'public-settings.css', 'public-settings.js',
+                                      'channel-presets.json')},
                'nginx': (here / 'admin-nginx-https.conf').read_text(encoding='utf8'),
                'backup': (here / 'backup.py').read_text(encoding='utf8'),
-               'homepage': 'https://relay.lolicode.com/relay-assets/index.html?v=20261021-6'}
+               'readme': (here / 'README.md').read_text(encoding='utf8'),
+               'homepage': ''}
     print(remote(args.host, r'''
 owned()
 marker = ROOT / '.lolicode-relay-portal-owned'
@@ -54,7 +60,7 @@ run(['python3', str(backup)])
 web.mkdir(mode=0o755, exist_ok=True)
 web.chmod(0o755)
 source.mkdir(mode=0o700, exist_ok=True)
-previous_paths = [parent / name for parent in (web, source) for name in payload['files']] + [nginx_source]
+previous_paths = [parent / name for parent in (web, source) for name in payload['files']] + [nginx_source, ROOT / 'README.md']
 if any(path.is_symlink() for path in previous_paths):
     raise RuntimeError('Unexpected portal asset symlink')
 previous = {str(path): path.read_text() if path.exists() else None for path in previous_paths}
@@ -62,7 +68,9 @@ homepage_mutated = False
 try:
     for name, content in payload['files'].items():
         if name not in ('index.html', 'portal.css', 'portal.js', 'portal-host.js', 'admin-theme.css',
-                        'account.html', 'account.css', 'account.js', 'public-account.css', 'public-account.js'):
+                        'account.html', 'account.css', 'account.js', 'public-account.css', 'public-account.js',
+                        'public-settings.html', 'public-settings.css', 'public-settings.js',
+                        'channel-presets.json'):
             raise RuntimeError('Unexpected portal member')
         for parent, mode in ((web, 0o644), (source, 0o600)):
             target = parent / name
@@ -70,6 +78,8 @@ try:
                 raise RuntimeError('Unexpected portal asset symlink')
             target.write_text(content)
             target.chmod(mode)
+    (ROOT / 'README.md').write_text(payload['readme'])
+    (ROOT / 'README.md').chmod(0o600)
     site.write_text((ROOT / 'admin-nginx-http.conf').read_text() + '\n' + payload['nginx'])
     run(['nginx', '-t'])
     run(['systemctl', 'reload', 'nginx'])
@@ -79,7 +89,7 @@ try:
     for attempt in range(15):
         with urllib.request.urlopen('https://relay.lolicode.com/', timeout=10) as response:
             page = response.read().decode()
-        if '/relay-assets/portal-host.js?v=20261021-6' in page: break
+        if '/relay-assets/account.js' in page and '/admin' in page: break
         if attempt == 14: raise RuntimeError('Portal did not become ready')
         time.sleep(0.2)
     for name in payload['files']:
@@ -96,7 +106,7 @@ try:
     with urllib.request.urlopen('https://relay.lolicode.com/sign-in?admin=1', timeout=10) as response:
         if '/relay-assets/admin-theme.css' not in response.read().decode():
             raise RuntimeError('Admin stylesheet was not attached')
-    if client.request('/api/home_page_content') != payload['homepage']:
+    if (client.request('/api/home_page_content') or '') != payload['homepage']:
         raise RuntimeError('Official homepage customization did not persist')
     nginx_source.write_text(payload['nginx'])
     nginx_source.chmod(0o600)
@@ -115,8 +125,8 @@ except Exception:
     run(['nginx', '-t'])
     run(['systemctl', 'reload', 'nginx'])
     raise
-emit({'portal': 'https://relay.lolicode.com/', 'admin': 'https://relay.lolicode.com/sign-in?admin=1',
-      'brand': 'LoliCode cherry and cream', 'official_navigation': True,
+emit({'portal': 'https://relay.lolicode.com/account', 'admin': 'https://relay.lolicode.com/admin',
+      'advanced_admin': 'https://relay.lolicode.com/channels', 'simple_consoles': True,
       'status': status, 'nginx_valid': True})
 ''', payload))
 

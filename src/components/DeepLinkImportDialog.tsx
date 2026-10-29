@@ -19,9 +19,9 @@ import { Button } from "@/components/ui/button";
 import { toast } from "@/lib/toast";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
-import { PromptConfirmation } from "./deeplink/PromptConfirmation";
-import { McpConfirmation } from "./deeplink/McpConfirmation";
-import { SkillConfirmation } from "./deeplink/SkillConfirmation";
+import { PromptConfirmation } from "../features/deeplink/PromptConfirmation";
+import { McpConfirmation } from "../features/deeplink/McpConfirmation";
+import { SkillConfirmation } from "../features/deeplink/SkillConfirmation";
 import { ProviderIcon } from "./ProviderIcon";
 import {
   classifyEndpoint,

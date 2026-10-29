@@ -36,7 +36,7 @@ vi.mock("@/hooks/useHermes", () => ({
 
 import HermesMemoryPanel, {
   HermesMemorySaveButton,
-} from "@/components/hermes/HermesMemoryPanel";
+} from "@/features/hermes/HermesMemoryPanel";
 
 function renderPage(onOpenWebUI?: (path?: string) => void) {
   return render(

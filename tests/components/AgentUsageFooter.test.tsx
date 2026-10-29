@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { AgentUsageFooter } from "@/components/agent/AgentUsageFooter";
+import { AgentUsageFooter } from "@/features/agent/AgentUsageFooter";
 
 describe("AgentUsageFooter", () => {
   it("shows one compact session line with unknown missing counters", () => {

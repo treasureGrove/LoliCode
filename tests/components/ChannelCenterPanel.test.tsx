@@ -8,7 +8,7 @@ import {
 } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { StrictMode } from "react";
-import { ChannelCenterPanel } from "@/components/channels/ChannelCenterPanel";
+import { ChannelCenterPanel } from "@/features/channels/ChannelCenterPanel";
 import {
   channelCenterApi,
   type ChannelCenterSnapshot,
@@ -36,13 +36,13 @@ vi.mock("@/lib/api/channel-center", () => ({
 vi.mock("@/lib/api", () => ({ settingsApi: { openExternal: vi.fn() } }));
 const authCenterProps = vi.hoisted(() => vi.fn());
 const embeddedToolsProps = vi.hoisted(() => vi.fn());
-vi.mock("@/components/apps/AppsPage", () => ({
+vi.mock("@/features/apps/AppsPage", () => ({
   AppsPage: (props: unknown) => {
     embeddedToolsProps(props);
     return <div>本地工具安装与诊断</div>;
   },
 }));
-vi.mock("@/components/settings/AuthCenterPanel", () => ({
+vi.mock("@/features/settings/AuthCenterPanel", () => ({
   AuthCenterPanel: (props: unknown) => {
     authCenterProps(props);
     return <div>已有账号维护列表</div>;
@@ -64,7 +64,7 @@ const copilot = vi.hoisted(() => ({
   reauthAccount: vi.fn(),
 }));
 const managedAuthHook = vi.hoisted(() => vi.fn());
-vi.mock("@/components/providers/forms/hooks/useManagedAuth", () => ({
+vi.mock("@/features/providers/forms/hooks/useManagedAuth", () => ({
   useManagedAuth: (provider: string) => {
     managedAuthHook(provider);
     return copilot;
@@ -550,6 +550,52 @@ describe("ChannelCenterPanel", () => {
       ).toEqual(["deepseek-chat", "deepseek-reasoner"]),
     );
     expect(channelCenterApi.apply).not.toHaveBeenCalled();
+  });
+
+  it("marks only public account models free and finds them by the free label", async () => {
+    saved = structuredClone(populated);
+    saved.channels.push({
+      id: "lolicode-public",
+      name: "LoliCode 公益模型",
+      baseUrl: "https://lolicode.com/relay/v1",
+      apiKey: "",
+      authKind: "lolicode_account",
+      accountId: "42",
+      protocol: "openai_chat",
+      enabled: true,
+      models: [
+        { id: "glm-5.3-flash", name: "GLM 5.3 Flash", supportsTools: true },
+      ],
+    });
+    render(<ChannelCenterPanel />);
+    await ready();
+    fireEvent.click(
+      screen.getByRole("button", { name: "展开 LoliCode 公益模型 模型" }),
+    );
+    const list = screen.getByRole("group", {
+      name: "LoliCode 公益模型 模型列表",
+    });
+    await waitFor(() => expect(within(list).getByText("free")).toBeVisible());
+    expect(
+      within(list).getByRole("checkbox", {
+        name: "LoliCode 公益模型 · GLM 5.3 Flash · free",
+      }),
+    ).toBeChecked();
+    const ordinaryList = modelList();
+    expect(within(ordinaryList).queryByText("free")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("option", {
+        name: "LoliCode 公益模型 · GLM 5.3 Flash · free",
+      }),
+    ).toHaveValue("lolicode-public/glm-5.3-flash");
+    fireEvent.change(screen.getByRole("textbox", { name: "搜索渠道或模型" }), {
+      target: { value: "free" },
+    });
+    expect(within(list).getByText("GLM 5.3 Flash")).toBeVisible();
+    expect(
+      screen.queryByRole("group", { name: "DeepSeek 模型列表" }),
+    ).not.toBeInTheDocument();
+    expect(channelCenterApi.save).not.toHaveBeenCalled();
   });
 
   it("opens embedded local tools from the legacy route and keeps external writes explicit", async () => {

@@ -16,6 +16,8 @@ const SETTINGS_KEY: &str = "channel_center";
 const TOKEN_KEY: &str = "channel_center_gateway_token";
 const APPLIED_KEY: &str = "channel_center_applied";
 const BACKGROUND_KEY: &str = "channel_center_requires_background";
+pub(super) const DEFAULT_CONTEXT_LIMIT: u64 = 1_000_000;
+pub(super) const MAX_MODEL_REQUEST_BYTES: u64 = 128 * 1024 * 1024;
 const TARGETS: [&str; 15] = [
     "claude",
     "claude-desktop",
@@ -44,6 +46,9 @@ pub struct ChannelModel {
     pub context_limit: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_limits: Option<Vec<u64>>,
+    /// Independent HTTP body ceiling, not a model context-window choice.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_request_bytes: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub selected_context_limit: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -72,7 +77,14 @@ impl ChannelModel {
                     .as_ref()
                     .is_some_and(|windows| windows.contains(selected))
             })
-            .or(self.context_limit)
+            .filter(|limit| *limit > 0)
+            .or(self.context_limit.filter(|limit| *limit > 0))
+            .or_else(|| {
+                self.context_limits.as_ref()?.iter().copied()
+                    .filter(|limit| *limit > 0 && *limit <= 9_007_199_254_740_991)
+                    .min()
+            })
+            .or(Some(DEFAULT_CONTEXT_LIMIT))
     }
 
     pub fn available(&self) -> bool {
@@ -157,10 +169,15 @@ pub struct AgentCatalogModel {
     pub model_id: String,
     pub name: String,
     pub channel_name: String,
+    /// Sponsored models are identified by the validated account-bound channel.
+    #[serde(default)]
+    pub is_free: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub context_limit: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_limits: Option<Vec<u64>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_request_bytes: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub output_limit: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -483,6 +500,14 @@ fn validate_channel(channel: &ChannelSource) -> Result<(), AppError> {
                 "模型上下文和输出上限需要填写正整数，未知时请留空".into(),
             ));
         }
+        if model
+            .max_request_bytes
+            .is_some_and(|limit| limit == 0 || limit > MAX_MODEL_REQUEST_BYTES)
+        {
+            return Err(AppError::InvalidInput(
+                "模型请求体上限需要是 1 到 128 MiB 之间的整数字节数".into(),
+            ));
+        }
     }
     Ok(())
 }
@@ -558,6 +583,7 @@ fn blank_model(id: String) -> ChannelModel {
         name: None,
         context_limit: None,
         context_limits: None,
+        max_request_bytes: None,
         selected_context_limit: None,
         output_limit: None,
         reasoning_efforts: None,
@@ -658,6 +684,7 @@ fn merge_discovered(existing: &[ChannelModel], discovered: Vec<ChannelModel>) ->
         if let Some(saved) = existing.iter().find(|saved| saved.id == model.id) {
             model.name = model.name.or_else(|| saved.name.clone());
             model.context_limit = model.context_limit.or(saved.context_limit);
+            model.max_request_bytes = model.max_request_bytes.or(saved.max_request_bytes);
             model.context_limits = model
                 .context_limits
                 .or_else(|| saved.context_limits.clone());
@@ -885,6 +912,22 @@ fn parse_channel_catalog(raw: &Value) -> Result<Vec<ChannelModel>, AppError> {
         let metadata = crate::services::model_fetch::declared_model_metadata(entry);
         model.context_limit = metadata.context_limit.or(model.context_limit);
         model.context_limits = metadata.context_limits;
+        if let Some(limit) = [
+            "/maxRequestBytes",
+            "/max_request_bytes",
+            "/limits/maxRequestBytes",
+            "/limits/max_request_bytes",
+        ]
+        .iter()
+        .find_map(|pointer| entry.pointer(pointer).filter(|value| !value.is_null()))
+        {
+            model.max_request_bytes = Some(
+                limit
+                    .as_u64()
+                    .filter(|limit| *limit > 0 && *limit <= MAX_MODEL_REQUEST_BYTES)
+                    .ok_or_else(|| AppError::InvalidInput("模型目录包含无效的请求体上限".into()))?,
+            );
+        }
         model.output_limit = metadata.output_limit.or(model.output_limit);
         model.reasoning_efforts = metadata.reasoning_efforts;
         if model.reasoning_efforts.is_some() {
@@ -1096,6 +1139,7 @@ pub fn merge_copilot_models(
                         .and_then(|windows| windows.first().copied())
                 }),
                 context_limits: model.context_windows,
+                max_request_bytes: None,
                 selected_context_limit: None,
                 output_limit: model.output_limit,
                 reasoning_efforts: model.reasoning_effort.map(|efforts| {
@@ -1176,6 +1220,7 @@ pub fn native_subscription_channel(tool: &str) -> Result<ChannelSource, AppError
             name: Some("原生工具默认模型（工具维护目录）".into()),
             context_limit: None,
             context_limits: None,
+            max_request_bytes: None,
             selected_context_limit: None,
             output_limit: None,
             reasoning_efforts: None,
@@ -1234,6 +1279,7 @@ pub fn merge_subscription_models(
             id: model.id,
             context_limit: model.metadata.context_limit,
             context_limits: model.metadata.context_limits,
+            max_request_bytes: None,
             selected_context_limit: None,
             output_limit: model.metadata.output_limit,
             reasoning_efforts: model.metadata.reasoning_efforts,
@@ -1909,8 +1955,13 @@ fn agent_catalog_from_snapshot(snapshot: &ChannelCenterSnapshot) -> AgentCatalog
                             model.name.as_deref().unwrap_or(&model.id)
                         ),
                         channel_name: source.name.clone(),
+                        is_free: source.auth_kind == "lolicode_account",
                         context_limit: model.effective_context_limit(),
                         context_limits: model.context_limits.clone(),
+                        max_request_bytes: model.max_request_bytes.or_else(|| {
+                            (source.auth_kind == "lolicode_account")
+                                .then_some(super::lolicode_relay::DEFAULT_REQUEST_BYTES)
+                        }),
                         output_limit: model.output_limit,
                         reasoning_efforts: model.reasoning_efforts.clone(),
                         reasoning_effort_source: model.reasoning_effort_source.clone(),
@@ -3171,6 +3222,101 @@ mod tests {
     }
 
     #[test]
+    fn agent_catalog_marks_only_account_bound_sponsored_models_as_free() {
+        let db = Database::memory().unwrap();
+        let mut paid = source("paid");
+        // A friendly display name does not establish sponsored entitlement.
+        paid.name = "LoliCode 公益模型 free".into();
+        let mut sponsored = source(super::super::lolicode_relay::CHANNEL_ID);
+        sponsored.base_url = super::super::lolicode_relay::BASE_URL.into();
+        sponsored.auth_kind = "lolicode_account".into();
+        sponsored.account_id = Some("42".into());
+        save(
+            &db,
+            ChannelCenterSnapshot {
+                channels: vec![paid, sponsored],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        let catalog = agent_catalog(&db).unwrap();
+        assert_eq!(catalog.models.len(), 4);
+        for model in &catalog.models {
+            assert_eq!(
+                model.is_free,
+                model.model_id.starts_with("lolicode-public/")
+            );
+            assert_eq!(
+                serde_json::to_value(model).unwrap()["isFree"],
+                model.is_free
+            );
+        }
+        let mut legacy = serde_json::to_value(&catalog.models[0]).unwrap();
+        legacy.as_object_mut().unwrap().remove("isFree");
+        assert!(
+            !serde_json::from_value::<AgentCatalogModel>(legacy)
+                .unwrap()
+                .is_free
+        );
+    }
+
+    #[test]
+    fn request_byte_limits_project_independently_of_context_and_unknown_context_defaults_to_one_million(
+    ) {
+        let mut channel = source("limited");
+        channel.models = parse_channel_catalog(&json!({"data":[
+                {"id":"model","contextLimit":128000,"contextLimits":[128000,1000000],"maxRequestBytes":131072},
+                {"id":"unknown"}
+            ]})).unwrap();
+        channel.models[0].selected_context_limit = Some(1000000);
+        let snapshot = ChannelCenterSnapshot {
+            channels: vec![channel.clone()],
+            ..Default::default()
+        };
+        validate(&snapshot).unwrap();
+        let catalog = agent_catalog_from_snapshot(&snapshot);
+        assert_eq!(catalog.models[0].context_limit, Some(1000000));
+        assert_eq!(
+            catalog.models[0].context_limits,
+            Some(vec![128000, 1000000])
+        );
+        assert_eq!(catalog.models[0].max_request_bytes, Some(131072));
+        assert_eq!(
+            serde_json::to_value(&catalog.models[0]).unwrap()["maxRequestBytes"],
+            131072
+        );
+        assert_eq!(catalog.models[1].context_limit, Some(1000000));
+        assert_eq!(catalog.models[1].context_limits, None);
+        assert_eq!(catalog.models[1].max_request_bytes, None);
+        let mut choices_only = blank_model("choices-only".into());
+        choices_only.context_limits = Some(vec![256000,128000]);
+        assert_eq!(choices_only.effective_context_limit(), Some(128000));
+        let unknown_refresh = parse_channel_catalog(&json!({"data":[{"id":"model"}]})).unwrap();
+        let merged = merge_discovered(&channel.models, unknown_refresh);
+        assert_eq!(merged[0].context_limit, Some(128000));
+        assert_eq!(merged[0].selected_context_limit, Some(1000000));
+        assert_eq!(merged[0].max_request_bytes, Some(131072));
+        for invalid in [
+            json!(0),
+            json!(-1),
+            json!(true),
+            json!("131072"),
+            json!(1.5),
+            json!(MAX_MODEL_REQUEST_BYTES + 1),
+        ] {
+            assert!(
+                parse_channel_catalog(&json!({"data":[{"id":"model","maxRequestBytes":invalid}]}))
+                    .is_err()
+            );
+        }
+        for invalid in [0, MAX_MODEL_REQUEST_BYTES + 1] {
+            channel.models[0].max_request_bytes = Some(invalid);
+            assert!(validate_channel(&channel).is_err());
+        }
+    }
+
+    #[test]
     fn selected_context_windows_survive_refresh_and_project_to_agent_and_external_clients() {
         let mut saved = source("multi");
         saved.models = parse_channel_catalog(&json!({"data":[{"id":"model","context_window":128000,"context_windows":[128000,1000000]}]})).unwrap();
@@ -3354,7 +3500,8 @@ mod tests {
             provider["models"]["one/vendor/model-a"]["limit"]["output"],
             8192
         );
-        assert!(provider["models"]["one/model-b"].get("limit").is_none());
+        assert_eq!(provider["models"]["one/model-b"]["limit"]["context"], 1_000_000);
+        assert!(provider["models"]["one/model-b"]["limit"].get("output").is_none());
         assert!(provider["models"]["one/model-b"]
             .get("capabilities")
             .is_none());

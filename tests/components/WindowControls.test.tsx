@@ -6,7 +6,7 @@ import {
   screen,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { WindowControls } from "@/components/shell/WindowControls";
+import { WindowControls } from "@/app/shell/WindowControls";
 
 const mocks = vi.hoisted(() => ({
   isMaximized: vi.fn(),

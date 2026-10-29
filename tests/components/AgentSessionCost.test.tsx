@@ -1,7 +1,7 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { AgentSessionCost } from "@/components/agent/AgentSessionCost";
+import { AgentSessionCost } from "@/features/agent/AgentSessionCost";
 import { usageApi } from "@/lib/api/usage";
 import type { UsageSummary } from "@/types/usage";
 

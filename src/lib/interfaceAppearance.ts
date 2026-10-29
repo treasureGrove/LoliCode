@@ -4,6 +4,7 @@ export interface InterfaceAppearance {
   mode: DecorationMode;
   intensity: number;
   companionVisible: boolean;
+  fontSize: number;
 }
 
 export const INTERFACE_APPEARANCE_KEY = "lolicode.interface-appearance.v1";
@@ -15,6 +16,7 @@ export const DEFAULT_INTERFACE_APPEARANCE: InterfaceAppearance = {
   mode: "full",
   intensity: 48,
   companionVisible: true,
+  fontSize: 115,
 };
 
 let memoryFallback: string | null = null;
@@ -78,6 +80,10 @@ export function parseInterfaceAppearance(
         typeof saved.companionVisible === "boolean"
           ? saved.companionVisible
           : DEFAULT_INTERFACE_APPEARANCE.companionVisible,
+      fontSize:
+        typeof saved.fontSize === "number" && Number.isFinite(saved.fontSize)
+          ? Math.round(Math.min(125, Math.max(85, saved.fontSize)) / 5) * 5
+          : DEFAULT_INTERFACE_APPEARANCE.fontSize,
     };
   } catch {
     return { ...DEFAULT_INTERFACE_APPEARANCE };
@@ -126,6 +132,10 @@ export function subscribeInterfaceAppearance(onChange: () => void) {
 
 export function applyInterfaceAppearance(appearance: InterfaceAppearance) {
   document.documentElement.dataset.decoration = appearance.mode;
+  document.documentElement.style.setProperty(
+    "--interface-font-scale",
+    String(appearance.fontSize / 100),
+  );
   document.documentElement.style.setProperty(
     "--atelier-intensity",
     String(appearance.intensity / 100),

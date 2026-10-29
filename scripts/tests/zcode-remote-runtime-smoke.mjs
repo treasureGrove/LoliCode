@@ -12,7 +12,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   assetRoot,
   verifyRemoteAssets,
-} from "../prepare-zcode-remote-runtime.mjs";
+} from "../build/prepare-zcode-remote-runtime.mjs";
 
 const index = process.argv.indexOf("--ssh-host");
 const alias = index >= 0 ? process.argv[index + 1] : undefined;

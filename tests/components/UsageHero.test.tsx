@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { UsageHero } from "@/components/usage/UsageHero";
+import { UsageHero } from "@/features/usage/UsageHero";
 
 const summaryQuery = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/query/usage", () => ({ useUsageSummaryByApp: summaryQuery }));

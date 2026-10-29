@@ -36,7 +36,7 @@ Claude、Gemini 订阅引用本机原生工具登录，只配置 Claude Code、G
 
 ## 开发入口与验证
 
-- `src/components/channels/`：简单配置界面、预设、浏览器登录与草稿保护。
+- `src/features/channels/`：简单配置界面、预设、浏览器登录与草稿保护。
 - `src-tauri/src/services/channel_center.rs`：目录存储、迁移、模型发现、客户端投影与逐项结果。
 - `src-tauri/src/proxy/channel_gateway.rs`：本机鉴权、版本目录、模型分流与流式协议适配。
 - `src-tauri/src/services/zhipu_login.rs`：官方网页登录与项目凭据生命周期。

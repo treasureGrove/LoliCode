@@ -6,11 +6,12 @@ import {
   screen,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AgentOperationsPanel } from "@/components/agent/AgentOperationsPanel";
-import { automationCron } from "@/components/agent/AgentAutomationPanel";
+import { AgentOperationsPanel } from "@/features/agent/AgentOperationsPanel";
+import { AgentToolDraftsContext } from "@/features/agent/AgentToolDrafts";
+import { automationCron } from "@/features/agent/AgentAutomationPanel";
 import { agentApi } from "@/lib/api/agent";
 import type { AgentCatalog, AgentSession } from "@/types/agent";
-import { WindowControlsContext } from "@/components/shell/AppPageHeader";
+import { WindowControlsContext } from "@/app/shell/AppPageHeader";
 
 vi.mock("@/lib/api/agent", () => ({
   agentApi: {
@@ -140,6 +141,131 @@ afterEach(() => {
 });
 
 describe("native workflow / automation / remote entry", () => {
+  it("restores an unsaved new workflow after switching tools and keeps drafts separate by project", async () => {
+    const drafts = new Map<string, unknown>();
+    const panel = (path = project) => (
+      <AgentToolDraftsContext.Provider value={drafts}>
+        <AgentOperationsPanel {...props()} projectPath={path} />
+      </AgentToolDraftsContext.Provider>
+    );
+    const view = render(panel());
+    await flush();
+    fireEvent.change(screen.getByLabelText("工作流范围"), {
+      target: { value: "global" },
+    });
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: "新建工作流" }));
+    fireEvent.change(screen.getByLabelText("工作流名称"), {
+      target: { value: "unsaved-workflow" },
+    });
+    fireEvent.change(screen.getByLabelText("工作流内容"), {
+      target: { value: "---\ndescription: Unsaved\n---\nKeep these steps." },
+    });
+    view.rerender(
+      <AgentToolDraftsContext.Provider value={drafts}>
+        <div>另一个工具</div>
+      </AgentToolDraftsContext.Provider>,
+    );
+    await flush();
+    view.rerender(panel("D:/owned/another-project"));
+    await flush();
+    expect(screen.queryByLabelText("工作流名称")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("工作流范围")).toHaveValue("project");
+    view.rerender(panel());
+    await flush();
+    expect(screen.getByLabelText("工作流范围")).toHaveValue("global");
+    expect(screen.getByLabelText("工作流名称")).toHaveValue("unsaved-workflow");
+    expect(screen.getByLabelText("工作流内容")).toHaveValue(
+      "---\ndescription: Unsaved\n---\nKeep these steps.",
+    );
+    expect(agentApi.native).not.toHaveBeenCalledWith(
+      "IZCodeAgentService",
+      "saveSavedWorkflow",
+      expect.anything(),
+    );
+  });
+
+  it("keeps the original document identity when an unsaved edit is remounted", async () => {
+    const original = "---\ndescription: Original\n---\nOriginal steps.";
+    vi.mocked(agentApi.native).mockImplementation(async (_service, method) => {
+      if (method === "listSavedWorkflows")
+        return { workflows: [workflow], invalid: [] };
+      if (method === "listSavedWorkflowRuns") return { runs: [] };
+      if (method === "getSavedWorkflow")
+        return { ok: true, document: original };
+      return { ok: true };
+    });
+    const drafts = new Map<string, unknown>();
+    const panel = () => (
+      <AgentToolDraftsContext.Provider value={drafts}>
+        <AgentOperationsPanel {...props()} />
+      </AgentToolDraftsContext.Provider>
+    );
+    const view = render(panel());
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: "编辑工作流" }));
+    await flush();
+    const edited = `${original}\nKeep this unfinished edit.`;
+    fireEvent.change(screen.getByLabelText("工作流内容"), {
+      target: { value: edited },
+    });
+    view.rerender(
+      <AgentToolDraftsContext.Provider value={drafts}>
+        {null}
+      </AgentToolDraftsContext.Provider>,
+    );
+    await flush();
+    view.rerender(panel());
+    await flush();
+    expect(screen.getByLabelText("工作流名称")).toHaveValue(workflow.name);
+    expect(screen.getByLabelText("工作流名称")).toBeDisabled();
+    expect(screen.getByLabelText("工作流内容")).toHaveValue(edited);
+    fireEvent.click(screen.getByRole("button", { name: "保存修改" }));
+    await flush();
+    expect(agentApi.native).toHaveBeenCalledWith(
+      "IZCodeAgentService",
+      "saveSavedWorkflow",
+      [
+        expect.objectContaining({
+          name: workflow.name,
+          document: edited,
+          overwrite: true,
+          expectedDocument: original,
+        }),
+      ],
+    );
+  });
+
+  it("resets a standalone workflow form when its project changes without a draft provider", async () => {
+    const view = render(<AgentOperationsPanel {...props()} />);
+    await flush();
+    fireEvent.change(screen.getByLabelText("工作流范围"), {
+      target: { value: "global" },
+    });
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: "新建工作流" }));
+    fireEvent.change(screen.getByLabelText("工作流名称"), {
+      target: { value: "old-project-draft" },
+    });
+    fireEvent.change(screen.getByLabelText("工作流内容"), {
+      target: { value: "Old project steps" },
+    });
+    view.rerender(
+      <AgentOperationsPanel
+        {...props()}
+        projectPath="D:/owned/second-project"
+      />,
+    );
+    await flush();
+    expect(screen.queryByLabelText("工作流名称")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("工作流范围")).toHaveValue("project");
+    fireEvent.click(screen.getByRole("button", { name: "新建工作流" }));
+    expect(screen.getByLabelText("工作流名称")).toHaveValue("");
+    expect(screen.getByLabelText("工作流内容")).not.toHaveValue(
+      "Old project steps",
+    );
+  });
+
   it("edits the complete saved document and keeps the draft when a stale save is rejected", async () => {
     const original =
       "---\n# preserve this comment\ndescription: Original\ncustom: keep-me\n---\nRead README.";
@@ -419,6 +545,18 @@ describe("native workflow / automation / remote entry", () => {
       [{ workspacePath: project, scope: "project" }],
     );
     expect(screen.getByText("review-code")).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("textbox", { name: "搜索工作流" }), {
+      target: { value: "Read the project" },
+    });
+    expect(screen.getByText("review-code")).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("textbox", { name: "搜索工作流" }), {
+      target: { value: "no-matching-workflow" },
+    });
+    expect(screen.queryByText("review-code")).not.toBeInTheDocument();
+    expect(screen.getByText("没有找到匹配的工作流")).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("textbox", { name: "搜索工作流" }), {
+      target: { value: "" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "在会话中创建工作流" }));
     expect(onCompose).toHaveBeenCalledWith(
       expect.stringContaining("创建可复用工作流"),
@@ -558,7 +696,7 @@ describe("native workflow / automation / remote entry", () => {
     expect(screen.getByText(/删除未完成/)).toBeInTheDocument();
     expect(screen.getByText("每日检查")).toBeInTheDocument();
   });
-  it("keeps close, Escape and the original window actions available", async () => {
+  it("keeps return, Escape and the original window actions available in its panel", async () => {
     const options = props();
     const windowClose = vi.fn();
     render(
@@ -569,11 +707,13 @@ describe("native workflow / automation / remote entry", () => {
       </WindowControlsContext.Provider>,
     );
     await flush();
+    expect(
+      screen.getByRole("region", { name: "工作流与自动化" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "关闭应用窗口" }));
     expect(windowClose).toHaveBeenCalledOnce();
-    fireEvent.click(
-      screen.getByRole("button", { name: "关闭项目与自动化弹窗" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "返回工作台" }));
     expect(options.onOpenChange).toHaveBeenCalledWith(false);
     fireEvent.keyDown(document, { key: "Escape" });
     await flush();

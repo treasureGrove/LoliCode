@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   UsageDashboard,
   resetUsageSyncClockForTests,
-} from "@/components/usage/UsageDashboard";
+} from "@/features/usage/UsageDashboard";
 
 const useProviderStatsMock = vi.hoisted(() => vi.fn());
 const useModelStatsMock = vi.hoisted(() => vi.fn());
@@ -63,22 +63,22 @@ vi.mock("@/lib/query/usage", async () => {
   };
 });
 
-vi.mock("@/components/usage/UsageHero", () => ({
+vi.mock("@/features/usage/UsageHero", () => ({
   UsageHero: (props: unknown) => {
     usageHeroMock(props);
     return <div data-testid="usage-hero" />;
   },
 }));
 
-vi.mock("@/components/usage/UsageTrendChart", () => ({
+vi.mock("@/features/usage/UsageTrendChart", () => ({
   UsageTrendChart: () => <div data-testid="usage-trend" />,
 }));
 
-vi.mock("@/components/usage/UsageHeatmap", () => ({
+vi.mock("@/features/usage/UsageHeatmap", () => ({
   UsageHeatmap: () => <div data-testid="usage-heatmap" />,
 }));
 
-vi.mock("@/components/usage/RequestLogTable", () => ({
+vi.mock("@/features/usage/RequestLogTable", () => ({
   RequestLogTable: (props: { onOpenDetail?: (id: string) => void }) => {
     requestLogTableMock(props);
     return (
@@ -89,7 +89,7 @@ vi.mock("@/components/usage/RequestLogTable", () => ({
   },
 }));
 
-vi.mock("@/components/usage/RequestDetailPanel", () => ({
+vi.mock("@/features/usage/RequestDetailPanel", () => ({
   RequestDetailPanel: (props: { requestId: string | null }) => {
     detailPanelMock(props);
     return props.requestId ? (
@@ -98,19 +98,19 @@ vi.mock("@/components/usage/RequestDetailPanel", () => ({
   },
 }));
 
-vi.mock("@/components/usage/ProviderStatsTable", () => ({
+vi.mock("@/features/usage/ProviderStatsTable", () => ({
   ProviderStatsTable: () => <div data-testid="provider-stats-table" />,
 }));
 
-vi.mock("@/components/usage/ModelStatsTable", () => ({
+vi.mock("@/features/usage/ModelStatsTable", () => ({
   ModelStatsTable: () => <div data-testid="model-stats-table" />,
 }));
 
-vi.mock("@/components/usage/PricingConfigPanel", () => ({
+vi.mock("@/features/usage/PricingConfigPanel", () => ({
   PricingConfigPanel: () => <div data-testid="pricing-config-panel" />,
 }));
 
-vi.mock("@/components/usage/UsageDateRangePicker", () => ({
+vi.mock("@/features/usage/UsageDateRangePicker", () => ({
   UsageDateRangePicker: ({
     triggerLabel,
     onApply,

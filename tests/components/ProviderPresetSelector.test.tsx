@@ -11,18 +11,18 @@ import {
   getVisiblePresetEntries,
   getVisiblePresetRows,
   type PresetEntry,
-} from "@/components/providers/forms/ProviderPresetSelector";
+} from "@/features/providers/forms/ProviderPresetSelector";
 import {
   PresetStepContext,
   type PresetStepState,
-} from "@/components/providers/forms/presetStep";
+} from "@/features/providers/forms/presetStep";
 import {
   domainBody,
   groupPresetRows,
   presetGroup,
   presetVersionLayout,
   sectionPresetRows,
-} from "@/components/providers/forms/presetGroups";
+} from "@/features/providers/forms/presetGroups";
 import { providerPresets } from "@/config/claudeProviderPresets";
 import { codexProviderPresets } from "@/config/codexProviderPresets";
 import {

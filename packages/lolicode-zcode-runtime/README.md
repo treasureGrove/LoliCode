@@ -13,11 +13,11 @@ anchor fails closed on source drift; original and transformed SHA-256 are record
 Run from the repository root:
 
 ```powershell
-node scripts/prepare-zcode-runtime.mjs --verify-only
+node scripts/build/prepare-zcode-runtime.mjs --verify-only
 node --test scripts/tests/prepare-zcode-runtime.test.mjs
-node scripts/prepare-zcode-runtime.mjs
-node scripts/prepare-zcode-runtime.mjs --worker-only
-node scripts/prepare-zcode-runtime.mjs --verify-runtime-only
+node scripts/build/prepare-zcode-runtime.mjs
+node scripts/build/prepare-zcode-runtime.mjs --worker-only
+node scripts/build/prepare-zcode-runtime.mjs --verify-runtime-only
 node scripts/tests/zcode-runtime-import-smoke.mjs
 node scripts/tests/zcode-facades.mjs
 ```
@@ -68,8 +68,8 @@ remote service, whose current remote execution environment is POSIX-only.
 Linux x64 assets use a separate, verified preparation step:
 
 ```powershell
-node scripts/prepare-zcode-remote-runtime.mjs --ssh-builder <authorized-build-host>
-node scripts/prepare-zcode-remote-runtime.mjs --verify-only
+node scripts/build/prepare-zcode-remote-runtime.mjs --ssh-builder <authorized-build-host>
+node scripts/build/prepare-zcode-remote-runtime.mjs --verify-only
 node scripts/tests/zcode-remote-runtime-smoke.mjs --ssh-host <authorized-test-host>
 ```
 

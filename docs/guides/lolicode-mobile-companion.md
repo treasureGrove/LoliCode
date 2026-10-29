@@ -53,7 +53,7 @@ Android 包名为 `art.treasuregrove.lolicode.mobile`，测试版本 `0.1.0-alph
 - 手机切后台、锁屏或断线时关闭前台连接，电脑持有任务；返回后重新认证并读取快照，不自动重发有副作用的任务。
 - 已保存但未收到确认的配对可以重连查询电脑批准状态，避免手机在后台时批准后被原二维码有效期困住。
 
-电脑入口为 `src-tauri/src/services/mobile_companion/`、`src-tauri/src/commands/mobile_companion.rs` 和 `src/components/shell/MobileCompanionDialog.tsx`；执行复用 `inprocess_agent.rs` 和 `crates/lolicode-agent`。通信与任务监测由 Rust 后台持有，不依赖工作台页面打开，也不通过再次启动程序或前台选择项目投递任务。
+电脑入口为 `src-tauri/src/services/mobile_companion/`、`src-tauri/src/commands/mobile_companion.rs` 和 `src/app/shell/MobileCompanionDialog.tsx`；执行复用 `inprocess_agent.rs` 和 `crates/lolicode-agent`。通信与任务监测由 Rust 后台持有，不依赖工作台页面打开，也不通过再次启动程序或前台选择项目投递任务。
 
 ## 静默后台模式与边界
 
@@ -149,6 +149,6 @@ FCM 真机锁屏通知和 P2P 直连分别待用户恢复推送工作、后续�
 
 测试通道已上线：[官网扫码下载页](https://lolicode.com/mobile/)。页面提供 Android APK、APK 直链二维码和配套 Windows 电脑预览 ZIP；新配对需要电脑预览版提供的“连接手机”入口。先退出已有 LoliCode 及托盘，将 ZIP 完整解压到独立目录后运行；电脑预览版沿用现有配置。
 
-2026-10-23 已通过匿名 HTTPS 完整下载并核对 APK 和 ZIP 的长度与 SHA-256，页面、清单、重定向与缓存头也已验证。APK SHA-256 为 `c06bb9e59d74bcaf1476b4f0cbc7c3edd307ff47327e19fbdfa350e02d65909b`；公开清单提供应用签名证书指纹。下载准备脚本 7 项测试通过，发布器在 Linux 上 9 项测试通过。生成入口为 `scripts/lolicode-android-download.mjs`，发布器为 `deploy/companion/publish-download.py`。
+2026-10-23 已通过匿名 HTTPS 完整下载并核对 APK 和 ZIP 的长度与 SHA-256，页面、清单、重定向与缓存头也已验证。APK SHA-256 为 `c06bb9e59d74bcaf1476b4f0cbc7c3edd307ff47327e19fbdfa350e02d65909b`；公开清单提供应用签名证书指纹。下载准备脚本 7 项测试通过，发布器在 Linux 上 9 项测试通过。生成入口为 `scripts/release/lolicode-android-download.mjs`，发布器为 `deploy/companion/publish-download.py`。
 
 Android 测试通道与电脑正式更新源使用各自版本及交付流程。公网下载通过不代表真机安装、IDE 预览渲染、Win+L 或窗口焦点已经验收；系统锁屏推送继续按用户决定暂缓。

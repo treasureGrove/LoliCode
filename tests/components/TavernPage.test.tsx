@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
-import { TavernPage } from "@/components/tavern/TavernPage";
+import { TavernPage } from "@/features/tavern/TavernPage";
 import type {
   TavernCharacter,
   TavernSnapshot,

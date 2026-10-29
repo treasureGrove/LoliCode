@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { GlobalProxySettings } from "@/components/settings/GlobalProxySettings";
+import { GlobalProxySettings } from "@/features/settings/GlobalProxySettings";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),

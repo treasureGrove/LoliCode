@@ -44,8 +44,8 @@ This implements the raster resource portion of step 2–3. Runtime, renderer Jav
 
 ## Preparing a resource-only publication
 
-1. Use `node scripts/lolicode-resource-pack.mjs prepare --source src/assets/atelier --output <new-directory> --version <integer> --min-app <SemVer> --max-app <SemVer> --archive-url https://tools.treasuregrove.art/lolicode/resources/<version>/assets.zip`.
+1. Use `node scripts/build/lolicode-resource-pack.mjs prepare --source src/assets/atelier --output <new-directory> --version <integer> --min-app <SemVer> --max-app <SemVer> --archive-url https://tools.treasuregrove.art/lolicode/resources/<version>/assets.zip`.
 2. Sign the exact `manifest.json` with Tauri's signer. Supply the signing key path and password through the controlled signing environment (`TAURI_SIGNING_PRIVATE_KEY_PATH` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`), never inline private-key contents or committed configuration.
-3. Run `node scripts/lolicode-resource-pack.mjs finalize --directory <directory> --signature <manifest.json.sig> --public-key <public-key.pub>`. This verifies the signer against the application's embedded public key and checks the actual archive bytes. The tool preserves existing outputs rather than overwriting a prepared version.
+3. Run `node scripts/build/lolicode-resource-pack.mjs finalize --directory <directory> --signature <manifest.json.sig> --public-key <public-key.pub>`. This verifies the signer against the application's embedded public key and checks the actual archive bytes. The tool preserves existing outputs rather than overwriting a prepared version.
 4. Run the isolated native acceptance example against that directory. Publish immutable files first, read the final public archive back and compare its length/SHA-256, then atomically replace only the resource `latest.json` envelope. Preserve the previous immutable version and keep the application updater feed unchanged.
 5. Run the native example with `--live`, then verify actual desktop display/apply/rollback and the newly shipped desktop release separately.

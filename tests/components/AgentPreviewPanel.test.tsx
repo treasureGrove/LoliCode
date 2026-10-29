@@ -10,21 +10,21 @@ import { invoke } from "@tauri-apps/api/core";
 import {
   AgentPreviewPanel,
   isolatedAgentHtml,
-} from "@/components/agent/AgentPreviewPanel";
+} from "@/features/agent/AgentPreviewPanel";
 import {
   AgentFileActionsContext,
   AgentFilePath,
-} from "@/components/agent/AgentFilePath";
-import { AgentMessageView } from "@/components/agent/AgentParts";
+} from "@/features/agent/AgentFilePath";
+import { AgentMessageView } from "@/features/agent/AgentParts";
 import { agentFilesApi, type AgentFilePreview } from "@/lib/api/agent-files";
 
 vi.mock("@/lib/api/agent-files", () => ({
   agentFilesApi: { preview: vi.fn(), open: vi.fn() },
 }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
-vi.mock("@/components/agent/AgentDocumentViewer", async (original) => ({
+vi.mock("@/features/agent/AgentDocumentViewer", async (original) => ({
   ...(await original<
-    typeof import("@/components/agent/AgentDocumentViewer")
+    typeof import("@/features/agent/AgentDocumentViewer")
   >()),
   AgentDocumentViewer: () => (
     <section aria-label="文档查看器">Office 内容</section>

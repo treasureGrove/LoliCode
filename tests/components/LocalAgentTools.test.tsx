@@ -7,7 +7,7 @@ import {
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { LocalAgentTools } from "@/components/apps/LocalAgentTools";
+import { LocalAgentTools } from "@/features/apps/LocalAgentTools";
 import {
   localAgentToolsApi,
   type LocalAgentTool,

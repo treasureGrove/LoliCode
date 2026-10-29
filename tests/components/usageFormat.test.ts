@@ -13,7 +13,7 @@ import {
   getOutputTokensPerSecond,
   getLocaleFromLanguage,
   sumSpeedTotals,
-} from "@/components/usage/format";
+} from "@/features/usage/format";
 
 describe("usage format helpers", () => {
   it("formats Traditional Chinese token units with Traditional characters", () => {

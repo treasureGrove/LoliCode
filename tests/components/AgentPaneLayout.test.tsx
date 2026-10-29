@@ -4,7 +4,7 @@ import {
   AgentPaneResizeHandle,
   computeAgentPaneLayout,
   useAgentPaneLayout,
-} from "@/components/agent/AgentPaneLayout";
+} from "@/features/agent/AgentPaneLayout";
 
 const keys = [
   "lolicode.agent.layout.sidebarWidth",

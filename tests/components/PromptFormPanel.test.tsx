@@ -7,7 +7,7 @@ import {
 } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import PromptFormPanel from "@/components/prompts/PromptFormPanel";
+import PromptFormPanel from "@/features/prompts/PromptFormPanel";
 import type { Prompt } from "@/lib/api";
 
 vi.mock("react-i18next", () => ({

@@ -1,0 +1,461 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#9e2445" />
+    <title>中转站管理 · LoliCode Relay</title>
+    <link
+      rel="icon"
+      href="https://lolicode.com/desktop-assets/favicon-32.png"
+    />
+    <link
+      rel="stylesheet"
+      href="/relay-assets/public-settings.css?v=20261028-admin3"
+    />
+    <script
+      src="/relay-assets/public-settings.js?v=20261028-admin3"
+      defer
+    ></script>
+  </head>
+  <body>
+    <header class="header page-width">
+      <a class="brand" href="/admin"
+        ><img
+          src="https://lolicode.com/desktop-assets/favicon-32.png"
+          alt=""
+          width="32"
+          height="32"
+        />LoliCode <span>Relay</span></a
+      >
+      <nav aria-label="管理导航">
+        <a href="/public-models-admin" aria-current="page">简易后台</a
+        ><a href="/account">用户控制台</a><a href="/channels">高级管理</a>
+      </nav>
+    </header>
+    <main class="page-width">
+      <section class="intro" aria-labelledby="page-title">
+        <div>
+          <h1 id="page-title">中转站管理</h1>
+          <p class="muted">接入 API、选择模型并管理每日额度。</p>
+        </div>
+        <div id="service-state" class="state-badge" role="status">
+          <span class="state-dot"></span
+          ><span id="service-state-text">正在读取设置…</span>
+        </div>
+      </section>
+      <p id="message" class="message" role="status" aria-live="polite">
+        正在确认管理员登录…
+      </p>
+      <button id="load-retry" class="button secondary" type="button" hidden>
+        重新读取设置 ↻
+      </button>
+      <section
+        id="login-panel"
+        class="panel login-panel"
+        hidden
+        aria-labelledby="login-title"
+      >
+        <h2 id="login-title">先登录管理后台</h2>
+        <p class="muted">使用现有的中转站管理员账号，登录后返回本页即可。</p>
+        <a class="button" href="/sign-in?admin=1">登录管理后台 ↗</a>
+      </section>
+      <section
+        id="upstream-panel"
+        class="panel upstream-panel"
+        hidden
+        aria-labelledby="upstream-title"
+      >
+        <div class="section-heading">
+          <h2 id="upstream-title">接入 API</h2>
+          <span id="selected-provider" class="count">自定义 API</span>
+        </div>
+        <form
+          id="upstream-form"
+          name="relay_upstream_configuration"
+          autocomplete="off"
+          data-lpignore="true"
+          data-1p-ignore="true"
+        >
+          <fieldset id="upstream-fields" disabled>
+            <div class="preset-picker">
+              <label for="preset-search">选择服务商</label>
+              <div class="preset-search-row">
+                <input
+                  id="preset-search"
+                  type="search"
+                  placeholder="搜索服务商，例如 DeepSeek、智谱、OpenRouter"
+                  autocomplete="off"
+                /><button
+                  id="preset-more"
+                  class="button secondary"
+                  type="button"
+                  aria-expanded="false"
+                >
+                  更多服务商
+                </button>
+              </div>
+              <div
+                id="preset-options"
+                class="preset-options"
+                role="group"
+                aria-label="服务商预设"
+              ></div>
+              <p id="preset-notice" class="field-help" role="status"></p>
+            </div>
+            <div class="upstream-fields">
+              <div class="field">
+                <label for="upstream-url">API 地址</label
+                ><input
+                  id="upstream-url"
+                  name="relay_upstream_base_url"
+                  type="url"
+                  data-lpignore="true"
+                  data-1p-ignore="true"
+                  required
+                  pattern="https://.*"
+                  placeholder="https://api.example.com/v1"
+                  autocomplete="off"
+                  spellcheck="false"
+                />
+              </div>
+              <div class="field">
+                <label for="upstream-key">API Key</label
+                ><input
+                  id="upstream-key"
+                  name="relay_upstream_api_key"
+                  type="password"
+                  required
+                  placeholder="粘贴你的 API Key"
+                  autocomplete="new-password"
+                  data-lpignore="true"
+                  data-1p-ignore="true"
+                  data-bwignore="true"
+                  spellcheck="false"
+                />
+              </div>
+              <div class="field protocol-field">
+                <label for="upstream-protocol">API 协议</label
+                ><select id="upstream-protocol" name="relay_upstream_protocol">
+                  <option value="openai_chat">OpenAI Chat</option>
+                  <option value="openai_responses">OpenAI Responses</option>
+                  <option value="anthropic">Anthropic Messages</option>
+                  <option value="gemini_native">Gemini</option>
+                </select>
+              </div>
+            </div>
+            <div class="upstream-name-row">
+              <div class="field">
+                <label for="upstream-name">渠道名称（可选）</label
+                ><input
+                  id="upstream-name"
+                  name="relay_upstream_channel_name"
+                  type="text"
+                  placeholder="默认使用服务商名称或地址"
+                  autocomplete="off"
+                  maxlength="100"
+                />
+              </div>
+              <button
+                id="cancel-upstream-edit"
+                class="button secondary"
+                type="button"
+                hidden
+              >
+                取消编辑
+              </button>
+            </div>
+            <div class="discovery-actions">
+              <p id="discovery-result" role="status" aria-live="polite">
+                选择预设，填入 Key 后自动获取模型；获取列表不会发起模型推理。
+              </p>
+              <button
+                id="discover-models"
+                class="button secondary"
+                type="button"
+                disabled
+              >
+                获取模型
+              </button>
+            </div>
+            <details id="upstream-catalog" class="upstream-catalog" open hidden>
+              <summary>
+                <span>选择要接入的模型</span
+                ><span id="upstream-model-count" class="count">0 个模型</span
+                ><span class="details-arrow" aria-hidden="true">⌄</span>
+              </summary>
+              <div class="catalog-toolbar">
+                <input
+                  id="upstream-model-search"
+                  type="search"
+                  aria-label="搜索上游模型"
+                  placeholder="搜索模型名称或 ID"
+                /><button
+                  id="upstream-select-all"
+                  class="button secondary"
+                  type="button"
+                >
+                  全选匹配</button
+                ><button
+                  id="upstream-select-none"
+                  class="button secondary"
+                  type="button"
+                >
+                  取消选择
+                </button>
+              </div>
+              <div
+                id="upstream-model-options"
+                class="upstream-model-options"
+                role="group"
+                aria-label="上游模型列表"
+              ></div>
+            </details>
+            <details id="manual-models" class="manual-models">
+              <summary>手动添加模型（上游无模型目录时）</summary>
+              <label for="manual-model-input"
+                >模型 ID，每行一个或用逗号分隔</label
+              >
+              <div class="manual-model-row">
+                <textarea
+                  id="manual-model-input"
+                  rows="2"
+                  placeholder="例如 glm-5.3-flash"
+                  spellcheck="false"
+                ></textarea
+                ><button
+                  id="manual-model-add"
+                  class="button secondary"
+                  type="button"
+                  disabled
+                >
+                  添加模型
+                </button>
+              </div>
+              <p class="field-help">
+                手动填写的模型会单独标注，保存时仍会测试首个模型。
+              </p>
+            </details>
+          </fieldset>
+          <div class="upstream-actions">
+            <p id="upstream-result" role="status" aria-live="polite">
+              勾选模型后保存并测试；测试会产生一次最小请求，提交后清空 Key。
+            </p>
+            <button id="upstream-submit" class="button" type="submit" disabled>
+              保存并测试 <span aria-hidden="true">↗</span>
+            </button>
+          </div>
+        </form>
+      </section>
+      <section
+        id="saved-channels-panel"
+        class="panel saved-channels-panel"
+        hidden
+        aria-labelledby="saved-channels-title"
+      >
+        <h2 id="saved-channels-title">已接入渠道</h2>
+        <div id="saved-channels" class="saved-channels"></div>
+      </section>
+      <form id="settings-form" hidden>
+        <fieldset id="settings-fields" disabled>
+          <section
+            class="panel availability-panel"
+            aria-labelledby="availability-title"
+          >
+            <div class="availability-heading">
+              <div>
+                <h2 id="availability-title">开放状态</h2>
+                <p class="muted">开启后，所选模型可在 LoliCode 中使用。</p>
+              </div>
+              <label class="switch-label" for="enabled"
+                ><span id="enabled-label">公益模型已关闭</span
+                ><span class="switch"
+                  ><input id="enabled" type="checkbox" role="switch" /><span
+                    class="switch-track"
+                  ></span></span
+              ></label>
+            </div>
+            <div class="schedule">
+              <span class="field-label">开放时间</span>
+              <div class="radio-options">
+                <label
+                  ><input
+                    type="radio"
+                    name="availability-mode"
+                    value="permanent"
+                    id="mode-permanent"
+                  />长期开放</label
+                ><label
+                  ><input
+                    type="radio"
+                    name="availability-mode"
+                    value="until"
+                    id="mode-until"
+                  />设截止时间</label
+                >
+              </div>
+              <div id="deadline-field" hidden>
+                <label for="available-until">截止时间</label
+                ><input id="available-until" type="datetime-local" />
+                <p id="timezone-note" class="field-help"></p>
+              </div>
+            </div>
+          </section>
+          <div class="settings-grid">
+            <section class="panel models-panel" aria-labelledby="models-title">
+              <div class="section-heading">
+                <div>
+                  <h2 id="models-title">选择公益模型</h2>
+                </div>
+                <span id="model-count" class="count">0 个已选</span>
+              </div>
+              <p class="muted">
+                API 测试通过后会自动勾选。也可以从已有启用渠道中选择。
+              </p>
+              <div id="model-options" class="model-options"></div>
+              <a class="text-link" href="/channels">添加或测试上游渠道 ↗</a>
+            </section>
+            <section class="panel quota-panel" aria-labelledby="quota-title">
+              <h2 id="quota-title">每日公益额度</h2>
+              <p class="muted">同一账号所有设备共用，新加坡时间零点重置。</p>
+              <div class="field-grid">
+                <div class="field">
+                  <label for="daily-requests">每账号请求数 / 天</label
+                  ><input
+                    id="daily-requests"
+                    type="number"
+                    min="1"
+                    step="1"
+                    required
+                    inputmode="numeric"
+                  />
+                </div>
+                <div class="field">
+                  <label for="daily-tokens">每账号 token / 天</label
+                  ><input
+                    id="daily-tokens"
+                    type="number"
+                    min="1"
+                    step="1"
+                    required
+                    inputmode="numeric"
+                  />
+                </div>
+                <div class="field">
+                  <label for="global-daily-requests">全站请求数 / 天</label
+                  ><input
+                    id="global-daily-requests"
+                    type="number"
+                    min="1"
+                    step="1"
+                    inputmode="numeric"
+                    placeholder="不限"
+                  />
+                </div>
+                <div class="field">
+                  <label for="global-daily-tokens">全站 token / 天</label
+                  ><input
+                    id="global-daily-tokens"
+                    type="number"
+                    min="1"
+                    step="1"
+                    inputmode="numeric"
+                    placeholder="不限"
+                  />
+                </div>
+              </div>
+              <p class="field-help">
+                token 按输入与输出合计；全站额度留空表示不限。
+              </p>
+            </section>
+          </div>
+          <details class="panel advanced-panel">
+            <summary>
+              <span>高级设置</span
+              ><span class="muted">并发、频率与单次请求限制</span
+              ><span class="details-arrow" aria-hidden="true">⌄</span>
+            </summary>
+            <div class="field-grid advanced-grid">
+              <div class="field">
+                <label for="max-concurrent-per-account">每账号并发请求</label
+                ><input
+                  id="max-concurrent-per-account"
+                  type="number"
+                  min="1"
+                  step="1"
+                  required
+                  inputmode="numeric"
+                />
+              </div>
+              <div class="field">
+                <label for="max-concurrent-global">全站并发请求</label
+                ><input
+                  id="max-concurrent-global"
+                  type="number"
+                  min="1"
+                  step="1"
+                  inputmode="numeric"
+                  placeholder="不限"
+                />
+              </div>
+              <div class="field">
+                <label for="global-requests-per-minute">全站每分钟请求</label
+                ><input
+                  id="global-requests-per-minute"
+                  type="number"
+                  min="1"
+                  step="1"
+                  inputmode="numeric"
+                  placeholder="不限"
+                />
+              </div>
+              <div class="field">
+                <label for="max-output-tokens">单次最大输出 token</label
+                ><input
+                  id="max-output-tokens"
+                  type="number"
+                  min="1"
+                  step="1"
+                  required
+                  inputmode="numeric"
+                />
+              </div>
+              <div class="field">
+                <label for="max-request-bytes">单次请求大小 / 字节</label
+                ><input
+                  id="max-request-bytes"
+                  type="number"
+                  min="1"
+                  step="1"
+                  required
+                  inputmode="numeric"
+                />
+              </div>
+            </div>
+          </details>
+        </fieldset>
+        <div class="save-bar">
+          <div>
+            <p id="save-note">设置保存后立即生效。</p>
+            <p id="save-result" role="status" aria-live="polite"></p>
+          </div>
+          <div class="save-actions">
+            <button id="reload" class="button secondary" type="button">
+              重新读取设置</button
+            ><button id="save" class="button" type="submit" disabled>
+              保存设置 <span aria-hidden="true">↗</span>
+            </button>
+          </div>
+        </div>
+      </form>
+      <noscript
+        ><p class="message error">
+          请启用 JavaScript 后管理公益设置。
+        </p></noscript
+      >
+    </main>
+    <footer class="page-width">
+      <span>LoliCode Relay</span><a href="/channels">渠道管理 ↗</a>
+    </footer>
+  </body>
+</html>

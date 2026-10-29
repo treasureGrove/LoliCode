@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ProviderForm,
   type ProviderFormValues,
-} from "@/components/providers/forms/ProviderForm";
+} from "@/features/providers/forms/ProviderForm";
 import { createTestQueryClient } from "../utils/testQueryClient";
 
 const authState = vi.hoisted(() => ({
@@ -21,7 +21,7 @@ vi.mock("sonner", () => ({
   },
 }));
 
-vi.mock("@/components/providers/forms/CodexOAuthSection", () => ({
+vi.mock("@/features/providers/forms/CodexOAuthSection", () => ({
   CodexOAuthSection: ({
     onAccountSelect,
     onSelectionConfirmed,
@@ -91,9 +91,9 @@ vi.mock("@/components/JsonEditor", () => ({
   ),
 }));
 
-vi.mock("@/components/providers/forms/hooks", async (importOriginal) => {
+vi.mock("@/features/providers/forms/hooks", async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import("@/components/providers/forms/hooks")>();
+    await importOriginal<typeof import("@/features/providers/forms/hooks")>();
   return {
     ...actual,
     useCopilotAuth: () => ({

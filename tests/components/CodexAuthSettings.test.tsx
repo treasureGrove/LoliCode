@@ -6,7 +6,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { CodexAuthSettings } from "@/components/settings/CodexAuthSettings";
+import { CodexAuthSettings } from "@/features/settings/CodexAuthSettings";
 import type { SettingsFormState } from "@/hooks/useSettings";
 
 vi.mock("react-i18next", () => ({

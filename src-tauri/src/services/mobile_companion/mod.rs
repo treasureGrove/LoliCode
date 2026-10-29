@@ -5,6 +5,8 @@ mod acceptance;
 mod account;
 mod account_crypto;
 mod account_transport;
+mod auth_refresh;
+mod authorization;
 mod crypto;
 mod direct;
 mod logical;
@@ -24,6 +26,7 @@ use crate::{
     services::{agent_preferences, inprocess_agent::InprocessAgentState},
     store::AppState,
 };
+use authorization::Control;
 use crypto::{now, WINDOW_MS};
 #[cfg(test)]
 use futures::{SinkExt, StreamExt};
@@ -133,11 +136,7 @@ struct Connection {
     transport: Option<&'static str>,
     logical_json: bool,
 }
-enum Control {
-    Approved,
-    Revoke,
-    Stop,
-}
+
 struct Inner {
     account: account::AccountState,
     db: Arc<Database>,

@@ -5,7 +5,7 @@ import {
   mergeDiscoveredChannel,
   selectedChannelModels,
   withValidDefault,
-} from "@/components/channels/channelCenterUtils";
+} from "@/features/channels/channelCenterUtils";
 import type {
   ChannelCenterSnapshot,
   ChannelSource,

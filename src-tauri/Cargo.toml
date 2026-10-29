@@ -1,6 +1,6 @@
 [package]
 name = "lolicode"
-version = "4.1.3"
+version = "4.1.4"
 description = "LoliCode desktop coding agent with shared model channels"
 authors = ["Jason Young"]
 license = "MIT"
@@ -17,7 +17,7 @@ doctest = false
 
 [features]
 default = []
-test-hooks = []
+test-hooks = ["tauri/test"]
 
 [build-dependencies]
 sha2 = "0.10"

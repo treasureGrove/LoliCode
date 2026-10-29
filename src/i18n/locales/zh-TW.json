@@ -398,6 +398,8 @@
       "soft": "柔和",
       "off": "簡潔",
       "intensity": "背景氛圍",
+      "fontSize": "介面字體大小",
+      "fontSizeHelp": "調整應用程式介面的文字大小。部分內容預覽保持原樣。",
       "backgroundOpacity": "背景遮罩透明度（調試）",
       "backgroundOpacityHelp": "拖動調整米白遮罩的透明度，數值越低，背景圖越明顯。調整會即時預覽並儲存於目前裝置。",
       "reset": "恢復預設",

@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   TablePagination,
   useClientPagination,
-} from "@/components/usage/TablePagination";
+} from "@/features/usage/TablePagination";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({

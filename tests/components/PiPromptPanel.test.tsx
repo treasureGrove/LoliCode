@@ -6,7 +6,7 @@ import {
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import PromptPanel from "@/components/prompts/PromptPanel";
+import PromptPanel from "@/features/prompts/PromptPanel";
 import { promptsApi, type Prompt } from "@/lib/api";
 
 const mocks = vi.hoisted(() => ({

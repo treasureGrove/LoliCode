@@ -1,7 +1,7 @@
 import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { PricingEditModal } from "@/components/usage/PricingEditModal";
+import { PricingEditModal } from "@/features/usage/PricingEditModal";
 import type { ModelPricing } from "@/types/usage";
 
 vi.mock("react-i18next", () => ({

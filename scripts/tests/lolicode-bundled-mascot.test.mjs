@@ -21,7 +21,7 @@ test("the production companion embeds the unchanged PNG without an asset request
       write: false,
       assetsInlineLimit: 0,
       rollupOptions: {
-        input: path.join(root, "src/components/agent/AgentCompanion.tsx"),
+        input: path.join(root, "src/features/agent/AgentCompanion.tsx"),
         preserveEntrySignatures: "strict",
         external: [
           "react",

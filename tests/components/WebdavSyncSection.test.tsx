@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import "@testing-library/jest-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-import { WebdavSyncSection } from "@/components/settings/WebdavSyncSection";
+import { WebdavSyncSection } from "@/features/settings/WebdavSyncSection";
 import type { WebDavSyncSettings } from "@/types";
 
 const toastSuccessMock = vi.fn();

@@ -4,7 +4,7 @@ import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { http, HttpResponse } from "msw";
 import type { Settings } from "@/types";
-import { SettingsPage } from "@/components/settings/SettingsPage";
+import { SettingsPage } from "@/features/settings/SettingsPage";
 import {
   resetProviderState,
   getSettings,
@@ -38,24 +38,24 @@ vi.mock("@/components/theme-provider", () => ({
 }));
 
 // 「数据」一节的其他卡片有自己的接口，这里只测目录和导入导出
-vi.mock("@/components/settings/BackupListSection", () => ({
+vi.mock("@/features/settings/BackupListSection", () => ({
   BackupListSection: () => <div>backup-list-section</div>,
 }));
-vi.mock("@/components/settings/WebdavSyncSection", () => ({
+vi.mock("@/features/settings/WebdavSyncSection", () => ({
   WebdavSyncSection: () => <div>webdav-sync-section</div>,
 }));
-vi.mock("@/components/settings/LogConfigPanel", () => ({
+vi.mock("@/features/settings/LogConfigPanel", () => ({
   LogConfigPanel: () => <div>log-config-panel</div>,
 }));
 
-vi.mock("@/components/settings/DirectorySettings", async () => {
+vi.mock("@/features/settings/DirectorySettings", async () => {
   const actual = await vi.importActual<
-    typeof import("@/components/settings/DirectorySettings")
-  >("@/components/settings/DirectorySettings");
+    typeof import("@/features/settings/DirectorySettings")
+  >("@/features/settings/DirectorySettings");
   return actual;
 });
 
-vi.mock("@/components/settings/ImportExportSection", () => ({
+vi.mock("@/features/settings/ImportExportSection", () => ({
   ImportExportSection: ({
     status,
     selectedFile,
@@ -80,7 +80,7 @@ vi.mock("@/components/settings/ImportExportSection", () => ({
   ),
 }));
 
-vi.mock("@/components/settings/AboutSection", () => ({
+vi.mock("@/features/settings/AboutSection", () => ({
   AboutSection: ({ isPortable }: any) => <div>about:{String(isPortable)}</div>,
 }));
 

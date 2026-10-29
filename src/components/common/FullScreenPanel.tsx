@@ -11,7 +11,7 @@ import { ChevronLeft } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { HoverTip } from "@/components/ui/hover-tip";
-import { AppPageHeader } from "@/components/shell/AppPageHeader";
+import { AppPageHeader } from "@/app/shell/AppPageHeader";
 import { useUnsavedChangesTracker } from "@/lib/unsavedChanges";
 import { cn } from "@/lib/utils";
 import { motionTokens } from "@/lib/motion";

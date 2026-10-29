@@ -6,7 +6,7 @@ import {
   screen,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AgentSessionMenu } from "@/components/agent/AgentSessionMenu";
+import { AgentSessionMenu } from "@/features/agent/AgentSessionMenu";
 import type { AgentSession } from "@/types/agent";
 const session: AgentSession = {
   id: "session",

@@ -17,6 +17,24 @@ pub(super) struct Plan {
     pub memory: Option<String>,
 }
 
+impl Plan {
+    pub(super) fn limit_summary_output(&mut self, tokens: u64) {
+        // A conservative byte ceiling avoids asking for a checkpoint far larger
+        // than its generation cap. This does not claim to count model tokens.
+        self.maximum_summary_bytes = self.maximum_summary_bytes.min(tokens as usize);
+        self.summary_messages[0]["content"] = json!(summary_prompt(self.maximum_summary_bytes));
+    }
+}
+
+fn summary_prompt(maximum_summary_bytes: usize) -> String {
+    format!("{SUMMARY_PROMPT}\nYour returned checkpoint must be shorter than {maximum_summary_bytes} UTF-8 bytes. Retain essential facts; do not fill this budget unnecessarily.")
+}
+
+pub(super) fn estimated_input_tokens(messages: &[Value], schemas: &[Value]) -> Result<u64, String> {
+    let bytes = request_size(messages, schemas)? as u64;
+    Ok(bytes / 2 + bytes % 2)
+}
+
 /// Memory is data, but user-authorized preferences should guide ordinary replies.
 pub(super) fn with_memory(system: &str, summary: Option<&str>, memory: Option<&str>, history: &[Value]) -> Vec<Value> {
     let mut messages = vec![json!({"role":"system","content":system})];
@@ -139,9 +157,14 @@ pub(super) fn plan_with_memory(
     // Include system text, tool schemas, checkpoints and complete protocol history.
     // Without declared context metadata, only an explicit upstream context error
     // permits a reactive checkpoint; its target is relative to the rejected input.
-    let hard = context
+    let mut hard = context
         .map(|tokens| tokens.saturating_mul(2) as usize)
         .unwrap_or(original_request_bytes);
+    // An explicit upstream context rejection disproves an optimistic catalog
+    // or local default. Shrink relative to the rejected request as well.
+    if force {
+        hard = hard.min(original_request_bytes);
+    }
     if !force && original_request_bytes <= hard.saturating_mul(3) / 4 {
         return Ok(None);
     }
@@ -180,7 +203,7 @@ pub(super) fn plan_with_memory(
             continue;
         }
         let summary_messages = vec![
-            json!({"role":"system","content":format!("{SUMMARY_PROMPT}\nYour returned checkpoint must be shorter than {maximum_summary_bytes} UTF-8 bytes. Retain essential facts; do not fill this budget unnecessarily.")}),
+            json!({"role":"system","content":summary_prompt(maximum_summary_bytes)}),
             json!({"role":"user","content":json!({"previousCheckpoint":summary,"latestUserRequest":checkpoint_value(&history[latest_user]["content"]),"completedHistory":checkpoint_value(&Value::Array(history[..cut].to_vec()))}).to_string()}),
         ];
         if request_size(&summary_messages, &[])? > hard.saturating_mul(3) / 4 {

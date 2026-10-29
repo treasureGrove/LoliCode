@@ -519,6 +519,9 @@ impl InprocessAgentState {
         let mut navigation = preferences::load(&state.db)?;
         let key = preferences::path_key(&result.workspace.path);
         let pinned = navigation.projects.get(&key).is_some_and(|p| p.pinned);
+        if let Some(name) = preferences::remembered_project_name(&navigation, &result.workspace.path) {
+            result.workspace.name = name;
+        }
         navigation.projects.insert(
             key,
             preferences::AgentProject {
@@ -552,17 +555,16 @@ impl InprocessAgentState {
         &self,
         state: &AppState,
         path: &str,
-        pinned: bool,
+        pinned: Option<bool>,
+        name: Option<&str>,
     ) -> Result<preferences::AgentProject, String> {
         let _guard = self.lifecycle.lock().await;
-        let mut navigation = preferences::load(&state.db)?;
-        let project = navigation
-            .projects
-            .get_mut(&preferences::path_key(path))
-            .ok_or("这个项目还没有加入工作台")?;
-        project.pinned = pinned;
-        let project = project.clone();
-        preferences::save(&state.db, &navigation)?;
+        let project = preferences::update_project_metadata(&state.db, path, pinned, name)?;
+        if let Some(binding) = self.binding.write().await.as_mut() {
+            if preferences::path_key(&binding.workspace.path) == preferences::path_key(&project.path) {
+                binding.workspace.name = project.name.clone();
+            }
+        }
         Ok(project)
     }
     pub async fn remove_project(&self, state: &AppState, path: &str) -> Result<(), String> {

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   flattenModels,
   formatPrice,
-} from "@/components/usage/ModelsDevPickerDialog";
+} from "@/features/usage/ModelsDevPickerDialog";
 import { normalizeModelsDevModelId } from "@/lib/modelsDev";
 import {
   getCommonModelKeys,

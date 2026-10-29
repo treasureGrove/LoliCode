@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { RequestDetailPanel } from "@/components/usage/RequestDetailPanel";
+import { RequestDetailPanel } from "@/features/usage/RequestDetailPanel";
 import type { RequestLog } from "@/types/usage";
 
 const useRequestDetailMock = vi.hoisted(() => vi.fn());

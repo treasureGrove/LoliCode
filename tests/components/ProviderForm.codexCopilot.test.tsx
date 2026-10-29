@@ -14,7 +14,7 @@ import {
   ProviderForm,
   type ProviderFormProps,
   type ProviderFormValues,
-} from "@/components/providers/forms/ProviderForm";
+} from "@/features/providers/forms/ProviderForm";
 import { codexProviderPresets } from "@/config/codexProviderPresets";
 import type { CodexCopilotApiFormat, ProviderMeta } from "@/types";
 import { server } from "../msw/server";
@@ -31,7 +31,7 @@ vi.mock("sonner", () => ({
   toast: { error: toastError, success: vi.fn() },
 }));
 
-vi.mock("@/components/providers/forms/CopilotAuthSection", () => ({
+vi.mock("@/features/providers/forms/CopilotAuthSection", () => ({
   CopilotAuthSection: ({
     selectedAccountId,
     onAccountSelect,
@@ -67,9 +67,9 @@ vi.mock("@/components/JsonEditor", () => ({
     />
   ),
 }));
-vi.mock("@/components/providers/forms/hooks", async (importOriginal) => {
+vi.mock("@/features/providers/forms/hooks", async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import("@/components/providers/forms/hooks")>();
+    await importOriginal<typeof import("@/features/providers/forms/hooks")>();
   return {
     ...actual,
     useCopilotAuth: () => ({

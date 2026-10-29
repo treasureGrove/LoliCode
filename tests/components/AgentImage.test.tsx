@@ -1,10 +1,10 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { invoke } from "@tauri-apps/api/core";
 import { vi, describe, it, expect, beforeEach } from "vitest";
-import { AgentMessageView } from "@/components/agent/AgentParts";
-import { AgentImage } from "@/components/agent/AgentImage";
-import { AgentFileActionsContext } from "@/components/agent/AgentFilePath";
-import { SessionMarkdown } from "@/components/sessions/reader/SessionMarkdown";
+import { AgentMessageView } from "@/features/agent/AgentParts";
+import { AgentImage } from "@/features/agent/AgentImage";
+import { AgentFileActionsContext } from "@/features/agent/AgentFilePath";
+import { SessionMarkdown } from "@/features/sessions/reader/SessionMarkdown";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 const data = {

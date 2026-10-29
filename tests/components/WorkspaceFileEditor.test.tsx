@@ -1,6 +1,6 @@
 import { act, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import WorkspaceFileEditor from "@/components/workspace/WorkspaceFileEditor";
+import WorkspaceFileEditor from "@/features/workspace/WorkspaceFileEditor";
 import { workspaceApi } from "@/lib/api/workspace";
 
 vi.mock("@/lib/api/workspace", () => ({

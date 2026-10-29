@@ -53,7 +53,7 @@ pub fn replace_image_blocks_with_marker(body: &mut Value) -> usize {
 }
 
 pub fn is_unsupported_image_error(error: &ProxyError) -> bool {
-    let ProxyError::UpstreamError { status, body } = error else {
+    let ProxyError::UpstreamError { status, body, .. } = error else {
         return false;
     };
 
@@ -1159,6 +1159,7 @@ mod tests {
     #[test]
     fn detects_unsupported_image_errors() {
         let error = ProxyError::UpstreamError {
+            retry_after: None,
             status: 400,
             body: Some(
                 r#"{"error":{"message":"This model does not support image input"}}"#.to_string(),
@@ -1173,6 +1174,7 @@ mod tests {
         // 火山方舟真实报错（issue #5025）：不含 image/media 等字样，且英文缺
         // 三单 s——旧逻辑的 mentions_image 门与 "only supports text" 提示都拦不住。
         let error = ProxyError::UpstreamError {
+            retry_after: None,
             status: 400,
             body: Some(
                 r#"{"error":{"message":"Model only support text input Request id: 021783"}}"#
@@ -1197,6 +1199,7 @@ mod tests {
     #[test]
     fn ignores_non_image_errors() {
         let error = ProxyError::UpstreamError {
+            retry_after: None,
             status: 400,
             body: Some(r#"{"error":{"message":"Invalid API key"}}"#.to_string()),
         };
@@ -1232,6 +1235,7 @@ mod tests {
     #[test]
     fn detects_media_and_attachment_error_phrasings() {
         let media_error = ProxyError::UpstreamError {
+            retry_after: None,
             status: 400,
             body: Some(
                 r#"{"error":{"message":"This model cannot process media inputs"}}"#.to_string(),
@@ -1240,6 +1244,7 @@ mod tests {
         assert!(is_unsupported_image_error(&media_error));
 
         let attachment_error = ProxyError::UpstreamError {
+            retry_after: None,
             status: 422,
             body: Some(r#"{"message":"attachments are not supported by this model"}"#.to_string()),
         };
@@ -1249,6 +1254,7 @@ mod tests {
     #[test]
     fn detects_chat_content_unknown_variant_image_url_errors() {
         let error = ProxyError::UpstreamError {
+            retry_after: None,
             status: 400,
             body: Some(
                 r#"{"error":{"message":"Failed to deserialize the JSON body into the target type: messages[11]: unknown variant image_url, expected text"}}"#

@@ -6,9 +6,9 @@ import {
   screen,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { InterfaceAppearanceRoot } from "@/components/shell/InterfaceAppearanceRoot";
-import { InterfaceAppearanceSettings } from "@/components/settings/InterfaceAppearanceSettings";
-import { AgentCompanion } from "@/components/agent/AgentCompanion";
+import { InterfaceAppearanceRoot } from "@/app/shell/InterfaceAppearanceRoot";
+import { InterfaceAppearanceSettings } from "@/features/settings/InterfaceAppearanceSettings";
+import { AgentCompanion } from "@/features/agent/AgentCompanion";
 import {
   DEFAULT_INTERFACE_APPEARANCE,
   INTERFACE_APPEARANCE_KEY,
@@ -24,6 +24,7 @@ afterEach(() => {
   localStorage.removeItem(INTERFACE_APPEARANCE_KEY);
   delete document.documentElement.dataset.decoration;
   document.documentElement.style.removeProperty("--atelier-intensity");
+  document.documentElement.style.removeProperty("--interface-font-scale");
 });
 
 describe("interface appearance", () => {
@@ -45,13 +46,64 @@ describe("interface appearance", () => {
       mode: "soft",
       intensity: 0,
       companionVisible: true,
+      fontSize: 115,
     });
     expect(parseInterfaceAppearance('{"mode":"off","intensity":"75"}')).toEqual(
-      { mode: "off", intensity: 48, companionVisible: true },
+      { mode: "off", intensity: 48, companionVisible: true, fontSize: 115 },
     );
     expect(
       parseInterfaceAppearance('{"companionVisible":"false"}').companionVisible,
     ).toBe(true);
+    expect(parseInterfaceAppearance('{"fontSize":500}').fontSize).toBe(125);
+    expect(parseInterfaceAppearance('{"fontSize":-10}').fontSize).toBe(85);
+    expect(parseInterfaceAppearance('{"fontSize":"120"}').fontSize).toBe(115);
+    expect(parseInterfaceAppearance('{"fontSize":100}').fontSize).toBe(100);
+  });
+
+  it("applies, saves, restores and resets the interface font size", () => {
+    const first = render(
+      <>
+        <InterfaceAppearanceRoot />
+        <InterfaceAppearanceSettings />
+      </>,
+    );
+    expect(
+      screen.getByRole("slider", { name: "settings.atelier.fontSize" }),
+    ).toHaveValue("115");
+    expect(
+      document.documentElement.style.getPropertyValue("--interface-font-scale"),
+    ).toBe("1.15");
+    fireEvent.change(
+      screen.getByRole("slider", { name: "settings.atelier.fontSize" }),
+      {
+        target: { value: "120" },
+      },
+    );
+    expect(
+      document.documentElement.style.getPropertyValue("--interface-font-scale"),
+    ).toBe("1.2");
+    expect(
+      JSON.parse(localStorage.getItem(INTERFACE_APPEARANCE_KEY)!).fontSize,
+    ).toBe(120);
+    first.unmount();
+    render(
+      <>
+        <InterfaceAppearanceRoot />
+        <InterfaceAppearanceSettings />
+      </>,
+    );
+    expect(
+      screen.getByRole("slider", { name: "settings.atelier.fontSize" }),
+    ).toHaveValue("120");
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "settings.atelier.reset" })[0],
+    );
+    expect(
+      document.documentElement.style.getPropertyValue("--interface-font-scale"),
+    ).toBe("1.15");
+    expect(
+      JSON.parse(localStorage.getItem(INTERFACE_APPEARANCE_KEY)!).fontSize,
+    ).toBe(115);
   });
 
   it("restores the appearance on remount without changing the color-scheme preference", () => {
@@ -91,7 +143,7 @@ describe("interface appearance", () => {
     expect(document.documentElement).toHaveAttribute("data-decoration", "off");
     expect(slider).toBeDisabled();
     expect(JSON.parse(localStorage.getItem(INTERFACE_APPEARANCE_KEY)!)).toEqual(
-      { mode: "off", intensity: 73, companionVisible: true },
+      { mode: "off", intensity: 73, companionVisible: true, fontSize: 115 },
     );
     fireEvent.click(
       screen.getByRole("button", { name: "settings.atelier.full" }),
@@ -181,6 +233,7 @@ describe("interface appearance", () => {
         mode: "off",
         intensity: 48,
         companionVisible: true,
+        fontSize: 115,
       },
     );
   });

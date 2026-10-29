@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import CodexConfigEditor from "@/components/providers/forms/CodexConfigEditor";
-import GeminiConfigEditor from "@/components/providers/forms/GeminiConfigEditor";
+import CodexConfigEditor from "@/features/providers/forms/CodexConfigEditor";
+import GeminiConfigEditor from "@/features/providers/forms/GeminiConfigEditor";
 
 vi.mock("@/components/common/FullScreenPanel", () => ({
   FullScreenPanel: ({

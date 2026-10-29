@@ -1,9 +1,9 @@
 /* Development-only visual fixture. This entry is not imported by src/main.tsx or the build. */
 import React, { useState } from "react";
 import { MotionConfig } from "framer-motion";
-import { Sidebar } from "../../../src/components/shell/Sidebar";
+import { Sidebar } from "../../../src/app/shell/Sidebar";
 import { UpdateProvider } from "../../../src/contexts/UpdateContext";
-import { ChannelCenterPanel } from "../../../src/components/channels/ChannelCenterPanel";
+import { ChannelCenterPanel } from "../../../src/features/channels/ChannelCenterPanel";
 import {
   channelCenterApi,
   type ChannelCenterSnapshot,
@@ -11,23 +11,23 @@ import {
 import type { SettingsSection } from "../../../src/lib/navigation";
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { AgentPage } from "../../../src/components/agent/AgentPage";
+import { AgentPage } from "../../../src/features/agent/AgentPage";
 import { agentApi } from "../../../src/lib/api/agent";
 import { agentFilesApi } from "../../../src/lib/api/agent-files";
 import {
   ThemeProvider,
   useTheme,
 } from "../../../src/components/theme-provider";
-import { InterfaceAppearanceRoot } from "../../../src/components/shell/InterfaceAppearanceRoot";
-import { InterfaceAppearanceSettings } from "../../../src/components/settings/InterfaceAppearanceSettings";
-import { CopilotBillingPanel } from "../../../src/components/usage/CopilotBillingPanel";
-import { AppPageHeader } from "../../../src/components/shell/AppPageHeader";
+import { InterfaceAppearanceRoot } from "../../../src/app/shell/InterfaceAppearanceRoot";
+import { InterfaceAppearanceSettings } from "../../../src/features/settings/InterfaceAppearanceSettings";
+import { CopilotBillingPanel } from "../../../src/features/usage/CopilotBillingPanel";
+import { AppPageHeader } from "../../../src/app/shell/AppPageHeader";
 import {
   SettingsBlock,
   SettingsBody,
   SettingsCard,
   SettingsRow,
-} from "../../../src/components/settings/SettingsLayout";
+} from "../../../src/features/settings/SettingsLayout";
 import {
   Dialog,
   DialogContent,

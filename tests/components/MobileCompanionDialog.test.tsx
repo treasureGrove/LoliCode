@@ -1,8 +1,9 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { MobileCompanionDialog } from "@/components/shell/MobileCompanionDialog";
+import { MobileCompanionDialog } from "@/app/shell/MobileCompanionDialog";
 import type { MobileCompanionStatus } from "@/lib/api/mobile-companion";
+import { settingsApi } from "@/lib/api/settings";
 const api = vi.hoisted(() => ({
   status: vi.fn(),
   pair: vi.fn(),
@@ -54,24 +55,46 @@ beforeEach(() => {
   api.setAccountVisible.mockResolvedValue(account);
 });
 describe("account phone connection", () => {
+  it("closes from the visible close button", async () => {
+    const onOpenChange = vi.fn();
+    render(<MobileCompanionDialog open onOpenChange={onOpenChange} />);
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "关闭手机连接" }));
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
   it("does not register, pair or contact the backend while closed", () => {
     render(<MobileCompanionDialog open={false} onOpenChange={vi.fn()} />);
     expect(api.status).not.toHaveBeenCalled();
     expect(api.accountStatus).not.toHaveBeenCalled();
     expect(api.pair).not.toHaveBeenCalled();
   });
-  it("explains bounded text fallback while retaining account enrollment", async () => {
+  it("keeps connection details collapsed until requested while retaining account enrollment", async () => {
     render(<MobileCompanionDialog open onOpenChange={vi.fn()} />);
     await waitFor(() => expect(api.status).toHaveBeenCalledOnce());
-    expect(screen.getByText("登录同一账户，无需配对码")).toBeInTheDocument();
+    expect(screen.getByText("端到端加密 · 无需配对码")).toBeVisible();
     expect(
-      screen.getByText(/文本通道只同步有大小和流量限制/),
-    ).toBeInTheDocument();
+      screen.getByText("电脑需保持开机、联网并运行 LoliCode。"),
+    ).toBeVisible();
+    const fallback = screen.getByText(/文本通道只同步有大小和流量限制/);
+    expect(fallback).not.toBeVisible();
+    await userEvent.setup().click(screen.getByText("连接与功能说明"));
+    expect(fallback).toBeVisible();
     expect(
       screen.queryByRole("button", { name: /二维码|配对码|中继/ }),
     ).not.toBeInTheDocument();
     expect(api.pair).not.toHaveBeenCalled();
     expect(api.approve).not.toHaveBeenCalled();
+  });
+  it("opens the Android download page only when requested", async () => {
+    render(<MobileCompanionDialog open onOpenChange={vi.fn()} />);
+    expect(settingsApi.openExternal).not.toHaveBeenCalled();
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "下载 Android 应用" }));
+    expect(settingsApi.openExternal).toHaveBeenCalledWith(
+      "https://lolicode.com/mobile/",
+    );
   });
   it("hides legacy rooms and another account's devices", async () => {
     api.status.mockResolvedValue({

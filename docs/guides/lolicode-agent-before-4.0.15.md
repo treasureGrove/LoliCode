@@ -68,9 +68,9 @@ Claude 和 Gemini 的原生订阅入口只供各自官方 CLI 使用，不能当
 - `src-tauri/src/commands/agent_dispatch.rs`：按会话引擎路由 IPC，保留旧会话；`agent_images.rs` 负责项目内图片预览。
 - `crates/lolicode-agent/`、`services/agent.rs`、`agent_preferences.rs`、`agent_policy.rs`、`agent_extensions.rs`：已有 OpenCode 会话与兼容 DTO，继续保留历史及原引擎规则。
 - `src-tauri/src/services/channel_center.rs`：原目录的不可变版本、agent 私有配置投影及共享网关运行保护，不调用外部客户端配置写入器。
-- `src/components/agent/` 与 `src/hooks/useAgentSnapshot.ts`：项目选择、聊天、执行状态、权限、问题与实际 diff 展示。
-- `scripts/prepare-agent-runtime.mjs`：从锁定的 npm 平台包准备随应用分发的引擎与许可。
-- `scripts/prepare-zcode-runtime.mjs`、`prepare-zcode-remote-runtime.mjs`：校验固定源码、依赖与 Node 来源，构建私有运行资源及独立 Linux 远程资源。
+- `src/features/agent/` 与 `src/hooks/useAgentSnapshot.ts`：项目选择、聊天、执行状态、权限、问题与实际 diff 展示。
+- `scripts/build/prepare-agent-runtime.mjs`：从锁定的 npm 平台包准备随应用分发的引擎与许可。
+- `scripts/build/prepare-zcode-runtime.mjs`、`prepare-zcode-remote-runtime.mjs`：校验固定源码、依赖与 Node 来源，构建私有运行资源及独立 Linux 远程资源。
 
 新引擎固定为 ZCode 3.15.1 / `aac4755666d09fdcd70272fcf063c077a639015f`，使用真实 V4 命令、持久日志、流式帧与分页历史。原始 Git 文件不修改；嵌入构建仅为只读 workspace 展示读取增加同步 Registry 刷新屏障，防止渠道已保存而现有 CLI 仍使用旧模型目录。精确变换、输入摘要和资源摘要写入构建清单。
 

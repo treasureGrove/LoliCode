@@ -7,7 +7,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { McodeProviderForm } from "@/components/providers/forms/McodeProviderForm";
+import { McodeProviderForm } from "@/features/providers/forms/McodeProviderForm";
 import { mcodeProviderPresets } from "@/config/mcodeProviderPresets";
 import { piProviderPresets } from "@/config/piProviderPresets";
 import { setProviders } from "../msw/state";

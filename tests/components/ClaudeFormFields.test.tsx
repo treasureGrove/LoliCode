@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ComponentProps, PropsWithChildren } from "react";
 import { useForm } from "react-hook-form";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ClaudeFormFields } from "@/components/providers/forms/ClaudeFormFields";
+import { ClaudeFormFields } from "@/features/providers/forms/ClaudeFormFields";
 import { Form } from "@/components/ui/form";
 
 const copilotApiMock = vi.hoisted(() => ({
@@ -27,11 +27,11 @@ vi.mock("@/lib/api/model-fetch", () => ({
   showFetchModelsError: modelFetchApiMock.showFetchModelsError,
 }));
 
-vi.mock("@/components/providers/forms/CopilotAuthSection", () => ({
+vi.mock("@/features/providers/forms/CopilotAuthSection", () => ({
   CopilotAuthSection: () => <div data-testid="copilot-auth-section" />,
 }));
 
-vi.mock("@/components/providers/forms/CodexOAuthSection", () => ({
+vi.mock("@/features/providers/forms/CodexOAuthSection", () => ({
   CodexOAuthSection: () => <div data-testid="codex-oauth-section" />,
 }));
 

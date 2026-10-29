@@ -3,7 +3,7 @@ import { renderWithQueryClient as render } from "../utils/testQueryClient";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { FormProvider, useForm } from "react-hook-form";
-import { OpenClawFormFields } from "@/components/providers/forms/OpenClawFormFields";
+import { OpenClawFormFields } from "@/features/providers/forms/OpenClawFormFields";
 
 const models = [
   {

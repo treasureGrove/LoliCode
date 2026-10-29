@@ -2,14 +2,14 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { ProviderCard } from "@/components/providers/ProviderCard";
+import { ProviderCard } from "@/features/providers/ProviderCard";
 import type { ManagedAuthStatus } from "@/lib/api";
 import type { Provider } from "@/types";
 import { createTestQueryClient } from "../utils/testQueryClient";
 
 const codexQuotaFooterProps = vi.hoisted(() => vi.fn());
 
-vi.mock("@/components/providers/ProviderCardActions", () => ({
+vi.mock("@/features/providers/ProviderCardActions", () => ({
   ProviderCardActions: (props: {
     onDuplicate?: () => void;
     onConfigureUsage?: () => void;

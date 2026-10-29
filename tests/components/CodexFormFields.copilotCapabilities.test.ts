@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   isCopilotModelSupportedByCodex,
   resolveCopilotReportedPromptLimit,
-} from "@/components/providers/forms/CodexFormFields";
+} from "@/features/providers/forms/CodexFormFields";
 import type { CopilotModel } from "@/lib/api/copilot";
 import type { CodexCopilotApiFormat } from "@/types";
 import endpointCases from "../fixtures/copilot-endpoint-cases.json";

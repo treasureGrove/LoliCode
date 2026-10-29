@@ -1,0 +1,740 @@
+{
+  "version": 1,
+  "presets": [
+    {
+      "id": "deepseek",
+      "name": "DeepSeek",
+      "baseUrl": "https://api.deepseek.com/v1",
+      "protocol": "openai_chat",
+      "icon": "deepseek",
+      "websiteUrl": "https://platform.deepseek.com"
+    },
+    {
+      "id": "openai",
+      "name": "OpenAI",
+      "baseUrl": "https://api.openai.com/v1",
+      "protocol": "openai_responses",
+      "icon": "openai",
+      "websiteUrl": "https://platform.openai.com"
+    },
+    {
+      "id": "anthropic",
+      "name": "Anthropic",
+      "baseUrl": "https://api.anthropic.com",
+      "protocol": "anthropic",
+      "icon": "anthropic",
+      "websiteUrl": "https://console.anthropic.com"
+    },
+    {
+      "id": "gemini",
+      "name": "Google Gemini",
+      "baseUrl": "https://generativelanguage.googleapis.com",
+      "protocol": "gemini_native",
+      "icon": "gemini",
+      "websiteUrl": "https://ai.google.dev/gemini-api"
+    },
+    {
+      "id": "zhipu",
+      "name": "智谱 · 通用 API",
+      "baseUrl": "https://open.bigmodel.cn/api/paas/v4",
+      "protocol": "openai_chat",
+      "icon": "zhipu",
+      "websiteUrl": "https://open.bigmodel.cn"
+    },
+    {
+      "id": "zhipu-coding",
+      "name": "智谱 · 编程套餐",
+      "baseUrl": "https://open.bigmodel.cn/api/coding/paas/v4",
+      "protocol": "openai_chat",
+      "icon": "zhipu",
+      "websiteUrl": "https://open.bigmodel.cn"
+    },
+    {
+      "id": "zai-coding",
+      "name": "Z.ai · 编程套餐",
+      "baseUrl": "https://api.z.ai/api/coding/paas/v4",
+      "protocol": "openai_chat",
+      "icon": "zhipu",
+      "websiteUrl": "https://z.ai"
+    },
+    {
+      "id": "kimi",
+      "name": "Kimi · 中国",
+      "baseUrl": "https://api.moonshot.cn/v1",
+      "protocol": "openai_chat",
+      "icon": "kimi",
+      "websiteUrl": "https://platform.kimi.com?track_id=track-7cf2b91dcde043eda6ef9a95951a042c"
+    },
+    {
+      "id": "minimax",
+      "name": "MiniMax · 中国",
+      "baseUrl": "https://api.minimax.cn/v1",
+      "protocol": "openai_chat",
+      "icon": "minimax",
+      "websiteUrl": "https://platform.minimax.cn"
+    },
+    {
+      "id": "openrouter",
+      "name": "OpenRouter",
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "protocol": "openai_responses",
+      "icon": "openrouter",
+      "websiteUrl": "https://openrouter.ai"
+    },
+    {
+      "id": "siliconflow",
+      "name": "硅基流动 · 中国",
+      "baseUrl": "https://api.siliconflow.cn/v1",
+      "protocol": "openai_chat",
+      "icon": "siliconflow",
+      "websiteUrl": "https://siliconflow.cn"
+    },
+    {
+      "id": "bailian",
+      "name": "阿里百炼 · 通用 API",
+      "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      "protocol": "openai_chat",
+      "icon": "qianwenai",
+      "websiteUrl": "https://platform.qianwenai.com/?utm_content=g_20000002971"
+    },
+    {
+      "id": "bailian-coding",
+      "name": "阿里百炼 · 编程套餐",
+      "baseUrl": "https://coding.dashscope.aliyuncs.com/apps/anthropic",
+      "protocol": "anthropic",
+      "icon": "qianwenai",
+      "websiteUrl": "https://bailian.console.aliyun.com"
+    },
+    {
+      "id": "opencode:Kimi Global",
+      "name": "Kimi Global",
+      "baseUrl": "https://api.moonshot.ai/v1",
+      "protocol": "openai_chat",
+      "icon": "kimi",
+      "websiteUrl": "https://platform.kimi.ai?track_id=track-674ed6e2af924a5682a87421f7cf753a"
+    },
+    {
+      "id": "opencode:Kimi For Coding",
+      "name": "Kimi For Coding",
+      "baseUrl": "https://api.kimi.com/coding/v1",
+      "protocol": "anthropic",
+      "icon": "kimi",
+      "websiteUrl": "https://www.kimi.com/code/"
+    },
+    {
+      "id": "opencode:Kimi For Coding Global",
+      "name": "Kimi For Coding Global",
+      "baseUrl": "https://api.kimi.ai/coding/v1",
+      "protocol": "anthropic",
+      "icon": "kimi",
+      "websiteUrl": "https://www.kimi.ai/code"
+    },
+    {
+      "id": "opencode:PackyCode",
+      "name": "PackyCode",
+      "baseUrl": "https://www.packyapi.ai/v1",
+      "protocol": "anthropic",
+      "icon": "packycode",
+      "websiteUrl": "https://www.packyapi.ai"
+    },
+    {
+      "id": "opencode:ZetaAPI",
+      "name": "ZetaAPI",
+      "baseUrl": "https://api.zetaapi.ai/v1",
+      "protocol": "openai_chat",
+      "icon": "zetaapi",
+      "websiteUrl": "https://zetaapi.ai"
+    },
+    {
+      "id": "opencode:APINebula",
+      "name": "APINebula",
+      "baseUrl": "https://apinebula.ai/v1",
+      "protocol": "openai_chat",
+      "icon": "apinebula",
+      "websiteUrl": "https://apinebula.ai"
+    },
+    {
+      "id": "opencode:AICodeMirror",
+      "name": "AICodeMirror",
+      "baseUrl": "https://api.aicodemirror.ai/api/claudecode",
+      "protocol": "anthropic",
+      "icon": "aicodemirror",
+      "websiteUrl": "https://www.aicodemirror.ai"
+    },
+    {
+      "id": "opencode:FennoAI",
+      "name": "FennoAI",
+      "baseUrl": "https://api.fenno.ai/v1",
+      "protocol": "openai_chat",
+      "icon": "fenno",
+      "websiteUrl": "https://api.fenno.ai"
+    },
+    {
+      "id": "opencode:RunAPI",
+      "name": "RunAPI",
+      "baseUrl": "https://runapi.host",
+      "protocol": "anthropic",
+      "icon": "runapi",
+      "websiteUrl": "https://runapi.host"
+    },
+    {
+      "id": "opencode:OpenModel",
+      "name": "OpenModel",
+      "baseUrl": "https://api.openmodel.ai/v1",
+      "protocol": "anthropic",
+      "icon": "openmodel",
+      "websiteUrl": "https://www.openmodel.ai"
+    },
+    {
+      "id": "opencode:Shengsuanyun",
+      "name": "Shengsuanyun",
+      "baseUrl": "https://router.shengsuanyun.com/api/v1",
+      "protocol": "anthropic",
+      "icon": "shengsuanyun",
+      "websiteUrl": "https://www.shengsuanyun.com/?from=CH_4HHXMRYF"
+    },
+    {
+      "id": "opencode:AIGoCode",
+      "name": "AIGoCode",
+      "baseUrl": "https://api.aigocode.app",
+      "protocol": "anthropic",
+      "icon": "aigocode",
+      "websiteUrl": "https://aigocode.app"
+    },
+    {
+      "id": "opencode:Qiniu",
+      "name": "Qiniu",
+      "baseUrl": "https://api.qnaigc.com/v1",
+      "protocol": "openai_chat",
+      "icon": "qiniu",
+      "websiteUrl": "https://s.qiniu.com/nMvAvy"
+    },
+    {
+      "id": "opencode:AICoding",
+      "name": "AICoding",
+      "baseUrl": "https://api.aicoding.inc",
+      "protocol": "anthropic",
+      "icon": "aicoding",
+      "websiteUrl": "https://aicoding.inc"
+    },
+    {
+      "id": "opencode:SubRouter",
+      "name": "SubRouter",
+      "baseUrl": "https://subrouter.ai/v1",
+      "protocol": "openai_chat",
+      "icon": "subrouter",
+      "websiteUrl": "https://subrouter.ai"
+    },
+    {
+      "id": "opencode:FluxA Token Plan",
+      "name": "FluxA Token Plan",
+      "baseUrl": "https://api.baiduqianfan.ai/v2/tokenplan/team",
+      "protocol": "openai_chat",
+      "icon": "fluxa",
+      "websiteUrl": "https://agentmarket.fluxapay.xyz/"
+    },
+    {
+      "id": "opencode:88API",
+      "name": "88API",
+      "baseUrl": "https://api.88api.ai/v1",
+      "protocol": "anthropic",
+      "icon": "88api",
+      "websiteUrl": "https://88api.ai"
+    },
+    {
+      "id": "opencode:APIKEY.FUN",
+      "name": "APIKEY.FUN",
+      "baseUrl": "https://api.apikey.fan/v1",
+      "protocol": "anthropic",
+      "icon": "apikeyfun",
+      "websiteUrl": "https://apikey.fan"
+    },
+    {
+      "id": "opencode:9527CODE",
+      "name": "9527CODE",
+      "baseUrl": "https://9527.codes/v1",
+      "protocol": "anthropic",
+      "icon": "9527code",
+      "websiteUrl": "https://9527.codes"
+    },
+    {
+      "id": "opencode:Code0",
+      "name": "Code0",
+      "baseUrl": "https://code0.ai/v1",
+      "protocol": "openai_chat",
+      "icon": "code0",
+      "websiteUrl": "https://code0.ai"
+    },
+    {
+      "id": "opencode:TeamoRouter",
+      "name": "TeamoRouter",
+      "baseUrl": "https://api.teamorouter.cn/v1",
+      "protocol": "openai_chat",
+      "icon": "teamorouter",
+      "websiteUrl": "https://teamorouter.cn"
+    },
+    {
+      "id": "opencode:PPIO",
+      "name": "PPIO",
+      "baseUrl": "https://api.ppio.com/openai/v1",
+      "protocol": "openai_chat",
+      "icon": "ppio",
+      "websiteUrl": "https://ppio.com"
+    },
+    {
+      "id": "opencode:ClaudeCN",
+      "name": "ClaudeCN",
+      "baseUrl": "https://claudecn.top",
+      "protocol": "anthropic",
+      "icon": "claudecn",
+      "websiteUrl": "https://claudecn.top"
+    },
+    {
+      "id": "opencode:火山 Agent Plan",
+      "name": "火山 Agent Plan",
+      "baseUrl": "https://ark.cn-beijing.volces.com/api/plan/v3",
+      "protocol": "openai_chat",
+      "icon": "huoshan",
+      "websiteUrl": "https://www.volcengine.com/activity/agentplan?ac=MMAP8JTTCAQ2&rc=6J6FV5N2&utm_source=OWO&utm_medium=devrel-1&utm_campaign=hw&utm_content=hw"
+    },
+    {
+      "id": "opencode:火山 Coding Plan",
+      "name": "火山 Coding Plan",
+      "baseUrl": "https://ark.cn-beijing.volces.com/api/coding/v3",
+      "protocol": "openai_chat",
+      "icon": "huoshan",
+      "websiteUrl": "https://www.volcengine.com/activity/codingplan?ac=MMAP8JTTCAQ2&rc=6J6FV5N2&utm_campaign=hw&utm_medium=devrel_tool_web&utm_source=OWO"
+    },
+    {
+      "id": "opencode:BytePlus",
+      "name": "BytePlus",
+      "baseUrl": "https://ark.ap-southeast.bytepluses.com/api/coding/v3",
+      "protocol": "openai_chat",
+      "icon": "byteplus",
+      "websiteUrl": "https://www.byteplus.com/en/product/modelark?utm_campaign=hw&utm_medium=devrel_tool_web&utm_source=OWO"
+    },
+    {
+      "id": "opencode:Volcengine Doubao",
+      "name": "Volcengine Doubao",
+      "baseUrl": "https://ark.cn-beijing.volces.com/api/v3",
+      "protocol": "openai_chat",
+      "icon": "doubao",
+      "websiteUrl": "https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey?apikey=%7B%7D&utm_campaign=hw&utm_medium=devrel_tool_web&utm_source=OWO"
+    },
+    {
+      "id": "opencode:A6API",
+      "name": "A6API",
+      "baseUrl": "https://api.a6api.com/v1",
+      "protocol": "openai_chat",
+      "icon": "a6api",
+      "websiteUrl": "https://www.a6api.com"
+    },
+    {
+      "id": "opencode:CCSub",
+      "name": "CCSub",
+      "baseUrl": "https://www.ccsub.net/v1",
+      "protocol": "openai_chat",
+      "icon": "ccsub",
+      "websiteUrl": "https://www.ccsub.net"
+    },
+    {
+      "id": "opencode:SSSAiCode",
+      "name": "SSSAiCode",
+      "baseUrl": "https://node-hk.sssaicodeapi.com/api/v1",
+      "protocol": "anthropic",
+      "icon": "sssaicode",
+      "websiteUrl": "https://sssaicodeapi.com"
+    },
+    {
+      "id": "opencode:SoleAPI",
+      "name": "SoleAPI",
+      "baseUrl": "https://soleapi.com/v1",
+      "protocol": "anthropic",
+      "icon": "soleapi",
+      "websiteUrl": "https://soleapi.com"
+    },
+    {
+      "id": "opencode:Micu",
+      "name": "Micu",
+      "baseUrl": "https://www.micuapi.ai/v1",
+      "protocol": "anthropic",
+      "icon": "micu",
+      "websiteUrl": "https://www.micuapi.ai"
+    },
+    {
+      "id": "opencode:RightCode",
+      "name": "RightCode",
+      "baseUrl": "https://www.rightapi.ai/codex/v1",
+      "protocol": "openai_responses",
+      "icon": "rc",
+      "websiteUrl": "https://www.rightapi.ai"
+    },
+    {
+      "id": "opencode:Cubence",
+      "name": "Cubence",
+      "baseUrl": "https://api.cubence.com/v1",
+      "protocol": "anthropic",
+      "icon": "cubence",
+      "websiteUrl": "https://cubence.com"
+    },
+    {
+      "id": "opencode:CrazyRouter",
+      "name": "CrazyRouter",
+      "baseUrl": "https://cn.crazyrouter.com",
+      "protocol": "anthropic",
+      "icon": "crazyrouter",
+      "websiteUrl": "https://www.crazyrouter.com"
+    },
+    {
+      "id": "opencode:DMXAPI",
+      "name": "DMXAPI",
+      "baseUrl": "https://www.dmxapi.cn/v1",
+      "protocol": "anthropic",
+      "icon": "dmxapi",
+      "websiteUrl": "https://www.dmxapi.cn"
+    },
+    {
+      "id": "opencode:SudoCode.chat",
+      "name": "SudoCode.chat",
+      "baseUrl": "https://api.sudocode.chat/v1",
+      "protocol": "openai_responses",
+      "icon": "sudocode",
+      "websiteUrl": "https://sudocode.chat"
+    },
+    {
+      "id": "opencode:SudoCode.us",
+      "name": "SudoCode.us",
+      "baseUrl": "https://sudocode.us/v1",
+      "protocol": "openai_responses",
+      "icon": "sudocode-us",
+      "websiteUrl": "https://sudocode.us"
+    },
+    {
+      "id": "opencode:XycAi",
+      "name": "XycAi",
+      "baseUrl": "https://apicdn.xycai.us/v1",
+      "protocol": "openai_chat",
+      "icon": "xycai",
+      "websiteUrl": "https://xycai.us"
+    },
+    {
+      "id": "opencode:Tu-zi",
+      "name": "Tu-zi",
+      "baseUrl": "https://api.tu-zi.com/v1",
+      "protocol": "anthropic",
+      "icon": "tuzi",
+      "websiteUrl": "https://api.tu-zi.com"
+    },
+    {
+      "id": "opencode:Amux",
+      "name": "Amux",
+      "baseUrl": "https://api.amux.ai/v1",
+      "protocol": "openai_chat",
+      "icon": "amux",
+      "websiteUrl": "https://amux.ai"
+    },
+    {
+      "id": "opencode:AtlasCloud",
+      "name": "AtlasCloud",
+      "baseUrl": "https://api.atlascloud.ai/v1",
+      "protocol": "openai_chat",
+      "icon": "atlascloud",
+      "websiteUrl": "https://www.atlascloud.ai/console/coding-plan"
+    },
+    {
+      "id": "opencode:Soshow",
+      "name": "Soshow",
+      "baseUrl": "https://maas.so-show.com/v1",
+      "protocol": "anthropic",
+      "icon": "soshow",
+      "websiteUrl": "https://aimarket.so-show.com"
+    },
+    {
+      "id": "opencode:Tencent Token Plan",
+      "name": "Tencent Token Plan",
+      "baseUrl": "https://api.lkeap.cloud.tencent.com/plan/v3",
+      "protocol": "openai_chat",
+      "icon": "tencent",
+      "websiteUrl": "https://cloud.tencent.com/product/tokenhub"
+    },
+    {
+      "id": "opencode:Tencent Token Plan (Intl)",
+      "name": "Tencent Token Plan (Intl)",
+      "baseUrl": "https://tokenhub-intl.tencentcloudmaas.com/plan/v3",
+      "protocol": "openai_chat",
+      "icon": "tencent",
+      "websiteUrl": "https://www.tencentcloud.com/products/tokenhub"
+    },
+    {
+      "id": "opencode:Tencent Token Plan Enterprise Pro",
+      "name": "Tencent Token Plan Enterprise Pro",
+      "baseUrl": "https://tokenhub.tencentmaas.com/plan/v3",
+      "protocol": "openai_chat",
+      "icon": "tencent",
+      "websiteUrl": "https://cloud.tencent.com/product/tokenhub"
+    },
+    {
+      "id": "opencode:Baidu Qianfan Token Plan",
+      "name": "Baidu Qianfan Token Plan",
+      "baseUrl": "https://qianfan.baidubce.com/v2/tokenplan/personal",
+      "protocol": "openai_chat",
+      "icon": "baidu",
+      "websiteUrl": "https://cloud.baidu.com/product/codingplan.html"
+    },
+    {
+      "id": "opencode:千问AI平台 Token Plan",
+      "name": "千问AI平台 Token Plan",
+      "baseUrl": "https://token-plan.cn-beijing.maas.aliyuncs.com/apps/anthropic/v1",
+      "protocol": "anthropic",
+      "icon": "qianwenai",
+      "websiteUrl": "https://platform.qianwenai.com/pricing/token-plan?utm_content=g_20000002977"
+    },
+    {
+      "id": "opencode:QwenCloud",
+      "name": "QwenCloud",
+      "baseUrl": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+      "protocol": "openai_chat",
+      "icon": "qwencloud",
+      "websiteUrl": "https://home.qwencloud.com/?utm_content=g_20000002974"
+    },
+    {
+      "id": "opencode:QwenCloud For Coding",
+      "name": "QwenCloud For Coding",
+      "baseUrl": "https://coding-intl.dashscope.aliyuncs.com/apps/anthropic/v1",
+      "protocol": "anthropic",
+      "icon": "qwencloud",
+      "websiteUrl": "https://www.qwencloud.com"
+    },
+    {
+      "id": "opencode:QwenCloud Token Plan",
+      "name": "QwenCloud Token Plan",
+      "baseUrl": "https://token-plan.ap-southeast-1.maas.aliyuncs.com/apps/anthropic/v1",
+      "protocol": "anthropic",
+      "icon": "qwencloud",
+      "websiteUrl": "https://www.qwencloud.com/pricing/token-plan?utm_content=g_20000002980"
+    },
+    {
+      "id": "opencode:StepFun",
+      "name": "StepFun",
+      "baseUrl": "https://api.stepfun.com/step_plan/v1",
+      "protocol": "openai_chat",
+      "icon": "stepfun",
+      "websiteUrl": "https://platform.stepfun.com/step-plan"
+    },
+    {
+      "id": "opencode:StepFun en",
+      "name": "StepFun en",
+      "baseUrl": "https://api.stepfun.ai/step_plan/v1",
+      "protocol": "openai_chat",
+      "icon": "stepfun",
+      "websiteUrl": "https://platform.stepfun.ai/step-plan"
+    },
+    {
+      "id": "opencode:ModelScope",
+      "name": "ModelScope",
+      "baseUrl": "https://api-inference.modelscope.cn/v1",
+      "protocol": "openai_chat",
+      "icon": "modelscope",
+      "websiteUrl": "https://modelscope.cn"
+    },
+    {
+      "id": "opencode:Longcat",
+      "name": "Longcat",
+      "baseUrl": "https://api.longcat.chat/openai/v1",
+      "protocol": "openai_chat",
+      "icon": "longcat",
+      "websiteUrl": "https://longcat.chat/platform"
+    },
+    {
+      "id": "opencode:MiniMax en",
+      "name": "MiniMax en",
+      "baseUrl": "https://api.minimax.io/v1",
+      "protocol": "openai_chat",
+      "icon": "minimax",
+      "websiteUrl": "https://platform.minimax.io"
+    },
+    {
+      "id": "opencode:BaiLing",
+      "name": "BaiLing",
+      "baseUrl": "https://api.ant-ling.com/v1",
+      "protocol": "openai_chat",
+      "icon": "bailing",
+      "websiteUrl": "https://developer.ant-ling.com/zh-CN/docs/"
+    },
+    {
+      "id": "opencode:Xiaomi MiMo",
+      "name": "Xiaomi MiMo",
+      "baseUrl": "https://api.xiaomimimo.com/v1",
+      "protocol": "openai_chat",
+      "icon": "xiaomimimo",
+      "websiteUrl": "https://platform.xiaomimimo.com"
+    },
+    {
+      "id": "opencode:Xiaomi MiMo Token Plan (China)",
+      "name": "Xiaomi MiMo Token Plan (China)",
+      "baseUrl": "https://token-plan-cn.xiaomimimo.com/v1",
+      "protocol": "openai_chat",
+      "icon": "xiaomimimo",
+      "websiteUrl": "https://platform.xiaomimimo.com/#/token-plan"
+    },
+    {
+      "id": "opencode:OpenCode Go",
+      "name": "OpenCode Go",
+      "baseUrl": "https://opencode.ai/zen/go/v1",
+      "protocol": "openai_chat",
+      "icon": "opencode",
+      "websiteUrl": "https://opencode.ai/go"
+    },
+    {
+      "id": "opencode:AiHubMix",
+      "name": "AiHubMix",
+      "baseUrl": "https://aihubmix.com/v1",
+      "protocol": "anthropic",
+      "icon": "aihubmix",
+      "websiteUrl": "https://aihubmix.com"
+    },
+    {
+      "id": "opencode:CherryIN",
+      "name": "CherryIN",
+      "baseUrl": "https://open.cherryin.net/v1",
+      "protocol": "anthropic",
+      "icon": "cherryin",
+      "websiteUrl": "https://open.cherryin.ai"
+    },
+    {
+      "id": "opencode:TheRouter",
+      "name": "TheRouter",
+      "baseUrl": "https://api.therouter.ai/v1",
+      "protocol": "openai_chat",
+      "icon": "therouter",
+      "websiteUrl": "https://therouter.ai"
+    },
+    {
+      "id": "opencode:Novita AI",
+      "name": "Novita AI",
+      "baseUrl": "https://api.novita.ai/openai",
+      "protocol": "openai_chat",
+      "icon": "novita",
+      "websiteUrl": "https://novita.ai"
+    },
+    {
+      "id": "opencode:Nvidia",
+      "name": "Nvidia",
+      "baseUrl": "https://integrate.api.nvidia.com/v1",
+      "protocol": "openai_chat",
+      "icon": "nvidia",
+      "websiteUrl": "https://build.nvidia.com"
+    },
+    {
+      "id": "opencode:PIPELLM",
+      "name": "PIPELLM",
+      "baseUrl": "https://cc-api.pipellm.ai",
+      "protocol": "anthropic",
+      "icon": "pipellm",
+      "websiteUrl": "https://code.pipellm.ai"
+    },
+    {
+      "id": "opencode:E-FlowCode",
+      "name": "E-FlowCode",
+      "baseUrl": "https://e-flowcode.cc/v1",
+      "protocol": "openai_responses",
+      "icon": "eflowcode",
+      "websiteUrl": "https://e-flowcode.cc"
+    },
+    {
+      "id": "opencode:JieKou AI",
+      "name": "JieKou AI",
+      "baseUrl": "https://api.jiekou.ai/openai/v1",
+      "protocol": "openai_chat",
+      "icon": "jiekou",
+      "websiteUrl": "https://jiekou.ai/#model-library"
+    },
+    {
+      "id": "opencode:AICodeWith",
+      "name": "AICodeWith",
+      "baseUrl": "https://api.aicodewith.ai/v1",
+      "protocol": "anthropic",
+      "icon": "aicodewith",
+      "websiteUrl": "https://aicodewith.ai"
+    },
+    {
+      "id": "opencode:模力方舟",
+      "name": "模力方舟",
+      "baseUrl": "https://api.moark.com/v1",
+      "protocol": "openai_chat",
+      "icon": "moark",
+      "websiteUrl": "https://moark.com"
+    },
+    {
+      "id": "opencode:SoruxGPT",
+      "name": "SoruxGPT",
+      "baseUrl": "https://ai.soruxgpt.com/v1",
+      "protocol": "anthropic",
+      "icon": "soruxgpt",
+      "websiteUrl": "https://ai.soruxgpt.com"
+    },
+    {
+      "id": "opencode:IKunCode",
+      "name": "IKunCode",
+      "baseUrl": "https://api.ikuncode.ai/v1",
+      "protocol": "anthropic",
+      "icon": "ikuncode",
+      "websiteUrl": "https://api.ikuncode.ai"
+    },
+    {
+      "id": "opencode:RunToken",
+      "name": "RunToken",
+      "baseUrl": "https://www.runtoken.ai/v1",
+      "protocol": "anthropic",
+      "icon": "runtoken",
+      "websiteUrl": "https://www.runtoken.ai"
+    },
+    {
+      "id": "opencode:BotCF",
+      "name": "BotCF",
+      "baseUrl": "https://botcf.com/v1",
+      "protocol": "anthropic",
+      "icon": "botcf",
+      "websiteUrl": "https://botcf.com"
+    },
+    {
+      "id": "opencode:YYLX",
+      "name": "YYLX",
+      "baseUrl": "https://app.yylx.io/v1",
+      "protocol": "anthropic",
+      "icon": "yylx",
+      "websiteUrl": "https://yylx.io"
+    },
+    {
+      "id": "opencode:TokenFlux",
+      "name": "TokenFlux",
+      "baseUrl": "https://tokenflux.dev/v1",
+      "protocol": "anthropic",
+      "icon": "tokenflux",
+      "websiteUrl": "https://tokenflux.dev"
+    },
+    {
+      "id": "siliconflow-global",
+      "name": "硅基流动 · 国际",
+      "baseUrl": "https://api.siliconflow.com/v1",
+      "protocol": "openai_chat",
+      "icon": "siliconflow",
+      "websiteUrl": "https://siliconflow.com"
+    }
+  ],
+  "commonIds": [
+    "deepseek",
+    "openai",
+    "anthropic",
+    "gemini",
+    "zhipu",
+    "zhipu-coding",
+    "zai-coding",
+    "kimi",
+    "minimax",
+    "openrouter",
+    "siliconflow",
+    "bailian",
+    "bailian-coding"
+  ]
+}

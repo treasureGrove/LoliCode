@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   useOpenclawFormState,
   OPENCLAW_DEFAULT_USER_AGENT,
-} from "@/components/providers/forms/hooks/useOpenclawFormState";
+} from "@/features/providers/forms/hooks/useOpenclawFormState";
 
 // Only ancillary provider queries are mocked; the hook is unmodified production code.
 vi.mock("@/lib/query/queries", () => ({

@@ -66,6 +66,8 @@ export const agentApi = {
   listProjects: () => invoke<AgentProject[]>("list_agent_projects"),
   setProjectMetadata: (path: string, pinned: boolean) =>
     invoke<AgentProject>("set_agent_project_metadata", { path, pinned }),
+  renameProject: (path: string, name: string) =>
+    invoke<AgentProject>("set_agent_project_metadata", { path, name }),
   removeProject: (path: string) =>
     invoke<void>("remove_agent_project", { path }),
   createSession: (

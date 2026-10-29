@@ -6,7 +6,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DevelopmentFrontendRefreshButton } from "@/components/shell/DevelopmentFrontendRefreshButton";
+import { DevelopmentFrontendRefreshButton } from "@/app/shell/DevelopmentFrontendRefreshButton";
 import {
   developmentFrontendNavigation,
   rebuildDevelopmentFrontend,

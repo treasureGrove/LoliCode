@@ -3489,7 +3489,7 @@ dependencies = [
 
 [[package]]
 name = "lolicode"
-version = "4.1.3"
+version = "4.1.4"
 dependencies = [
  "anyhow",
  "arboard",

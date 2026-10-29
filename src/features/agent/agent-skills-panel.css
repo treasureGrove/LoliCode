@@ -1,0 +1,127 @@
+.wb-tool-panel .wb-skills-panel {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+.wb-tool-panel .wb-skills-panel > .wb-extension-tabs {
+  width: fit-content;
+  max-width: 100%;
+  padding: 4px;
+  gap: 4px;
+  border: 1px solid var(--wb-border);
+  border-radius: 12px;
+  background: var(--wb-hover);
+}
+.wb-tool-panel .wb-skills-panel .wb-extension-list {
+  padding: 0;
+  gap: 18px;
+  overflow: visible;
+}
+.wb-tool-panel .wb-skills-panel .wb-extension-tabs button {
+  min-width: 96px;
+  padding: 8px 16px;
+  border-radius: 8px;
+}
+.wb-tool-panel
+  .wb-skills-panel
+  .wb-extension-tabs
+  button[aria-selected="true"] {
+  background: var(--wb-panel);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 6%);
+}
+.wb-skills-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+}
+.wb-skills-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 260px;
+  min-width: 0;
+  max-width: 480px;
+  padding: 10px 13px;
+  border: 1px solid var(--wb-border);
+  border-radius: 10px;
+  background: var(--wb-panel);
+  color: var(--wb-muted);
+}
+.wb-skills-search:focus-within {
+  border-color: var(--wb-accent);
+}
+.wb-skills-search input {
+  width: 100%;
+  min-width: 0;
+  background: transparent;
+  color: var(--wb-text);
+  font-size: 13px;
+}
+.wb-skills-search input:focus {
+  outline: none;
+}
+.wb-skills-count {
+  color: var(--wb-muted);
+  font-size: 12px;
+}
+.wb-skills-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+  gap: 14px;
+}
+.wb-tool-panel .wb-skills-grid .wb-extension-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 18px;
+  min-width: 0;
+  background: var(--wb-panel);
+}
+.wb-skills-grid .wb-extension-card-heading h3 {
+  overflow-wrap: anywhere;
+}
+.wb-skills-grid .wb-extension-card-heading > svg {
+  color: var(--wb-accent);
+  flex-shrink: 0;
+}
+.wb-skills-grid .wb-extension-meta {
+  margin-top: auto;
+  padding-top: 14px;
+}
+.wb-skills-empty {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 48px 20px;
+  border: 1px dashed var(--wb-border);
+  border-radius: 16px;
+  color: var(--wb-muted);
+  text-align: center;
+  font-size: 13px;
+}
+.wb-skills-empty h3 {
+  color: var(--wb-text);
+  font-size: 14px;
+  font-weight: 550;
+}
+.wb-tool-panel .wb-skills-panel > .wb-extension-reload {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  border: 1px solid var(--wb-border);
+  border-radius: 12px;
+  background: var(--wb-accent-soft);
+}
+@media (max-width: 640px) {
+  .wb-tool-panel .wb-skills-panel .wb-extension-tabs button {
+    min-width: 0;
+    padding: 8px 12px;
+  }
+  .wb-tool-panel .wb-skills-grid .wb-extension-card {
+    padding: 14px;
+  }
+}

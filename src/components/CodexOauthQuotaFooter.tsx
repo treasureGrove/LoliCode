@@ -2,7 +2,7 @@ import React from "react";
 import type { ProviderMeta } from "@/types";
 import { useCodexOauthQuota } from "@/lib/query/subscription";
 import { SubscriptionQuotaView } from "@/components/SubscriptionQuotaFooter";
-import { useQuotaDisplay } from "@/components/quota/useQuotaDisplay";
+import { useQuotaDisplay } from "@/features/quota/useQuotaDisplay";
 
 interface CodexOauthQuotaFooterProps {
   meta?: ProviderMeta;

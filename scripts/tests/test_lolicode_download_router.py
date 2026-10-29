@@ -9,7 +9,7 @@ import threading
 import unittest
 
 spec = importlib.util.spec_from_file_location(
-    'lolicode_download_router', Path(__file__).parents[1] / 'lolicode-download-router.py')
+    'lolicode_download_router', Path(__file__).parents[1] / 'release' / 'lolicode-download-router.py')
 router = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = router
 spec.loader.exec_module(router)

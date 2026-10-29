@@ -1,0 +1,36 @@
+# Managed by lolicode-ai-rankings-v1
+[Unit]
+Description=Collect verified AI rankings and model news
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=lolicode-rankings
+Group=lolicode-rankings
+WorkingDirectory=/var/lib/lolicode-ai-rankings/private
+ExecStart=/usr/bin/python3 /usr/local/lib/lolicode-ai-rankings/job.py --state-dir /var/lib/lolicode-ai-rankings --binary /usr/local/lib/lolicode-ai-rankings/opencode
+LoadCredential=glm.json:/etc/lolicode-ai-rankings/glm.json
+Environment=HOME=/var/lib/lolicode-ai-rankings/private
+Environment=XDG_CONFIG_HOME=/var/lib/lolicode-ai-rankings/private/config
+Environment=XDG_DATA_HOME=/var/lib/lolicode-ai-rankings/private/data
+Environment=XDG_CACHE_HOME=/var/lib/lolicode-ai-rankings/private/cache
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=TZ=Asia/Singapore
+UMask=0077
+TimeoutStartSec=2700
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadWritePaths=/var/lib/lolicode-ai-rankings
+StandardOutput=journal
+StandardError=journal

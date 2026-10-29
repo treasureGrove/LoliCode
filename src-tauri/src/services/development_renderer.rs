@@ -45,10 +45,10 @@ pub(super) fn source_directory() -> Result<PathBuf, String> {
         .ok_or("此开发版未绑定源码目录，请运行 pnpm build:dev 完整重建一次")?;
     let root = PathBuf::from(source);
     guard(&root)?;
-    if !root.join("scripts/lolicode-development.mjs").is_file() {
+    if !root.join("scripts/dev/lolicode-development.mjs").is_file() {
         return Err("开发源码目录不可用，请恢复仓库后重试".into());
     }
-    guard(&root.join("scripts/lolicode-development.mjs"))?;
+    guard(&root.join("scripts/dev/lolicode-development.mjs"))?;
     Ok(root)
 }
 
@@ -243,7 +243,7 @@ pub(super) fn build() -> Result<(PathBuf, DevelopmentSnapshot), String> {
     let mut command = Command::new(node);
     command
         .current_dir(&source)
-        .arg(source.join("scripts/lolicode-development.mjs"))
+        .arg(source.join("scripts/dev/lolicode-development.mjs"))
         .arg("renderer")
         .stdin(Stdio::null())
         .stdout(Stdio::piped())

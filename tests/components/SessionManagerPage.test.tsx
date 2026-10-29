@@ -8,8 +8,8 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { UNKNOWN_PROJECT_DIR_KEY } from "@/components/sessions/utils";
-import { SessionManagerPage } from "@/components/sessions/SessionManagerPage";
+import { UNKNOWN_PROJECT_DIR_KEY } from "@/features/sessions/utils";
+import { SessionManagerPage } from "@/features/sessions/SessionManagerPage";
 import { piApi } from "@/lib/api/pi";
 import { sessionsApi } from "@/lib/api/sessions";
 import type { SessionMessage, SessionMeta } from "@/types";

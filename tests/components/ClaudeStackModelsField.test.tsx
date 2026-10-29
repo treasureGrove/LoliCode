@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   ClaudeStackModelsField,
   createClaudeStackModelRow,
-} from "@/components/providers/forms/ClaudeStackModelsField";
+} from "@/features/providers/forms/ClaudeStackModelsField";
 import { Form } from "@/components/ui/form";
 
 const FormShell = ({ children }: PropsWithChildren) => {

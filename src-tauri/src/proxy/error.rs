@@ -43,7 +43,11 @@ pub enum ProxyError {
     ProviderUnhealthy(String),
 
     #[error("上游错误 (状态码 {status}): {body:?}")]
-    UpstreamError { status: u16, body: Option<String> },
+    UpstreamError {
+        status: u16,
+        body: Option<String>,
+        retry_after: Option<u64>,
+    },
 
     #[error("超过最大重试次数")]
     MaxRetriesExceeded,
@@ -79,10 +83,26 @@ pub enum ProxyError {
     Internal(String),
 }
 
+impl ProxyError {
+    /// Only bounded delta-seconds from a 429 response may reach the client.
+    pub fn retry_after_seconds(&self) -> Option<u64> {
+        match self {
+            Self::UpstreamError {
+                status: 429,
+                retry_after,
+                ..
+            } => retry_after.filter(|seconds| *seconds <= 86400),
+            _ => None,
+        }
+    }
+}
+
 impl IntoResponse for ProxyError {
     fn into_response(self) -> Response {
+        let retry_after = self.retry_after_seconds();
         let (status, body) = match &self {
             ProxyError::UpstreamError {
+                retry_after: _,
                 status: upstream_status,
                 body: upstream_body,
             } => {
@@ -176,7 +196,15 @@ impl IntoResponse for ProxyError {
             }
         };
 
-        (status, Json(body)).into_response()
+        let mut response = (status, Json(body)).into_response();
+        if let Some(value) = retry_after
+            .and_then(|seconds| axum::http::HeaderValue::from_str(&seconds.to_string()).ok())
+        {
+            response
+                .headers_mut()
+                .insert(axum::http::header::RETRY_AFTER, value);
+        }
+        response
     }
 }
 

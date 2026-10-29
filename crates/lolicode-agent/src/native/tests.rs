@@ -432,6 +432,9 @@ fn is_compaction(input: &Value) -> bool {
 
 mod context_cases;
 mod stream_usage_cases;
+mod rate_limit_cases;
+mod transport_budget_cases;
+mod output_budget_cases;
 mod image_output_cases;
 mod memory_cases;
 mod tool_search_cases;

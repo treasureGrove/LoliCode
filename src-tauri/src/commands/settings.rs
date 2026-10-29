@@ -282,7 +282,7 @@ pub async fn install_update_and_restart(app: AppHandle) -> Result<bool, String> 
     crate::channel::require_stable_updates()?;
     // The frontend's async metadata can be late or fail. Never let a portable
     // build dispatch an NSIS installer into the installed application's path.
-    if crate::commands::misc::is_portable_mode().await? {
+    if crate::commands::desktop::is_portable_mode().await? {
         return Err("便携版请从工具站下载新 ZIP，完成任务后替换程序。".into());
     }
     // Keep the whole check/download/install flow exclusive across windows and

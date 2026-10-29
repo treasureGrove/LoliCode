@@ -6,6 +6,10 @@ Please follow the [Code of Conduct](CODE_OF_CONDUCT.md). Report vulnerabilities 
 
 ## Start developing
 
+Start with the [architecture and maintenance guide](ARCHITECTURE.md), then the [repository map](docs/REPOSITORY_MAP.md). Open `LoliCode.code-workspace` in a compatible editor to hide dependencies and generated files.
+
+Keep application startup and composition in `src/app/`, business pages and their private components in `src/features/<domain>/`, and reusable controls in `src/components/`. Keep script entry points in `scripts/dev/`, `build/`, `release/` or `data/`, with regression tests in `scripts/tests/`. Update callers, tests and documentation when moving a module.
+
 Requirements are recorded in `.node-version`, `package.json`, and `rust-toolchain.toml`: Node.js 22.12.0 is the repository default, pnpm is pinned to 10.12.3, and Rust is pinned to 1.95. Install the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) for your platform.
 
 ```sh
@@ -59,6 +63,7 @@ Keep the four root README translations consistent. [docs/README.md](docs/README.
 欢迎向 [LoliCode 仓库](https://github.com/treasureGrove/LoliCode)提交代码、文档、翻译与反馈。
 
 - 按上面的工具链和命令启动开发环境，前端热更新、Rust 增量重启，无需每次打安装包。
+- 目录职责、第三方源码和本地生成物见[仓库地图](docs/REPOSITORY_MAP.md)。
 - 按改动范围验证功能；界面改动还应检查真实窗口、窄屏、键盘、滚动和错误状态。
 - 保留用户数据、现有字段、模型原生能力及未保存内容，不提交密钥、账户文件、私聊和签名私钥。
 - 接入功能时记录来源版本、许可证、模块归属与执行边界，保留必要版权声明。

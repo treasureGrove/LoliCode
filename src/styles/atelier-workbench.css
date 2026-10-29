@@ -432,6 +432,7 @@
 }
 .lolicode-workbench .wb-composer-toolbar button[aria-label="模型"],
 .lolicode-workbench .wb-composer-toolbar button[aria-label="思考档位"],
+.lolicode-workbench .wb-composer-toolbar button[aria-label="上下文窗口"],
 .lolicode-workbench .wb-composer-toolbar select {
   border: 1px solid transparent;
   border-radius: 7px;
@@ -442,6 +443,7 @@
   :is(
     button[aria-label="模型"],
     button[aria-label="思考档位"],
+    button[aria-label="上下文窗口"],
     select
   ):hover:not(:disabled) {
   border-color: var(--atelier-rule);

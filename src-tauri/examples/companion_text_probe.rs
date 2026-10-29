@@ -11,6 +11,12 @@ use std::{
 };
 
 #[allow(dead_code)]
+#[path = "../src/services/mobile_companion/auth_refresh.rs"]
+mod auth_refresh;
+#[allow(dead_code)]
+#[path = "../src/services/mobile_companion/authorization.rs"]
+mod authorization;
+#[allow(dead_code)]
 #[path = "../src/services/mobile_companion/crypto.rs"]
 mod crypto;
 #[allow(dead_code)]
@@ -82,6 +88,8 @@ fn description() -> Value {
 fn source_hashes() -> Value {
     json!({
         "examples/companion_text_probe.rs":digest(include_bytes!("companion_text_probe.rs")),
+        "src/services/mobile_companion/auth_refresh.rs":digest(include_bytes!("../src/services/mobile_companion/auth_refresh.rs")),
+        "src/services/mobile_companion/authorization.rs":digest(include_bytes!("../src/services/mobile_companion/authorization.rs")),
         "src/services/mobile_companion/text.rs":digest(include_bytes!("../src/services/mobile_companion/text.rs")),
         "src/services/mobile_companion/crypto.rs":digest(include_bytes!("../src/services/mobile_companion/crypto.rs")),
         "src/services/mobile_companion/text_projection.rs":digest(include_bytes!("../src/services/mobile_companion/text_projection.rs"))

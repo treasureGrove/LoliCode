@@ -1,6 +1,6 @@
 @import "./styles/motion.css";
-@import "./components/shell/shell.css";
-@import "./components/providers/workbench.css";
+@import "./app/shell/shell.css";
+@import "./features/providers/workbench.css";
 
 @tailwind base;
 @tailwind components;

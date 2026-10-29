@@ -12,7 +12,7 @@ import {
 } from "vitest";
 import { SubscriptionQuotaView } from "@/components/SubscriptionQuotaFooter";
 import type { QuotaTier, SubscriptionQuota } from "@/types/subscription";
-import type { QuotaDisplay } from "@/components/quota/quotaRules";
+import type { QuotaDisplay } from "@/features/quota/quotaRules";
 import zh from "@/i18n/locales/zh.json";
 import zhTW from "@/i18n/locales/zh-TW.json";
 import en from "@/i18n/locales/en.json";

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   AppPageHeader,
   WindowControlsContext,
-} from "@/components/shell/AppPageHeader";
+} from "@/app/shell/AppPageHeader";
 
 describe("AppPageHeader title semantics", () => {
   it("keeps the editor task as the heading when a client subtitle is supplied", () => {

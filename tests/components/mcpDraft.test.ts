@@ -9,7 +9,7 @@ import {
   summaryOf,
   uniqueId,
   validateDraft,
-} from "@/components/mcp/mcpDraft";
+} from "@/features/mcp/mcpDraft";
 
 describe("mcpDraft paste recognition", () => {
   it("recognizes a single named mcpServers entry", () => {

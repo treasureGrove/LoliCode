@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   useDraftEditorProjection,
   type EditorBaseChange,
-} from "@/components/providers/forms/hooks/useDraftEditorProjection";
+} from "@/features/providers/forms/hooks/useDraftEditorProjection";
 import type { AppId } from "@/lib/api";
 import type { ProviderMeta } from "@/types";
 

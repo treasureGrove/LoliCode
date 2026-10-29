@@ -10,7 +10,7 @@ import userEvent from "@testing-library/user-event";
 import type { ComponentProps, PropsWithChildren } from "react";
 import { useForm } from "react-hook-form";
 import { describe, expect, it, vi } from "vitest";
-import { OpenCodeFormFields } from "@/components/providers/forms/OpenCodeFormFields";
+import { OpenCodeFormFields } from "@/features/providers/forms/OpenCodeFormFields";
 import { Form } from "@/components/ui/form";
 import { fetchModelsForConfig } from "@/lib/api/model-fetch";
 import type { PresetModelSource } from "@/lib/modelMetadata";

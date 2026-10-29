@@ -8,8 +8,8 @@ import {
 import { QueryClientProvider } from "@tanstack/react-query";
 import { http, HttpResponse } from "msw";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ProviderForm } from "@/components/providers/forms/ProviderForm";
-import { OPENCLAW_DEFAULT_USER_AGENT } from "@/components/providers/forms/hooks/useOpenclawFormState";
+import { ProviderForm } from "@/features/providers/forms/ProviderForm";
+import { OPENCLAW_DEFAULT_USER_AGENT } from "@/features/providers/forms/hooks/useOpenclawFormState";
 import { server } from "../msw/server";
 import { createTestQueryClient } from "../utils/testQueryClient";
 
@@ -21,9 +21,9 @@ vi.mock("@/components/JsonEditor", () => ({
     <textarea readOnly value={value} />
   ),
 }));
-vi.mock("@/components/providers/forms/hooks", async (importOriginal) => {
+vi.mock("@/features/providers/forms/hooks", async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import("@/components/providers/forms/hooks")>();
+    await importOriginal<typeof import("@/features/providers/forms/hooks")>();
   return {
     ...actual,
     useCopilotAuth: () => ({

@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { AgentPermissionCard } from "@/components/agent/AgentPermissionCard";
+import { AgentPermissionCard } from "@/features/agent/AgentPermissionCard";
 import type { AgentPermission } from "@/types/agent";
 
 const permission = (

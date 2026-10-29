@@ -5,56 +5,15 @@ description: |
 labels:
   - documentation
 body:
-  - type: checkboxes
-    attributes:
-      label: Self Checks / 自检
-      options:
-        - label: |
-            I have searched for [existing issues](https://github.com/treasureGrove/LoliCode/issues), including closed ones.
-            我已搜索过[已有的 Issue](https://github.com/treasureGrove/LoliCode/issues)，包括已关闭的。
-          required: true
-
-  - type: dropdown
-    attributes:
-      label: Language / 语言
-      description: |
-        Which language version of the docs?
-        涉及哪个语言版本的文档？
-      multiple: true
-      options:
-        - English
-        - 中文
-        - 日本語
-    validations:
-      required: true
-
-  - type: input
-    attributes:
-      label: Document Location / 文档位置
-      description: |
-        Which file or section is affected? Provide a link or file path.
-        涉及哪个文件或章节？请提供链接或文件路径。
-      placeholder: "e.g. README.md#faq or docs/user-manual/zh/..."
-    validations:
-      required: true
-
-  - type: dropdown
-    attributes:
-      label: Issue Type / 问题类型
-      options:
-        - "Typo or grammar / 拼写或语法错误"
-        - "Outdated content / 内容过时"
-        - "Missing information / 信息缺失"
-        - "Translation issue / 翻译问题"
-        - "Other / 其他"
-    validations:
-      required: true
-
   - type: textarea
+    id: description
     attributes:
       label: Description / 描述
       description: |
-        Describe the documentation issue.
-        描述文档问题。
+        A title and a description of the documentation issue are enough. Links, language, and screenshots are optional.
+        填写标题和具体文档问题即可。文档链接、语言、截图等信息可选。
+      placeholder: |
+        The docs say ... but ...
+        文档中……，但实际……
     validations:
       required: true

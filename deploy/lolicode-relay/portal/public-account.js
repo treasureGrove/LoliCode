@@ -1,7 +1,8 @@
 // Public navigation and login use the forum-backed session, including on the homepage.
 (() => {
   const publicPaths = new Set(["/", "/pricing", "/rankings", "/about"]);
-  const frameSelector = 'iframe[src^="https://relay.lolicode.com/relay-assets/index.html?"]';
+  const frameSelector =
+    'iframe[src^="https://relay.lolicode.com/relay-assets/index.html?"]';
   let account = null;
   let reading = false;
   let submitting = false;
@@ -30,20 +31,15 @@
   brand.append(logo, element("span", "", "LoliCode Relay"));
   const navigation = element("nav", "relay-nav-links");
   navigation.setAttribute("aria-label", "主导航");
-  for (const [text, href] of [["主页", "/"], ["控制台", "/account"], ["模型广场", "/pricing"],
-    ["排行榜", "/rankings"], ["文档", "https://docs.newapi.pro"], ["关于", "/about"]]) {
+  for (const [text, href] of [
+    ["用户控制台", "/account"],
+    ["管理后台", "/admin"],
+  ]) {
     navigation.append(link(text, href));
   }
   const controls = element("div", "relay-nav-account");
   controls.setAttribute("aria-live", "polite");
-  const theme = element("button", "relay-theme-toggle", "☾");
-  theme.type = "button";
-  theme.setAttribute("aria-label", "切换浅色或深色主题");
-  theme.addEventListener("click", () => {
-    document.documentElement.classList.toggle("dark");
-    updateFrame();
-  });
-  nav.append(brand, navigation, theme, controls);
+  nav.append(brand, navigation, controls);
 
   const dialog = element("dialog", "relay-login-dialog");
   dialog.setAttribute("aria-labelledby", "relay-login-heading");
@@ -77,18 +73,39 @@
   submit.type = "submit";
   form.append(nameLabel, name, passwordLabel, password, error, submit);
   const loginLinks = element("div", "relay-login-links");
-  loginLinks.append(link("注册 LoliCode 账号 ↗", "/register"),
-    link("忘记密码？", "https://lolicode.com/all?account=login"));
-  dialog.append(close, element("p", "relay-login-eyebrow", "SAME ACCOUNT. MORE POSSIBILITIES."), heading,
-    element("p", "relay-login-description", "使用原来的社区用户名或邮箱和密码，无需另行注册中转站账号。"), form, loginLinks);
+  loginLinks.append(
+    link("注册 LoliCode 账号 ↗", "/register"),
+    link("忘记密码？", "https://lolicode.com/all?account=login"),
+  );
+  dialog.append(
+    close,
+    heading,
+    element(
+      "p",
+      "relay-login-description",
+      "使用原来的社区用户名或邮箱和密码，无需另行注册中转站账号。",
+    ),
+    form,
+    loginLinks,
+  );
   document.body.prepend(nav);
   document.body.append(dialog);
 
   function updateFrame() {
+    document
+      .querySelector(frameSelector)
+      ?.contentWindow.postMessage(
+        { type: "lolicode:portal-account", signedIn: Boolean(account) },
+        "*",
+      );
     document.querySelector(frameSelector)?.contentWindow.postMessage(
-      { type: "lolicode:portal-account", signedIn: Boolean(account) }, "*");
-    document.querySelector(frameSelector)?.contentWindow.postMessage(
-      { themeMode: document.documentElement.classList.contains("dark") ? "dark" : "light" }, "*");
+      {
+        themeMode: document.documentElement.classList.contains("dark")
+          ? "dark"
+          : "light",
+      },
+      "*",
+    );
   }
   function render() {
     controls.replaceChildren();
@@ -100,9 +117,17 @@
     } else {
       const menu = element("details", "relay-account-menu");
       const summary = element("summary");
-      const initial = Array.from(account.displayName || account.username)[0] || "L";
-      summary.append(element("span", "relay-account-initial", initial),
-        element("span", "relay-account-name", account.displayName || account.username), element("span", "", "⌄"));
+      const initial =
+        Array.from(account.displayName || account.username)[0] || "L";
+      summary.append(
+        element("span", "relay-account-initial", initial),
+        element(
+          "span",
+          "relay-account-name",
+          account.displayName || account.username,
+        ),
+        element("span", "", "⌄"),
+      );
       const dropdown = element("div", "relay-account-dropdown");
       const logout = element("button", "", "退出 LoliCode 登录");
       logout.type = "button";
@@ -117,7 +142,10 @@
           render();
         } catch (failure) {
           logout.textContent = failure.message || "退出失败，请重试";
-        } finally { submitting = false; logout.disabled = false; }
+        } finally {
+          submitting = false;
+          logout.disabled = false;
+        }
       });
       dropdown.append(link("我的额度 / 控制台", "/account"), logout);
       menu.append(summary, dropdown);
@@ -128,15 +156,26 @@
   async function api(path, body) {
     const response = await fetch(`/account-api/${path}`, {
       method: body === undefined ? "GET" : "POST",
-      credentials: "same-origin", cache: "no-store", redirect: "error",
+      credentials: "same-origin",
+      cache: "no-store",
+      redirect: "error",
       signal: AbortSignal.timeout(20000),
       headers: body === undefined ? {} : { "Content-Type": "application/json" },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     let data;
-    try { data = await response.json(); } catch { data = {}; }
+    try {
+      data = await response.json();
+    } catch {
+      data = {};
+    }
     if (!response.ok) {
-      const failure = new Error(data.error?.message || (response.status === 429 ? "尝试过于频繁，请稍后重试。" : "账号服务暂时无法连接，请稍后重试。"));
+      const failure = new Error(
+        data.error?.message ||
+          (response.status === 429
+            ? "尝试过于频繁，请稍后重试。"
+            : "账号服务暂时无法连接，请稍后重试。"),
+      );
       failure.status = response.status;
       throw failure;
     }
@@ -157,10 +196,16 @@
         account = null;
         render();
       }
-    } finally { reading = false; refreshedAt = Date.now(); }
+    } finally {
+      reading = false;
+      refreshedAt = Date.now();
+    }
   }
   function openLogin(opener) {
-    if (account) { location.assign("/account"); return; }
+    if (account) {
+      location.assign("/account");
+      return;
+    }
     if (dialog.open) return;
     loginOpener = opener;
     error.textContent = "";
@@ -179,17 +224,31 @@
     error.textContent = "正在验证 LoliCode 账号…";
     ++generation;
     try {
-      const result = await api("login", { identification: name.value.trim(), password: password.value });
+      const result = await api("login", {
+        identification: name.value.trim(),
+        password: password.value,
+      });
       account = result.account;
       dialog.close();
       render();
-    } catch (failure) { error.textContent = failure.message || "网络连接失败，请稍后重试。"; }
-    finally { password.value = ""; submit.disabled = false; submitting = false; }
+    } catch (failure) {
+      error.textContent = failure.message || "网络连接失败，请稍后重试。";
+    } finally {
+      password.value = "";
+      submit.disabled = false;
+      submitting = false;
+    }
   });
   window.addEventListener("message", (event) => {
     const frame = document.querySelector(frameSelector);
-    if (event.origin !== "null" || !frame || event.source !== frame.contentWindow) return;
-    if (event.data?.type === "lolicode:portal-login") openLogin(controls.querySelector("button"));
+    if (
+      event.origin !== "null" ||
+      !frame ||
+      event.source !== frame.contentWindow
+    )
+      return;
+    if (event.data?.type === "lolicode:portal-login")
+      openLogin(controls.querySelector("button"));
     if (event.data?.type === "lolicode:portal-ready") updateFrame();
   });
   function route() {
@@ -198,15 +257,20 @@
     nav.hidden = !isPublic;
     if (!isPublic && dialog.open) dialog.close();
     for (const anchor of navigation.querySelectorAll("a")) {
-      if (anchor.getAttribute("href") === location.pathname) anchor.setAttribute("aria-current", "page");
+      if (anchor.getAttribute("href") === location.pathname)
+        anchor.setAttribute("aria-current", "page");
       else anchor.removeAttribute("aria-current");
     }
     if (isPublic && Date.now() - refreshedAt > 1000) refresh();
   }
   window.addEventListener("lolicode:route", route);
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) refresh();
+  });
   window.addEventListener("pageshow", () => refresh());
-  setInterval(() => { if (!document.hidden) refresh(); }, 60000);
+  setInterval(() => {
+    if (!document.hidden) refresh();
+  }, 60000);
   render();
   route();
 })();

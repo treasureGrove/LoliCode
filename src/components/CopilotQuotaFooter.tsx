@@ -4,9 +4,9 @@ import type { ProviderMeta } from "@/types";
 import { useCopilotQuota } from "@/lib/query/copilot";
 import { resolveManagedAccountId } from "@/lib/authBinding";
 import { PROVIDER_TYPES } from "@/config/constants";
-import { QuotaBars, QuotaLines } from "@/components/quota/QuotaLines";
-import { useQuotaDisplay } from "@/components/quota/useQuotaDisplay";
-import { failedLines, tierLine } from "@/components/quota/quotaRules";
+import { QuotaBars, QuotaLines } from "@/features/quota/QuotaLines";
+import { useQuotaDisplay } from "@/features/quota/useQuotaDisplay";
+import { failedLines, tierLine } from "@/features/quota/quotaRules";
 
 interface CopilotQuotaFooterProps {
   meta?: ProviderMeta;

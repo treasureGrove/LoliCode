@@ -4,8 +4,8 @@ import { useTranslation } from "react-i18next";
 import type { AppId } from "@/lib/api";
 import { useSubscriptionQuota } from "@/lib/query/subscription";
 import type { QuotaTier, SubscriptionQuota } from "@/types/subscription";
-import { QuotaBars, QuotaLines } from "@/components/quota/QuotaLines";
-import { useQuotaDisplay } from "@/components/quota/useQuotaDisplay";
+import { QuotaBars, QuotaLines } from "@/features/quota/QuotaLines";
+import { useQuotaDisplay } from "@/features/quota/useQuotaDisplay";
 import {
   creditsBreakdownItem,
   creditsLine,
@@ -14,9 +14,9 @@ import {
   tierLine,
   type QuotaDisplay,
   type QuotaLine,
-} from "@/components/quota/quotaRules";
+} from "@/features/quota/quotaRules";
 
-export { countdownStr } from "@/components/quota/quotaRules";
+export { countdownStr } from "@/features/quota/quotaRules";
 
 interface SubscriptionQuotaFooterProps {
   appId: AppId;

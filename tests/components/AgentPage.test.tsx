@@ -8,9 +8,10 @@ import {
 import type { ReactElement } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AgentPage } from "@/components/agent/AgentPage";
+import { AgentPage } from "@/features/agent/AgentPage";
 import { agentApi } from "@/lib/api/agent";
 import { settingsApi } from "@/lib/api";
+import { agentMemoryApi } from "@/lib/api/agent-memory";
 import { usageApi } from "@/lib/api/usage";
 import { toast } from "@/lib/toast";
 import {
@@ -35,6 +36,9 @@ function render(ui: ReactElement) {
 vi.mock("@/lib/api/usage", () => ({
   usageApi: { getSessionUsageSummary: vi.fn() },
 }));
+vi.mock("@/lib/api/agent-memory", () => ({
+  agentMemoryApi: { get: vi.fn() },
+}));
 
 vi.mock("@/lib/api/agent", () => ({
   agentApi: {
@@ -46,6 +50,7 @@ vi.mock("@/lib/api/agent", () => ({
     listSessions: vi.fn(),
     listProjects: vi.fn(),
     setProjectMetadata: vi.fn(),
+    renameProject: vi.fn(),
     removeProject: vi.fn(),
     createSession: vi.fn(),
     updateSession: vi.fn(),
@@ -53,6 +58,9 @@ vi.mock("@/lib/api/agent", () => ({
     setSessionMetadata: vi.fn(),
     deleteSession: vi.fn(),
     getExtensions: vi.fn(),
+    getPluginStore: vi.fn(),
+    getNativeActivity: vi.fn(),
+    native: vi.fn(),
     getSession: vi.fn(),
     sendMessage: vi.fn(),
     queryCommand: vi.fn(),
@@ -109,6 +117,7 @@ const emptySnapshot = (): AgentSnapshot => ({
   streamGap: false,
 });
 let snapshot: AgentSnapshot;
+const pendingStopCleanups = new Set<() => void>();
 async function flush() {
   await act(async () => {
     for (let i = 0; i < 20; i += 1) await Promise.resolve();
@@ -134,6 +143,25 @@ function modelRefreshButton() {
   if (picker.getAttribute("aria-expanded") !== "true") fireEvent.click(picker);
   return screen.getByRole("button", { name: "刷新可用模型" });
 }
+async function folderMenuItem() {
+  const trigger = screen.getByRole("button", { name: "选择新建任务类型" });
+  expect(trigger).toBeEnabled();
+  if (trigger.getAttribute("aria-expanded") !== "true")
+    fireEvent.keyDown(trigger, { key: "Enter" });
+  await flush();
+  return screen.getByRole("menuitem", { name: "打开文件夹" });
+}
+async function expectFolderEnabled() {
+  const item = await folderMenuItem();
+  expect(item).not.toHaveAttribute("aria-disabled", "true");
+  expect(item).not.toHaveAttribute("data-disabled");
+  fireEvent.keyDown(item, { key: "Escape" });
+  await flush();
+}
+async function openFolder() {
+  fireEvent.click(await folderMenuItem());
+  await flush();
+}
 function selectModel(name: string) {
   fireEvent.click(screen.getByRole("button", { name: "模型" }));
   fireEvent.change(screen.getByRole("searchbox", { name: "搜索模型或渠道" }), {
@@ -145,6 +173,30 @@ function selectModel(name: string) {
 }
 
 beforeEach(() => {
+  vi.mocked(agentMemoryApi.get).mockResolvedValue({
+    revision: 1,
+    enabled: true,
+    requireApproval: true,
+    projectPath: project,
+    user: { entries: [], used: 0, limit: 1375 },
+    project: { entries: [], used: 0, limit: 2200 },
+  });
+  vi.mocked(agentApi.getPluginStore).mockResolvedValue({
+    marketplaces: [],
+    availablePlugins: [],
+    installedPlugins: [],
+    restorableBuiltins: [],
+    diagnostics: [],
+    capability: { supported: true },
+  });
+  vi.mocked(agentApi.getNativeActivity).mockResolvedValue({
+    features: { workflows: true, automation: true, remote: false },
+  });
+  vi.mocked(agentApi.native).mockImplementation(async (_service, method) =>
+    method === "listSavedWorkflows"
+      ? { workflows: [], invalid: [] }
+      : { runs: [] },
+  );
   vi.mocked(usageApi.getSessionUsageSummary).mockReset().mockResolvedValue({
     totalRequests: 0,
     totalCost: "0",
@@ -186,6 +238,14 @@ beforeEach(() => {
     .mockResolvedValue([
       { path: project, name: "project", pinned: false, lastOpenedAt: 2 },
     ]);
+  vi.mocked(agentApi.renameProject)
+    .mockReset()
+    .mockImplementation(async (path, name) => ({
+      path,
+      name,
+      pinned: false,
+      lastOpenedAt: 2,
+    }));
   vi.mocked(agentApi.updateSession)
     .mockReset()
     .mockImplementation(async (id, patch) => {
@@ -207,6 +267,9 @@ beforeEach(() => {
         ...(patch.permissionMode && { permissionMode: patch.permissionMode }),
         ...(patch.reasoningEffort !== undefined && {
           reasoningEffort: patch.reasoningEffort || null,
+        }),
+        ...(patch.contextLimit !== undefined && {
+          contextLimit: patch.contextLimit,
         }),
       };
       return structuredClone(snapshot.session);
@@ -264,12 +327,150 @@ beforeEach(() => {
   vi.mocked(settingsApi.pickDirectory).mockReset().mockResolvedValue(project);
   vi.mocked(settingsApi.openExternal).mockReset().mockResolvedValue();
 });
-afterEach(() => {
+afterEach(async () => {
   cleanup();
+  // Unmount first so a failed assertion cannot leave a shared Stop lane busy
+  // or allow its deferred acknowledgement to update the next test's session.
+  await act(async () => {
+    for (const finish of pendingStopCleanups) finish();
+    pendingStopCleanups.clear();
+    for (let i = 0; i < 20; i += 1) await Promise.resolve();
+  });
   vi.useRealTimers();
 });
 
 describe("AgentPage", () => {
+  it("returns focus to the composer after using a skill and releasing the panel", async () => {
+    vi.mocked(agentApi.getExtensions).mockResolvedValue({
+      revision: 1,
+      skills: [
+        {
+          id: "pdf",
+          name: "PDF",
+          description: "读取和制作 PDF",
+          source: "bundled",
+          installed: true,
+          enabled: true,
+          requirements: [],
+        },
+      ],
+      plugins: [],
+      mcpServers: [],
+    });
+    render(
+      <div id="content-area">
+        <div className="tai-page">
+          <AgentPage toolRequest={{ tool: "skills", id: 1 }} />
+        </div>
+      </div>,
+    );
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: "在会话中使用" }));
+    await flush();
+    await act(async () => vi.advanceTimersByTimeAsync(250));
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
+      "请使用 PDF 技能完成这个任务。\n",
+    );
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveFocus();
+  });
+
+  it("switches independent tool panels and returns to the same session and draft", async () => {
+    const changed = vi.fn();
+    const consumed = vi.fn();
+    const page = (
+      tool: "skills" | "workflows" | "memory" | null,
+      id: number,
+    ) => (
+      <div id="content-area">
+        <div className="tai-page">
+          <AgentPage
+            toolRequest={{ tool, id }}
+            onToolRequestConsumed={consumed}
+            onActiveToolChange={changed}
+          />
+        </div>
+      </div>
+    );
+    const view = render(page(null, 0));
+    await flush();
+    fill("切换面板时保留这个草稿");
+    const initialCalls = vi.mocked(agentApi.getSession).mock.calls.length;
+
+    for (const [index, tool, title] of [
+      [1, "skills", "技能与插件"],
+      [2, "workflows", "工作流与自动化"],
+      [3, "memory", "记忆"],
+    ] as const) {
+      view.rerender(page(tool, index));
+      await flush();
+      expect(screen.getByRole("region", { name: title })).toBeInTheDocument();
+      expect(
+        screen
+          .getAllByRole("region")
+          .filter((node) => node.classList.contains("tai-editor-panel")),
+      ).toHaveLength(1);
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      expect(document.querySelector<HTMLElement>(".tai-page")?.inert).toBe(
+        true,
+      );
+      expect(changed).toHaveBeenLastCalledWith(tool);
+    }
+
+    fireEvent.click(screen.getByRole("button", { name: "返回工作台" }));
+    await flush();
+    expect(
+      screen.queryByRole("region", { name: "记忆" }),
+    ).not.toBeInTheDocument();
+    expect(changed).toHaveBeenLastCalledWith(null);
+    expect(document.querySelector<HTMLElement>(".tai-page")?.inert).not.toBe(
+      true,
+    );
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
+      "切换面板时保留这个草稿",
+    );
+    expect(agentApi.getSession).toHaveBeenCalledTimes(initialCalls);
+
+    view.rerender(page("skills", 4));
+    await flush();
+    view.rerender(page(null, 5));
+    await flush();
+    expect(
+      screen.queryByRole("region", { name: "技能与插件" }),
+    ).not.toBeInTheDocument();
+    expect(changed).toHaveBeenLastCalledWith(null);
+  });
+
+  it("renames the active project without reopening it or changing its session binding", async () => {
+    render(<AgentPage />);
+    await flush();
+    fill("保留中的消息草稿");
+    fireEvent.keyDown(
+      screen.getByRole("button", { name: "管理项目：project" }),
+      { key: "Enter" },
+    );
+    fireEvent.click(screen.getByRole("menuitem", { name: "重命名项目" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "项目名称" }), {
+      target: { value: "  我的新项目  " },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "保存名称" }));
+    await flush();
+
+    expect(agentApi.renameProject).toHaveBeenCalledWith(project, "我的新项目");
+    expect(
+      screen.getByRole("button", { name: "管理项目：我的新项目" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("group", { name: "我的新项目 的任务" }),
+    ).toHaveTextContent(session.title);
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
+      "保留中的消息草稿",
+    );
+    expect(agentApi.openProject).not.toHaveBeenCalled();
+    expect(agentApi.createSession).not.toHaveBeenCalled();
+    expect(agentApi.updateSession).not.toHaveBeenCalled();
+    expect(agentApi.sendMessage).not.toHaveBeenCalled();
+  });
+
   it("presents queued question requests one at a time", async () => {
     snapshot.status = "waiting_question";
     snapshot.questions = [
@@ -353,6 +554,18 @@ describe("AgentPage", () => {
     expect(
       localStorage.getItem("lolicode.agent.recent-projects") || "",
     ).not.toContain("standalone-workspace");
+  });
+  it("opens a folder from the new task menu", async () => {
+    render(<AgentPage />);
+    await flush();
+    fireEvent.keyDown(
+      screen.getByRole("button", { name: "选择新建任务类型" }),
+      { key: "Enter" },
+    );
+    await flush();
+    fireEvent.click(screen.getByRole("menuitem", { name: "打开文件夹" }));
+    await flush();
+    expect(settingsApi.pickDirectory).toHaveBeenCalled();
   });
   it("opens the independent task action from a project without discarding its draft", async () => {
     render(<AgentPage />);
@@ -625,6 +838,7 @@ describe("AgentPage", () => {
     vi.mocked(agentApi.interruptSession).mockReturnValueOnce(
       new Promise((resolve) => {
         finishStop = resolve;
+        pendingStopCleanups.add(resolve);
       }),
     );
     render(<AgentPage />);
@@ -675,6 +889,7 @@ describe("AgentPage", () => {
     vi.mocked(agentApi.interruptSession).mockReturnValueOnce(
       new Promise((resolve) => {
         finishStop = resolve;
+        pendingStopCleanups.add(resolve);
       }),
     );
     render(<AgentPage />);
@@ -682,8 +897,8 @@ describe("AgentPage", () => {
     fill("原项目草稿");
     fireEvent.click(screen.getByRole("button", { name: "打断并发送" }));
     await flush();
-    expect(screen.getByRole("button", { name: "打开文件夹" })).toBeEnabled();
-    fireEvent.click(screen.getByRole("button", { name: "打开文件夹" }));
+    await expectFolderEnabled();
+    await openFolder();
     await flush();
     fill("新项目草稿");
     await tick(100);
@@ -756,11 +971,8 @@ describe("AgentPage", () => {
       });
       render(<AgentPage />);
       await flush();
-      fireEvent.click(
-        action === "open"
-          ? screen.getByRole("button", { name: "打开文件夹" })
-          : modelRefreshButton(),
-      );
+      if (action === "open") await openFolder();
+      else fireEvent.click(modelRefreshButton());
       await flush();
       for (const warning of warnings)
         expect(toast.warning).toHaveBeenCalledWith(warning);
@@ -822,7 +1034,7 @@ describe("AgentPage", () => {
       expect(agentApi.sendMessage).not.toHaveBeenCalled();
       expect(agentApi.updateSession).not.toHaveBeenCalled();
 
-      expect(screen.getByRole("button", { name: "打开文件夹" })).toBeEnabled();
+      await expectFolderEnabled();
       snapshot = { ...emptySnapshot(), session: { ...session, id: "lc:new" } };
       fireEvent.click(sessionCreationButton());
       await flush();
@@ -1129,10 +1341,10 @@ describe("AgentPage", () => {
     render(<AgentPage />);
     await flush();
     fill("保留窗口切换期间的草稿");
-    fireEvent.click(screen.getByRole("button", { name: "思考档位" }));
-    fireEvent.change(screen.getByRole("combobox", { name: "上下文窗口" }), {
-      target: { value: "1000000" },
-    });
+    fireEvent.click(screen.getByRole("button", { name: "上下文窗口" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "上下文窗口 1,000,000 tokens" }),
+    );
     await flush();
     expect(agentApi.updateSession).toHaveBeenLastCalledWith(session.id, {
       contextLimit: 1000000,
@@ -1143,6 +1355,108 @@ describe("AgentPage", () => {
     expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
       "保留窗口切换期间的草稿",
     );
+    expect(agentApi.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("keeps an acknowledged context through stale snapshots and can restore the channel default", async () => {
+    const models = structuredClone(catalog);
+    models.models[0].contextLimit = 128000;
+    models.models[0].contextLimits = [128000, 1000000];
+    vi.mocked(agentApi.getCatalog).mockResolvedValue(models);
+    vi.mocked(agentApi.updateSession).mockResolvedValueOnce({
+      ...session,
+      contextLimit: 1000000,
+    });
+    render(<AgentPage />);
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: "上下文窗口" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "上下文窗口 1,000,000 tokens" }),
+    );
+    await flush();
+    await tick(5000);
+    expect(
+      screen.getByRole("button", { name: "上下文窗口" }),
+    ).toHaveTextContent("1M");
+    fireEvent.click(screen.getByRole("button", { name: "上下文窗口" }));
+    fireEvent.click(screen.getByRole("button", { name: "使用默认上下文" }));
+    await flush();
+    expect(agentApi.updateSession).toHaveBeenLastCalledWith(session.id, {
+      contextLimit: null,
+    });
+    expect(
+      screen.getByRole("button", { name: "上下文窗口" }),
+    ).toHaveTextContent("128K");
+    expect(agentApi.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("keeps the saved context and draft when a context update fails", async () => {
+    snapshot.session.contextLimit = 128000;
+    const models = structuredClone(catalog);
+    models.models[0].contextLimit = 128000;
+    models.models[0].contextLimits = [128000, 1000000];
+    vi.mocked(agentApi.getCatalog).mockResolvedValue(models);
+    vi.mocked(agentApi.updateSession).mockRejectedValue(
+      new Error("上下文保存失败"),
+    );
+    render(<AgentPage />);
+    await flush();
+    fill("保留上下文切换前的输入");
+    fireEvent.click(screen.getByRole("button", { name: "上下文窗口" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "上下文窗口 1,000,000 tokens" }),
+    );
+    await flush();
+    expect(
+      screen.getByRole("button", { name: "上下文窗口" }),
+    ).toHaveTextContent("128K");
+    expect(screen.getByText("上下文保存失败")).toBeVisible();
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
+      "保留上下文切换前的输入",
+    );
+    expect(agentApi.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("keeps context overrides and drafts with their own conversations", async () => {
+    const models = structuredClone(catalog);
+    models.models[0].contextLimit = 128000;
+    models.models[0].contextLimits = [128000, 1000000];
+    const second = {
+      ...session,
+      id: "s2",
+      title: "第二个上下文会话",
+      contextLimit: 128000,
+    };
+    vi.mocked(agentApi.getCatalog).mockResolvedValue(models);
+    vi.mocked(agentApi.listSessions).mockResolvedValue([session, second]);
+    vi.mocked(agentApi.getSession).mockImplementation(async (id) =>
+      id === second.id
+        ? { ...emptySnapshot(), session: second }
+        : structuredClone(snapshot),
+    );
+    render(<AgentPage />);
+    await flush();
+    fill("第一个会话草稿");
+    fireEvent.click(screen.getByRole("button", { name: "上下文窗口" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "上下文窗口 1,000,000 tokens" }),
+    );
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: /^第二个上下文会话/ }));
+    await flush();
+    expect(
+      screen.getByRole("button", { name: "上下文窗口" }),
+    ).toHaveTextContent("128K");
+    fill("第二个会话草稿");
+    fireEvent.click(screen.getByRole("button", { name: /^修复测试/ }));
+    await flush();
+    expect(
+      screen.getByRole("button", { name: "上下文窗口" }),
+    ).toHaveTextContent("1M");
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
+      "第一个会话草稿",
+    );
+    expect(agentApi.updateSession).toHaveBeenCalledTimes(1);
     expect(agentApi.sendMessage).not.toHaveBeenCalled();
   });
 
@@ -1195,10 +1509,10 @@ describe("AgentPage", () => {
     vi.mocked(agentApi.listSessions).mockResolvedValue([]);
     render(<AgentPage />);
     await flush();
-    fireEvent.click(screen.getByRole("button", { name: "思考档位" }));
-    fireEvent.change(screen.getByRole("combobox", { name: "上下文窗口" }), {
-      target: { value: "1000000" },
-    });
+    fireEvent.click(screen.getByRole("button", { name: "上下文窗口" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "上下文窗口 1,000,000 tokens" }),
+    );
     fireEvent.keyDown(document.activeElement || document.body, {
       key: "Escape",
     });
@@ -1212,6 +1526,35 @@ describe("AgentPage", () => {
       undefined,
       undefined,
       1000000,
+    );
+  });
+
+  it("clears a new conversation context choice when selecting a different model", async () => {
+    const models = structuredClone(catalog);
+    models.models[0].contextLimit = 128000;
+    models.models[0].contextLimits = [128000, 1000000];
+    models.models[1].contextLimit = 32000;
+    vi.mocked(agentApi.getCatalog).mockResolvedValue(models);
+    vi.mocked(agentApi.listSessions).mockResolvedValue([]);
+    render(<AgentPage />);
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: "上下文窗口" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "上下文窗口 1,000,000 tokens" }),
+    );
+    selectModel("Model B");
+    await flush();
+    expect(
+      screen.getByRole("button", { name: "上下文窗口" }),
+    ).toHaveTextContent("32K");
+    fireEvent.click(sessionCreationButton());
+    await flush();
+    expect(agentApi.createSession).toHaveBeenCalledWith(
+      catalog.models[1].id,
+      "build",
+      undefined,
+      "ask",
+      undefined,
     );
   });
 
@@ -1507,7 +1850,7 @@ describe("AgentPage", () => {
     });
     render(<AgentPage />);
     await flush();
-    fireEvent.click(screen.getByRole("button", { name: "打开文件夹" }));
+    await openFolder();
     await flush();
     expect(settingsApi.pickDirectory).toHaveBeenCalledTimes(1);
     expect(agentApi.openProject).toHaveBeenCalledWith(project);
@@ -1665,7 +2008,7 @@ describe("AgentPage", () => {
     expect(requestId).toMatch(/^msg_/);
     expect(screen.getByText("已发送，等待开始…")).toBeInTheDocument();
     expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue("");
-    expect(screen.getByRole("button", { name: "打开文件夹" })).toBeEnabled();
+    await expectFolderEnabled();
     await tick();
     expect(screen.getByText("已发送，等待开始…")).toBeInTheDocument();
     snapshot.messages = [
@@ -1907,6 +2250,80 @@ describe("AgentPage", () => {
     expect(screen.getByText("已发送，等待开始…")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "发送" })).toBeDisabled();
   });
+
+  it("settles an acknowledged latest turn that fails before any running or assistant snapshot", async () => {
+    const reason =
+      "当前完整输入无法放入摘要请求的上下文预算；未截断历史或重放工具，请选择更长上下文模型后继续。";
+    vi.mocked(agentApi.sendMessage).mockImplementationOnce(
+      async (_id, text, requestId) => {
+        snapshot.messages = [
+          {
+            id: requestId!,
+            role: "user",
+            createdAt: 3,
+            parts: [{ type: "text", text }],
+          },
+        ];
+        snapshot.status = "error";
+        snapshot.error = reason;
+      },
+    );
+    render(<AgentPage />);
+    await flush();
+    fill("测试公益模型");
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+    await flush();
+    await tick();
+
+    expect(screen.getByText(reason)).toBeVisible();
+    expect(screen.getByText("本轮运行失败")).toBeVisible();
+    expect(screen.getByText("执行遇到问题")).toBeInTheDocument();
+    expect(screen.queryByText("已发送，等待开始…")).not.toBeInTheDocument();
+    expect(readAgentSubmission(project, session.id)).toBeNull();
+    fill("保留给用户手动继续的草稿");
+    expect(screen.getByRole("button", { name: "发送" })).toBeEnabled();
+    expect(agentApi.sendMessage).toHaveBeenCalledOnce();
+    expect(agentApi.updateSession).not.toHaveBeenCalled();
+    expect(agentApi.deleteSession).not.toHaveBeenCalled();
+  });
+
+  it.each(["different request", "later user turn", "missing failure reason"])(
+    "does not settle a pending input from an unrelated terminal snapshot: %s",
+    async (caseName) => {
+      render(<AgentPage />);
+      await flush();
+      fill("当前发送");
+      fireEvent.click(screen.getByRole("button", { name: "发送" }));
+      await flush();
+      const requestId = vi.mocked(agentApi.sendMessage).mock.calls[0][2]!;
+      snapshot.messages = [
+        {
+          id:
+            caseName === "different request" ? "some-other-request" : requestId,
+          role: "user",
+          createdAt: 3,
+          parts: [{ type: "text", text: "已记录的输入" }],
+        },
+      ];
+      if (caseName === "later user turn")
+        snapshot.messages.push({
+          id: "a-later-user-turn",
+          role: "user",
+          createdAt: 4,
+          parts: [{ type: "text", text: "更晚的一轮" }],
+        });
+      snapshot.status = "error";
+      snapshot.error =
+        caseName === "missing failure reason" ? "  " : "其他轮次的错误";
+      await tick();
+
+      expect(screen.getByText("已发送，等待开始…")).toBeInTheDocument();
+      expect(screen.queryByText("本轮运行失败")).not.toBeInTheDocument();
+      fill("新草稿");
+      expect(screen.getByRole("button", { name: "发送" })).toBeDisabled();
+      expect(agentApi.sendMessage).toHaveBeenCalledOnce();
+    },
+  );
 
   it("reconciles a lost ACK with the exact native user id, clears only the submitted draft, then allows a new input", async () => {
     vi.mocked(agentApi.sendMessage).mockRejectedValueOnce(
@@ -2169,11 +2586,11 @@ describe("AgentPage", () => {
     await flush();
     fireEvent.click(screen.getByRole("button", { name: /^完成的会话/ }));
     await flush();
-    expect(screen.getByRole("button", { name: "打开文件夹" })).toBeEnabled();
+    await expectFolderEnabled();
     expect(modelRefreshButton()).toBeDisabled();
     snapshot.status = "idle";
     await tick(1500);
-    expect(screen.getByRole("button", { name: "打开文件夹" })).toBeEnabled();
+    await expectFolderEnabled();
     expect(agentApi.interruptSession).not.toHaveBeenCalled();
   });
 
@@ -2268,6 +2685,7 @@ describe("AgentPage", () => {
       () =>
         new Promise((resolve) => {
           finishStop = resolve;
+          pendingStopCleanups.add(resolve);
         }),
     );
     render(<AgentPage />);

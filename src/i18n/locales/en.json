@@ -400,6 +400,8 @@
       "soft": "Soft",
       "off": "Minimal",
       "intensity": "Background ambience",
+      "fontSize": "Interface font size",
+      "fontSizeHelp": "Adjust the text size in the application interface. Some content previews remain unchanged.",
       "backgroundOpacity": "Background overlay opacity (debug)",
       "backgroundOpacityHelp": "Adjust the cream overlay opacity. Lower values reveal more of the background image. Changes preview immediately and save on this device.",
       "reset": "Reset",

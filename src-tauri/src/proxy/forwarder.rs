@@ -2853,6 +2853,15 @@ impl RequestForwarder {
             Ok((response, resolved_claude_api_format, outbound_model))
         } else {
             let status_code = status.as_u16();
+            let retry_after = (status_code == 429)
+                .then(|| {
+                    response.headers()
+                        .get(http::header::RETRY_AFTER)
+                        .and_then(|value| value.to_str().ok())
+                        .and_then(|value| value.trim().parse::<u64>().ok())
+                        .filter(|seconds| *seconds <= 86400)
+                })
+                .flatten();
             // 错误响应同样可能被上游压缩（content-encoding）。reqwest 未启用任何
             // 自动解压 feature，这里拿到的是原始字节；不解压的话，压缩过的错误体会
             // 在 from_utf8 处变成非 UTF-8 而被丢弃，隐藏掉上游的限流/鉴权等详情。
@@ -2874,6 +2883,7 @@ impl RequestForwarder {
                 .map(|body| crate::redact_known_secrets_strict(&body, &log_secrets));
 
             Err(ProxyError::UpstreamError {
+                retry_after,
                 status: status_code,
                 body: body_text,
             })
@@ -3526,7 +3536,7 @@ fn build_terminal_failure_log(
 
 fn summarize_proxy_error(error: &ProxyError) -> String {
     match error {
-        ProxyError::UpstreamError { status, body } => {
+        ProxyError::UpstreamError { status, body, .. } => {
             let body_summary = body
                 .as_deref()
                 .map(summarize_upstream_body)
@@ -4942,6 +4952,7 @@ mod tests {
     #[test]
     fn single_provider_retryable_log_uses_single_provider_code() {
         let error = ProxyError::UpstreamError {
+            retry_after: None,
             status: 429,
             body: Some(r#"{"error":{"message":"rate limit exceeded"}}"#.to_string()),
         };
@@ -5707,14 +5718,17 @@ mod tests {
         for error in [
             ProxyError::AuthError("restart Codex".to_string()),
             ProxyError::UpstreamError {
+                retry_after: None,
                 status: 401,
                 body: None,
             },
             ProxyError::UpstreamError {
+                retry_after: None,
                 status: 403,
                 body: None,
             },
             ProxyError::UpstreamError {
+                retry_after: None,
                 status: 429,
                 body: None,
             },
@@ -5744,6 +5758,7 @@ mod tests {
         assert_eq!(
             forwarder.categorize_proxy_error(
                 &ProxyError::UpstreamError {
+                    retry_after: None,
                     status: 401,
                     body: None,
                 },
@@ -6890,6 +6905,7 @@ mod tests {
 
     fn image_unsupported_error() -> ProxyError {
         ProxyError::UpstreamError {
+            retry_after: None,
             status: 400,
             body: Some(
                 r#"{"error":{"message":"This model does not support image input"}}"#.to_string(),
@@ -6980,6 +6996,7 @@ mod tests {
         let fwd = forwarder_with_rectifier(RectifierConfig::default());
         let body = body_with_codex_input_image("deepseek-v4-flash");
         let error = ProxyError::UpstreamError {
+            retry_after: None,
             status: 400,
             body: Some(
                 r#"{"error":{"message":"Failed to deserialize the JSON body into the target type: messages[11]: unknown variant image_url, expected text"}}"#
@@ -7026,6 +7043,7 @@ mod tests {
         let fwd = forwarder_with_rectifier(RectifierConfig::default());
         let body = body_with_codex_tool_output_image(false);
         let context_error = ProxyError::UpstreamError {
+            retry_after: None,
             status: 400,
             body: Some(r#"{"error":{"message":"maximum context length exceeded"}}"#.to_string()),
         };
@@ -7616,6 +7634,7 @@ mod tests {
                 { "type": "compaction", "encrypted_content": "gAAAA-openai" }
             ] });
             let unsupported = ProxyError::UpstreamError {
+                retry_after: None,
                 status: 400,
                 body: Some("unsupported input item".to_string()),
             };
@@ -7661,6 +7680,7 @@ mod tests {
                 { "type": "compaction", "encrypted_content": "gAAAA-openai" }
             ] });
             let unsupported = ProxyError::UpstreamError {
+                retry_after: None,
                 status: 400,
                 body: Some("unsupported input item".to_string()),
             };
@@ -7825,6 +7845,7 @@ mod tests {
 
         fn is_unreadable_task_error(error: &ProxyError) -> bool {
             let ProxyError::UpstreamError {
+                retry_after: _,
                 status: 400,
                 body: Some(body),
             } = error

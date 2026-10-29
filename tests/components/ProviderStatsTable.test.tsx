@@ -1,10 +1,10 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { ProviderStatsTable } from "@/components/usage/ProviderStatsTable";
+import { ProviderStatsTable } from "@/features/usage/ProviderStatsTable";
 import {
   getStatsEstimatedSpeed,
   getStatsSpeed,
-} from "@/components/usage/statsColumns";
+} from "@/features/usage/statsColumns";
 import type { ProviderStats } from "@/types/usage";
 
 const useProviderStatsMock = vi.hoisted(() => vi.fn());

@@ -1,0 +1,12 @@
+# Managed by lolicode-ai-rankings-v1
+[Unit]
+Description=Update AI rankings every day at 09:00 Singapore time
+
+[Timer]
+OnCalendar=*-*-* 09:00:00 Asia/Singapore
+Persistent=true
+AccuracySec=1min
+Unit=lolicode-ai-rankings.service
+
+[Install]
+WantedBy=timers.target

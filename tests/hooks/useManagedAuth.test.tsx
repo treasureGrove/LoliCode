@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useManagedAuth } from "@/components/providers/forms/hooks/useManagedAuth";
+import { useManagedAuth } from "@/features/providers/forms/hooks/useManagedAuth";
 import { CODEX_OAUTH_DUPLICATE_ACCOUNT_ERROR } from "@/lib/api/auth";
 
 const apiMocks = vi.hoisted(() => ({

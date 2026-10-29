@@ -2302,12 +2302,16 @@ fn build_codex_proxy_error_response(
         ProxyError::Internal(format!("Failed to serialize proxy error: {e}"))
     })?;
 
-    axum::response::Response::builder()
+    let mut builder = axum::response::Response::builder()
         .status(status)
         .header(
             axum::http::header::CONTENT_TYPE,
             axum::http::HeaderValue::from_static("application/json"),
-        )
+        );
+    if let Some(seconds) = error.retry_after_seconds() {
+        builder = builder.header(axum::http::header::RETRY_AFTER, seconds.to_string());
+    }
+    builder
         .body(axum::body::Body::from(body))
         .map_err(|e| {
             log::error!("[Codex] 构建代理错误响应失败: {e}");
@@ -2322,7 +2326,7 @@ fn codex_proxy_error_json(
     error: &ProxyError,
 ) -> Value {
     let (mut body, upstream_status) = match error {
-        ProxyError::UpstreamError { status, body } => {
+        ProxyError::UpstreamError { status, body, .. } => {
             let parsed_body = body
                 .as_deref()
                 .map(|body| serde_json::from_str::<Value>(body).unwrap_or_else(|_| json!(body)));
@@ -4021,6 +4025,7 @@ data: {\"type\":\"response.output_item.done\",\"item\":{\"type\":\"message\"}}\n
     #[test]
     fn codex_proxy_upstream_error_normalizes_nonstandard_body() {
         let error = ProxyError::UpstreamError {
+            retry_after: None,
             status: 502,
             body: Some(
                 r#"{"base_resp":{"status_code":2013,"status_msg":"upstream gateway failed"}}"#
@@ -4041,6 +4046,7 @@ data: {\"type\":\"response.output_item.done\",\"item\":{\"type\":\"message\"}}\n
         // 模拟上游渠道商 nginx 因 client_max_body_size 返回的 413 HTML 页面
         // （见 issue #666：长上下文 / 大图 / 大日志撞上游体积上限）
         let error = ProxyError::UpstreamError {
+            retry_after: None,
             status: 413,
             body: Some(
                 "<html>\r\n<head><title>413 Request Entity Too Large</title></head>\r\n\

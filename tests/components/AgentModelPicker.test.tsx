@@ -1,6 +1,6 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { AgentModelPicker } from "@/components/agent/AgentModelPicker";
+import { AgentModelPicker } from "@/features/agent/AgentModelPicker";
 import type { AgentModel } from "@/types/agent";
 
 const models: AgentModel[] = [
@@ -21,6 +21,61 @@ const models: AgentModel[] = [
 ];
 
 describe("AgentModelPicker", () => {
+  it("marks public models as free in the current selection and searchable options", () => {
+    const select = vi.fn();
+    const publicModel = {
+      ...models[0],
+      id: "lolicode-public/glm-5.3-flash",
+      modelId: "glm-5.3-flash",
+      channelName: "LoliCode 公益模型",
+      name: "GLM 5.3 Flash",
+      isFree: true,
+    };
+    render(
+      <AgentModelPicker
+        models={[publicModel, models[1]]}
+        value={publicModel.id}
+        onSelect={select}
+      />,
+    );
+    const trigger = screen.getByRole("button", { name: "模型，free" });
+    expect(within(trigger).getByText("free")).toBeVisible();
+    expect(trigger).toHaveAttribute(
+      "title",
+      "LoliCode 公益模型 · GLM 5.3 Flash · free",
+    );
+    fireEvent.click(trigger);
+    fireEvent.change(
+      screen.getByRole("searchbox", { name: "搜索模型或渠道" }),
+      {
+        target: { value: "free" },
+      },
+    );
+    expect(
+      screen.queryByRole("button", { name: "Channel B 模型" }),
+    ).not.toBeInTheDocument();
+    const option = screen.getByRole("button", {
+      name: "LoliCode 公益模型 · GLM 5.3 Flash · free",
+    });
+    expect(within(option).getByText("free")).toBeVisible();
+    fireEvent.click(option);
+    expect(select).toHaveBeenCalledWith(publicModel.id);
+  });
+
+  it("does not infer a free badge from model or channel names", () => {
+    render(
+      <AgentModelPicker
+        models={[
+          { ...models[0], name: "GLM Flash", channelName: "LoliCode 公益模型" },
+        ]}
+        value={models[0].id}
+        onSelect={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "模型" }));
+    expect(screen.queryByText("free")).not.toBeInTheDocument();
+  });
+
   it("does not render opaque internal IDs and keeps exact identity when selecting", () => {
     const uuid = "12345678-1234-1234-1234-123456789abc";
     const select = vi.fn();

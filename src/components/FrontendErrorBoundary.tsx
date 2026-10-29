@@ -3,7 +3,7 @@ import { RefreshCw, TriangleAlert } from "lucide-react";
 import i18n from "@/i18n";
 import { reportFrontendError } from "@/lib/frontendLogger";
 import { Button } from "@/components/ui/button";
-import { RendererRecoveryButton } from "@/components/shell/RendererRecoveryButton";
+import { RendererRecoveryButton } from "@/app/shell/RendererRecoveryButton";
 
 interface FrontendErrorBoundaryState {
   hasError: boolean;

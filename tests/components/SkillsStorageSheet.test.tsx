@@ -2,7 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { SkillsStorageSheet } from "@/components/skills/SkillsStorageSheet";
+import { SkillsStorageSheet } from "@/features/skills/SkillsStorageSheet";
 
 const m = vi.hoisted(() => ({
   settings: {

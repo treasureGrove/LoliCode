@@ -5,8 +5,8 @@ import {
   getAgentReaderStyle,
   READER_VERB_I18N_PREFIX,
   type ReaderStyleId,
-} from "@/components/sessions/reader/agentStyles";
-import { SESSION_APP_IDS } from "@/components/sessions/utils";
+} from "@/features/sessions/reader/agentStyles";
+import { SESSION_APP_IDS } from "@/features/sessions/utils";
 
 const STYLE_IDS: ReaderStyleId[] = [
   "claude",

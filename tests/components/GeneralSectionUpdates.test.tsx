@@ -1,12 +1,12 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { GeneralSection } from "@/components/settings/sections/GeneralSection";
+import { GeneralSection } from "@/features/settings/sections/GeneralSection";
 import type { SettingsFormState } from "@/hooks/useSettings";
 
 vi.mock("@/components/theme-provider", () => ({
   useTheme: () => ({ theme: "light", setTheme: vi.fn() }),
 }));
-vi.mock("@/components/settings/TerminalSettings", () => ({
+vi.mock("@/features/settings/TerminalSettings", () => ({
   TerminalSelect: () => null,
 }));
 

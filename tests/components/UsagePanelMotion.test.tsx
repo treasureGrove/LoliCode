@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 import UsageScriptModal from "@/components/UsageScriptModal";
-import { PricingEditModal } from "@/components/usage/PricingEditModal";
+import { PricingEditModal } from "@/features/usage/PricingEditModal";
 
 vi.mock("@/lib/query", () => ({
   useSettingsQuery: () => ({ data: { usageConfirmed: true } }),

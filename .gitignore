@@ -10,7 +10,8 @@ packages/platform-host/dist/
 packages/adapters/opencode/dist/
 dist/
 dist-dev/
-release/
+# Only the root delivery output is generated; scripts/release/ contains source.
+/release/
 src-tauri/resources/agent/
 src-tauri/resources/zcode-runtime/
 packages/lolicode-zcode-runtime/.build/

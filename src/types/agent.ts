@@ -26,9 +26,13 @@ export interface AgentModel {
   modelId: string;
   name: string;
   channelName: string;
+  /** Set by the backend for models in the LoliCode public channel. */
+  isFree?: boolean;
   contextLimit?: number | null;
   /** Window sizes explicitly advertised by this channel. */
   contextLimits?: number[] | null;
+  /** Gateway request-body limit in bytes, independent of the context budget. */
+  maxRequestBytes?: number | null;
   outputLimit?: number | null;
   reasoningEfforts?: string[] | null;
   defaultReasoningEffort?: string | null;

@@ -1,14 +1,14 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import App from "@/App";
+import App from "@/app/App";
 import { setSettings } from "../msw/state";
 
 vi.mock("@/contexts/UpdateContext", () => ({
   useUpdate: () => ({ hasUpdate: false, updateInfo: null }),
 }));
 
-vi.mock("@/components/channels/ChannelCenterPanel", () => ({
+vi.mock("@/features/channels/ChannelCenterPanel", () => ({
   ChannelCenterPanel: () => (
     <div data-testid="channel-center">Shared channels</div>
   ),

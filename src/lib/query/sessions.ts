@@ -11,7 +11,7 @@ import type {
   SessionMessage,
   TranscriptChunk,
 } from "@/types";
-import { buildTurnIndex, buildTurns } from "@/components/sessions/reader/turns";
+import { buildTurnIndex, buildTurns } from "@/features/sessions/reader/turns";
 
 /**
  * 会话阅读页的数据层：

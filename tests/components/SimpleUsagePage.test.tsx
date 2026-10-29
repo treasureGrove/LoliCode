@@ -9,7 +9,7 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { SimpleUsagePage } from "@/components/usage/SimpleUsagePage";
+import { SimpleUsagePage } from "@/features/usage/SimpleUsagePage";
 import { usageApi } from "@/lib/api/usage";
 import { channelCenterApi } from "@/lib/api/channel-center";
 import type { ProviderStats } from "@/types/usage";

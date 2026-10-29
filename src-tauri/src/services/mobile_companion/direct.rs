@@ -1,6 +1,6 @@
 //! Native direct-only task transport. The authenticated service carries only
 //! bounded, separately encrypted SDP; it never receives task packet bytes.
-use super::{crypto, Secret};
+use super::{auth_refresh::AuthRefresh, crypto, Secret};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use futures::{SinkExt, StreamExt};
 use ring::aead;
@@ -71,7 +71,7 @@ pub(super) struct DirectChannel {
     ping: Interval,
     faulted: Arc<AtomicBool>,
     pending_packet: Option<String>,
-    auth_refresh: super::account_transport::AuthRefresh,
+    auth_refresh: AuthRefresh,
 }
 
 impl DirectChannel {
@@ -215,7 +215,7 @@ impl DirectChannel {
             ping: interval(Duration::from_secs(25)),
             faulted,
             pending_packet,
-            auth_refresh: super::account_transport::AuthRefresh::new(auth_refresh),
+            auth_refresh: AuthRefresh::new(auth_refresh),
         })
     }
 

@@ -3,7 +3,7 @@ import type { ComponentProps, PropsWithChildren } from "react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { CodexFormFields } from "@/components/providers/forms/CodexFormFields";
+import { CodexFormFields } from "@/features/providers/forms/CodexFormFields";
 import { Form } from "@/components/ui/form";
 import type { FetchedModel } from "@/lib/api/model-fetch";
 

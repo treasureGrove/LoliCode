@@ -1,20 +1,20 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import App from "@/App";
+import App from "@/app/App";
 import { setSettings } from "../msw/state";
 
 vi.mock("@/contexts/UpdateContext", () => ({
   useUpdate: () => ({ hasUpdate: false, updateInfo: null }),
 }));
-vi.mock("@/components/agent/AgentPage", () => ({
+vi.mock("@/features/agent/AgentPage", () => ({
   AgentPage: ({ onOpenChannels }: { onOpenChannels: () => void }) => (
     <div data-testid="agent-workspace">
       <button onClick={onOpenChannels}>添加模型渠道</button>
     </div>
   ),
 }));
-vi.mock("@/components/channels/ChannelCenterPanel", () => ({
+vi.mock("@/features/channels/ChannelCenterPanel", () => ({
   ChannelCenterPanel: ({
     initialToolsOpen,
   }: {

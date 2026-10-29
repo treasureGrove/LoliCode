@@ -1,11 +1,11 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { AgentChanges } from "@/components/agent/AgentChanges";
-import { AgentMessageView, AgentToolPart } from "@/components/agent/AgentParts";
+import { AgentChanges } from "@/features/agent/AgentChanges";
+import { AgentMessageView, AgentToolPart } from "@/features/agent/AgentParts";
 import type { AgentDiff, AgentPart } from "@/types/agent";
 
-vi.mock("@/components/sessions/reader/SessionMarkdown", () => ({
+vi.mock("@/features/sessions/reader/SessionMarkdown", () => ({
   SessionMarkdown: ({ content }: { content: string }) => <p>{content}</p>,
 }));
 

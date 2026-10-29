@@ -5,10 +5,10 @@
   "type": "module",
   "license": "MIT",
   "scripts": {
-    "build:runtime": "node ../../scripts/prepare-zcode-runtime.mjs",
-    "build:worker": "node ../../scripts/prepare-zcode-runtime.mjs --worker-only",
-    "build:remote": "node ../../scripts/prepare-zcode-remote-runtime.mjs",
-    "verify:source": "node ../../scripts/prepare-zcode-runtime.mjs --verify-only",
+    "build:runtime": "node ../../scripts/build/prepare-zcode-runtime.mjs",
+    "build:worker": "node ../../scripts/build/prepare-zcode-runtime.mjs --worker-only",
+    "build:remote": "node ../../scripts/build/prepare-zcode-remote-runtime.mjs",
+    "verify:source": "node ../../scripts/build/prepare-zcode-runtime.mjs --verify-only",
     "test:build": "node --test ../../scripts/tests/prepare-zcode-runtime.test.mjs ../../scripts/tests/prepare-zcode-remote-runtime.test.mjs",
     "test:facades": "node ../../scripts/tests/zcode-facades.mjs"
   },

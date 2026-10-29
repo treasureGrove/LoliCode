@@ -9,7 +9,7 @@ import {
   within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CopilotBillingPanel } from "@/components/usage/CopilotBillingPanel";
+import { CopilotBillingPanel } from "@/features/usage/CopilotBillingPanel";
 import { copilotGetAuthStatus, copilotListAccounts } from "@/lib/api/copilot";
 import {
   COPILOT_BILLING_QUERY_KEY,

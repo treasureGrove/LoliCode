@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { AgentReasoningPicker } from "@/components/agent/AgentReasoningPicker";
+import { AgentReasoningPicker } from "@/features/agent/AgentReasoningPicker";
 import type { AgentModel } from "@/types/agent";
 
 const model: AgentModel = {
@@ -18,68 +18,73 @@ const open = () =>
   fireEvent.click(screen.getByRole("button", { name: "思考档位" }));
 
 describe("AgentReasoningPicker", () => {
-  it("offers the declared Copilot standard and long prompt tiers without treating the full model window as a preset", () => {
-    const context = vi.fn();
-    const { rerender } = render(
-      <AgentReasoningPicker
-        model={{
-          ...model,
-          contextLimit: 272000,
-          contextLimits: [272000, 922000],
-        }}
-        value="high"
-        onSelect={vi.fn()}
-        onContextSelect={context}
-      />,
-    );
-    open();
-    expect(
-      screen.getByRole("option", { name: "272,000 tokens（标准档）" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("option", { name: "922,000 tokens（长上下文）" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("option", { name: /1,050,000/ }),
-    ).not.toBeInTheDocument();
-    fireEvent.change(screen.getByRole("combobox", { name: "上下文窗口" }), {
-      target: { value: "922000" },
-    });
-    expect(context).toHaveBeenCalledWith(922000);
-    rerender(
-      <AgentReasoningPicker
-        model={{
-          ...model,
-          contextLimit: 922000,
-          contextLimits: [272000, 922000],
-        }}
-        value="high"
-        onSelect={vi.fn()}
-        onContextSelect={context}
-      />,
-    );
-    expect(
-      screen.getByRole("option", { name: "922,000 tokens（长上下文）" }),
-    ).toBeInTheDocument();
-  });
-  it("switches a session context window independently from reasoning", () => {
-    const select = vi.fn(),
-      context = vi.fn();
+  it.each([
+    { value: "", expected: "思考 · 上游默认" },
+    { value: "custom", expected: "思考 · custom（手动）" },
+  ])(
+    "labels the visible $expected state as reasoning",
+    ({ value, expected }) => {
+      const select = vi.fn();
+      render(<AgentReasoningPicker value={value} onSelect={select} />);
+      expect(
+        screen.getByRole("button", { name: "思考档位" }),
+      ).toHaveTextContent(expected);
+      expect(select).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    { outputLimit: 32768, cap: "32,768 tokens" },
+    { outputLimit: undefined, cap: "未声明" },
+  ])(
+    "distinguishes the read-only model output cap $cap from automatic allocation",
+    ({ outputLimit, cap }) => {
+      const select = vi.fn();
+      render(
+        <AgentReasoningPicker
+          model={{ ...model, outputLimit }}
+          value=""
+          onSelect={select}
+        />,
+      );
+      open();
+      expect(
+        screen.getByText("模型输出上限").nextElementSibling,
+      ).toHaveTextContent(cap);
+      expect(
+        screen.getByText(/每轮输出根据模型上限和剩余上下文自动分配/),
+      ).toBeVisible();
+      if (outputLimit === undefined) {
+        expect(
+          screen.getByText(/模型上限未声明，本地自动基准为 32K tokens/),
+        ).toBeVisible();
+        expect(screen.queryByText("32,768 tokens")).not.toBeInTheDocument();
+      } else {
+        expect(screen.queryByText(/本地自动基准/)).not.toBeInTheDocument();
+      }
+      expect(screen.queryByRole("spinbutton")).not.toBeInTheDocument();
+      expect(select).not.toHaveBeenCalled();
+    },
+  );
+
+  it("shows the saved context as read-only metadata without another context selector", () => {
+    const select = vi.fn();
     render(
       <AgentReasoningPicker
         model={{ ...model, contextLimits: [131072, 1000000] }}
         value="high"
+        contextValue={1000000}
         onSelect={select}
-        contextValue={131072}
-        onContextSelect={context}
       />,
     );
     open();
-    fireEvent.change(screen.getByRole("combobox", { name: "上下文窗口" }), {
-      target: { value: "1000000" },
-    });
-    expect(context).toHaveBeenCalledWith(1000000);
-    expect(select).not.toHaveBeenCalled();
+    expect(screen.getByText("1,000,000 tokens")).toBeVisible();
+    expect(
+      screen.queryByRole("combobox", { name: "上下文窗口" }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "思考档位 low" }));
+    expect(select).toHaveBeenCalledOnce();
+    expect(select).toHaveBeenCalledWith("low");
   });
   it.each([
     { efforts: ["low", "high", "medium", "max"], expected: "medium" },
@@ -97,7 +102,7 @@ describe("AgentReasoningPicker", () => {
       );
       expect(
         screen.getByRole("button", { name: "思考档位" }),
-      ).toHaveTextContent(`自动档位 · ${expected}`);
+      ).toHaveTextContent(`思考 · 自动档位 · ${expected}`);
     },
   );
   it("inherits the current model default without copying it into the session override", () => {
@@ -110,7 +115,7 @@ describe("AgentReasoningPicker", () => {
       />,
     );
     expect(screen.getByRole("button", { name: "思考档位" })).toHaveTextContent(
-      "模型默认 · high",
+      "思考 · 模型默认 · high",
     );
     expect(select).not.toHaveBeenCalled();
     open();
@@ -127,7 +132,7 @@ describe("AgentReasoningPicker", () => {
     );
     expect(select).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "思考档位" })).toHaveTextContent(
-      "low",
+      "思考 · low",
     );
     open();
     expect(screen.getByText("131,072 tokens")).toBeVisible();
@@ -173,7 +178,11 @@ describe("AgentReasoningPicker", () => {
       );
       expect(select).not.toHaveBeenCalled();
       open();
-      expect(screen.getAllByText("未知（渠道未提供）")).toHaveLength(2);
+      expect(screen.getByText("1,000,000 tokens")).toBeVisible();
+      expect(screen.getByText("未声明")).toBeVisible();
+      expect(
+        screen.getByText(/模型上限未声明，本地自动基准为 32K tokens/),
+      ).toBeVisible();
       const input = screen.getByRole("textbox", {
         name: "手动档位标识（未验证）",
       });

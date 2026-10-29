@@ -3,9 +3,9 @@ import { act, render, screen, waitFor, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { RendererUpdatesSection } from "@/components/settings/RendererUpdatesSection";
-import { RendererBootHealth } from "@/components/shell/RendererBootHealth";
-import { RendererRecoveryButton } from "@/components/shell/RendererRecoveryButton";
+import { RendererUpdatesSection } from "@/features/settings/RendererUpdatesSection";
+import { RendererBootHealth } from "@/app/shell/RendererBootHealth";
+import { RendererRecoveryButton } from "@/app/shell/RendererRecoveryButton";
 import {
   rendererUpdatesApi,
   type RendererStatus,

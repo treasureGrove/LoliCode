@@ -74,6 +74,12 @@ fn assert_protocol(messages: &[Value]) {
 
 fn summary_reply(input: &Value) -> Reply {
     assert!(input["tools"].as_array().unwrap().is_empty());
+    let output = input["max_tokens"].as_u64().unwrap();
+    assert!(output > 0 && output <= 20000);
+    let prompt = input["messages"][0]["content"].as_str().unwrap();
+    let bytes = prompt.split("shorter than ").nth(1).unwrap()
+        .split_whitespace().next().unwrap().parse::<u64>().unwrap();
+    assert!(bytes <= output, "summary instruction must fit its generation cap");
     let data: Value =
         serde_json::from_str(input["messages"][1]["content"].as_str().unwrap()).unwrap();
     assert_protocol(data["completedHistory"].as_array().unwrap());
@@ -509,7 +515,7 @@ async fn successful_compaction_preserves_configuration_and_title_changes_made_wh
             return reply;
         }
         let step = recorded.fetch_add(1, Ordering::SeqCst);
-        if step < 3 {
+        if input["model"] != "channel/other/model" {
             edit_batch(step)
         } else {
             assert_eq!(input["model"], "channel/other/model");

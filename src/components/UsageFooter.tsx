@@ -10,15 +10,15 @@ import {
 } from "@/components/SubscriptionQuotaFooter";
 import type { QuotaTier } from "@/types/subscription";
 import { isAdditiveAppId } from "@/config/appConfig";
-import { QuotaBars, QuotaLines } from "@/components/quota/QuotaLines";
-import { useQuotaDisplay } from "@/components/quota/useQuotaDisplay";
+import { QuotaBars, QuotaLines } from "@/features/quota/QuotaLines";
+import { useQuotaDisplay } from "@/features/quota/useQuotaDisplay";
 import {
   balanceLine,
   expiredLine,
   failedLines,
   tierLine,
   type QuotaLine,
-} from "@/components/quota/quotaRules";
+} from "@/features/quota/quotaRules";
 
 interface UsageFooterProps {
   provider: Provider;

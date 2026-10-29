@@ -218,7 +218,7 @@ mod acceptance {
             let p=remote.attach(&c.id,&root).await.map_err(|e|anyhow!(e))?;let anchor=remote.anchor(&p);
             let path=anchor.canonicalize()?.to_string_lossy().trim_start_matches(r"\\?\").to_owned();
             let mut prefs=load_workspace_preferences(&db).map_err(|e|anyhow!(e))?;
-            prefs.projects.insert(workspace_path_key(&path),AgentProject{path:path.clone(),name:"Owned remote automation".into(),pinned:false,last_opened_at:chrono::Utc::now().timestamp_millis() as u64});
+            prefs.projects.insert(workspace_path_key(&path),AgentProject{path:path.clone(),name:"Owned remote automation".into(),standalone:false,pinned:false,last_opened_at:chrono::Utc::now().timestamp_millis() as u64});
             save_workspace_preferences(&db,&prefs).map_err(|e|anyhow!(e))?;
             let listener=tokio::net::TcpListener::bind("127.0.0.1:0").await?;let address=listener.local_addr()?;
             let requests=Arc::new(AtomicUsize::new(0));let counted=requests.clone();
@@ -226,7 +226,7 @@ mod acceptance {
             struct Server(tokio::task::JoinHandle<()>);impl Drop for Server{fn drop(&mut self){self.0.abort();}}
             let _server=Server(tokio::spawn(async move{axum::serve(listener,app).await.unwrap();}));
             let engine=NativeEngine::open(enginepath.clone()).await.map_err(|e|anyhow!(e))?;
-            engine.set_application_tools(Arc::new(DesktopToolHost{local:DesktopApplicationTools(AppState::new(db.clone())),remote:remote.clone()})).await;
+            engine.set_application_tools(Arc::new(DesktopToolHost{local:DesktopApplicationTools(AppState::new(db.clone())),remote:remote.clone(),mcp:None})).await;
             let catalog=serde_json::from_value(json!({"revision":1,"models":[{"id":"lolicode/owned/fixture","providerId":"lolicode","modelId":"owned/fixture","name":"Owned fixture","channelName":"Owned"}],"defaultModel":"lolicode/owned/fixture","excludedSources":[]}))?;
             let runtime:Arc<dyn AutomationRuntime>=Arc::new(Runtime{engine:engine.clone(),remote:remote.clone(),catalog,gateway:NativeGateway{base_url:format!("http://{address}/v1"),bearer_token:"owned-loopback-only".into()}});
             // Foreground remains on a different local workspace throughout.

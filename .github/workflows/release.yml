@@ -47,7 +47,7 @@ jobs:
         shell: pwsh
         run: |
           if ($env:RELEASE_VERSION -notmatch '^\d+\.\d+\.\d+$') { throw 'Expected a stable SemVer.' }
-          $productVersion = node --input-type=module -e "import { productVersion } from './scripts/lolicode-product-version.mjs'; process.stdout.write(productVersion(process.env.RELEASE_VERSION));"
+          $productVersion = node --input-type=module -e "import { productVersion } from './scripts/release/lolicode-product-version.mjs'; process.stdout.write(productVersion(process.env.RELEASE_VERSION));"
           "PRODUCT_VERSION=$productVersion" >> $env:GITHUB_ENV
           $packageVersion = (Get-Content -Raw package.json | ConvertFrom-Json).version
           $tauriVersion = (Get-Content -Raw src-tauri/tauri.conf.json | ConvertFrom-Json).version
@@ -66,7 +66,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           pnpm exec vitest run tests/config/whatsNewEntries.test.ts tests/lib/whatsNew.test.ts tests/lib/updater.test.ts
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          node --test scripts/lolicode-release.test.mjs scripts/lolicode-publish.test.mjs
+          node --test scripts/tests/lolicode-release.test.mjs scripts/tests/lolicode-publish.test.mjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node --test scripts/tests/lolicode-nsis-upgrade-guard.test.mjs scripts/tests/lolicode-nsis-resource-layout.test.mjs scripts/tests/lolicode-nsis-overwrite-upgrade.test.mjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -87,7 +87,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $installer = "src-tauri/target/release/bundle/nsis/LoliCode_$($env:RELEASE_VERSION)_x64-setup.exe"
           if (-not (Test-Path "$installer.sig")) { throw 'Missing updater signature.' }
-          node scripts/lolicode-release.mjs prepare --installer $installer --signature "$installer.sig" --public-key-file src-tauri/updater.pub --version "$env:RELEASE_VERSION" --current-version 0.0.0 --base-url https://tools.treasuregrove.art/lolicode/releases --latest-url https://tools.treasuregrove.art/lolicode/updates/latest.json --output-dir "$env:RUNNER_TEMP/lolicode-release"
+          node scripts/release/lolicode-release.mjs prepare --installer $installer --signature "$installer.sig" --public-key-file src-tauri/updater.pub --version "$env:RELEASE_VERSION" --current-version 0.0.0 --base-url https://tools.treasuregrove.art/lolicode/releases --latest-url https://tools.treasuregrove.art/lolicode/updates/latest.json --output-dir "$env:RUNNER_TEMP/lolicode-release"
           exit $LASTEXITCODE
       - uses: actions/upload-artifact@v7
         with:
@@ -113,5 +113,5 @@ jobs:
           gh release create "lolicode-v$env:PRODUCT_VERSION" $installer "$installer.sig" --repo treasureGrove/LoliCode-Releases --target main --title "LoliCode $env:PRODUCT_VERSION" --notes-file "$env:RUNNER_TEMP/lolicode-release-notes.md"
           exit $LASTEXITCODE
 
-# The signed website feed is published separately with scripts/lolicode-publish.mjs.
+# The signed website feed is published separately with scripts/release/lolicode-publish.mjs.
 # This workflow never writes another project's R2 bucket or changes the live feed.

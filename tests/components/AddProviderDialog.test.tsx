@@ -7,12 +7,12 @@ import {
 } from "@testing-library/react";
 import { useEffect } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { AddProviderDialog } from "@/components/providers/AddProviderDialog";
-import type { ProviderFormValues } from "@/components/providers/forms/ProviderForm";
+import { AddProviderDialog } from "@/features/providers/AddProviderDialog";
+import type { ProviderFormValues } from "@/features/providers/forms/ProviderForm";
 import { codexProviderPresets } from "@/config/codexProviderPresets";
 import { providersApi } from "@/lib/api";
 import type { ProviderEditorView } from "@/lib/api/providers";
-import { usePresetStep } from "@/components/providers/forms/presetStep";
+import { usePresetStep } from "@/features/providers/forms/presetStep";
 import { createPortal } from "react-dom";
 
 vi.mock("@/components/ui/dialog", () => ({
@@ -45,7 +45,7 @@ let mockProjectedBase: Record<string, unknown> | null = null;
 let mockProjectedDraft: Record<string, unknown> | undefined;
 let submitReadyCallbacks: Array<(isReady: boolean) => void> = [];
 
-vi.mock("@/components/providers/forms/ProviderForm", () => ({
+vi.mock("@/features/providers/forms/ProviderForm", () => ({
   ProviderForm: ({
     onSubmit,
     onSubmitReadyChange,
@@ -101,7 +101,7 @@ vi.mock("@/components/providers/forms/ProviderForm", () => ({
   },
 }));
 
-vi.mock("@/components/providers/AuthSettingsPanel", () => ({
+vi.mock("@/features/providers/AuthSettingsPanel", () => ({
   AuthSettingsPanel: ({ target }: { target: string | null }) =>
     target ? <div data-testid="auth-settings-panel">{target}</div> : null,
 }));

@@ -5,8 +5,8 @@ import {
   QuotaBars,
   QuotaLines,
   REFRESH_RESULT_MS,
-} from "@/components/quota/QuotaLines";
-import { failedLines, type QuotaLine } from "@/components/quota/quotaRules";
+} from "@/features/quota/QuotaLines";
+import { failedLines, type QuotaLine } from "@/features/quota/quotaRules";
 import type { TFunction } from "i18next";
 
 const t = ((key: string) => key) as unknown as TFunction;

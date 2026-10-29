@@ -116,6 +116,9 @@ pub(super) fn declared_context_windows(
         "/capabilities/limits/max_context_tokens",
         "/capabilities/limits/max_context_window_tokens",
         "/limit/context",
+        "/parameters/context_window",
+        "/parameters/context_length",
+        "/parameters/contextLimit",
     ];
     let default = SCALARS.iter().find_map(|pointer| {
         let value = entry.pointer(pointer)?;
@@ -153,7 +156,9 @@ pub(super) fn declared_context_windows(
         "/supported_context_lengths",
         "/supported_context_limits",
         "/limits/context_windows",
+        "/limits/contextLimits",
         "/capabilities/limits/context_windows",
+        "/capabilities/limits/contextLimits",
         "/parameters/context_window/enum",
         "/parameters/context_length/enum",
     ]) {
@@ -679,6 +684,24 @@ mod tests {
             metadata.context_limits, None,
             "different input/output/total ceilings are not presets"
         );
+    }
+
+    #[test]
+    fn parameter_context_choices_keep_the_declared_default() {
+        for parameter in ["context_window", "context_length", "contextLimit"] {
+            let mut entry = serde_json::json!({"parameters":{}});
+            entry["parameters"][parameter] = serde_json::json!({
+                "default":1000000,"enum":[128000,1000000]
+            });
+            let metadata = declared_model_metadata(&entry);
+            assert_eq!(metadata.context_limit, Some(1000000));
+            assert_eq!(metadata.context_limits, Some(vec![128000, 1000000]));
+        }
+        let invalid_default = declared_model_metadata(&serde_json::json!({
+            "parameters":{"context_length":{"default":777777,"enum":[128000,1000000]}}
+        }));
+        assert_eq!(invalid_default.context_limit, Some(128000));
+        assert_eq!(invalid_default.context_limits, Some(vec![128000, 1000000]));
     }
 
     #[test]

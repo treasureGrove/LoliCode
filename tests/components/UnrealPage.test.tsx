@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
-import { UnrealPage } from "@/components/unreal/UnrealPage";
+import { UnrealPage } from "@/features/unreal/UnrealPage";
 import { toast } from "@/lib/toast";
 import type { UnrealSnapshot } from "@/lib/api/unreal";
 import zh from "@/i18n/locales/zh.json";

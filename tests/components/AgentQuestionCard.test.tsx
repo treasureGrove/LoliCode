@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { AgentQuestionCard } from "@/components/agent/AgentQuestionCard";
+import { AgentQuestionCard } from "@/features/agent/AgentQuestionCard";
 import type { AgentQuestion } from "@/types/agent";
 import { settingsApi } from "@/lib/api";
 

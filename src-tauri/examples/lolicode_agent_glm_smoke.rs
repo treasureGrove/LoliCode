@@ -12,6 +12,9 @@ fn main() {
 #[cfg(feature = "test-hooks")]
 mod live {
     use anyhow::{anyhow, bail, ensure, Context, Result};
+    use lolicode_agent::{
+        AgentModelRef, AgentPart, AgentSnapshot, AgentStatus, Engine, EngineOptions,
+    };
     use lolicode_lib::{
         agent_test_support::{
             channel_center::{
@@ -20,9 +23,6 @@ mod live {
             AgentWorkspace, CodexOAuthManager, UsageCache,
         },
         AppState, Database, ProxyService,
-    };
-    use lolicode_agent::{
-        AgentModelRef, AgentPart, AgentSnapshot, AgentStatus, Engine, EngineOptions,
     };
     use serde_json::{json, Value};
     use std::{
@@ -416,6 +416,12 @@ mod live {
                         id: MODEL.into(),
                         name: Some(MODEL.into()),
                         context_limit: None,
+                        context_limits: None,
+                        selected_context_limit: None,
+                        max_request_bytes: None,
+                        reasoning_efforts: None,
+                        reasoning_effort_source: None,
+                        reasoning_effort_transport: None,
                         output_limit: Some(1024),
                         supports_tools: Some(true),
                         input_modalities: None,
@@ -440,6 +446,7 @@ mod live {
             standalone: false,
             path: project.to_string_lossy().into_owned(),
             name: "真实 GLM 临时项目测试记录".into(),
+            remote: None,
         };
         let mut evidence = json!({"provenance":{"model":MODEL,"testedAt":chrono::Utc::now().to_rfc3339(),"description":"真实 GLM 临时项目测试记录 · 界面回放"},"evidence":{"kind":"real_glm_temp_project","model":MODEL,"engineVersion":lolicode_agent::ENGINE_VERSION,
             "productionChannelGateway":true,"fixtureCleanedAfterRun":true,"turnTimeoutSeconds":70,"maxToolCalls":5},

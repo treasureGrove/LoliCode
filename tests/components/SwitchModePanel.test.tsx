@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import type { Provider } from "@/types";
 import type { ProxyAppId } from "@/config/appConfig";
 import type { AppMode } from "@/types/proxy";
-import { SwitchModePanel } from "@/components/providers/mode/SwitchModePanel";
+import { SwitchModePanel } from "@/features/providers/mode/SwitchModePanel";
 import { server } from "../msw/server";
 import { createTestQueryClient } from "../utils/testQueryClient";
 
@@ -21,7 +21,7 @@ vi.mock("sonner", () => ({
 }));
 
 // 只关心模式层：卡片画成按钮，按 presentation 的 key 找；「更多」菜单里的项加 menu- 前缀
-vi.mock("@/components/providers/ProviderCard", () => ({
+vi.mock("@/features/providers/ProviderCard", () => ({
   ProviderCard: ({ provider, presentation }: any) => (
     <div data-testid={`card-${provider.id}`}>
       {presentation.buttons.map((button: any) => (

@@ -28,7 +28,7 @@
 包只从官网专用 HTTPS 目录或既有 R2 公共域的 `/lolicode/renderer/` 目录下载，不跟随重定向，不修改 CSP 或 IPC 权限。其他 R2 域名、安装包目录、相似域名和查询参数不会被接受。原生下载器使用产品 User-Agent。默认检查地址仍为 `https://tools.treasuregrove.art/lolicode/renderer/latest.json`，未发布时 404 表示没有界面更新。
 
 1. 在原生版本对应的冻结源码上构建前端：`pnpm build:renderer`。
-2. 使用 `scripts/lolicode-renderer-pack.mjs prepare`，指定绝对路径的 `--source`（dist）、新的 `--output`、递增整数 `--version` 和官网目录内的 `--archive-url`。
+2. 使用 `scripts/build/lolicode-renderer-pack.mjs prepare`，指定绝对路径的 `--source`（dist）、新的 `--output`、递增整数 `--version` 和官网目录内的 `--archive-url`。
 3. 通过现有受控的 Tauri 签名流程签署 `manifest.json`。准备与发布脚本不读取私钥。
 4. 用 `finalize --directory <目录> --signature <签名文件> --public-key <公钥.pub>` 校验签名、公钥与实际 ZIP，生成 `latest.json`。发布目录和清单禁止覆盖。
 5. 先发布不可变 ZIP，再发布检查清单。测试实际桌面启动、应用和回退后，才能更新公开清单。

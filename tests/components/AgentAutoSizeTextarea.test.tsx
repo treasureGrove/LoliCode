@@ -1,6 +1,6 @@
 import { act, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useAgentAutoSizeTextarea } from "@/components/agent/useAgentAutoSizeTextarea";
+import { useAgentAutoSizeTextarea } from "@/features/agent/useAgentAutoSizeTextarea";
 
 let height = 22;
 let width = 300;

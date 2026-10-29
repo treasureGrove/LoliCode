@@ -1,7 +1,7 @@
 import * as React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { ChevronLeft, X } from "lucide-react";
-import { AppPageHeader } from "@/components/shell/AppPageHeader";
+import { AppPageHeader } from "@/app/shell/AppPageHeader";
 import { Button } from "@/components/ui/button";
 import { DRAG_REGION_ATTR } from "@/lib/platform";
 import { useUnsavedChangesTracker } from "@/lib/unsavedChanges";

@@ -11,6 +11,9 @@ use tokio::sync::{mpsc, watch};
 pub(super) const CANCELLED: &str = "任务已停止";
 pub(super) const CONTEXT_EXCEEDED: &str = "[context_length_exceeded] 模型网关明确报告上下文超限";
 const LIMIT: usize = 8 * 1024 * 1024;
+const MAX_RATE_RETRIES: usize = 3;
+const MAX_RATE_DELAY: Duration = Duration::from_secs(60);
+const MAX_RATE_WAIT: Duration = Duration::from_secs(120);
 #[derive(Clone)]
 pub(super) enum Delta {
     Text(String),
@@ -83,6 +86,7 @@ pub(super) async fn infer(
     session_id: &str,
     model: &str,
     reasoning_effort: Option<&str>,
+    max_tokens: u64,
     messages: Vec<Value>,
     tools: Vec<Value>,
     tx: mpsc::UnboundedSender<Delta>,
@@ -93,6 +97,7 @@ pub(super) async fn infer(
         gateway,
         model,
         reasoning_effort,
+        max_tokens,
         messages,
         tools,
         tx,
@@ -107,6 +112,7 @@ pub(super) async fn infer_with_policy(
     gateway: &NativeGateway,
     model: &str,
     reasoning_effort: Option<&str>,
+    max_tokens: u64,
     messages: Vec<Value>,
     tools: Vec<Value>,
     tx: mpsc::UnboundedSender<Delta>,
@@ -116,46 +122,108 @@ pub(super) async fn infer_with_policy(
 ) -> Result<Turn, String> {
     let endpoint = validate_gateway(gateway)?;
     if session_id.is_some_and(|session| {
-        !session.strip_prefix("lc:").and_then(|id| uuid::Uuid::parse_str(id).ok())
+        !session
+            .strip_prefix("lc:")
+            .and_then(|id| uuid::Uuid::parse_str(id).ok())
             .is_some_and(|id| session == format!("lc:{id}"))
     }) {
         return Err("模型请求的 LoliCode 会话标识无效".into());
     }
-    let mut body = json!({"model":model,"messages":messages,"tools":tools,"stream":true,"stream_options":{"include_usage":true}});
+    if max_tokens < 16 {
+        return Err("模型输出预算不足 16 tokens，未发送请求".into());
+    }
+    let mut body = json!({"model":model,"messages":messages,"tools":tools,"max_tokens":max_tokens,"stream":true,"stream_options":{"include_usage":true}});
     if let Some(effort) = reasoning_effort {
         body["reasoning_effort"] = json!(effort);
     }
-    let mut request = client
-        .post(endpoint)
-        .bearer_auth(&gateway.bearer_token)
-        .json(&body);
-    if let Some(session_id) = session_id {
-        request = request.header("x-lolicode-session-id", session_id);
-    }
-    let request = request.send();
-    let response = tokio::select! { _ = cancelled(&mut cancel) => return Err(CANCELLED.into()), result = tokio::time::timeout(policy.progress_timeout, request) => result.map_err(|_| "模型等待首个响应超时；尚未执行新的工具，可以重试或切换模型。")?.map_err(|_| "无法连接模型网关，请检查渠道后重试")? };
-    if !response.status().is_success() {
+    let mut rate_retries = 0;
+    let mut rate_wait = Duration::ZERO;
+    let mut output_alias_retried = false;
+    // Retry only an explicit pre-response refusal. The request and completed
+    // tool history stay identical; a stream is never replayed after it starts.
+    let response = loop {
+        let mut request = client
+            .post(endpoint.clone())
+            .bearer_auth(&gateway.bearer_token)
+            .json(&body);
+        if let Some(session_id) = session_id {
+            request = request.header("x-lolicode-session-id", session_id);
+        }
+        let response = tokio::select! {
+            biased;
+            _ = cancelled(&mut cancel) => return Err(CANCELLED.into()),
+            result = tokio::time::timeout(policy.progress_timeout, request.send()) =>
+                result.map_err(|_| "模型等待首个响应超时；尚未执行新的工具，可以重试或切换模型。")?
+                    .map_err(|_| "无法连接模型网关，请检查渠道后重试")?,
+        };
+        if response.status().is_success() {
+            break response;
+        }
         let status = response.status().as_u16();
-        if matches!(status, 400 | 413 | 422) {
-            let mut body = Vec::new();
-            let mut stream = response.bytes_stream();
-            let deadline =
-                tokio::time::Instant::now() + policy.progress_timeout.min(Duration::from_secs(5));
-            loop {
-                let chunk = tokio::select! {
-                    _ = cancelled(&mut cancel) => return Err(CANCELLED.into()),
-                    _ = tokio::time::sleep_until(deadline) => break,
-                    value = stream.next() => value,
-                };
-                let Some(Ok(chunk)) = chunk else { break };
-                if body.len() + chunk.len() > 8192 {
-                    break;
+        let retry_after = response
+            .headers()
+            .get(reqwest::header::RETRY_AFTER)
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.trim().parse::<u64>().ok())
+            .map(Duration::from_secs)
+            .filter(|delay| *delay <= MAX_RATE_DELAY);
+        if matches!(status, 400 | 413 | 422 | 429) {
+            let error = read_error(response, &mut cancel, policy.progress_timeout).await?;
+            if status == 429 {
+                let terminal = error.as_ref().is_some_and(terminal_quota_error);
+                if let Some(delay) = retry_after.filter(|delay| {
+                    !terminal
+                        && rate_retries < MAX_RATE_RETRIES
+                        && rate_wait + *delay <= MAX_RATE_WAIT
+                }) {
+                    rate_retries += 1;
+                    rate_wait += delay;
+                    // The engine's model phase remains Waiting until this infer
+                    // resolves, and stopping the task interrupts the wait.
+                    tokio::select! {
+                        biased;
+                        _ = cancelled(&mut cancel) => return Err(CANCELLED.into()),
+                        _ = tokio::time::sleep(delay) => {},
+                    }
+                    continue;
                 }
-                body.extend_from_slice(&chunk);
+                let reason = error
+                    .as_ref()
+                    .and_then(rate_error_reason)
+                    .unwrap_or(if terminal {
+                        "模型渠道额度不足"
+                    } else {
+                        "模型渠道请求过于频繁"
+                    });
+                let wait = if terminal {
+                    "已保留会话记录，请在额度恢复后继续。".into()
+                } else {
+                    retry_after
+                        .filter(|delay| !delay.is_zero())
+                        .map(|delay| format!("建议等待 {} 秒后再继续。", delay.as_secs()))
+                        .unwrap_or_else(|| "请稍后继续，或检查渠道额度。".into())
+                };
+                return Err(format!("{reason}（HTTP 429）。{wait}"));
             }
-            if let Ok(error) = serde_json::from_slice::<Value>(&body) {
+            if let Some(error) = error {
                 if context_error(&error) {
                     return Err(CONTEXT_EXCEEDED.into());
+                }
+                if status == 400
+                    && !output_alias_retried
+                    && !terminal_quota_error(&error)
+                    && error.pointer("/error/code").and_then(Value::as_str)
+                        == Some("unsupported_parameter")
+                    && error.pointer("/error/param").and_then(Value::as_str) == Some("max_tokens")
+                    && body["max_tokens"].as_u64() == Some(max_tokens)
+                    && body.get("max_completion_tokens").is_none()
+                {
+                    body.as_object_mut()
+                        .expect("constructed request")
+                        .remove("max_tokens");
+                    body["max_completion_tokens"] = json!(max_tokens);
+                    output_alias_retried = true;
+                    continue;
                 }
                 if image_input_error(&error) {
                     return Err("当前渠道或模型不支持图片输入，请切换支持视觉的模型或渠道。".into());
@@ -166,7 +234,7 @@ pub(super) async fn infer_with_policy(
             "模型请求失败（HTTP {}），请检查渠道与模型。",
             status
         ));
-    }
+    };
     let json_response = response
         .headers()
         .get(reqwest::header::CONTENT_TYPE)
@@ -347,6 +415,11 @@ fn consume(
         if context_error(value) {
             return Err(CONTEXT_EXCEEDED.into());
         }
+        if let Some(reason) = rate_error_reason(value) {
+            return Err(format!(
+                "{reason}；已收到的内容和已完成工具保留，请稍后继续。"
+            ));
+        }
         return Err("模型网关返回错误，请检查渠道后重试".into());
     }
     consume_usage(value, tx, result);
@@ -513,6 +586,68 @@ pub(super) fn parse_usage(usage: &Value) -> AgentTokenUsage {
     }
 }
 
+async fn read_error(
+    response: reqwest::Response,
+    cancel: &mut watch::Receiver<bool>,
+    timeout: Duration,
+) -> Result<Option<Value>, String> {
+    let mut body = Vec::new();
+    let mut stream = response.bytes_stream();
+    let deadline = tokio::time::Instant::now() + timeout.min(Duration::from_secs(5));
+    loop {
+        let chunk = tokio::select! {
+            biased;
+            _ = cancelled(cancel) => return Err(CANCELLED.into()),
+            _ = tokio::time::sleep_until(deadline) => break,
+            value = stream.next() => value,
+        };
+        let Some(Ok(chunk)) = chunk else { break };
+        if body.len() + chunk.len() > 8192 {
+            break;
+        }
+        body.extend_from_slice(&chunk);
+    }
+    Ok(serde_json::from_slice::<Value>(&body).ok())
+}
+
+fn error_codes(value: &Value) -> impl Iterator<Item = &str> {
+    ["/error/code", "/error/type", "/code"]
+        .into_iter()
+        .filter_map(|pointer| value.pointer(pointer).and_then(Value::as_str))
+}
+
+fn terminal_quota_error(value: &Value) -> bool {
+    error_codes(value).any(|code| {
+        [
+            "daily",
+            "quota",
+            "credit",
+            "balance",
+            "billing",
+            "insufficient",
+        ]
+        .iter()
+        .any(|marker| code.to_ascii_lowercase().contains(marker))
+    })
+}
+
+fn rate_error_reason(value: &Value) -> Option<&'static str> {
+    error_codes(value).find_map(|code| match code {
+        "service_rate_limited" => Some("公益模型全站请求频率受限"),
+        "account_busy" => Some("当前账号已有模型请求处理中"),
+        "service_busy" => Some("公益模型服务繁忙"),
+        "daily_requests_exhausted" => Some("今日公益请求次数已用完，零点后恢复"),
+        "daily_tokens_exhausted" => Some("今日公益 token 额度已用完，零点后恢复"),
+        "service_daily_requests_exhausted" => Some("今日公益请求总额度已用完，零点后恢复"),
+        "service_daily_tokens_exhausted" => Some("今日公益 token 总额度已用完，零点后恢复"),
+        "rate_limit_exceeded" | "rate_limit_error" | "rate_limited" | "too_many_requests" => {
+            Some("模型渠道请求频率受限")
+        }
+        "insufficient_quota" | "quota_exceeded" => Some("模型渠道额度不足"),
+        _ => None,
+    })
+}
+
 fn context_error(value: &Value) -> bool {
     ["/error/code", "/error/type", "/code"]
         .iter()
@@ -521,6 +656,7 @@ fn context_error(value: &Value) -> bool {
             matches!(
                 code,
                 "context_length_exceeded"
+                    | "context_too_long"
                     | "max_context_length_exceeded"
                     | "prompt_too_long"
                     | "input_too_long"

@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import DailyMemoryPanel from "@/components/workspace/DailyMemoryPanel";
+import DailyMemoryPanel from "@/features/workspace/DailyMemoryPanel";
 import { workspaceApi } from "@/lib/api/workspace";
 
 vi.mock("@/lib/api/workspace", () => ({

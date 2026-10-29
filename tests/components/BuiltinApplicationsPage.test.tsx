@@ -3,14 +3,14 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
-import { BuiltinApplicationsPage } from "@/components/apps/BuiltinApplicationsPage";
+import { BuiltinApplicationsPage } from "@/features/apps/BuiltinApplicationsPage";
 import { builtinAppsKey } from "@/lib/api/builtin-apps";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
-vi.mock("@/components/shell/AppPageHeader", () => ({
+vi.mock("@/app/shell/AppPageHeader", () => ({
   AppPageHeader: ({ title }: { title: string }) => <h1>{title}</h1>,
 }));
 vi.mock("@/lib/toast", () => ({ toast: { error: vi.fn() } }));

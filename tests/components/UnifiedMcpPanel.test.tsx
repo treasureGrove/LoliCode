@@ -7,7 +7,7 @@ import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import UnifiedMcpPanel from "@/components/mcp/UnifiedMcpPanel";
+import UnifiedMcpPanel from "@/features/mcp/UnifiedMcpPanel";
 import type { McpApps, McpServer, McpServerSpec } from "@/types";
 
 const mocks = vi.hoisted(() => ({
@@ -54,12 +54,12 @@ vi.mock("@/hooks/useMcp", () => ({
   }),
 }));
 
-vi.mock("@/components/mcp/useVisibleAppIds", () => ({
+vi.mock("@/features/mcp/useVisibleAppIds", () => ({
   useVisibleAppIds: (ids: string[]) =>
     ids.filter((id) => mocks.visibleApps.includes(id)),
 }));
 
-vi.mock("@/components/mcp/McpFormModal", () => ({
+vi.mock("@/features/mcp/McpFormModal", () => ({
   default: ({ editingId }: { editingId?: string }) => (
     <div data-testid="mcp-drawer">{editingId ?? "add"}</div>
   ),

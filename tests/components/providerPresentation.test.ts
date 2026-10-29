@@ -8,7 +8,7 @@ import {
   buildSwitchSections,
   type ProviderSection,
   type SwitchModeInput,
-} from "@/components/providers/presentation";
+} from "@/features/providers/presentation";
 
 const t = ((key: string, options?: Record<string, unknown>) =>
   options && "count" in options

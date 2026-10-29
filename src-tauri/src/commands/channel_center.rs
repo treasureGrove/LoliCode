@@ -141,7 +141,7 @@ pub async fn open_native_subscription_login(tool: String) -> Result<(), String> 
         if crate::commands::local_tool_version(&tool).is_none() {
             return Err("本机没有检测到官方工具，请先在应用管理页安装后重试".into());
         }
-        super::misc::launch_terminal_running(command, label)
+        super::tool_management::launch_terminal_running(command, label)
     })
     .await
     .map_err(|_| "官方工具无法启动，请重试".to_string())?

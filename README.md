@@ -8,6 +8,8 @@ LoliCode brings a desktop coding Agent, shared model channels, and an anime-insp
 
 [Download](https://lolicode.com/) · [Community and account](https://lolicode.com/all) · [Source](https://github.com/treasureGrove/LoliCode) · [Documentation](docs/README.md) · [Release notes](CHANGELOG.md)
 
+For source maintenance, start with the [architecture guide](ARCHITECTURE.md) and open [LoliCode.code-workspace](LoliCode.code-workspace) for a focused source view.
+
 ## What you can use today
 
 - **One main Agent workspace:** streaming conversations, project files, terminal tools, permissions, questions, cancellation, session history, and file-change review.

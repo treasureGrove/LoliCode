@@ -5,6 +5,10 @@ import en from "./locales/en.json";
 import ja from "./locales/ja.json";
 import zh from "./locales/zh.json";
 import zhTW from "./locales/zh-TW.json";
+import rankingsEn from "./locales/rankings/en.json";
+import rankingsJa from "./locales/rankings/ja.json";
+import rankingsZh from "./locales/rankings/zh.json";
+import rankingsZhTW from "./locales/rankings/zh-TW.json";
 
 type Language = "zh" | "zh-TW" | "en" | "ja";
 
@@ -62,20 +66,26 @@ const getInitialLanguage = (): Language => {
 const resources = {
   en: {
     translation: en,
+    rankings: rankingsEn,
   },
   ja: {
     translation: ja,
+    rankings: rankingsJa,
   },
   zh: {
     translation: zh,
+    rankings: rankingsZh,
   },
   "zh-TW": {
     translation: zhTW,
+    rankings: rankingsZhTW,
   },
 };
 
 i18n.use(initReactI18next).init({
   resources,
+  ns: ["translation", "rankings"],
+  defaultNS: "translation",
   lng: getInitialLanguage(), // 根据本地存储或系统语言选择默认语言
   fallbackLng: "en", // 如果缺少中文翻译则退回英文
 

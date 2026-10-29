@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { CommonConfigEditor } from "@/components/providers/forms/CommonConfigEditor";
+import { CommonConfigEditor } from "@/features/providers/forms/CommonConfigEditor";
 import type { ProviderEditorInactiveField } from "@/lib/api/providers";
 
 vi.mock("@/components/JsonEditor", () => ({

@@ -2,7 +2,7 @@ import { useQueries } from "@tanstack/react-query";
 import * as authApi from "@/lib/api/auth";
 import type { ManagedAuthProvider } from "@/lib/api/auth";
 import { useUsageSummary } from "@/lib/query/usage";
-import { parseFiniteNumber } from "@/components/usage/format";
+import { parseFiniteNumber } from "@/features/usage/format";
 import type { UsageRangeSelection } from "@/types/usage";
 
 const TODAY: UsageRangeSelection = { preset: "today" };

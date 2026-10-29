@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { http, HttpResponse } from "msw";
 import { toast } from "sonner";
-import { CodexStaleClientsNotice } from "@/components/providers/CodexStaleClientsNotice";
+import { CodexStaleClientsNotice } from "@/features/providers/CodexStaleClientsNotice";
 import type { CodexStaleClients } from "@/types/proxy";
 import { server } from "../msw/server";
 

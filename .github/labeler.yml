@@ -49,7 +49,7 @@ documentation:
 mcp:
   - changed-files:
       - any-glob-to-any-file:
-          - "src/components/mcp/**"
+          - "src/features/mcp/**"
           - "src/lib/api/mcp.ts"
           - "src-tauri/src/mcp/**"
           - "src-tauri/src/claude_mcp.rs"
@@ -59,7 +59,7 @@ mcp:
 skills:
   - changed-files:
       - any-glob-to-any-file:
-          - "src/components/skills/**"
+          - "src/features/skills/**"
           - "src/lib/api/skills.ts"
           - "src-tauri/src/commands/skill.rs"
           - "src-tauri/src/services/skill.rs"
@@ -68,7 +68,7 @@ skills:
 proxy:
   - changed-files:
       - any-glob-to-any-file:
-          - "src/components/proxy/**"
+          - "src/features/proxy/**"
           - "src/lib/api/proxy.ts"
           - "src-tauri/src/proxy/**"
           - "src-tauri/src/commands/proxy.rs"

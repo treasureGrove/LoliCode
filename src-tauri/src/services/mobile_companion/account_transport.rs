@@ -1,67 +1,9 @@
 //! Native direct preferred, with separately encrypted and bounded text fallback.
+use super::authorization::fence_authorized_work;
 use super::direct::DirectChannel;
 use super::text::TextChannel;
 use super::*;
 use std::collections::VecDeque;
-
-/// Only the TLS signaling socket can confirm an account ticket renewal. Peer
-/// task payloads never update this state or the authority deadline.
-pub(super) struct AuthRefresh {
-    supported: bool,
-    pending: Option<(String, u64, tokio::time::Instant)>,
-    renewed: Option<u64>,
-}
-impl AuthRefresh {
-    pub(super) fn new(supported: bool) -> Self {
-        Self {
-            supported,
-            pending: None,
-            renewed: None,
-        }
-    }
-    pub(super) fn request(&mut self, ticket: &str, expires: u64) -> Result<Option<Value>, String> {
-        if !self.supported {
-            return Ok(None);
-        }
-        if let Some((_, _, started)) = &self.pending {
-            if started.elapsed() > Duration::from_secs(30) {
-                return Err("账号票据续期未获确认，连接已停止".into());
-            }
-            return Ok(None);
-        }
-        if ticket.is_empty() || ticket.len() > 4096 || expires <= now() {
-            return Err("账号续期票据无效".into());
-        }
-        let request = uuid::Uuid::new_v4().to_string();
-        self.pending = Some((request.clone(), expires, tokio::time::Instant::now()));
-        Ok(Some(
-            json!({"type":"auth.refresh","v":1,"requestId":request,"deviceToken":ticket}),
-        ))
-    }
-    pub(super) fn accept(&mut self, value: &Value) -> Result<(), String> {
-        let object = value.as_object().ok_or("账号续期确认格式无效")?;
-        let (request, expires, started) = self.pending.as_ref().ok_or("意外的账号续期确认")?;
-        if object.len() != 4
-            || object
-                .keys()
-                .any(|key| !["type", "v", "requestId", "expiresAt"].contains(&key.as_str()))
-            || value["type"] != "auth.renewed"
-            || value["v"] != 1
-            || value["requestId"] != *request
-            || value["expiresAt"] != *expires
-            || *expires <= now()
-            || started.elapsed() > Duration::from_secs(30)
-        {
-            return Err("账号续期确认不匹配，连接已停止".into());
-        }
-        self.renewed = Some(*expires);
-        self.pending = None;
-        Ok(())
-    }
-    pub(super) fn take_renewed(&mut self) -> Option<u64> {
-        self.renewed.take()
-    }
-}
 
 /// Bounded plaintext fragments, encrypted only immediately before their write.
 /// Large replies never hold the receive loop while waiting for rate allowance.
@@ -139,44 +81,6 @@ fn urgent_request(value: &Value) -> bool {
         || value["method"] == "permission.reply" && value["params"]["decision"] == "reject"
 }
 
-#[cfg(test)]
-pub(super) async fn fence_text_work<F>(
-    work: F,
-    teardown: tokio::sync::watch::Receiver<u64>,
-    expires: u64,
-    controls: &mut mpsc::Receiver<Control>,
-) -> Result<(), String>
-where
-    F: std::future::Future<Output = Result<(), String>>,
-{
-    let (_deadline_tx, deadline_rx) = tokio::sync::watch::channel(expires);
-    fence_authorized_work(work, teardown, deadline_rx, controls).await
-}
-async fn fence_authorized_work<F>(
-    work: F,
-    mut teardown: tokio::sync::watch::Receiver<u64>,
-    mut authorization: tokio::sync::watch::Receiver<u64>,
-    controls: &mut mpsc::Receiver<Control>,
-) -> Result<(), String>
-where
-    F: std::future::Future<Output = Result<(), String>>,
-{
-    let mut work = Box::pin(work);
-    loop {
-        let expires = *authorization.borrow();
-        tokio::select! {
-            biased;
-            _ = teardown.changed() => return Ok(()),
-            changed = authorization.changed() => { if changed.is_err() { return Err("账号认证已关闭".into()); } continue; },
-            _ = tokio::time::sleep(Duration::from_millis(expires.saturating_sub(now()))) => return Err("账号设备认证已到期，连接已关闭".into()),
-            control = controls.recv() => match control {
-                Some(Control::Approved) => continue,
-                Some(Control::Stop | Control::Revoke) | None => return Ok(()),
-            },
-            result = &mut work => return result,
-        }
-    }
-}
 async fn connect_direct(
     room: &Room,
     id: &str,
@@ -482,35 +386,6 @@ mod tests {
         outbox.enqueue(json!({"type":"event","eventId":"pending-completion","kind":"task_completed","sentAt":now()}), false, true).unwrap();
         assert_eq!(outbox.pop().unwrap()["type"], "pair.approved");
         assert_eq!(outbox.pop().unwrap()["type"], "event");
-    }
-    #[test]
-    fn renewal_accepts_only_matching_tls_ack_and_never_unsolicited_deadline() {
-        let expiry = now() + 60_000;
-        let mut auth = AuthRefresh::new(true);
-        assert!(auth
-            .accept(
-                &json!({"type":"auth.renewed","v":1,"requestId":"unsolicited","expiresAt":expiry})
-            )
-            .is_err());
-        let request = auth
-            .request("test-ticket-not-a-credential", expiry)
-            .unwrap()
-            .unwrap();
-        assert!(auth
-            .request("test-ticket-not-a-credential", expiry)
-            .unwrap()
-            .is_none());
-        let mut ack = json!({"type":"auth.renewed","v":1,"requestId":request["requestId"],"expiresAt":expiry+1});
-        assert!(auth.accept(&ack).is_err());
-        assert!(auth.take_renewed().is_none());
-        ack["expiresAt"] = json!(expiry);
-        auth.accept(&ack).unwrap();
-        assert_eq!(auth.take_renewed(), Some(expiry));
-        assert!(auth.accept(&ack).is_err());
-        assert!(AuthRefresh::new(false)
-            .request("test-ticket-not-a-credential", expiry)
-            .unwrap()
-            .is_none());
     }
     #[tokio::test]
     async fn confirmed_renewal_extends_fence_without_resetting_work_or_revocation() {

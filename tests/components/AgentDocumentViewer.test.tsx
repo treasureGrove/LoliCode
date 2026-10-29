@@ -10,8 +10,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   AgentDocumentViewer,
   splitDocumentPath,
-} from "@/components/agent/AgentDocumentViewer";
-import { AgentPreviewPanel } from "@/components/agent/AgentPreviewPanel";
+} from "@/features/agent/AgentDocumentViewer";
+import { AgentPreviewPanel } from "@/features/agent/AgentPreviewPanel";
 import {
   agentDocumentsApi,
   isOfficeDocumentPath,

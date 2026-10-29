@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
-import { SkillsPage } from "@/components/skills/SkillsPage";
+import { SkillsPage } from "@/features/skills/SkillsPage";
 import type {
   DiscoverableSkill,
   InstalledSkill,

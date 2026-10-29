@@ -4,8 +4,8 @@ import { useCodexOauthQuotaByAccountId } from "@/lib/query/subscription";
 import {
   AccountQuotaColumn,
   subscriptionQuotaState,
-} from "@/components/settings/auth/AccountQuota";
-import { useQuotaDisplay } from "@/components/quota/useQuotaDisplay";
+} from "@/features/settings/auth/AccountQuota";
+import { useQuotaDisplay } from "@/features/quota/useQuotaDisplay";
 
 interface CodexOauthAccountQuotaProps {
   /** cc-switch 自管的 ChatGPT 账号 ID */

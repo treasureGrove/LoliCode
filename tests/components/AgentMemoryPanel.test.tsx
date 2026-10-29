@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { AgentMemoryPanel } from "@/components/agent/AgentMemoryPanel";
+import { AgentMemoryPanel } from "@/features/agent/AgentMemoryPanel";
+import { AgentToolDraftsContext } from "@/features/agent/AgentToolDrafts";
 import {
   agentMemoryApi,
   type AgentMemorySnapshot,
@@ -50,6 +51,90 @@ beforeEach(() => {
 });
 
 describe("AgentMemoryPanel", () => {
+  it("restores an unfinished edit after switching to another tool and back", async () => {
+    const drafts = new Map<string, unknown>();
+    const view = render(
+      <AgentToolDraftsContext.Provider value={drafts}>
+        <AgentMemoryPanel embedded projectPath="D:/project" />
+      </AgentToolDraftsContext.Provider>,
+    );
+    await screen.findByText("默认用中文回答");
+    fireEvent.click(screen.getByRole("button", { name: "编辑记忆" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "编辑记忆内容" }), {
+      target: { value: "默认用中文，并保留未保存的修改" },
+    });
+    view.rerender(
+      <AgentToolDraftsContext.Provider value={drafts}>
+        <div>另一个工具面板</div>
+      </AgentToolDraftsContext.Provider>,
+    );
+    view.rerender(
+      <AgentToolDraftsContext.Provider value={drafts}>
+        <AgentMemoryPanel embedded projectPath="D:/project" />
+      </AgentToolDraftsContext.Provider>,
+    );
+    await screen.findByText("默认用中文回答");
+    expect(screen.getByRole("textbox", { name: "编辑记忆内容" })).toHaveValue(
+      "默认用中文，并保留未保存的修改",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "保存修改" }));
+    await waitFor(() =>
+      expect(agentMemoryApi.edit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scope: "user",
+          action: "patch",
+          old_text: "默认用中文回答",
+          content: "默认用中文，并保留未保存的修改",
+        }),
+        "D:/project",
+      ),
+    );
+  });
+
+  it("omits the duplicate title when embedded and keeps refresh available", async () => {
+    render(<AgentMemoryPanel embedded projectPath="D:/project" />);
+    await screen.findByText("默认用中文回答");
+    expect(
+      screen.queryByRole("heading", { name: "Agent 记忆" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "刷新记忆" })).toBeEnabled();
+    expect(screen.getByRole("meter", { name: "记忆容量" })).toHaveAttribute(
+      "aria-valuetext",
+      "8 / 1375 字符",
+    );
+  });
+
+  it("offers a retry when the initial memory read fails", async () => {
+    vi.mocked(agentMemoryApi.get)
+      .mockRejectedValueOnce("暂时无法读取")
+      .mockResolvedValue(snapshot());
+    render(<AgentMemoryPanel />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("暂时无法读取");
+    fireEvent.click(screen.getByRole("button", { name: "重新读取记忆" }));
+    expect(await screen.findByText("默认用中文回答")).toBeVisible();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("returns to user preferences when moving from a project to no project", async () => {
+    const view = render(<AgentMemoryPanel projectPath="D:/project" />);
+    await screen.findByText("默认用中文回答");
+    fireEvent.click(screen.getByRole("tab", { name: "当前项目" }));
+    expect(screen.getByRole("tab", { name: "当前项目" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    vi.mocked(agentMemoryApi.get).mockResolvedValue(
+      snapshot({ projectPath: null }),
+    );
+    view.rerender(<AgentMemoryPanel />);
+    await screen.findByText("默认用中文回答");
+    expect(screen.getByRole("tab", { name: "用户偏好" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.getByRole("tab", { name: "当前项目" })).toBeDisabled();
+  });
+
   it("identifies editable character presets without reinitializing them from the UI", async () => {
     const preset = {
       id: "preset",

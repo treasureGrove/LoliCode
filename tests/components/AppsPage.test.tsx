@@ -39,7 +39,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/api", () => ({ settingsApi: mocks }));
-vi.mock("@/components/apps/LocalAgentTools", () => ({
+vi.mock("@/features/apps/LocalAgentTools", () => ({
   LocalAgentTools: () => <div>国产 Agent 管理</div>,
 }));
 vi.mock("@/lib/api/providers", () => ({
@@ -132,7 +132,7 @@ function mountApps(AppsPage: () => JSX.Element) {
 
 async function renderApps() {
   // 安装 / 升级的状态放在模块级 store 里，跨挂载保留。
-  const { AppsPage } = await import("@/components/apps/AppsPage");
+  const { AppsPage } = await import("@/features/apps/AppsPage");
   const view = mountApps(AppsPage);
   await waitFor(() =>
     expect(
@@ -215,7 +215,7 @@ describe("AppsPage concurrent CLI upgrades", () => {
   });
 
   it("embeds local tool management without a second application header or sidebar switches", async () => {
-    const { AppsPage } = await import("@/components/apps/AppsPage");
+    const { AppsPage } = await import("@/features/apps/AppsPage");
     const view = mountApps(() => <AppsPage embedded simpleMode />);
     await waitFor(() =>
       expect(
@@ -454,7 +454,7 @@ describe("AppsPage concurrent CLI upgrades", () => {
         tools.includes("opencode") ? pending.promise : getVersions(tools),
       );
       const user = userEvent.setup();
-      const { AppsPage } = await import("@/components/apps/AppsPage");
+      const { AppsPage } = await import("@/features/apps/AppsPage");
       mountApps(AppsPage);
       await user.click(
         screen.getByRole("button", { name: "appsPage.moreActions" }),
@@ -1073,7 +1073,7 @@ describe("AppsPage concurrent CLI upgrades", () => {
       }
       return getVersions(tools);
     });
-    const { AppsPage } = await import("@/components/apps/AppsPage");
+    const { AppsPage } = await import("@/features/apps/AppsPage");
     const view = mountApps(AppsPage);
     await waitFor(() => expect(mocks.getToolVersions).toHaveBeenCalledTimes(9));
     view.unmount();

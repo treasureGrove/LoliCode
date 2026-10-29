@@ -192,7 +192,7 @@ const JsonEditor: React.FC<JsonEditorProps> = ({
       ".cm-content": {
         fontFamily:
           "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
-        fontSize: "14px",
+        fontSize: "calc(14px * var(--interface-font-scale, 1))",
       },
     });
 

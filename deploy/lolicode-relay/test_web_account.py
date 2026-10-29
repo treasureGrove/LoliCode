@@ -1,13 +1,17 @@
 """Browser authentication regressions; only local mocked forum requests."""
 import hashlib
+from contextlib import contextmanager
+from datetime import date, datetime, timedelta
+import json
 from pathlib import Path
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
-from bridge import create_app
+from bridge import calendar, create_app
 from test_bridge import POLICY, profile
 from web_account import COOKIE, ORIGIN, TTL
 
@@ -18,6 +22,7 @@ class BrowserAccount(unittest.IsolatedAsyncioTestCase):
         self.current = profile()
         self.token_valid = True
         self.login_calls = 0
+        self.forum_calls = 0
         self.forum_response = None
         self.material_calls = 0
 
@@ -31,8 +36,13 @@ class BrowserAccount(unittest.IsolatedAsyncioTestCase):
                                      {'userId': 42, 'token': 'a' * 40})
 
         async def forum(request):
+            self.forum_calls += 1
             if self.token_valid and request.headers.get('Authorization') == 'Token ' + 'a' * 40:
                 return web.json_response(self.current)
+            if request.match_info['id'] == '7' and request.headers.get('Authorization') == 'Token ' + 'b' * 40:
+                other = profile(username='other', displayName='Other', email='other-private@example.invalid')
+                other['data']['id'] = '7'
+                return web.json_response(other)
             return web.json_response({'data': {'id': '42', 'type': 'users', 'attributes': {'username': 'public'}}})
 
         remote = web.Application()
@@ -160,6 +170,105 @@ class BrowserAccount(unittest.IsolatedAsyncioTestCase):
         with self.client.server.app['ledger'].connect() as db:
             db.execute("UPDATE accounts SET disabled=1 WHERE forum_id='42'")
         response = await self.client.get('/web/account', headers=cookie)
+        self.assertEqual(response.status, 403)
+
+    async def test_usage_is_private_complete_and_separates_reserved_from_charged(self):
+        _, cookie = await self.login()
+        app = self.client.server.app
+        ledger = app['ledger']
+        today = date.fromisoformat(calendar()[0])
+        stamp = datetime.fromisoformat(today.isoformat() + 'T12:00:00+08:00').timestamp()
+        with ledger.connect() as db:
+            for index in range(25):
+                db.execute('''INSERT INTO requests
+                    (id,forum_id,day,reserved,charged,state,model,created_at) VALUES(?,?,?,?,?,?,?,?)''',
+                    (f'own-{index:02}', '42', today.isoformat(), 100, index + 1,
+                     'charged', 'mock-model', stamp + index))
+            rows = [
+                ('own-uncertain', '42', today.isoformat(), 50, 50, 'uncertain', 'mock-model', stamp + 26),
+                ('own-pending', '42', today.isoformat(), 80, 0, 'pending', 'mock-model', stamp + 27),
+                ('own-released', '42', today.isoformat(), 500, 0, 'released', 'mock-model', stamp + 28),
+                ('own-six-days', '42', (today - timedelta(days=6)).isoformat(), 90, 9,
+                 'charged', 'mock-model', stamp - 6 * 86400),
+                ('own-old', '42', (today - timedelta(days=7)).isoformat(), 500, 400,
+                 'charged', 'mock-model', stamp - 7 * 86400),
+                ('other-private-id', '7', today.isoformat(), 9999, 9999,
+                 'charged', 'other-private-model', stamp + 30),
+            ]
+            db.executemany('''INSERT INTO requests
+                (id,forum_id,day,reserved,charged,state,model,created_at) VALUES(?,?,?,?,?,?,?,?)''', rows)
+            before = [tuple(row) for row in db.execute('SELECT * FROM requests ORDER BY id')]
+        response = await self.client.get('/web/usage?forum_id=7', headers=cookie)
+        self.assertEqual(response.status, 200, await response.text())
+        value = await response.json()
+        self.assertEqual(value['plan'], {'id': 'public-free', 'name': '公益免费',
+                                       'currency': 'CNY', 'billedAmount': 0})
+        self.assertEqual(value['today'], {'requests': 27, 'tokens': 375, 'reservedTokens': 80})
+        self.assertEqual(len(value['daily']), 7)
+        self.assertEqual(value['daily'][0], {'day': (today - timedelta(days=6)).isoformat(),
+                                          'requests': 1, 'tokens': 9, 'reservedTokens': 0})
+        self.assertEqual(value['daily'][-1]['tokens'], value['today']['tokens'])
+        self.assertTrue(all(day['requests'] == 0 for day in value['daily'][1:-1]))
+        summary = ledger.summary('42', app['policy'])
+        self.assertEqual(value['today']['requests'], summary['requestsUsed'])
+        self.assertEqual(value['today']['tokens'], summary['tokensUsed'])
+        self.assertEqual(value['today']['reservedTokens'], summary['tokensReserved'])
+        self.assertEqual(len(value['records']), 20)
+        self.assertEqual(value['records'][0]['id'], 'own-released')
+        pending = next(row for row in value['records'] if row['state'] == 'pending')
+        self.assertEqual((pending['tokens'], pending['reservedTokens']), (0, 80))
+        uncertain = next(row for row in value['records'] if row['state'] == 'uncertain')
+        self.assertEqual((uncertain['tokens'], uncertain['reservedTokens']), (50, 0))
+        for record in value['records']:
+            self.assertEqual(set(record), {'id', 'model', 'createdAt', 'state', 'tokens', 'reservedTokens'})
+        text = json.dumps(value)
+        for secret in ('other-private', 'a' * 40, 'b' * 40, 'fixture-password',
+                       'never-return-this-key', 'private@example.invalid', 'gateway_key', 'prompt'):
+            self.assertNotIn(secret, text)
+        self.assertEqual(response.headers['Cache-Control'], 'no-store')
+        session = app['web_sessions'].create('7', 'b' * 40)
+        other = await (await self.client.get('/web/usage',
+            headers={'Cookie': COOKIE + '=' + session})).json()
+        self.assertEqual(other['today']['tokens'], 9999)
+        self.assertEqual([row['id'] for row in other['records']], ['other-private-id'])
+        self.assertNotIn('own-', json.dumps(other))
+        with ledger.connect() as db:
+            self.assertEqual([tuple(row) for row in db.execute('SELECT * FROM requests ORDER BY id')], before)
+
+    async def test_usage_invalid_or_expired_cookie_never_reads_request_history(self):
+        ledger = self.client.server.app['ledger']
+        session = self.client.server.app['web_sessions'].create('42', 'a' * 40)
+        with ledger.connect() as db:
+            db.execute('UPDATE web_sessions SET expires_at=?', (time.time() - 1,))
+        queries = []
+        original = ledger.connect
+
+        @contextmanager
+        def trace():
+            with original() as db:
+                db.set_trace_callback(queries.append)
+                yield db
+
+        initial_forum_calls = self.forum_calls
+        with patch.object(ledger, 'connect', trace):
+            for headers in ({}, {'Cookie': COOKIE + '=invalid'},
+                            {'Cookie': COOKIE + '=' + session},
+                            {'Cookie': COOKIE + '=' + session, 'Origin': 'https://evil.invalid'}):
+                response = await self.client.get('/web/usage', headers=headers)
+                self.assertIn(response.status, (401, 403))
+        self.assertEqual(self.forum_calls, initial_forum_calls)
+        self.assertFalse(any('FROM requests' in query for query in queries))
+
+    async def test_usage_revalidates_revoked_and_disabled_accounts(self):
+        _, cookie = await self.login()
+        self.token_valid = False
+        response = await self.client.get('/web/usage', headers=cookie)
+        self.assertEqual(response.status, 401)
+        self.token_valid = True
+        _, cookie = await self.login()
+        with self.client.server.app['ledger'].connect() as db:
+            db.execute("UPDATE accounts SET disabled=1 WHERE forum_id='42'")
+        response = await self.client.get('/web/usage', headers=cookie)
         self.assertEqual(response.status, 403)
 
 

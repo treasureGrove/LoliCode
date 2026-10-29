@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Authentication, accounting and streaming regression tests; all upstreams local."""
 from concurrent.futures import ThreadPoolExecutor
+from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
@@ -100,6 +101,36 @@ class Accounting(unittest.TestCase):
             with self.assertRaises(Rejected):
                 prepare_payload({**base, **extra}, POLICY)
 
+    def test_context_estimate_matches_native_without_reducing_quota_reservation(self):
+        value = {'model': 'mock-model', 'messages': [{'role': 'user', 'content': 'x' * 50000}]}
+        _, bound, _ = prepare_payload(value, POLICY)
+        self.assertGreater(bound, 50000)
+        value['messages'][0]['content'] = 'x' * 60000
+        with self.assertRaises(Rejected) as raised:
+            prepare_payload(value, POLICY)
+        self.assertEqual(raised.exception.code, 'context_too_long')
+
+    def test_adaptive_output_uses_model_default_and_remaining_context(self):
+        policy = deepcopy(POLICY)
+        policy['max_output_tokens'] = 128000
+        policy['models'][0].update(contextLimit=1000000, outputLimit=128000)
+        value = {'model': 'mock-model', 'messages': [{'role': 'user', 'content': 'hello'}]}
+        self.assertEqual(prepare_payload(value, policy)[2], 128000)
+        self.assertEqual(prepare_payload({**value, 'max_tokens': 2048}, policy)[2], 2048)
+        self.assertEqual(prepare_payload({**value, 'max_completion_tokens': 1024}, policy)[2], 1024)
+        del policy['models'][0]['outputLimit']
+        self.assertEqual(prepare_payload(value, policy)[2], 32000)
+        policy['models'][0].update(contextLimit=16000, outputLimit=128000)
+        _, bound, output = prepare_payload(value, policy)
+        self.assertEqual(output, 16000 - (bound + 1) // 2 - 1000)
+        self.assertGreater(output, 4096)
+        policy['max_output_tokens'] = 1024
+        self.assertEqual(prepare_payload(value, policy)[2], 1024)
+        policy['models'][0]['contextLimit'] = 2000
+        with self.assertRaises(Rejected) as raised:
+            prepare_payload(value, policy)
+        self.assertEqual(raised.exception.code, 'context_too_long')
+
     def test_global_request_pool_is_atomic_across_different_accounts(self):
         policy = {**POLICY, 'global_daily_requests': 3, 'global_daily_tokens': 1000000,
                   'max_concurrent_global': 100}
@@ -169,7 +200,7 @@ class HttpBridge(unittest.IsolatedAsyncioTestCase):
         self.calls = 0
         self.current = profile()
         self.captured = None
-        self.policy = dict(POLICY)
+        self.policy = deepcopy(POLICY)
         async def forum(request):
             if request.headers.get('Authorization') != 'Token ' + 'a' * 40:
                 return web.json_response({'data': {'type': 'users', 'id': '42', 'attributes': {'username': 'public'}}})
@@ -190,7 +221,7 @@ class HttpBridge(unittest.IsolatedAsyncioTestCase):
             return web.json_response({'choices': [{'message': {'role': 'assistant', 'content': 'OK'}}],
                                       'usage': {'prompt_tokens': 100, 'completion_tokens': 20, 'total_tokens': 120,
                                                 'prompt_tokens_details': {'cached_tokens': 60}}})
-        remote = web.Application()
+        remote = web.Application(client_max_size=3 * 1024**2)
         remote.router.add_get('/api/users/{id}', forum)
         remote.router.add_post('/v1/chat/completions', upstream)
         self.remote = TestServer(remote)
@@ -282,6 +313,67 @@ class HttpBridge(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(data['dailyTokens'], 100000)
         self.assertEqual(self.calls, 0)
         self.assertEqual(response.headers['Cache-Control'], 'no-store')
+
+    async def test_discovery_publishes_transport_budget_without_shrinking_upstream_context(self):
+        self.policy['models'][0]['contextLimit'] = 1000000
+        account = await (await self.client.get('/account', headers=self.headers)).json()
+        models = await (await self.client.get('/v1/models', headers=self.headers)).json()
+        self.assertEqual(account['models'][0]['contextLimit'], 61440)
+        self.assertEqual(models['data'][0]['contextLimit'], 61440)
+        self.assertEqual(account['models'][0]['upstreamContextLimit'], 1000000)
+        self.assertEqual(account['models'][0]['maxRequestBytes'], 131072)
+        self.assertEqual(self.policy['models'][0]['contextLimit'], 1000000)
+        # A real request within the advertised planning budget is checked
+        # against upstream capacity, not the smaller public metadata value.
+        response = await self.client.post('/v1/chat/completions',
+            json={**self.payload, 'messages': [{'role': 'user', 'content': 'x' * 70000}]},
+            headers=self.headers)
+        self.assertEqual(response.status, 200)
+        await response.read()
+        self.assertEqual(self.calls, 1)
+
+    async def test_discovery_preserves_smaller_models_and_shrinks_with_body_limit(self):
+        self.policy['models'][0]['contextLimit'] = 8192
+        account = await (await self.client.get('/account', headers=self.headers)).json()
+        self.assertEqual(account['models'][0]['contextLimit'], 8192)
+        self.policy['models'][0]['contextLimit'] = 1000000
+        self.policy['max_request_bytes'] = 16384
+        account = await (await self.client.get('/account', headers=self.headers)).json()
+        self.assertEqual(account['models'][0]['contextLimit'], 4096)
+        self.assertEqual(self.calls, 0)
+
+    async def test_one_million_context_can_cross_old_trial_body_limit(self):
+        self.policy.update(max_request_bytes=2105344, daily_tokens=10000000)
+        self.policy['models'][0]['contextLimit'] = 1000000
+        account = await (await self.client.get('/account', headers=self.headers)).json()
+        self.assertEqual(account['models'][0]['contextLimit'], 1000000)
+        response = await self.client.post('/v1/chat/completions',
+            json={**self.payload, 'messages': [{'role': 'user', 'content': 'x' * 1600000}]},
+            headers=self.headers)
+        self.assertEqual(response.status, 200)
+        await response.read()
+        self.assertEqual(self.calls, 1)
+
+        response = await self.client.post('/v1/chat/completions',
+            json={**self.payload, 'messages': [{'role': 'user', 'content': 'x' * 2200000}]},
+            headers=self.headers)
+        self.assertEqual(response.status, 413)
+        await response.read()
+        self.assertEqual(self.calls, 1)
+
+    async def test_dynamic_output_reaches_upstream_and_settles_actual_usage(self):
+        self.policy['max_output_tokens'] = 128000
+        self.policy['models'][0].update(contextLimit=16000, outputLimit=128000)
+        response = await self.client.post('/v1/chat/completions',
+            json={'model': 'mock-model', 'messages': [{'role': 'user', 'content': 'hello'}], 'stream': True},
+            headers=self.headers)
+        self.assertEqual(response.status, 200)
+        await response.read()
+        self.assertTrue(4096 < self.captured['max_tokens'] < 16000)
+        account = await (await self.client.get('/account', headers=self.headers)).json()
+        self.assertEqual(account['quota']['tokensUsed'], 120)
+        self.assertEqual(account['quota']['tokensReserved'], 0)
+        self.assertEqual(account['quota']['requestsUsed'], 1)
 
     async def test_global_limit_returns_retry_after_without_forwarding_or_charging(self):
         self.policy['global_requests_per_minute'] = 1

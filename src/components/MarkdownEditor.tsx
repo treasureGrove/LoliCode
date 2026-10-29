@@ -43,7 +43,7 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
         overflow: "auto",
         fontFamily:
           "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
-        fontSize: "14px",
+        fontSize: "calc(14px * var(--interface-font-scale, 1))",
       },
       "&light .cm-content, &dark .cm-content": {
         padding: "12px 0",

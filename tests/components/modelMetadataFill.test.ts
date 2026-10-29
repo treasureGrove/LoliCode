@@ -8,7 +8,7 @@ import {
   piPresetThinkingFor,
   piSendsReasoningEffort,
   piThinkingLevelMapFromEfforts,
-} from "@/components/providers/forms/modelMetadataFill";
+} from "@/features/providers/forms/modelMetadataFill";
 import type { KnownModelMetadata } from "@/lib/modelMetadata";
 
 const metadata: KnownModelMetadata = {

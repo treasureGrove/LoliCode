@@ -5,7 +5,7 @@ import { renderWithQueryClient as render } from "../utils/testQueryClient";
 import { useState, type ComponentProps, type PropsWithChildren } from "react";
 import { useForm } from "react-hook-form";
 import { describe, expect, it, vi } from "vitest";
-import { HermesFormFields } from "@/components/providers/forms/HermesFormFields";
+import { HermesFormFields } from "@/features/providers/forms/HermesFormFields";
 import type { HermesModel } from "@/config/hermesProviderPresets";
 import { Form } from "@/components/ui/form";
 import { MODELS_DEV_API_URL } from "@/lib/modelsDev";

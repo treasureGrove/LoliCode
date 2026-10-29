@@ -215,10 +215,11 @@ pub async fn list_agent_projects(app: AppHandle) -> Result<Vec<AgentProject>, St
 pub async fn set_agent_project_metadata(
     app: AppHandle,
     path: String,
-    pinned: bool,
+    pinned: Option<bool>,
+    name: Option<String>,
 ) -> Result<AgentProject, String> {
     app.state::<InprocessAgentState>()
-        .project_metadata(app.state::<AppState>().inner(), &path, pinned)
+        .project_metadata(app.state::<AppState>().inner(), &path, pinned, name.as_deref())
         .await
 }
 #[tauri::command]

@@ -2,7 +2,7 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { PiProviderForm } from "@/components/providers/forms/PiProviderForm";
+import { PiProviderForm } from "@/features/providers/forms/PiProviderForm";
 import { http, HttpResponse } from "msw";
 import { server } from "../msw/server";
 import { renderWithQueryClient as render } from "../utils/testQueryClient";

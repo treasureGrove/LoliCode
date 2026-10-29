@@ -50,7 +50,7 @@ vi.mock("@/lib/modelsDevAutoSync", () => ({
   syncModelsDevPricing,
 }));
 
-import { ModelsDevAutoSyncPanel } from "@/components/usage/ModelsDevAutoSyncPanel";
+import { ModelsDevAutoSyncPanel } from "@/features/usage/ModelsDevAutoSyncPanel";
 
 const state = {
   configPath: "C:/Users/test/.tai-switch/model-pricing.json",

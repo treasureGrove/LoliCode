@@ -14,7 +14,7 @@ import {
   upstreamImporterVersions,
   verifySource,
   verifyRuntime,
-} from "../prepare-zcode-runtime.mjs";
+} from "../build/prepare-zcode-runtime.mjs";
 
 test("the owned workspace read barrier changes exactly one pinned anchor and fails closed on drift", () => {
   const original = `export async function readWorkspacePresentation(context, rawParams) {\n  const params = parseParams(zcodeWorkspaceReadPresentationParamsSchema, rawParams);\n  return context.runtime.getPresentation(params);\n}\n`;

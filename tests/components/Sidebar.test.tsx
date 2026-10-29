@@ -10,7 +10,7 @@ import {
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { Sidebar, type SidebarProps } from "@/components/shell/Sidebar";
+import { Sidebar, type SidebarProps } from "@/app/shell/Sidebar";
 import { APP_IDS } from "@/config/appConfig";
 import { SETTINGS_SECTIONS } from "@/lib/navigation";
 import { useSidebarCollapsed } from "@/hooks/useSidebarCollapsed";
@@ -110,6 +110,34 @@ beforeEach(() => {
 });
 
 describe("sidebar tool management", () => {
+  it.each([
+    ["skills", "技能"],
+    ["workflows", "工作流与自动化"],
+    ["memory", "记忆"],
+  ] as const)("selects only the active %s panel in the rail", (tool, label) => {
+    mount(props({ view: "agent", activeAgentTool: tool }));
+    expect(screen.getByRole("button", { name: label })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(
+      screen.getByRole("button", { name: "编程工作台" }),
+    ).not.toHaveAttribute("aria-current");
+    expect(document.querySelectorAll('[aria-current="page"]')).toHaveLength(1);
+  });
+
+  it("opens workspace tools from the global rail", () => {
+    const onOpenAgentTool = vi.fn();
+    mount(props({ onOpenAgentTool }));
+    fireEvent.click(screen.getByRole("button", { name: "技能" }));
+    fireEvent.click(screen.getByRole("button", { name: "工作流与自动化" }));
+    fireEvent.click(screen.getByRole("button", { name: "记忆" }));
+    expect(onOpenAgentTool.mock.calls).toEqual([
+      ["skills"],
+      ["workflows"],
+      ["memory"],
+    ]);
+  });
   it("collapses tools without changing the current page and restores the preference on remount", async () => {
     enabledTools = ["tavern", "rankings"];
     const values = props({ view: "tavern" });

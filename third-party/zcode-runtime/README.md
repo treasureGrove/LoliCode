@@ -15,10 +15,10 @@ patched for LoliCode; integration code lives in `packages/lolicode-zcode-runtime
 The pinned Linux x64 bfs, ripgrep and ugrep archives and upstream SHA256SUMS
 are also retained as original Git blobs for the owned remote asset builder.
 
-Verify with `node scripts/prepare-zcode-runtime.mjs --verify-only`.
+Verify with `node scripts/build/prepare-zcode-runtime.mjs --verify-only`.
 Refresh from the exact official checkout with
-`node scripts/prepare-zcode-runtime.mjs --vendor-source <absolute-checkout> --source-only`.
-Build with `node scripts/prepare-zcode-runtime.mjs` (Node 24.19.x and pnpm 10.33.2).
+`node scripts/build/prepare-zcode-runtime.mjs --vendor-source <absolute-checkout> --source-only`.
+Build with `node scripts/build/prepare-zcode-runtime.mjs` (Node 24.19.x and pnpm 10.33.2).
 Dependency lifecycle scripts are disabled. Only explicitly audited native packages
 may be rebuilt; the final manifest records the actual bundled Node executable.
 

@@ -3,7 +3,7 @@ import { renderWithQueryClient as render } from "../utils/testQueryClient";
 import userEvent from "@testing-library/user-event";
 import { parse as parseToml } from "smol-toml";
 import { describe, expect, it, vi } from "vitest";
-import { GrokBuildProviderForm } from "@/components/providers/forms/GrokBuildProviderForm";
+import { GrokBuildProviderForm } from "@/features/providers/forms/GrokBuildProviderForm";
 
 vi.mock("@/components/JsonEditor", () => ({
   default: ({

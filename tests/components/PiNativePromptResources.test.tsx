@@ -14,7 +14,7 @@ import {
   PiPromptTemplates,
   PiSystemPromptFiles,
   type PiPromptTemplatesHandle,
-} from "@/components/prompts/PiNativePromptResources";
+} from "@/features/prompts/PiNativePromptResources";
 import { promptsApi, type PiPromptFileKind } from "@/lib/api/prompts";
 
 const toastMocks = vi.hoisted(() => ({

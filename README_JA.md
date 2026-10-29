@@ -8,6 +8,8 @@ LoliCode はデスクトップのコーディング Agent、共通のモデル�
 
 [ダウンロード](https://lolicode.com/) · [コミュニティ・アカウント](https://lolicode.com/all) · [ソース](https://github.com/treasureGrove/LoliCode) · [ドキュメント](docs/README.md) · [更新履歴](CHANGELOG.md)
 
+コードの保守は[構成ガイド](ARCHITECTURE.md)から始めてください。[LoliCode.code-workspace](LoliCode.code-workspace) を開くと、依存関係・生成物・ログを非表示にできます。
+
 ## 現在使える機能
 
 - **一つのメイン Agent**：ストリーミング会話、プロジェクト内のファイル操作、ターミナル、権限確認、質問・選択肢、停止、会話履歴、変更内容の確認。

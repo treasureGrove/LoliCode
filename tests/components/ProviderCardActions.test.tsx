@@ -1,8 +1,8 @@
 import { act, render, screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { ProviderCardActions } from "@/components/providers/ProviderCardActions";
-import type { CardPresentation } from "@/components/providers/presentation";
+import { ProviderCardActions } from "@/features/providers/ProviderCardActions";
+import type { CardPresentation } from "@/features/providers/presentation";
 
 async function openMenu(presentation: CardPresentation) {
   const user = userEvent.setup();

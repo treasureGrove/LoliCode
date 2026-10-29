@@ -2,7 +2,7 @@ import { render, screen, waitFor, within, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
-import UnifiedSkillsPanel from "@/components/skills/UnifiedSkillsPanel";
+import UnifiedSkillsPanel from "@/features/skills/UnifiedSkillsPanel";
 import { settingsApi, skillsApi } from "@/lib/api";
 import type {
   InstalledSkill,
@@ -44,12 +44,12 @@ vi.mock("sonner", () => ({
   },
 }));
 
-vi.mock("@/components/mcp/useVisibleAppIds", () => ({
+vi.mock("@/features/mcp/useVisibleAppIds", () => ({
   useVisibleAppIds: (ids: string[]) =>
     ids.filter((id) => m.visibleApps.includes(id)),
 }));
 
-vi.mock("@/components/skills/SkillsStorageSheet", () => ({
+vi.mock("@/features/skills/SkillsStorageSheet", () => ({
   SkillsStorageSheet: ({ open }: { open: boolean }) =>
     open ? <div data-testid="storage-sheet" /> : null,
 }));

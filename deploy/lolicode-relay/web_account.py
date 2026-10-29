@@ -4,6 +4,7 @@ import json
 import re
 import secrets
 import time
+from datetime import date, datetime, timedelta, timezone
 
 import aiohttp
 from aiohttp import web
@@ -106,19 +107,56 @@ def install_web_account(app, authenticate, account_status, forum, *, reject, rea
                             samesite='Lax', path='/')
         return response
 
-    async def account(request):
+    async def authenticated_user(request):
         same_origin(request)
         session = request.cookies.get(COOKIE, '')
         credential = sessions.get(session)
         if credential is None:
             reject(401, 'login_required', '请登录原有 LoliCode 账号。')
         try:
-            user = await authenticate('Bearer lc1.' + credential['forum_id'] + '.' + credential['forum_token'])
-            return web.json_response(await account_status(user))
+            return await authenticate('Bearer lc1.' + credential['forum_id'] + '.' + credential['forum_token'])
         except rejection_type as exc:
             if exc.status in (401, 403):
                 sessions.delete(session)
             raise
+
+    async def account(request):
+        return web.json_response(await account_status(await authenticated_user(request)))
+
+    async def usage(request):
+        user = await authenticated_user(request)
+        # Match the quota ledger's UTC+8 date buckets, including pending requests
+        # in the request count while keeping their reserved tokens separate.
+        from bridge import calendar
+        today, reset = calendar()
+        days = [(date.fromisoformat(today) - timedelta(days=offset)).isoformat()
+                for offset in range(6, -1, -1)]
+        with app['ledger'].connect() as db:
+            db.execute('BEGIN')
+            daily_rows = db.execute('''SELECT day, count(*) AS requests,
+                    coalesce(sum(charged),0) AS tokens,
+                    coalesce(sum(CASE WHEN state='pending' THEN reserved ELSE 0 END),0) AS reserved
+                    FROM requests WHERE forum_id=? AND day>=? AND day<=? AND state!='released'
+                    GROUP BY day''', (user['id'], days[0], today)).fetchall()
+            records = db.execute('''SELECT id,model,created_at,state,charged,
+                    CASE WHEN state='pending' THEN reserved ELSE 0 END AS reserved
+                    FROM requests WHERE forum_id=? ORDER BY created_at DESC,id DESC LIMIT 20''',
+                    (user['id'],)).fetchall()
+        buckets = {row['day']: {'day': row['day'], 'requests': row['requests'],
+                   'tokens': row['tokens'], 'reservedTokens': row['reserved']}
+                   for row in daily_rows}
+        daily = [buckets.get(day, {'day': day, 'requests': 0, 'tokens': 0, 'reservedTokens': 0})
+                 for day in days]
+        return web.json_response({
+            'plan': {'id': 'public-free', 'name': '公益免费', 'currency': 'CNY', 'billedAmount': 0},
+            'today': {key: daily[-1][key] for key in ('requests', 'tokens', 'reservedTokens')},
+            'timezone': 'Asia/Singapore', 'resetsAt': reset,
+            'daily': daily,
+            'records': [{'id': row['id'], 'model': row['model'],
+                         'createdAt': datetime.fromtimestamp(row['created_at'], timezone.utc).isoformat(),
+                         'state': row['state'], 'tokens': row['charged'],
+                         'reservedTokens': row['reserved']} for row in records],
+        })
 
     async def logout(request):
         same_origin(request, mutation=True)
@@ -130,4 +168,5 @@ def install_web_account(app, authenticate, account_status, forum, *, reject, rea
 
     app.router.add_post('/web/login', login)
     app.router.add_get('/web/account', account)
+    app.router.add_get('/web/usage', usage)
     app.router.add_post('/web/logout', logout)

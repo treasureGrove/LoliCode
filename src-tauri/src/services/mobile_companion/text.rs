@@ -1,6 +1,6 @@
 //! Account-scoped, bounded text fallback. This is a separate AEAD domain from
 //! both native task packets and signaling; no media or opaque packet tunnel.
-use super::{account_transport::AuthRefresh, crypto, Secret};
+use super::{auth_refresh::AuthRefresh, crypto, Secret};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use futures::{SinkExt, StreamExt};
 use ring::aead;
@@ -416,7 +416,7 @@ mod tests {
 
     #[tokio::test]
     async fn authority_fences_cancel_a_real_paced_text_send_before_a_second_frame_is_written() {
-        use super::super::{account_transport::fence_text_work, Control};
+        use super::super::authorization::{fence_text_work, Control};
         use tokio::sync::{mpsc, oneshot, watch};
 
         for mode in ["logout", "stop", "revoke", "expiry"] {

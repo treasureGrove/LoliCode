@@ -8,6 +8,8 @@ LoliCode verbindet einen Desktop-Agenten für Programmierung, gemeinsame Modellz
 
 [Download](https://lolicode.com/) · [Community und Konto](https://lolicode.com/all) · [Quellcode](https://github.com/treasureGrove/LoliCode) · [Dokumentation](docs/README.md) · [Änderungen](CHANGELOG.md)
 
+Für die Codepflege: [Architektur und Verzeichnisse](ARCHITECTURE.md). [LoliCode.code-workspace](LoliCode.code-workspace) blendet Abhängigkeiten, Build-Ausgaben und Protokolle aus.
+
 ## Bereits verfügbar
 
 - **Ein zentraler Agent:** gestreamte Gespräche, Projektdateien, Terminalwerkzeuge, Berechtigungsabfragen, Rückfragen und Auswahlmöglichkeiten, Abbruch, Gesprächsverlauf und Änderungsansicht.

@@ -10,7 +10,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { http, HttpResponse } from "msw";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ProviderForm } from "@/components/providers/forms/ProviderForm";
+import { ProviderForm } from "@/features/providers/forms/ProviderForm";
 import { codexProviderPresets } from "@/config/codexProviderPresets";
 import { geminiProviderPresets } from "@/config/geminiProviderPresets";
 import { grokBuildProviderPresets } from "@/config/grokBuildProviderPresets";
@@ -34,13 +34,13 @@ vi.mock("@/components/JsonEditor", () => ({
   ),
 }));
 
-vi.mock("@/components/providers/forms/CodexOAuthSection", () => ({
+vi.mock("@/features/providers/forms/CodexOAuthSection", () => ({
   CodexOAuthSection: () => <div data-testid="codex-oauth-section" />,
 }));
 
-vi.mock("@/components/providers/forms/hooks", async (importOriginal) => {
+vi.mock("@/features/providers/forms/hooks", async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import("@/components/providers/forms/hooks")>();
+    await importOriginal<typeof import("@/features/providers/forms/hooks")>();
   return {
     ...actual,
     useCopilotAuth: () => ({

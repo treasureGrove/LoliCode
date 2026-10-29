@@ -8,6 +8,8 @@ LoliCode 把桌面编程 Agent、统一模型渠道和二次元工作空间放�
 
 [下载官网](https://lolicode.com/) · [社区与账户](https://lolicode.com/all) · [源码仓库](https://github.com/treasureGrove/LoliCode) · [文档](docs/README.md) · [更新记录](CHANGELOG.md)
 
+维护代码先读[架构与目录入口](ARCHITECTURE.md)；用 [LoliCode.code-workspace](LoliCode.code-workspace) 打开工程，可收起依赖、构建产物和日志。
+
 ## 现在可以做什么
 
 - **一个主 Agent 工作台**：流式对话、项目文件读写、终端工具、权限确认、提问与选项、停止任务、会话历史和文件变更查看。

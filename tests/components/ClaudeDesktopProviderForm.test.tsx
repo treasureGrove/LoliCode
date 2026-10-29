@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { QueryClientProvider } from "@tanstack/react-query";
 import type { ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ClaudeDesktopProviderForm } from "@/components/providers/forms/ClaudeDesktopProviderForm";
+import { ClaudeDesktopProviderForm } from "@/features/providers/forms/ClaudeDesktopProviderForm";
 import { createTestQueryClient } from "../utils/testQueryClient";
 
 const authState = vi.hoisted(() => ({
@@ -20,9 +20,9 @@ vi.mock("sonner", () => ({
   },
 }));
 
-vi.mock("@/components/providers/forms/hooks", async (importOriginal) => {
+vi.mock("@/features/providers/forms/hooks", async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import("@/components/providers/forms/hooks")>();
+    await importOriginal<typeof import("@/features/providers/forms/hooks")>();
   return {
     ...actual,
     useCopilotAuth: () => ({
@@ -48,15 +48,15 @@ vi.mock("@/components/providers/forms/hooks", async (importOriginal) => {
   };
 });
 
-vi.mock("@/components/providers/forms/CodexOAuthSection", () => ({
+vi.mock("@/features/providers/forms/CodexOAuthSection", () => ({
   CodexOAuthSection: () => <div data-testid="codex-oauth-section" />,
 }));
 
-vi.mock("@/components/providers/forms/CopilotAuthSection", () => ({
+vi.mock("@/features/providers/forms/CopilotAuthSection", () => ({
   CopilotAuthSection: () => <div data-testid="copilot-auth-section" />,
 }));
 
-vi.mock("@/components/providers/forms/XaiOAuthSection", () => ({
+vi.mock("@/features/providers/forms/XaiOAuthSection", () => ({
   XaiOAuthSection: () => <div data-testid="xai-oauth-section" />,
 }));
 

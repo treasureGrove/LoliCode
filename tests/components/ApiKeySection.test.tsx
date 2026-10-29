@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { ApiKeySection } from "@/components/providers/forms/shared/ApiKeySection";
+import { ApiKeySection } from "@/features/providers/forms/shared/ApiKeySection";
 
 // 测试的 i18n 是空资源，推广语传了 defaultValue: "" 会变成空串；这里让 t() 原样返回 key
 vi.mock("react-i18next", () => ({

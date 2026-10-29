@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ZhipuLoginPanel } from "@/components/channels/ZhipuLoginPanel";
+import { ZhipuLoginPanel } from "@/features/channels/ZhipuLoginPanel";
 import {
   channelCenterApi,
   type ChannelSource,

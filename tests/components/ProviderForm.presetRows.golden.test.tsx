@@ -33,7 +33,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ProviderForm,
   type ProviderFormValues,
-} from "@/components/providers/forms/ProviderForm";
+} from "@/features/providers/forms/ProviderForm";
 import { providerPresets } from "@/config/claudeProviderPresets";
 import { codexProviderPresets } from "@/config/codexProviderPresets";
 import {
@@ -74,13 +74,13 @@ vi.mock("@/components/JsonEditor", () => ({
   ),
 }));
 
-vi.mock("@/components/providers/forms/CodexOAuthSection", () => ({
+vi.mock("@/features/providers/forms/CodexOAuthSection", () => ({
   CodexOAuthSection: () => <div data-testid="codex-oauth-section" />,
 }));
 
-vi.mock("@/components/providers/forms/hooks", async (importOriginal) => {
+vi.mock("@/features/providers/forms/hooks", async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import("@/components/providers/forms/hooks")>();
+    await importOriginal<typeof import("@/features/providers/forms/hooks")>();
   return {
     ...actual,
     useCopilotAuth: () => ({

@@ -8,7 +8,7 @@ import { proxyApi } from "@/lib/api/proxy";
 import { proxyKeys } from "@/lib/query/proxy";
 import type { AppMode } from "@/types/proxy";
 import { extractErrorMessage } from "@/utils/errorUtils";
-import { APP_DISPLAY_NAME } from "@/components/shell/AppGlyph";
+import { APP_DISPLAY_NAME } from "@/app/shell/AppGlyph";
 
 /** 这几个客户端只在启动时读配置：改写了客户端文件要提示重启（Claude Code 会自己重读）。 */
 const RESTART_TO_APPLY = new Set<AppId>(["codex", "gemini", "grokbuild"]);

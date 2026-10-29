@@ -2,7 +2,7 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { McpServer } from "@/types";
-import McpFormModal from "@/components/mcp/McpFormModal";
+import McpFormModal from "@/features/mcp/McpFormModal";
 import { MCP_APP_IDS } from "@/config/appConfig";
 
 const mocks = vi.hoisted(() => ({

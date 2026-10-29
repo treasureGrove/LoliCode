@@ -78,7 +78,7 @@ pub fn detect_opaque_state_rejection(
     if !config.enabled {
         return None;
     }
-    let ProxyError::UpstreamError { status, body } = error else {
+    let ProxyError::UpstreamError { status, body, .. } = error else {
         return None;
     };
 
@@ -142,6 +142,7 @@ pub fn in_stream_rejection(error: &Value, request: &Value) -> Option<ProxyError>
     let messages = error_messages(&payload);
     is_self_identified_rejection(&body, Some(&payload), &messages, request).then(|| {
         ProxyError::UpstreamError {
+            retry_after: None,
             status: 400,
             body: Some(body.clone()),
         }
@@ -178,6 +179,7 @@ pub fn carries_encrypted_agent_task(request: &Value) -> bool {
 /// 子 agent 读不到任务：上游解不开请求末尾那条任务的密文。HTTP 400，Codex 不会重试。
 pub fn unreadable_agent_task_error() -> ProxyError {
     ProxyError::UpstreamError {
+        retry_after: None,
         status: 400,
         body: Some(
             json!({
@@ -378,6 +380,7 @@ mod tests {
 
     fn upstream(status: u16, body: Value) -> ProxyError {
         ProxyError::UpstreamError {
+            retry_after: None,
             status,
             body: Some(body.to_string()),
         }
@@ -437,6 +440,7 @@ mod tests {
         assert_eq!(detect(&xai), Some(ALL_STATE));
 
         let function_output = ProxyError::UpstreamError {
+            retry_after: None,
             status: 502,
             body: Some(ENCRYPTED_FUNCTION_OUTPUT_REJECTION.to_string()),
         };
@@ -577,6 +581,7 @@ mod tests {
             json!({ "error": { "message": "unsupported input item type: compaction" } }),
         );
         let plain_text = ProxyError::UpstreamError {
+            retry_after: None,
             status: 422,
             body: Some("bad input".to_string()),
         };
@@ -772,6 +777,7 @@ mod tests {
     #[test]
     fn the_unreadable_task_error_is_a_non_retryable_explanation() {
         let ProxyError::UpstreamError {
+            retry_after: _,
             status,
             body: Some(body),
         } = unreadable_agent_task_error()

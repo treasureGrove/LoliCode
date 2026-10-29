@@ -1,0 +1,146 @@
+.tai-shell-quota-button {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  margin: 2px auto;
+  padding: 3px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  color: #e0ced8;
+  background: transparent;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease;
+}
+.tai-shell-quota-button:hover,
+.tai-shell-quota-button[data-state="open"] {
+  background: rgb(200 171 130 / 10%);
+  border-color: rgb(200 171 130 / 20%);
+}
+.tai-shell-quota-button:focus-visible {
+  outline: 2px solid #e0ced8;
+  outline-offset: 2px;
+}
+.tai-shell-quota-button svg {
+  width: 36px;
+  height: 36px;
+  overflow: visible;
+}
+.tai-shell-quota-track,
+.tai-shell-quota-progress {
+  fill: none;
+  stroke-width: 2.5;
+}
+.tai-shell-quota-track {
+  stroke: currentColor;
+  opacity: 0.2;
+}
+.tai-shell-quota-progress {
+  stroke: currentColor;
+  stroke-linecap: round;
+}
+.tai-shell-quota-center {
+  fill: currentColor;
+  opacity: 0.55;
+}
+.tai-shell-quota-button[data-tone="low"] {
+  color: #e7ba88;
+}
+.tai-shell-quota-button[data-tone="empty"] {
+  color: #e1a0a5;
+}
+.tai-shell-quota-button[data-tone="unknown"] .tai-shell-quota-track {
+  stroke-dasharray: 3 3;
+  opacity: 0.45;
+}
+.tai-shell-quota-popover {
+  width: min(340px, calc(100vw - 32px));
+  padding: 0;
+  border-radius: 20px;
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.tai-shell-quota-source {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px 6px;
+  padding: 17px 18px;
+  border-bottom: 1px solid hsl(var(--border));
+  color: var(--text-3);
+  font-size: 12px;
+}
+.tai-shell-quota-source strong {
+  color: var(--text-2);
+  font-weight: 500;
+}
+.tai-shell-quota-source button {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  margin-left: auto;
+  border-radius: 7px;
+}
+.tai-shell-quota-source button:hover {
+  background: var(--bg-subtle);
+  color: var(--text-1);
+}
+.tai-shell-quota-source button:disabled {
+  opacity: 0.45;
+}
+.tai-shell-quota-details {
+  display: grid;
+  gap: 11px;
+  padding: 17px 18px;
+}
+.tai-shell-quota-summary,
+.tai-shell-quota-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.tai-shell-quota-summary {
+  margin-bottom: 3px;
+  font-size: 14px;
+  font-weight: 550;
+}
+.tai-shell-quota-summary strong {
+  color: var(--text-1);
+  font-weight: 600;
+}
+.tai-shell-quota-row {
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+.tai-shell-quota-note {
+  color: var(--text-3);
+  font-size: 11px;
+  line-height: 1.7;
+}
+.tai-shell-quota-unavailable {
+  padding: 20px 18px;
+  color: var(--text-3);
+}
+.tai-shell-quota-manage {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 13px 18px;
+  border-top: 1px solid hsl(var(--border));
+  color: var(--text-1);
+  text-align: left;
+  font-weight: 500;
+}
+.tai-shell-quota-manage:hover {
+  background: var(--bg-subtle);
+}
+.tai-shell-quota-popover button:focus-visible {
+  outline: 2px solid var(--action-text);
+  outline-offset: -3px;
+}

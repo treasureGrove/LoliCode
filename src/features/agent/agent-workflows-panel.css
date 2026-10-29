@@ -1,0 +1,203 @@
+.wb-operations-panel .wb-extension-tabs {
+  padding: 0 0 16px;
+  gap: 8px;
+}
+
+.wb-operations-panel .wb-extension-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 8px 14px;
+}
+
+.wb-operations-panel .wb-extension-list {
+  display: block;
+  padding: 24px 0 0;
+  overflow: visible;
+}
+
+.wb-operations-panel .wb-extension-hint {
+  padding: 24px;
+  border: 1px solid var(--wb-border);
+  border-radius: 16px;
+  background: var(--wb-panel);
+}
+
+.wb-workflow-toolbar,
+.wb-workflow-scope,
+.wb-workflow-card-heading,
+.wb-workflow-card-actions,
+.wb-workflow-list-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.wb-workflow-toolbar {
+  padding-bottom: 8px;
+}
+
+.wb-workflow-scope {
+  color: var(--wb-muted);
+  font-size: 12px;
+}
+
+.wb-workflow-scope select {
+  min-width: 112px;
+  color: var(--wb-text);
+}
+
+.wb-workflow-toolbar-spacer {
+  flex: 1;
+}
+
+.wb-workflow-list-heading {
+  justify-content: space-between;
+  padding-top: 8px;
+}
+
+.wb-workflow-list-heading h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.wb-workflow-list-heading h3 span,
+.wb-workflow-badge {
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--wb-hover);
+  color: var(--wb-muted);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.wb-workflow-search {
+  position: relative;
+  width: min(100%, 260px);
+  color: var(--wb-muted);
+}
+
+.wb-workflow-search > svg {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.wb-workflow-search input {
+  padding-left: 32px;
+}
+
+.wb-workflow-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
+  gap: 16px;
+}
+
+.wb-workflow-card,
+.wb-workflow-editor {
+  padding: 20px;
+  border: 1px solid var(--wb-border);
+  border-radius: 16px;
+  background: var(--wb-panel);
+}
+
+.wb-workflow-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  transition: border-color 180ms ease;
+}
+
+.wb-workflow-card:hover {
+  border-color: color-mix(in srgb, var(--wb-accent) 38%, var(--wb-border));
+}
+
+.wb-workflow-card-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: var(--wb-accent-soft);
+  color: var(--wb-accent);
+  flex-shrink: 0;
+}
+
+.wb-workflow-card-heading strong {
+  min-width: 0;
+  flex: 1;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.wb-workflow-card-description {
+  flex: 1;
+  color: var(--wb-muted);
+  font-size: 13px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.wb-workflow-card-actions {
+  padding-top: 12px;
+  border-top: 1px solid var(--wb-border);
+  gap: 8px;
+}
+
+.wb-workflow-card-actions > :last-child {
+  margin-left: auto;
+}
+
+.wb-workflow-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 54px 24px;
+  border: 1px dashed var(--wb-border);
+  border-radius: 16px;
+  color: var(--wb-muted);
+  text-align: center;
+  font-size: 13px;
+}
+
+.wb-workflow-empty > svg {
+  color: var(--wb-accent);
+  margin-bottom: 4px;
+}
+
+.wb-workflow-empty strong {
+  color: var(--wb-text);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.wb-workflow-empty p {
+  max-width: 400px;
+  line-height: 1.7;
+}
+
+@media (max-width: 640px) {
+  .wb-workflow-toolbar-spacer {
+    display: none;
+  }
+
+  .wb-workflow-toolbar,
+  .wb-workflow-list-heading {
+    gap: 12px;
+  }
+
+  .wb-workflow-card,
+  .wb-workflow-editor {
+    padding: 16px;
+  }
+}

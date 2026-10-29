@@ -3,7 +3,7 @@
 
 Default is a read-only plan. Run --activate only on the lolicode host after
 reviewing that plan. The source tar is produced from the directory prepared by
-scripts/lolicode-android-download.mjs. No Firebase credentials are involved.
+scripts/release/lolicode-android-download.mjs. No Firebase credentials are involved.
 """
 import argparse
 import contextlib

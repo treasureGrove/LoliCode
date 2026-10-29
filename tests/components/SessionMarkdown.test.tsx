@@ -13,7 +13,7 @@ import {
   MARKDOWN_PARSE_LIMIT,
   SessionMarkdown,
   SessionPlainText,
-} from "@/components/sessions/reader/SessionMarkdown";
+} from "@/features/sessions/reader/SessionMarkdown";
 
 const { invokeMock, copyTextMock } = vi.hoisted(() => ({
   invokeMock: vi.fn(),

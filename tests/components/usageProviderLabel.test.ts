@@ -3,7 +3,7 @@ import type { TFunction } from "i18next";
 import {
   getUsageProviderLabel,
   usageProviderTitle,
-} from "@/components/usage/providerLabel";
+} from "@/features/usage/providerLabel";
 
 const t = ((key: string, options?: Record<string, unknown>) =>
   options?.app ? `${key}:${options.app}` : key) as unknown as TFunction;

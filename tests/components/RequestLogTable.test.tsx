@@ -4,7 +4,7 @@ import {
   RequestLogTable,
   appShortName,
   formatLogTime,
-} from "@/components/usage/RequestLogTable";
+} from "@/features/usage/RequestLogTable";
 import type { UsageRangeSelection } from "@/types/usage";
 
 const useRequestLogsMock = vi.hoisted(() => vi.fn());

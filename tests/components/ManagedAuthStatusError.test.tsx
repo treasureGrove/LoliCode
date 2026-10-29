@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { CodexOAuthSection } from "@/components/providers/forms/CodexOAuthSection";
-import { CopilotAuthSection } from "@/components/providers/forms/CopilotAuthSection";
+import { CodexOAuthSection } from "@/features/providers/forms/CodexOAuthSection";
+import { CopilotAuthSection } from "@/features/providers/forms/CopilotAuthSection";
 
 const authMocks = vi.hoisted(() => ({
   refetchCodex: vi.fn(),
@@ -30,16 +30,16 @@ const failedStatus = (refetchStatus: () => void) => ({
   refetchStatus,
 });
 
-vi.mock("@/components/providers/forms/hooks/useCodexOauth", () => ({
+vi.mock("@/features/providers/forms/hooks/useCodexOauth", () => ({
   useCodexOauth: () => failedStatus(authMocks.refetchCodex),
 }));
 
-vi.mock("@/components/providers/forms/hooks/useCopilotAuth", () => ({
+vi.mock("@/features/providers/forms/hooks/useCopilotAuth", () => ({
   useCopilotAuth: () => failedStatus(authMocks.refetchCopilot),
 }));
 
 // 「N 个供应商在用」要读供应商列表（React Query）；这里不关心，给空
-vi.mock("@/components/providers/forms/hooks/useManagedAccountUsers", () => ({
+vi.mock("@/features/providers/forms/hooks/useManagedAccountUsers", () => ({
   useManagedAccountUsers: () => () => [],
 }));
 

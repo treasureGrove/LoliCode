@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatReasoningLevelsLabel } from "@/components/providers/forms/CodexFormFields";
+import { formatReasoningLevelsLabel } from "@/features/providers/forms/CodexFormFields";
 
 describe("formatReasoningLevelsLabel", () => {
   it("collapses a run of three or more adjacent levels into a range", () => {

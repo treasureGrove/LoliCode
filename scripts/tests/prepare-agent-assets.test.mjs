@@ -11,7 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createHash } from "node:crypto";
-import { prepareAgentAssets } from "../prepare-agent-assets.mjs";
+import { prepareAgentAssets } from "../build/prepare-agent-assets.mjs";
 
 async function cleanup(root) {
   const actual = await realpath(root);

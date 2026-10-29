@@ -1,6 +1,6 @@
 import { act, renderHook } from "@testing-library/react";
 import { describe, it, expect } from "vitest";
-import { useCodexConfigState } from "@/components/providers/forms/hooks/useCodexConfigState";
+import { useCodexConfigState } from "@/features/providers/forms/hooks/useCodexConfigState";
 
 // The hook is also used for stored providers and presets. Those inputs keep
 // auth.OPENAI_API_KEY as their canonical credential; only EditProviderDialog's

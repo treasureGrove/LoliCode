@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { ModelDropdown } from "@/components/providers/forms/shared/ModelDropdown";
+import { ModelDropdown } from "@/features/providers/forms/shared/ModelDropdown";
 
 describe("ModelDropdown", () => {
   it("exposes a labelled search input and filters by vendor", async () => {

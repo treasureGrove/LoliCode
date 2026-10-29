@@ -31,6 +31,8 @@ Configuration support does not imply execution support in the built-in Agent.
 
 ## 开发与发布 / Development and release
 
+- [代码架构与维护入口](../ARCHITECTURE.md)：启动调用链、业务目录与修改位置；[编辑器工作区](../LoliCode.code-workspace)可收起本地产物。
+- [仓库地图 / Repository map](REPOSITORY_MAP.md)：源码、配套服务、第三方代码与本地生成物的位置。
 - [贡献指南与热重载](../CONTRIBUTING.md)。
 - [独立发布、打包与签名](guides/lolicode-release.md)。
 - [应用内更新摘要格式](../src/whats-new/README.md)。
@@ -51,6 +53,8 @@ These documents include future work or architectural proposals, not a list of sh
 UE 工具、酒馆、高级记忆提供者、语音及更多角色交互按阶段接入；它们尚未全部实现。本机个人/项目记忆已在当前原生核心中实现。
 
 ## 配置参考与历史资料 / Configuration reference and history
+
+[旧验收与交接材料](history/README.md)集中保存在 `docs/history/`。
 
 [配置参考手册](user-manual/README.md)保留了源自 CC Switch 的章节，供外部工具配置、路由、导入等功能查阅。除已更新的安装页外，部分操作和截图可能与当前 LoliCode 界面不同。旧发布说明、迁移材料和第三方版权记录保留历史语境。
 

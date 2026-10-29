@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { http, HttpResponse } from "msw";
-import { ProviderForm } from "@/components/providers/forms/ProviderForm";
+import { ProviderForm } from "@/features/providers/forms/ProviderForm";
 import { createTestQueryClient } from "../utils/testQueryClient";
 import { server } from "../msw/server";
 import { setLiveProviderIds, setSettings } from "../msw/state";

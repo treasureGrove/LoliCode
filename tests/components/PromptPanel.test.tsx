@@ -12,7 +12,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import PromptPanel, {
   type PromptPanelProps,
-} from "@/components/prompts/PromptPanel";
+} from "@/features/prompts/PromptPanel";
 import { promptsApi, type AppId, type Prompt } from "@/lib/api";
 
 const mocks = vi.hoisted(() => ({
@@ -69,10 +69,10 @@ vi.mock("@/hooks/useTauriEvent", () => ({
   useTauriEvent: vi.fn(),
 }));
 
-vi.mock("@/components/prompts/PromptFormPanel", async (importOriginal) => {
+vi.mock("@/features/prompts/PromptFormPanel", async (importOriginal) => {
   const actual =
     await importOriginal<
-      typeof import("@/components/prompts/PromptFormPanel")
+      typeof import("@/features/prompts/PromptFormPanel")
     >();
   return {
     ...actual,

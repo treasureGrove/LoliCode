@@ -7,7 +7,7 @@
 //! - `src/config/claudeProviderPresets.ts`（"Claude Official"）
 //! - `src/config/codexProviderPresets.ts`（"OpenAI Official"）
 //! - `src/config/geminiProviderPresets.ts`（"Google Official"）
-//! - `src/components/providers/forms/GrokBuildProviderForm.tsx`（"Grok Official"）
+//! - `src/features/providers/forms/GrokBuildProviderForm.tsx`（"Grok Official"）
 
 use crate::app_config::AppType;
 

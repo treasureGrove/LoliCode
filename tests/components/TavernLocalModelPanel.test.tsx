@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
-import { TavernLocalModelPanel } from "@/components/tavern/TavernLocalModelPanel";
+import { TavernLocalModelPanel } from "@/features/tavern/TavernLocalModelPanel";
 import {
   TAVERN_LOCAL_MODEL_KEY,
   type TavernLocalModelStatus,

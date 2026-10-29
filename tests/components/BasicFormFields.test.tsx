@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { useForm, type FieldPath, type UseFormReturn } from "react-hook-form";
 import { describe, expect, it, vi } from "vitest";
-import { BasicFormFields } from "@/components/providers/forms/BasicFormFields";
+import { BasicFormFields } from "@/features/providers/forms/BasicFormFields";
 import { Form } from "@/components/ui/form";
 import type { ProviderFormData } from "@/lib/schemas/provider";
 

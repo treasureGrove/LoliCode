@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { ContextWindowSelect } from "@/components/channels/ContextWindowSelect";
+import { ContextWindowSelect } from "@/features/channels/ContextWindowSelect";
 
 describe("context window selection", () => {
   it("offers only declared windows and can return to the channel default", () => {

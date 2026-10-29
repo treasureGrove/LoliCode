@@ -2,9 +2,9 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { TFunction } from "i18next";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { CopilotAuthSection } from "@/components/providers/forms/CopilotAuthSection";
-import { CodexOAuthSection } from "@/components/providers/forms/CodexOAuthSection";
-import { XaiOAuthSection } from "@/components/providers/forms/XaiOAuthSection";
+import { CopilotAuthSection } from "@/features/providers/forms/CopilotAuthSection";
+import { CodexOAuthSection } from "@/features/providers/forms/CodexOAuthSection";
+import { XaiOAuthSection } from "@/features/providers/forms/XaiOAuthSection";
 
 const mocks = vi.hoisted(() => ({
   useCopilotAuth: vi.fn(),
@@ -12,24 +12,24 @@ const mocks = vi.hoisted(() => ({
   useXaiOauth: vi.fn(),
 }));
 
-vi.mock("@/components/providers/forms/hooks/useCopilotAuth", () => ({
+vi.mock("@/features/providers/forms/hooks/useCopilotAuth", () => ({
   useCopilotAuth: mocks.useCopilotAuth,
 }));
-vi.mock("@/components/providers/forms/hooks/useCodexOauth", () => ({
+vi.mock("@/features/providers/forms/hooks/useCodexOauth", () => ({
   useCodexOauth: mocks.useCodexOauth,
 }));
-vi.mock("@/components/providers/forms/hooks/useXaiOauth", () => ({
+vi.mock("@/features/providers/forms/hooks/useXaiOauth", () => ({
   useXaiOauth: mocks.useXaiOauth,
 }));
 // 「N 个供应商在用」要读供应商列表（React Query）；这里不关心，给空
-vi.mock("@/components/providers/forms/hooks/useManagedAccountUsers", () => ({
+vi.mock("@/features/providers/forms/hooks/useManagedAccountUsers", () => ({
   useManagedAccountUsers: () => () => [],
 }));
 // 额度各自走 React Query；这里只看账号区本身
-vi.mock("@/components/settings/auth/AccountQuota", async (importOriginal) => {
+vi.mock("@/features/settings/auth/AccountQuota", async (importOriginal) => {
   const actual =
     await importOriginal<
-      typeof import("@/components/settings/auth/AccountQuota")
+      typeof import("@/features/settings/auth/AccountQuota")
     >();
   return {
     ...actual,
@@ -244,7 +244,7 @@ describe("subscriptionQuotaState", () => {
 
   it("writes remaining quota per tier and flags a failed query", async () => {
     const { subscriptionQuotaState } = await import(
-      "@/components/settings/auth/AccountQuota"
+      "@/features/settings/auth/AccountQuota"
     );
     const ok = subscriptionQuotaState(
       t,
@@ -299,7 +299,7 @@ describe("AccountQuotaColumn", () => {
   it("opens the saved resets to list when each one expires", async () => {
     const user = userEvent.setup();
     const { AccountQuotaColumn } = await import(
-      "@/components/settings/auth/AccountQuota"
+      "@/features/settings/auth/AccountQuota"
     );
     render(
       <AccountQuotaColumn

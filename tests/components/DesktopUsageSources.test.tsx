@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { DesktopUsageSources } from "@/components/usage/DesktopUsageSources";
+import { DesktopUsageSources } from "@/features/usage/DesktopUsageSources";
 import { usageApi } from "@/lib/api/usage";
 import { usageKeys } from "@/lib/query/usage";
 import type { UsageSummary } from "@/types/usage";

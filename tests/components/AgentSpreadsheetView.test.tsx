@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { AgentSpreadsheetView } from "@/components/agent/AgentSpreadsheetView";
+import { AgentSpreadsheetView } from "@/features/agent/AgentSpreadsheetView";
 import type { AgentDocument, DocumentSection } from "@/lib/api/agent-documents";
 
 const sheet = (

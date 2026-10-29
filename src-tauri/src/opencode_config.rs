@@ -465,7 +465,7 @@ fn native_cost(value: &Value) -> bool {
 }
 
 // Keys only a V1 declaration has, and keys only a native one has. Mirrored by
-// isNativeOpencodeConfig in src/components/providers/forms/helpers/opencodeFormUtils.ts.
+// isNativeOpencodeConfig in src/features/providers/forms/helpers/opencodeFormUtils.ts.
 const LEGACY_ONLY_KEYS: [&str; 3] = ["npm", "options", "api"];
 const NATIVE_ONLY_KEYS: [&str; 5] = ["package", "settings", "headers", "body", "canonical"];
 

@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { http, HttpResponse } from "msw";
-import App from "@/App";
+import App from "@/app/App";
 import { providersApi } from "@/lib/api/providers";
 import { proxyApi } from "@/lib/api/proxy";
 import { settingsApi } from "@/lib/api/settings";
@@ -34,10 +34,10 @@ vi.mock("@tauri-apps/api/app", () => ({ getVersion: async () => "4.0.18" }));
 vi.mock("@tauri-apps/api/window", () => ({
   getCurrentWindow: () => ({ setDecorations: async () => undefined }),
 }));
-vi.mock("@/components/shell/WindowControls", () => ({
+vi.mock("@/app/shell/WindowControls", () => ({
   WindowControls: () => null,
 }));
-vi.mock("@/components/agent/AgentPage", () => ({
+vi.mock("@/features/agent/AgentPage", () => ({
   AgentPage: ({
     onOpenChannels,
     onCheckUpdate,
@@ -51,7 +51,7 @@ vi.mock("@/components/agent/AgentPage", () => ({
     </div>
   ),
 }));
-vi.mock("@/components/channels/ChannelCenterPanel", async () => {
+vi.mock("@/features/channels/ChannelCenterPanel", async () => {
   const { useUnsavedChangesTracker } = await vi.importActual<
     typeof import("@/lib/unsavedChanges")
   >("@/lib/unsavedChanges");
@@ -80,7 +80,7 @@ vi.mock("@/components/channels/ChannelCenterPanel", async () => {
     ),
   };
 });
-vi.mock("@/components/settings/SettingsPage", () => ({
+vi.mock("@/features/settings/SettingsPage", () => ({
   SettingsPage: ({
     section,
     onImportSuccess,
@@ -95,7 +95,7 @@ vi.mock("@/components/settings/SettingsPage", () => ({
     </div>
   ),
 }));
-vi.mock("@/components/usage/SimpleUsagePage", () => ({
+vi.mock("@/features/usage/SimpleUsagePage", () => ({
   SimpleUsagePage: () => <div data-testid="usage-page" />,
 }));
 

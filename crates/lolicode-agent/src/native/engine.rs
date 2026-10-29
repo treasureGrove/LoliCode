@@ -20,6 +20,35 @@ use uuid::Uuid;
 #[path = "deferred_tools.rs"]
 mod deferred_tools;
 
+const DEFAULT_CONTEXT_LIMIT: u64 = 1_000_000;
+const MAX_REQUEST_BYTES: u64 = 128 * 1024 * 1024;
+const REQUEST_ENVELOPE_BYTES: u64 = 8 * 1024;
+const LOCAL_CONTEXT_BUDGETS: &[u64] = &[32000, 64000, 128000, 256000, 512000, 1_000_000];
+const OUTPUT_HEADROOM: u64 = 1000;
+const MIN_OUTPUT_TOKENS: u64 = 16;
+
+#[derive(Clone, Copy)]
+struct ModelOutputBudget {
+    context_limit: u64,
+    output_limit: u64,
+}
+
+impl ModelOutputBudget {
+    fn output_tokens(&self, messages: &[Value], tools: &[Value], ceiling: u64) -> Result<u64, String> {
+        let input = context::estimated_input_tokens(messages, tools)?;
+        let available = self.context_limit.saturating_sub(input).saturating_sub(OUTPUT_HEADROOM);
+        let output = self.output_limit.min(available).min(ceiling);
+        if output < MIN_OUTPUT_TOKENS {
+            return Err("当前上下文预算或模型输出上限不足以预留至少 16 tokens 的安全输出；原记录已保留，请缩小输入或选择更长上下文。".into());
+        }
+        Ok(output)
+    }
+}
+
+#[cfg(test)]
+#[path = "context_limit_tests.rs"]
+mod context_limit_tests;
+
 pub(super) fn now() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -823,6 +852,7 @@ impl NativeEngine {
             .clone()
             .ok_or("此会话没有可用模型")?;
         model_context(&binding.catalog, &model, state.stored.snapshot.session.context_limit)?;
+        let title_budget = model_output_budget(&binding.catalog, &model, state.stored.snapshot.session.context_limit)?;
         let (cancel, receiver) = watch::channel(false);
         let skills = self.inner.skills.read().await.clone();
         let mut stored = state.stored.clone();
@@ -907,7 +937,7 @@ impl NativeEngine {
             let completed = outcome.is_ok();
             engine.finish(entry.clone(), &request_id, outcome).await;
             if completed {
-                engine.generate_title(entry, binding.gateway, model).await;
+                engine.generate_title(entry, binding.gateway, model, title_budget).await;
             }
         });
         let mut tasks = self.inner.tasks.lock().await;
@@ -950,18 +980,20 @@ impl NativeEngine {
             if *cancel.borrow() {
                 return Err(inference::CANCELLED.into());
             }
-            let (history, summary, project, mode, model, context, effort, mut system) = {
+            let (history, summary, project, mode, model, context, budget, effort, mut system) = {
                 let state = entry.lock().await;
                 let session = &state.stored.snapshot.session;
                 let project = PathBuf::from(&session.project_path);
                 let mode = session.mode.clone();
                 let model = session.model.clone().ok_or("此会话没有可用模型")?;
                 let context = model_context(&catalog, &model, session.context_limit)?;
+                let budget = model_output_budget(&catalog, &model, session.context_limit)?;
+                let context = context.map(|limit| limit.min(budget.context_limit.saturating_sub(OUTPUT_HEADROOM + MIN_OUTPUT_TOKENS)));
                 let effort = effective_effort(&catalog,&model,session.reasoning_effort.as_deref());
                 let mut system = system_prompt(&project, &mode, &skills, state.stored.response_locale.as_deref());
                 if needs_final_answer { system.push_str("The previous response ended without a user-facing answer. Now provide the actual final answer to the user in the requested language; do not return only reasoning. Do not repeat completed tools.\n"); }
                 (state.stored.history.clone(), state.stored.context_summary.clone(),
-                    project, mode, model, context, effort, system)
+                    project, mode, model, context, budget, effort, system)
             };
             let memory = {
                 let _guard = self.inner.memory_gate.lock().await;
@@ -993,10 +1025,11 @@ impl NativeEngine {
                 system.push_str("\nThis is a quiet phone-origin background session. Shell commands, interactive applications and desktop control are disabled. Use only the provided file, search and approval tools. Report this limitation when a task requires a build, test, shell or application; never claim such an operation ran.\n");
             }
             if let Some(plan) = context::plan_with_memory(&history, summary.as_deref(), &system, &schemas, context, false, remembered.as_deref())? {
-                self.compact(&entry, &gateway, &model, effort.as_deref(), &system, &schemas, plan, cancel.clone()).await?;
+                self.compact(&entry, &gateway, &model, effort.as_deref(), budget, &system, &schemas, plan, cancel.clone()).await?;
                 continue;
             }
             let messages = context::with_memory(&system, summary.as_deref(), remembered.as_deref(), &history);
+            let max_tokens = budget.output_tokens(&messages, &schemas, u64::MAX)?;
             let assistant_id = format!("assistant-{}", Uuid::new_v4());
             {
                 let mut state = entry.lock().await;
@@ -1017,6 +1050,7 @@ impl NativeEngine {
                 &session_id,
                 &model.model_id,
                 effort.as_deref(),
+                max_tokens,
                 messages,
                 schemas.clone(),
                 tx,
@@ -1041,7 +1075,7 @@ impl NativeEngine {
                     }
                     let plan = context::plan_with_memory(&history, summary.as_deref(), &system, &schemas, context, true, remembered.as_deref())?
                         .ok_or("上游报告上下文超限，但没有可安全整理的已完成历史；原记录已保留。")?;
-                    self.compact(&entry, &gateway, &model, effort.as_deref(), &system, &schemas, plan, cancel.clone()).await?;
+                    self.compact(&entry, &gateway, &model, effort.as_deref(), budget, &system, &schemas, plan, cancel.clone()).await?;
                     reactive_retry = true;
                     continue;
                 }
@@ -1324,11 +1358,14 @@ impl NativeEngine {
         gateway: &NativeGateway,
         model: &AgentModelRef,
         effort: Option<&str>,
+        budget: ModelOutputBudget,
         system: &str,
         schemas: &[Value],
-        plan: context::Plan,
+        mut plan: context::Plan,
         cancel: watch::Receiver<bool>,
     ) -> Result<(), String> {
+        let max_tokens = budget.output_tokens(&plan.summary_messages, &[], 20_000)?;
+        plan.limit_summary_output(max_tokens);
         let session_id = {
             let mut state = entry.lock().await;
             let mut stored = state.stored.clone();
@@ -1341,7 +1378,7 @@ impl NativeEngine {
         let outcome = tokio::time::timeout(
             Duration::from_secs(120),
             inference::infer(
-                &self.inner.client, gateway, &session_id, &model.model_id, effort,
+                &self.inner.client, gateway, &session_id, &model.model_id, effort, max_tokens,
                 plan.summary_messages.clone(), Vec::new(), tx, cancel.clone(),
             ),
         )
@@ -1407,7 +1444,7 @@ impl NativeEngine {
         outcome.map(|_| ())
     }
 
-    async fn generate_title(&self, entry: Entry, gateway: NativeGateway, model: AgentModelRef) {
+    async fn generate_title(&self, entry: Entry, gateway: NativeGateway, model: AgentModelRef, budget: ModelOutputBudget) {
         let (conversation, session_id) = {
             let mut state = entry.lock().await;
             if state.title_in_flight
@@ -1437,7 +1474,7 @@ impl NativeEngine {
             json!({"role":"user","content":serde_json::to_string(&conversation).unwrap_or_default()}),
         ];
         let (tx, _) = mpsc::unbounded_channel();
-        let result = tokio::time::timeout(
+        let result = if let Ok(max_tokens) = budget.output_tokens(&messages, &[], 2048) { tokio::time::timeout(
             Duration::from_secs(20),
             inference::infer(
                 &self.inner.client,
@@ -1445,13 +1482,14 @@ impl NativeEngine {
                 &session_id,
                 &model.model_id,
                 None,
+                max_tokens,
                 messages,
                 Vec::new(),
                 tx,
                 self.inner.shutdown.subscribe(),
             ),
         )
-        .await;
+        .await } else { Ok(Err("标题生成的输出预算不足".into())) };
         let mut state = entry.lock().await;
         state.title_in_flight = false;
         // A manual rename, another completed summary, or a deleted session
@@ -2177,6 +2215,10 @@ fn catalog_value(value: Value) -> Result<Value, String> {
         if !seen.insert(model["id"].as_str().unwrap()) {
             return Err("模型目录包含重复标识".into());
         }
+        if model.get("maxRequestBytes").filter(|value| !value.is_null())
+            .is_some_and(|value| value.as_u64().is_none_or(|bytes| bytes == 0 || bytes > MAX_REQUEST_BYTES)) {
+            return Err("模型请求大小上限需要为不超过 128 MiB 的正整数字节数".into());
+        }
         let mut object = serde_json::Map::new();
         for key in [
             "id",
@@ -2186,6 +2228,7 @@ fn catalog_value(value: Value) -> Result<Value, String> {
             "channelName",
             "contextLimit",
             "contextLimits",
+            "maxRequestBytes",
             "outputLimit",
             "reasoningEfforts",
             "reasoningEffortSource",
@@ -2215,16 +2258,44 @@ fn selection(catalog: &Value, id: &str) -> Result<(AgentModelRef, Option<u64>), 
         model["contextLimit"].as_u64().filter(|limit| *limit > 0),
     ))
 }
+fn context_tokens(value: &Value) -> Option<u64> {
+    value.as_u64().filter(|limit| *limit > 0 && *limit <= 9_007_199_254_740_991)
+}
+fn context_windows(metadata: &Value) -> Vec<u64> {
+    metadata["contextLimits"].as_array().map(|windows|
+        windows.iter().filter_map(context_tokens).collect()).unwrap_or_default()
+}
+fn default_context(metadata: &Value) -> u64 {
+    context_tokens(&metadata["contextLimit"])
+        .or_else(|| context_windows(metadata).into_iter().min())
+        .unwrap_or(DEFAULT_CONTEXT_LIMIT)
+}
 fn context_choice(catalog: &Value, model: &AgentModelRef, value: Option<&Value>) -> Result<Option<u64>, String> {
     let Some(value) = value.filter(|value| !value.is_null()) else { return Ok(None); };
     let limit = value.as_u64().filter(|value| *value > 0).ok_or("上下文窗口需要正整数")?;
     let declared = model_metadata(catalog, model).is_some_and(|metadata| {
-        metadata["contextLimit"].as_u64() == Some(limit) || metadata["contextLimits"].as_array()
-            .is_some_and(|windows| windows.iter().any(|item| item.as_u64() == Some(limit)))
+        let default = default_context(metadata);
+        let windows = context_windows(metadata);
+        limit == default || if windows.is_empty() {
+            limit <= default && LOCAL_CONTEXT_BUDGETS.contains(&limit)
+        } else {
+            windows.contains(&limit)
+        }
     });
     if !declared { return Err("此上下文窗口不在模型当前公布的档位中，请重新选择".into()); }
     Ok(Some(limit))
 }
+fn model_output_budget(catalog: &Value, model: &AgentModelRef, selected: Option<u64>) -> Result<ModelOutputBudget, String> {
+    let metadata = model_metadata(catalog, model).ok_or("会话模型不在当前渠道目录中，请重新选择模型")?;
+    if let Some(selected) = selected {
+        context_choice(catalog, model, Some(&json!(selected)))?;
+    }
+    Ok(ModelOutputBudget {
+        context_limit: selected.unwrap_or_else(|| default_context(metadata)).max(1024),
+        output_limit: context_tokens(&metadata["outputLimit"]).unwrap_or(32_000),
+    })
+}
+
 fn model_context(catalog: &Value, model: &AgentModelRef, selected: Option<u64>) -> Result<Option<u64>, String> {
     let catalog_model = catalog["models"]
         .as_array()
@@ -2234,15 +2305,15 @@ fn model_context(catalog: &Value, model: &AgentModelRef, selected: Option<u64>) 
             })
         })
         .ok_or("会话模型不在当前渠道目录中，请重新选择模型")?;
-    // A missing limit means the provider did not publish context metadata.
-    // Do not turn that unknown value into an 8K hard limit: large system
-    // prompts and skill catalogs can exceed it before reaching the model.
+    // The local default is a planning budget, not an upstream capability claim.
+    // A transport ceiling is independent of selectable windows and always wins.
     if let Some(selected) = selected {
         context_choice(catalog, model, Some(&json!(selected)))?;
     }
-    Ok(selected.or_else(|| catalog_model["contextLimit"].as_u64())
-        .filter(|limit| *limit > 0)
-        .map(|limit| limit.max(1024)))
+    let requested = selected.unwrap_or_else(|| default_context(catalog_model)).max(1024);
+    let transport = catalog_model["maxRequestBytes"].as_u64()
+        .map(|bytes| (bytes.saturating_sub(REQUEST_ENVELOPE_BYTES) / 2).max(1));
+    Ok(Some(transport.map_or(requested, |limit| requested.min(limit))))
 }
 fn model_metadata<'a>(catalog: &'a Value, model: &AgentModelRef) -> Option<&'a Value> {
     catalog["models"].as_array()?.iter().find(|item| {

@@ -58,6 +58,19 @@ def active_models(policy, now=None):
     return policy['models']
 
 
+def public_models(policy):
+    # Older desktops do not know that a relay may have a smaller transport
+    # envelope than its upstream model. Publish the usable planning window:
+    # native context planning allows two UTF-8 bytes per token, with room for
+    # the remaining HTTP request fields. Keep the upstream policy unchanged.
+    transport_context = max(1, (policy['max_request_bytes'] - 8192) // 2)
+    return [{**model, 'contextLimit': min(model.get('contextLimit', 1000000), transport_context),
+             'upstreamContextLimit': model.get('contextLimit', 1000000),
+             'maxRequestBytes': policy['max_request_bytes'],
+             'outputLimit': min(model.get('outputLimit', 32000), policy['max_output_tokens'])}
+            for model in active_models(policy)]
+
+
 def public_limits(policy):
     return {'maxOutputTokens': policy['max_output_tokens'],
             'maxRequestBytes': policy['max_request_bytes'],
@@ -364,16 +377,20 @@ def prepare_payload(value, policy):
     payload['stream'] = value.get('stream', False)
     if payload['stream']:
         payload['stream_options'] = {'include_usage': True}
-    output = value.get('max_completion_tokens', value.get('max_tokens', policy['max_output_tokens']))
+    model = models[value['model']]
+    model_output = model.get('outputLimit', 32000)
+    output = value.get('max_completion_tokens', value.get('max_tokens', model_output))
     if type(output) is not int or output < 1:
         reject(400, 'invalid_request', '输出 token 上限必须为正整数。')
-    model = models[value['model']]
-    output = min(output, policy['max_output_tokens'], model.get('outputLimit', policy['max_output_tokens']))
     # Text/tool requests only. Count every UTF-8 JSON byte plus a fixed framing
     # allowance as a conservative input reservation; settle using upstream usage.
     bound = len(json.dumps(payload, ensure_ascii=False).encode()) + 4096 + 32 * len(messages)
-    if bound + output > model.get('contextLimit', 32768):
+    # Match native planning's two-byte context estimate. Accounting continues
+    # to reserve every byte above, independently of the selected model window.
+    remaining_context = model.get('contextLimit', 1000000) - (bound + 1) // 2 - 1000
+    if remaining_context < 1:
         reject(400, 'context_too_long', '当前上下文超过公益模型限制，请缩短对话。')
+    output = min(output, policy['max_output_tokens'], model_output, remaining_context)
     return payload, bound, output
 
 
@@ -400,8 +417,11 @@ def create_app(policy, database, *, forum='https://lolicode.com', gateway='http:
                credentials=None, material_factory=None):
     ledger = Ledger(database)
     ledger.recover()
-    app = web.Application(client_max_size=policy['max_request_bytes'], middlewares=[errors])
+    app = web.Application(client_max_size=3 * 1024**2, middlewares=[errors])
     app['ledger'], app['policy'] = ledger, policy
+    from public_settings import install_public_settings
+    install_public_settings(app, policy, gateway, Path(database).parent,
+                            reject=reject, read_limited=read_limited)
 
     async def startup(app):
         app['http'] = aiohttp.ClientSession(trust_env=False, auto_decompress=True,
@@ -437,7 +457,7 @@ def create_app(policy, database, *, forum='https://lolicode.com', gateway='http:
     async def account_status(user):
         await app['gateway'].material(user)
         return {'account': user, 'quota': ledger.summary(user['id'], policy),
-                                  'models': active_models(policy), 'ready': bool(active_models(policy)),
+                                  'models': public_models(policy), 'ready': bool(active_models(policy)),
                                   'limits': public_limits(policy), 'trialEndsAt': policy.get('available_until')}
 
     async def account(request):
@@ -447,12 +467,15 @@ def create_app(policy, database, *, forum='https://lolicode.com', gateway='http:
         user = await identity(request)
         await app['gateway'].material(user)
         return web.json_response({'object': 'list', 'data': [
-            {'id': model['id'], 'object': 'model', 'owned_by': 'lolicode', **model} for model in active_models(policy)]})
+            {'id': model['id'], 'object': 'model', 'owned_by': 'lolicode', **model} for model in public_models(policy)]})
 
     async def chat(request):
         user = await identity(request)
         try:
-            value = await request.json()
+            raw = await request.read()
+            if len(raw) > policy['max_request_bytes']:
+                reject(413, 'request_too_large', '请求内容超过当前公益模型限制。')
+            value = json.loads(raw)
         except (ValueError, UnicodeError):
             reject(400, 'invalid_request', '请求必须为有效 JSON。')
         payload, input_bound, output = prepare_payload(value, policy)
@@ -462,9 +485,13 @@ def create_app(policy, database, *, forum='https://lolicode.com', gateway='http:
         sent, usage, release = False, None, False
         try:
             sent = True
+            # A productive stream may last beyond the old trial's total timeout.
+            # Retain connect/idle bounds; output and daily reservations remain finite.
+            model_timeout = aiohttp.ClientTimeout(total=None if payload['stream'] else 320,
+                                                 connect=8, sock_read=300)
             async with app['http'].post(gateway + '/v1/chat/completions', json=payload,
                     headers={'Authorization': 'Bearer ' + key, 'Accept-Encoding': 'identity'},
-                    allow_redirects=False) as upstream:
+                    allow_redirects=False, timeout=model_timeout) as upstream:
                 if upstream.status != 200:
                     release = True
                     reject(503, 'upstream_unavailable', '模型暂时不可用，本次未扣除每日额度。')

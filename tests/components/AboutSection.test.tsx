@@ -6,7 +6,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { AboutSection } from "@/components/settings/AboutSection";
+import { AboutSection } from "@/features/settings/AboutSection";
 import { UpdateProvider } from "@/contexts/UpdateContext";
 import { APP_CHANGELOG, APP_WEBSITE } from "@/lib/branding";
 import { useSettingsMetadata } from "@/hooks/useSettingsMetadata";

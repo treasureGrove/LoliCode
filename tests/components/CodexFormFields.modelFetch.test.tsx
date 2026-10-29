@@ -10,7 +10,7 @@ import { FormProvider, useForm } from "react-hook-form";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { toast } from "sonner";
 import { renderWithQueryClient as render } from "../utils/testQueryClient";
-import { CodexFormFields } from "@/components/providers/forms/CodexFormFields";
+import { CodexFormFields } from "@/features/providers/forms/CodexFormFields";
 import {
   copilotGetModels,
   copilotGetModelsForAccount,
@@ -36,16 +36,16 @@ vi.mock("@/lib/api/model-fetch", () => ({
 vi.mock("sonner", () => ({
   toast: { error: vi.fn(), success: vi.fn(), info: vi.fn() },
 }));
-vi.mock("@/components/providers/forms/CopilotAuthSection", () => ({
+vi.mock("@/features/providers/forms/CopilotAuthSection", () => ({
   CopilotAuthSection: () => null,
 }));
-vi.mock("@/components/providers/forms/XaiOAuthSection", () => ({
+vi.mock("@/features/providers/forms/XaiOAuthSection", () => ({
   XaiOAuthSection: () => null,
 }));
-vi.mock("@/components/providers/forms/shared", async (importOriginal) => {
+vi.mock("@/features/providers/forms/shared", async (importOriginal) => {
   const actual =
     await importOriginal<
-      typeof import("@/components/providers/forms/shared")
+      typeof import("@/features/providers/forms/shared")
     >();
   return {
     ...actual,

@@ -7,7 +7,7 @@ import {
   groupSessionsByTime,
   isArchivedSession,
   formatMessageTime,
-} from "@/components/sessions/utils";
+} from "@/features/sessions/utils";
 import type { SessionMeta } from "@/types";
 
 describe("session utils", () => {

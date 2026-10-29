@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import type { ComponentProps, PropsWithChildren } from "react";
 import { useForm } from "react-hook-form";
 import { describe, expect, it, vi } from "vitest";
-import { CodexFormFields } from "@/components/providers/forms/CodexFormFields";
+import { CodexFormFields } from "@/features/providers/forms/CodexFormFields";
 import { Form } from "@/components/ui/form";
 
 vi.mock("@/hooks/useModelMetadataFill", () => ({

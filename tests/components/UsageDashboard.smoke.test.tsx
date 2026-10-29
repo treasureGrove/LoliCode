@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { UsageDashboard } from "@/components/usage/UsageDashboard";
+import { UsageDashboard } from "@/features/usage/UsageDashboard";
 
 /**
  * 不 mock 子组件，把整页（指标、趋势图、四个页签）真渲染一遍，接口用假数据。

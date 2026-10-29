@@ -1,7 +1,7 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { LolicodeRelayDialog } from "@/components/shell/LolicodeRelayDialog";
+import { LolicodeRelayDialog } from "@/app/shell/LolicodeRelayDialog";
 import type { LolicodeRelayStatus } from "@/lib/api/lolicode-account";
 
 const api = vi.hoisted(() => ({ relayStatus: vi.fn(), connectRelay: vi.fn() }));
@@ -29,6 +29,20 @@ beforeEach(() => {
   api.connectRelay.mockResolvedValue(undefined);
 });
 describe("LoliCode sponsored allowance", () => {
+  it("marks each open public model as free", async () => {
+    api.relayStatus.mockResolvedValue({
+      ...status,
+      ready: true,
+      models: [{ id: "glm-5.3-flash", name: "GLM 5.3 Flash" }],
+    });
+    render(<LolicodeRelayDialog open accountId="42" onOpenChange={vi.fn()} />);
+    expect(await screen.findByText("GLM 5.3 Flash")).toBeInTheDocument();
+    expect(screen.getByText("free")).toHaveAttribute(
+      "title",
+      "公益模型，使用每日免费额度",
+    );
+  });
+
   it("does not fetch when closed or signed out", () => {
     const view = render(
       <LolicodeRelayDialog

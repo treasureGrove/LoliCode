@@ -4,7 +4,7 @@ import {
   createUsageTrendTokenTickFormatter,
   formatUsageTrendTokenTickLabel,
   formatUsageTrendTickLabel,
-} from "@/components/usage/UsageTrendChart";
+} from "@/features/usage/UsageTrendChart";
 
 const day = (isoDate: string) =>
   ({

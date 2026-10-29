@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ProviderForm } from "@/components/providers/forms/ProviderForm";
+import { ProviderForm } from "@/features/providers/forms/ProviderForm";
 import type { ProviderMeta } from "@/types";
 import type { AppMode } from "@/types/proxy";
 import { createTestQueryClient } from "../utils/testQueryClient";
@@ -27,13 +27,13 @@ vi.mock("@/lib/query/proxy", async (importOriginal) => {
   };
 });
 
-vi.mock("@/components/providers/forms/CodexConfigEditor", () => ({
+vi.mock("@/features/providers/forms/CodexConfigEditor", () => ({
   default: () => <div data-testid="codex-config-editor" />,
 }));
 
-vi.mock("@/components/providers/forms/hooks", async (importOriginal) => {
+vi.mock("@/features/providers/forms/hooks", async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import("@/components/providers/forms/hooks")>();
+    await importOriginal<typeof import("@/features/providers/forms/hooks")>();
   const signedOut = {
     isAuthenticated: false,
     isStatusSuccess: true,
