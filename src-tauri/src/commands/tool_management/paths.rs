@@ -8,6 +8,7 @@ use super::terminal::{default_flag_for_shell, is_valid_shell};
 #[cfg(target_os = "windows")]
 use super::CREATE_NO_WINDOW;
 use std::path::Path;
+#[cfg(target_os = "windows")]
 use std::path::PathBuf;
 
 pub(super) fn push_unique_path(paths: &mut Vec<std::path::PathBuf>, path: std::path::PathBuf) {

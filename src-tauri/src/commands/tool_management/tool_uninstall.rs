@@ -9,26 +9,27 @@ use super::installations::{
     default_install, enumerate_tool_installations, mcode_receipt_install_root,
     mcode_script_install_root, McodeLayout, ToolInstallation,
 };
+#[cfg(target_os = "windows")]
+use super::lifecycle::finish_lifecycle_output;
 use super::lifecycle::run_tool_lifecycle_silently;
 #[cfg(not(target_os = "windows"))]
 use super::lifecycle::sibling_bin;
 #[cfg(target_os = "windows")]
 use super::lifecycle::sibling_bin_with_ext;
 use super::lifecycle::{
-    finish_lifecycle_output, is_native_executable, npm_package_for, tool_display_name,
-    ToolUninstallPlan,
+    is_native_executable, npm_package_for, tool_display_name, ToolUninstallPlan,
 };
 use super::paths::resolve_path_default;
 #[cfg(target_os = "windows")]
 use super::paths::windows_shell_compatible_path;
-use super::process::{
-    decode_command_output, wait_child_output, CommandDeadline, INSTALL_PROBE_TIMEOUT,
-};
-use super::terminal::{default_flag_for_shell, is_valid_shell, shell_single_quote};
+#[cfg(target_os = "windows")]
+use super::process::{decode_command_output, wait_child_output};
+use super::process::{CommandDeadline, INSTALL_PROBE_TIMEOUT};
+use super::terminal::shell_single_quote;
 #[cfg(target_os = "windows")]
 use super::terminal::{
-    is_valid_shell_flag, is_valid_wsl_distro_name, win_quote_path_for_batch,
-    windows_cmd_double_quote_arg,
+    default_flag_for_shell, is_valid_shell, is_valid_shell_flag, is_valid_wsl_distro_name,
+    win_quote_path_for_batch, windows_cmd_double_quote_arg,
 };
 #[cfg(test)]
 use super::versions::wsl_auto_shell_command;

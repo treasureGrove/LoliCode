@@ -2,6 +2,7 @@
 
 #[cfg(target_os = "windows")]
 use super::paths::windows_shell_compatible_path;
+#[cfg(any(target_os = "windows", target_os = "macos"))]
 use super::process::decode_command_output;
 #[cfg(target_os = "windows")]
 use super::CREATE_NO_WINDOW;

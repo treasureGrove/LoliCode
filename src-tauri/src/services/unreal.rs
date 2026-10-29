@@ -254,6 +254,7 @@ pub fn discover_engines() -> Vec<UnrealEngine> {
     found
 }
 
+#[cfg(any(target_os = "windows", target_os = "macos"))]
 fn launcher_installations(path: &Path) -> Vec<(PathBuf, String)> {
     let Ok(raw) = fs::read(path) else {
         return vec![];

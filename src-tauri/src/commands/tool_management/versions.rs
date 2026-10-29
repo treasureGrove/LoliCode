@@ -9,6 +9,7 @@ use super::paths::effective_path_os;
 use super::paths::effective_path_string;
 #[cfg(not(target_os = "windows"))]
 use super::paths::prepend_search_dir_to_path;
+#[cfg(target_os = "windows")]
 use super::paths::resolve_path_default;
 use super::paths::{build_tool_search_paths, tool_executable_candidates};
 use super::process::decode_command_output;

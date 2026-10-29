@@ -18,11 +18,10 @@ use super::process::decode_command_output;
 use super::terminal::quote_path_if_spaced;
 #[cfg(not(target_os = "windows"))]
 use super::terminal::shell_single_quote;
-use super::terminal::{default_flag_for_shell, is_valid_shell};
 #[cfg(target_os = "windows")]
 use super::terminal::{
-    is_valid_shell_flag, is_valid_wsl_distro_name, win_quote_path_for_batch,
-    windows_cmd_double_quote_arg,
+    default_flag_for_shell, is_valid_shell, is_valid_shell_flag, is_valid_wsl_distro_name,
+    win_quote_path_for_batch, windows_cmd_double_quote_arg,
 };
 use super::tool_uninstall;
 #[cfg(target_os = "windows")]

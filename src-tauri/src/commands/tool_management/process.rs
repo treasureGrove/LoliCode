@@ -5,10 +5,10 @@ use super::installations::locate_default_tool;
 use super::installations::wsl_distro_for_tool;
 #[cfg(target_os = "windows")]
 use super::paths::{is_windows_command_script, windows_shell_compatible_path};
-use super::terminal::shell_single_quote;
 #[cfg(target_os = "windows")]
 use super::terminal::{
-    is_valid_wsl_distro_name, win_quote_path_for_batch, windows_cmd_double_quote_arg,
+    is_valid_wsl_distro_name, shell_single_quote, win_quote_path_for_batch,
+    windows_cmd_double_quote_arg,
 };
 #[cfg(target_os = "windows")]
 use super::CREATE_NO_WINDOW;

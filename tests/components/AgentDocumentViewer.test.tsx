@@ -620,6 +620,9 @@ describe("Office document viewer", () => {
     expect(extracted).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "上一页内容" }));
     await waitFor(() => expect(pdfMocks.getPage).toHaveBeenLastCalledWith(1));
+    await waitFor(() =>
+      expect(screen.getByLabelText("PDF 第 1 页")).toBeVisible(),
+    );
     expect(agentDocumentsApi.pdf).toHaveBeenCalledTimes(1);
     expect(agentDocumentsApi.pdf).toHaveBeenCalledWith(
       "lc:session",
@@ -646,6 +649,9 @@ describe("Office document viewer", () => {
     expect(screen.getByText("Readable fallback")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "重试 PDF" }));
     await waitFor(() => expect(pdfMocks.render).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(screen.getByLabelText("PDF 第 1 页")).toBeVisible(),
+    );
   });
 
   it("zooms the actual PDF viewport without reloading document bytes", async () => {
@@ -654,22 +660,27 @@ describe("Office document viewer", () => {
     );
     viewer("report.pdf");
     await waitFor(() => expect(pdfMocks.render).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(screen.getByLabelText("PDF 第 1 页")).toBeVisible(),
+    );
     const firstWidth = pdfMocks.render.mock.calls.at(-1)![0].viewport.width;
     fireEvent.change(screen.getByRole("slider", { name: "文档缩放" }), {
       target: { value: "150" },
     });
-    await waitFor(() =>
+    await waitFor(() => {
       expect(pdfMocks.render.mock.calls.at(-1)![0].viewport.width).toBeCloseTo(
         firstWidth * 1.5,
-      ),
-    );
+      );
+      expect(screen.getByLabelText("PDF 第 1 页")).toBeVisible();
+    });
     expect(screen.getByLabelText("当前缩放")).toHaveTextContent("150%");
     fireEvent.click(screen.getByRole("button", { name: "缩小" }));
-    await waitFor(() =>
+    await waitFor(() => {
       expect(pdfMocks.render.mock.calls.at(-1)![0].viewport.width).toBeCloseTo(
         firstWidth * 1.4,
-      ),
-    );
+      );
+      expect(screen.getByLabelText("PDF 第 1 页")).toBeVisible();
+    });
     expect(agentDocumentsApi.pdf).toHaveBeenCalledTimes(1);
     expect(pdfMocks.getDocument).toHaveBeenCalledTimes(1);
   });
@@ -687,11 +698,12 @@ describe("Office document viewer", () => {
         expect(screen.getByLabelText("PDF 第 1 页")).toBeVisible(),
       );
       fireEvent.click(screen.getByRole("button", { name: "适合宽度" }));
-      await waitFor(() =>
+      await waitFor(() => {
         expect(
           pdfMocks.render.mock.calls.at(-1)![0].viewport.width,
-        ).toBeLessThanOrEqual(320.001),
-      );
+        ).toBeLessThanOrEqual(320.001);
+        expect(screen.getByLabelText("PDF 第 1 页")).toBeVisible();
+      });
       expect(
         Number(
           (screen.getByRole("slider", { name: "文档缩放" }) as HTMLInputElement)
@@ -772,11 +784,12 @@ describe("Office document viewer", () => {
       fireEvent.change(screen.getByRole("slider", { name: "文档缩放" }), {
         target: { value: "150" },
       });
-      await waitFor(() =>
+      await waitFor(() => {
         expect(
           pdfMocks.render.mock.calls.at(-1)![0].viewport.width,
-        ).toBeGreaterThan(320),
-      );
+        ).toBeGreaterThan(320);
+        expect(screen.getByLabelText("PDF 第 1 页")).toBeVisible();
+      });
       const manualWidth = pdfMocks.render.mock.calls.at(-1)![0].viewport.width;
       await resize(480);
       expect(screen.getByRole("slider", { name: "文档缩放" })).toHaveValue(
@@ -786,11 +799,12 @@ describe("Office document viewer", () => {
         manualWidth,
       );
       fireEvent.click(screen.getByRole("button", { name: "适合宽度" }));
-      await waitFor(() =>
+      await waitFor(() => {
         expect(
           pdfMocks.render.mock.calls.at(-1)![0].viewport.width,
-        ).toBeLessThanOrEqual(480.001),
-      );
+        ).toBeLessThanOrEqual(480.001);
+        expect(screen.getByLabelText("PDF 第 1 页")).toBeVisible();
+      });
       const fittedWidth = pdfMocks.render.mock.calls.at(-1)![0].viewport.width;
       await resize(640);
       await waitFor(() => {
@@ -798,6 +812,7 @@ describe("Office document viewer", () => {
           pdfMocks.render.mock.calls.at(-1)![0].viewport.width;
         expect(currentWidth).toBeGreaterThan(fittedWidth);
         expect(currentWidth).toBeLessThanOrEqual(640.001);
+        expect(screen.getByLabelText("PDF 第 1 页")).toBeVisible();
       });
       expect(agentDocumentsApi.pdf).toHaveBeenCalledTimes(1);
     } finally {
@@ -884,12 +899,15 @@ describe("Office document viewer", () => {
     }));
     const view = viewer("report.pdf");
     await waitFor(() => expect(pdfMocks.render).toHaveBeenCalledTimes(1));
-    fireEvent.click(screen.getByRole("button", { name: "取消渲染" }));
+    fireEvent.click(await screen.findByRole("button", { name: "取消渲染" }));
     expect(pdfMocks.cancel).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("alert")).toHaveTextContent("页面渲染已取消");
     fireEvent.click(screen.getByRole("button", { name: "下一页内容" }));
     await waitFor(() => expect(pdfMocks.getPage).toHaveBeenLastCalledWith(2));
     await act(async () => pending.reject(new Error("Rendering cancelled")));
+    await waitFor(() =>
+      expect(screen.getByLabelText("PDF 第 2 页")).toBeVisible(),
+    );
     expect(pdfMocks.cleanup).toHaveBeenCalled();
     expect(screen.queryByText(/Rendering cancelled/)).toBeNull();
     view.unmount();
