@@ -1071,8 +1071,7 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
     family: "sudocode",
     providerKey: "lolicode-sudo-code-chat",
     websiteUrl: "https://sudocode.chat",
-    apiKeyUrl:
-      "https://sudocode.chat/sign-up?&utm_medium=sponsor",
+    apiKeyUrl: "https://sudocode.chat/sign-up?&utm_medium=sponsor",
     settingsConfig: {
       name: "SudoCode.chat",
       baseUrl: "https://api.sudocode.chat/v1",

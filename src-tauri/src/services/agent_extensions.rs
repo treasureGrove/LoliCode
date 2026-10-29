@@ -4,6 +4,7 @@
 use crate::{config::atomic_write_private, error::AppError};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+#[cfg(any(test, feature = "test-hooks"))]
 use sha2::{Digest, Sha256};
 use std::{
     collections::{BTreeMap, BTreeSet},

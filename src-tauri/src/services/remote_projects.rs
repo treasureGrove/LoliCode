@@ -113,7 +113,7 @@ impl RemoteProjects {
             .await?;
         let encoded = receipt["base64"]
             .as_str()
-            .filter(|s| s.len() <= (5 * 1024 * 1024 + 2) / 3 * 4)
+            .filter(|s| s.len() <= (5usize * 1024 * 1024).div_ceil(3) * 4)
             .ok_or("远程文件超过预览限制")?;
         let bytes = STANDARD.decode(encoded).map_err(|_| "远程文件回执无效")?;
         if bytes.len() > 5 * 1024 * 1024 || receipt["size"].as_u64() != Some(bytes.len() as u64) {

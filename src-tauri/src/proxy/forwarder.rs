@@ -2855,7 +2855,8 @@ impl RequestForwarder {
             let status_code = status.as_u16();
             let retry_after = (status_code == 429)
                 .then(|| {
-                    response.headers()
+                    response
+                        .headers()
                         .get(http::header::RETRY_AFTER)
                         .and_then(|value| value.to_str().ok())
                         .and_then(|value| value.trim().parse::<u64>().ok())

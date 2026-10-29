@@ -227,7 +227,7 @@ fn sessions(db: &Connection, project: Option<&str>) -> Result<Vec<AgentSession>,
     if !known {
         return Err("旧会话数据库缺少会话表，原文件已保留".into());
     }
-    result.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+    result.sort_by_key(|session| std::cmp::Reverse(session.updated_at));
     Ok(result)
 }
 fn push_session(

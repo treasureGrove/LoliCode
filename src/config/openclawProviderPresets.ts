@@ -1684,8 +1684,7 @@ export const openclawProviderPresets: OpenClawProviderPreset[] = [
     planKey: "payg",
     nameKey: "providerForm.presets.ucloud",
     websiteUrl: "https://www.compshare.cn",
-    apiKeyUrl:
-      "https://www.compshare.cn/coding-plan",
+    apiKeyUrl: "https://www.compshare.cn/coding-plan",
     settingsConfig: {
       baseUrl: "https://api.modelverse.cn/v1",
       apiKey: "",
@@ -1726,8 +1725,7 @@ export const openclawProviderPresets: OpenClawProviderPreset[] = [
     planKey: "codingPlan",
     nameKey: "providerForm.presets.ucloudCoding",
     websiteUrl: "https://www.compshare.cn",
-    apiKeyUrl:
-      "https://www.compshare.cn/coding-plan",
+    apiKeyUrl: "https://www.compshare.cn/coding-plan",
     settingsConfig: {
       baseUrl: "https://cp.compshare.cn/v1",
       apiKey: "",
@@ -2129,8 +2127,7 @@ export const openclawProviderPresets: OpenClawProviderPreset[] = [
     name: "SudoCode.chat",
     family: "sudocode",
     websiteUrl: "https://sudocode.chat",
-    apiKeyUrl:
-      "https://sudocode.chat/sign-up?&utm_medium=sponsor",
+    apiKeyUrl: "https://sudocode.chat/sign-up?&utm_medium=sponsor",
     settingsConfig: {
       baseUrl: "https://api.sudocode.chat/v1",
       apiKey: "",

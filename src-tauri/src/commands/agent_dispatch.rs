@@ -10,8 +10,8 @@ use crate::{
     },
     store::AppState,
 };
-use lolicode_agent::{AgentSession, AgentSnapshot};
 use base64::{engine::general_purpose::STANDARD, Engine as _};
+use lolicode_agent::{AgentSession, AgentSnapshot};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::{json, Value};
 use tauri::{AppHandle, Manager};
@@ -161,7 +161,9 @@ pub async fn open_agent_project(
 pub async fn open_agent_standalone(app: AppHandle) -> Result<AgentOpenProject, String> {
     let path = tokio::task::spawn_blocking(|| {
         crate::services::agent_host::standalone_workspace_at(&crate::config::get_app_config_dir())
-    }).await.map_err(|_| "独立任务目录检查未完成")??;
+    })
+    .await
+    .map_err(|_| "独立任务目录检查未完成")??;
     open_agent_project(app, path.to_string_lossy().into_owned(), None).await
 }
 
@@ -219,7 +221,12 @@ pub async fn set_agent_project_metadata(
     name: Option<String>,
 ) -> Result<AgentProject, String> {
     app.state::<InprocessAgentState>()
-        .project_metadata(app.state::<AppState>().inner(), &path, pinned, name.as_deref())
+        .project_metadata(
+            app.state::<AppState>().inner(),
+            &path,
+            pinned,
+            name.as_deref(),
+        )
         .await
 }
 #[tauri::command]
@@ -228,6 +235,10 @@ pub async fn remove_agent_project(app: AppHandle, path: String) -> Result<(), St
         .remove_project(app.state::<AppState>().inner(), &path)
         .await
 }
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Named arguments are part of the existing Tauri IPC contract."
+)]
 #[tauri::command(rename_all = "camelCase")]
 pub async fn create_agent_session(
     app: AppHandle,
@@ -239,11 +250,17 @@ pub async fn create_agent_session(
     context_limit: Option<u64>,
     project_path: Option<String>,
 ) -> Result<AgentSession, String> {
-    if let Some(path) = &project_path { check_project(&app, path)?; }
+    if let Some(path) = &project_path {
+        check_project(&app, path)?;
+    }
     let mut session: AgentSession = native(&app, "createSession", json!({"projectPath":project_path,"modelId":model_id,"mode":mode,"title":title,"permissionMode":permission_mode.unwrap_or_else(|| "ask".into()),"reasoningEffort":reasoning_effort,"contextLimit":context_limit}), true).await?;
     decorate(&app, &mut session)?;
     Ok(session)
 }
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Named arguments are part of the existing Tauri IPC contract."
+)]
 #[tauri::command(rename_all = "camelCase")]
 pub async fn update_agent_session(
     app: AppHandle,
@@ -403,8 +420,7 @@ pub async fn send_agent_message(
                 .decode(encoded)
                 .map_err(|_| "图片数据编码无效，请重新添加图片".to_string())?;
             if decoded.len() as u64 != attachment.bytes
-                || super::agent_images::image_media_type(&decoded)
-                    != Some(attachment.mime.as_str())
+                || super::agent_images::image_media_type(&decoded) != Some(attachment.mime.as_str())
             {
                 return Err("图片内容与格式不匹配，请重新添加图片".into());
             }
@@ -487,13 +503,7 @@ pub async fn send_agent_message(
     if !attachment_values.is_empty() {
         args["attachments"] = Value::Array(attachment_values);
     }
-    native(
-        &app,
-        "sendMessage",
-        args,
-        true,
-    )
-    .await
+    native(&app, "sendMessage", args, true).await
 }
 
 #[derive(Debug, Deserialize)]
@@ -543,9 +553,7 @@ pub async fn inspect_agent_document(path: String) -> Result<AgentDocumentInfo, S
     let contents = tokio::fs::read(&path)
         .await
         .map_err(|_| "无法读取文档，请确认文件仍然存在".to_string())?;
-    if contents.len() as u64 != metadata.len()
-        || !valid_document_signature(&file_name, &contents)
-    {
+    if contents.len() as u64 != metadata.len() || !valid_document_signature(&file_name, &contents) {
         return Err("文件内容与扩展名不匹配".into());
     }
     Ok(AgentDocumentInfo {
@@ -580,7 +588,9 @@ fn validate_document_metadata(
 }
 
 fn supported_document_mime(file_name: &str, mime: &str) -> bool {
-    let extension = file_name.rsplit_once('.').map(|(_, extension)| extension.to_ascii_lowercase());
+    let extension = file_name
+        .rsplit_once('.')
+        .map(|(_, extension)| extension.to_ascii_lowercase());
     extension
         .as_deref()
         .and_then(document_mime_for_extension)
@@ -612,19 +622,17 @@ fn document_mime_for_extension(extension: &str) -> Option<&'static str> {
 }
 
 fn valid_document_signature(file_name: &str, bytes: &[u8]) -> bool {
-    let extension = file_name.rsplit_once('.').map(|(_, extension)| extension.to_ascii_lowercase());
+    let extension = file_name
+        .rsplit_once('.')
+        .map(|(_, extension)| extension.to_ascii_lowercase());
     match extension.as_deref() {
         Some("docx" | "docm" | "pptx" | "pptm" | "xlsx" | "xlsm" | "odt" | "ods" | "odp") => {
             bytes.starts_with(b"PK\x03\x04")
         }
-        Some("doc" | "ppt" | "xls") => {
-            bytes.starts_with(b"\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1")
-        }
+        Some("doc" | "ppt" | "xls") => bytes.starts_with(b"\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1"),
         Some("pdf") => bytes.starts_with(b"%PDF-"),
         Some("rtf") => bytes.starts_with(b"{\\rtf"),
-        Some("txt" | "md" | "markdown" | "csv" | "json") => {
-            std::str::from_utf8(bytes).is_ok()
-        }
+        Some("txt" | "md" | "markdown" | "csv" | "json") => std::str::from_utf8(bytes).is_ok(),
         _ => false,
     }
 }
@@ -778,19 +786,17 @@ pub async fn run_agent_saved_workflow(
     {
         return Err("工作流名称、参数或运行编号无效".into());
     }
-    let snapshot: AgentSnapshot = native(
-        &app,
-        "getSession",
-        json!({"sessionId":session_id}),
-        false,
-    )
-    .await?;
+    let snapshot: AgentSnapshot =
+        native(&app, "getSession", json!({"sessionId":session_id}), false).await?;
     if snapshot.session.id != session_id {
         return Err("返回的工作流会话不一致，请重新读取".into());
     }
     let project_path = snapshot.session.project_path.clone();
     check_project(&app, &project_path)?;
-    let remote = app.state::<InprocessAgentState>().remote_projects(&app.state::<AppState>()).await;
+    let remote = app
+        .state::<InprocessAgentState>()
+        .remote_projects(&app.state::<AppState>())
+        .await;
     let prompt = crate::services::agent_workflows::workflow_prompt_with_remote(
         &remote,
         &project_path,
@@ -799,8 +805,19 @@ pub async fn run_agent_saved_workflow(
         &args,
     )
     .await?;
-    crate::services::agent_workflows::record_run(&app, &project_path, &session_id, &name, &scope, &request_id, &prompt).await?;
-    let locale = crate::settings::get_settings().language.unwrap_or_else(|| "zh".into());
+    crate::services::agent_workflows::record_run(
+        &app,
+        &project_path,
+        &session_id,
+        &name,
+        &scope,
+        &request_id,
+        &prompt,
+    )
+    .await?;
+    let locale = crate::settings::get_settings()
+        .language
+        .unwrap_or_else(|| "zh".into());
     let _: Value = native(
         &app,
         "sendMessage",
@@ -808,13 +825,8 @@ pub async fn run_agent_saved_workflow(
         true,
     )
     .await?;
-    let mut result: AgentSnapshot = native(
-        &app,
-        "getSession",
-        json!({"sessionId":session_id}),
-        false,
-    )
-    .await?;
+    let mut result: AgentSnapshot =
+        native(&app, "getSession", json!({"sessionId":session_id}), false).await?;
     decorate(&app, &mut result.session)?;
     Ok(result.session)
 }
@@ -873,7 +885,10 @@ pub async fn invoke_agent_remote(
     args: Option<Vec<Value>>,
 ) -> Result<Value, String> {
     let state = app.state::<AppState>();
-    let remote = app.state::<InprocessAgentState>().remote_projects(&state).await;
+    let remote = app
+        .state::<InprocessAgentState>()
+        .remote_projects(&state)
+        .await;
     remote.invoke(&method, args.unwrap_or_default()).await
 }
 
@@ -886,10 +901,7 @@ pub async fn get_agent_plugin_store(app: AppHandle) -> Result<Value, String> {
     native(&app, "getPluginStore", json!({}), false).await
 }
 #[tauri::command]
-pub async fn add_agent_plugin_marketplace(
-    app: AppHandle,
-    source: String,
-) -> Result<Value, String> {
+pub async fn add_agent_plugin_marketplace(app: AppHandle, source: String) -> Result<Value, String> {
     native(&app, "addPluginMarketplace", json!({"source":source}), true).await
 }
 #[tauri::command]
@@ -1030,9 +1042,15 @@ mod tests {
     #[test]
     fn completed_and_cancelled_receipts_remain_accepted_after_lost_renderer_ack() {
         for status in ["accepted", "completed", "cancelled"] {
-            let result=json!({"results":[{"key":{"sessionId":"owned","commandId":"owned-request"},"result":{"commandId":"owned-request","status":status}}]});
-            assert_eq!(command_receipt(&result,"lc:owned","owned-request")["status"],"accepted");
-            assert_eq!(command_receipt(&result,"lc:other","owned-request")["status"],"unknown");
+            let result = json!({"results":[{"key":{"sessionId":"owned","commandId":"owned-request"},"result":{"commandId":"owned-request","status":status}}]});
+            assert_eq!(
+                command_receipt(&result, "lc:owned", "owned-request")["status"],
+                "accepted"
+            );
+            assert_eq!(
+                command_receipt(&result, "lc:other", "owned-request")["status"],
+                "unknown"
+            );
         }
     }
     #[test]

@@ -122,13 +122,13 @@ pub(crate) fn set_pi_default_model(provider_key: &str, model_id: &str) -> Result
 }
 
 fn select_pi_settings(path: &Path, provider_key: &str, model_id: &str) -> Result<(), AppError> {
-    let (mut document, expected_revision) = read_models_document_with_revision(&path)?;
+    let (mut document, expected_revision) = read_models_document_with_revision(path)?;
     let root = document
         .as_object_mut()
         .ok_or_else(|| AppError::Config("Pi settings root must be an object".into()))?;
     root.insert("defaultProvider".into(), Value::String(provider_key.into()));
     root.insert("defaultModel".into(), Value::String(model_id.into()));
-    write_models_document(&path, &document, &expected_revision)
+    write_models_document(path, &document, &expected_revision)
 }
 
 pub(crate) fn read_pi_native_providers() -> Result<IndexMap<String, Value>, AppError> {

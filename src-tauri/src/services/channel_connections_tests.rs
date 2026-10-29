@@ -243,15 +243,23 @@ async fn explicit_route_choice_overrides_a_native_account_default_without_changi
 
 #[tokio::test]
 #[serial]
-async fn reapplying_claude_route_removes_the_old_catalog_minimum_without_losing_native_output_preferences() {
+async fn reapplying_claude_route_removes_the_old_catalog_minimum_without_losing_native_output_preferences(
+) {
     let _home = Home::new();
     let state = state().await;
     let path = crate::config::get_claude_settings_path();
     write(&path, json!({"env":{"ANTHROPIC_AUTH_TOKEN":"synthetic-native-key","CLAUDE_CODE_MAX_OUTPUT_TOKENS":"7000"},
         "effortLevel":"high","hooks":{"keep":true}}).to_string().as_bytes());
     set(&state, "claude", "lolicode", Some(1)).await.unwrap();
-    assert_eq!(read_live(&AppType::Claude).unwrap()["env"]["CLAUDE_CODE_MAX_OUTPUT_TOKENS"], "7000");
-    let mut previous = state.db.get_provider_by_id(ROUTE_ID, "claude").unwrap().unwrap();
+    assert_eq!(
+        read_live(&AppType::Claude).unwrap()["env"]["CLAUDE_CODE_MAX_OUTPUT_TOKENS"],
+        "7000"
+    );
+    let mut previous = state
+        .db
+        .get_provider_by_id(ROUTE_ID, "claude")
+        .unwrap()
+        .unwrap();
     previous.settings_config["env"]["CLAUDE_CODE_MAX_OUTPUT_TOKENS"] = json!("4096");
     state.db.save_provider("claude", &previous).unwrap();
     let mut live = read_live(&AppType::Claude).unwrap();
@@ -265,6 +273,9 @@ async fn reapplying_claude_route_removes_the_old_catalog_minimum_without_losing_
     set(&state, "claude", "native", None).await.unwrap();
     let native = read_live(&AppType::Claude).unwrap();
     assert_eq!(native["env"]["CLAUDE_CODE_MAX_OUTPUT_TOKENS"], "7000");
-    assert_eq!(native["env"]["ANTHROPIC_AUTH_TOKEN"], "synthetic-native-key");
+    assert_eq!(
+        native["env"]["ANTHROPIC_AUTH_TOKEN"],
+        "synthetic-native-key"
+    );
     state.proxy_service.stop().await.unwrap();
 }

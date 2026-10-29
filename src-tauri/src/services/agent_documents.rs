@@ -195,6 +195,7 @@ pub async fn get_view(project_path: &Path) -> Result<Option<DocumentView>, Strin
     Ok(Some(view))
 }
 
+#[cfg(test)]
 pub async fn report_view(
     project_path: &Path,
     path: &str,

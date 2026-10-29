@@ -120,6 +120,7 @@ impl LocalModelManager {
         }
     }
 
+    #[cfg(any(test, feature = "test-hooks"))]
     pub fn root(&self) -> &Path {
         &self.root
     }
@@ -393,7 +394,7 @@ impl LocalModelManager {
             let progress = progress.clone();
             async move {
                 manager
-                    .download_range(&client, asset, path, start, end, completed, progress)
+                    .download_range(&client, asset, path, start..=end, completed, progress)
                     .await
             }
         }))
@@ -414,11 +415,11 @@ impl LocalModelManager {
         client: &reqwest::Client,
         asset: Asset,
         path: PathBuf,
-        start: u64,
-        end: u64,
+        range: std::ops::RangeInclusive<u64>,
         completed: u64,
         progress: Arc<AtomicU64>,
     ) -> Result<(), String> {
+        let (start, end) = range.into_inner();
         let mut file = OpenOptions::new()
             .create(true)
             .append(true)
@@ -689,9 +690,8 @@ impl LocalModelManager {
 
     pub async fn chat(&self, messages: Vec<Value>) -> Result<String, String> {
         let _guard = self.operation.lock().await;
-        let (url, token) = self.ensure_runtime().await.map_err(|e| {
+        let (url, token) = self.ensure_runtime().await.inspect_err(|e| {
             self.update("error", Some(e.clone()));
-            e
         })?;
         let client = local_client()?;
         let mut messages = normalize_messages(messages)?;

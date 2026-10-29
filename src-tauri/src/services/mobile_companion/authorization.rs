@@ -5,7 +5,9 @@ use std::time::Duration;
 use tokio::sync::mpsc;
 
 pub(super) enum Control {
+    #[cfg(test)]
     Approved,
+    #[cfg(test)]
     Revoke,
     Stop,
 }
@@ -41,8 +43,11 @@ where
             changed = authorization.changed() => { if changed.is_err() { return Err("账号认证已关闭".into()); } continue; },
             _ = tokio::time::sleep(Duration::from_millis(expires.saturating_sub(now()))) => return Err("账号设备认证已到期，连接已关闭".into()),
             control = controls.recv() => match control {
+                #[cfg(test)]
                 Some(Control::Approved) => continue,
-                Some(Control::Stop | Control::Revoke) | None => return Ok(()),
+                #[cfg(test)]
+                Some(Control::Revoke) => return Ok(()),
+                Some(Control::Stop) | None => return Ok(()),
             },
             result = &mut work => return result,
         }

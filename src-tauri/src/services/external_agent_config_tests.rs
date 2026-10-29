@@ -622,6 +622,45 @@ fn external_mimo_partial_catalog_limits_produce_a_loadable_config() {
 }
 
 #[test]
+fn external_mimo_limits_use_reported_windows_and_the_selected_window() {
+    let directory = tempdir().unwrap();
+    let mut catalog = source();
+    let mut choices = catalog.models[0].clone();
+    choices.id = "choices".into();
+    choices.context_limit = None;
+    choices.context_limits = Some(vec![256000, 128000]);
+
+    let mut selected = catalog.models[0].clone();
+    selected.id = "selected".into();
+    selected.context_limits = Some(vec![128000, 1000000]);
+    selected.selected_context_limit = Some(1000000);
+
+    let mut output_only = catalog.models[0].clone();
+    output_only.id = "output-only".into();
+    output_only.context_limit = None;
+    assert_eq!(output_only.reported_context_limit(), None);
+    assert_eq!(
+        output_only.effective_context_limit(),
+        Some(super::super::channel_center::DEFAULT_CONTEXT_LIMIT)
+    );
+    catalog.models = vec![choices, selected, output_only];
+
+    let outcome = apply_at("mimocode", &catalog, "selected", directory.path()).unwrap();
+    let document = parsed(Path::new(&outcome.files[0]));
+    assert_eq!(document["model"], "lolicode/selected");
+    let models = &document["provider"]["lolicode"]["models"];
+    assert_eq!(
+        models["choices"]["limit"],
+        json!({"context":128000,"output":8192})
+    );
+    assert_eq!(
+        models["selected"]["limit"],
+        json!({"context":1000000,"output":8192})
+    );
+    assert!(models["output-only"].get("limit").is_none());
+}
+
+#[test]
 fn external_mimo_reapply_repairs_owned_partial_limits_with_a_backup() {
     let directory = tempdir().unwrap();
     let mut catalog = source();

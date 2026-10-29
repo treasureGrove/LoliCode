@@ -519,7 +519,9 @@ impl InprocessAgentState {
         let mut navigation = preferences::load(&state.db)?;
         let key = preferences::path_key(&result.workspace.path);
         let pinned = navigation.projects.get(&key).is_some_and(|p| p.pinned);
-        if let Some(name) = preferences::remembered_project_name(&navigation, &result.workspace.path) {
+        if let Some(name) =
+            preferences::remembered_project_name(&navigation, &result.workspace.path)
+        {
             result.workspace.name = name;
         }
         navigation.projects.insert(
@@ -561,7 +563,9 @@ impl InprocessAgentState {
         let _guard = self.lifecycle.lock().await;
         let project = preferences::update_project_metadata(&state.db, path, pinned, name)?;
         if let Some(binding) = self.binding.write().await.as_mut() {
-            if preferences::path_key(&binding.workspace.path) == preferences::path_key(&project.path) {
+            if preferences::path_key(&binding.workspace.path)
+                == preferences::path_key(&project.path)
+            {
                 binding.workspace.name = project.name.clone();
             }
         }

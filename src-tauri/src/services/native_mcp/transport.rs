@@ -422,7 +422,7 @@ impl Sse {
 }
 
 enum Transport {
-    Stdio(StdioTransport),
+    Stdio(Box<StdioTransport>),
     Http(HttpTransport),
 }
 pub(super) struct Session {
@@ -441,7 +441,7 @@ impl Session {
     ) -> Result<Self, String> {
         let deadline = tokio::time::Instant::now() + timeout;
         let transport = if config["type"] == "local" {
-            Transport::Stdio(StdioTransport::spawn(config, project)?)
+            Transport::Stdio(Box::new(StdioTransport::spawn(config, project)?))
         } else {
             Transport::Http(HttpTransport::new(config)?)
         };

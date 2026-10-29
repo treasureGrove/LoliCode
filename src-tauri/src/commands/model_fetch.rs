@@ -52,9 +52,9 @@ pub async fn get_opencode_models() -> Result<Vec<OpenCodeModelRef>, String> {
             });
         }
 
-        Ok(parse_opencode_models(&super::tool_management::decode_command_output(
-            &output.stdout,
-        )))
+        Ok(parse_opencode_models(
+            &super::tool_management::decode_command_output(&output.stdout),
+        ))
     })
     .await
     .map_err(|e| format!("OpenCode model discovery task failed: {e}"))?

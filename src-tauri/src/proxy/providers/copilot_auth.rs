@@ -2185,10 +2185,7 @@ mod tests {
 
         let model = CopilotModel::from(item);
         assert_eq!(model.context_window, Some(922_000));
-        assert_eq!(
-            model.supports_parallel_tool_calls,
-            Some(true)
-        );
+        assert_eq!(model.supports_parallel_tool_calls, Some(true));
         assert_eq!(
             model.reasoning_effort,
             Some(vec![
@@ -2211,7 +2208,8 @@ mod tests {
                 "max_prompt_tokens": 0,
                 "max_context_window_tokens": 400000
             }}
-        })).unwrap();
+        }))
+        .unwrap();
         assert_eq!(CopilotModel::from(item).context_window, Some(400_000));
     }
 

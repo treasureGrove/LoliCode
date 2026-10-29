@@ -1190,7 +1190,7 @@ pub async fn invoke(app: &AppHandle, method: &str, args: Vec<Value>) -> Result<V
                         && id.is_none_or(|id| run.automation_id == id)
                 })
                 .collect();
-            runs.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+            runs.sort_by_key(|run| std::cmp::Reverse(run.created_at));
             runs.truncate(100);
             Ok(json!(runs))
         }
@@ -1461,15 +1461,14 @@ pub async fn recover_runs_runtime(
             )
         }) {
             if let Some(id) = session_id {
-                if cancel_requested {
-                    if runtime
+                if cancel_requested
+                    && runtime
                         .call("interruptSession", json!({"sessionId":id}), false)
                         .await
                         .is_err()
-                    {
-                        // Keep cancellation pending for the next recovery attempt.
-                        continue;
-                    }
+                {
+                    // Keep cancellation pending for the next recovery attempt.
+                    continue;
                 }
                 let runtime = runtime.clone();
                 let db = db.clone();

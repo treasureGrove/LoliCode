@@ -1042,8 +1042,7 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
     planKey: "payg",
     nameKey: "providerForm.presets.ucloud",
     websiteUrl: "https://www.compshare.cn",
-    apiKeyUrl:
-      "https://www.compshare.cn/coding-plan",
+    apiKeyUrl: "https://www.compshare.cn/coding-plan",
     settingsConfig: {
       name: "compshare",
       base_url: "https://api.modelverse.cn/v1",
@@ -1069,8 +1068,7 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
     planKey: "codingPlan",
     nameKey: "providerForm.presets.ucloudCoding",
     websiteUrl: "https://www.compshare.cn",
-    apiKeyUrl:
-      "https://www.compshare.cn/coding-plan",
+    apiKeyUrl: "https://www.compshare.cn/coding-plan",
     settingsConfig: {
       name: "compshare_coding",
       base_url: "https://cp.compshare.cn/v1",
@@ -1295,8 +1293,7 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
     name: "SudoCode.chat",
     family: "sudocode",
     websiteUrl: "https://sudocode.chat",
-    apiKeyUrl:
-      "https://sudocode.chat/sign-up?&utm_medium=sponsor",
+    apiKeyUrl: "https://sudocode.chat/sign-up?&utm_medium=sponsor",
     settingsConfig: {
       name: "sudocode",
       base_url: "https://api.sudocode.chat/v1",

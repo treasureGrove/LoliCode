@@ -729,8 +729,7 @@ export const claudeDesktopProviderPresets: ClaudeDesktopProviderPreset[] = [
     planKey: "payg",
     nameKey: "providerForm.presets.ucloud",
     websiteUrl: "https://www.compshare.cn",
-    apiKeyUrl:
-      "https://www.compshare.cn/coding-plan",
+    apiKeyUrl: "https://www.compshare.cn/coding-plan",
     category: "aggregator",
     baseUrl: "https://api.modelverse.cn",
     mode: "direct",
@@ -748,8 +747,7 @@ export const claudeDesktopProviderPresets: ClaudeDesktopProviderPreset[] = [
     planKey: "codingPlan",
     nameKey: "providerForm.presets.ucloudCoding",
     websiteUrl: "https://www.compshare.cn",
-    apiKeyUrl:
-      "https://www.compshare.cn/coding-plan",
+    apiKeyUrl: "https://www.compshare.cn/coding-plan",
     category: "aggregator",
     baseUrl: "https://cp.compshare.cn",
     mode: "direct",
@@ -895,8 +893,7 @@ export const claudeDesktopProviderPresets: ClaudeDesktopProviderPreset[] = [
     name: "SudoCode.chat",
     family: "sudocode",
     websiteUrl: "https://sudocode.chat",
-    apiKeyUrl:
-      "https://sudocode.chat/sign-up?&utm_medium=sponsor",
+    apiKeyUrl: "https://sudocode.chat/sign-up?&utm_medium=sponsor",
     category: "third_party",
     baseUrl: "https://api.sudocode.chat",
     mode: "direct",

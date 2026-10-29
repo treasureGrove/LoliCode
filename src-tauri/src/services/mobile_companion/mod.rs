@@ -498,6 +498,8 @@ impl MobileCompanionState {
     ) {
         if self.account_room_may_start(&room_id).await {
             self.direct_room_worker(app, room_id, controls).await;
+            // Only the isolated legacy worker continues below in test builds.
+            #[cfg(test)]
             return;
         }
         #[cfg(test)]
@@ -659,6 +661,7 @@ impl MobileCompanionState {
             true
         }
     }
+    #[cfg(test)]
     async fn receive(
         &self,
         app: &AppHandle,

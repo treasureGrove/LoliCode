@@ -350,8 +350,7 @@ export const grokBuildProviderPresets: GrokBuildProviderPreset[] = [
     planKey: "payg",
     nameKey: "providerForm.presets.ucloud",
     websiteUrl: "https://www.compshare.cn",
-    apiKeyUrl:
-      "https://www.compshare.cn/coding-plan",
+    apiKeyUrl: "https://www.compshare.cn/coding-plan",
     auth: grokAuth(),
     config: grokPresetConfig("Compshare", "https://api.modelverse.cn/v1"),
     endpointCandidates: ["https://api.modelverse.cn/v1"],
@@ -367,8 +366,7 @@ export const grokBuildProviderPresets: GrokBuildProviderPreset[] = [
     planKey: "codingPlan",
     nameKey: "providerForm.presets.ucloudCoding",
     websiteUrl: "https://www.compshare.cn",
-    apiKeyUrl:
-      "https://www.compshare.cn/coding-plan",
+    apiKeyUrl: "https://www.compshare.cn/coding-plan",
     auth: grokAuth(),
     config: grokPresetConfig(
       "Compshare Coding Plan",
@@ -495,8 +493,7 @@ export const grokBuildProviderPresets: GrokBuildProviderPreset[] = [
     name: "SudoCode.chat",
     family: "sudocode",
     websiteUrl: "https://sudocode.chat",
-    apiKeyUrl:
-      "https://sudocode.chat/sign-up?&utm_medium=sponsor",
+    apiKeyUrl: "https://sudocode.chat/sign-up?&utm_medium=sponsor",
     auth: grokAuth(),
     config: grokPresetConfig("SudoCode.chat", "https://api.sudocode.chat/v1"),
     endpointCandidates: [

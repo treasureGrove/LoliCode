@@ -309,7 +309,7 @@ pub fn save_report(db: &Database, report: CopilotBillingReport) -> Result<(), Ap
             && previous.month == report.month)
     });
     reports.push(report);
-    reports.sort_by(|a, b| (b.year, b.month, b.fetched_at).cmp(&(a.year, a.month, a.fetched_at)));
+    reports.sort_by_key(|report| std::cmp::Reverse((report.year, report.month, report.fetched_at)));
     let raw = serde_json::to_string(&reports).map_err(|_| message("无法保存 Copilot 官方账本"))?;
     db.set_setting(REPORTS_KEY, &raw)
 }

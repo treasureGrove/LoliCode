@@ -55,6 +55,7 @@ pub struct Locations {
     pub zcode_personal_config: Option<PathBuf>,
 }
 impl Locations {
+    #[cfg(test)]
     pub fn fixture(home: &Path) -> Self {
         Self {
             home: home.into(),
@@ -93,6 +94,7 @@ pub fn apply(
 ) -> Result<Outcome, AppError> {
     apply_with_locations(target, source, default_route, &Locations::system())
 }
+#[cfg(test)]
 pub fn apply_at(
     target: &str,
     source: &ChannelSource,
@@ -427,7 +429,7 @@ fn model_value(model: &ChannelModel) -> Value {
     // both required fields are present. Catalogs often report only one value;
     // omit the override in that case so the client can use its own defaults.
     // Never invent a missing upstream limit just to make the config validate.
-    if let (Some(context), Some(output)) = (model.effective_context_limit(), model.output_limit) {
+    if let (Some(context), Some(output)) = (model.reported_context_limit(), model.output_limit) {
         value["limit"] = json!({"context": context, "output": output});
     }
     if let Some(input) = &model.input_modalities {

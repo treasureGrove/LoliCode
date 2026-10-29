@@ -457,6 +457,8 @@ pub fn skills(root: &Path) -> Result<(Vec<VerifiedSkill>, Vec<SkillIssue>), Stri
             ))
         }
     };
+    let references =
+        regex::Regex::new(r"(?:\.\./)+(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_.-]+\.(?:md|txt)");
     for plugin in settings.installed.into_iter().filter(|entry| entry.enabled) {
         let base = root.join(&plugin.directory);
         let entries = match fs::read_dir(base.join("skills")) {
@@ -503,11 +505,9 @@ pub fn skills(root: &Path) -> Result<(Vec<VerifiedSkill>, Vec<SkillIssue>), Stri
                 // Native file tools stay project-scoped. Attach explicitly
                 // referenced guides to this on-demand body instead of asking
                 // the model to escape that boundary to read plugin files.
-                let references = regex::Regex::new(
-                    r"(?:\.\./)+(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_.-]+\.(?:md|txt)",
-                )
-                .map_err(|_| "CLI 引用规则无效")?;
                 let paths = references
+                    .as_ref()
+                    .map_err(|_| "CLI 引用规则无效")?
                     .find_iter(&content)
                     .map(|value| value.as_str().to_owned())
                     .collect::<BTreeSet<_>>();

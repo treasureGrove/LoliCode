@@ -183,10 +183,8 @@ pub(super) fn validate_request(method: &str, params: &Value) -> Result<(), Strin
                 exact(params, "title", 160)?;
             }
         }
-        "message.send" => {
-            if params["text"].as_str().is_none_or(|s| s.trim().is_empty()) {
-                return Err("文本消息不能为空".into());
-            }
+        "message.send" if params["text"].as_str().is_none_or(|s| s.trim().is_empty()) => {
+            return Err("文本消息不能为空".into());
         }
         "session.get" | "sessions.list" | "message.get" | "models.list" => {
             if let Some(value) = params.get("knownRevision") {

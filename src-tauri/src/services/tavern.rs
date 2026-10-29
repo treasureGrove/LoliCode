@@ -199,7 +199,7 @@ fn write_store(state: &AppState, store: &TavernStore) -> Result<(), String> {
 pub fn snapshot(state: &AppState) -> Result<TavernSnapshot, String> {
     let store = read_store(state)?;
     let mut stories = store.stories;
-    stories.sort_by(|left, right| right.updated_at.cmp(&left.updated_at));
+    stories.sort_by_key(|story| std::cmp::Reverse(story.updated_at));
     Ok(TavernSnapshot {
         characters: store.characters.into_iter().map(|item| item.card).collect(),
         stories,
@@ -749,7 +749,7 @@ fn build_context(
             || secondary
                 .iter()
                 .any(|key| contains_case_insensitive(&scan_text, key));
-        if !constant && !(primary_hit && secondary_hit) {
+        if !(constant || primary_hit && secondary_hit) {
             excluded.push(format!("{title}（本轮未命中关键词）"));
             continue;
         }

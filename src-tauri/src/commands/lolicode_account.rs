@@ -76,7 +76,9 @@ pub async fn lolicode_account_logout(
     app.state::<crate::services::mobile_companion::MobileCompanionState>()
         .logout_account(&app)
         .await;
-    let status=state.logout().await;
-    app.state::<crate::services::mobile_companion::MobileCompanionState>().fence_account(&app).await;
+    let status = state.logout().await;
+    app.state::<crate::services::mobile_companion::MobileCompanionState>()
+        .fence_account(&app)
+        .await;
     Ok(status)
 }

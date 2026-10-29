@@ -19,6 +19,7 @@ mod live {
         routing::post,
         Json, Router,
     };
+    use lolicode_agent::native::{NativeEngine, NativeGateway};
     use lolicode_lib::{
         agent_test_support::{
             channel_center::{self, ChannelCenterSnapshot},
@@ -26,7 +27,6 @@ mod live {
         },
         AppState, Database, ProxyService,
     };
-    use lolicode_agent::native::{NativeEngine, NativeGateway};
     use serde_json::{json, Value};
     use std::{
         path::{Path, PathBuf},
@@ -534,9 +534,7 @@ mod live {
         project: &Path,
         requests: &AtomicUsize,
     ) -> Result<Value> {
-        use lolicode_lib::agent_test_support::{
-            record_run_in_db, workflow_files, workflow_prompt,
-        };
+        use lolicode_lib::agent_test_support::{record_run_in_db, workflow_files, workflow_prompt};
         let name = "isolated-glm-math-check";
         let document = "---\ndescription: Repair a tiny math function and verify workflow arguments\n# This comment must survive editing.\ncustom: acceptance-only\nargs:\n  expectedTotal:\n    type: number\n    required: true\n    default: 5\n---\nRead sum.js and make its add function perform ordinary addition. The expected result for add(2,3) is the expectedTotal argument. Edit sum.js only, using the smallest change. Do not execute commands, access network, use images, write memories, or read outside this isolated project. Use real read_file and apply_patch/write_file tools. Report the change briefly in Chinese.";
         let params =
@@ -679,12 +677,12 @@ mod live {
         catalog: &Value,
         gateway: &NativeGateway,
     ) -> Result<Value> {
+        use chrono::Timelike;
         use lolicode_lib::agent_test_support::{
             automation_system_idle_ms, automation_tick, create_automation,
             load_workspace_preferences, save_workspace_preferences, workspace_path_key,
             AgentProject, AutomationRuntime,
         };
-        use chrono::Timelike;
         let typed_catalog: channel_center::AgentCatalog = serde_json::from_value(catalog.clone())?;
         let model = typed_catalog
             .models

@@ -21,7 +21,7 @@ pub fn name() -> &'static str {
 
 pub fn development_build_number() -> Option<&'static str> {
     is_development()
-        .then(|| option_env!("LOLICODE_BUILD_NUMBER"))
+        .then_some(option_env!("LOLICODE_BUILD_NUMBER"))
         .flatten()
 }
 

@@ -56,6 +56,7 @@ impl SkillSnapshot {
         json!({"revision":self.revision,"skills":self.verified_skills})
     }
     /// Small discovery prompt only. Full bodies are retrieved by read_skill.
+    #[cfg(test)]
     pub fn summary_prompt(&self) -> String {
         if self.verified_skills.is_empty() {
             return String::new();

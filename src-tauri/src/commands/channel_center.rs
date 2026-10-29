@@ -189,6 +189,10 @@ pub fn get_channel_connections(
     crate::services::channel_connections::list(state.inner()).map_err(|error| error.to_string())
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Named arguments and managed auth states preserve the existing Tauri IPC contract."
+)]
 #[tauri::command(rename_all = "camelCase")]
 pub async fn set_channel_connection(
     app: AppHandle,

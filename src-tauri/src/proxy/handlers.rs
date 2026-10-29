@@ -2302,21 +2302,17 @@ fn build_codex_proxy_error_response(
         ProxyError::Internal(format!("Failed to serialize proxy error: {e}"))
     })?;
 
-    let mut builder = axum::response::Response::builder()
-        .status(status)
-        .header(
-            axum::http::header::CONTENT_TYPE,
-            axum::http::HeaderValue::from_static("application/json"),
-        );
+    let mut builder = axum::response::Response::builder().status(status).header(
+        axum::http::header::CONTENT_TYPE,
+        axum::http::HeaderValue::from_static("application/json"),
+    );
     if let Some(seconds) = error.retry_after_seconds() {
         builder = builder.header(axum::http::header::RETRY_AFTER, seconds.to_string());
     }
-    builder
-        .body(axum::body::Body::from(body))
-        .map_err(|e| {
-            log::error!("[Codex] 构建代理错误响应失败: {e}");
-            ProxyError::Internal(format!("Failed to build proxy error response: {e}"))
-        })
+    builder.body(axum::body::Body::from(body)).map_err(|e| {
+        log::error!("[Codex] 构建代理错误响应失败: {e}");
+        ProxyError::Internal(format!("Failed to build proxy error response: {e}"))
+    })
 }
 
 fn codex_proxy_error_json(

@@ -12,6 +12,7 @@ mod smoke {
     use axum::{
         body::Body, extract::State, http::header, response::Response, routing::post, Json, Router,
     };
+    use lolicode_agent::{AgentPart, AgentStatus, Engine, EngineOptions};
     use lolicode_lib::{
         agent_test_support::{
             channel_center::{AgentCatalog, AgentCatalogModel},
@@ -19,7 +20,6 @@ mod smoke {
         },
         Database,
     };
-    use lolicode_agent::{AgentPart, AgentStatus, Engine, EngineOptions};
     use serde_json::{json, Value};
     use std::{
         path::PathBuf,

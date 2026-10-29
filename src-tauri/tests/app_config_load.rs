@@ -100,8 +100,6 @@ fn load_valid_v2_config_succeeds() {
 
     let loaded = MultiAppConfig::load().expect("v2 should load successfully");
     assert_eq!(loaded.version, 2);
-    assert!(loaded
-        .get_manager(&lolicode_lib::AppType::Claude)
-        .is_some());
+    assert!(loaded.get_manager(&lolicode_lib::AppType::Claude).is_some());
     assert!(loaded.get_manager(&lolicode_lib::AppType::Codex).is_some());
 }

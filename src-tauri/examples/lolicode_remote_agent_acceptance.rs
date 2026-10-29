@@ -9,6 +9,7 @@ fn main() {
 #[cfg(feature = "test-hooks")]
 mod acceptance {
     use anyhow::{anyhow, ensure, Context, Result};
+    use lolicode_agent::native::{NativeEngine, NativeGateway};
     use lolicode_lib::{
         agent_test_support::{
             remote_transport::{self, RemoteTarget},
@@ -16,7 +17,6 @@ mod acceptance {
         },
         AppState, Database,
     };
-    use lolicode_agent::native::{NativeEngine, NativeGateway};
     use serde_json::{json, Value};
     use std::{
         path::PathBuf,

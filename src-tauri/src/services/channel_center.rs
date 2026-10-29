@@ -70,7 +70,8 @@ pub struct ChannelModel {
 }
 
 impl ChannelModel {
-    pub fn effective_context_limit(&self) -> Option<u64> {
+    /// Catalog context metadata, including a selection from its reported windows.
+    pub fn reported_context_limit(&self) -> Option<u64> {
         self.selected_context_limit
             .filter(|selected| {
                 self.context_limits
@@ -80,10 +81,17 @@ impl ChannelModel {
             .filter(|limit| *limit > 0)
             .or(self.context_limit.filter(|limit| *limit > 0))
             .or_else(|| {
-                self.context_limits.as_ref()?.iter().copied()
+                self.context_limits
+                    .as_ref()?
+                    .iter()
+                    .copied()
                     .filter(|limit| *limit > 0 && *limit <= 9_007_199_254_740_991)
                     .min()
             })
+    }
+
+    pub fn effective_context_limit(&self) -> Option<u64> {
+        self.reported_context_limit()
             .or(Some(DEFAULT_CONTEXT_LIMIT))
     }
 
@@ -447,9 +455,16 @@ fn validate_channel(channel: &ChannelSource) -> Result<(), AppError> {
         && (channel.id != super::lolicode_relay::CHANNEL_ID
             || channel.base_url != super::lolicode_relay::BASE_URL
             || channel.protocol != "openai_chat"
-            || channel.models.iter().any(|model| model.protocol.as_deref().is_some_and(|p| p != "openai_chat")))
+            || channel.models.iter().any(|model| {
+                model
+                    .protocol
+                    .as_deref()
+                    .is_some_and(|p| p != "openai_chat")
+            }))
     {
-        return Err(AppError::InvalidInput("公益模型必须使用固定的 LoliCode 服务地址。".into()));
+        return Err(AppError::InvalidInput(
+            "公益模型必须使用固定的 LoliCode 服务地址。".into(),
+        ));
     }
     if native_auth_target(&channel.auth_kind).is_some()
         && (channel.account_id.as_deref() != Some("native") || !channel.base_url.is_empty())
@@ -1546,7 +1561,21 @@ pub(crate) fn gateway_provider(
             doc["model_providers"]["custom"]["wire_api"] = toml_edit::value("responses");
             doc["model_providers"]["custom"]["experimental_bearer_token"] =
                 toml_edit::value(source.api_key.as_str());
-            json!({"auth":{"OPENAI_API_KEY":source.api_key},"config":doc.to_string(),"modelCatalog":{"models":source.models.iter().map(|m| {let mut item=json!({"model":m.id,"displayName":m.name});if let Some(c)=m.effective_context_limit() {item["contextWindow"]=json!(c);}if let Some(i)=&m.input_modalities {item["inputModalities"]=json!(i);}item}).collect::<Vec<_>>()}})
+            let models = source
+                .models
+                .iter()
+                .map(|model| {
+                    let mut item = json!({"model":model.id,"displayName":model.name});
+                    if let Some(context_limit) = model.effective_context_limit() {
+                        item["contextWindow"] = json!(context_limit);
+                    }
+                    if let Some(input_modalities) = &model.input_modalities {
+                        item["inputModalities"] = json!(input_modalities);
+                    }
+                    item
+                })
+                .collect::<Vec<_>>();
+            json!({"auth":{"OPENAI_API_KEY":source.api_key},"config":doc.to_string(),"modelCatalog":{"models":models}})
         }
         AppType::GrokBuild => {
             let mut doc = toml_edit::DocumentMut::new();
@@ -1769,15 +1798,14 @@ fn upsert_projection(
             AppType::Hermes => {
                 crate::hermes_config::set_provider(&provider.id, provider.settings_config.clone())?;
             }
-            AppType::Pi => {
+            AppType::Pi
                 if crate::pi_config::replace_pi_provider_if_present(
                     &provider.id,
                     &provider.settings_config,
                 )?
-                .is_none()
-                {
-                    crate::pi_config::insert_pi_provider(&provider.id, &provider.settings_config)?;
-                }
+                .is_none() =>
+            {
+                crate::pi_config::insert_pi_provider(&provider.id, &provider.settings_config)?;
             }
             AppType::Mcode => {
                 crate::mcode_config::set_provider(&provider.id, provider.settings_config.clone())?
@@ -2170,10 +2198,8 @@ pub async fn prepare_inprocess_agent_binding(
     state: &AppState,
 ) -> Result<AgentGatewayBinding, AppError> {
     let mut binding = prepare_agent_binding_with(state, |_| Ok(())).await?;
-    binding.base_url = crate::proxy::channel_gateway::catalog_client_base_url(
-        &binding.base_url,
-        "lolicode",
-    )?;
+    binding.base_url =
+        crate::proxy::channel_gateway::catalog_client_base_url(&binding.base_url, "lolicode")?;
     Ok(binding)
 }
 
@@ -2871,16 +2897,28 @@ pub(super) async fn apply_to(
     for target in &targets {
         if super::external_agent_config::TARGETS.contains(&target.as_str()) {
             let (status, message) = if api_models.is_empty() {
-                ("skipped", "此工具没有可用 API 渠道；原生登录账号只用于对应工具，配置未改动".into())
+                (
+                    "skipped",
+                    "此工具没有可用 API 渠道；原生登录账号只用于对应工具，配置未改动".into(),
+                )
             } else if let Some(gateway) = &gateway {
                 match apply_external_target(state, &api_snapshot, target, gateway).await {
                     Ok(message) => ("success", message),
                     Err(error) => ("error", crate::error_for_log(&error.to_string())),
                 }
             } else {
-                ("error", gateway_error.clone().unwrap_or_else(|| "本地渠道服务不可用".into()))
+                (
+                    "error",
+                    gateway_error
+                        .clone()
+                        .unwrap_or_else(|| "本地渠道服务不可用".into()),
+                )
             };
-            report.results.push(ChannelApplyResult { app: target.clone(), status: status.into(), message });
+            report.results.push(ChannelApplyResult {
+                app: target.clone(),
+                status: status.into(),
+                message,
+            });
             continue;
         }
         let app = AppType::from_str(target)?;
@@ -3212,7 +3250,14 @@ mod tests {
         sponsored.account_id = Some("42".into());
         assert!(validate_channel(&sponsored).is_ok());
         let db = Database::memory().unwrap();
-        save(&db, ChannelCenterSnapshot { channels: vec![sponsored.clone()], ..Default::default() }).unwrap();
+        save(
+            &db,
+            ChannelCenterSnapshot {
+                channels: vec![sponsored.clone()],
+                ..Default::default()
+            },
+        )
+        .unwrap();
         assert!(load(&db).unwrap().channels[0].api_key.is_empty());
         sponsored.base_url = "https://untrusted.example/v1".into();
         assert!(validate_channel(&sponsored).is_err());
@@ -3262,6 +3307,29 @@ mod tests {
     }
 
     #[test]
+    fn reported_context_metadata_stays_distinct_from_the_agent_default() {
+        let mut model = blank_model("unknown".into());
+        assert_eq!(model.reported_context_limit(), None);
+        assert_eq!(model.effective_context_limit(), Some(DEFAULT_CONTEXT_LIMIT));
+
+        model.context_limit = Some(128000);
+        assert_eq!(model.reported_context_limit(), Some(128000));
+        assert_eq!(model.effective_context_limit(), Some(128000));
+
+        model.context_limits = Some(vec![256000, 128000, 1000000]);
+        model.selected_context_limit = Some(1000000);
+        assert_eq!(model.reported_context_limit(), Some(1000000));
+        assert_eq!(model.effective_context_limit(), Some(1000000));
+
+        model.selected_context_limit = Some(777777);
+        assert_eq!(model.reported_context_limit(), Some(128000));
+
+        model.context_limit = None;
+        model.selected_context_limit = None;
+        assert_eq!(model.reported_context_limit(), Some(128000));
+    }
+
+    #[test]
     fn request_byte_limits_project_independently_of_context_and_unknown_context_defaults_to_one_million(
     ) {
         let mut channel = source("limited");
@@ -3290,7 +3358,7 @@ mod tests {
         assert_eq!(catalog.models[1].context_limits, None);
         assert_eq!(catalog.models[1].max_request_bytes, None);
         let mut choices_only = blank_model("choices-only".into());
-        choices_only.context_limits = Some(vec![256000,128000]);
+        choices_only.context_limits = Some(vec![256000, 128000]);
         assert_eq!(choices_only.effective_context_limit(), Some(128000));
         let unknown_refresh = parse_channel_catalog(&json!({"data":[{"id":"model"}]})).unwrap();
         let merged = merge_discovered(&channel.models, unknown_refresh);
@@ -3305,10 +3373,10 @@ mod tests {
             json!(1.5),
             json!(MAX_MODEL_REQUEST_BYTES + 1),
         ] {
-            assert!(
-                parse_channel_catalog(&json!({"data":[{"id":"model","maxRequestBytes":invalid}]}))
-                    .is_err()
-            );
+            assert!(parse_channel_catalog(
+                &json!({"data":[{"id":"model","maxRequestBytes":invalid}]})
+            )
+            .is_err());
         }
         for invalid in [0, MAX_MODEL_REQUEST_BYTES + 1] {
             channel.models[0].max_request_bytes = Some(invalid);
@@ -3362,9 +3430,21 @@ mod tests {
     fn external_targets_roundtrip_without_changing_client_files() {
         let db = Database::memory().unwrap();
         let mut configured = snapshot();
-        configured.targets = super::super::external_agent_config::TARGETS.iter().map(|target| target.to_string()).collect();
+        configured.targets = super::super::external_agent_config::TARGETS
+            .iter()
+            .map(|target| target.to_string())
+            .collect();
         save(&db, configured).unwrap();
-        assert_eq!(load(&db).unwrap().targets, ["workbuddy", "deepseek-harness", "zcode", "mimocode", "codebuddy"]);
+        assert_eq!(
+            load(&db).unwrap().targets,
+            [
+                "workbuddy",
+                "deepseek-harness",
+                "zcode",
+                "mimocode",
+                "codebuddy"
+            ]
+        );
         assert!(db.get_setting(APPLIED_KEY).unwrap().is_none());
     }
 
@@ -3373,16 +3453,30 @@ mod tests {
         let db = Database::memory().unwrap();
         let mut configured = snapshot();
         configured.channels[0].models[0].reasoning_efforts = Some(vec!["low".into()]);
-        configured.channels[0].models[0].reasoning_effort_source = Some("relay:model-directory".into());
+        configured.channels[0].models[0].reasoning_effort_source =
+            Some("relay:model-directory".into());
         save(&db, configured).unwrap();
         let saved = load(&db).unwrap();
         let catalog = agent_catalog(&db).unwrap();
-        let model = catalog.models.iter().find(|model| model.model_id == "one/model-a").unwrap();
+        let model = catalog
+            .models
+            .iter()
+            .find(|model| model.model_id == "one/model-a")
+            .unwrap();
         assert_eq!(model.reasoning_efforts, Some(vec!["low".into()]));
-        assert_eq!(model.reasoning_effort_source.as_deref(), Some("relay:model-directory"));
-        let refreshed = merge_discovered(&saved.channels[0].models, vec![blank_model("model-a".into())]);
+        assert_eq!(
+            model.reasoning_effort_source.as_deref(),
+            Some("relay:model-directory")
+        );
+        let refreshed = merge_discovered(
+            &saved.channels[0].models,
+            vec![blank_model("model-a".into())],
+        );
         assert_eq!(refreshed[0].reasoning_efforts, Some(vec!["low".into()]));
-        assert!(db.get_setting(APPLIED_KEY).unwrap().is_none(), "saving channel capabilities must not write external tool configuration");
+        assert!(
+            db.get_setting(APPLIED_KEY).unwrap().is_none(),
+            "saving channel capabilities must not write external tool configuration"
+        );
     }
 
     #[test]
@@ -3500,8 +3594,13 @@ mod tests {
             provider["models"]["one/vendor/model-a"]["limit"]["output"],
             8192
         );
-        assert_eq!(provider["models"]["one/model-b"]["limit"]["context"], 1_000_000);
-        assert!(provider["models"]["one/model-b"]["limit"].get("output").is_none());
+        assert_eq!(
+            provider["models"]["one/model-b"]["limit"]["context"],
+            1_000_000
+        );
+        assert!(provider["models"]["one/model-b"]["limit"]
+            .get("output")
+            .is_none());
         assert!(provider["models"]["one/model-b"]
             .get("capabilities")
             .is_none());
@@ -4419,7 +4518,9 @@ mod tests {
                     {"model_name":"not-published","litellm_params":{"model":"openai/gpt-6-astra"},"model_info":{}}
                 ]}))
             }));
-        let server = tokio::spawn(async move { axum::serve(listener, router).await.unwrap(); });
+        let server = tokio::spawn(async move {
+            axum::serve(listener, router).await.unwrap();
+        });
         let mut channel = source("fixture");
         channel.name = "LiteLLM".into();
         channel.base_url = format!("http://{address}/v1");
@@ -4432,15 +4533,30 @@ mod tests {
         assert_eq!(model.context_limit, Some(32000));
         assert_eq!(model.output_limit, Some(4000));
         assert_eq!(model.enabled, Some(false));
-        assert!(model.reasoning_efforts.as_ref().unwrap().contains(&"xhigh".into()));
-        assert_eq!(model.reasoning_effort_transport.as_deref(), Some("declared"));
-        assert!(!serde_json::to_string(model).unwrap().contains("must-not-escape"));
+        assert!(model
+            .reasoning_efforts
+            .as_ref()
+            .unwrap()
+            .contains(&"xhigh".into()));
+        assert_eq!(
+            model.reasoning_effort_transport.as_deref(),
+            Some("declared")
+        );
+        assert!(!serde_json::to_string(model)
+            .unwrap()
+            .contains("must-not-escape"));
         let expected_source = model.reasoning_effort_source.clone();
-        let mut snapshot = ChannelCenterSnapshot { channels: vec![discovered], ..Default::default() };
+        let mut snapshot = ChannelCenterSnapshot {
+            channels: vec![discovered],
+            ..Default::default()
+        };
         snapshot.channels[0].models[0].enabled = Some(true);
         let catalog = agent_catalog_from_snapshot(&snapshot);
         assert_eq!(catalog.models[0].reasoning_effort_source, expected_source);
-        assert_eq!(catalog.models[0].reasoning_effort_transport.as_deref(), Some("declared"));
+        assert_eq!(
+            catalog.models[0].reasoning_effort_transport.as_deref(),
+            Some("declared")
+        );
         server.abort();
     }
 
@@ -4450,7 +4566,8 @@ mod tests {
         saved.reasoning_efforts = Some(vec!["custom".into()]);
         let mut fresh = blank_model("alias".into());
         fresh.reasoning_efforts = Some(vec!["low".into(), "high".into()]);
-        fresh.reasoning_effort_source = Some(super::super::litellm_capabilities::REGISTRY_SOURCE.into());
+        fresh.reasoning_effort_source =
+            Some(super::super::litellm_capabilities::REGISTRY_SOURCE.into());
         fresh.reasoning_effort_transport = Some("unconfirmed".into());
         let merged = merge_discovered(&[saved], vec![fresh]);
         assert_eq!(merged[0].reasoning_efforts, Some(vec!["custom".into()]));
@@ -4460,7 +4577,10 @@ mod tests {
 
     #[test]
     fn successful_unknown_refresh_discards_stale_inferences_but_failure_keeps_them() {
-        for source in [super::super::litellm_capabilities::REGISTRY_SOURCE, "litellm:model-info"] {
+        for source in [
+            super::super::litellm_capabilities::REGISTRY_SOURCE,
+            "litellm:model-info",
+        ] {
             let mut saved = blank_model("alias".into());
             saved.reasoning_efforts = Some(vec!["low".into(), "high".into()]);
             saved.reasoning_effort_source = Some(source.into());
@@ -4473,7 +4593,10 @@ mod tests {
             let refreshed = merge_discovered(&[saved], vec![unknown.clone()]);
             assert!(refreshed[0].reasoning_efforts.is_none());
             assert!(refreshed[0].reasoning_effort_source.is_none());
-            assert_eq!(refreshed[0].reasoning_effort_transport.as_deref(), Some("mixed"));
+            assert_eq!(
+                refreshed[0].reasoning_effort_transport.as_deref(),
+                Some("mixed")
+            );
             assert_eq!(refreshed[0].enabled, Some(false));
             let mut manual = blank_model("alias".into());
             manual.reasoning_efforts = Some(vec!["custom".into()]);

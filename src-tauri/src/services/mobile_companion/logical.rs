@@ -151,6 +151,7 @@ pub(super) struct Receiver {
     active: Option<Active>,
 }
 
+#[cfg(test)]
 impl Receiver {
     pub(super) fn progress_request_id(&self) -> Option<&str> {
         self.active
@@ -175,6 +176,9 @@ impl Receiver {
     pub(super) fn clear(&mut self) {
         self.active = None;
     }
+}
+
+impl Receiver {
     pub(super) fn check_timeout(&mut self) -> Result<(), String> {
         if self.expired(Instant::now()) {
             self.active = None;

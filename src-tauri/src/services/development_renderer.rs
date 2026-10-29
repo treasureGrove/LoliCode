@@ -143,9 +143,7 @@ pub(super) fn load(
     let mut files = BTreeMap::new();
     let mut total = 0;
     read_tree(&directory, &directory, &mut files, &mut total)?;
-    if !files
-        .get("index.html")
-        .is_some_and(|bytes| !bytes.is_empty())
+    if files.get("index.html").is_none_or(|bytes| bytes.is_empty())
         || !files
             .keys()
             .any(|key| key.starts_with("assets/") && key.ends_with(".js"))

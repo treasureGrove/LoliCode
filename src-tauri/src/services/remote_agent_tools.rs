@@ -126,7 +126,7 @@ fn args(name: &str, input: &Value) -> Result<(Value, String), String> {
     {
         return Err("搜索内容不能为空或超过 4 KiB".into());
     }
-    if name == "apply_patch" && !input["old_text"].as_str().is_some_and(|s| !s.is_empty()) {
+    if name == "apply_patch" && input["old_text"].as_str().is_none_or(|s| s.is_empty()) {
         return Err("补丁的旧文本不能为空".into());
     }
     let mut normalized = input.clone();
@@ -173,7 +173,7 @@ fn inspection(
     })
 }
 pub fn image_data_url(encoded: &str) -> Result<String, String> {
-    if encoded.len() > (MAX_IMAGE + 2) / 3 * 4 {
+    if encoded.len() > MAX_IMAGE.div_ceil(3) * 4 {
         return Err("远程图片超过 5 MiB".into());
     }
     let bytes = STANDARD

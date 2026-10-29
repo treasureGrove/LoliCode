@@ -9,9 +9,7 @@ fn main() {
 #[cfg(feature = "test-hooks")]
 mod acceptance {
     use anyhow::{anyhow, ensure, Context, Result};
-    use lolicode_lib::agent_test_support::remote_transport::{
-        self, RemoteErrorKind, RemoteTarget,
-    };
+    use lolicode_lib::agent_test_support::remote_transport::{self, RemoteErrorKind, RemoteTarget};
     use serde_json::{json, Value};
     use std::{path::PathBuf, time::Duration};
     use tokio::sync::watch;

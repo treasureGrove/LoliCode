@@ -1626,8 +1626,7 @@ export const opencodeProviderPresets: OpenCodeProviderPreset[] = [
     name: "SudoCode.chat",
     family: "sudocode",
     websiteUrl: "https://sudocode.chat",
-    apiKeyUrl:
-      "https://sudocode.chat/sign-up?&utm_medium=sponsor",
+    apiKeyUrl: "https://sudocode.chat/sign-up?&utm_medium=sponsor",
     settingsConfig: {
       npm: "@ai-sdk/openai",
       name: "SudoCode.chat",

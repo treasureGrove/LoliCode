@@ -154,10 +154,10 @@ fn sync_at(db: &Database, directory: &Path, now: i64) -> Result<SessionSyncResul
             if request.duration_unknown || request.started_at == 0 || end < request.started_at {
                 continue;
             }
-            if !request
+            if request
                 .message_id
                 .strip_prefix("assistant-")
-                .is_some_and(|id| uuid::Uuid::parse_str(id).is_ok())
+                .is_none_or(|id| uuid::Uuid::parse_str(id).is_err())
             {
                 continue;
             }

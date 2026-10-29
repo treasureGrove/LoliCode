@@ -75,7 +75,13 @@ fn take_native_session(client: &str, headers: &mut HeaderMap) -> Option<String> 
 pub(crate) fn is_attributed_client(client: &str) -> bool {
     matches!(
         client,
-        "lolicode" | "tavern" | "workbuddy" | "deepseek-harness" | "zcode" | "mimocode" | "codebuddy"
+        "lolicode"
+            | "tavern"
+            | "workbuddy"
+            | "deepseek-harness"
+            | "zcode"
+            | "mimocode"
+            | "codebuddy"
     )
 }
 
@@ -578,18 +584,31 @@ async fn handle(state: ProxyState, request: Request, wire: Wire) -> Result<Respo
         if !matches!(client, "lolicode" | "tavern")
             || source.base_url != crate::services::lolicode_relay::BASE_URL
             || source.protocol != "openai_chat"
-            || source.models.iter().any(|m| m.protocol.as_deref().is_some_and(|p| p != "openai_chat"))
+            || source
+                .models
+                .iter()
+                .any(|m| m.protocol.as_deref().is_some_and(|p| p != "openai_chat"))
         {
-            return Err(ProxyError::AuthError("公益模型请在 LoliCode 内使用。".into()));
+            return Err(ProxyError::AuthError(
+                "公益模型请在 LoliCode 内使用。".into(),
+            ));
         }
-        let account = state.app_handle.as_ref()
-            .and_then(|app| app.try_state::<crate::services::lolicode_account::LolicodeAccountState>())
+        let account = state
+            .app_handle
+            .as_ref()
+            .and_then(|app| {
+                app.try_state::<crate::services::lolicode_account::LolicodeAccountState>()
+            })
             .ok_or_else(|| ProxyError::AuthError("LoliCode 账户服务尚未就绪。".into()))?;
-        let (_, bearer) = account.relay_credential(source.account_id.as_deref())
-            .await.map_err(ProxyError::AuthError)?;
+        let (_, bearer) = account
+            .relay_credential(source.account_id.as_deref())
+            .await
+            .map_err(ProxyError::AuthError)?;
         if let Some(secrets) = parts.extensions.get_mut::<GatewaySecrets>() {
             secrets.0.push(bearer.clone());
-            if let Some(token) = bearer.rsplit('.').next() { secrets.0.push(token.to_owned()); }
+            if let Some(token) = bearer.rsplit('.').next() {
+                secrets.0.push(token.to_owned());
+            }
         }
         source.api_key = bearer;
         source.auth_kind = "api_key".into();
@@ -850,7 +869,11 @@ async fn forward(
 ) -> Result<Response, ProxyError> {
     let client_stream = body.get("stream").and_then(Value::as_bool).unwrap_or(false);
     if wire == Wire::Messages {
-        prepare_messages_request(&mut body, model, normalize_protocol(protocol(source, model))?)?;
+        prepare_messages_request(
+            &mut body,
+            model,
+            normalize_protocol(protocol(source, model))?,
+        )?;
     }
     if source.auth_kind == "codex_oauth" && wire == Wire::Responses {
         super::providers::transform_responses::normalize_codex_oauth_responses_request(
@@ -886,7 +909,8 @@ async fn forward(
     if ctx.app_type_str == "lolicode" {
         // Other native clients and generic metadata cannot claim an lc: session.
         // Keep this billing identity out of upstream cache/session hints too.
-        ctx.session_id = extensions.get::<GatewaySession>()
+        ctx.session_id = extensions
+            .get::<GatewaySession>()
             .map(|session| session.0.clone())
             .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
         ctx.session_client_provided = false;
@@ -1203,17 +1227,32 @@ fn prompt_tokens(usage: Option<&Value>) -> u64 {
 }
 
 fn reported_chat_usage(usage: &Value) -> Value {
-    let mut result=serde_json::Map::new();
-    let input=usage.get("input_tokens").and_then(Value::as_u64).map(|_|prompt_tokens(Some(usage)));
-    let output=usage.get("output_tokens").and_then(Value::as_u64);
-    if let Some(value)=input {result.insert("prompt_tokens".into(),json!(value));}
-    if let Some(value)=output {result.insert("completion_tokens".into(),json!(value));}
-    if let (Some(input),Some(output))=(input,output) {result.insert("total_tokens".into(),json!(input.saturating_add(output)));}
-    if let Some(value)=usage.get("cache_read_input_tokens").and_then(Value::as_u64) {
-        result.insert("prompt_tokens_details".into(),json!({"cached_tokens":value}));
+    let mut result = serde_json::Map::new();
+    let input = usage
+        .get("input_tokens")
+        .and_then(Value::as_u64)
+        .map(|_| prompt_tokens(Some(usage)));
+    let output = usage.get("output_tokens").and_then(Value::as_u64);
+    if let Some(value) = input {
+        result.insert("prompt_tokens".into(), json!(value));
     }
-    if let Some(value)=usage.get("cache_creation_input_tokens").and_then(Value::as_u64) {
-        result.insert("cache_creation_input_tokens".into(),json!(value));
+    if let Some(value) = output {
+        result.insert("completion_tokens".into(), json!(value));
+    }
+    if let (Some(input), Some(output)) = (input, output) {
+        result.insert("total_tokens".into(), json!(input.saturating_add(output)));
+    }
+    if let Some(value) = usage.get("cache_read_input_tokens").and_then(Value::as_u64) {
+        result.insert(
+            "prompt_tokens_details".into(),
+            json!({"cached_tokens":value}),
+        );
+    }
+    if let Some(value) = usage
+        .get("cache_creation_input_tokens")
+        .and_then(Value::as_u64)
+    {
+        result.insert("cache_creation_input_tokens".into(), json!(value));
     }
     Value::Object(result)
 }
@@ -1241,7 +1280,7 @@ fn messages_json_to_chat(body: Value, model: &str) -> Value {
     if !reasoning.is_empty() {
         message["reasoning_content"] = json!(reasoning);
     }
-    let usage=reported_chat_usage(body.get("usage").unwrap_or(&Value::Null));
+    let usage = reported_chat_usage(body.get("usage").unwrap_or(&Value::Null));
     json!({
         "id":body.get("id"), "object":"chat.completion", "created":chrono::Utc::now().timestamp(),
         "model":model,"choices":[{"index":0,"message":message,
@@ -1720,10 +1759,16 @@ mod tests {
         assert_eq!(catalog["data"].as_array().unwrap().len(), 1);
         assert_eq!(catalog["data"][0]["id"], "test/vendor/model");
         assert_eq!(catalog["data"][0]["contextLimit"], 1000000);
-        assert_eq!(catalog["data"][0]["contextLimits"], json!([128000, 1000000]));
+        assert_eq!(
+            catalog["data"][0]["contextLimits"],
+            json!([128000, 1000000])
+        );
         assert_eq!(catalog["data"][0]["maxRequestBytes"], 131072);
         assert_eq!(catalog["data"][0]["outputLimit"], 4096);
-        assert_eq!(catalog["data"][0]["reasoningEfforts"], json!(["low", "high"]));
+        assert_eq!(
+            catalog["data"][0]["reasoningEfforts"],
+            json!(["low", "high"])
+        );
         assert!(!catalog.to_string().contains("test-secret"));
         assert!(!catalog.to_string().contains("native-default"));
     }
@@ -1774,7 +1819,8 @@ mod tests {
     fn messages_limits_preserve_lower_user_caps_and_keep_legacy_thinking_valid() {
         let mut model = source().models.remove(0);
         model.output_limit = Some(4096);
-        let mut request = json!({"max_tokens":16384,"thinking":{"type":"enabled","budget_tokens":12000}});
+        let mut request =
+            json!({"max_tokens":16384,"thinking":{"type":"enabled","budget_tokens":12000}});
         prepare_messages_request(&mut request, &model, "anthropic").unwrap();
         assert_eq!(request["max_tokens"], 4096);
         assert_eq!(request["thinking"]["budget_tokens"], 4095);
@@ -1782,17 +1828,24 @@ mod tests {
         let mut lower = json!({"max_tokens":2048,"output_config":{"effort":"low"}});
         prepare_messages_request(&mut lower, &model, "anthropic").unwrap();
         assert_eq!(lower["max_tokens"], 2048);
-        assert!(lower.get("thinking").is_none(), "native Messages stays native");
+        assert!(
+            lower.get("thinking").is_none(),
+            "native Messages stays native"
+        );
 
         model.output_limit = Some(1024);
-        let mut too_small = json!({"max_tokens":16384,"thinking":{"type":"enabled","budget_tokens":12000}});
+        let mut too_small =
+            json!({"max_tokens":16384,"thinking":{"type":"enabled","budget_tokens":12000}});
         assert!(prepare_messages_request(&mut too_small, &model, "anthropic").is_err());
 
         model.output_limit = None;
         let unchanged = json!({"max_tokens":16384});
         let mut unknown = unchanged.clone();
         prepare_messages_request(&mut unknown, &model, "openai_chat").unwrap();
-        assert_eq!(unknown, unchanged, "unknown limits and omitted effort are not guessed");
+        assert_eq!(
+            unknown, unchanged,
+            "unknown limits and omitted effort are not guessed"
+        );
     }
 
     #[tokio::test]
@@ -1809,7 +1862,9 @@ mod tests {
                 let captured = captured.clone();
                 async move {
                     let path = request.uri().path().to_string();
-                    let bytes = axum::body::to_bytes(request.into_body(), MAX_REQUEST_BYTES).await.unwrap();
+                    let bytes = axum::body::to_bytes(request.into_body(), MAX_REQUEST_BYTES)
+                        .await
+                        .unwrap();
                     let body: Value = serde_json::from_slice(&bytes).unwrap();
                     captured.lock().await.push((path.clone(), body.clone()));
                     let reply = if path.ends_with("/chat/completions") {
@@ -1833,12 +1888,23 @@ mod tests {
             .route("/v1/messages", axum::routing::post(capture.clone()))
             .route("/v1/chat/completions", axum::routing::post(capture.clone()))
             .route("/v1/responses", axum::routing::post(capture));
-        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+            .await
+            .unwrap();
         let address = listener.local_addr().unwrap();
-        let upstream_task = tokio::spawn(async move { axum::serve(listener, upstream).await.unwrap(); });
+        let upstream_task = tokio::spawn(async move {
+            axum::serve(listener, upstream).await.unwrap();
+        });
         let db = Arc::new(Database::memory().unwrap());
         let token = channel_center::gateway_token(&db).unwrap();
-        let proxy = ProxyServer::new(ProxyConfig { listen_port:0, ..Default::default() }, db.clone(), None);
+        let proxy = ProxyServer::new(
+            ProxyConfig {
+                listen_port: 0,
+                ..Default::default()
+            },
+            db.clone(),
+            None,
+        );
         let info = proxy.start().await.unwrap();
         let base = gateway_base_url(&info.address, info.port).unwrap();
         let client = reqwest::Client::builder().no_proxy().build().unwrap();
@@ -1854,22 +1920,40 @@ mod tests {
 
         for upstream_protocol in ["openai_chat", "openai_responses", "anthropic"] {
             source.protocol = upstream_protocol.into();
-            db.set_setting("channel_center_applied", &serde_json::to_string(&ChannelCenterSnapshot {
-                channels:vec![source.clone()], ..Default::default()
-            }).unwrap()).unwrap();
-            for (model_index, output_cap) in [(0,16384), (1,4096), (0,16384)] {
+            db.set_setting(
+                "channel_center_applied",
+                &serde_json::to_string(&ChannelCenterSnapshot {
+                    channels: vec![source.clone()],
+                    ..Default::default()
+                })
+                .unwrap(),
+            )
+            .unwrap();
+            for (model_index, output_cap) in [(0, 16384), (1, 4096), (0, 16384)] {
                 for thinking_off in [false, true] {
-                    let published = channel_center::claude_route_id(&source, &source.models[model_index]);
+                    let published =
+                        channel_center::claude_route_id(&source, &source.models[model_index]);
                     let mut request = json!({"model":published,"max_tokens":16384,"output_config":{"effort":"high"},
                         "system":"Keep the task instructions unchanged.",
                         "messages":[{"role":"user","content":"inspect x"},
                             {"role":"assistant","content":[{"type":"tool_use","id":"call_test","name":"read","input":{"path":"x"}}]},
                             {"role":"user","content":[{"type":"tool_result","tool_use_id":"call_test","content":"original file contents"}]}],
                         "tools":[{"name":"read","description":"read a file","input_schema":{"type":"object","properties":{"path":{"type":"string"}}}}]});
-                    if thinking_off { request["thinking"] = json!({"type":"disabled"}); }
-                    let response = client.post(format!("{base}/messages")).bearer_auth(&token)
-                        .json(&request).send().await.unwrap();
-                    assert!(response.status().is_success(), "{upstream_protocol}: {}", response.text().await.unwrap());
+                    if thinking_off {
+                        request["thinking"] = json!({"type":"disabled"});
+                    }
+                    let response = client
+                        .post(format!("{base}/messages"))
+                        .bearer_auth(&token)
+                        .json(&request)
+                        .send()
+                        .await
+                        .unwrap();
+                    assert!(
+                        response.status().is_success(),
+                        "{upstream_protocol}: {}",
+                        response.text().await.unwrap()
+                    );
                     let output: Value = response.json().await.unwrap();
                     assert_eq!(output["content"][0]["text"], "ok");
                     let captured = captured.lock().await;
@@ -1891,10 +1975,14 @@ mod tests {
                             &sent["reasoning"]["effort"]
                         };
                         assert_eq!(effort, if thinking_off { "low" } else { "high" });
-                        assert!(sent.to_string().contains("Keep the task instructions unchanged."));
+                        assert!(sent
+                            .to_string()
+                            .contains("Keep the task instructions unchanged."));
                         assert!(sent.to_string().contains("original file contents"));
                         assert!(sent.to_string().contains("call_test"));
-                        assert!(sent["tools"].as_array().is_some_and(|tools| !tools.is_empty()));
+                        assert!(sent["tools"]
+                            .as_array()
+                            .is_some_and(|tools| !tools.is_empty()));
                     }
                 }
             }
@@ -1917,7 +2005,10 @@ mod tests {
         ] {
             let mut headers = HeaderMap::new();
             headers.insert("x-lolicode-session-id", value.parse().unwrap());
-            assert_eq!(take_native_session(client, &mut headers).as_deref(), expected);
+            assert_eq!(
+                take_native_session(client, &mut headers).as_deref(),
+                expected
+            );
             assert!(!headers.contains_key("x-lolicode-session-id"));
         }
         assert_eq!(take_native_session("lolicode", &mut HeaderMap::new()), None);
@@ -1927,18 +2018,26 @@ mod tests {
     async fn native_lolicode_streamed_requests_are_billed_once_under_the_app_and_channel() {
         use super::super::{server::ProxyServer, types::ProxyConfig};
         use crate::database::Database;
-        use std::sync::{Arc,atomic::{AtomicUsize,Ordering}};
-        let sequence=Arc::new(AtomicUsize::new(0));
-        let capture=move |request:Request| {
-            let id=sequence.fetch_add(1,Ordering::SeqCst);
+        use std::sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc,
+        };
+        let sequence = Arc::new(AtomicUsize::new(0));
+        let capture = move |request: Request| {
+            let id = sequence.fetch_add(1, Ordering::SeqCst);
             async move {
                 assert!(!request.headers().contains_key("x-lolicode-session-id"));
-                let path=request.uri().path();
+                let path = request.uri().path();
                 if path.ends_with("/chat/completions") {
-                    let sse=format!("data: {}\n\ndata: {}\n\ndata: [DONE]\n\n",
+                    let sse = format!(
+                        "data: {}\n\ndata: {}\n\ndata: [DONE]\n\n",
                         json!({"id":format!("chat_{id}"),"model":"meter-model","choices":[{"index":0,"delta":{"content":"ok"},"finish_reason":"stop"}]}),
-                        json!({"id":format!("chat_{id}"),"model":"meter-model","choices":[],"usage":{"prompt_tokens":100,"completion_tokens":10,"prompt_tokens_details":{"cached_tokens":20}}}));
-                    Response::builder().header("content-type","text/event-stream").body(axum::body::Body::from(sse)).unwrap()
+                        json!({"id":format!("chat_{id}"),"model":"meter-model","choices":[],"usage":{"prompt_tokens":100,"completion_tokens":10,"prompt_tokens_details":{"cached_tokens":20}}})
+                    );
+                    Response::builder()
+                        .header("content-type", "text/event-stream")
+                        .body(axum::body::Body::from(sse))
+                        .unwrap()
                 } else if path.ends_with("/responses") {
                     Json(json!({"id":format!("resp_{id}"),"object":"response","model":"meter-model","status":"completed",
                         "output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"ok"}]}],
@@ -1950,53 +2049,109 @@ mod tests {
                 }
             }
         };
-        let upstream=axum::Router::new()
-            .route("/v1/chat/completions",axum::routing::post(capture.clone()))
-            .route("/v1/responses",axum::routing::post(capture.clone()))
-            .route("/v1/messages",axum::routing::post(capture));
-        let listener=tokio::net::TcpListener::bind(("127.0.0.1",0)).await.unwrap();
-        let address=listener.local_addr().unwrap();
-        let task=tokio::spawn(async move {axum::serve(listener,upstream).await.unwrap();});
-        let db=Arc::new(Database::memory().unwrap());
+        let upstream = axum::Router::new()
+            .route("/v1/chat/completions", axum::routing::post(capture.clone()))
+            .route("/v1/responses", axum::routing::post(capture.clone()))
+            .route("/v1/messages", axum::routing::post(capture));
+        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+            .await
+            .unwrap();
+        let address = listener.local_addr().unwrap();
+        let task = tokio::spawn(async move {
+            axum::serve(listener, upstream).await.unwrap();
+        });
+        let db = Arc::new(Database::memory().unwrap());
         {
-            let conn=db.conn.lock().unwrap();
+            let conn = db.conn.lock().unwrap();
             conn.execute("INSERT INTO model_pricing(model_id,display_name,input_cost_per_million,output_cost_per_million,cache_read_cost_per_million,cache_creation_cost_per_million)
                 VALUES('meter-model','Meter model','1','2','0.5','1.25')",[]).unwrap();
         }
-        let token=channel_center::gateway_token(&db).unwrap();
-        let proxy=ProxyServer::new(ProxyConfig {listen_port:0,..Default::default()},db.clone(),None);
-        let info=proxy.start().await.unwrap();
-        let base=gateway_catalog_base_url(&info.address,info.port,42).unwrap();
-        let base=catalog_client_base_url(&base,"lolicode").unwrap();
-        let client=reqwest::Client::builder().no_proxy().build().unwrap();
-        let mut source=source();
-        source.base_url=format!("http://{address}/v1"); source.models.truncate(1); source.models[0].id="meter-model".into();
+        let token = channel_center::gateway_token(&db).unwrap();
+        let proxy = ProxyServer::new(
+            ProxyConfig {
+                listen_port: 0,
+                ..Default::default()
+            },
+            db.clone(),
+            None,
+        );
+        let info = proxy.start().await.unwrap();
+        let base = gateway_catalog_base_url(&info.address, info.port, 42).unwrap();
+        let base = catalog_client_base_url(&base, "lolicode").unwrap();
+        let client = reqwest::Client::builder().no_proxy().build().unwrap();
+        let mut source = source();
+        source.base_url = format!("http://{address}/v1");
+        source.models.truncate(1);
+        source.models[0].id = "meter-model".into();
         let session = "lc:12345678-1234-4234-8234-123456789abc";
-        for (index,protocol) in ["openai_chat","anthropic","openai_responses"].into_iter().enumerate() {
-            source.protocol=protocol.into();
-            db.set_setting("channel_center_catalog_42",&serde_json::to_string(&ChannelCenterSnapshot {channels:vec![source.clone()],..Default::default()}).unwrap()).unwrap();
+        for (index, protocol) in ["openai_chat", "anthropic", "openai_responses"]
+            .into_iter()
+            .enumerate()
+        {
+            source.protocol = protocol.into();
+            db.set_setting(
+                "channel_center_catalog_42",
+                &serde_json::to_string(&ChannelCenterSnapshot {
+                    channels: vec![source.clone()],
+                    ..Default::default()
+                })
+                .unwrap(),
+            )
+            .unwrap();
             let response=client.post(format!("{base}/chat/completions")).bearer_auth(&token)
                 .header("x-lolicode-session-id", session)
                 .json(&json!({"model":"test/meter-model","messages":[{"role":"user","content":"hello"}],"stream":true,"stream_options":{"include_usage":true}}))
                 .send().await.unwrap();
-            assert!(response.status().is_success(),"{protocol}: {}",response.text().await.unwrap());
+            assert!(
+                response.status().is_success(),
+                "{protocol}: {}",
+                response.text().await.unwrap()
+            );
             assert!(response.text().await.unwrap().contains("ok"));
-            tokio::time::timeout(std::time::Duration::from_secs(5),async {
+            tokio::time::timeout(std::time::Duration::from_secs(5), async {
                 loop {
-                    if db.get_usage_summary(None,None,Some("lolicode"),None,None).unwrap().total_requests == (index+1) as u64 {break;}
+                    if db
+                        .get_usage_summary(None, None, Some("lolicode"), None, None)
+                        .unwrap()
+                        .total_requests
+                        == (index + 1) as u64
+                    {
+                        break;
+                    }
                     tokio::task::yield_now().await;
                 }
-            }).await.unwrap();
+            })
+            .await
+            .unwrap();
         }
-        let own=db.get_usage_summary(None,None,Some("lolicode"),None,None).unwrap();
-        assert_eq!(own.total_requests,3); assert_eq!(own.total_input_tokens,240);
-        assert_eq!(own.total_output_tokens,30); assert_eq!(own.total_cache_read_tokens,60);
-        assert_eq!(own.real_total_tokens,330); assert_eq!(own.total_cost,"0.000330");
-        let channels=db.get_provider_stats(None,None,Some("lolicode"),None,None).unwrap();
-        assert_eq!(channels.len(),1); assert_eq!(channels[0].provider_id,"channel-test");
-        assert_eq!(channels[0].request_count,3); assert_eq!(channels[0].total_tokens,330);
-        assert_eq!(db.get_usage_summary(None,None,Some("channel-gateway"),None,None).unwrap().total_requests,0);
-        assert_eq!(db.get_usage_summary(None,None,None,None,None).unwrap().total_requests,3);
+        let own = db
+            .get_usage_summary(None, None, Some("lolicode"), None, None)
+            .unwrap();
+        assert_eq!(own.total_requests, 3);
+        assert_eq!(own.total_input_tokens, 240);
+        assert_eq!(own.total_output_tokens, 30);
+        assert_eq!(own.total_cache_read_tokens, 60);
+        assert_eq!(own.real_total_tokens, 330);
+        assert_eq!(own.total_cost, "0.000330");
+        let channels = db
+            .get_provider_stats(None, None, Some("lolicode"), None, None)
+            .unwrap();
+        assert_eq!(channels.len(), 1);
+        assert_eq!(channels[0].provider_id, "channel-test");
+        assert_eq!(channels[0].request_count, 3);
+        assert_eq!(channels[0].total_tokens, 330);
+        assert_eq!(
+            db.get_usage_summary(None, None, Some("channel-gateway"), None, None)
+                .unwrap()
+                .total_requests,
+            0
+        );
+        assert_eq!(
+            db.get_usage_summary(None, None, None, None, None)
+                .unwrap()
+                .total_requests,
+            3
+        );
         assert_eq!(db.conn.lock().unwrap().query_row(
             "SELECT COUNT(*) FROM proxy_request_logs WHERE app_type='lolicode' AND session_id=?1",
             [session], |row| row.get::<_, i64>(0)).unwrap(), 3);
@@ -2006,20 +2161,30 @@ mod tests {
             let mut request = client.post(format!("{base}/chat/completions")).bearer_auth(&token)
                 .json(&json!({"model":"test/meter-model","messages":[{"role":"user","content":"hello"}],
                     "metadata":{"session_id":session},"stream":true,"stream_options":{"include_usage":true}}));
-            if let Some(header) = header { request = request.header("x-lolicode-session-id", header); }
+            if let Some(header) = header {
+                request = request.header("x-lolicode-session-id", header);
+            }
             let response = request.send().await.unwrap();
             assert!(response.status().is_success());
             let _ = response.text().await.unwrap();
             tokio::time::timeout(std::time::Duration::from_secs(5), async {
-                while db.get_usage_summary(None,None,Some("lolicode"),None,None).unwrap().total_requests != (index+4) as u64 {
+                while db
+                    .get_usage_summary(None, None, Some("lolicode"), None, None)
+                    .unwrap()
+                    .total_requests
+                    != (index + 4) as u64
+                {
                     tokio::task::yield_now().await;
                 }
-            }).await.unwrap();
+            })
+            .await
+            .unwrap();
         }
         assert_eq!(db.conn.lock().unwrap().query_row(
             "SELECT COUNT(*) FROM proxy_request_logs WHERE app_type='lolicode' AND session_id=?1",
             [session], |row| row.get::<_, i64>(0)).unwrap(), 3);
-        proxy.stop().await.unwrap(); task.abort();
+        proxy.stop().await.unwrap();
+        task.abort();
     }
 
     #[test]
@@ -2344,13 +2509,28 @@ mod tests {
                 .send()
                 .await
                 .unwrap();
-            assert!(response.status().is_success(), "{app}: {}", response.status());
+            assert!(
+                response.status().is_success(),
+                "{app}: {}",
+                response.status()
+            );
             let output: Value = response.json().await.unwrap();
             assert_eq!(output["choices"][0]["finish_reason"], "tool_calls");
         }
         assert!(catalog_client_base_url(&version_base, "unknown").is_err());
-        assert_eq!(client.get(format!("{}/clients/unknown/v1/models",version_base.trim_end_matches("/v1")))
-            .bearer_auth(&token).send().await.unwrap().status(), http::StatusCode::BAD_REQUEST);
+        assert_eq!(
+            client
+                .get(format!(
+                    "{}/clients/unknown/v1/models",
+                    version_base.trim_end_matches("/v1")
+                ))
+                .bearer_auth(&token)
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            http::StatusCode::BAD_REQUEST
+        );
         assert_eq!(
             client
                 .post(format!("{base}/chat/completions"))
@@ -2584,7 +2764,9 @@ mod tests {
                     }
                 }),
             );
-            let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+            let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+                .await
+                .unwrap();
             let address = listener.local_addr().unwrap();
             let upstream_task = tokio::spawn(async move {
                 axum::serve(listener, upstream).await.unwrap();
@@ -2592,9 +2774,23 @@ mod tests {
             let mut channel = source();
             channel.base_url = format!("http://{address}/v1");
             channel.api_key = "upstream-static-secret".into();
-            let snapshot = ChannelCenterSnapshot { channels: vec![channel], ..Default::default() };
-            db.set_setting("channel_center_applied", &serde_json::to_string(&snapshot).unwrap()).unwrap();
-            let proxy = ProxyServer::new(ProxyConfig { listen_port: 0, ..Default::default() }, db, None);
+            let snapshot = ChannelCenterSnapshot {
+                channels: vec![channel],
+                ..Default::default()
+            };
+            db.set_setting(
+                "channel_center_applied",
+                &serde_json::to_string(&snapshot).unwrap(),
+            )
+            .unwrap();
+            let proxy = ProxyServer::new(
+                ProxyConfig {
+                    listen_port: 0,
+                    ..Default::default()
+                },
+                db,
+                None,
+            );
             let info = proxy.start().await.unwrap();
             let base = gateway_base_url(&info.address, info.port).unwrap();
             let client = reqwest::Client::builder().no_proxy().build().unwrap();
@@ -2604,7 +2800,13 @@ mod tests {
                     .json(&json!({"model":"test/vendor/model","messages":[{"role":"user","content":"limited"}],"stream":is_stream}))
                     .send().await.unwrap();
                 assert_eq!(response.status().as_u16(), status);
-                assert_eq!(response.headers().get("retry-after").and_then(|value|value.to_str().ok()), expected);
+                assert_eq!(
+                    response
+                        .headers()
+                        .get("retry-after")
+                        .and_then(|value| value.to_str().ok()),
+                    expected
+                );
                 assert!(!response.headers().contains_key("x-upstream-secret"));
                 assert!(!response.headers().contains_key("set-cookie"));
                 let body: Value = response.json().await.unwrap();
@@ -2619,13 +2821,15 @@ mod tests {
 
     #[test]
     fn chat_usage_projection_preserves_cache_counts_and_does_not_invent_missing_usage() {
-        let reported=reported_chat_usage(&json!({"input_tokens":20,"output_tokens":10,"cache_read_input_tokens":60,"cache_creation_input_tokens":20}));
-        assert_eq!(reported["prompt_tokens"],100);
-        assert_eq!(reported["completion_tokens"],10);
-        assert_eq!(reported["prompt_tokens_details"]["cached_tokens"],60);
-        assert_eq!(reported["cache_creation_input_tokens"],20);
-        assert_eq!(reported_chat_usage(&json!({})),json!({}));
-        let ordinary=reported_chat_usage(&json!({"input_tokens":3,"output_tokens":4}));
+        let reported = reported_chat_usage(
+            &json!({"input_tokens":20,"output_tokens":10,"cache_read_input_tokens":60,"cache_creation_input_tokens":20}),
+        );
+        assert_eq!(reported["prompt_tokens"], 100);
+        assert_eq!(reported["completion_tokens"], 10);
+        assert_eq!(reported["prompt_tokens_details"]["cached_tokens"], 60);
+        assert_eq!(reported["cache_creation_input_tokens"], 20);
+        assert_eq!(reported_chat_usage(&json!({})), json!({}));
+        let ordinary = reported_chat_usage(&json!({"input_tokens":3,"output_tokens":4}));
         assert!(ordinary.get("prompt_tokens_details").is_none());
         assert!(ordinary.get("cache_creation_input_tokens").is_none());
     }

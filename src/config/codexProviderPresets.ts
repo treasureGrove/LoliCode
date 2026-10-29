@@ -1135,8 +1135,7 @@ requires_openai_auth = true`,
     planKey: "payg",
     nameKey: "providerForm.presets.ucloud",
     websiteUrl: "https://www.compshare.cn",
-    apiKeyUrl:
-      "https://www.compshare.cn/coding-plan",
+    apiKeyUrl: "https://www.compshare.cn/coding-plan",
     auth: generateThirdPartyAuth(""),
     config: generateThirdPartyConfig(
       "compshare",
@@ -1156,8 +1155,7 @@ requires_openai_auth = true`,
     planKey: "codingPlan",
     nameKey: "providerForm.presets.ucloudCoding",
     websiteUrl: "https://www.compshare.cn",
-    apiKeyUrl:
-      "https://www.compshare.cn/coding-plan",
+    apiKeyUrl: "https://www.compshare.cn/coding-plan",
     auth: generateThirdPartyAuth(""),
     config: generateThirdPartyConfig(
       "compshare_coding",
@@ -1314,8 +1312,7 @@ requires_openai_auth = true`,
     name: "SudoCode.chat",
     family: "sudocode",
     websiteUrl: "https://sudocode.chat",
-    apiKeyUrl:
-      "https://sudocode.chat/sign-up?&utm_medium=sponsor",
+    apiKeyUrl: "https://sudocode.chat/sign-up?&utm_medium=sponsor",
     category: "third_party",
     auth: generateThirdPartyAuth(""),
     config: `model_provider = "custom"

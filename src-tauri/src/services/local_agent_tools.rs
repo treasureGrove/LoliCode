@@ -84,9 +84,8 @@ fn runnable(path: &Path, target: &str) -> bool {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        return path
-            .metadata()
-            .is_ok_and(|m| m.permissions().mode() & 0o111 != 0);
+        path.metadata()
+            .is_ok_and(|m| m.permissions().mode() & 0o111 != 0)
     }
     #[cfg(not(unix))]
     true
@@ -108,11 +107,11 @@ pub fn validate_path(target: &str, path: &Path) -> Result<PathBuf, String> {
     #[cfg(windows)]
     {
         let raw = canonical.to_string_lossy();
-        return Ok(if let Some(unc) = raw.strip_prefix(r"\\?\UNC\") {
+        Ok(if let Some(unc) = raw.strip_prefix(r"\\?\UNC\") {
             PathBuf::from(format!(r"\\{unc}"))
         } else {
             PathBuf::from(raw.strip_prefix(r"\\?\").unwrap_or(&raw))
-        });
+        })
     }
     #[cfg(not(windows))]
     Ok(canonical)

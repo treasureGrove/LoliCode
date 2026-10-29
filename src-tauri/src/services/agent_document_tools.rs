@@ -27,10 +27,10 @@ fn validate(name: &str, input: &Value) -> Result<(), String> {
     if object.keys().any(|key| !allowed.contains(&key.as_str())) {
         return Err("文档工具包含未知参数".into());
     }
-    if name != "get_view" && !input["path"].as_str().is_some_and(|s| !s.trim().is_empty()) {
+    if name != "get_view" && input["path"].as_str().is_none_or(|s| s.trim().is_empty()) {
         return Err("缺少文档路径".into());
     }
-    if name == "search_document" && !input["query"].as_str().is_some_and(|s| !s.is_empty()) {
+    if name == "search_document" && input["query"].as_str().is_none_or(|s| s.is_empty()) {
         return Err("缺少搜索文字".into());
     }
     for (key, value) in object {

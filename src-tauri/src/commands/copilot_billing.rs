@@ -18,6 +18,10 @@ pub async fn copilot_billing_list_reports(
         .map_err(|_| AppError::Message("读取 Copilot 官方账本失败".into()))?
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Named arguments are part of the existing Tauri IPC contract."
+)]
 #[tauri::command]
 pub async fn copilot_billing_sync(
     state: State<'_, AppState>,

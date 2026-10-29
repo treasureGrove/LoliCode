@@ -316,13 +316,14 @@ fn python_script() -> Result<&'static str, RemoteError> {
     Ok(SCRIPT.get().expect("initialized remote helper"))
 }
 
+#[cfg(any(target_os = "windows", test))]
 fn parse_wsl_names(bytes: &[u8]) -> Result<Vec<String>, RemoteError> {
     let decoded = if bytes.starts_with(&[0xff, 0xfe])
         || bytes.ends_with(&[b'\n', 0])
         || bytes.ends_with(&[b'\r', 0])
     {
         let bytes = bytes.strip_prefix(&[0xff, 0xfe]).unwrap_or(bytes);
-        if bytes.len() % 2 != 0 {
+        if !bytes.len().is_multiple_of(2) {
             return Err(invalid());
         }
         String::from_utf16(
@@ -359,10 +360,10 @@ fn parse_wsl_names(bytes: &[u8]) -> Result<Vec<String>, RemoteError> {
 pub async fn list_wsl_distributions() -> Result<Vec<String>, RemoteError> {
     #[cfg(not(target_os = "windows"))]
     {
-        return Err(failure(
+        Err(failure(
             RemoteErrorKind::Unsupported,
             "WSL 仅适用于 Windows 桌面。",
-        ));
+        ))
     }
     #[cfg(target_os = "windows")]
     {
