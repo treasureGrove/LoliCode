@@ -1,0 +1,1027 @@
+@import "./workspace-tokens.css";
+
+/* The existing optional portrait stays above the flush editor, outside navigation. */
+body > #root .wb-companion {
+  position: fixed;
+  z-index: 30;
+  right: 22px;
+  bottom: 180px;
+  width: 144px;
+  pointer-events: none;
+}
+body > #root .wb-companion-stage {
+  height: 144px;
+  border: 0;
+  background: transparent;
+}
+body > #root .wb-companion-image {
+  height: 137px;
+}
+body > #root .wb-companion-hide {
+  pointer-events: auto;
+  color: var(--text-2);
+  background: var(--bg-card);
+  border-color: hsl(var(--border));
+  opacity: 1;
+}
+
+.lolicode-refreshed-shell .tai-main[data-view]::before {
+  opacity: calc(var(--atelier-scene-opacity) * 0.12);
+}
+
+:root[data-resource-scene]
+  .lolicode-refreshed-shell
+  .tai-main[data-view]::before {
+  opacity: var(--atelier-scene-opacity);
+}
+
+:root .lolicode-workbench.wb-unified {
+  background: transparent;
+}
+
+:root .lolicode-workbench.wb-unified .wb-sidebar {
+  --wb-sidebar: var(--bg-sidebar);
+  --wb-input: var(--bg-card);
+  --wb-panel: var(--bg-card);
+  --wb-text: var(--text-1);
+  --wb-muted: var(--text-3);
+  --wb-border: hsl(var(--border));
+  --wb-hover: var(--bg-subtle);
+  --wb-selected: var(--bg-selected);
+  --wb-accent: var(--action-text);
+  --wb-accent-soft: var(--action-soft);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: var(--bg-sidebar);
+  box-shadow: none;
+  backdrop-filter: none;
+  animation: none;
+}
+
+:root .lolicode-workbench.wb-unified .wb-sidebar::before,
+:root .lolicode-workbench.wb-unified .wb-sidebar::after,
+:root .lolicode-workbench.wb-unified .wb-composer::after {
+  display: none;
+}
+
+:root .lolicode-workbench.wb-unified .wb-sidebar .wb-nav {
+  padding: 0;
+  gap: 0;
+}
+
+:root .lolicode-workbench.wb-unified .wb-sidebar .wb-create-task {
+  margin: 0;
+  color: var(--action-text);
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  box-shadow: none;
+}
+
+:root
+  .lolicode-workbench.wb-unified
+  .wb-sidebar
+  .wb-create-task
+  > .wb-nav-create {
+  justify-content: flex-start;
+  min-height: 38px;
+  padding: 9px 12px;
+  font-size: var(--workspace-label);
+  font-weight: 500;
+}
+
+:root .lolicode-workbench.wb-unified .wb-sidebar .wb-create-task-options {
+  border-left: 0;
+}
+
+:root
+  .lolicode-workbench.wb-unified
+  .wb-sidebar
+  .wb-create-task
+  > .wb-nav-create:hover:not(:disabled),
+:root
+  .lolicode-workbench.wb-unified
+  .wb-sidebar
+  .wb-create-task-options:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--action-text) 10%, var(--action-soft));
+  box-shadow: none;
+}
+
+:root .lolicode-workbench.wb-unified .wb-sidebar .wb-search {
+  flex-shrink: 0;
+  margin: 2px 0 18px;
+  padding: 8px 10px;
+  min-height: 34px;
+  background: color-mix(in srgb, var(--bg-card) 65%, transparent);
+  border: 1px solid hsl(var(--border) / 0.7);
+  border-radius: 9px;
+  font-size: var(--workspace-caption);
+}
+
+:root .lolicode-workbench.wb-unified .wb-sidebar .wb-search:focus-within {
+  border-color: var(--action-text);
+  box-shadow: 0 0 0 2px var(--action-soft);
+}
+
+:root .lolicode-workbench.wb-unified .wb-sidebar .wb-projects {
+  min-height: 0;
+  padding: 0 0 12px;
+  scrollbar-width: thin;
+}
+
+:root .lolicode-workbench.wb-unified .wb-sidebar .wb-section-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 5px 12px;
+  color: var(--text-3);
+  font-size: var(--workspace-caption);
+  letter-spacing: 0;
+}
+
+:root .lolicode-workbench.wb-unified .wb-workspace-count {
+  flex: 1;
+  font-variant-numeric: tabular-nums;
+  opacity: 1;
+}
+
+:root
+  .lolicode-workbench.wb-unified
+  .wb-sidebar
+  .wb-section-label
+  .wb-icon-button {
+  width: 24px;
+  height: 24px;
+}
+
+:root .lolicode-workbench.wb-unified .wb-sidebar .wb-project-row,
+:root .lolicode-workbench.wb-unified .wb-sidebar .wb-project-list-row {
+  min-height: 34px;
+  margin: 0;
+  border: 0;
+  color: var(--text-2);
+}
+
+:root
+  .lolicode-workbench.wb-unified
+  .wb-sidebar
+  .wb-workspace-group
+  + .wb-workspace-group {
+  margin-top: 12px;
+}
+
+:root .lolicode-workbench.wb-unified .wb-sidebar .wb-workspace-sessions {
+  margin-left: 13px;
+  padding: 3px 0 3px 8px;
+  border-left: 1px solid hsl(var(--border));
+}
+
+:root .lolicode-workbench.wb-unified .wb-sidebar .wb-session-row {
+  min-height: 34px;
+  padding: 9px 28px 9px 10px;
+  border-radius: 7px;
+  font-size: var(--workspace-caption);
+  color: var(--text-2);
+}
+
+:root
+  .lolicode-workbench.wb-unified
+  .wb-sidebar
+  .wb-session-row[aria-pressed="true"] {
+  background: var(--action-soft);
+  color: var(--action-text);
+  box-shadow: none;
+  font-weight: 500;
+}
+
+:root
+  .lolicode-workbench.wb-unified
+  .wb-sidebar
+  .wb-session-row[aria-pressed="true"]
+  ~ .wb-session-menu {
+  background: var(--action-soft);
+  color: var(--action-text);
+}
+
+:root .lolicode-workbench.wb-unified .wb-main {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background: color-mix(
+    in srgb,
+    var(--bg-app) var(--atelier-sheet-opacity, 95%),
+    transparent
+  );
+}
+
+/* Installed sidebar artwork remains available without restoring the old frame. */
+:root[data-resource-sidebar][data-decoration="full"]
+  .lolicode-workbench.wb-unified
+  .lolicode-unified-sidebar {
+  background-image:
+    linear-gradient(
+      color-mix(in srgb, var(--sidebar-surface) 94%, transparent),
+      color-mix(in srgb, var(--sidebar-surface) 94%, transparent)
+    ),
+    var(--atelier-sidebar);
+  background-size: cover;
+  background-position: center;
+}
+
+.wb-chat-surface {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Optional theme art lives behind content and never intercepts interaction. */
+:root .lolicode-workbench.wb-unified .wb-main::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image: var(--workspace-decoration);
+  background-position: var(--workspace-decoration-position);
+  background-size: var(--workspace-decoration-size);
+  opacity: var(--workspace-decoration-opacity);
+}
+
+:root[data-resource-brooch][data-decoration="full"]
+  .lolicode-workbench.wb-unified
+  .wb-main::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  width: 120px;
+  height: 120px;
+  right: 20px;
+  top: 108px;
+  background: var(--atelier-brooch) center / contain no-repeat;
+  opacity: calc(var(--atelier-intensity, 0.48) * 0.7);
+  pointer-events: none;
+}
+
+:root[data-decoration="off"] .lolicode-workbench.wb-unified .wb-main::before {
+  display: none;
+}
+
+:root
+  .lolicode-workbench.wb-unified
+  :is(.wb-icon-button, .wb-create-task)
+  svg.lucide {
+  width: 19px;
+  height: 19px;
+  stroke-width: 1.8;
+}
+
+:root .lolicode-workbench.wb-unified .wb-sidebar .wb-project-row {
+  font-size: var(--workspace-label);
+  font-weight: 400;
+}
+
+:root
+  .lolicode-workbench.wb-unified
+  .wb-sidebar
+  .wb-create-task
+  > .wb-nav-create {
+  min-height: 42px;
+}
+
+/* Keep the sidebar alive while collapsing; the track is inert when closed. */
+.wb-sidebar-track {
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns: 1fr;
+  min-height: 0;
+  transition:
+    grid-template-columns 260ms var(--motion-ease),
+    opacity 180ms ease;
+}
+
+.wb-sidebar-track[data-collapsed="true"] {
+  grid-template-columns: 0fr;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.wb-sidebar-clip {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.wb-sidebar-clip > .wb-sidebar {
+  height: 100%;
+}
+
+:root .lolicode-workbench.wb-unified .wb-icon-button {
+  border-radius: 8px;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease,
+    transform 200ms var(--motion-ease);
+}
+
+:root .lolicode-workbench.wb-unified .wb-workspace-sessions {
+  animation: wb-workspace-reveal 220ms var(--motion-ease);
+}
+
+@keyframes wb-workspace-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wb-sidebar-track,
+  :root .lolicode-workbench.wb-unified .wb-icon-button {
+    transition: none;
+  }
+  :root .lolicode-workbench.wb-unified .wb-workspace-sessions {
+    animation: none;
+  }
+  :root .wb-unified .wb-chat-message {
+    animation: none;
+  }
+}
+
+:root .lolicode-workbench.wb-unified .wb-titlebar {
+  height: 58px;
+  min-height: 58px;
+  padding-inline: 20px 8px;
+  gap: 6px;
+  flex-wrap: nowrap;
+  border-bottom: 1px solid hsl(var(--border) / 0.65);
+  background: var(--bg-app);
+}
+
+:root .lolicode-workbench.wb-unified .wb-titlebar h1 {
+  font-size: var(--workspace-label);
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+:root .lolicode-workbench.wb-unified .wb-titlebar-project {
+  display: inline-flex;
+  justify-content: center;
+  flex: 0 0 32px;
+  width: 32px;
+  max-width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  font-size: 0;
+  gap: 0;
+  color: var(--text-2);
+}
+
+:root .lolicode-workbench.wb-unified .wb-chat {
+  padding: 20px 18px 24px;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
+
+:root .lolicode-workbench.wb-unified .wb-chat-content {
+  width: 100%;
+  max-width: none;
+  gap: 22px;
+}
+
+/* Avatar and bubble share one row; long code stays inside its own scroll area. */
+:root .wb-unified .wb-chat-message {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  animation: wb-message-arrive 260ms var(--motion-ease) both;
+}
+:root .wb-unified .wb-chat-message--user {
+  flex-direction: row-reverse;
+}
+:root .wb-unified .wb-chat-avatar {
+  display: grid;
+  place-items: center;
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
+  overflow: hidden;
+  margin-top: 23px;
+  border-radius: 50%;
+  background: var(--workspace-avatar-bg);
+  color: var(--workspace-avatar-fg);
+  box-shadow: none;
+  user-select: none;
+}
+:root .wb-unified .wb-chat-message--user .wb-chat-avatar {
+  margin-top: 0;
+}
+:root .wb-unified .wb-chat-avatar img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+:root .wb-unified .wb-chat-avatar-fallback {
+  display: grid;
+  place-items: center;
+  font-size: 15px;
+  font-weight: 500;
+}
+:root .wb-unified .wb-chat-avatar svg {
+  width: 20px;
+  height: 20px;
+  stroke-width: 1.8;
+}
+:root .wb-unified .wb-chat-message-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  max-width: min(82%, 780px);
+  min-width: 0;
+}
+:root .wb-unified .wb-chat-message--user .wb-chat-message-body {
+  align-items: flex-end;
+  max-width: min(78%, 700px);
+}
+:root .wb-unified .wb-chat-author {
+  margin: 0 0 5px;
+  color: var(--text-3);
+  font-size: var(--workspace-caption);
+  line-height: 18px;
+  font-weight: 400;
+}
+:root .lolicode-workbench.wb-unified .wb-chat-bubble {
+  position: relative;
+  width: fit-content;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+  padding: 10px 14px;
+  color: var(--text-1);
+  border: 1px solid var(--workspace-bubble-line);
+  border-radius: var(--workspace-radius);
+  background: color-mix(
+    in srgb,
+    var(--workspace-assistant-bubble) var(--atelier-reply-opacity, 95%),
+    transparent
+  );
+  box-shadow: none;
+  overflow-wrap: anywhere;
+  font-size: var(--workspace-text);
+  line-height: 1.65;
+}
+:root .lolicode-workbench.wb-unified .wb-chat-bubble::before {
+  content: "";
+  position: absolute;
+  top: 11px;
+  left: -6px;
+  width: 0;
+  height: 0;
+  border-block: 6px solid transparent;
+  border-right: 6px solid var(--workspace-assistant-bubble);
+}
+:root .lolicode-workbench.wb-unified .wb-chat-bubble.wb-message-user {
+  background: var(--workspace-user-bubble);
+  color: var(--workspace-user-ink);
+  border-color: transparent;
+}
+:root .lolicode-workbench.wb-unified .wb-chat-bubble.wb-message-user::before {
+  left: auto;
+  right: -6px;
+  border-left: 6px solid var(--workspace-user-bubble);
+  border-right: 0;
+}
+:root .wb-unified .wb-chat-bubble .text-body {
+  font-family: var(--workspace-font);
+  font-size: var(--workspace-text);
+  line-height: 1.65;
+  color: inherit;
+}
+:root .wb-unified .wb-chat-bubble .text-body :is(h1, h2, h3, h4) {
+  font-family: inherit;
+  font-size: 1.08em;
+  line-height: 1.5;
+  letter-spacing: 0;
+  font-weight: 600;
+}
+:root .wb-unified .wb-chat-bubble .text-body p {
+  margin-block: 0 0.65em;
+}
+:root .wb-unified .wb-chat-bubble .text-body > :last-child {
+  margin-bottom: 0;
+}
+
+:root
+  .wb-unified
+  .wb-chat-bubble
+  .text-body
+  :is(li, blockquote)
+  > p:last-child {
+  margin-bottom: 0;
+}
+:root .wb-unified .wb-chat-bubble .text-body :is(ul, ol) {
+  margin-block: 0.55em 0.7em;
+}
+:root .wb-unified .wb-chat-bubble pre {
+  max-width: 100%;
+  font-size: calc(12px * var(--workspace-type-scale));
+  line-height: 1.65;
+}
+:root .wb-unified .wb-chat-message--activity {
+  margin-block: -12px;
+}
+:root .wb-unified .wb-chat-message--activity .wb-chat-avatar {
+  visibility: hidden;
+  margin-top: 0;
+}
+:root
+  .lolicode-workbench.wb-unified
+  .wb-chat-message--activity
+  .wb-chat-bubble {
+  padding: 2px 4px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+:root .wb-unified .wb-chat-message--activity .wb-chat-bubble::before,
+:root .wb-unified .wb-chat-message--system .wb-chat-bubble::before {
+  display: none;
+}
+:root .wb-unified .wb-execution-summary {
+  font-size: var(--workspace-caption);
+  color: var(--text-3);
+}
+:root .wb-unified .wb-chat-message--system {
+  justify-content: center;
+}
+:root .lolicode-workbench.wb-unified .wb-message-system {
+  padding: 7px 12px;
+  font-size: var(--workspace-caption);
+  color: var(--text-3);
+  background: var(--bg-subtle);
+  border-radius: 10px;
+}
+@keyframes wb-message-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(7px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+:root .lolicode-workbench.wb-unified .wb-composer-area {
+  flex: 0 0 auto;
+  padding: 0;
+  border-top: 1px solid hsl(var(--border) / 0.8);
+  background: var(--workspace-composer);
+  transition: border-color 160ms ease;
+}
+
+:root .lolicode-workbench.wb-unified .wb-composer {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+:root .lolicode-workbench.wb-unified .wb-composer:focus-within {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+:root .lolicode-workbench.wb-unified .wb-composer textarea {
+  min-height: 104px;
+  padding: 18px 28px 12px;
+  font-family: var(--workspace-font);
+  font-size: var(--workspace-text);
+  line-height: 1.65;
+}
+
+:root .lolicode-workbench.wb-unified .wb-composer-toolbar {
+  gap: 5px;
+  flex-wrap: nowrap;
+  padding: 4px 20px 16px;
+  background: transparent;
+  border: 0;
+}
+
+:root .lolicode-workbench.wb-unified .wb-composer-toolbar > .wb-primary {
+  min-height: 32px;
+  border-radius: 10px;
+  box-shadow: none;
+}
+
+:root .lolicode-workbench.wb-unified .wb-composer-toolbar > .wb-send-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 74px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 7px;
+  background: var(--action-bg);
+  color: var(--action-fg);
+  font-size: var(--workspace-caption);
+}
+:root
+  .lolicode-workbench.wb-unified
+  .wb-composer-toolbar
+  > .wb-send-button:disabled {
+  background: var(--bg-subtle);
+  color: var(--text-3);
+  opacity: 1;
+}
+:root .lolicode-workbench.wb-unified .wb-composer-toolbar svg.lucide {
+  width: 18px;
+  height: 18px;
+  stroke-width: 1.8;
+}
+:root
+  .lolicode-workbench.wb-unified
+  .wb-composer-toolbar
+  > .wb-send-button
+  svg {
+  width: 16px;
+  height: 16px;
+}
+
+:root .lolicode-workbench.wb-unified .wb-composer-add {
+  display: grid;
+  place-items: center;
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 7px;
+  color: var(--text-2);
+  background: transparent;
+}
+
+:root .lolicode-workbench.wb-unified .wb-composer-options-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 10px;
+  border-radius: 9px;
+  color: var(--text-2);
+  background: transparent;
+  font-size: var(--workspace-caption);
+}
+
+:root
+  .lolicode-workbench.wb-unified
+  :is(.wb-composer-add, .wb-composer-options-trigger):hover {
+  background: var(--bg-subtle);
+}
+
+:root .lolicode-workbench.wb-unified .wb-composer-model {
+  min-width: 0;
+  max-width: 240px;
+  flex: 0 1 auto;
+}
+
+:root .lolicode-workbench.wb-unified .wb-composer-model button {
+  min-height: 34px;
+  font-size: var(--workspace-caption);
+}
+
+.wb-composer-options-popover {
+  width: 304px;
+  padding: 18px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 16px;
+  font-family: var(--workspace-font);
+  box-shadow: var(--shadow-md);
+}
+
+.wb-composer-options-popover > h2 {
+  margin: 0 0 6px;
+  font-size: var(--workspace-label);
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.wb-conversation-menu [role="menuitem"] {
+  gap: 9px;
+}
+.wb-conversation-menu svg.lucide {
+  flex-shrink: 0;
+  width: 17px;
+  height: 17px;
+  stroke-width: 1.8;
+}
+.wb-titlebar-build-menu [data-build-channel] {
+  color: var(--text-2);
+  background: var(--bg-subtle);
+  border-color: hsl(var(--border));
+  font-size: var(--workspace-caption);
+  font-weight: 400;
+}
+
+:root .lolicode-workbench.wb-unified .wb-usage-footer {
+  color: var(--text-3);
+  font-size: 11px;
+  opacity: 1;
+}
+
+.wb-composer-options-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 0;
+  color: var(--text-2);
+  font-size: var(--workspace-label);
+}
+
+.wb-composer-options-field :is(button, select) {
+  max-width: 170px;
+  padding: 7px 9px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--text-1);
+  font: inherit;
+  font-size: var(--workspace-caption);
+}
+
+:root .lolicode-workbench.wb-unified .wb-empty-content {
+  max-width: 600px;
+  padding: 30px;
+}
+
+:root .lolicode-workbench.wb-unified .wb-empty h2 {
+  font-family: inherit;
+  font-size: 28px;
+  font-weight: 500;
+  letter-spacing: -0.025em;
+}
+
+:root .lolicode-workbench.wb-unified .wb-welcome-mark {
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  margin-bottom: 20px;
+  border: 1px solid color-mix(in srgb, var(--action-text) 12%, transparent);
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--action-soft);
+  color: var(--action-text);
+}
+
+:root .lolicode-workbench.wb-unified .wb-welcome-mark img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+:root .lolicode-workbench.wb-unified .wb-welcome-eyebrow {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--text-3);
+}
+
+:root .lolicode-workbench.wb-unified .wb-pane-resizer {
+  background: var(--bg-app);
+}
+
+:root .lolicode-workbench.wb-unified .wb-pane-resizer::after {
+  width: 1px;
+  background: hsl(var(--border) / 0.65);
+}
+
+:root
+  .lolicode-workbench.wb-unified
+  .wb-pane-resizer:is(:hover, [data-dragging])::after {
+  width: 2px;
+  background: var(--action-text);
+}
+
+@container (max-width: 540px) {
+  :root .lolicode-workbench.wb-unified .wb-titlebar {
+    padding-inline: 12px;
+    gap: 8px;
+  }
+
+  :root .lolicode-workbench.wb-unified .wb-chat {
+    padding-inline: 12px;
+  }
+  :root .lolicode-workbench.wb-unified .wb-composer textarea {
+    padding-inline: 18px;
+  }
+  :root .lolicode-workbench.wb-unified .wb-composer-toolbar {
+    padding-inline: 10px;
+    gap: 3px;
+  }
+  :root .lolicode-workbench.wb-unified .wb-chat-bubble {
+    padding: 9px 12px;
+  }
+  :root .wb-unified .wb-chat-message-body {
+    max-width: calc(100% - 44px);
+  }
+  :root .wb-unified .wb-chat-message {
+    gap: 9px;
+  }
+  :root .wb-unified .wb-chat-avatar {
+    width: 30px;
+    height: 30px;
+    flex-basis: 30px;
+  }
+}
+
+@media (max-height: 650px) {
+  :root .lolicode-workbench.wb-unified .wb-titlebar {
+    height: 56px;
+    min-height: 56px;
+  }
+  :root .lolicode-workbench.wb-unified .wb-empty-content {
+    padding: 12px 20px;
+  }
+  :root .lolicode-workbench.wb-unified .wb-empty h2 {
+    font-size: 23px;
+  }
+}
+
+@media (forced-colors: active) {
+  :root
+    .lolicode-workbench.wb-unified
+    :is(.wb-message-user, .wb-message-assistant, .wb-composer) {
+    background: Canvas;
+    color: CanvasText;
+    border-color: CanvasText;
+    box-shadow: none;
+  }
+  :root
+    .lolicode-workbench.wb-unified
+    .wb-sidebar
+    .wb-session-row[aria-pressed="true"] {
+    background: Highlight;
+    color: HighlightText;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root .wb-unified .wb-chat-message {
+    animation: none;
+  }
+}
+
+/* One header row and one flush editor; optional details open on demand. */
+:root .lolicode-workbench.wb-unified .wb-titlebar h1 {
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+:root .lolicode-workbench.wb-unified .wb-titlebar > .wb-status {
+  flex: 0 1 auto;
+  max-width: 150px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: var(--workspace-caption);
+}
+:root .lolicode-workbench.wb-unified .wb-titlebar > .wb-status::before,
+:root .lolicode-workbench.wb-unified .wb-titlebar > .wb-status svg {
+  flex-shrink: 0;
+}
+:root .lolicode-workbench.wb-unified .wb-composer-area:focus-within {
+  border-top-color: color-mix(
+    in srgb,
+    var(--action-text) 40%,
+    hsl(var(--border))
+  );
+}
+:root .lolicode-workbench.wb-unified .wb-composer-usage {
+  display: grid;
+  place-items: center;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-3);
+}
+:root
+  .lolicode-workbench.wb-unified
+  .wb-composer-usage:is(:hover, [data-state="open"]) {
+  color: var(--action-text);
+  background: var(--bg-subtle);
+}
+.wb-usage-popover {
+  width: min(330px, calc(100vw - 24px));
+  padding: 18px;
+  border-radius: 12px;
+  font-family: var(--workspace-font);
+}
+.wb-usage-popover h2 {
+  margin-bottom: 12px;
+  font-size: var(--workspace-label);
+  font-weight: 600;
+}
+.wb-usage-popover .wb-usage-footer {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  margin: 0;
+  padding: 0;
+  gap: 8px;
+  white-space: normal;
+  color: var(--text-2);
+  font-size: var(--workspace-caption);
+}
+@container (max-width: 760px) {
+  :root .lolicode-workbench.wb-unified .wb-titlebar {
+    padding-inline: 12px 8px;
+    gap: 6px;
+  }
+  :root .lolicode-workbench.wb-unified .wb-titlebar-project {
+    display: inline-flex;
+    justify-content: center;
+    flex: 0 0 30px;
+    width: 30px;
+    max-width: 30px;
+    height: 30px;
+    padding: 0;
+    border: 0;
+    font-size: 0;
+    gap: 0;
+  }
+  :root .lolicode-workbench.wb-unified .wb-titlebar > .wb-status {
+    max-width: 105px;
+    font-size: 11px;
+  }
+}
+@media (max-height: 650px) {
+  :root .lolicode-workbench.wb-unified .wb-composer textarea {
+    min-height: 86px;
+  }
+  :root .lolicode-workbench.wb-unified .wb-composer-toolbar {
+    padding-bottom: 10px;
+  }
+}
+
+@container (max-width: 540px) {
+  :root .lolicode-workbench.wb-unified .wb-titlebar {
+    gap: 4px;
+  }
+  :root
+    .lolicode-workbench.wb-unified
+    .wb-titlebar
+    > .wb-status:not([data-phase="idle"]) {
+    flex: 0 0 14px;
+    width: 14px;
+    max-width: 14px;
+    font-size: 0;
+    gap: 0;
+  }
+  :root .lolicode-workbench.wb-unified .wb-composer-options-trigger {
+    padding-inline: 5px;
+    white-space: nowrap;
+    gap: 0;
+  }
+  :root .lolicode-workbench.wb-unified .wb-composer-options-trigger > svg {
+    display: none;
+  }
+  :root
+    .lolicode-workbench.wb-unified
+    :is(.wb-composer-add, .wb-composer-usage) {
+    width: 28px;
+    flex-basis: 28px;
+  }
+  :root .lolicode-workbench.wb-unified .wb-composer-toolbar > .wb-send-button {
+    min-width: 58px;
+    padding-inline: 10px;
+  }
+  :root
+    .lolicode-workbench.wb-unified
+    .wb-send-button
+    > svg:not(.wb-send-spinner) {
+    display: none;
+  }
+}

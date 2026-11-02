@@ -4,11 +4,14 @@ import { motionEasing, motionTokens } from "@/lib/motion";
 
 interface MotionSurfaceProps extends HTMLAttributes<HTMLDivElement> {
   motionKey: string;
+  /** Keep embedded navigation stationary while its content changes. */
+  targetSelector?: string;
 }
 
 /** Animate the live surface; never retain an old page or key a business form. */
 export function MotionSurface({
   motionKey,
+  targetSelector,
   children,
   ...props
 }: MotionSurfaceProps) {
@@ -18,7 +21,9 @@ export function MotionSurface({
   const reduced = useReducedMotion();
 
   useLayoutEffect(() => {
-    const element = ref.current;
+    const element = targetSelector
+      ? ref.current?.querySelector<HTMLElement>(targetSelector)
+      : ref.current;
     if (!element || previous.current === motionKey) return;
     previous.current = motionKey;
     // Read the in-flight presentation before cancellation so rapid changes
@@ -36,7 +41,7 @@ export function MotionSurface({
       [from, { transform: "none", opacity: "1" }],
       { duration: motionTokens.duration.page * 1000, easing: motionEasing },
     );
-  }, [motionKey, reduced]);
+  }, [motionKey, reduced, targetSelector]);
 
   useLayoutEffect(() => {
     if (reduced) animation.current?.cancel();

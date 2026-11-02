@@ -4979,31 +4979,35 @@
   },
   "applications": {
     "title": "應用中心",
-    "subtitle": "按需新增應用，共用主 Agent 和模型渠道",
+    "subtitle": "創作工具、模型榜單與免費資源，都在這裡",
+    "libraryTitle": "探索應用",
+    "appCount": "{{count}} 款內建應用",
+    "enabled": "已啟用",
+    "available": "可啟用",
     "loading": "正在讀取應用",
     "loadFailed": "暫時無法讀取應用",
     "retry": "重試",
     "saving": "正在儲存",
     "changeFailed": "應用狀態儲存失敗",
     "open": "開啟應用",
-    "remove": "移除入口",
+    "remove": "停用",
     "add": "新增應用",
-    "retained": "移除僅關閉入口和對應 Agent 能力，角色、故事與工程資料會保留。重新新增即可繼續使用。",
+    "retained": "應用統一從這裡開啟。停用後，已有故事、角色和工程記錄仍會保留。",
     "tavern": {
       "title": "酒館",
       "description": "匯入角色卡，管理故事與世界書，透過統一渠道進行角色對話。"
     },
     "unreal": {
-      "title": "虛幻工作台",
+      "title": "UEBox · 虛幻工作台",
       "description": "管理本機 Unreal 工程、啟動編輯器，讓主 Agent 透過外掛操作編輯器。需要安裝 Unreal Engine。"
     },
     "rankings": {
-      "title": "模型榜单",
-      "description": "汇集综合、编程与多模态榜单，收藏常看的独立评测来源。"
+      "title": "模型榜單",
+      "description": "彙整綜合、程式設計與多模態榜單，收藏常看的獨立評測來源。"
     },
     "free-ai": {
-      "title": "免费 AI 导航",
-      "description": "发现免费模型、体验额度和开发平台，查看清楚的使用条件与官方入口。"
+      "title": "免費 AI 導覽",
+      "description": "探索免費模型、體驗額度與開發平台，查看清楚的使用條件和官方入口。"
     }
   },
   "resourceUpdates": {

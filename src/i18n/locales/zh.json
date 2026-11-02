@@ -5029,22 +5029,26 @@
   },
   "applications": {
     "title": "应用中心",
-    "subtitle": "按需添加应用，共用主 Agent 和模型渠道",
+    "subtitle": "创作工具、模型榜单与免费资源，都在这里",
+    "libraryTitle": "发现应用",
+    "appCount": "{{count}} 款内置应用",
+    "enabled": "已启用",
+    "available": "可启用",
     "loading": "正在读取应用",
     "loadFailed": "暂时无法读取应用",
     "retry": "重试",
     "saving": "正在保存",
     "changeFailed": "应用状态保存失败",
     "open": "打开应用",
-    "remove": "移除入口",
+    "remove": "停用",
     "add": "添加应用",
-    "retained": "移除仅关闭应用入口和对应 Agent 能力，已有故事、角色和工程记录会保留。重新添加即可继续使用。",
+    "retained": "应用从这里统一打开。停用后，已有故事、角色和工程记录仍会保留。",
     "tavern": {
       "title": "酒馆",
       "description": "导入角色卡，管理故事与世界书，使用统一渠道展开角色对话。"
     },
     "unreal": {
-      "title": "虚幻工作台",
+      "title": "UEBox · 虚幻工作台",
       "description": "管理本地 Unreal 工程、启动编辑器，并让主 Agent 通过工程插件操作编辑器。需要本机安装 Unreal Engine。"
     },
     "rankings": {

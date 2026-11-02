@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AboutSection } from "@/features/settings/AboutSection";
 import { AppPageHeader } from "@/app/shell/AppPageHeader";
+import { BuildChannelBadge } from "@/app/shell/BuildChannelBadge";
 
 const buildState = vi.hoisted(() => ({ development: true, dirty: true }));
 const nativeBuild = vi.hoisted(() => ({ invoke: vi.fn() }));
@@ -65,6 +66,43 @@ describe("development application identity", () => {
     expect(
       screen.getByText("TG/freehub-m0").closest("[title]"),
     ).toHaveAttribute("title", "构建分支：TG/freehub-m0 · 含未提交改动");
+  });
+
+  it("keeps the compact badge and refresh control on one row with build details in its title", () => {
+    render(<BuildChannelBadge developmentOnly compact />);
+    const badge = screen.getByText("开发版").closest("[data-build-channel]")!;
+    expect(badge).toHaveAttribute("data-build-channel", "development");
+    expect(badge).toHaveAttribute(
+      "title",
+      "开发版 · DEV-20261028-174243 · abc1234+dirty · 构建分支：TG/freehub-m0 · 含未提交改动",
+    );
+    expect(screen.queryByText("TG/freehub-m0")).not.toBeInTheDocument();
+    const refresh = screen.getByRole("button", { name: "热更新界面" });
+    expect(refresh.parentElement).toBe(badge.parentElement);
+    expect(badge.parentElement).toHaveClass("inline-flex", "items-center");
+    expect(badge.parentElement).not.toHaveClass("flex-col");
+    expect(refresh.querySelector(".sr-only")).toHaveTextContent("热更新界面");
+    expect(refresh).toHaveAttribute(
+      "title",
+      expect.stringContaining("后台任务继续运行"),
+    );
+  });
+
+  it("hides the compact development-only badge and tools in stable builds", () => {
+    buildState.development = false;
+    const view = render(<BuildChannelBadge developmentOnly compact />);
+    expect(view.container).toBeEmptyDOMElement();
+  });
+
+  it("can show build details in a menu label without a duplicate refresh button", () => {
+    render(<BuildChannelBadge compact showRefresh={false} />);
+    expect(screen.getByText("开发版").closest("[title]")).toHaveAttribute(
+      "title",
+      expect.stringContaining("TG/freehub-m0"),
+    );
+    expect(
+      screen.queryByRole("button", { name: "热更新界面" }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows the source revision and rebuild instructions without stable update controls", async () => {

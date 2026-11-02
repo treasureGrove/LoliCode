@@ -50,7 +50,7 @@ const account: LolicodeAccount = {
   avatarUrl: "https://lolicode.com/assets/avatars/42.png",
   profileUrl: "https://lolicode.com/u/42",
 };
-function mount() {
+function mount(expanded = false) {
   const onOpenSettings = vi.fn();
   const onOpenUpdates = vi.fn();
   const client = new QueryClient({
@@ -62,6 +62,7 @@ function mount() {
   return {
     ...render(
       <SidebarProfileMenu
+        expanded={expanded}
         selected
         hasUpdate
         onOpenSettings={onOpenSettings}
@@ -124,8 +125,10 @@ beforeEach(() => {
 
 describe("LoliCode sidebar account", () => {
   it("offers a website login with a neutral signed-out avatar", async () => {
-    mount();
+    mount(true);
     const trigger = screen.getByRole("button", { name: "头像与设置" });
+    expect(trigger).toHaveTextContent("未登录");
+    expect(trigger).toHaveTextContent("账户与设置");
     expect(trigger).toHaveAttribute("data-selected", "true");
     expect(trigger.querySelector("img")).toBeNull();
     expect(
@@ -166,8 +169,9 @@ describe("LoliCode sidebar account", () => {
 
   it("shows the website nickname/avatar, opens its profile, and refreshes it", async () => {
     mocks.account = account;
-    mount();
+    mount(true);
     const trigger = screen.getByRole("button", { name: "头像与设置" });
+    expect(trigger).toHaveTextContent("小桃");
     expect(trigger.querySelector("img")).toHaveAttribute(
       "src",
       account.avatarUrl,

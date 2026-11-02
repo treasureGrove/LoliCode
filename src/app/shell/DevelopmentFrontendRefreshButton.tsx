@@ -2,6 +2,7 @@ import { useSyncExternalStore, type CSSProperties } from "react";
 import { RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { IS_DEVELOPMENT_BUILD } from "@/lib/buildChannel";
 import {
   isDevelopmentFrontendRebuilding,
@@ -11,14 +12,13 @@ import {
 import { toast } from "@/lib/toast";
 import { extractErrorMessage } from "@/utils/errorUtils";
 
-export function DevelopmentFrontendRefreshButton() {
+function useDevelopmentFrontendRefresh() {
   const { t } = useTranslation();
   const busy = useSyncExternalStore(
     subscribeDevelopmentFrontend,
     isDevelopmentFrontendRebuilding,
     isDevelopmentFrontendRebuilding,
   );
-  if (!IS_DEVELOPMENT_BUILD) return null;
   const refresh = async () => {
     try {
       await rebuildDevelopmentFrontend(() =>
@@ -38,27 +38,62 @@ export function DevelopmentFrontendRefreshButton() {
       );
     }
   };
+  return {
+    busy,
+    refresh,
+    label: busy
+      ? t("buildChannel.frontendBuilding", { defaultValue: "构建界面中…" })
+      : t("buildChannel.refreshFrontend", { defaultValue: "热更新界面" }),
+    title: t("buildChannel.frontendReloadHelp", {
+      defaultValue:
+        "构建最新界面并刷新窗口；后台任务继续运行。后端改动仍需完整重建。",
+    }),
+  };
+}
+
+export function DevelopmentFrontendRefreshMenuItem() {
+  const { busy, refresh, label, title } = useDevelopmentFrontendRefresh();
+  if (!IS_DEVELOPMENT_BUILD) return null;
+  return (
+    <DropdownMenuItem
+      disabled={busy}
+      onSelect={() => void refresh()}
+      title={title}
+    >
+      <RefreshCw
+        className={busy ? "animate-spin" : undefined}
+        aria-hidden="true"
+      />
+      {label}
+    </DropdownMenuItem>
+  );
+}
+
+export function DevelopmentFrontendRefreshButton({
+  iconOnly = false,
+}: {
+  iconOnly?: boolean;
+}) {
+  const { busy, refresh, label, title } = useDevelopmentFrontendRefresh();
+  if (!IS_DEVELOPMENT_BUILD) return null;
   return (
     <Button
       type="button"
       variant="ghost"
       size="sm"
-      className="h-5 gap-1 px-1 text-[11px]"
+      className={
+        iconOnly ? "h-6 w-6 shrink-0 p-0" : "h-5 gap-1 px-1 text-[11px]"
+      }
       style={{ WebkitAppRegion: "no-drag" } as CSSProperties}
       disabled={busy}
       onClick={() => void refresh()}
-      title={t("buildChannel.frontendReloadHelp", {
-        defaultValue:
-          "构建最新界面并刷新窗口；后台任务继续运行。后端改动仍需完整重建。",
-      })}
+      title={title}
     >
       <RefreshCw
         className={`h-3 w-3${busy ? " animate-spin" : ""}`}
         aria-hidden="true"
       />
-      {busy
-        ? t("buildChannel.frontendBuilding", { defaultValue: "构建界面中…" })
-        : t("buildChannel.refreshFrontend", { defaultValue: "热更新界面" })}
+      <span className={iconOnly ? "sr-only" : undefined}>{label}</span>
     </Button>
   );
 }

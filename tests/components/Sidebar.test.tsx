@@ -4,44 +4,30 @@ import {
   render,
   renderHook,
   screen,
-  waitFor,
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { http, HttpResponse } from "msw";
 import { Sidebar, type SidebarProps } from "@/app/shell/Sidebar";
 import { APP_IDS } from "@/config/appConfig";
+import { BUILTIN_APP_IDS } from "@/lib/api/builtin-apps";
 import { SETTINGS_SECTIONS } from "@/lib/navigation";
 import { useSidebarCollapsed } from "@/hooks/useSidebarCollapsed";
-import type { VisibleApps } from "@/types";
-import { http, HttpResponse } from "msw";
-import { server } from "../msw/server";
-import { BUILTIN_APP_IDS, type BuiltinAppId } from "@/lib/api/builtin-apps";
 import { SIDEBAR_TOOLS_KEY } from "@/hooks/useSidebarTools";
-import { toast } from "@/lib/toast";
-
-vi.mock("@/lib/toast", () => ({ toast: { error: vi.fn() } }));
-let enabledTools: BuiltinAppId[];
-let removalFails: boolean;
-let appChanges: unknown[];
-let pendingRemoval: Promise<void> | undefined;
+import type { VisibleApps } from "@/types";
+import { server } from "../msw/server";
 
 vi.mock("@/contexts/UpdateContext", () => ({
   useUpdate: () => ({ hasUpdate: true }),
 }));
 vi.mock("@tauri-apps/api/app", () => ({ getVersion: async () => "4.0.10" }));
 vi.mock("@/hooks/useSidebarStatus", () => ({
-  useSidebarStatus: () => ({
-    appStatus: (app: string) => ({
-      mode: app === "codex" ? "route" : "direct",
-      mapping: false,
-      alert: app === "codex",
-    }),
-    todayCost: 1.25,
-    authNeedsAttention: true,
-  }),
+  useSidebarStatus: () => ({ todayCost: 1.25, authNeedsAttention: true }),
 }));
+
+let appChanges: unknown[];
 
 function props(overrides: Partial<SidebarProps> = {}): SidebarProps {
   return {
@@ -60,6 +46,7 @@ function props(overrides: Partial<SidebarProps> = {}): SidebarProps {
     ...overrides,
   };
 }
+
 function mount(values: SidebarProps) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -70,323 +57,282 @@ function mount(values: SidebarProps) {
   return render(<Sidebar {...values} />, { wrapper });
 }
 
+const moreButton = () =>
+  screen.getByRole("button", { name: /^(更多|common\.more)(?: ·|$)/ });
+
 beforeEach(() => {
-  enabledTools = [];
-  removalFails = false;
   appChanges = [];
-  pendingRemoval = undefined;
   localStorage.removeItem(SIDEBAR_TOOLS_KEY);
-  server.use(
-    http.post("http://tauri.local/list_builtin_apps", () =>
-      HttpResponse.json(
-        BUILTIN_APP_IDS.map((id) => ({
-          id,
-          enabled: enabledTools.includes(id),
-        })),
-      ),
-    ),
-    http.post(
-      "http://tauri.local/set_builtin_app_enabled",
-      async ({ request }) => {
-        const change = (await request.json()) as {
-          app: BuiltinAppId;
-          enabled: boolean;
-        };
-        appChanges.push(change);
-        await pendingRemoval;
-        if (removalFails)
-          return new HttpResponse("disk unavailable", { status: 500 });
-        enabledTools = enabledTools.filter((id) => id !== change.app);
-        if (change.enabled) enabledTools.push(change.app);
-        return new HttpResponse(null, { status: 204 });
-      },
-    ),
-  );
   localStorage.removeItem("cc-switch-sidebar-collapsed");
   Object.defineProperty(window, "innerWidth", {
     configurable: true,
     value: 1000,
   });
+  server.use(
+    http.post("http://tauri.local/list_builtin_apps", () =>
+      HttpResponse.json(BUILTIN_APP_IDS.map((id) => ({ id, enabled: true }))),
+    ),
+    http.post(
+      "http://tauri.local/set_builtin_app_enabled",
+      async ({ request }) => {
+        appChanges.push(await request.json());
+        return new HttpResponse(null, { status: 204 });
+      },
+    ),
+  );
 });
 
-describe("sidebar tool management", () => {
-  it.each([
-    ["skills", "技能"],
-    ["workflows", "工作流与自动化"],
-    ["memory", "记忆"],
-  ] as const)("selects only the active %s panel in the rail", (tool, label) => {
-    mount(props({ view: "agent", activeAgentTool: tool }));
-    expect(screen.getByRole("button", { name: label })).toHaveAttribute(
-      "aria-current",
-      "page",
-    );
+describe("unified workspace navigation", () => {
+  it("shows model and chat tabs with accessible destination names", () => {
+    const values = props({ view: "agent" });
+    mount(values);
+    const navigation = screen.getByRole("navigation");
+    expect(navigation).toHaveAttribute("data-collapsed", "false");
+    for (const name of [
+      /^编程工作台/,
+      /^渠道与模型/,
+      /^(更多|common\.more)(?: ·|$)/,
+    ]) {
+      const button = within(navigation).getByRole("button", { name });
+      expect(button).toHaveAccessibleName();
+    }
+    expect(
+      screen.getByRole("button", { name: /^渠道与模型/ }),
+    ).toHaveTextContent("模型");
     expect(
       screen.getByRole("button", { name: "编程工作台" }),
-    ).not.toHaveAttribute("aria-current");
-    expect(document.querySelectorAll('[aria-current="page"]')).toHaveLength(1);
-  });
-
-  it("opens workspace tools from the global rail", () => {
-    const onOpenAgentTool = vi.fn();
-    mount(props({ onOpenAgentTool }));
-    fireEvent.click(screen.getByRole("button", { name: "技能" }));
-    fireEvent.click(screen.getByRole("button", { name: "工作流与自动化" }));
-    fireEvent.click(screen.getByRole("button", { name: "记忆" }));
-    expect(onOpenAgentTool.mock.calls).toEqual([
-      ["skills"],
-      ["workflows"],
-      ["memory"],
-    ]);
-  });
-  it("collapses tools without changing the current page and restores the preference on remount", async () => {
-    enabledTools = ["tavern", "rankings"];
-    const values = props({ view: "tavern" });
-    const first = mount(values);
-    const user = userEvent.setup();
-    await screen.findByRole("button", { name: "nav.tavern" });
-    await user.click(screen.getByRole("button", { name: "nav.collapseTools" }));
+    ).toHaveTextContent("对话");
+    expect(screen.getByRole("button", { name: "自动化" })).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "nav.tavern" }),
-    ).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^渠道与模型/ })).toBeVisible();
-    expect(
-      screen.getByRole("button", { name: "applications.title" }),
-    ).toBeVisible();
-    expect(values.onSelectPage).not.toHaveBeenCalled();
-    expect(JSON.parse(localStorage.getItem(SIDEBAR_TOOLS_KEY)!)).toMatchObject({
-      collapsed: true,
-    });
-    first.unmount();
-    mount(values);
-    const expand = await screen.findByRole("button", {
-      name: "nav.expandTools",
-    });
-    expect(expand).toHaveAttribute("aria-expanded", "false");
-    await user.click(expand);
-    expect(screen.getByRole("button", { name: "nav.tavern" })).toHaveAttribute(
+      screen.getByRole("button", { name: "插件市场" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "编程工作台" })).toHaveAttribute(
       "aria-current",
       "page",
     );
   });
 
-  it("pins tools above the folder in the latest pin order and keeps them visible when collapsed", async () => {
-    enabledTools = ["tavern", "unreal", "rankings"];
-    const first = mount(props());
-    const user = userEvent.setup();
-    for (const name of ["applications.rankings.title", "nav.tavern"]) {
-      fireEvent.contextMenu(await screen.findByRole("button", { name }));
-      await user.click(
-        await screen.findByRole("menuitem", { name: "nav.pinTool" }),
-      );
-    }
-    const pinned = screen.getByRole("group", { name: "nav.pinnedTools" });
-    expect(
-      within(pinned)
-        .getAllByRole("button")
-        .map((item) => item.getAttribute("data-sidebar-tool")),
-    ).toEqual(["tavern", "rankings"]);
-    await user.click(screen.getByRole("button", { name: "nav.collapseTools" }));
-    expect(screen.getByRole("button", { name: "nav.tavern" })).toBeVisible();
-    expect(
-      screen.queryByRole("button", { name: "nav.unreal" }),
-    ).not.toBeInTheDocument();
-    first.unmount();
-    mount(props());
-    await screen.findByRole("group", { name: "nav.pinnedTools" });
-    fireEvent.contextMenu(screen.getByRole("button", { name: "nav.tavern" }));
-    await user.click(
-      await screen.findByRole("menuitem", { name: "nav.unpinTool" }),
-    );
-    expect(
-      screen.queryByRole("button", { name: "nav.tavern" }),
-    ).not.toBeInTheDocument();
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "nav.expandTools" }),
-      ).toHaveFocus(),
-    );
-  });
-
-  it("keeps left click and Enter as navigation and supports keyboard context menus with Escape", async () => {
-    enabledTools = ["tavern"];
-    const values = props();
-    mount(values);
-    const user = userEvent.setup();
-    const item = await screen.findByRole("button", { name: "nav.tavern" });
-    await user.click(item);
-    expect(values.onSelectPage).toHaveBeenLastCalledWith("tavern");
-    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
-    await user.keyboard("{Enter}");
-    expect(values.onSelectPage).toHaveBeenCalledTimes(2);
-    await user.keyboard("{Shift>}{F10}{/Shift}");
-    expect(
-      await screen.findByRole("menuitem", { name: "nav.removeTool" }),
-    ).toBeVisible();
-    expect(values.onSelectPage).toHaveBeenCalledTimes(2);
-    await user.keyboard("{Escape}");
-    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
-    expect(item).toHaveFocus();
-  });
-
-  it("removes an active pinned tool through the existing opt-in API and keeps the other tools", async () => {
-    enabledTools = ["tavern", "unreal"];
-    localStorage.setItem(
-      SIDEBAR_TOOLS_KEY,
-      JSON.stringify({ collapsed: true, pinned: ["tavern"] }),
-    );
-    const values = props({ view: "tavern" });
-    mount(values);
-    const user = userEvent.setup();
-    fireEvent.contextMenu(
-      await screen.findByRole("button", { name: "nav.tavern" }),
-    );
-    await user.click(
-      await screen.findByRole("menuitem", { name: "nav.removeTool" }),
-    );
-    await waitFor(() =>
-      expect(
-        screen.queryByRole("button", { name: "nav.tavern" }),
-      ).not.toBeInTheDocument(),
-    );
-    expect(appChanges).toEqual([{ app: "tavern", enabled: false }]);
-    expect(values.onSelectPage).toHaveBeenCalledWith("applications");
-    expect(enabledTools).toEqual(["unreal"]);
-    expect(JSON.parse(localStorage.getItem(SIDEBAR_TOOLS_KEY)!)).toEqual({
-      collapsed: true,
-      pinned: [],
-    });
-    await user.click(screen.getByRole("button", { name: "nav.expandTools" }));
-    expect(screen.getByRole("button", { name: "nav.unreal" })).toBeVisible();
-  });
-
-  it("does not navigate away from a page opened while a tool is being removed", async () => {
-    enabledTools = ["tavern"];
-    let finish!: () => void;
-    pendingRemoval = new Promise<void>((resolve) => {
-      finish = resolve;
-    });
-    const values = props({ view: "tavern" });
-    const { rerender } = mount(values);
-    const user = userEvent.setup();
-    fireEvent.contextMenu(
-      await screen.findByRole("button", { name: "nav.tavern" }),
-    );
-    await user.click(
-      await screen.findByRole("menuitem", { name: "nav.removeTool" }),
-    );
-    await waitFor(() => expect(appChanges).toHaveLength(1));
-    rerender(<Sidebar {...values} view="settings" />);
-    finish();
-    await waitFor(() => expect(enabledTools).toEqual([]));
-    expect(values.onSelectPage).not.toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: "nav.back" })).toBeVisible();
-  });
-
-  it("preserves the tool and its pin when removal fails", async () => {
-    enabledTools = ["tavern"];
-    removalFails = true;
-    localStorage.setItem(
-      SIDEBAR_TOOLS_KEY,
-      JSON.stringify({ collapsed: true, pinned: ["tavern"] }),
-    );
-    mount(props());
-    const user = userEvent.setup();
-    fireEvent.contextMenu(
-      await screen.findByRole("button", { name: "nav.tavern" }),
-    );
-    await user.click(
-      await screen.findByRole("menuitem", { name: "nav.removeTool" }),
-    );
-    await waitFor(() =>
-      expect(toast.error).toHaveBeenCalledWith(
-        "applications.changeFailed",
-        expect.anything(),
-      ),
-    );
-    expect(screen.getByRole("button", { name: "nav.tavern" })).toBeVisible();
-    expect(JSON.parse(localStorage.getItem(SIDEBAR_TOOLS_KEY)!)).toMatchObject({
-      pinned: ["tavern"],
-    });
-  });
-});
-
-describe("simple channel navigation", () => {
-  it.each(["agent", "settings"] as const)(
-    "keeps Apps directly above Updates at the bottom in %s",
-    (view) => {
-      const values = props({ view });
-      const { container } = mount(values);
-      const apps = screen.getByRole("button", { name: "applications.title" });
-      const footer = container.querySelector(".tai-shell-footer")!;
-      expect(footer).toContainElement(apps);
-      expect(footer.querySelectorAll("button")[0]).toBe(apps);
-      expect(footer.querySelectorAll("button")[1]).toHaveAccessibleName(
-        /软件更新|nav.softwareUpdates/,
-      );
-      expect(
-        container.querySelector(".tai-shell-directory"),
-      ).not.toContainElement(apps);
-      fireEvent.click(apps);
-      expect(values.onSelectPage).toHaveBeenCalledWith("applications");
-    },
-  );
-  it("opens software updates from the avatar menu and keeps the About entry available", async () => {
-    const user = userEvent.setup();
-    const values = props({ view: "settings" });
-    mount(values);
-    await user.click(screen.getByRole("button", { name: "头像与设置" }));
-    const updates = screen.getByRole("menuitem", { name: /^软件更新/ });
-    expect(updates).toHaveAccessibleName(/发现 LoliCode 新版本/);
-    await user.click(updates);
-    expect(values.onOpenUpdates).toHaveBeenCalledOnce();
-    expect(values.onSelectPage).not.toHaveBeenCalled();
-    fireEvent.click(
-      screen.getByRole("button", { name: /^settings.sections.about/ }),
-    );
-    expect(values.onSelectSettingsSection).toHaveBeenLastCalledWith("about");
-  });
-
-  it("opens shared channels and retains only the core destinations", async () => {
-    const user = userEvent.setup();
+  it("opens the core destinations while retaining channel status and today's usage", async () => {
     const values = props({ view: "channels" });
     mount(values);
     const channels = screen.getByRole("button", { name: /^渠道与模型/ });
     expect(channels).toHaveAttribute("aria-current", "page");
-    fireEvent.click(channels);
-    expect(values.onSelectPage).toHaveBeenLastCalledWith("channels");
+    expect(channels).toHaveAccessibleName(/nav.authNeedsReauth/);
     for (const [name, page] of [
-      [/^nav.usage/, "usage"],
+      [/^渠道与模型/, "channels"],
       [/^编程工作台/, "agent"],
     ] as const) {
       fireEvent.click(screen.getByRole("button", { name }));
       expect(values.onSelectPage).toHaveBeenLastCalledWith(page);
     }
-    await user.click(screen.getByRole("button", { name: "头像与设置" }));
-    await user.click(screen.getByRole("menuitem", { name: "设置" }));
-    expect(values.onSelectPage).toHaveBeenLastCalledWith("settings");
-    expect(
-      screen.queryByRole("button", { name: /^nav.sessions/ }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /^nav.apps(?: ·|$)/ }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /^nav.auth/ }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "MCP" }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "Skills" }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /^nav.prompts/ }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /^切换客户端/ }),
-    ).not.toBeInTheDocument();
-    expect(channels).toHaveAccessibleName(/nav.authNeedsReauth/);
+    const user = userEvent.setup();
+    for (const [name, page] of [
+      [/^nav.usage/, "usage"],
+      [/^applications.title/, "applications"],
+    ] as const) {
+      await user.click(moreButton());
+      const item = screen.getByRole("menuitem", { name });
+      if (page === "usage") expect(item).toHaveAccessibleName(/\$1\.25/);
+      await user.click(item);
+      expect(values.onSelectPage).toHaveBeenLastCalledWith(page);
+    }
+    expect(values.onSelectApp).not.toHaveBeenCalled();
   });
+
+  it("opens automation and plugins directly while retaining chat as their parent destination", async () => {
+    const onOpenAgentTool = vi.fn();
+    const values = props({
+      view: "agent",
+      activeAgentTool: "workflows",
+      onOpenAgentTool,
+    });
+    mount(values);
+    expect(screen.getByRole("button", { name: "自动化" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(screen.getByRole("button", { name: "编程工作台" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "自动化" }));
+    expect(onOpenAgentTool).toHaveBeenLastCalledWith("workflows", "automation");
+    await user.click(screen.getByRole("button", { name: "插件市场" }));
+    expect(onOpenAgentTool).toHaveBeenLastCalledWith("skills", "plugins");
+    expect(values.onSelectPage).not.toHaveBeenCalled();
+  });
+
+  it("embeds the actual workspace actions and tree without duplicating task creation", () => {
+    const onCollapse = vi.fn();
+    const onCreate = vi.fn();
+    mount(
+      props({
+        embedded: true,
+        view: "agent",
+        onCollapse,
+        workspaceActions: <button onClick={onCreate}>新建任务</button>,
+        workspaceContent: <div aria-label="项目列表">当前工作区</div>,
+      }),
+    );
+    expect(screen.getByRole("navigation")).toHaveAttribute(
+      "data-embedded",
+      "true",
+    );
+    expect(screen.getByLabelText("项目列表")).toHaveTextContent("当前工作区");
+    const tree = screen.getByLabelText("项目列表");
+    const tools = screen.getByRole("group", { name: "工作台工具" });
+    expect(
+      tree.compareDocumentPosition(tools) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      tools.compareDocumentPosition(moreButton()) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      within(tools).getByRole("button", { name: "插件市场" }),
+    ).toHaveTextContent("插件");
+    expect(
+      within(tools).getByRole("button", { name: "插件市场" }),
+    ).toHaveAttribute("title", "插件市场");
+    expect(
+      screen.queryByRole("button", { name: "开始对话" }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "新建任务" }));
+    expect(onCreate).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole("button", { name: "收起侧栏" }));
+    expect(onCollapse).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ["skills", "技能"],
+    ["workflows", "工作流与自动化"],
+    ["memory", "记忆"],
+  ] as const)("marks the active %s panel inside More", async (tool, label) => {
+    const values = props({ view: "agent", activeAgentTool: tool });
+    mount(values);
+    expect(moreButton()).toHaveAttribute("data-selected", "true");
+    expect(screen.getByRole("button", { name: "编程工作台" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(
+      screen.queryByRole("button", { name: label }),
+    ).not.toBeInTheDocument();
+    await userEvent.setup().click(moreButton());
+    expect(screen.getByRole("menuitem", { name: label })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(values.onSelectPage).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["skills", "技能"],
+    ["workflows", "工作流与自动化"],
+    ["memory", "记忆"],
+  ] as const)(
+    "opens %s from More without changing the destination directly",
+    async (tool, label) => {
+      const onOpenAgentTool = vi.fn();
+      const values = props({ onOpenAgentTool });
+      mount(values);
+      await userEvent.setup().click(moreButton());
+      await userEvent
+        .setup()
+        .click(screen.getByRole("menuitem", { name: label }));
+      expect(onOpenAgentTool).toHaveBeenCalledOnce();
+      expect(onOpenAgentTool).toHaveBeenCalledWith(tool);
+      expect(values.onSelectPage).not.toHaveBeenCalled();
+      expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    },
+  );
+
+  it("keeps updates in More and the profile menu without a separate rail button", async () => {
+    const values = props({ view: "agent" });
+    mount(values);
+    expect(
+      screen.queryByRole("button", { name: /^软件更新|^nav.softwareUpdates/ }),
+    ).not.toBeInTheDocument();
+    const user = userEvent.setup();
+    await user.click(moreButton());
+    const updates = screen.getByRole("menuitem", {
+      name: /^软件更新|^nav.softwareUpdates/,
+    });
+    expect(updates).toHaveAccessibleName(
+      /发现 LoliCode 新版本|nav.softwareUpdatesAvailable/,
+    );
+    await user.click(updates);
+    expect(values.onOpenUpdates).toHaveBeenCalledOnce();
+    await user.click(screen.getByRole("button", { name: "头像与设置" }));
+    await user.click(screen.getByRole("menuitem", { name: /^软件更新/ }));
+    expect(values.onOpenUpdates).toHaveBeenCalledTimes(2);
+    expect(values.onSelectPage).not.toHaveBeenCalled();
+  });
+
+  it.each(["applications", ...BUILTIN_APP_IDS] as const)(
+    "selects Applications for the %s page without exposing built-in shortcuts",
+    async (view) => {
+      const values = props({ view });
+      mount(values);
+      expect(moreButton()).toHaveAttribute("data-selected", "true");
+      await userEvent.setup().click(moreButton());
+      expect(
+        screen.getByRole("menuitem", { name: "applications.title" }),
+      ).toHaveAttribute("aria-current", "page");
+      for (const name of [
+        "nav.tavern",
+        "nav.unreal",
+        "applications.rankings.title",
+        "applications.free-ai.title",
+      ]) {
+        expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+      }
+      expect(document.querySelectorAll('[aria-current="page"]')).toHaveLength(
+        1,
+      );
+      expect(values.onSelectPage).not.toHaveBeenCalled();
+      expect(appChanges).toEqual([]);
+    },
+  );
+
+  it("ignores old pinned shortcuts while retaining the saved preferences and application data", () => {
+    const saved = JSON.stringify({
+      collapsed: false,
+      pinned: [...BUILTIN_APP_IDS],
+    });
+    localStorage.setItem(SIDEBAR_TOOLS_KEY, saved);
+    mount(props({ view: "rankings" }));
+    expect(
+      screen.queryByRole("button", { name: "nav.tavern" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "nav.expandTools" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "nav.collapseTools" }),
+    ).not.toBeInTheDocument();
+    expect(localStorage.getItem(SIDEBAR_TOOLS_KEY)).toBe(saved);
+    expect(appChanges).toEqual([]);
+  });
+
+  it.each(["agent", "settings"] as const)(
+    "keeps account and More together in the %s footer and Applications reachable",
+    async (view) => {
+      const values = props({ view });
+      const { container } = mount(values);
+      const footer = container.querySelector(".lolicode-sidebar-footer")!;
+      expect(footer).toContainElement(moreButton());
+      expect(footer).toContainElement(
+        screen.getByRole("button", { name: "头像与设置" }),
+      );
+      await userEvent.setup().click(moreButton());
+      await userEvent
+        .setup()
+        .click(screen.getByRole("menuitem", { name: "applications.title" }));
+      expect(values.onSelectPage).toHaveBeenCalledWith("applications");
+    },
+  );
 
   it("keeps the channel destination stable across legacy client views", () => {
     const values = props();
@@ -399,7 +345,40 @@ describe("simple channel navigation", () => {
     expect(values.onSelectApp).not.toHaveBeenCalled();
   });
 
-  it("keeps ordinary settings and removes the complex routing entry", async () => {
+  it("updates animated selection without replacing the focused navigation control", () => {
+    const values = props({ view: "channels" });
+    const { rerender } = mount(values);
+    const chat = screen.getByRole("button", { name: "编程工作台" });
+    chat.focus();
+    rerender(<Sidebar {...values} view="agent" />);
+    expect(screen.getByRole("button", { name: "编程工作台" })).toBe(chat);
+    expect(chat).toHaveFocus();
+    expect(chat).toHaveAttribute("aria-current", "page");
+    expect(
+      screen.getByRole("button", { name: /^渠道与模型/ }),
+    ).not.toHaveAttribute("aria-current");
+    expect(values.onSelectPage).not.toHaveBeenCalled();
+  });
+
+  it("keeps named controls reachable with the keyboard", async () => {
+    const values = props({ view: "channels" });
+    mount(values);
+    const channels = screen.getByRole("button", { name: /^渠道与模型/ });
+    channels.focus();
+    const user = userEvent.setup();
+    await user.keyboard("{Enter}");
+    expect(values.onSelectPage).toHaveBeenCalledWith("channels");
+    moreButton().focus();
+    await user.keyboard("{Enter}");
+    expect(screen.getByRole("menu")).toBeVisible();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(moreButton()).toHaveFocus();
+  });
+});
+
+describe("compact settings navigation", () => {
+  it("keeps ordinary settings, the About update notice, and the back action", async () => {
     const values = props({ view: "settings", settingsSection: "network" });
     mount(values);
     for (const section of SETTINGS_SECTIONS.filter(
@@ -410,6 +389,8 @@ describe("simple channel navigation", () => {
       });
       if (section === "network")
         expect(item).toHaveAttribute("aria-current", "page");
+      if (section === "about")
+        expect(item).toHaveAccessibleName(/nav.settingsHasUpdate/);
       fireEvent.click(item);
       expect(values.onSelectSettingsSection).toHaveBeenLastCalledWith(section);
     }
@@ -418,34 +399,14 @@ describe("simple channel navigation", () => {
     ).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "nav.back" }));
     expect(values.onExitSettings).toHaveBeenCalledOnce();
-    expect(screen.getByRole("navigation")).toHaveAttribute(
-      "data-collapsed",
-      "true",
-    );
     expect(screen.queryByText("LoliCode v4.0.10")).not.toBeInTheDocument();
-  });
-
-  it("keeps named keyboard controls reachable in the compact rail", async () => {
-    Object.defineProperty(window, "innerWidth", {
-      configurable: true,
-      value: 900,
-    });
-    const values = props({ view: "channels" });
-    mount(values);
-    expect(screen.getByRole("navigation")).toHaveAttribute(
-      "data-collapsed",
-      "true",
-    );
-    const channels = screen.getByRole("button", { name: /^渠道与模型/ });
-    expect(channels).toHaveAttribute("aria-current", "page");
-    channels.focus();
-    await userEvent.setup().keyboard("{Enter}");
-    expect(values.onSelectPage).toHaveBeenCalledWith("channels");
-    expect(
-      screen.getByRole("button", { name: /^渠道与模型/ }),
-    ).toHaveAccessibleName(/nav.authNeedsReauth/);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "头像与设置" }));
+    await user.click(screen.getByRole("menuitem", { name: "设置" }));
+    expect(values.onSelectPage).toHaveBeenLastCalledWith("settings");
   });
 });
+
 describe("sidebar width preference", () => {
   it("uses the latest intent for rapid reversal and retains manual preference across resize", () => {
     const { result } = renderHook(() => useSidebarCollapsed({ current: null }));
@@ -454,9 +415,7 @@ describe("sidebar width preference", () => {
       for (let n = 0; n < 10; n++) result.current.toggle();
     });
     expect(result.current.collapsed).toBe(false);
-    act(() => {
-      result.current.toggle();
-    });
+    act(() => result.current.toggle());
     expect(result.current.collapsed).toBe(true);
     expect(localStorage.getItem("cc-switch-sidebar-collapsed")).toBe("true");
     Object.defineProperty(window, "innerWidth", {

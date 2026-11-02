@@ -6,7 +6,15 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DevelopmentFrontendRefreshButton } from "@/app/shell/DevelopmentFrontendRefreshButton";
+import {
+  DevelopmentFrontendRefreshButton,
+  DevelopmentFrontendRefreshMenuItem,
+} from "@/app/shell/DevelopmentFrontendRefreshButton";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+} from "@/components/ui/dropdown-menu";
 import {
   developmentFrontendNavigation,
   rebuildDevelopmentFrontend,
@@ -84,15 +92,22 @@ describe("development frontend refresh", () => {
     mocks.invoke.mockReturnValue(build.promise);
     render(
       <>
-        <DevelopmentFrontendRefreshButton />
+        <DevelopmentFrontendRefreshButton iconOnly />
         <DevelopmentFrontendRefreshButton />
       </>,
     );
     const buttons = screen.getAllByRole("button", { name: "热更新界面" });
+    expect(buttons[0].querySelector(".sr-only")).toHaveTextContent(
+      "热更新界面",
+    );
+    expect(buttons[1].querySelector(".sr-only")).toBeNull();
     fireEvent.click(buttons[0]);
     expect(mocks.invoke).toHaveBeenCalledTimes(1);
     expect(mocks.invoke).toHaveBeenCalledWith("rebuild_development_frontend");
     for (const button of buttons) expect(button).toBeDisabled();
+    expect(screen.getAllByRole("button", { name: "构建界面中…" })).toHaveLength(
+      2,
+    );
     expect(developmentFrontendNavigation.reload).not.toHaveBeenCalled();
     fireEvent.click(buttons[1]);
     expect(mocks.invoke).toHaveBeenCalledTimes(1);
@@ -114,6 +129,44 @@ describe("development frontend refresh", () => {
     );
     expect(developmentFrontendNavigation.reload).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "热更新界面" })).toBeEnabled();
+  });
+
+  it("starts the same guarded rebuild from a keyboard-accessible menu item", async () => {
+    const build = deferred();
+    mocks.invoke.mockReturnValue(build.promise);
+    render(
+      <>
+        <DevelopmentFrontendRefreshButton />
+        <DropdownMenu>
+          <DropdownMenuTrigger>更多</DropdownMenuTrigger>
+          <DropdownMenuContent>
+            <DevelopmentFrontendRefreshMenuItem />
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </>,
+    );
+    fireEvent.keyDown(screen.getByRole("button", { name: "更多" }), {
+      key: "Enter",
+    });
+    const item = await screen.findByRole("menuitem", { name: "热更新界面" });
+    expect(item).toHaveAttribute(
+      "title",
+      expect.stringContaining("后台任务继续运行"),
+    );
+    fireEvent.keyDown(item, { key: "Enter" });
+    expect(mocks.invoke).toHaveBeenCalledWith("rebuild_development_frontend");
+    expect(screen.getByRole("button", { name: "构建界面中…" })).toBeDisabled();
+    fireEvent.keyDown(screen.getByRole("button", { name: "更多" }), {
+      key: "Enter",
+    });
+    expect(
+      await screen.findByRole("menuitem", { name: "构建界面中…" }),
+    ).toHaveAttribute("aria-disabled", "true");
+    build.resolve({});
+    await waitFor(() =>
+      expect(developmentFrontendNavigation.reload).toHaveBeenCalledOnce(),
+    );
+    expect(window.confirm).not.toHaveBeenCalled();
   });
 
   it("protects drafts edited during compilation when the user cancels reload", async () => {

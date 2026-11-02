@@ -1,4 +1,12 @@
-import { useCallback, useContext, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import { MotionSurface } from "@/components/motion/MotionSurface";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
@@ -22,13 +30,12 @@ import {
   PanelRightOpen,
   ChevronDown,
   ChevronRight,
-  Blocks,
   Brain,
   Archive,
   Pin,
-  ImagePlus,
+  Plus,
   FileText,
-  CircleHelp,
+  MoreHorizontal,
   BookOpen,
   UsersRound,
   MessageSquare,
@@ -40,9 +47,15 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Notice } from "@/components/ui/notice";
+import {
+  FullScreenPanelHostContext,
+  FullScreenPanelNavigationContext,
+} from "@/components/common/FullScreenPanel";
 import { settingsApi } from "@/lib/api";
 import { APP_NAME, APP_UPDATES_ENABLED } from "@/lib/branding";
 import { BuildChannelBadge } from "@/app/shell/BuildChannelBadge";
+import { DevelopmentFrontendRefreshMenuItem } from "@/app/shell/DevelopmentFrontendRefreshButton";
+import { IS_DEVELOPMENT_BUILD } from "@/lib/buildChannel";
 import { agentApi } from "@/lib/api/agent";
 import {
   readAgentDocumentAttachments,
@@ -67,6 +80,8 @@ import {
   type AgentSubmission,
 } from "@/lib/agentInputLedger";
 import { agentErrorMessage, useAgentSnapshot } from "@/hooks/useAgentSnapshot";
+import { useLolicodeAccount } from "@/hooks/useLolicodeAccount";
+import assistantPortrait from "@/assets/brand/lolicode-icon.png";
 import {
   AgentReplacementAborted,
   stopAgentBeforeReplacement,
@@ -89,15 +104,13 @@ import { AgentChanges } from "./AgentChanges";
 import { AgentPermissionCard } from "./AgentPermissionCard";
 import { AgentQuestionCard } from "./AgentQuestionCard";
 import { AgentActivityStatus } from "./AgentActivityStatus";
-import {
-  AgentModelPicker,
-  agentModelLabel as modelLabel,
-} from "./AgentModelPicker";
+import { AgentModelPicker } from "./AgentModelPicker";
 import { AgentReasoningPicker } from "./AgentReasoningPicker";
 import { AgentContextPicker } from "./AgentContextPicker";
+import { AgentComposerAdd, AgentComposerOptions } from "./AgentComposerOptions";
 import { AgentFileActionsContext } from "./AgentFilePath";
 import { AgentPreviewPanel } from "./AgentPreviewPanel";
-import { AgentUsageFooter } from "./AgentUsageFooter";
+import { AgentUsagePopover } from "./AgentUsagePopover";
 import { AgentPaneResizeHandle, useAgentPaneLayout } from "./AgentPaneLayout";
 import { useAgentAutoSizeTextarea } from "./useAgentAutoSizeTextarea";
 import { WindowControlsContext } from "@/app/shell/AppPageHeader";
@@ -105,12 +118,15 @@ import { DRAG_REGION_ATTR, DRAG_REGION_STYLE } from "@/lib/platform";
 import "./lolicode-workbench.css";
 import { AgentSessionMenu } from "./AgentSessionMenu";
 import { AgentProjectMenu } from "./AgentProjectMenu";
-import { AgentCompanion } from "./AgentCompanion";
 import { AgentAttachmentImage } from "./AgentAttachmentImage";
 import { AgentExtensionsPanel } from "./AgentExtensionsPanel";
 import { AgentMemoryPanel } from "./AgentMemoryPanel";
 import { AgentOperationsPanel } from "./AgentOperationsPanel";
-import { AgentToolPanel, type AgentTool } from "./AgentToolPanel";
+import {
+  AgentToolPanel,
+  type AgentTool,
+  type AgentToolTab,
+} from "./AgentToolPanel";
 import { AgentToolDraftsContext } from "./AgentToolDrafts";
 import {
   Dialog,
@@ -123,6 +139,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -210,7 +227,7 @@ function WelcomeMark({ compact = false }: { compact?: boolean }) {
       className={`wb-welcome-mark${compact ? " wb-welcome-mark-compact" : ""}`}
       aria-hidden="true"
     >
-      <Sparkles />
+      <img src={assistantPortrait} alt="" draggable={false} />
     </div>
   );
 }
@@ -352,7 +369,17 @@ const activeStatus = (status?: string) =>
   Boolean(status && status !== "idle" && status !== "error");
 
 export interface AgentPageProps {
-  toolRequest?: { tool: AgentTool | null; id: number };
+  renderSidebar?: (content: {
+    actions: ReactNode;
+    workspace: ReactNode;
+    onCollapse: () => void;
+  }) => ReactNode;
+  toolRequest?: {
+    tool: AgentTool | null;
+    id: number;
+    initialTab?: AgentToolTab;
+  };
+  onWorkspaceNavigate?: (action: () => void) => void;
   onToolRequestConsumed?: () => void;
   onActiveToolChange?: (tool: AgentTool | null) => void;
   onOpenChannels?: () => void;
@@ -387,14 +414,27 @@ function AgentHelpMenu({
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className="wb-icon-button wb-titlebar-help"
-          aria-label="帮助和支持"
-          title="帮助和支持"
+          className="wb-icon-button wb-titlebar-more"
+          aria-label="对话更多选项"
+          title="更多"
         >
-          <CircleHelp aria-hidden="true" />
+          <MoreHorizontal aria-hidden="true" />
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" sideOffset={8} className="w-56">
+      <DropdownMenuContent
+        align="end"
+        sideOffset={8}
+        className="wb-conversation-menu w-56"
+      >
+        {IS_DEVELOPMENT_BUILD && (
+          <>
+            <DropdownMenuLabel className="wb-titlebar-build-menu">
+              <BuildChannelBadge developmentOnly compact showRefresh={false} />
+            </DropdownMenuLabel>
+            <DevelopmentFrontendRefreshMenuItem />
+            <DropdownMenuSeparator />
+          </>
+        )}
         <DropdownMenuItem
           onSelect={() =>
             openExternal("https://tools.treasuregrove.art/lolicode/")
@@ -449,6 +489,8 @@ function AgentHelpMenu({
 }
 
 export function AgentPage({
+  renderSidebar,
+  onWorkspaceNavigate,
   toolRequest,
   onToolRequestConsumed,
   onActiveToolChange,
@@ -460,6 +502,7 @@ export function AgentPage({
   onInitialProjectConsumed,
 }: AgentPageProps) {
   const windowControls = useContext(WindowControlsContext);
+  const { account } = useLolicodeAccount();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sessionSearch, setSessionSearch] = useState("");
   const sessionSearchRef = useRef<HTMLInputElement>(null);
@@ -479,16 +522,20 @@ export function AgentPage({
   const [extensionsInitialTab, setExtensionsInitialTab] = useState<
     "skills" | "plugins" | "mcp"
   >("skills");
-  const [operationsTab, setOperationsTab] = useState<"workflows" | "remote">(
-    "workflows",
-  );
+  const [operationsTab, setOperationsTab] = useState<
+    "workflows" | "automation" | "remote"
+  >("workflows");
   useEffect(() => {
     if (!toolRequest) return;
     setActiveTool(toolRequest.tool);
     if (toolRequest.tool === "skills") {
-      setExtensionsInitialTab("skills");
+      setExtensionsInitialTab(
+        toolRequest.initialTab === "plugins" ? "plugins" : "skills",
+      );
     } else if (toolRequest.tool === "workflows") {
-      setOperationsTab("workflows");
+      setOperationsTab(
+        toolRequest.initialTab === "automation" ? "automation" : "workflows",
+      );
     }
     onToolRequestConsumed?.();
   }, [toolRequest]);
@@ -602,13 +649,13 @@ export function AgentPage({
     }
     if (!focusComposerOnReturn.current) return;
     let frame = 0;
-    let attempts = 0;
+    const focusDeadline = performance.now() + 1000;
     const restoreComposerFocus = () => {
       const input = composerInputRef.current;
       let parent: HTMLElement | null = input;
       while (parent && !parent.inert) parent = parent.parentElement;
-      // AnimatePresence may release the page one frame after the close render.
-      if (parent && attempts++ < 12) {
+      // Wait for the exit transition, independent of the display's refresh rate.
+      if (parent && performance.now() < focusDeadline) {
         frame = requestAnimationFrame(restoreComposerFocus);
         return;
       }
@@ -1268,6 +1315,9 @@ export function AgentPage({
       previewSession === sessionId &&
       previewPath !== null,
   });
+  const lastSidebarWidth = useRef(paneLayout.sidebarWidth || 252);
+  if (paneLayout.sidebarVisible)
+    lastSidebarWidth.current = paneLayout.sidebarWidth;
   const writeDraft = (storageKey: string, value: string) => {
     setDrafts((old) => ({ ...old, [storageKey]: value }));
     saveAgentDraft(storageKey, value);
@@ -2382,1172 +2432,1251 @@ export function AgentPage({
       Number(b.pinned) - Number(a.pinned),
   );
 
-  return (
-    <div
-      ref={paneLayout.containerRef}
-      className="lolicode-agent-page lolicode-workbench wb-resizable-layout"
+  const navigateWorkspace = (action: () => void) => {
+    const proceed = () => {
+      setActiveTool(null);
+      action();
+    };
+    if (activeTool && onWorkspaceNavigate) onWorkspaceNavigate(proceed);
+    else proceed();
+  };
+  const collapseSidebar = () => {
+    const focused = document.activeElement;
+    const restoreKeyboardFocus =
+      focused instanceof HTMLElement &&
+      Boolean(focused.closest(".wb-sidebar")) &&
+      focused.matches(":focus-visible");
+    setSidebarCollapsed(true);
+    if (restoreKeyboardFocus)
+      requestAnimationFrame(() => {
+        const buttons =
+          paneLayout.containerRef.current?.querySelectorAll<HTMLButtonElement>(
+            ".wb-sidebar-expand",
+          );
+        const target = Array.from(buttons || []).find((button) => {
+          let parent: HTMLElement | null = button;
+          while (parent && !parent.inert) parent = parent.parentElement;
+          return !parent;
+        });
+        target?.focus();
+      });
+  };
+  const toggleSidebar = () => {
+    if (!paneLayout.sidebarVisible) {
+      setPreviewPath(null);
+      setSidebarCollapsed(false);
+    } else collapseSidebar();
+  };
+  const sidebarToggle = !paneLayout.sidebarVisible ? (
+    <button
+      type="button"
+      className="wb-icon-button wb-sidebar-expand"
+      title={"Ctrl + \\"}
+      aria-label="展开项目侧栏"
+      onClick={toggleSidebar}
+      style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
     >
-      {!sidebarCollapsed && paneLayout.sidebarVisible && (
-        <aside
-          className="wb-sidebar"
-          aria-label="项目会话"
-          style={{
-            width: paneLayout.sidebarWidth,
-            flexBasis: paneLayout.sidebarWidth,
-          }}
+      <PanelLeftOpen />
+    </button>
+  ) : null;
+  const sidebarActions = (
+    <nav className="wb-nav" aria-label="工作台操作">
+      <div className="wb-create-task">
+        <button
+          className="wb-nav-button wb-nav-create"
+          aria-label={busy === "create" ? "正在创建…" : "新建任务"}
+          disabled={
+            initializing ||
+            Boolean(busy) ||
+            engine?.available === false ||
+            Boolean(workspace && !modelId)
+          }
+          onClick={() => navigateWorkspace(() => void createSession())}
         >
-          <div
-            className="wb-brand"
-            {...DRAG_REGION_ATTR}
-            style={DRAG_REGION_STYLE as React.CSSProperties}
-          >
-            <span className="wb-brand-mark" aria-hidden="true">
-              <Sparkles />
-            </span>
-            <div className="wb-brand-label">
-              {APP_NAME} <span>工作台</span>
-            </div>
-          </div>
-          <nav className="wb-nav" aria-label="工作台操作">
-            <div className="wb-create-task">
-              <button
-                className="wb-nav-button wb-nav-create"
-                disabled={
-                  initializing ||
-                  Boolean(busy) ||
-                  engine?.available === false ||
-                  Boolean(workspace && !modelId)
-                }
-                onClick={() => void createSession()}
+          <Plus aria-hidden="true" />
+          {busy === "create" ? "正在创建…" : "新对话"}
+        </button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              className="wb-create-task-options"
+              aria-label="选择新建任务类型"
+              disabled={
+                initializing || Boolean(busy) || engine?.available === false
+              }
+            >
+              <ChevronDown />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" sideOffset={6}>
+            <DropdownMenuItem
+              onSelect={() => navigateWorkspace(() => void openProject())}
+            >
+              <FolderOpen className="mr-2 h-4 w-4" />
+              打开文件夹
+            </DropdownMenuItem>
+            {workspace && !workspace.standalone && (
+              <DropdownMenuItem
+                disabled={!modelId}
+                onSelect={() => navigateWorkspace(() => void createSession())}
               >
-                <MessageSquarePlus />
-                {busy === "create" ? "正在创建…" : "新建任务"}
-              </button>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
+                <Folder className="mr-2 h-4 w-4" />
+                在当前项目新建任务
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuItem
+              onSelect={() => navigateWorkspace(() => void createSession(true))}
+            >
+              <MessageSquarePlus className="mr-2 h-4 w-4" />
+              <span>
+                新建独立任务
+                <span className="block text-xs text-fg-3">
+                  无需打开项目或选择文件夹
+                </span>
+              </span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    </nav>
+  );
+  const sidebarWorkspace = (
+    <>
+      <div className="wb-search" role="search">
+        <Search aria-hidden="true" />
+        <input
+          ref={sessionSearchRef}
+          aria-label="搜索会话"
+          placeholder="搜索会话"
+          value={sessionSearch}
+          onChange={(event) => setSessionSearch(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key !== "Escape") return;
+            if (event.nativeEvent.isComposing || event.keyCode === 229) {
+              event.stopPropagation();
+              return;
+            }
+            if (sessionSearch) {
+              event.stopPropagation();
+              event.preventDefault();
+              setSessionSearch("");
+            }
+          }}
+        />
+        {sessionSearch && (
+          <button
+            type="button"
+            className="wb-search-clear"
+            aria-label="清空会话搜索"
+            onClick={() => {
+              setSessionSearch("");
+              sessionSearchRef.current?.focus();
+            }}
+          >
+            <X aria-hidden="true" />
+          </button>
+        )}
+      </div>
+      <div className="wb-projects">
+        <div className="wb-section-label">
+          <span>{showArchived ? "归档任务" : "工作区"}</span>
+          <span className="wb-workspace-count">{sidebarProjects.length}</span>
+          <button
+            type="button"
+            className="wb-icon-button"
+            aria-label="添加工作区"
+            title="打开项目文件夹"
+            disabled={
+              initializing || Boolean(busy) || engine?.available === false
+            }
+            onClick={() => navigateWorkspace(() => void openProject())}
+          >
+            <FolderOpen />
+          </button>
+          <button
+            className="wb-icon-button"
+            disabled={!workspace || Boolean(busy)}
+            aria-label={showArchived ? "显示当前会话" : "显示归档会话"}
+            aria-pressed={showArchived}
+            onClick={() => void toggleArchive()}
+          >
+            <Archive />
+          </button>
+        </div>
+        {sidebarProjects.map((project) => {
+          const isCurrentWorkspace = project.path === workspace?.path;
+          const expanded = isCurrentWorkspace
+            ? workspaceExpanded
+            : Boolean(expandedWorkspaces[project.path]);
+          const taskListId = `workspace-tasks-${encodeURIComponent(
+            project.path,
+          )}`;
+          const matchingTasks = (
+            isCurrentWorkspace
+              ? visibleWorkspaceSessions
+              : workspaceSessions[project.path] || []
+          )
+            .filter(
+              (session) =>
+                isCurrentWorkspace ||
+                !sessionSearch.trim() ||
+                session.title
+                  .toLocaleLowerCase()
+                  .includes(sessionSearch.toLocaleLowerCase()),
+            )
+            .sort(
+              (a, b) =>
+                Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) ||
+                b.updatedAt - a.updatedAt,
+            );
+          return (
+            <div className="wb-workspace-group" key={project.path}>
+              <div
+                className={
+                  isCurrentWorkspace ? "wb-project-row" : "wb-project-list-row"
+                }
+                title={
+                  project.standalone ? "无需绑定项目的独立任务" : project.path
+                }
+              >
+                <button
+                  type="button"
+                  className={`wb-workspace-toggle${isCurrentWorkspace ? " wb-current-workspace-toggle" : ""}`}
+                  aria-label={`${expanded ? "收起" : "展开"} ${project.name} 的任务`}
+                  aria-expanded={expanded}
+                  aria-controls={taskListId}
+                  disabled={initializing || Boolean(busy)}
+                  onClick={() => toggleWorkspace(project.path, expanded)}
+                >
+                  {expanded ? <ChevronDown /> : <ChevronRight />}
+                </button>
+                {isCurrentWorkspace ? (
+                  <>
+                    {project.standalone ? <MessageSquare /> : <Folder />}
+                    <span>{project.name}</span>
+                    {project.pinned && <Pin size={11} />}
+                  </>
+                ) : (
                   <button
-                    type="button"
-                    className="wb-create-task-options"
-                    aria-label="选择新建任务类型"
+                    className="wb-nav-button wb-workspace-project"
+                    title={project.standalone ? "打开独立任务" : project.path}
                     disabled={
                       initializing ||
                       Boolean(busy) ||
                       engine?.available === false
                     }
+                    onClick={() =>
+                      navigateWorkspace(() => void openProject(project.path))
+                    }
                   >
-                    <ChevronDown />
+                    {project.standalone ? <MessageSquare /> : <Folder />}
+                    <span className="truncate">{project.name}</span>
+                    {project.pinned && <Pin size={11} />}
                   </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" sideOffset={6}>
-                  <DropdownMenuItem onSelect={() => void openProject()}>
-                    <FolderOpen className="mr-2 h-4 w-4" />
-                    打开文件夹
-                  </DropdownMenuItem>
-                  {workspace && !workspace.standalone && (
-                    <DropdownMenuItem
-                      disabled={!modelId}
-                      onSelect={() => void createSession()}
-                    >
-                      <Folder className="mr-2 h-4 w-4" />
-                      在当前项目新建任务
-                    </DropdownMenuItem>
-                  )}
-                  <DropdownMenuItem onSelect={() => void createSession(true)}>
-                    <MessageSquarePlus className="mr-2 h-4 w-4" />
-                    <span>
-                      新建独立任务
-                      <span className="block text-xs text-fg-3">
-                        无需打开项目或选择文件夹
-                      </span>
-                    </span>
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          </nav>
-          <div className="wb-search" role="search">
-            <Search aria-hidden="true" />
-            <input
-              ref={sessionSearchRef}
-              aria-label="搜索会话"
-              placeholder="搜索会话"
-              value={sessionSearch}
-              onChange={(event) => setSessionSearch(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key !== "Escape") return;
-                if (event.nativeEvent.isComposing || event.keyCode === 229) {
-                  event.stopPropagation();
-                  return;
-                }
-                if (sessionSearch) {
-                  event.stopPropagation();
-                  event.preventDefault();
-                  setSessionSearch("");
-                }
-              }}
-            />
-            {sessionSearch && (
-              <button
-                type="button"
-                className="wb-search-clear"
-                aria-label="清空会话搜索"
-                onClick={() => {
-                  setSessionSearch("");
-                  sessionSearchRef.current?.focus();
-                }}
-              >
-                <X aria-hidden="true" />
-              </button>
-            )}
-          </div>
-          <div className="wb-projects">
-            <div className="wb-section-label">
-              <span>{showArchived ? "归档任务" : "工作区与任务"}</span>
-              <button
-                className="wb-icon-button"
-                disabled={!workspace || Boolean(busy)}
-                aria-label={showArchived ? "显示当前会话" : "显示归档会话"}
-                aria-pressed={showArchived}
-                onClick={() => void toggleArchive()}
-              >
-                <Archive />
-              </button>
-            </div>
-            {sidebarProjects.map((project) => {
-              const isCurrentWorkspace = project.path === workspace?.path;
-              const expanded = isCurrentWorkspace
-                ? workspaceExpanded
-                : Boolean(expandedWorkspaces[project.path]);
-              const taskListId = `workspace-tasks-${encodeURIComponent(
-                project.path,
-              )}`;
-              const matchingTasks = (
-                isCurrentWorkspace
-                  ? visibleWorkspaceSessions
-                  : workspaceSessions[project.path] || []
-              )
-                .filter(
-                  (session) =>
-                    isCurrentWorkspace ||
-                    !sessionSearch.trim() ||
-                    session.title
-                      .toLocaleLowerCase()
-                      .includes(sessionSearch.toLocaleLowerCase()),
-                )
-                .sort(
-                  (a, b) =>
-                    Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) ||
-                    b.updatedAt - a.updatedAt,
-                );
-              return (
-                <div className="wb-workspace-group" key={project.path}>
-                  <div
-                    className={
-                      isCurrentWorkspace
-                        ? "wb-project-row"
-                        : "wb-project-list-row"
-                    }
-                    title={
-                      project.standalone
-                        ? "无需绑定项目的独立任务"
-                        : project.path
-                    }
-                  >
-                    <button
-                      type="button"
-                      className={`wb-workspace-toggle${isCurrentWorkspace ? " wb-current-workspace-toggle" : ""}`}
-                      aria-label={`${expanded ? "收起" : "展开"} ${project.name} 的任务`}
-                      aria-expanded={expanded}
-                      aria-controls={taskListId}
-                      disabled={initializing || Boolean(busy)}
-                      onClick={() => toggleWorkspace(project.path, expanded)}
-                    >
-                      {expanded ? <ChevronDown /> : <ChevronRight />}
-                    </button>
-                    {isCurrentWorkspace ? (
-                      <>
-                        {project.standalone ? <MessageSquare /> : <Folder />}
-                        <span>{project.name}</span>
-                        {project.pinned && <Pin size={11} />}
-                      </>
-                    ) : (
-                      <button
-                        className="wb-nav-button wb-workspace-project"
-                        title={
-                          project.standalone ? "打开独立任务" : project.path
-                        }
-                        disabled={
-                          initializing ||
-                          Boolean(busy) ||
-                          engine?.available === false
-                        }
-                        onClick={() => void openProject(project.path)}
-                      >
-                        {project.standalone ? <MessageSquare /> : <Folder />}
-                        <span className="truncate">{project.name}</span>
-                        {project.pinned && <Pin size={11} />}
-                      </button>
-                    )}
-                    <AgentProjectMenu
-                      name={project.name}
-                      standalone={project.standalone}
-                      pinned={Boolean(project.pinned)}
-                      disabled={Boolean(busy)}
-                      inProjectList={!isCurrentWorkspace}
-                      onCreateTask={
-                        isCurrentWorkspace
-                          ? () => void createSession()
-                          : undefined
-                      }
-                      onTogglePin={() => void updateProject(project)}
-                      onRename={
-                        project.standalone
-                          ? undefined
-                          : (name) => renameProject(project, name)
-                      }
-                      onRemove={() => void updateProject(project, true)}
-                    />
-                  </div>
-                  {expanded && (
-                    <div
-                      className={`wb-workspace-sessions${
-                        isCurrentWorkspace
-                          ? " wb-current-workspace-sessions"
-                          : ""
-                      }`}
-                      id={taskListId}
-                      role="group"
-                      aria-label={`${project.name} 的任务`}
-                    >
-                      {isCurrentWorkspace ? (
-                        matchingTasks.length ? (
-                          matchingTasks.map((session) => (
-                            <div
-                              className="wb-session-container"
-                              key={session.id}
-                            >
-                              <button
-                                className="wb-session-row"
-                                disabled={
-                                  busy === "project" || busy === "create"
-                                }
-                                aria-pressed={session.id === sessionId}
-                                onClick={() => {
-                                  setError(null);
-                                  setSessionId(session.id);
-                                }}
-                              >
-                                <span>{session.title || "新会话"}</span>
-                                {session.pinned && (
-                                  <Pin size={11} aria-label="已置顶" />
-                                )}
-                                {(activeStatus(statuses[session.id]) ||
-                                  pending[session.id]) && (
-                                  <i
-                                    className="wb-session-dot"
-                                    aria-label="进行中"
-                                  />
-                                )}
-                              </button>
-                              <AgentSessionMenu
-                                session={session}
-                                disabled={
-                                  Boolean(busy) || isLegacySession(session.id)
-                                }
-                                active={
-                                  activeStatus(statuses[session.id]) ||
-                                  Boolean(pending[session.id]) ||
-                                  Boolean(stopping[session.id])
-                                }
-                                onRename={(title) =>
-                                  mutateSession(
-                                    session.id,
-                                    () =>
-                                      agentApi.renameSession(session.id, title),
-                                    false,
-                                    ["title"],
-                                  )
-                                }
-                                onPin={() =>
-                                  mutateSession(
-                                    session.id,
-                                    () =>
-                                      agentApi.setSessionMetadata(session.id, {
-                                        pinned: !session.pinned,
-                                      }),
-                                    false,
-                                    ["pinned"],
-                                  )
-                                }
-                                onArchive={() =>
-                                  mutateSession(
-                                    session.id,
-                                    () =>
-                                      agentApi.setSessionMetadata(session.id, {
-                                        archived: !session.archived,
-                                      }),
-                                    false,
-                                    ["archived"],
-                                  )
-                                }
-                                onDelete={() =>
-                                  mutateSession(
-                                    session.id,
-                                    () => agentApi.deleteSession(session.id),
-                                    true,
-                                  )
-                                }
-                              />
-                            </div>
-                          ))
-                        ) : (
-                          <p className="wb-sidebar-note">
-                            {sessionSearch.trim()
-                              ? "没有匹配的会话。"
-                              : showArchived
-                                ? "当前项目没有归档任务。"
-                                : "当前项目还没有任务。"}
-                          </p>
-                        )
-                      ) : loadingWorkspaceSessions[project.path] ? (
-                        <p className="wb-sidebar-note" role="status">
-                          正在加载任务…
-                        </p>
-                      ) : workspaceSessionErrors[project.path] ? (
-                        <button
-                          type="button"
-                          className="wb-workspace-note"
-                          onClick={() =>
-                            void loadWorkspaceSessions(project.path)
-                          }
-                        >
-                          加载失败，点击重试
-                        </button>
-                      ) : matchingTasks.length ? (
-                        matchingTasks.map((session) => (
+                )}
+                <AgentProjectMenu
+                  name={project.name}
+                  standalone={project.standalone}
+                  pinned={Boolean(project.pinned)}
+                  disabled={Boolean(busy)}
+                  inProjectList={!isCurrentWorkspace}
+                  onCreateTask={
+                    isCurrentWorkspace
+                      ? () => navigateWorkspace(() => void createSession())
+                      : undefined
+                  }
+                  onTogglePin={() => void updateProject(project)}
+                  onRename={
+                    project.standalone
+                      ? undefined
+                      : (name) => renameProject(project, name)
+                  }
+                  onRemove={() => void updateProject(project, true)}
+                />
+              </div>
+              {expanded && (
+                <div
+                  className={`wb-workspace-sessions${
+                    isCurrentWorkspace ? " wb-current-workspace-sessions" : ""
+                  }`}
+                  id={taskListId}
+                  role="group"
+                  aria-label={`${project.name} 的任务`}
+                >
+                  {isCurrentWorkspace ? (
+                    matchingTasks.length ? (
+                      matchingTasks.map((session) => (
+                        <div className="wb-session-container" key={session.id}>
                           <button
-                            type="button"
-                            className="wb-session-row wb-workspace-task-row"
-                            key={session.id}
-                            title={session.title || "新会话"}
-                            disabled={Boolean(busy)}
+                            className="wb-session-row"
+                            disabled={busy === "project" || busy === "create"}
+                            aria-pressed={session.id === sessionId}
                             onClick={() =>
-                              void openProject(project.path, session.id)
+                              navigateWorkspace(() => {
+                                setError(null);
+                                setSessionId(session.id);
+                              })
                             }
                           >
                             <span>{session.title || "新会话"}</span>
-                            {activeStatus(
-                              statuses[session.id] || session.activity?.status,
-                            ) && (
+                            {session.pinned && (
+                              <Pin size={11} aria-label="已置顶" />
+                            )}
+                            {(activeStatus(statuses[session.id]) ||
+                              pending[session.id]) && (
                               <i
                                 className="wb-session-dot"
                                 aria-label="进行中"
                               />
                             )}
                           </button>
-                        ))
-                      ) : (
-                        <p className="wb-sidebar-note">
-                          {sessionSearch.trim()
-                            ? "没有匹配的任务。"
-                            : "此工作区还没有任务。"}
-                        </p>
-                      )}
-                    </div>
+                          <AgentSessionMenu
+                            session={session}
+                            disabled={
+                              Boolean(busy) || isLegacySession(session.id)
+                            }
+                            active={
+                              activeStatus(statuses[session.id]) ||
+                              Boolean(pending[session.id]) ||
+                              Boolean(stopping[session.id])
+                            }
+                            onRename={(title) =>
+                              mutateSession(
+                                session.id,
+                                () => agentApi.renameSession(session.id, title),
+                                false,
+                                ["title"],
+                              )
+                            }
+                            onPin={() =>
+                              mutateSession(
+                                session.id,
+                                () =>
+                                  agentApi.setSessionMetadata(session.id, {
+                                    pinned: !session.pinned,
+                                  }),
+                                false,
+                                ["pinned"],
+                              )
+                            }
+                            onArchive={() =>
+                              mutateSession(
+                                session.id,
+                                () =>
+                                  agentApi.setSessionMetadata(session.id, {
+                                    archived: !session.archived,
+                                  }),
+                                false,
+                                ["archived"],
+                              )
+                            }
+                            onDelete={() =>
+                              mutateSession(
+                                session.id,
+                                () => agentApi.deleteSession(session.id),
+                                true,
+                              )
+                            }
+                          />
+                        </div>
+                      ))
+                    ) : (
+                      <p className="wb-sidebar-note">
+                        {sessionSearch.trim()
+                          ? "没有匹配的会话。"
+                          : showArchived
+                            ? "当前项目没有归档任务。"
+                            : "当前项目还没有任务。"}
+                      </p>
+                    )
+                  ) : loadingWorkspaceSessions[project.path] ? (
+                    <p className="wb-sidebar-note" role="status">
+                      正在加载任务…
+                    </p>
+                  ) : workspaceSessionErrors[project.path] ? (
+                    <button
+                      type="button"
+                      className="wb-workspace-note"
+                      onClick={() => void loadWorkspaceSessions(project.path)}
+                    >
+                      加载失败，点击重试
+                    </button>
+                  ) : matchingTasks.length ? (
+                    matchingTasks.map((session) => (
+                      <button
+                        type="button"
+                        className="wb-session-row wb-workspace-task-row"
+                        key={session.id}
+                        title={session.title || "新会话"}
+                        disabled={Boolean(busy)}
+                        onClick={() =>
+                          navigateWorkspace(
+                            () => void openProject(project.path, session.id),
+                          )
+                        }
+                      >
+                        <span>{session.title || "新会话"}</span>
+                        {activeStatus(
+                          statuses[session.id] || session.activity?.status,
+                        ) && (
+                          <i className="wb-session-dot" aria-label="进行中" />
+                        )}
+                      </button>
+                    ))
+                  ) : (
+                    <p className="wb-sidebar-note">
+                      {sessionSearch.trim()
+                        ? "没有匹配的任务。"
+                        : "此工作区还没有任务。"}
+                    </p>
                   )}
                 </div>
-              );
-            })}
-          </div>
-          <div className="wb-sidebar-footer">
-            <AgentCompanion />
-          </div>
-        </aside>
-      )}
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </>
+  );
+
+  return (
+    <div
+      ref={paneLayout.containerRef}
+      className="lolicode-agent-page lolicode-workbench wb-resizable-layout wb-unified"
+    >
+      <div
+        className="wb-sidebar-track"
+        data-collapsed={!paneLayout.sidebarVisible}
+        aria-hidden={!paneLayout.sidebarVisible || undefined}
+        ref={(node) => {
+          if (node) node.inert = !paneLayout.sidebarVisible;
+        }}
+      >
+        <div className="wb-sidebar-clip">
+          <aside
+            className="wb-sidebar"
+            aria-label="项目会话"
+            style={{
+              width: lastSidebarWidth.current,
+              flexBasis: lastSidebarWidth.current,
+            }}
+          >
+            {renderSidebar ? (
+              renderSidebar({
+                actions: sidebarActions,
+                workspace: sidebarWorkspace,
+                onCollapse: collapseSidebar,
+              })
+            ) : (
+              <>
+                <div
+                  className="wb-brand"
+                  {...DRAG_REGION_ATTR}
+                  style={DRAG_REGION_STYLE as React.CSSProperties}
+                >
+                  <span className="wb-brand-mark" aria-hidden="true">
+                    <Sparkles />
+                  </span>
+                  <div className="wb-brand-label">
+                    {APP_NAME} <span>工作台</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="wb-icon-button"
+                    aria-label="收起项目侧栏"
+                    title={"Ctrl + \\"}
+                    onClick={collapseSidebar}
+                    style={
+                      { WebkitAppRegion: "no-drag" } as React.CSSProperties
+                    }
+                  >
+                    <PanelLeftClose aria-hidden="true" />
+                  </button>
+                </div>
+                {sidebarActions}
+                {sidebarWorkspace}
+              </>
+            )}
+          </aside>
+        </div>
+      </div>
       {!sidebarCollapsed && paneLayout.sidebarVisible && (
         <AgentPaneResizeHandle {...paneLayout.sidebarHandleProps} />
       )}
-      <main className="wb-main">
-        <header
-          className="wb-titlebar"
-          {...DRAG_REGION_ATTR}
-          style={DRAG_REGION_STYLE as React.CSSProperties}
+      <main id="agent-content-area" className="wb-main">
+        <MotionSurface
+          motionKey={`conversation:${sessionId || "welcome"}`}
+          className="wb-chat-surface"
+          data-panel-background
         >
-          <button
-            className="wb-icon-button"
-            title={"Ctrl + \\"}
-            aria-label={sidebarCollapsed ? "展开项目侧栏" : "收起项目侧栏"}
-            onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
-            style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+          <header
+            className="wb-titlebar"
+            {...DRAG_REGION_ATTR}
+            style={DRAG_REGION_STYLE as React.CSSProperties}
           >
-            {sidebarCollapsed ? <PanelLeftOpen /> : <PanelLeftClose />}
-          </button>
-          <div className="wb-titlebar-heading" {...DRAG_REGION_ATTR}>
-            <span className="wb-titlebar-caption">对话工作台</span>
-            <h1 {...DRAG_REGION_ATTR}>
-              {selectedSession?.title || "编程工作台"}
-            </h1>
-          </div>
-          <BuildChannelBadge developmentOnly />
-          {workspace && (
-            <button
-              type="button"
-              className="wb-titlebar-project"
-              title={
-                workspace.standalone
-                  ? "打开独立任务的文件目录"
-                  : workspace.remote
-                    ? `管理远程项目：${workspace.remote.root}`
-                    : `打开项目文件夹：${workspace.path}`
-              }
-              aria-label={
-                workspace.standalone
-                  ? "打开独立任务的文件目录"
-                  : workspace.remote
-                    ? `管理远程项目：${workspace.remote.root}`
-                    : `打开项目文件夹：${workspace.path}`
-              }
-              onClick={(event) => {
-                event.stopPropagation();
-                if (workspace.remote) {
-                  setOperationsTab("remote");
-                  setOperationsOpen(true);
-                  return;
-                }
-                void agentApi
-                  .openProjectDirectory(workspace.path)
-                  .catch((cause) =>
-                    toast.error(
-                      cause instanceof Error
-                        ? cause.message
-                        : "无法打开项目文件夹",
-                    ),
-                  );
-              }}
-              style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
-            >
-              {workspace.standalone ? <MessageSquare /> : <Folder />}
-              {workspace.name}
-            </button>
-          )}
-          <AgentHelpMenu
-            onOpenAbout={onOpenAbout}
-            onCheckUpdate={onCheckUpdate}
-          />
-          <div
-            className="wb-native-controls"
-            style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
-          >
-            {windowControls}
-          </div>
-        </header>
-        {initializing && (
-          <p role="status" className="wb-notice">
-            正在恢复工作台…
-          </p>
-        )}
-        {error && (
-          <div role="alert" className="wb-notice">
-            <Notice tone="danger" title={error} />
-          </div>
-        )}
-        {engine?.available === false && (
-          <div className="wb-notice">
-            <Notice
-              tone="warning"
-              title="编程引擎暂不可用"
-              actions={
-                <Button variant="quiet" onClick={() => void initialize()}>
-                  重新检查
-                </Button>
-              }
-            >
-              请检查桌面应用的编程引擎组件，然后重新检查。
-            </Notice>
-          </div>
-        )}
-        {!workspace ? (
-          <div className="wb-empty">
-            <div className="wb-empty-content">
-              <WelcomeMark />
-              <span className="wb-welcome-eyebrow">YOUR CREATIVE SPACE</span>
-              <h2>从一个想法开始</h2>
-              <p>直接开始独立任务，也可以打开项目，继续你的创作。</p>
-              <button
-                className="wb-primary wb-welcome-action"
-                disabled={
-                  initializing || Boolean(busy) || engine?.available === false
-                }
-                onClick={() => void createSession(true)}
+            {sidebarToggle}
+            <div className="wb-titlebar-heading" {...DRAG_REGION_ATTR}>
+              <h1
+                title={selectedSession?.title || "编程工作台"}
+                {...DRAG_REGION_ATTR}
               >
-                <MessageSquarePlus />
-                新建独立任务
-                <ArrowUpRight aria-hidden="true" />
-              </button>
-              <button
-                className="wb-nav-button justify-center"
-                aria-label="打开项目文件夹"
-                disabled={
-                  initializing || Boolean(busy) || engine?.available === false
-                }
-                onClick={() => void openProject()}
-              >
-                <FolderOpen />
-                打开项目
-                <ArrowUpRight aria-hidden="true" />
-              </button>
-              <span className="wb-welcome-note">
-                独立任务自动保存，无需选择文件夹
-              </span>
-              {error && (
-                <button
-                  className="wb-nav-button justify-center"
-                  onClick={() => void initialize()}
-                >
-                  重新加载
-                </button>
-              )}
+                {selectedSession?.title || "编程工作台"}
+              </h1>
             </div>
-          </div>
-        ) : !sessionId ? (
-          <div className="wb-empty">
-            <div className="wb-empty-content">
-              <WelcomeMark compact />
-              <span className="wb-welcome-eyebrow">READY WHEN YOU ARE</span>
-              <h2>开始新任务</h2>
-              <p>
-                {catalog.models.length
-                  ? "选择模型，然后描述你想完成的工作。"
-                  : "先在渠道与模型中添加可用于编程的模型。"}
-              </p>
-              <div className="wb-startup-controls">
-                <AgentModelPicker
-                  className="wb-startup-model"
-                  models={catalog.models}
-                  disabled={Boolean(busy)}
-                  value={modelId}
-                  onOpenChannels={onOpenChannels}
-                  onRefresh={() => void refreshCatalog()}
-                  refreshDisabled={Boolean(busy) || working}
-                  excludedSources={catalog.excludedSources}
-                  onSelect={(id) => {
-                    setModelId(id);
-                    setContextLimit(null);
-                    setReasoningEffort((old) =>
-                      catalog.models
-                        .find((model) => model.id === id)
-                        ?.reasoningEfforts?.includes(old)
-                        ? old
-                        : "",
+            {workspace && (
+              <button
+                type="button"
+                className="wb-icon-button wb-titlebar-project"
+                title={
+                  workspace.standalone
+                    ? "打开独立任务的文件目录"
+                    : workspace.remote
+                      ? `管理远程项目：${workspace.remote.root}`
+                      : `打开项目文件夹：${workspace.path}`
+                }
+                aria-label={
+                  workspace.standalone
+                    ? "打开独立任务的文件目录"
+                    : workspace.remote
+                      ? `管理远程项目：${workspace.remote.root}`
+                      : `打开项目文件夹：${workspace.path}`
+                }
+                onClick={(event) => {
+                  event.stopPropagation();
+                  if (workspace.remote) {
+                    setOperationsTab("remote");
+                    setOperationsOpen(true);
+                    return;
+                  }
+                  void agentApi
+                    .openProjectDirectory(workspace.path)
+                    .catch((cause) =>
+                      toast.error(
+                        cause instanceof Error
+                          ? cause.message
+                          : "无法打开项目文件夹",
+                      ),
                     );
-                  }}
-                />
-                <AgentReasoningPicker
-                  model={catalog.models.find((model) => model.id === modelId)}
-                  value={reasoningEffort}
-                  disabled={Boolean(busy) || !modelId}
-                  onSelect={setReasoningEffort}
-                  contextValue={contextLimit}
-                />
-                <AgentContextPicker
-                  model={catalog.models.find((model) => model.id === modelId)}
-                  value={contextLimit}
-                  disabled={Boolean(busy) || !modelId}
-                  onSelect={setContextLimit}
-                />
-                <label className="sr-only" htmlFor="agent-new-permission">
-                  执行权限
-                </label>
-                <select
-                  id="agent-new-permission"
-                  className="wb-empty-select"
-                  value={permissionMode}
-                  disabled={Boolean(busy)}
-                  onChange={(event) => {
-                    if (event.target.value === "full_access") {
-                      fullAccessTarget.current = null;
-                      setConfirmFullAccess(true);
-                    } else
-                      setPermissionMode(
-                        event.target.value as AgentPermissionMode,
-                      );
-                  }}
-                >
-                  <option value="ask">逐次确认</option>
-                  <option value="auto">Auto Mode</option>
-                  <option value="full_access">完整权限</option>
-                </select>
-              </div>
-              <button
-                className="wb-primary wb-welcome-action"
-                disabled={Boolean(busy) || !modelId}
-                onClick={() => void createSession()}
+                }}
+                style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
               >
-                开始会话
-                <ArrowUpRight aria-hidden="true" />
+                <Folder aria-hidden="true" />
               </button>
-            </div>
-          </div>
-        ) : (
-          <>
-            {readOnlySession && (
-              <p role="status" className="wb-notice">
-                旧版会话只读，原数据保留，请新建本体会话继续
-              </p>
             )}
-            <div className="wb-context-line">
-              <span className="wb-context-model">
-                {boundModel ? modelLabel(boundModel) : "会话绑定的模型"}
-              </span>
-              <div className="wb-context-actions">
-                <button
-                  type="button"
-                  className="wb-icon-button"
-                  aria-label="预览项目文件"
-                  onClick={() => openPreview("")}
-                >
-                  <PanelRightOpen />
-                </button>
+            {workspace && sessionId && (
+              <>
                 <AgentActivityStatus
+                  hideIdle
                   snapshot={snapshot}
                   queued={queuedHere}
                   stopping={stoppingHere}
                   loading={snapshotLoading}
                 />
-              </div>
-            </div>
-            {snapshotError && (
-              <div role="alert" className="wb-notice">
-                <Notice
-                  tone="danger"
-                  title={snapshotError}
-                  actions={
-                    <Button
-                      variant="quiet"
-                      size="compact"
-                      onClick={() => setRefresh((old) => old + 1)}
-                    >
-                      重试
-                    </Button>
-                  }
-                />
-              </div>
-            )}
-            {snapshot?.streamGap && activeStatus(snapshot.status) && (
-              <p role="status" className="wb-notice">
-                正在恢复连接，已有内容会保留。
-              </p>
-            )}
-            <AgentFileActionsContext.Provider
-              value={{
-                sessionId: sessionId || undefined,
-                projectPath: workspace?.path,
-                onPreview: openPreview,
-              }}
-            >
-              <div
-                ref={scrollRef}
-                onScroll={() => {
-                  const el = scrollRef.current;
-                  if (el) {
-                    atBottom.current =
-                      el.scrollTop + el.clientHeight >= el.scrollHeight - 40;
-                    setShowScrollToBottom(!atBottom.current);
-                  }
-                }}
-                className="wb-chat"
-              >
-                <div className="wb-chat-content">
-                  <AgentTranscript
-                    messages={snapshot?.messages || []}
-                    sessionId={snapshot?.session.id}
-                    projectPath={workspace.path}
-                    status={snapshot?.status}
-                    imageAttachmentsByMessage={sentImageAttachments}
-                    documentAttachmentsByMessage={sentDocumentAttachments}
-                  />
-                  {snapshot && !snapshot.messages.length && (
-                    <div className="wb-empty">
-                      <div className="wb-empty-content">
-                        <WelcomeMark compact />
-                        <span className="wb-welcome-eyebrow">
-                          LET’S MAKE SOMETHING
-                        </span>
-                        <h2>今天想完成什么？</h2>
-                        <p>一个想法、一处优化，都可以从这里开始。</p>
-                        {!readOnlySession && (
-                          <div
-                            className="wb-task-starters"
-                            aria-label="任务灵感"
-                          >
-                            {[
-                              {
-                                icon: Compass,
-                                title: workspace.standalone
-                                  ? "回答问题"
-                                  : "读懂项目",
-                                detail: workspace.standalone
-                                  ? "解释概念与整理思路"
-                                  : "梳理结构与核心流程",
-                                prompt: workspace.standalone
-                                  ? "帮我分析并解释这个问题："
-                                  : "帮我梳理这个项目的结构，介绍核心模块和主要运行流程。",
-                              },
-                              {
-                                icon: Code2,
-                                title: "实现想法",
-                                detail: "把灵感变成可用功能",
-                                prompt: workspace.standalone
-                                  ? "帮我实现这个想法："
-                                  : "我想为这个项目实现一个新功能：",
-                              },
-                              {
-                                icon: workspace.standalone ? FileText : Bug,
-                                title: workspace.standalone
-                                  ? "整理资料"
-                                  : "排查问题",
-                                detail: workspace.standalone
-                                  ? "总结内容与提炼要点"
-                                  : "找到原因，稳妥修复",
-                                prompt: workspace.standalone
-                                  ? "请帮我整理和总结下面的资料："
-                                  : "帮我排查并修复这个项目中的问题：",
-                              },
-                            ].map(({ icon: Icon, title, detail, prompt }) => (
-                              <button
-                                type="button"
-                                className="wb-task-starter"
-                                key={title}
-                                onClick={() => insertStarter(prompt)}
-                              >
-                                <span className="wb-task-starter-icon">
-                                  <Icon aria-hidden="true" />
-                                </span>
-                                <strong>{title}</strong>
-                                <span>{detail}</span>
-                                <ArrowUpRight
-                                  className="wb-task-starter-arrow"
-                                  aria-hidden="true"
-                                />
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                  {!readOnlySession &&
-                    snapshot?.permissions
-                      .filter((request) => request.sessionId === sessionId)
-                      .map((request) => (
-                        <AgentPermissionCard
-                          key={request.id}
-                          request={request}
-                          onReply={(decision) =>
-                            refreshAfter(() =>
-                              agentApi.replyPermission(
-                                request.sessionId,
-                                request.id,
-                                decision,
-                              ),
-                            )
-                          }
-                        />
-                      ))}
-                  {!readOnlySession &&
-                    snapshot?.questions
-                      .filter((request) => request.sessionId === sessionId)
-                      .slice(0, 1)
-                      .map((request) => (
-                        <AgentQuestionCard
-                          key={request.id}
-                          question={request}
-                          onReply={(answer) =>
-                            refreshAfter(() =>
-                              agentApi.replyQuestion(
-                                request.sessionId,
-                                request.id,
-                                answer,
-                              ),
-                            )
-                          }
-                          onReject={() =>
-                            refreshAfter(() =>
-                              agentApi.rejectQuestion(
-                                request.sessionId,
-                                request.id,
-                              ),
-                            )
-                          }
-                        />
-                      ))}
-                  {snapshot && (
-                    <AgentRunError
-                      messages={snapshot.messages}
-                      status={snapshot.status}
-                      error={snapshot.error}
-                      pending={Boolean(
-                        queuedHere ||
-                          runningHere ||
-                          stoppingHere ||
-                          sendingHere ||
-                          replacingHere,
-                      )}
-                      currentTurnId={
-                        sessionId ? pending[sessionId]?.requestId : undefined
-                      }
-                      onRetry={readOnlySession ? undefined : retryLastMessage}
-                      retrying={retryLoading || sendingHere}
-                    />
-                  )}
-                </div>
-              </div>
-              <AgentChanges key={sessionId} diffs={snapshot?.diffs || []} />
-            </AgentFileActionsContext.Provider>
-            <div className="wb-composer-area">
-              {showScrollToBottom && (
                 <button
                   type="button"
-                  className="wb-scroll-latest"
-                  onClick={() => {
-                    const scroll = scrollRef.current;
-                    if (!scroll) return;
-                    atBottom.current = true;
-                    setShowScrollToBottom(false);
-                    scroll.scrollTo({
-                      top: scroll.scrollHeight,
-                      behavior: window.matchMedia(
-                        "(prefers-reduced-motion: reduce)",
-                      ).matches
-                        ? "instant"
-                        : "smooth",
-                    });
-                  }}
+                  className="wb-icon-button wb-titlebar-preview"
+                  aria-label="预览项目文件"
+                  title="预览项目文件"
+                  onClick={() => openPreview("")}
+                  style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
                 >
-                  <ArrowDown aria-hidden="true" />
-                  回到最新
+                  <PanelRightOpen aria-hidden="true" />
                 </button>
-              )}
-              <form
-                ref={composerFormRef}
-                className="wb-composer"
-                onDragOver={(event) => {
-                  if (
-                    Array.from(event.dataTransfer.items).some(
-                      (item) => item.kind === "file",
-                    )
-                  )
-                    event.preventDefault();
-                }}
-                onDrop={(event) => {
-                  const files = Array.from(event.dataTransfer.files);
-                  if (!files.length) return;
-                  event.preventDefault();
-                  if (nativeDropSupport.current)
-                    void addComposerImages(
-                      files.filter((file) =>
-                        file.type.toLowerCase().startsWith("image/"),
-                      ),
-                    );
-                  else void addComposerFiles(files);
-                }}
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void send();
-                }}
+              </>
+            )}
+            <AgentHelpMenu
+              onOpenAbout={onOpenAbout}
+              onCheckUpdate={onCheckUpdate}
+            />
+            <div
+              className="wb-native-controls"
+              style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+            >
+              {windowControls}
+            </div>
+          </header>
+          {initializing && (
+            <p role="status" className="wb-notice">
+              正在恢复工作台…
+            </p>
+          )}
+          {error && (
+            <div role="alert" className="wb-notice">
+              <Notice tone="danger" title={error} />
+            </div>
+          )}
+          {engine?.available === false && (
+            <div className="wb-notice">
+              <Notice
+                tone="warning"
+                title="编程引擎暂不可用"
+                actions={
+                  <Button variant="quiet" onClick={() => void initialize()}>
+                    重新检查
+                  </Button>
+                }
               >
-                {(composerImages.length > 0 ||
-                  composerDocuments.length > 0) && (
-                  <div
-                    className="wb-composer-attachments"
-                    aria-label="待发送附件"
+                请检查桌面应用的编程引擎组件，然后重新检查。
+              </Notice>
+            </div>
+          )}
+          {!workspace ? (
+            <div className="wb-empty">
+              <div className="wb-empty-content">
+                <WelcomeMark />
+                <span className="wb-welcome-eyebrow">YOUR CREATIVE SPACE</span>
+                <h2>从一个想法开始</h2>
+                <p>直接开始独立任务，也可以打开项目，继续你的创作。</p>
+                <button
+                  className="wb-primary wb-welcome-action"
+                  disabled={
+                    initializing || Boolean(busy) || engine?.available === false
+                  }
+                  onClick={() => void createSession(true)}
+                >
+                  <MessageSquarePlus />
+                  新建独立任务
+                  <ArrowUpRight aria-hidden="true" />
+                </button>
+                <button
+                  className="wb-nav-button justify-center"
+                  aria-label="打开项目文件夹"
+                  disabled={
+                    initializing || Boolean(busy) || engine?.available === false
+                  }
+                  onClick={() => void openProject()}
+                >
+                  <FolderOpen />
+                  打开项目
+                  <ArrowUpRight aria-hidden="true" />
+                </button>
+                <span className="wb-welcome-note">
+                  独立任务自动保存，无需选择文件夹
+                </span>
+                {error && (
+                  <button
+                    className="wb-nav-button justify-center"
+                    onClick={() => void initialize()}
                   >
-                    {composerImages.map((image) => (
-                      <div className="wb-composer-image" key={image.id}>
-                        <AgentAttachmentImage
-                          image={image}
-                          buttonClassName="wb-composer-image-preview"
-                          imageClassName="wb-composer-image-preview__image"
-                        />
-                        <button
-                          type="button"
-                          aria-label={`移除图片：${image.fileName}`}
-                          title="移除图片"
-                          onClick={() => removeComposerImage(image.id)}
-                        >
-                          <X aria-hidden="true" />
-                        </button>
-                      </div>
-                    ))}
-                    {composerDocuments.map((document) => (
-                      <div className="wb-composer-document" key={document.id}>
-                        <FileText aria-hidden="true" />
-                        <span title={document.fileName}>
-                          {document.fileName}
-                        </span>
-                        <small>
-                          {document.bytes
-                            ? `${(document.bytes / (1024 * 1024)).toFixed(1)} MB`
-                            : "本地文件"}
-                        </small>
-                        <button
-                          type="button"
-                          aria-label={`移除文档：${document.fileName}`}
-                          title="移除文档"
-                          onClick={() => removeComposerDocument(document.id)}
-                        >
-                          <X aria-hidden="true" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
+                    重新加载
+                  </button>
                 )}
-                <label htmlFor="agent-message" className="sr-only">
-                  发送给 Agent 的消息
-                </label>
-                <textarea
-                  ref={composerRef}
-                  id="agent-message"
-                  rows={1}
-                  placeholder="描述任务，或继续追问…"
-                  title="Enter 发送 · Shift + Enter 换行；执行中可打断并发送"
-                  value={draft}
-                  disabled={readOnlySession}
-                  onChange={(event) => writeDraft(key, event.target.value)}
-                  onPaste={(event) => {
-                    const files = Array.from(event.clipboardData.items)
-                      .filter(
-                        (item) =>
-                          item.kind === "file" &&
-                          item.type.startsWith("image/"),
-                      )
-                      .map((item) => item.getAsFile())
-                      .filter((file): file is File => file !== null);
-                    if (!files.length) return;
-                    event.preventDefault();
-                    void addComposerImages(files);
-                  }}
-                  onKeyDown={(event) => {
-                    if (
-                      event.key === "Enter" &&
-                      !event.shiftKey &&
-                      !event.nativeEvent.isComposing
-                    ) {
-                      event.preventDefault();
-                      if (!sendDisabled) void send();
-                    }
-                  }}
-                />
-                <input
-                  ref={imageInputRef}
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp,image/gif,image/bmp,image/avif"
-                  multiple
-                  hidden
-                  onChange={(event) => {
-                    void addComposerFiles(
-                      Array.from(event.currentTarget.files || []),
-                    );
-                    event.currentTarget.value = "";
-                  }}
-                />
-                <div className="wb-composer-toolbar">
-                  <button
-                    type="button"
-                    className="wb-attach-image-button"
-                    aria-label="添加图片"
-                    title="添加图片；也可以粘贴截图或拖入图片"
-                    disabled={readOnlySession || uncertainHere || !sessionId}
-                    onClick={() => imageInputRef.current?.click()}
-                  >
-                    <ImagePlus aria-hidden="true" />
-                  </button>
-                  <button
-                    type="button"
-                    className="wb-attach-image-button"
-                    aria-label="添加文档"
-                    title="添加 Word、PowerPoint、Excel、PDF 或文本文件；也可以直接拖入"
-                    disabled={readOnlySession || uncertainHere || !sessionId}
-                    onClick={() => void chooseComposerDocuments()}
-                  >
-                    <FileText aria-hidden="true" />
-                  </button>
-                  <button
-                    type="button"
-                    className="wb-attach-image-button"
-                    aria-label="添加插件"
-                    title="打开插件市场；安装后可将技能添加到当前会话"
-                    onClick={() => {
-                      setExtensionsInitialTab("plugins");
-                      setExtensionsOpen(true);
+              </div>
+            </div>
+          ) : !sessionId ? (
+            <div className="wb-empty">
+              <div className="wb-empty-content">
+                <WelcomeMark compact />
+                <span className="wb-welcome-eyebrow">READY WHEN YOU ARE</span>
+                <h2>开始新任务</h2>
+                <p>
+                  {catalog.models.length
+                    ? "选择模型，然后描述你想完成的工作。"
+                    : "先在渠道与模型中添加可用于编程的模型。"}
+                </p>
+                <div className="wb-startup-controls">
+                  <AgentModelPicker
+                    className="wb-startup-model"
+                    models={catalog.models}
+                    disabled={Boolean(busy)}
+                    value={modelId}
+                    onOpenChannels={onOpenChannels}
+                    onRefresh={() => void refreshCatalog()}
+                    refreshDisabled={Boolean(busy) || working}
+                    excludedSources={catalog.excludedSources}
+                    onSelect={(id) => {
+                      setModelId(id);
+                      setContextLimit(null);
+                      setReasoningEffort((old) =>
+                        catalog.models
+                          .find((model) => model.id === id)
+                          ?.reasoningEfforts?.includes(old)
+                          ? old
+                          : "",
+                      );
                     }}
-                  >
-                    <Blocks aria-hidden="true" />
-                  </button>
-                  <div className="wb-composer-model">
-                    <AgentModelPicker
-                      models={catalog.models}
-                      disabled={
-                        readOnlySession ||
-                        Boolean(busy) ||
-                        !snapshot ||
-                        uncertainHere
-                      }
-                      value={displayedModelId}
-                      onOpenChannels={onOpenChannels}
-                      onRefresh={() => void refreshCatalog()}
-                      refreshDisabled={Boolean(busy) || working}
-                      excludedSources={catalog.excludedSources}
-                      notice={
-                        catalogUpdate > catalog.revision
-                          ? working
-                            ? "渠道已更新，任务结束后将自动刷新模型目录。"
-                            : "渠道已更新，可刷新模型目录。"
-                          : working
-                            ? "任务结束后可刷新模型目录。"
-                            : undefined
-                      }
-                      unavailableLabel={
-                        selectedSession?.model
-                          ? "会话模型（目录中不可用）"
-                          : undefined
-                      }
-                      onSelect={(id) =>
-                        void updateSessionConfig({
-                          modelId: id,
-                        })
-                      }
-                    />
-                  </div>
+                  />
                   <AgentReasoningPicker
-                    model={displayedModel}
-                    value={displayedReasoningEffort}
-                    contextValue={selectedSession?.contextLimit}
-                    disabled={
-                      readOnlySession ||
-                      Boolean(busy) ||
-                      !snapshot ||
-                      uncertainHere ||
-                      !displayedModel
-                    }
-                    onSelect={(value) =>
-                      void updateSessionConfig({ reasoningEffort: value })
-                    }
+                    model={catalog.models.find((model) => model.id === modelId)}
+                    value={reasoningEffort}
+                    disabled={Boolean(busy) || !modelId}
+                    onSelect={setReasoningEffort}
+                    contextValue={contextLimit}
                   />
                   <AgentContextPicker
-                    model={displayedModel}
-                    value={selectedSession?.contextLimit}
-                    onSelect={(value) =>
-                      void updateSessionConfig({ contextLimit: value })
-                    }
-                    disabled={
-                      readOnlySession ||
-                      Boolean(busy) ||
-                      !snapshot ||
-                      uncertainHere ||
-                      !displayedModel
-                    }
+                    model={catalog.models.find((model) => model.id === modelId)}
+                    value={contextLimit}
+                    disabled={Boolean(busy) || !modelId}
+                    onSelect={setContextLimit}
                   />
-                  <label className="sr-only" htmlFor="agent-permission-mode">
+                  <label className="sr-only" htmlFor="agent-new-permission">
                     执行权限
                   </label>
                   <select
-                    id="agent-permission-mode"
-                    title="逐次确认：改动和命令先询问；Auto Mode：常规编辑和安全命令自动允许；完整权限：允许项目内工具，项目外仍需确认。配置从下一次请求或工具检查生效。"
-                    value={selectedSession?.permissionMode || "ask"}
-                    disabled={
-                      readOnlySession ||
-                      Boolean(busy) ||
-                      !snapshot ||
-                      uncertainHere
-                    }
+                    id="agent-new-permission"
+                    className="wb-empty-select"
+                    value={permissionMode}
+                    disabled={Boolean(busy)}
                     onChange={(event) => {
-                      if (readOnlySession) return;
                       if (event.target.value === "full_access") {
-                        fullAccessTarget.current = sessionId;
+                        fullAccessTarget.current = null;
                         setConfirmFullAccess(true);
                       } else
-                        void updateSessionConfig({
-                          permissionMode: event.target
-                            .value as AgentPermissionMode,
-                        });
+                        setPermissionMode(
+                          event.target.value as AgentPermissionMode,
+                        );
                     }}
                   >
                     <option value="ask">逐次确认</option>
                     <option value="auto">Auto Mode</option>
                     <option value="full_access">完整权限</option>
-                    {selectedSession?.permissionMode &&
-                      !["ask", "auto", "full_access"].includes(
-                        selectedSession.permissionMode,
-                      ) && (
-                        <option value={selectedSession.permissionMode}>
-                          自定义权限
-                        </option>
-                      )}
                   </select>
-                  <span className="wb-toolbar-spacer" />
-                  {!readOnlySession &&
-                    (runningHere ||
-                      queuedHere ||
-                      uncertainHere ||
-                      stoppingHere) && (
-                      <button
-                        type="button"
-                        className="wb-primary wb-stop-button"
-                        disabled={stoppingHere}
-                        onClick={() => void stop()}
-                      >
-                        <Square />
-                        {stoppingHere ? "停止中…" : "停止"}
-                      </button>
-                    )}
-                  <button
-                    type="submit"
-                    className={`wb-primary wb-send-button${sendingHere || replacingHere ? " wb-send-pending" : ""}`}
-                    disabled={sendDisabled}
-                    title={
-                      runningHere
-                        ? "停止当前任务，确认收尾后发送新消息"
-                        : "Enter 发送 · Shift + Enter 换行"
-                    }
-                  >
-                    {sendingHere || replacingHere ? (
-                      <LoaderCircle
-                        className="wb-send-spinner"
-                        aria-hidden="true"
-                      />
-                    ) : (
-                      <ArrowUp aria-hidden="true" />
-                    )}
-                    {replacingHere
-                      ? "正在打断…"
-                      : sendingHere
-                        ? "正在发送…"
-                        : runningHere
-                          ? "打断并发送"
-                          : "发送"}
-                  </button>
                 </div>
-              </form>
-              <div className="wb-composer-meta" aria-hidden="true">
-                <span>灵感，就从这一句开始</span>
-                <span>
-                  <kbd>↵</kbd> 发送 <span className="wb-hint-divider">·</span>{" "}
-                  <kbd>Shift ↵</kbd> 换行
-                </span>
+                <button
+                  className="wb-primary wb-welcome-action"
+                  disabled={Boolean(busy) || !modelId}
+                  onClick={() => void createSession()}
+                >
+                  开始会话
+                  <ArrowUpRight aria-hidden="true" />
+                </button>
               </div>
-              <AgentUsageFooter
-                usage={snapshot?.usage}
-                sessionId={sessionId}
-                active={
-                  snapshot?.status === "running" ||
-                  snapshot?.titlePending ||
-                  snapshot?.compacting
-                }
-              />
             </div>
-          </>
-        )}
+          ) : (
+            <>
+              {readOnlySession && (
+                <p role="status" className="wb-notice">
+                  旧版会话只读，原数据保留，请新建本体会话继续
+                </p>
+              )}
+              {snapshotError && (
+                <div role="alert" className="wb-notice">
+                  <Notice
+                    tone="danger"
+                    title={snapshotError}
+                    actions={
+                      <Button
+                        variant="quiet"
+                        size="compact"
+                        onClick={() => setRefresh((old) => old + 1)}
+                      >
+                        重试
+                      </Button>
+                    }
+                  />
+                </div>
+              )}
+              {snapshot?.streamGap && activeStatus(snapshot.status) && (
+                <p role="status" className="wb-notice">
+                  正在恢复连接，已有内容会保留。
+                </p>
+              )}
+              <AgentFileActionsContext.Provider
+                value={{
+                  sessionId: sessionId || undefined,
+                  projectPath: workspace?.path,
+                  onPreview: openPreview,
+                }}
+              >
+                <div
+                  ref={scrollRef}
+                  onScroll={() => {
+                    const el = scrollRef.current;
+                    if (el) {
+                      atBottom.current =
+                        el.scrollTop + el.clientHeight >= el.scrollHeight - 40;
+                      setShowScrollToBottom(!atBottom.current);
+                    }
+                  }}
+                  className="wb-chat"
+                >
+                  <div className="wb-chat-content">
+                    <AgentTranscript
+                      messages={snapshot?.messages || []}
+                      userIdentity={
+                        account
+                          ? {
+                              displayName:
+                                account.displayName || account.username,
+                              avatarUrl: account.avatarUrl || undefined,
+                            }
+                          : undefined
+                      }
+                      sessionId={snapshot?.session.id}
+                      projectPath={workspace.path}
+                      status={snapshot?.status}
+                      imageAttachmentsByMessage={sentImageAttachments}
+                      documentAttachmentsByMessage={sentDocumentAttachments}
+                    />
+                    {snapshot && !snapshot.messages.length && (
+                      <div className="wb-empty">
+                        <div className="wb-empty-content">
+                          <WelcomeMark compact />
+                          <span className="wb-welcome-eyebrow">
+                            LET’S MAKE SOMETHING
+                          </span>
+                          <h2>今天想完成什么？</h2>
+                          <p>一个想法、一处优化，都可以从这里开始。</p>
+                          {!readOnlySession && (
+                            <div
+                              className="wb-task-starters"
+                              aria-label="任务灵感"
+                            >
+                              {[
+                                {
+                                  icon: Compass,
+                                  title: workspace.standalone
+                                    ? "回答问题"
+                                    : "读懂项目",
+                                  detail: workspace.standalone
+                                    ? "解释概念与整理思路"
+                                    : "梳理结构与核心流程",
+                                  prompt: workspace.standalone
+                                    ? "帮我分析并解释这个问题："
+                                    : "帮我梳理这个项目的结构，介绍核心模块和主要运行流程。",
+                                },
+                                {
+                                  icon: Code2,
+                                  title: "实现想法",
+                                  detail: "把灵感变成可用功能",
+                                  prompt: workspace.standalone
+                                    ? "帮我实现这个想法："
+                                    : "我想为这个项目实现一个新功能：",
+                                },
+                                {
+                                  icon: workspace.standalone ? FileText : Bug,
+                                  title: workspace.standalone
+                                    ? "整理资料"
+                                    : "排查问题",
+                                  detail: workspace.standalone
+                                    ? "总结内容与提炼要点"
+                                    : "找到原因，稳妥修复",
+                                  prompt: workspace.standalone
+                                    ? "请帮我整理和总结下面的资料："
+                                    : "帮我排查并修复这个项目中的问题：",
+                                },
+                              ].map(({ icon: Icon, title, detail, prompt }) => (
+                                <button
+                                  type="button"
+                                  className="wb-task-starter"
+                                  key={title}
+                                  onClick={() => insertStarter(prompt)}
+                                >
+                                  <span className="wb-task-starter-icon">
+                                    <Icon aria-hidden="true" />
+                                  </span>
+                                  <strong>{title}</strong>
+                                  <span>{detail}</span>
+                                  <ArrowUpRight
+                                    className="wb-task-starter-arrow"
+                                    aria-hidden="true"
+                                  />
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    {!readOnlySession &&
+                      snapshot?.permissions
+                        .filter((request) => request.sessionId === sessionId)
+                        .map((request) => (
+                          <AgentPermissionCard
+                            key={request.id}
+                            request={request}
+                            onReply={(decision) =>
+                              refreshAfter(() =>
+                                agentApi.replyPermission(
+                                  request.sessionId,
+                                  request.id,
+                                  decision,
+                                ),
+                              )
+                            }
+                          />
+                        ))}
+                    {!readOnlySession &&
+                      snapshot?.questions
+                        .filter((request) => request.sessionId === sessionId)
+                        .slice(0, 1)
+                        .map((request) => (
+                          <AgentQuestionCard
+                            key={request.id}
+                            question={request}
+                            onReply={(answer) =>
+                              refreshAfter(() =>
+                                agentApi.replyQuestion(
+                                  request.sessionId,
+                                  request.id,
+                                  answer,
+                                ),
+                              )
+                            }
+                            onReject={() =>
+                              refreshAfter(() =>
+                                agentApi.rejectQuestion(
+                                  request.sessionId,
+                                  request.id,
+                                ),
+                              )
+                            }
+                          />
+                        ))}
+                    {snapshot && (
+                      <AgentRunError
+                        messages={snapshot.messages}
+                        status={snapshot.status}
+                        error={snapshot.error}
+                        pending={Boolean(
+                          queuedHere ||
+                            runningHere ||
+                            stoppingHere ||
+                            sendingHere ||
+                            replacingHere,
+                        )}
+                        currentTurnId={
+                          sessionId ? pending[sessionId]?.requestId : undefined
+                        }
+                        onRetry={readOnlySession ? undefined : retryLastMessage}
+                        retrying={retryLoading || sendingHere}
+                      />
+                    )}
+                  </div>
+                </div>
+                <AgentChanges key={sessionId} diffs={snapshot?.diffs || []} />
+              </AgentFileActionsContext.Provider>
+              <div className="wb-composer-area">
+                {showScrollToBottom && (
+                  <button
+                    type="button"
+                    className="wb-scroll-latest"
+                    onClick={() => {
+                      const scroll = scrollRef.current;
+                      if (!scroll) return;
+                      atBottom.current = true;
+                      setShowScrollToBottom(false);
+                      scroll.scrollTo({
+                        top: scroll.scrollHeight,
+                        behavior: window.matchMedia(
+                          "(prefers-reduced-motion: reduce)",
+                        ).matches
+                          ? "instant"
+                          : "smooth",
+                      });
+                    }}
+                  >
+                    <ArrowDown aria-hidden="true" />
+                    回到最新
+                  </button>
+                )}
+                <form
+                  ref={composerFormRef}
+                  className="wb-composer"
+                  onDragOver={(event) => {
+                    if (
+                      Array.from(event.dataTransfer.items).some(
+                        (item) => item.kind === "file",
+                      )
+                    )
+                      event.preventDefault();
+                  }}
+                  onDrop={(event) => {
+                    const files = Array.from(event.dataTransfer.files);
+                    if (!files.length) return;
+                    event.preventDefault();
+                    if (nativeDropSupport.current)
+                      void addComposerImages(
+                        files.filter((file) =>
+                          file.type.toLowerCase().startsWith("image/"),
+                        ),
+                      );
+                    else void addComposerFiles(files);
+                  }}
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void send();
+                  }}
+                >
+                  {(composerImages.length > 0 ||
+                    composerDocuments.length > 0) && (
+                    <div
+                      className="wb-composer-attachments"
+                      aria-label="待发送附件"
+                    >
+                      {composerImages.map((image) => (
+                        <div className="wb-composer-image" key={image.id}>
+                          <AgentAttachmentImage
+                            image={image}
+                            buttonClassName="wb-composer-image-preview"
+                            imageClassName="wb-composer-image-preview__image"
+                          />
+                          <button
+                            type="button"
+                            aria-label={`移除图片：${image.fileName}`}
+                            title="移除图片"
+                            onClick={() => removeComposerImage(image.id)}
+                          >
+                            <X aria-hidden="true" />
+                          </button>
+                        </div>
+                      ))}
+                      {composerDocuments.map((document) => (
+                        <div className="wb-composer-document" key={document.id}>
+                          <FileText aria-hidden="true" />
+                          <span title={document.fileName}>
+                            {document.fileName}
+                          </span>
+                          <small>
+                            {document.bytes
+                              ? `${(document.bytes / (1024 * 1024)).toFixed(1)} MB`
+                              : "本地文件"}
+                          </small>
+                          <button
+                            type="button"
+                            aria-label={`移除文档：${document.fileName}`}
+                            title="移除文档"
+                            onClick={() => removeComposerDocument(document.id)}
+                          >
+                            <X aria-hidden="true" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <label htmlFor="agent-message" className="sr-only">
+                    发送给 Agent 的消息
+                  </label>
+                  <textarea
+                    ref={composerRef}
+                    id="agent-message"
+                    rows={1}
+                    placeholder="描述任务，或继续追问…"
+                    title="Enter 发送 · Shift + Enter 换行；执行中可打断并发送"
+                    value={draft}
+                    disabled={readOnlySession}
+                    onChange={(event) => writeDraft(key, event.target.value)}
+                    onPaste={(event) => {
+                      const files = Array.from(event.clipboardData.items)
+                        .filter(
+                          (item) =>
+                            item.kind === "file" &&
+                            item.type.startsWith("image/"),
+                        )
+                        .map((item) => item.getAsFile())
+                        .filter((file): file is File => file !== null);
+                      if (!files.length) return;
+                      event.preventDefault();
+                      void addComposerImages(files);
+                    }}
+                    onKeyDown={(event) => {
+                      if (
+                        event.key === "Enter" &&
+                        !event.shiftKey &&
+                        !event.nativeEvent.isComposing
+                      ) {
+                        event.preventDefault();
+                        if (!sendDisabled) void send();
+                      }
+                    }}
+                  />
+                  <input
+                    ref={imageInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/gif,image/bmp,image/avif"
+                    multiple
+                    hidden
+                    onChange={(event) => {
+                      void addComposerFiles(
+                        Array.from(event.currentTarget.files || []),
+                      );
+                      event.currentTarget.value = "";
+                    }}
+                  />
+                  <div className="wb-composer-toolbar">
+                    <AgentComposerAdd
+                      attachmentsDisabled={
+                        readOnlySession || uncertainHere || !sessionId
+                      }
+                      onAddImages={() => imageInputRef.current?.click()}
+                      onAddDocuments={() => void chooseComposerDocuments()}
+                      onAddPlugins={() => {
+                        setExtensionsInitialTab("plugins");
+                        setExtensionsOpen(true);
+                      }}
+                    />
+                    <div className="wb-composer-model">
+                      <AgentModelPicker
+                        models={catalog.models}
+                        disabled={
+                          readOnlySession ||
+                          Boolean(busy) ||
+                          !snapshot ||
+                          uncertainHere
+                        }
+                        value={displayedModelId}
+                        onOpenChannels={onOpenChannels}
+                        onRefresh={() => void refreshCatalog()}
+                        refreshDisabled={Boolean(busy) || working}
+                        excludedSources={catalog.excludedSources}
+                        notice={
+                          catalogUpdate > catalog.revision
+                            ? working
+                              ? "渠道已更新，任务结束后将自动刷新模型目录。"
+                              : "渠道已更新，可刷新模型目录。"
+                            : working
+                              ? "任务结束后可刷新模型目录。"
+                              : undefined
+                        }
+                        unavailableLabel={
+                          selectedSession?.model
+                            ? "会话模型（目录中不可用）"
+                            : undefined
+                        }
+                        onSelect={(id) =>
+                          void updateSessionConfig({
+                            modelId: id,
+                          })
+                        }
+                      />
+                    </div>
+                    <AgentComposerOptions
+                      permissionMode={selectedSession?.permissionMode || "ask"}
+                    >
+                      <div className="wb-composer-options-field">
+                        <span>推理强度</span>
+                        <AgentReasoningPicker
+                          model={displayedModel}
+                          value={displayedReasoningEffort}
+                          contextValue={selectedSession?.contextLimit}
+                          disabled={
+                            readOnlySession ||
+                            Boolean(busy) ||
+                            !snapshot ||
+                            uncertainHere ||
+                            !displayedModel
+                          }
+                          onSelect={(value) =>
+                            void updateSessionConfig({ reasoningEffort: value })
+                          }
+                        />
+                      </div>
+                      <div className="wb-composer-options-field">
+                        <span>上下文容量</span>
+                        <AgentContextPicker
+                          model={displayedModel}
+                          value={selectedSession?.contextLimit}
+                          onSelect={(value) =>
+                            void updateSessionConfig({ contextLimit: value })
+                          }
+                          disabled={
+                            readOnlySession ||
+                            Boolean(busy) ||
+                            !snapshot ||
+                            uncertainHere ||
+                            !displayedModel
+                          }
+                        />
+                      </div>
+                      <div className="wb-composer-options-field">
+                        <label htmlFor="agent-permission-mode">执行权限</label>
+                        <select
+                          id="agent-permission-mode"
+                          title="逐次确认：改动和命令先询问；Auto Mode：常规编辑和安全命令自动允许；完整权限：允许项目内工具，项目外仍需确认。配置从下一次请求或工具检查生效。"
+                          value={selectedSession?.permissionMode || "ask"}
+                          disabled={
+                            readOnlySession ||
+                            Boolean(busy) ||
+                            !snapshot ||
+                            uncertainHere
+                          }
+                          onChange={(event) => {
+                            if (readOnlySession) return;
+                            if (event.target.value === "full_access") {
+                              fullAccessTarget.current = sessionId;
+                              setConfirmFullAccess(true);
+                            } else
+                              void updateSessionConfig({
+                                permissionMode: event.target
+                                  .value as AgentPermissionMode,
+                              });
+                          }}
+                        >
+                          <option value="ask">逐次确认</option>
+                          <option value="auto">Auto Mode</option>
+                          <option value="full_access">完整权限</option>
+                          {selectedSession?.permissionMode &&
+                            !["ask", "auto", "full_access"].includes(
+                              selectedSession.permissionMode,
+                            ) && (
+                              <option value={selectedSession.permissionMode}>
+                                自定义权限
+                              </option>
+                            )}
+                        </select>
+                      </div>
+                    </AgentComposerOptions>
+                    <span className="wb-toolbar-spacer" />
+                    <AgentUsagePopover
+                      usage={snapshot?.usage}
+                      sessionId={sessionId}
+                      active={
+                        snapshot?.status === "running" ||
+                        snapshot?.titlePending ||
+                        snapshot?.compacting
+                      }
+                    />
+                    {!readOnlySession &&
+                      (runningHere ||
+                        queuedHere ||
+                        uncertainHere ||
+                        stoppingHere) && (
+                        <button
+                          type="button"
+                          className="wb-primary wb-stop-button"
+                          disabled={stoppingHere}
+                          onClick={() => void stop()}
+                        >
+                          <Square />
+                          {stoppingHere ? "停止中…" : "停止"}
+                        </button>
+                      )}
+                    <button
+                      type="submit"
+                      className={`wb-primary wb-send-button${sendingHere || replacingHere ? " wb-send-pending" : ""}`}
+                      disabled={sendDisabled}
+                      title={
+                        runningHere
+                          ? "停止当前任务，确认收尾后发送新消息"
+                          : "Enter 发送 · Shift + Enter 换行"
+                      }
+                    >
+                      {sendingHere || replacingHere ? (
+                        <LoaderCircle
+                          className="wb-send-spinner"
+                          size={20}
+                          aria-hidden="true"
+                        />
+                      ) : (
+                        <ArrowUp size={20} aria-hidden="true" />
+                      )}
+                      <span>
+                        {replacingHere
+                          ? "正在打断…"
+                          : sendingHere
+                            ? "正在发送…"
+                            : runningHere
+                              ? "打断并发送"
+                              : "发送"}
+                      </span>
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </>
+          )}
+        </MotionSurface>
       </main>
       {sessionId && previewSession === sessionId && previewPath !== null && (
         <AgentPaneResizeHandle {...paneLayout.previewHandleProps} />
@@ -3561,53 +3690,21 @@ export function AgentPage({
           onClose={() => setPreviewPath(null)}
         />
       )}
-      <AgentToolDraftsContext.Provider value={toolDrafts.current}>
-        <AgentOperationsPanel
-          open={operationsOpen}
-          onOpenChange={setOperationsOpen}
-          initialTab={operationsTab}
-          projectPath={workspace?.path}
-          catalog={catalog}
-          working={working}
-          onOpenProject={openProject}
-          onSession={(session) => {
-            if (
-              !mounted.current ||
-              workspaceRef.current?.path !== session.projectPath
-            )
-              return;
-            setSessions((old) => [
-              session,
-              ...old.filter((item) => item.id !== session.id),
-            ]);
-            setSessionId(session.id);
-            setRefresh((value) => value + 1);
-          }}
-          onCompose={(text) => {
-            if (key && !readOnlySession) {
-              writeDraft(
-                key,
-                `${draft}${draft && !draft.endsWith("\n") ? "\n" : ""}${text}\n`,
-              );
-              return;
-            }
-            if (!workspace || mutation.current) return;
-            const target = workspace.path;
-            const requestGeneration = generation.current;
-            mutation.current = true;
-            setBusy("create");
-            void agentApi
-              .createSession(
-                modelId || catalog.defaultModel || catalog.models[0]?.id || "",
-                "build",
-                undefined,
-                "ask",
-              )
-              .then((session) => {
+      <FullScreenPanelNavigationContext.Provider value={sidebarToggle}>
+        <FullScreenPanelHostContext.Provider value="agent-content-area">
+          <AgentToolDraftsContext.Provider value={toolDrafts.current}>
+            <AgentOperationsPanel
+              open={operationsOpen}
+              onOpenChange={setOperationsOpen}
+              initialTab={operationsTab}
+              projectPath={workspace?.path}
+              catalog={catalog}
+              working={working}
+              onOpenProject={openProject}
+              onSession={(session) => {
                 if (
                   !mounted.current ||
-                  generation.current !== requestGeneration ||
-                  workspaceRef.current?.path !== target
+                  workspaceRef.current?.path !== session.projectPath
                 )
                   return;
                 setSessions((old) => [
@@ -3615,53 +3712,92 @@ export function AgentPage({
                   ...old.filter((item) => item.id !== session.id),
                 ]);
                 setSessionId(session.id);
-                writeDraft(draftKey(target, session.id), `${text}\n`);
-              })
-              .catch((cause) => {
-                if (mounted.current) setError(agentErrorMessage(cause));
-              })
-              .finally(() => {
-                mutation.current = false;
-                if (mounted.current) setBusy(null);
-              });
-          }}
-        />
-        <AgentExtensionsPanel
-          open={extensionsOpen}
-          onOpenChange={setExtensionsOpen}
-          projectPath={workspace?.path}
-          initialTab={extensionsInitialTab}
-          working={working}
-          projectOpen={Boolean(workspace)}
-          onReload={async () => {
-            await refreshCatalog(true);
-          }}
-          onUseSkill={
-            key && !readOnlySession
-              ? (skill) => {
+                setRefresh((value) => value + 1);
+              }}
+              onCompose={(text) => {
+                if (key && !readOnlySession) {
                   writeDraft(
                     key,
-                    `${draft}${draft && !draft.endsWith("\n") ? "\n" : ""}请使用 ${skill.name} 技能完成这个任务。\n`,
+                    `${draft}${draft && !draft.endsWith("\n") ? "\n" : ""}${text}\n`,
                   );
-                  focusComposerOnReturn.current = true;
-                  setExtensionsOpen(false);
+                  return;
                 }
-              : undefined
-          }
-        />
-        <AgentToolPanel
-          open={activeTool === "memory"}
-          onClose={() => setActiveTool(null)}
-          title="记忆"
-          description="管理跨会话的用户偏好与项目约定，让 Agent 越用越了解你的工作方式。"
-          icon={Brain}
-          projectPath={workspace?.path}
-        >
-          {activeTool === "memory" && (
-            <AgentMemoryPanel embedded projectPath={workspace?.path} />
-          )}
-        </AgentToolPanel>
-      </AgentToolDraftsContext.Provider>
+                if (!workspace || mutation.current) return;
+                const target = workspace.path;
+                const requestGeneration = generation.current;
+                mutation.current = true;
+                setBusy("create");
+                void agentApi
+                  .createSession(
+                    modelId ||
+                      catalog.defaultModel ||
+                      catalog.models[0]?.id ||
+                      "",
+                    "build",
+                    undefined,
+                    "ask",
+                  )
+                  .then((session) => {
+                    if (
+                      !mounted.current ||
+                      generation.current !== requestGeneration ||
+                      workspaceRef.current?.path !== target
+                    )
+                      return;
+                    setSessions((old) => [
+                      session,
+                      ...old.filter((item) => item.id !== session.id),
+                    ]);
+                    setSessionId(session.id);
+                    writeDraft(draftKey(target, session.id), `${text}\n`);
+                  })
+                  .catch((cause) => {
+                    if (mounted.current) setError(agentErrorMessage(cause));
+                  })
+                  .finally(() => {
+                    mutation.current = false;
+                    if (mounted.current) setBusy(null);
+                  });
+              }}
+            />
+            <AgentExtensionsPanel
+              open={extensionsOpen}
+              onOpenChange={setExtensionsOpen}
+              projectPath={workspace?.path}
+              initialTab={extensionsInitialTab}
+              working={working}
+              projectOpen={Boolean(workspace)}
+              onReload={async () => {
+                await refreshCatalog(true);
+              }}
+              onUseSkill={
+                key && !readOnlySession
+                  ? (skill) => {
+                      writeDraft(
+                        key,
+                        `${draft}${draft && !draft.endsWith("\n") ? "\n" : ""}请使用 ${skill.name} 技能完成这个任务。\n`,
+                      );
+                      focusComposerOnReturn.current = true;
+                      setExtensionsOpen(false);
+                    }
+                  : undefined
+              }
+            />
+            <AgentToolPanel
+              open={activeTool === "memory"}
+              onClose={() => setActiveTool(null)}
+              title="记忆"
+              description="管理跨会话的用户偏好与项目约定，让 Agent 越用越了解你的工作方式。"
+              icon={Brain}
+              projectPath={workspace?.path}
+            >
+              {activeTool === "memory" && (
+                <AgentMemoryPanel embedded projectPath={workspace?.path} />
+              )}
+            </AgentToolPanel>
+          </AgentToolDraftsContext.Provider>
+        </FullScreenPanelHostContext.Provider>
+      </FullScreenPanelNavigationContext.Provider>
       <Dialog open={confirmFullAccess} onOpenChange={setConfirmFullAccess}>
         <DialogContent className="wb-extensions wb-permission-confirm p-5">
           <DialogHeader>

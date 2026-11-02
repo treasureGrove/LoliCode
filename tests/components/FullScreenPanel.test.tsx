@@ -1,6 +1,10 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { FullScreenPanel } from "@/components/common/FullScreenPanel";
+import {
+  FullScreenPanel,
+  FullScreenPanelHostContext,
+  FullScreenPanelNavigationContext,
+} from "@/components/common/FullScreenPanel";
 import { DRAG_REGION_ENABLED } from "@/lib/platform";
 
 const Panels = ({ innerOpen }: { innerOpen: boolean }) => (
@@ -57,9 +61,123 @@ describe("FullScreenPanel motion", () => {
     expect(surface).toHaveStyle({ transform: "translateX(28px)" });
     expect(surface).not.toHaveStyle({ opacity: "0" });
   });
+
+  it("keeps only the incoming controls interactive during a gentle panel switch", async () => {
+    const toggleSidebar = vi.fn();
+    const panels = (next: boolean) => (
+      <FullScreenPanelNavigationContext.Provider
+        value={<button onClick={toggleSidebar}>展开项目侧栏</button>}
+      >
+        <FullScreenPanel
+          isOpen={!next}
+          title="Plugins"
+          onClose={() => undefined}
+          motionPreset="fade"
+        >
+          <input aria-label="Plugin search" />
+        </FullScreenPanel>
+        <FullScreenPanel
+          isOpen={next}
+          title="Automation"
+          onClose={() => undefined}
+          motionPreset="fade"
+        >
+          <input aria-label="Workflow search" />
+        </FullScreenPanel>
+      </FullScreenPanelNavigationContext.Provider>
+    );
+    const view = render(panels(false));
+    const outgoing = screen.getByRole("region", { name: "Plugins" });
+    await waitFor(() => expect(outgoing).toHaveStyle({ opacity: "1" }));
+    view.rerender(panels(true));
+    const incoming = screen.getByRole("region", { name: "Automation" });
+    expect(outgoing.inert).toBe(true);
+    expect(outgoing).toHaveAttribute("aria-hidden", "true");
+    expect(incoming.inert).toBe(false);
+    expect(
+      screen.getAllByRole("button", { name: "展开项目侧栏" }),
+    ).toHaveLength(1);
+    const toggle = screen.getByRole("button", { name: "展开项目侧栏" });
+    toggle.focus();
+    expect(toggle).toHaveFocus();
+    fireEvent.click(toggle);
+    expect(toggleSidebar).toHaveBeenCalledOnce();
+    await waitFor(() =>
+      expect(screen.queryByLabelText("Plugin search")).toBeNull(),
+    );
+    expect(incoming.inert).toBe(false);
+  });
 });
 
 describe("FullScreenPanel interaction lifecycle", () => {
+  it("keeps embedded workspace navigation usable while covering only its chat surface", async () => {
+    const appHost = document.createElement("main");
+    appHost.id = "content-area";
+    const appPage = document.createElement("div");
+    appPage.className = "tai-page";
+    appPage.inert = false;
+    const navigation = document.createElement("nav");
+    navigation.setAttribute("aria-label", "Workspace navigation");
+    const trigger = document.createElement("button");
+    trigger.textContent = "Open automation";
+    navigation.append(trigger);
+    const chatHost = document.createElement("main");
+    chatHost.id = "agent-content-area";
+    const chatSurface = document.createElement("div");
+    chatSurface.setAttribute("data-panel-background", "");
+    chatSurface.inert = false;
+    chatHost.append(chatSurface);
+    appPage.append(navigation, chatHost);
+    appHost.append(appPage);
+    document.body.append(appHost);
+    trigger.focus();
+    const panel = (isOpen: boolean) => (
+      <FullScreenPanelHostContext.Provider value="agent-content-area">
+        <FullScreenPanelNavigationContext.Provider
+          value={<button>展开项目侧栏</button>}
+        >
+          <FullScreenPanel
+            isOpen={isOpen}
+            title="Automation"
+            onClose={() => undefined}
+            motionPreset="none"
+          >
+            <input aria-label="Automation name" />
+          </FullScreenPanel>
+        </FullScreenPanelNavigationContext.Provider>
+      </FullScreenPanelHostContext.Provider>
+    );
+    const view = render(panel(true));
+    try {
+      const surface = screen.getByRole("region", { name: "Automation" });
+      expect(surface.parentElement).toBe(chatHost);
+      expect(surface).toHaveClass("absolute");
+      expect(chatSurface.inert).toBe(true);
+      expect(appPage.inert).toBe(false);
+      expect(navigation.closest("[inert]")).toBeNull();
+      expect(surface).toHaveFocus();
+      const restoreNavigation = screen.getByRole("button", {
+        name: "展开项目侧栏",
+      });
+      expect(surface).toContainElement(restoreNavigation);
+      restoreNavigation.focus();
+      expect(restoreNavigation).toHaveFocus();
+      expect(restoreNavigation.closest("[inert]")).toBeNull();
+      trigger.focus();
+      expect(trigger).toHaveFocus();
+      surface.focus();
+      view.rerender(panel(false));
+      await waitFor(() =>
+        expect(screen.queryByLabelText("Automation name")).toBeNull(),
+      );
+      expect(chatSurface.inert).toBe(false);
+      expect(trigger).toHaveFocus();
+    } finally {
+      view.unmount();
+      appHost.remove();
+    }
+  });
+
   it("preserves the existing input Escape behavior unless the editor opts in", () => {
     const close = vi.fn();
     render(

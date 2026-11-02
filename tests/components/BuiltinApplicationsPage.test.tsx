@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -54,20 +54,32 @@ describe("built-in application lifecycle", () => {
   it("adds before opening, removes without deleting domain data and reloads persisted state", async () => {
     const user = userEvent.setup();
     const first = mount();
+    const card = screen.getByRole("article", {
+      name: "applications.tavern.title",
+    });
+    expect(
+      screen.getByRole("heading", { name: "applications.libraryTitle" }),
+    ).toBeInTheDocument();
     await waitFor(() =>
       expect(
-        screen.getAllByRole("button", { name: /applications.add/ })[0],
+        within(card).getByRole("button", { name: "applications.add" }),
       ).toBeEnabled(),
     );
+    expect(
+      within(card).getByText("applications.available"),
+    ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "applications.open" }),
     ).not.toBeInTheDocument();
     await user.click(
-      screen.getAllByRole("button", { name: /applications.add/ })[0],
+      within(card).getByRole("button", { name: "applications.add" }),
     );
-    await user.click(
-      await screen.findByRole("button", { name: "applications.open" }),
-    );
+    const open = await within(card).findByRole("button", {
+      name: "applications.open",
+    });
+    expect(within(card).getByText("applications.enabled")).toBeInTheDocument();
+    expect(first.onOpen).not.toHaveBeenCalled();
+    await user.click(open);
     expect(first.onOpen).toHaveBeenCalledWith("tavern");
     first.unmount();
     mount();

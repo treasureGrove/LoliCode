@@ -8,7 +8,7 @@
   padding: 3px;
   border: 1px solid transparent;
   border-radius: 14px;
-  color: #e0ced8;
+  color: var(--text-2);
   background: transparent;
   transition:
     background-color 150ms ease,
@@ -16,11 +16,11 @@
 }
 .tai-shell-quota-button:hover,
 .tai-shell-quota-button[data-state="open"] {
-  background: rgb(200 171 130 / 10%);
-  border-color: rgb(200 171 130 / 20%);
+  background: var(--bg-subtle);
+  border-color: hsl(var(--border));
 }
 .tai-shell-quota-button:focus-visible {
-  outline: 2px solid #e0ced8;
+  outline: 2px solid hsl(var(--ring));
   outline-offset: 2px;
 }
 .tai-shell-quota-button svg {
@@ -46,10 +46,10 @@
   opacity: 0.55;
 }
 .tai-shell-quota-button[data-tone="low"] {
-  color: #e7ba88;
+  color: var(--warning-text, #805e2e);
 }
 .tai-shell-quota-button[data-tone="empty"] {
-  color: #e1a0a5;
+  color: var(--danger-text, #a83851);
 }
 .tai-shell-quota-button[data-tone="unknown"] .tai-shell-quota-track {
   stroke-dasharray: 3 3;

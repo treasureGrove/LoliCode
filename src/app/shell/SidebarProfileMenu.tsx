@@ -41,6 +41,7 @@ import { MobileCompanionDialog } from "./MobileCompanionDialog";
 import { SidebarQuotaRing } from "./SidebarQuotaRing";
 
 export interface SidebarProfileMenuProps {
+  expanded?: boolean;
   onOpenSettings: () => void;
   onOpenUpdates: () => void;
   hasUpdate?: boolean;
@@ -75,6 +76,7 @@ function AccountAvatar({ account }: { account: LolicodeAccount | null }) {
 
 /** One forum identity also unlocks the sponsored model allowance. */
 export function SidebarProfileMenu({
+  expanded = false,
   onOpenSettings,
   onOpenUpdates,
   hasUpdate = false,
@@ -163,6 +165,18 @@ export function SidebarProfileMenu({
             title={account ? `${account.displayName} · LoliCode` : profileLabel}
           >
             <AccountAvatar key={avatarKey} account={account} />
+            {expanded && (
+              <span className="tai-shell-profile-copy" aria-hidden="true">
+                <strong>
+                  {account?.displayName ||
+                    account?.username ||
+                    (identity.isLoading
+                      ? text("正在加载…", "Loading…")
+                      : text("未登录", "Not signed in"))}
+                </strong>
+                <small>{text("账户与设置", "Account & settings")}</small>
+              </span>
+            )}
             <span id={identityId} className="sr-only">
               {identityLabel}
             </span>

@@ -96,15 +96,20 @@ export function ResourcePackProvider({ children }: { children: ReactNode }) {
   }, [query.data, client]);
 
   useEffect(() => {
+    const root = document.documentElement;
+    // Existing resource packs contain a complete raster frame with legacy cuts.
+    // Keep those cuts separate from the bundled, square nine-slice frame.
     for (const [slot, variable] of Object.entries(cssSlots)) {
       const src = assets[slot as keyof typeof cssSlots];
-      if (src)
-        document.documentElement.style.setProperty(variable, `url("${src}")`);
-      else document.documentElement.style.removeProperty(variable);
+      root.toggleAttribute(`data-resource-${slot}`, Boolean(src));
+      if (src) root.style.setProperty(variable, `url("${src}")`);
+      else root.style.removeProperty(variable);
     }
     return () => {
-      for (const variable of Object.values(cssSlots))
-        document.documentElement.style.removeProperty(variable);
+      for (const [slot, variable] of Object.entries(cssSlots)) {
+        root.removeAttribute(`data-resource-${slot}`);
+        root.style.removeProperty(variable);
+      }
     };
   }, [assets]);
 

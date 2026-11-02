@@ -3,11 +3,13 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import {
   BookHeart,
+  ArrowUpRight,
   Boxes,
   ChartNoAxesCombined,
   Gift,
   LoaderCircle,
-  Plus,
+  Check,
+  Power,
 } from "lucide-react";
 import { AppPageHeader } from "@/app/shell/AppPageHeader";
 import { Button } from "@/components/ui/button";
@@ -19,6 +21,14 @@ import {
   type BuiltinAppId,
 } from "@/lib/api/builtin-apps";
 import { toast } from "@/lib/toast";
+import "./builtin-applications.css";
+
+const APP_ICONS = {
+  tavern: BookHeart,
+  unreal: Boxes,
+  rankings: ChartNoAxesCombined,
+  "free-ai": Gift,
+};
 
 export function BuiltinApplicationsPage({
   onOpen,
@@ -50,7 +60,7 @@ export function BuiltinApplicationsPage({
       />
       <div
         id="main-content"
-        className="min-h-0 flex-1 overflow-y-auto px-8 py-6"
+        className="builtin-apps-content min-h-0 flex-1 overflow-y-auto"
       >
         {apps.isPending && (
           <LoaderCircle
@@ -66,65 +76,89 @@ export function BuiltinApplicationsPage({
             </Button>
           </div>
         )}
-        <div className="mx-auto grid max-w-4xl gap-5 md:grid-cols-2">
-          {BUILTIN_APP_IDS.map((id) => {
-            const enabled =
-              apps.data?.find((item) => item.id === id)?.enabled === true;
-            const Icon = {
-              tavern: BookHeart,
-              unreal: Boxes,
-              rankings: ChartNoAxesCombined,
-              "free-ai": Gift,
-            }[id];
-            return (
-              <article
-                key={id}
-                className="flex flex-col gap-4 rounded-2xl border border-border bg-surface/90 p-6 shadow-sm"
-              >
-                <Icon className="h-8 w-8 text-action-text" />
-                <h2 className="text-lg font-semibold">
-                  {t(`applications.${id}.title`)}
-                </h2>
-                <p className="flex-1 text-sm leading-relaxed text-fg-2">
-                  {t(`applications.${id}.description`)}
-                </p>
-                <div className="flex items-center gap-2">
-                  {enabled ? (
-                    <>
-                      <Button onClick={() => onOpen(id)}>
-                        {t("applications.open")}
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        disabled={pending !== null}
-                        onClick={() => void toggle(id, false)}
+        <div className="builtin-apps-library">
+          <div className="builtin-apps-heading">
+            <h2>{t("applications.libraryTitle")}</h2>
+            <span>
+              {t("applications.appCount", { count: BUILTIN_APP_IDS.length })}
+            </span>
+          </div>
+          <div className="builtin-apps-grid">
+            {BUILTIN_APP_IDS.map((id) => {
+              const enabled =
+                apps.data?.find((item) => item.id === id)?.enabled === true;
+              const Icon = APP_ICONS[id];
+              return (
+                <article
+                  key={id}
+                  className="builtin-app-card"
+                  data-app={id}
+                  aria-labelledby={`builtin-app-${id}`}
+                >
+                  <div className="builtin-app-card-top">
+                    <span className="builtin-app-icon" aria-hidden="true">
+                      <Icon />
+                    </span>
+                    {apps.data && (
+                      <span
+                        className="builtin-app-status"
+                        data-enabled={enabled}
                       >
-                        {t("applications.remove")}
+                        {enabled && <Check size={12} aria-hidden="true" />}
+                        {t(
+                          enabled
+                            ? "applications.enabled"
+                            : "applications.available",
+                        )}
+                      </span>
+                    )}
+                  </div>
+                  <h3 id={`builtin-app-${id}`}>
+                    {t(`applications.${id}.title`)}
+                  </h3>
+                  <p className="builtin-app-description">
+                    {t(`applications.${id}.description`)}
+                  </p>
+                  <div className="builtin-app-actions">
+                    {enabled ? (
+                      <>
+                        <Button type="button" onClick={() => onOpen(id)}>
+                          {t("applications.open")}
+                          <ArrowUpRight size={14} aria-hidden="true" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          disabled={pending !== null}
+                          onClick={() => void toggle(id, false)}
+                        >
+                          {t("applications.remove")}
+                        </Button>
+                      </>
+                    ) : (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={!apps.data || pending !== null}
+                        onClick={() => void toggle(id, true)}
+                      >
+                        <Power size={14} aria-hidden="true" />
+                        {t("applications.add")}
                       </Button>
-                    </>
-                  ) : (
-                    <Button
-                      disabled={!apps.data || pending !== null}
-                      onClick={() => void toggle(id, true)}
-                    >
-                      <Plus className="h-4 w-4" />
-                      {t("applications.add")}
-                    </Button>
-                  )}
-                  {pending === id && (
-                    <LoaderCircle
-                      className="h-4 w-4 animate-spin"
-                      aria-label={t("applications.saving")}
-                    />
-                  )}
-                </div>
-              </article>
-            );
-          })}
+                    )}
+                    {pending === id && (
+                      <LoaderCircle
+                        className="h-4 w-4 animate-spin"
+                        aria-label={t("applications.saving")}
+                      />
+                    )}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+          <p className="builtin-apps-note">{t("applications.retained")}</p>
         </div>
-        <p className="mx-auto mt-6 max-w-4xl text-sm text-fg-3">
-          {t("applications.retained")}
-        </p>
       </div>
     </>
   );

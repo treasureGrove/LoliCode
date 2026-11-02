@@ -1,5 +1,20 @@
 @import "./atelier-workbench.css";
 
+.tai-shell-more-menu {
+  min-width: 220px;
+}
+.tai-shell-more-menu [aria-current="page"] {
+  background: var(--bg-subtle);
+  color: var(--text-1);
+}
+.tai-shell-menu-notice {
+  width: 6px;
+  height: 6px;
+  margin-inline-start: auto;
+  border-radius: 50%;
+  background: var(--success, #54a58c);
+}
+
 /* Cherry Atelier: the shared palette also reaches Radix portals outside the shell. */
 :root {
   color-scheme: light;

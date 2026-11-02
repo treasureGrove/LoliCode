@@ -4,8 +4,9 @@ import { FullScreenPanel } from "@/components/common/FullScreenPanel";
 import "./agent-tool-panels.css";
 
 export type AgentTool = "skills" | "workflows" | "memory";
+export type AgentToolTab = "plugins" | "automation";
 
-/** A workspace tool replaces the content surface while keeping the global rail usable. */
+/** A workspace tool replaces the chat surface while keeping its navigation usable. */
 export function AgentToolPanel({
   open,
   onClose,
@@ -37,7 +38,7 @@ export function AgentToolPanel({
       backLabel="返回工作台"
       onClose={onClose}
       actions={actions}
-      motionPreset="none"
+      motionPreset="fade"
       contentClassName="wb-tool-panel-content space-y-0 p-0"
     >
       <div className="wb-extensions wb-tool-panel">

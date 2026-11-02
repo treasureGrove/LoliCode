@@ -46,6 +46,15 @@ const updated: ResourcePack = {
   },
   warning: null,
 };
+const sidebarPack: ResourcePack = {
+  ...updated,
+  id: "legacy-sidebar-id",
+  pendingConfirmation: false,
+  assets: {
+    ...updated.assets,
+    sidebar: "data:image/png;base64,cw==",
+  },
+};
 const decode = vi.fn();
 function Companion() {
   return (
@@ -82,7 +91,9 @@ beforeEach(() => {
       src = "";
       naturalWidth = 1;
       naturalHeight = 1;
-      decode = decode;
+      decode() {
+        return decode(this.src);
+      }
     },
   );
 });
@@ -168,6 +179,123 @@ describe("local-first signed resource activation", () => {
       "src",
       "bundled.png",
     );
+    view.unmount();
+  });
+
+  it("enables legacy sidebar cuts only after the frame decodes and clears them on unmount", async () => {
+    const view = mount();
+    await waitFor(() => expect(resourceUpdatesApi.local).toHaveBeenCalled());
+    let finish!: () => void;
+    decode.mockImplementation((src: string) =>
+      src === sidebarPack.assets.sidebar
+        ? new Promise<void>((resolve) => (finish = resolve))
+        : Promise.resolve(),
+    );
+    await act(async () => {
+      view.client.setQueryData(resourcePackKey, sidebarPack);
+    });
+    // Query observers are notified asynchronously; verify the decoder is
+    // actually waiting before checking that legacy frame cuts remain disabled.
+    await waitFor(() =>
+      expect(decode).toHaveBeenCalledWith(sidebarPack.assets.sidebar),
+    );
+    expect(document.documentElement).not.toHaveAttribute(
+      "data-resource-sidebar",
+    );
+    expect(
+      document.documentElement.style.getPropertyValue("--atelier-sidebar"),
+    ).toBe("");
+    await act(async () => finish());
+    await waitFor(() =>
+      expect(document.documentElement).toHaveAttribute("data-resource-sidebar"),
+    );
+    expect(
+      document.documentElement.style.getPropertyValue("--atelier-sidebar"),
+    ).toContain(sidebarPack.assets.sidebar);
+    view.unmount();
+    expect(document.documentElement).not.toHaveAttribute(
+      "data-resource-sidebar",
+    );
+    expect(
+      document.documentElement.style.getPropertyValue("--atelier-sidebar"),
+    ).toBe("");
+  });
+
+  it("restores bundled frame geometry for packs without a sidebar and for bundled fallback", async () => {
+    vi.mocked(resourceUpdatesApi.local).mockResolvedValue(sidebarPack);
+    const view = mount();
+    await waitFor(() =>
+      expect(document.documentElement).toHaveAttribute("data-resource-sidebar"),
+    );
+    await act(async () => {
+      view.client.setQueryData(resourcePackKey, {
+        ...updated,
+        pendingConfirmation: false,
+      });
+    });
+    await waitFor(() =>
+      expect(document.documentElement).not.toHaveAttribute(
+        "data-resource-sidebar",
+      ),
+    );
+    expect(
+      document.documentElement.style.getPropertyValue("--atelier-sidebar"),
+    ).toBe("");
+    expect(screen.getByAltText("companion")).toHaveAttribute(
+      "src",
+      updated.assets.companion,
+    );
+    await act(async () => {
+      view.client.setQueryData(resourcePackKey, sidebarPack);
+    });
+    await waitFor(() =>
+      expect(document.documentElement).toHaveAttribute("data-resource-sidebar"),
+    );
+    await act(async () => {
+      view.client.setQueryData(resourcePackKey, bundled);
+    });
+    await waitFor(() =>
+      expect(document.documentElement).not.toHaveAttribute(
+        "data-resource-sidebar",
+      ),
+    );
+    expect(
+      document.documentElement.style.getPropertyValue("--atelier-sidebar"),
+    ).toBe("");
+    expect(screen.getByAltText("companion")).toHaveAttribute(
+      "src",
+      "bundled.png",
+    );
+    view.unmount();
+  });
+
+  it("removes legacy frame geometry when a replacement pack fails validation", async () => {
+    vi.mocked(resourceUpdatesApi.local).mockResolvedValue(sidebarPack);
+    const view = mount();
+    await waitFor(() =>
+      expect(document.documentElement).toHaveAttribute("data-resource-sidebar"),
+    );
+    decode.mockRejectedValueOnce(new Error("replacement frame cannot decode"));
+    const replacement = {
+      ...sidebarPack,
+      id: "invalid-replacement",
+      pendingConfirmation: true,
+    };
+    await act(async () => {
+      view.client.setQueryData(resourcePackKey, replacement);
+    });
+    await waitFor(() =>
+      expect(resourceUpdatesApi.rollback).toHaveBeenCalledWith(replacement.id),
+    );
+    await waitFor(() =>
+      expect(document.documentElement).not.toHaveAttribute(
+        "data-resource-sidebar",
+      ),
+    );
+    expect(
+      document.documentElement.style.getPropertyValue("--atelier-sidebar"),
+    ).toBe("");
+    expect(resourceUpdatesApi.confirm).not.toHaveBeenCalled();
     view.unmount();
   });
 });

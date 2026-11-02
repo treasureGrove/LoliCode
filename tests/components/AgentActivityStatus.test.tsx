@@ -32,6 +32,30 @@ const snapshot = (
 });
 
 describe("AgentActivityStatus", () => {
+  it("can omit idle status without hiding activity or failures", () => {
+    const props = {
+      queued: false,
+      stopping: false,
+      loading: false,
+      hideIdle: true,
+    };
+    const view = render(
+      <AgentActivityStatus snapshot={snapshot("idle")} {...props} />,
+    );
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    view.rerender(
+      <AgentActivityStatus snapshot={snapshot("running")} {...props} />,
+    );
+    expect(screen.getByRole("status")).toHaveTextContent("正在执行…");
+    view.rerender(
+      <AgentActivityStatus snapshot={snapshot("error")} {...props} />,
+    );
+    expect(screen.getByRole("status")).toHaveTextContent("执行遇到问题");
+    view.rerender(
+      <AgentActivityStatus snapshot={snapshot("idle")} {...props} queued />,
+    );
+    expect(screen.getByRole("status")).toHaveTextContent("已发送，等待开始…");
+  });
   it("shows waiting for the first model token only for the current unfinished placeholder", () => {
     const value = snapshot("running", [
       message([{ type: "text", text: "上一请求已完成" }], 3),

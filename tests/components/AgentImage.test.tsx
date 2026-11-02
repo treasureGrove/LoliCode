@@ -104,7 +104,7 @@ describe("generated agent image previews", () => {
     "does not turn an unsupported image target into active content: %s",
     (src) => {
       const view = reply(`![图片](${src})`);
-      expect(view.container.querySelector("img")).toBeNull();
+      expect(view.container.querySelector(".wb-chat-bubble img")).toBeNull();
       expect(invoke).not.toHaveBeenCalled();
     },
   );

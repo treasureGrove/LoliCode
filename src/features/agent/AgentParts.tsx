@@ -21,6 +21,10 @@ import { AgentImage } from "./AgentImage";
 import { AgentAttachmentImage } from "./AgentAttachmentImage";
 import { AgentDisclosure, type AgentDisclosureState } from "./AgentDisclosure";
 import { isAgentCancellation } from "./AgentRunError";
+import {
+  AgentMessageFrame,
+  type AgentMessageIdentity,
+} from "./AgentMessageFrame";
 
 const TOOL_NAMES: Record<string, string> = {
   read: "读取文件",
@@ -295,33 +299,17 @@ export const AgentMessageView = memo(function AgentMessageView({
   sessionId,
   imageAttachments,
   documentAttachments,
+  userIdentity,
 }: {
   message: AgentMessage;
   projectPath: string;
   sessionId?: string;
   imageAttachments?: AgentImageAttachment[];
   documentAttachments?: AgentDocumentAttachment[];
+  userIdentity?: AgentMessageIdentity;
 }) {
   return (
-    <article
-      aria-label={
-        message.role === "user"
-          ? "你的消息"
-          : message.role === "assistant"
-            ? "Agent 回复"
-            : "系统消息"
-      }
-      className={cn(
-        "min-w-0",
-        message.role === "user" && "wb-message-user",
-        message.role === "assistant" && "wb-message-assistant",
-      )}
-    >
-      {message.role !== "assistant" && (
-        <p className="wb-message-meta">
-          {message.role === "user" ? "你" : "系统"}
-        </p>
-      )}
+    <AgentMessageFrame role={message.role} identity={userIdentity}>
       {agentMessageParts(message).map(({ part, key }) =>
         part.type === "tool" ? (
           <AgentToolPart key={key} part={part} />
@@ -358,6 +346,6 @@ export const AgentMessageView = memo(function AgentMessageView({
           ))}
         </div>
       ) : null}
-    </article>
+    </AgentMessageFrame>
   );
 });

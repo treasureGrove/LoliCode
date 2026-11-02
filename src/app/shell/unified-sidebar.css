@@ -1,0 +1,780 @@
+.lolicode-unified-sidebar {
+  --sidebar-surface: var(--bg-sidebar);
+  --sidebar-foreground: var(--text-1);
+  --sidebar-line: hsl(var(--border));
+  --sidebar-accent: var(--action-text);
+  --sidebar-muted: var(--text-3);
+  --sidebar-selected: var(--action-soft);
+  --sidebar-hover: var(--bg-subtle);
+  --wb-sidebar: var(--sidebar-surface);
+  --wb-input: var(--bg-card);
+  --wb-text: var(--sidebar-foreground);
+  --wb-muted: var(--sidebar-muted);
+  --wb-border: var(--sidebar-line);
+  --wb-hover: var(--sidebar-hover);
+  --wb-selected: var(--sidebar-selected);
+  --wb-selected-text: var(--sidebar-accent);
+  --wb-selected-muted: var(--sidebar-muted);
+  --wb-selected-ring: var(--sidebar-accent);
+  --wb-selected-hover: var(--sidebar-hover);
+  --wb-section-text: var(--sidebar-muted);
+  --wb-accent: var(--sidebar-accent);
+  --wb-accent-soft: var(--sidebar-selected);
+  container: lolicode-sidebar / inline-size;
+  display: flex;
+  flex: 0 0 248px;
+  flex-direction: column;
+  width: 248px;
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
+  padding: 0 16px;
+  border-inline-end: 1px solid var(--sidebar-line);
+  background: var(--sidebar-surface);
+  color: var(--text-1);
+  font-size: var(--workspace-label);
+}
+
+.lolicode-unified-sidebar[data-embedded="true"] {
+  flex: 1 1 auto;
+  width: 100%;
+  border: 0;
+}
+
+.lolicode-unified-sidebar :focus-visible {
+  outline: 2px solid var(--sidebar-accent);
+  outline-offset: 2px;
+}
+
+.lolicode-sidebar-brand {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  min-height: 66px;
+  gap: 8px;
+  padding-inline: 6px 0;
+}
+
+.lolicode-sidebar-brand.is-mac {
+  padding-top: 26px;
+  min-height: 88px;
+}
+
+.lolicode-sidebar-wordmark {
+  overflow: hidden;
+  display: inline-flex;
+  align-items: baseline;
+  color: var(--sidebar-accent);
+  font-family: "Segoe UI Variable Display", "Segoe UI", sans-serif;
+  font-size: 27px;
+  font-weight: 500;
+  letter-spacing: -1.1px;
+  line-height: 1.2;
+}
+
+.lolicode-sidebar-icon-button {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  color: var(--sidebar-accent);
+  background: transparent;
+  transition:
+    color var(--motion-fast, 160ms) var(--motion-ease, ease),
+    background-color var(--motion-fast, 160ms) var(--motion-ease, ease),
+    transform var(--motion-fast, 160ms) var(--motion-ease, ease);
+}
+
+.lolicode-sidebar-icon-button > svg {
+  width: 18px;
+  height: 18px;
+  stroke-width: 1.7;
+}
+
+.lolicode-sidebar-icon-button:hover,
+.lolicode-sidebar-icon-button[data-state="open"] {
+  color: var(--text-1);
+  background: var(--sidebar-selected);
+}
+
+.lolicode-sidebar-icon-button[data-selected="true"] {
+  color: var(--sidebar-accent);
+}
+
+.lolicode-sidebar-icon-button:active {
+  transform: scale(0.94);
+}
+
+.lolicode-sidebar-segments {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  flex-shrink: 0;
+  gap: 3px;
+  padding: 4px;
+  border: 0;
+  border-radius: 15px;
+  background: color-mix(in srgb, var(--action-bg) 13%, var(--sidebar-surface));
+}
+
+.lolicode-unified-sidebar .lolicode-sidebar-nav-item {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  padding: 8px 11px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-2);
+  text-align: start;
+  font-size: var(--workspace-label);
+  font-weight: 500;
+  line-height: 1.4;
+  transition:
+    color var(--motion-fast, 160ms) var(--motion-ease, ease),
+    background-color var(--motion-fast, 160ms) var(--motion-ease, ease),
+    transform var(--motion-fast, 160ms) var(--motion-ease, ease);
+}
+
+.lolicode-sidebar-nav-item:active:not(:disabled) {
+  transform: scale(0.975);
+}
+
+.lolicode-sidebar-nav-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lolicode-sidebar-nav-item:hover:not(:disabled) {
+  color: var(--text-1);
+  background: color-mix(in srgb, var(--text-1) 5%, transparent);
+}
+
+.lolicode-sidebar-nav-item[aria-current="page"] {
+  color: var(--sidebar-accent);
+  background: transparent;
+}
+
+.lolicode-sidebar-selection {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--sidebar-selected);
+  pointer-events: none;
+}
+
+.lolicode-sidebar-nav-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.lolicode-sidebar-nav-icon {
+  flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
+  stroke-width: 1.8;
+  color: var(--sidebar-accent);
+}
+
+.lolicode-sidebar-segments .lolicode-sidebar-nav-item {
+  justify-content: center;
+  min-height: 35px;
+  gap: 8px;
+  padding: 6px;
+  border-radius: 11px;
+}
+
+.lolicode-sidebar-segments .lolicode-sidebar-nav-item[aria-current="page"] {
+  color: var(--action-fg);
+  background: transparent;
+}
+
+.lolicode-sidebar-segments .lolicode-sidebar-selection {
+  background: var(--action-bg);
+  box-shadow: 0 2px 5px rgb(98 50 69 / 13%);
+}
+
+.lolicode-sidebar-status,
+.lolicode-sidebar-notice {
+  flex: 0 0 5px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--sidebar-accent);
+}
+
+.lolicode-sidebar-status.is-alert {
+  background: var(--warning, #bd8b4e);
+}
+
+.lolicode-sidebar-notice {
+  position: absolute;
+  top: 5px;
+  right: 4px;
+}
+
+.lolicode-sidebar-actions {
+  flex-shrink: 0;
+  margin-top: 14px;
+}
+
+.lolicode-sidebar-new-chat {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  width: 100%;
+  min-height: 42px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--sidebar-accent);
+  font-size: var(--workspace-label);
+  font-weight: 500;
+  transition:
+    border-color var(--motion-fast, 160ms) var(--motion-ease, ease),
+    background-color var(--motion-fast, 160ms) var(--motion-ease, ease),
+    transform var(--motion-fast, 160ms) var(--motion-ease, ease);
+}
+
+.lolicode-sidebar-new-chat:active {
+  transform: scale(0.98);
+}
+
+.lolicode-sidebar-new-chat:hover {
+  background: var(--sidebar-selected);
+}
+
+.lolicode-sidebar-new-chat > svg {
+  width: 16px;
+  height: 16px;
+}
+
+.lolicode-sidebar-shortcuts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  flex-shrink: 0;
+  gap: 4px;
+  margin-top: 8px;
+  padding-block: 8px;
+  border-top: 1px solid var(--sidebar-line);
+}
+
+.lolicode-sidebar-shortcuts .lolicode-sidebar-nav-item {
+  justify-content: center;
+  min-height: 38px;
+  gap: 7px;
+  padding: 7px 5px;
+  font-size: var(--workspace-caption);
+}
+
+.lolicode-sidebar-shortcuts .lolicode-sidebar-nav-icon {
+  flex-basis: 18px;
+  width: 18px;
+  height: 18px;
+  color: inherit;
+}
+
+.lolicode-sidebar-workspaces {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  margin-top: 16px;
+  overflow: hidden;
+}
+
+.lolicode-sidebar-footer {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 5px;
+  min-height: 68px;
+  margin-top: 0;
+  padding: 10px 0;
+  border-top: 1px solid var(--sidebar-line);
+}
+
+.lolicode-sidebar-account {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  gap: 2px;
+}
+
+.lolicode-sidebar-account .tai-shell-profile {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  order: 0;
+  flex: 1;
+  gap: 9px;
+  width: auto;
+  min-width: 0;
+  height: 44px;
+  margin: 0;
+  padding: 4px;
+  border-radius: 9px;
+}
+
+.lolicode-sidebar-account .tai-shell-profile:hover,
+.lolicode-sidebar-account .tai-shell-profile[data-state="open"],
+.lolicode-sidebar-account .tai-shell-profile[data-selected="true"] {
+  border-color: transparent;
+  background: var(--sidebar-selected);
+}
+
+.lolicode-sidebar-account .tai-shell-profile-picture {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-color: color-mix(in srgb, var(--sidebar-accent) 20%, transparent);
+  background: var(--sidebar-selected);
+  color: var(--sidebar-accent);
+  font-size: var(--workspace-label);
+}
+
+.lolicode-sidebar-account .tai-shell-profile-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  text-align: start;
+}
+
+.lolicode-sidebar-account .tai-shell-profile-copy strong,
+.lolicode-sidebar-account .tai-shell-profile-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lolicode-sidebar-account .tai-shell-profile-copy strong {
+  color: var(--text-1);
+  font-size: var(--workspace-label);
+  font-weight: 500;
+}
+
+.lolicode-sidebar-account .tai-shell-profile-copy small {
+  color: var(--text-3);
+  font-size: var(--workspace-caption);
+}
+
+.lolicode-sidebar-account .tai-shell-profile-notice {
+  top: 4px;
+  left: 27px;
+  right: auto;
+  width: 5px;
+  height: 5px;
+  background: var(--sidebar-accent);
+  border-color: var(--sidebar-surface);
+}
+
+.lolicode-sidebar-account .tai-shell-quota-button {
+  order: 1;
+  width: 27px;
+  height: 32px;
+  margin: 0;
+  padding: 1px;
+  border-radius: 8px;
+  color: var(--text-2);
+}
+
+.lolicode-sidebar-account
+  .tai-shell-quota-button:is(:hover, [data-state="open"]) {
+  border-color: var(--sidebar-line);
+}
+
+.lolicode-sidebar-account .tai-shell-quota-button[data-tone="low"] {
+  color: var(--warning-text, #805e2e);
+}
+
+.lolicode-sidebar-account .tai-shell-quota-button[data-tone="empty"] {
+  color: var(--danger-text, #a83851);
+}
+
+.lolicode-sidebar-account .tai-shell-quota-button svg {
+  width: 24px;
+  height: 24px;
+}
+
+.lolicode-sidebar-menu-detail {
+  margin-inline-start: auto;
+  color: var(--text-3);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.lolicode-sidebar-settings {
+  flex: 1;
+  min-height: 0;
+  padding-top: 4px;
+  overflow-y: auto;
+}
+
+.lolicode-sidebar-settings-items {
+  display: grid;
+  gap: 5px;
+}
+
+.lolicode-sidebar-divider {
+  height: 1px;
+  margin: 14px 0;
+  background: var(--sidebar-line);
+}
+
+@container lolicode-sidebar (max-width: 180px) {
+  .lolicode-sidebar-segments .lolicode-sidebar-nav-item {
+    gap: 3px;
+    padding-inline: 3px;
+  }
+  .lolicode-sidebar-segments .lolicode-sidebar-nav-icon {
+    display: none;
+  }
+  .lolicode-sidebar-brand {
+    gap: 4px;
+    padding-inline: 0;
+  }
+  .lolicode-sidebar-wordmark {
+    font-size: 20px;
+  }
+  .lolicode-sidebar-account .tai-shell-profile-copy,
+  .lolicode-sidebar-shortcuts .lolicode-sidebar-nav-label {
+    display: none;
+  }
+
+  :root
+    .lolicode-workbench.wb-unified
+    .wb-sidebar
+    .lolicode-unified-sidebar
+    .wb-create-task
+    > .wb-nav-create {
+    gap: 6px;
+    padding-inline: 8px;
+  }
+
+  :root
+    .lolicode-workbench.wb-unified
+    .wb-sidebar
+    .lolicode-unified-sidebar
+    .wb-create-task-options {
+    flex-basis: 28px;
+  }
+}
+
+@media (max-height: 620px) {
+  .lolicode-sidebar-brand {
+    min-height: 58px;
+  }
+  .lolicode-sidebar-brand.is-mac {
+    min-height: 84px;
+  }
+  .lolicode-sidebar-actions {
+    margin-top: 12px;
+  }
+  .lolicode-sidebar-workspaces {
+    margin-top: 14px;
+  }
+  .lolicode-sidebar-footer {
+    min-height: 64px;
+    padding-block: 8px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lolicode-unified-sidebar button {
+    transition: none;
+  }
+  .lolicode-sidebar-icon-button:active,
+  .lolicode-sidebar-nav-item:active:not(:disabled),
+  .lolicode-sidebar-new-chat:active {
+    transform: none;
+  }
+}
+
+.lolicode-sidebar-wordmark > span {
+  font-weight: 350;
+}
+.lolicode-sidebar-wordmark > i {
+  width: 5px;
+  height: 5px;
+  margin-left: 3px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.lolicode-sidebar-segments .lolicode-sidebar-nav-icon {
+  color: inherit;
+}
+.lolicode-sidebar-segments
+  .lolicode-sidebar-nav-item:not([aria-current="page"]) {
+  color: var(--sidebar-accent);
+}
+.lolicode-unified-sidebar .lolicode-sidebar-new-chat {
+  font-size: var(--workspace-label);
+  font-weight: 500;
+}
+.lolicode-sidebar-new-chat > svg {
+  width: 20px;
+  height: 20px;
+  stroke-width: 1.8;
+}
+
+/* Keep workspace slots on the same surface despite legacy workbench rules. */
+:root
+  .lolicode-workbench.wb-unified
+  .wb-sidebar
+  .lolicode-unified-sidebar
+  .wb-create-task {
+  overflow: hidden;
+  border-radius: 8px;
+  color: var(--sidebar-accent);
+  background: transparent;
+}
+
+:root
+  .lolicode-workbench.wb-unified
+  .wb-sidebar
+  .lolicode-unified-sidebar
+  .wb-create-task
+  > button {
+  border-radius: 0;
+  color: inherit;
+  background: transparent;
+}
+
+:root
+  .lolicode-workbench.wb-unified
+  .wb-sidebar
+  .lolicode-unified-sidebar
+  .wb-create-task
+  > button:hover:not(:disabled) {
+  background: var(--sidebar-selected);
+  box-shadow: none;
+}
+
+:root
+  .lolicode-workbench.wb-unified
+  .wb-sidebar
+  .lolicode-unified-sidebar
+  .wb-create-task
+  > button:focus-visible {
+  outline-color: var(--sidebar-accent);
+  outline-offset: -3px;
+}
+
+:root
+  .lolicode-workbench.wb-unified
+  .wb-sidebar
+  .lolicode-unified-sidebar
+  .wb-search {
+  min-height: 36px;
+  margin: 0 0 17px;
+  padding: 8px 10px;
+  border-color: var(--sidebar-line);
+  border-radius: 7px;
+  color: var(--sidebar-muted);
+  background: color-mix(in srgb, var(--bg-card) 65%, transparent);
+}
+
+:root
+  .lolicode-workbench.wb-unified
+  .wb-sidebar
+  .lolicode-unified-sidebar
+  .wb-search:focus-within {
+  border-color: var(--sidebar-accent);
+  box-shadow: 0 0 0 2px var(--sidebar-selected);
+}
+
+:root
+  .lolicode-workbench.wb-unified
+  .wb-sidebar
+  .lolicode-unified-sidebar
+  .wb-search
+  input {
+  color: var(--sidebar-foreground);
+  font-size: var(--workspace-caption);
+}
+
+:root
+  .lolicode-workbench.wb-unified
+  .wb-sidebar
+  .lolicode-unified-sidebar
+  .wb-search
+  input::placeholder {
+  color: var(--sidebar-muted);
+  opacity: 1;
+}
+
+:root
+  .lolicode-workbench.wb-unified
+  .wb-sidebar
+  .lolicode-unified-sidebar
+  .wb-section-label {
+  padding: 0 4px 8px;
+  color: var(--sidebar-muted);
+}
+
+:root
+  .lolicode-workbench.wb-unified
+  .wb-sidebar
+  .lolicode-unified-sidebar
+  :is(.wb-project-row, .wb-project-list-row) {
+  min-height: 36px;
+  gap: 6px;
+  padding: 2px 4px;
+  color: var(--sidebar-foreground);
+}
+
+:root
+  .lolicode-workbench.wb-unified
+  .wb-sidebar
+  .lolicode-unified-sidebar
+  :is(.wb-project-row > span, .wb-workspace-project) {
+  min-width: 0;
+  font-size: var(--workspace-label);
+  font-weight: 500;
+}
+
+:root
+  .lolicode-workbench.wb-unified
+  .wb-sidebar
+  .lolicode-unified-sidebar
+  .wb-workspace-project {
+  min-height: 32px;
+  gap: 6px;
+  padding: 5px 24px 5px 0;
+  border-radius: 6px;
+}
+
+:root
+  .lolicode-workbench.wb-unified
+  .wb-sidebar
+  .lolicode-unified-sidebar
+  .wb-workspace-toggle {
+  flex-basis: 18px;
+  width: 18px;
+  height: 30px;
+  border-radius: 5px;
+  color: var(--sidebar-muted);
+}
+
+:root
+  .lolicode-workbench.wb-unified
+  .wb-sidebar
+  .lolicode-unified-sidebar
+  .wb-workspace-sessions {
+  margin-left: 13px;
+  padding: 3px 0 4px 7px;
+  border-left-color: var(--sidebar-line);
+}
+
+:root
+  .lolicode-workbench.wb-unified
+  .wb-sidebar
+  .lolicode-unified-sidebar
+  .wb-session-row {
+  min-height: 36px;
+  padding: 8px 28px 8px 10px;
+  font-size: var(--workspace-label);
+  font-weight: 400;
+  color: var(--text-2);
+}
+
+:root
+  .lolicode-workbench.wb-unified
+  .wb-sidebar
+  .lolicode-unified-sidebar
+  .wb-session-row[aria-pressed="true"] {
+  color: var(--sidebar-accent);
+  background: var(--sidebar-selected);
+  box-shadow: none;
+}
+
+:root
+  .lolicode-workbench.wb-unified
+  .wb-sidebar
+  .lolicode-unified-sidebar
+  .wb-session-row[aria-pressed="true"]
+  ~ .wb-session-menu {
+  color: var(--sidebar-accent);
+  background: var(--sidebar-selected);
+}
+
+:root
+  .lolicode-workbench.wb-unified
+  .wb-sidebar
+  .lolicode-unified-sidebar
+  :is(.wb-session-menu, .wb-project-menu-trigger) {
+  color: var(--sidebar-muted);
+  transition: opacity var(--motion-fast, 160ms) var(--motion-ease, ease);
+}
+
+@media (hover: hover) {
+  .lolicode-unified-sidebar .wb-project-menu-trigger,
+  .lolicode-unified-sidebar
+    .wb-section-label
+    > .wb-icon-button:not([aria-pressed="true"]) {
+    opacity: 0;
+  }
+
+  .lolicode-unified-sidebar
+    :is(.wb-project-row, .wb-project-list-row):is(:hover, :focus-within)
+    .wb-project-menu-trigger,
+  .lolicode-unified-sidebar .wb-project-menu-trigger[data-state="open"],
+  .lolicode-unified-sidebar
+    .wb-section-label:is(:hover, :focus-within)
+    > .wb-icon-button {
+    opacity: 1;
+  }
+}
+
+@media (hover: none) {
+  .lolicode-unified-sidebar .wb-session-menu {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root
+    .lolicode-workbench.wb-unified
+    .wb-sidebar
+    .lolicode-unified-sidebar
+    :is(.wb-session-menu, .wb-project-menu-trigger, .wb-search) {
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .lolicode-unified-sidebar {
+    --sidebar-surface: Canvas;
+    --sidebar-foreground: CanvasText;
+    --sidebar-muted: CanvasText;
+    --sidebar-line: CanvasText;
+    --sidebar-selected: Highlight;
+    --text-2: CanvasText;
+  }
+
+  .lolicode-unified-sidebar .lolicode-sidebar-nav-item[aria-current="page"],
+  :root
+    .lolicode-workbench.wb-unified
+    .wb-sidebar
+    .lolicode-unified-sidebar
+    .wb-session-row[aria-pressed="true"] {
+    color: HighlightText;
+    background: Highlight;
+  }
+}

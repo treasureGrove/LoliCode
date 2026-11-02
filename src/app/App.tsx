@@ -3,7 +3,9 @@ import { DeepLinkImportDialog } from "@/components/DeepLinkImportDialog";
 import { FirstRunNoticeDialog } from "@/components/FirstRunNoticeDialog";
 import { WhatsNewNotice } from "@/components/WhatsNewDialog";
 import { AgentPage } from "@/features/agent/AgentPage";
-import type { AgentTool } from "@/features/agent/AgentToolPanel";
+import { AgentCompanion } from "@/features/agent/AgentCompanion";
+import type { AgentTool, AgentToolTab } from "@/features/agent/AgentToolPanel";
+import { LayoutGroup } from "framer-motion";
 import { BuiltinApplicationsPage } from "@/features/apps/BuiltinApplicationsPage";
 import { isBuiltinApp, useBuiltinApps } from "@/lib/api/builtin-apps";
 import { DiscoveryPage } from "@/features/discovery/DiscoveryPage";
@@ -21,7 +23,7 @@ import {
   AppPageHeader,
   WindowControlsContext,
 } from "@/app/shell/AppPageHeader";
-import { Sidebar } from "@/app/shell/Sidebar";
+import { Sidebar, type SidebarProps } from "@/app/shell/Sidebar";
 import { WindowControls } from "@/app/shell/WindowControls";
 import { SimpleUsagePage } from "@/features/usage/SimpleUsagePage";
 import { APP_IDS, DEFAULT_VISIBLE_APPS } from "@/config/appConfig";
@@ -87,6 +89,7 @@ function App() {
   const [agentToolRequest, setAgentToolRequest] = useState<{
     tool: AgentTool | null;
     id: number;
+    initialTab?: AgentToolTab;
   }>();
   const [activeAgentTool, setActiveAgentTool] = useState<AgentTool | null>(
     null,
@@ -415,12 +418,16 @@ function App() {
     setCurrentView("agent");
   };
 
-  const openAgentTool = (tool: AgentTool) => {
+  const openAgentTool = (tool: AgentTool, initialTab?: AgentToolTab) => {
     if (managementBusyRef.current) return;
-    if (confirmLeave(() => openAgentTool(tool))) return;
+    if (confirmLeave(() => openAgentTool(tool, initialTab))) return;
     setActiveAgentTool(tool);
     setCurrentView("agent");
-    setAgentToolRequest((previous) => ({ tool, id: (previous?.id ?? 0) + 1 }));
+    setAgentToolRequest((previous) => ({
+      tool,
+      initialTab,
+      id: (previous?.id ?? 0) + 1,
+    }));
   };
 
   useTrayNavigation((navigation) => {
@@ -495,6 +502,32 @@ function App() {
     }
   };
 
+  const renderSidebar = (
+    slots: Pick<
+      SidebarProps,
+      "embedded" | "workspaceActions" | "workspaceContent" | "onCollapse"
+    > = {},
+  ) => (
+    <Sidebar
+      {...slots}
+      onOpenAgentTool={openAgentTool}
+      activeAgentTool={currentView === "agent" ? activeAgentTool : null}
+      activeApp={activeApp}
+      view={currentView}
+      visibleApps={visibleApps}
+      settingsSection={settingsSection}
+      onSelectApp={selectApp}
+      onSelectPage={openPageFromNav}
+      onOpenUpdates={() => openSettings("about")}
+      onSelectSettingsSection={(section) => {
+        setAppConfigScrollTarget(undefined);
+        setSettingsSection(section);
+      }}
+      onExitSettings={exitSettings}
+      appsUpdateAvailable={checkToolUpdatesOnStartup && toolUpdatesAvailable}
+    />
+  );
+
   // ─── 全局页 ─────────────────────────────────────────────────────────────
 
   const renderGlobalPage = () => {
@@ -513,6 +546,18 @@ function App() {
           <>
             <div id="main-content" className="min-h-0 flex-1 overflow-hidden">
               <AgentPage
+                renderSidebar={({ actions, workspace, onCollapse }) =>
+                  renderSidebar({
+                    embedded: true,
+                    workspaceActions: actions,
+                    workspaceContent: workspace,
+                    onCollapse,
+                  })
+                }
+                onWorkspaceNavigate={(action) => {
+                  if (managementBusyRef.current || confirmLeave(action)) return;
+                  action();
+                }}
                 toolRequest={agentToolRequest}
                 onToolRequestConsumed={() => setAgentToolRequest(undefined)}
                 onActiveToolChange={setActiveAgentTool}
@@ -606,69 +651,57 @@ function App() {
     <WindowControlsContext.Provider
       value={useAppWindowControls ? <WindowControls /> : null}
     >
-      <div className="tai-shell flex h-screen overflow-hidden bg-app text-fg-1 selection:bg-action/25">
-        <Sidebar
-          onOpenAgentTool={openAgentTool}
-          activeAgentTool={currentView === "agent" ? activeAgentTool : null}
-          activeApp={activeApp}
-          view={currentView}
-          visibleApps={visibleApps}
-          settingsSection={settingsSection}
-          onSelectApp={selectApp}
-          onSelectPage={openPageFromNav}
-          onOpenUpdates={() => openSettings("about")}
-          onSelectSettingsSection={(section) => {
-            setAppConfigScrollTarget(undefined);
-            setSettingsSection(section);
-          }}
-          onExitSettings={exitSettings}
-          appsUpdateAvailable={
-            checkToolUpdatesOnStartup && toolUpdatesAvailable
-          }
-        />
-        <main
-          ref={mainScrollRef}
-          id="content-area"
-          data-view={currentView}
-          className="tai-main relative isolate flex min-w-0 flex-1 flex-col overflow-hidden bg-app"
-        >
-          {showEnvBanner && envConflicts.length > 0 && (
-            <EnvWarningBanner
-              conflicts={envConflicts}
-              onDismiss={() => {
-                setShowEnvBanner(false);
-                sessionStorage.setItem("env_banner_dismissed", "true");
-              }}
-              onDeleted={async () => {
-                try {
-                  const allConflicts = await checkAllEnvConflicts();
-                  const flatConflicts = Object.values(allConflicts).flat();
-                  setEnvConflicts(flatConflicts);
-                  if (flatConflicts.length === 0) {
-                    setShowEnvBanner(false);
-                  }
-                } catch (error) {
-                  console.error(
-                    "[App] Failed to re-check conflicts after deletion:",
-                    error,
-                  );
-                }
-              }}
-            />
-          )}
-          <MotionSurface
-            motionKey={`${currentView}:${activeApp}:${currentView === "settings" ? settingsSection : ""}`}
-            className="tai-page flex min-h-0 flex-1 flex-col"
+      <LayoutGroup id="desktop-navigation">
+        <div className="tai-shell lolicode-refreshed-shell flex h-screen overflow-hidden bg-app text-fg-1 selection:bg-action/25">
+          {currentView !== "agent" && renderSidebar()}
+          <main
+            ref={mainScrollRef}
+            id="content-area"
+            data-view={currentView}
+            className="tai-main relative isolate flex min-w-0 flex-1 flex-col overflow-hidden bg-app"
           >
-            {/* Navigation owns business-page identity; motion does not remount it. */}
-            <Fragment
-              key={currentView === "settings" ? "settings" : currentView}
+            {showEnvBanner && envConflicts.length > 0 && (
+              <EnvWarningBanner
+                conflicts={envConflicts}
+                onDismiss={() => {
+                  setShowEnvBanner(false);
+                  sessionStorage.setItem("env_banner_dismissed", "true");
+                }}
+                onDeleted={async () => {
+                  try {
+                    const allConflicts = await checkAllEnvConflicts();
+                    const flatConflicts = Object.values(allConflicts).flat();
+                    setEnvConflicts(flatConflicts);
+                    if (flatConflicts.length === 0) {
+                      setShowEnvBanner(false);
+                    }
+                  } catch (error) {
+                    console.error(
+                      "[App] Failed to re-check conflicts after deletion:",
+                      error,
+                    );
+                  }
+                }}
+              />
+            )}
+            <MotionSurface
+              motionKey={`${currentView}:${activeApp}:${currentView === "settings" ? settingsSection : ""}`}
+              targetSelector={
+                currentView === "agent" ? ".wb-chat-surface" : undefined
+              }
+              className="tai-page flex min-h-0 flex-1 flex-col"
             >
-              {renderContent()}
-            </Fragment>
-          </MotionSurface>
-        </main>
-      </div>
+              {/* Navigation owns business-page identity; motion does not remount it. */}
+              <Fragment
+                key={currentView === "settings" ? "settings" : currentView}
+              >
+                {renderContent()}
+              </Fragment>
+            </MotionSurface>
+          </main>
+        </div>
+      </LayoutGroup>
+      <AgentCompanion />
 
       <ConfirmDialog
         isOpen={pendingLeave !== null}

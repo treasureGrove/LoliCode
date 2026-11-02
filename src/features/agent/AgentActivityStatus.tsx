@@ -11,6 +11,7 @@ interface Props {
   queued: boolean;
   stopping: boolean;
   loading: boolean;
+  hideIdle?: boolean;
 }
 
 function runningPhase(messages: AgentMessage[]) {
@@ -48,6 +49,7 @@ export function AgentActivityStatus({
   queued,
   stopping,
   loading,
+  hideIdle = false,
 }: Props) {
   let phase = "idle";
   let label = "准备就绪";
@@ -86,6 +88,7 @@ export function AgentActivityStatus({
     label = "正在加载会话…";
     busy = true;
   }
+  if (hideIdle && phase === "idle") return null;
   const Icon = busy
     ? Loader2
     : phase === "question"
@@ -102,6 +105,7 @@ export function AgentActivityStatus({
       aria-atomic="true"
       className="wb-status"
       data-phase={phase}
+      title={label}
     >
       {Icon && (
         <Icon

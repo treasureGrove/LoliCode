@@ -1,0 +1,96 @@
+import { memo, useState, type ReactNode } from "react";
+import { Sparkles, UserRound } from "lucide-react";
+import assistantPortrait from "@/assets/brand/lolicode-icon.png";
+import { BUILTIN_AGENT_NICKNAME } from "@/lib/branding";
+import { cn } from "@/lib/utils";
+import type { AgentMessage } from "@/types/agent";
+
+export interface AgentMessageIdentity {
+  displayName?: string;
+  avatarUrl?: string;
+}
+
+function MessageAvatar({
+  role,
+  identity,
+}: {
+  role: "user" | "assistant";
+  identity?: AgentMessageIdentity;
+}) {
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const source = role === "assistant" ? assistantPortrait : identity?.avatarUrl;
+  const initial = Array.from(identity?.displayName?.trim() || "")[0];
+  return (
+    <span className="wb-chat-avatar" aria-hidden="true">
+      {source && source !== failedUrl ? (
+        <img
+          src={source}
+          alt=""
+          draggable={false}
+          decoding="async"
+          referrerPolicy="no-referrer"
+          onError={() => setFailedUrl(source)}
+        />
+      ) : (
+        <span className="wb-chat-avatar-fallback">
+          {role === "assistant" ? (
+            <Sparkles />
+          ) : initial ? (
+            initial.toLocaleUpperCase()
+          ) : (
+            <UserRound />
+          )}
+        </span>
+      )}
+    </span>
+  );
+}
+
+/** The frame owns identity and alignment; transcript blocks retain their order. */
+export const AgentMessageFrame = memo(function AgentMessageFrame({
+  role,
+  identity,
+  ariaLabel,
+  showAuthor = true,
+  className,
+  children,
+}: {
+  role: AgentMessage["role"];
+  identity?: AgentMessageIdentity;
+  ariaLabel?: string;
+  showAuthor?: boolean;
+  className?: string;
+  children: ReactNode;
+}) {
+  const author =
+    role === "user"
+      ? identity?.displayName?.trim() || "你"
+      : role === "assistant"
+        ? BUILTIN_AGENT_NICKNAME
+        : "系统";
+  return (
+    <article
+      aria-label={
+        ariaLabel ||
+        (role === "user"
+          ? "你的消息"
+          : role === "assistant"
+            ? "Agent 回复"
+            : "系统消息")
+      }
+      className={cn("wb-chat-message", `wb-chat-message--${role}`, className)}
+    >
+      {role !== "system" && <MessageAvatar role={role} identity={identity} />}
+      <div className="wb-chat-message-body">
+        {showAuthor && (
+          <p className={cn("wb-chat-author", role === "user" && "sr-only")}>
+            {author}
+          </p>
+        )}
+        <div className={cn("wb-chat-bubble", `wb-message-${role}`)}>
+          {children}
+        </div>
+      </div>
+    </article>
+  );
+});

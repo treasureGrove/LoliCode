@@ -4,6 +4,7 @@ import {
   fireEvent,
   render as testingRender,
   screen,
+  within,
 } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -21,6 +22,7 @@ import {
 } from "@/lib/agentInputLedger";
 import type { AgentCatalog, AgentSession, AgentSnapshot } from "@/types/agent";
 import { emitTauriEvent } from "../msw/tauriMocks";
+import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 
 function render(ui: ReactElement) {
   const client = new QueryClient({
@@ -35,6 +37,13 @@ function render(ui: ReactElement) {
 
 vi.mock("@/lib/api/usage", () => ({
   usageApi: { getSessionUsageSummary: vi.fn() },
+}));
+vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn() }));
+// Engine tests use a fake clock; animation timing and exiting-surface isolation
+// are covered with the real Motion runtime in FullScreenPanel.test.tsx.
+vi.mock("framer-motion", async () => ({
+  ...(await vi.importActual<typeof import("framer-motion")>("framer-motion")),
+  useReducedMotion: () => true,
 }));
 vi.mock("@/lib/api/agent-memory", () => ({
   agentMemoryApi: { get: vi.fn() },
@@ -61,6 +70,7 @@ vi.mock("@/lib/api/agent", () => ({
     getPluginStore: vi.fn(),
     getNativeActivity: vi.fn(),
     native: vi.fn(),
+    automation: vi.fn(),
     getSession: vi.fn(),
     sendMessage: vi.fn(),
     queryCommand: vi.fn(),
@@ -72,7 +82,11 @@ vi.mock("@/lib/api/agent", () => ({
   },
 }));
 vi.mock("@/lib/api", () => ({
-  settingsApi: { pickDirectory: vi.fn(), openExternal: vi.fn() },
+  settingsApi: {
+    pickDirectory: vi.fn(),
+    openExternal: vi.fn(),
+    revealAppLogFile: vi.fn(),
+  },
 }));
 
 const project = "D:/fixture/project";
@@ -138,6 +152,22 @@ function fill(text = "修复这个项目的测试") {
     target: { value: text },
   });
 }
+function openComposerOptions() {
+  const trigger = screen.getByRole("button", { name: "对话设置" });
+  if (trigger.getAttribute("aria-expanded") !== "true")
+    fireEvent.click(trigger);
+  return screen.getByRole("dialog", { name: "对话设置" });
+}
+function composerPermissionSelect() {
+  if (!screen.queryByRole("button", { name: "对话设置" }))
+    return screen.getByLabelText("执行权限");
+  return within(openComposerOptions()).getByLabelText("执行权限");
+}
+function composerSettingButton(name: "思考档位" | "上下文窗口") {
+  if (!screen.queryByRole("button", { name: "对话设置" }))
+    return screen.getByRole("button", { name });
+  return within(openComposerOptions()).getByRole("button", { name });
+}
 function modelRefreshButton() {
   const picker = screen.getByRole("button", { name: "模型" });
   if (picker.getAttribute("aria-expanded") !== "true") fireEvent.click(picker);
@@ -173,6 +203,7 @@ function selectModel(name: string) {
 }
 
 beforeEach(() => {
+  vi.mocked(openFileDialog).mockReset().mockResolvedValue(null);
   vi.mocked(agentMemoryApi.get).mockResolvedValue({
     revision: 1,
     enabled: true,
@@ -197,6 +228,7 @@ beforeEach(() => {
       ? { workflows: [], invalid: [] }
       : { runs: [] },
   );
+  vi.mocked(agentApi.automation).mockReset().mockResolvedValue([]);
   vi.mocked(usageApi.getSessionUsageSummary).mockReset().mockResolvedValue({
     totalRequests: 0,
     totalCost: "0",
@@ -326,6 +358,7 @@ beforeEach(() => {
   vi.mocked(agentApi.closeProject).mockReset().mockResolvedValue();
   vi.mocked(settingsApi.pickDirectory).mockReset().mockResolvedValue(project);
   vi.mocked(settingsApi.openExternal).mockReset().mockResolvedValue();
+  vi.mocked(settingsApi.revealAppLogFile).mockReset().mockResolvedValue();
 });
 afterEach(async () => {
   cleanup();
@@ -340,6 +373,339 @@ afterEach(async () => {
 });
 
 describe("AgentPage", () => {
+  it("keeps session status and file preview in the titlebar while preserving the composer", async () => {
+    const view = render(<AgentPage />);
+    await flush();
+    fill("打开文件预览时保留的草稿");
+    const header = screen
+      .getByRole("heading", { name: session.title })
+      .closest("header")!;
+    expect(header).toHaveClass("wb-titlebar");
+    expect(within(header).queryByRole("status")).not.toBeInTheDocument();
+    expect(within(header).getByRole("heading")).toHaveAttribute(
+      "title",
+      session.title,
+    );
+    expect(
+      within(header).getByRole("button", {
+        name: `打开项目文件夹：${project}`,
+      }),
+    ).toBeEnabled();
+    expect(
+      within(header).getByRole("button", { name: "对话更多选项" }),
+    ).toBeEnabled();
+    expect(
+      within(header).queryByText("DeepSeek · Code Model"),
+    ).not.toBeInTheDocument();
+    expect(view.container.querySelector(".wb-context-line")).toBeNull();
+    expect(screen.getByRole("button", { name: "模型" })).toBeEnabled();
+
+    fireEvent.click(
+      within(header).getByRole("button", { name: "预览项目文件" }),
+    );
+    await flush();
+    expect(
+      screen.getByRole("complementary", { name: "文件预览" }),
+    ).toBeVisible();
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
+      "打开文件预览时保留的草稿",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "关闭预览" }));
+    expect(
+      screen.queryByRole("complementary", { name: "文件预览" }),
+    ).not.toBeInTheDocument();
+    expect(agentApi.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("keeps help, logs and updates reachable from the titlebar more menu", async () => {
+    const onCheckUpdate = vi.fn();
+    const onOpenAbout = vi.fn();
+    render(
+      <AgentPage onCheckUpdate={onCheckUpdate} onOpenAbout={onOpenAbout} />,
+    );
+    await flush();
+    const openMore = async () => {
+      fireEvent.keyDown(screen.getByRole("button", { name: "对话更多选项" }), {
+        key: "Enter",
+      });
+      await flush();
+    };
+    await openMore();
+    for (const name of [
+      "产品文档",
+      "用户社群",
+      "问题上报",
+      "报告安全漏洞",
+      "提出产品需求",
+      "查看应用日志",
+      "检查更新",
+      "关于 LoliCode",
+    ])
+      expect(screen.getByRole("menuitem", { name })).not.toHaveAttribute(
+        "aria-disabled",
+        "true",
+      );
+    fireEvent.click(screen.getByRole("menuitem", { name: "查看应用日志" }));
+    await flush();
+    expect(settingsApi.revealAppLogFile).toHaveBeenCalledOnce();
+    await openMore();
+    fireEvent.click(screen.getByRole("menuitem", { name: "检查更新" }));
+    expect(onCheckUpdate).toHaveBeenCalledOnce();
+    await openMore();
+    fireEvent.click(screen.getByRole("menuitem", { name: "关于 LoliCode" }));
+    expect(onOpenAbout).toHaveBeenCalledOnce();
+    await openMore();
+    fireEvent.click(screen.getByRole("menuitem", { name: "产品文档" }));
+    await flush();
+    expect(settingsApi.openExternal).toHaveBeenCalledWith(
+      "https://tools.treasuregrove.art/lolicode/",
+    );
+    await tick(1);
+  });
+
+  it.each([false, true])(
+    "keeps one collapse control and restores keyboard focus with tool panel %s",
+    async (toolOpen) => {
+      render(
+        <AgentPage
+          toolRequest={toolOpen ? { tool: "skills", id: 1 } : undefined}
+          renderSidebar={({ onCollapse, actions, workspace }) => (
+            <>
+              <button type="button" onClick={onCollapse}>
+                收起侧栏
+              </button>
+              {actions}
+              {workspace}
+            </>
+          )}
+        />,
+      );
+      await flush();
+      const collapse = screen.getByRole("button", { name: "收起侧栏" });
+      expect(
+        screen.queryByRole("button", { name: "收起项目侧栏" }),
+      ).not.toBeInTheDocument();
+      collapse.focus();
+      fireEvent.click(collapse);
+      await flush();
+      await tick(20);
+      const scope = toolOpen
+        ? within(screen.getByRole("region", { name: "技能与插件" }))
+        : screen;
+      const expand = scope.getByRole("button", { name: "展开项目侧栏" });
+      expect(expand).toHaveFocus();
+      fireEvent.click(expand);
+      await flush();
+      expect(
+        scope.queryByRole("button", { name: "展开项目侧栏" }),
+      ).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "收起侧栏" })).toBeVisible();
+      if (toolOpen) {
+        fireEvent.click(scope.getByRole("button", { name: "返回工作台" }));
+        await flush();
+        await tick(250);
+      }
+    },
+  );
+
+  it("restores an automatically hidden sidebar when a narrow-window preview is open", async () => {
+    vi.stubGlobal("innerWidth", 620);
+    try {
+      render(<AgentPage />);
+      await flush();
+      expect(
+        screen.getByRole("complementary", { name: "项目会话" }),
+      ).toBeVisible();
+      fireEvent.click(screen.getByRole("button", { name: "预览项目文件" }));
+      await flush();
+      expect(
+        screen.queryByRole("complementary", { name: "项目会话" }),
+      ).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "展开项目侧栏" }));
+      await flush();
+      expect(
+        screen.getByRole("complementary", { name: "项目会话" }),
+      ).toBeVisible();
+      expect(
+        screen.queryByRole("complementary", { name: "文件预览" }),
+      ).not.toBeInTheDocument();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("does not expose session status or file preview before creating a conversation", async () => {
+    vi.mocked(agentApi.listSessions).mockResolvedValue([]);
+    render(<AgentPage />);
+    await flush();
+    const header = screen
+      .getByRole("heading", { name: "编程工作台" })
+      .closest("header")!;
+    expect(within(header).queryByRole("status")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "预览项目文件" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("complementary", { name: "文件预览" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("opens session usage from the composer and restores focus with Escape", async () => {
+    snapshot.usage = {
+      session: {
+        totalTokens: 1200,
+        inputTokens: 1000,
+        outputTokens: 200,
+        cacheHitRate: 0.5,
+        modelRequests: 2,
+        reportedRequests: 2,
+        since: 1,
+        complete: true,
+      },
+    };
+    render(<AgentPage />);
+    await flush();
+    fill("查看用量时保留输入");
+    const trigger = screen.getByRole("button", { name: "查看会话用量" });
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByLabelText("本会话用量")).not.toBeInTheDocument();
+    fireEvent.click(trigger);
+    const usage = screen.getByRole("dialog", { name: "本会话用量" });
+    expect(
+      within(usage).getByRole("heading", { name: "本会话用量" }),
+    ).toBeVisible();
+    expect(usage).toHaveTextContent("会话用量 1.2K tokens");
+    expect(usage).toHaveTextContent("缓存命中 50.0%");
+    fireEvent.keyDown(usage, { key: "Escape" });
+    await flush();
+    await tick(1);
+    expect(
+      screen.queryByRole("dialog", { name: "本会话用量" }),
+    ).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
+      "查看用量时保留输入",
+    );
+    expect(agentApi.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("keeps the composer compact with permissions visible before opening settings", async () => {
+    snapshot.session.permissionMode = "full_access";
+    render(<AgentPage />);
+    await flush();
+    const options = screen.getByRole("button", { name: "对话设置" });
+    expect(options).toHaveTextContent("完整权限");
+    expect(options).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("button", { name: "添加内容" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "模型" })).toBeEnabled();
+    expect(screen.queryByLabelText("执行权限")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "思考档位" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "上下文窗口" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "发送" })).toHaveTextContent(
+      "发送",
+    );
+
+    fireEvent.click(options);
+    const settings = screen.getByRole("dialog", { name: "对话设置" });
+    expect(within(settings).getByText("推理强度")).toBeVisible();
+    expect(within(settings).getByText("上下文容量")).toBeVisible();
+    expect(within(settings).getByLabelText("执行权限")).toHaveValue(
+      "full_access",
+    );
+    fireEvent.change(within(settings).getByLabelText("执行权限"), {
+      target: { value: "ask" },
+    });
+    await flush();
+    fireEvent.click(options);
+    expect(options).toHaveTextContent("逐次确认");
+    expect(
+      screen.queryByRole("dialog", { name: "对话设置" }),
+    ).not.toBeInTheDocument();
+    expect(agentApi.updateSession).toHaveBeenCalledWith(session.id, {
+      permissionMode: "ask",
+    });
+    expect(agentApi.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("dismisses nested settings one level at a time and restores keyboard focus", async () => {
+    render(<AgentPage />);
+    await flush();
+    fill("设置关闭后继续写的草稿");
+    const options = screen.getByRole("button", { name: "对话设置" });
+    fireEvent.click(options);
+    const reasoning = screen.getByRole("button", { name: "思考档位" });
+    fireEvent.click(reasoning);
+    expect(screen.getByRole("dialog", { name: "对话设置" })).toBeVisible();
+    const nested = screen.getByRole("dialog", { name: "选择思考档位" });
+    fireEvent.keyDown(nested, { key: "Escape" });
+    await flush();
+    await tick(1);
+    expect(
+      screen.queryByRole("dialog", { name: "选择思考档位" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "对话设置" })).toBeVisible();
+    expect(reasoning).toHaveFocus();
+    fireEvent.keyDown(reasoning, { key: "Escape" });
+    await flush();
+    await tick(1);
+    expect(
+      screen.queryByRole("dialog", { name: "对话设置" }),
+    ).not.toBeInTheDocument();
+    expect(options).toHaveFocus();
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
+      "设置关闭后继续写的草稿",
+    );
+    expect(agentApi.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("opens images, documents and the plugin market from the add-content menu", async () => {
+    const view = render(<AgentPage />);
+    await flush();
+    const input =
+      view.container.querySelector<HTMLInputElement>('input[type="file"]')!;
+    const chooseImages = vi.spyOn(input, "click");
+    const openAddMenu = async () => {
+      fireEvent.keyDown(screen.getByRole("button", { name: "添加内容" }), {
+        key: "Enter",
+      });
+      await flush();
+    };
+    await openAddMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "添加图片" }));
+    await flush();
+    expect(chooseImages).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    await openAddMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "添加文档" }));
+    await flush();
+    expect(openFileDialog).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "添加文档", multiple: true }),
+    );
+    await openAddMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "添加插件" }));
+    await flush();
+    await tick(1);
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    const panel = screen.getByRole("region", { name: "技能与插件" });
+    expect(within(panel).getByRole("tab", { name: "插件" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(document.activeElement).toBe(panel);
+    fireEvent.click(within(panel).getByRole("button", { name: "返回工作台" }));
+    await flush();
+    await tick(250);
+    expect(
+      screen.queryByRole("region", { name: "技能与插件" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toBeEnabled();
+    chooseImages.mockRestore();
+  });
+
   it("returns focus to the composer after using a skill and releasing the panel", async () => {
     vi.mocked(agentApi.getExtensions).mockResolvedValue({
       revision: 1,
@@ -367,7 +733,7 @@ describe("AgentPage", () => {
     await flush();
     fireEvent.click(screen.getByRole("button", { name: "在会话中使用" }));
     await flush();
-    await act(async () => vi.advanceTimersByTimeAsync(250));
+    await tick(250);
     expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
       "请使用 PDF 技能完成这个任务。\n",
     );
@@ -410,9 +776,9 @@ describe("AgentPage", () => {
           .filter((node) => node.classList.contains("tai-editor-panel")),
       ).toHaveLength(1);
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-      expect(document.querySelector<HTMLElement>(".tai-page")?.inert).toBe(
-        true,
-      );
+      expect(
+        document.querySelector<HTMLElement>(".wb-chat-surface")?.inert,
+      ).toBe(true);
       expect(changed).toHaveBeenLastCalledWith(tool);
     }
 
@@ -422,9 +788,9 @@ describe("AgentPage", () => {
       screen.queryByRole("region", { name: "记忆" }),
     ).not.toBeInTheDocument();
     expect(changed).toHaveBeenLastCalledWith(null);
-    expect(document.querySelector<HTMLElement>(".tai-page")?.inert).not.toBe(
-      true,
-    );
+    expect(
+      document.querySelector<HTMLElement>(".wb-chat-surface")?.inert,
+    ).not.toBe(true);
     expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
       "切换面板时保留这个草稿",
     );
@@ -438,6 +804,127 @@ describe("AgentPage", () => {
       screen.queryByRole("region", { name: "技能与插件" }),
     ).not.toBeInTheDocument();
     expect(changed).toHaveBeenLastCalledWith(null);
+  });
+
+  it.each([
+    ["skills", "plugins", "插件", "技能"],
+    ["workflows", "automation", "自动化", "工作流"],
+  ] as const)(
+    "opens the %s shortcut on its requested %s tab",
+    async (tool, initialTab, selected, other) => {
+      render(<AgentPage toolRequest={{ tool, initialTab, id: 1 }} />);
+      await flush();
+      expect(screen.getByRole("tab", { name: selected })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
+      expect(screen.getByRole("tab", { name: other })).toHaveAttribute(
+        "aria-selected",
+        "false",
+      );
+    },
+  );
+
+  it("returns from a tool to the selected conversation without losing either draft", async () => {
+    const second = { ...session, id: "s2", title: "整理项目文档" };
+    vi.mocked(agentApi.listSessions).mockResolvedValue([session, second]);
+    vi.mocked(agentApi.getSession).mockImplementation(async (id) => ({
+      ...emptySnapshot(),
+      session: id === second.id ? second : session,
+    }));
+    const view = render(<AgentPage />);
+    await flush();
+    fill("第一条会话的草稿");
+    fireEvent.click(screen.getByRole("button", { name: second.title }));
+    await flush();
+    fill("第二条会话的草稿");
+    view.rerender(<AgentPage toolRequest={{ tool: "skills", id: 1 }} />);
+    await flush();
+    expect(
+      screen.getByRole("region", { name: "技能与插件" }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: session.title }));
+    await flush();
+    await tick(250);
+    expect(
+      screen.queryByRole("region", { name: "技能与插件" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: session.title }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
+      "第一条会话的草稿",
+    );
+    fireEvent.click(screen.getByRole("button", { name: second.title }));
+    await flush();
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
+      "第二条会话的草稿",
+    );
+    expect(agentApi.interruptSession).not.toHaveBeenCalled();
+  });
+
+  it("restores the sidebar from the tool header while the chat is covered", async () => {
+    render(<AgentPage toolRequest={{ tool: "skills", id: 1 }} />);
+    await flush();
+    fireEvent.keyDown(window, { key: "\\", ctrlKey: true });
+    expect(
+      screen.queryByRole("complementary", { name: "项目会话" }),
+    ).not.toBeInTheDocument();
+    const panel = screen.getByRole("region", { name: "技能与插件" });
+    const expand = within(panel).getByRole("button", { name: "展开项目侧栏" });
+    expand.focus();
+    expect(expand).toHaveFocus();
+    fireEvent.click(expand);
+    expect(
+      screen.getByRole("complementary", { name: "项目会话" }),
+    ).toBeInTheDocument();
+    expect(panel).toBeInTheDocument();
+    expect(
+      within(panel).queryByRole("button", { name: "展开项目侧栏" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("waits for the shell navigation guard before leaving a tool and changing conversations", async () => {
+    const second = { ...session, id: "s2", title: "等待确认后切换" };
+    const pending: Array<() => void> = [];
+    const navigate = vi.fn((proceed: () => void) => {
+      pending.push(proceed);
+    });
+    vi.mocked(agentApi.listSessions).mockResolvedValue([session, second]);
+    vi.mocked(agentApi.getSession).mockImplementation(async (id) => ({
+      ...emptySnapshot(),
+      session: id === second.id ? second : session,
+    }));
+    render(
+      <AgentPage
+        toolRequest={{ tool: "skills", id: 1 }}
+        onWorkspaceNavigate={navigate}
+      />,
+    );
+    await flush();
+    vi.mocked(agentApi.getSession).mockClear();
+    fireEvent.click(screen.getByRole("button", { name: second.title }));
+    await flush();
+    expect(navigate).toHaveBeenCalledOnce();
+    expect(agentApi.getSession).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("region", { name: "技能与插件" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: second.title })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    act(() => pending[0]());
+    await flush();
+    await tick(250);
+    expect(agentApi.getSession).toHaveBeenCalledWith(second.id);
+    expect(
+      screen.queryByRole("region", { name: "技能与插件" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: second.title })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
   });
 
   it("renames the active project without reopening it or changing its session binding", async () => {
@@ -1017,7 +1504,22 @@ describe("AgentPage", () => {
       expect(input).toBeDisabled();
       expect(screen.getByRole("button", { name: "发送" })).toBeDisabled();
       expect(screen.getByLabelText("模型", { exact: true })).toBeDisabled();
-      expect(screen.getByLabelText("执行权限")).toBeDisabled();
+      fireEvent.keyDown(screen.getByRole("button", { name: "添加内容" }), {
+        key: "Enter",
+      });
+      await flush();
+      expect(
+        screen.getByRole("menuitem", { name: "添加图片" }),
+      ).toHaveAttribute("aria-disabled", "true");
+      expect(
+        screen.getByRole("menuitem", { name: "添加文档" }),
+      ).toHaveAttribute("aria-disabled", "true");
+      expect(
+        screen.getByRole("menuitem", { name: "添加插件" }),
+      ).not.toHaveAttribute("aria-disabled", "true");
+      fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
+      await flush();
+      expect(composerPermissionSelect()).toBeDisabled();
       expect(
         screen.queryByRole("button", { name: "分析" }),
       ).not.toBeInTheDocument();
@@ -1026,7 +1528,7 @@ describe("AgentPage", () => {
       ).not.toBeInTheDocument();
       expect(screen.getByLabelText(`管理会话：${legacy.title}`)).toBeDisabled();
       fireEvent.click(screen.getByLabelText("模型", { exact: true }));
-      fireEvent.change(screen.getByLabelText("执行权限"), {
+      fireEvent.change(composerPermissionSelect(), {
         target: { value: "auto" },
       });
       fireEvent.submit(input.closest("form")!);
@@ -1103,7 +1605,7 @@ describe("AgentPage", () => {
       requestId,
     );
     expect(screen.getByLabelText("模型", { exact: true })).toBeDisabled();
-    expect(screen.getByLabelText("执行权限")).toBeDisabled();
+    expect(composerPermissionSelect()).toBeDisabled();
     expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
       "恢复原输入",
     );
@@ -1277,20 +1779,23 @@ describe("AgentPage", () => {
       modelId: catalog.models[1].modelId,
     };
     await tick(5000);
-    expect(screen.getAllByText("Copilot · Model B")[0]).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "模型" })).toHaveAttribute(
+      "title",
+      "Copilot · Model B",
+    );
   });
 
   it("changes Auto Mode without exposing obsolete analysis/build mode controls", async () => {
     render(<AgentPage />);
     await flush();
-    fireEvent.change(screen.getByLabelText("执行权限"), {
+    fireEvent.change(composerPermissionSelect(), {
       target: { value: "auto" },
     });
     await flush();
     expect(agentApi.updateSession).toHaveBeenLastCalledWith(session.id, {
       permissionMode: "auto",
     });
-    expect(screen.getByLabelText("执行权限")).toHaveAttribute(
+    expect(composerPermissionSelect()).toHaveAttribute(
       "title",
       expect.stringContaining("常规编辑和安全命令自动允许"),
     );
@@ -1300,7 +1805,7 @@ describe("AgentPage", () => {
     expect(
       screen.queryByRole("button", { name: "分析" }),
     ).not.toBeInTheDocument();
-    expect(screen.getByLabelText("执行权限")).toHaveValue("auto");
+    expect(composerPermissionSelect()).toHaveValue("auto");
     expect(screen.queryByText(/分析模式只读取文件/)).not.toBeInTheDocument();
   });
 
@@ -1312,15 +1817,13 @@ describe("AgentPage", () => {
     render(<AgentPage />);
     await flush();
     fill("保留待发送的要求");
-    fireEvent.click(screen.getByRole("button", { name: "思考档位" }));
+    fireEvent.click(composerSettingButton("思考档位"));
     fireEvent.click(screen.getByRole("button", { name: "思考档位 high" }));
     await flush();
     expect(agentApi.updateSession).toHaveBeenLastCalledWith(session.id, {
       reasoningEffort: "high",
     });
-    expect(screen.getByRole("button", { name: "思考档位" })).toHaveTextContent(
-      "high",
-    );
+    expect(composerSettingButton("思考档位")).toHaveTextContent("high");
     expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
       "保留待发送的要求",
     );
@@ -1341,7 +1844,7 @@ describe("AgentPage", () => {
     render(<AgentPage />);
     await flush();
     fill("保留窗口切换期间的草稿");
-    fireEvent.click(screen.getByRole("button", { name: "上下文窗口" }));
+    fireEvent.click(composerSettingButton("上下文窗口"));
     fireEvent.click(
       screen.getByRole("button", { name: "上下文窗口 1,000,000 tokens" }),
     );
@@ -1369,24 +1872,20 @@ describe("AgentPage", () => {
     });
     render(<AgentPage />);
     await flush();
-    fireEvent.click(screen.getByRole("button", { name: "上下文窗口" }));
+    fireEvent.click(composerSettingButton("上下文窗口"));
     fireEvent.click(
       screen.getByRole("button", { name: "上下文窗口 1,000,000 tokens" }),
     );
     await flush();
     await tick(5000);
-    expect(
-      screen.getByRole("button", { name: "上下文窗口" }),
-    ).toHaveTextContent("1M");
-    fireEvent.click(screen.getByRole("button", { name: "上下文窗口" }));
+    expect(composerSettingButton("上下文窗口")).toHaveTextContent("1M");
+    fireEvent.click(composerSettingButton("上下文窗口"));
     fireEvent.click(screen.getByRole("button", { name: "使用默认上下文" }));
     await flush();
     expect(agentApi.updateSession).toHaveBeenLastCalledWith(session.id, {
       contextLimit: null,
     });
-    expect(
-      screen.getByRole("button", { name: "上下文窗口" }),
-    ).toHaveTextContent("128K");
+    expect(composerSettingButton("上下文窗口")).toHaveTextContent("128K");
     expect(agentApi.sendMessage).not.toHaveBeenCalled();
   });
 
@@ -1402,14 +1901,12 @@ describe("AgentPage", () => {
     render(<AgentPage />);
     await flush();
     fill("保留上下文切换前的输入");
-    fireEvent.click(screen.getByRole("button", { name: "上下文窗口" }));
+    fireEvent.click(composerSettingButton("上下文窗口"));
     fireEvent.click(
       screen.getByRole("button", { name: "上下文窗口 1,000,000 tokens" }),
     );
     await flush();
-    expect(
-      screen.getByRole("button", { name: "上下文窗口" }),
-    ).toHaveTextContent("128K");
+    expect(composerSettingButton("上下文窗口")).toHaveTextContent("128K");
     expect(screen.getByText("上下文保存失败")).toBeVisible();
     expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
       "保留上下文切换前的输入",
@@ -1437,22 +1934,18 @@ describe("AgentPage", () => {
     render(<AgentPage />);
     await flush();
     fill("第一个会话草稿");
-    fireEvent.click(screen.getByRole("button", { name: "上下文窗口" }));
+    fireEvent.click(composerSettingButton("上下文窗口"));
     fireEvent.click(
       screen.getByRole("button", { name: "上下文窗口 1,000,000 tokens" }),
     );
     await flush();
     fireEvent.click(screen.getByRole("button", { name: /^第二个上下文会话/ }));
     await flush();
-    expect(
-      screen.getByRole("button", { name: "上下文窗口" }),
-    ).toHaveTextContent("128K");
+    expect(composerSettingButton("上下文窗口")).toHaveTextContent("128K");
     fill("第二个会话草稿");
     fireEvent.click(screen.getByRole("button", { name: /^修复测试/ }));
     await flush();
-    expect(
-      screen.getByRole("button", { name: "上下文窗口" }),
-    ).toHaveTextContent("1M");
+    expect(composerSettingButton("上下文窗口")).toHaveTextContent("1M");
     expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
       "第一个会话草稿",
     );
@@ -1466,7 +1959,7 @@ describe("AgentPage", () => {
     );
     render(<AgentPage />);
     await flush();
-    fireEvent.click(screen.getByRole("button", { name: "思考档位" }));
+    fireEvent.click(composerSettingButton("思考档位"));
     fireEvent.change(screen.getByLabelText("手动档位标识（未验证）"), {
       target: { value: "high" },
     });
@@ -1475,9 +1968,7 @@ describe("AgentPage", () => {
     expect(agentApi.updateSession).toHaveBeenCalledWith(session.id, {
       reasoningEffort: "high",
     });
-    expect(screen.getByRole("button", { name: "思考档位" })).toHaveTextContent(
-      "上游默认",
-    );
+    expect(composerSettingButton("思考档位")).toHaveTextContent("上游默认");
     expect(screen.getByText("中转不接受此思考档位")).toBeInTheDocument();
   });
 
@@ -1485,7 +1976,7 @@ describe("AgentPage", () => {
     vi.mocked(agentApi.listSessions).mockResolvedValue([]);
     render(<AgentPage />);
     await flush();
-    fireEvent.click(screen.getByRole("button", { name: "思考档位" }));
+    fireEvent.click(composerSettingButton("思考档位"));
     fireEvent.change(screen.getByLabelText("手动档位标识（未验证）"), {
       target: { value: "high" },
     });
@@ -1509,7 +2000,7 @@ describe("AgentPage", () => {
     vi.mocked(agentApi.listSessions).mockResolvedValue([]);
     render(<AgentPage />);
     await flush();
-    fireEvent.click(screen.getByRole("button", { name: "上下文窗口" }));
+    fireEvent.click(composerSettingButton("上下文窗口"));
     fireEvent.click(
       screen.getByRole("button", { name: "上下文窗口 1,000,000 tokens" }),
     );
@@ -1538,15 +2029,13 @@ describe("AgentPage", () => {
     vi.mocked(agentApi.listSessions).mockResolvedValue([]);
     render(<AgentPage />);
     await flush();
-    fireEvent.click(screen.getByRole("button", { name: "上下文窗口" }));
+    fireEvent.click(composerSettingButton("上下文窗口"));
     fireEvent.click(
       screen.getByRole("button", { name: "上下文窗口 1,000,000 tokens" }),
     );
     selectModel("Model B");
     await flush();
-    expect(
-      screen.getByRole("button", { name: "上下文窗口" }),
-    ).toHaveTextContent("32K");
+    expect(composerSettingButton("上下文窗口")).toHaveTextContent("32K");
     fireEvent.click(sessionCreationButton());
     await flush();
     expect(agentApi.createSession).toHaveBeenCalledWith(
@@ -1561,10 +2050,12 @@ describe("AgentPage", () => {
   it("requires an explicit confirmation before enabling full access", async () => {
     render(<AgentPage />);
     await flush();
-    fireEvent.change(screen.getByLabelText("执行权限"), {
+    fireEvent.change(composerPermissionSelect(), {
       target: { value: "full_access" },
     });
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(
+      screen.getByRole("dialog", { name: "为此会话启用完整权限？" }),
+    ).toBeInTheDocument();
     expect(agentApi.updateSession).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "启用完整权限" }));
     await flush();
@@ -1581,7 +2072,7 @@ describe("AgentPage", () => {
       await flush();
       fill("任务结束后再发送的草稿");
       expect(screen.getByLabelText("模型", { exact: true })).toBeEnabled();
-      expect(screen.getByLabelText("执行权限")).toBeEnabled();
+      expect(composerPermissionSelect()).toBeEnabled();
       selectModel("Model B");
       await flush();
       expect(agentApi.updateSession).toHaveBeenLastCalledWith(session.id, {
@@ -1590,7 +2081,7 @@ describe("AgentPage", () => {
       expect(screen.getByLabelText("模型", { exact: true })).toHaveTextContent(
         "Model B",
       );
-      fireEvent.change(screen.getByLabelText("执行权限"), {
+      fireEvent.change(composerPermissionSelect(), {
         target: { value: "auto" },
       });
       await flush();
@@ -1631,7 +2122,7 @@ describe("AgentPage", () => {
     selectModel("Model B");
     await flush();
     expect(screen.getByLabelText("模型", { exact: true })).toBeDisabled();
-    expect(screen.getByLabelText("执行权限")).toBeDisabled();
+    expect(composerPermissionSelect()).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "停止" }));
     await flush();
     expect(agentApi.interruptSession).toHaveBeenCalledOnce();
@@ -1830,7 +2321,10 @@ describe("AgentPage", () => {
     expect(agentApi.updateSession).toHaveBeenCalledWith(session.id, {
       modelId: catalog.models[1].id,
     });
-    expect(screen.getAllByText("Copilot · Model B")[0]).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "模型" })).toHaveAttribute(
+      "title",
+      "Copilot · Model B",
+    );
     fireEvent.click(sessionCreationButton());
     await flush();
     expect(agentApi.createSession).toHaveBeenCalledWith(
@@ -2465,7 +2959,7 @@ describe("AgentPage", () => {
     expect(screen.getByText("正在停止…")).toBeInTheDocument();
     snapshot.status = "idle";
     await tick();
-    expect(screen.getByText("准备就绪")).toBeInTheDocument();
+    expect(screen.queryByText("准备就绪")).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "停止" }),
     ).not.toBeInTheDocument();
@@ -2695,7 +3189,7 @@ describe("AgentPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /^完成的会话/ }));
     await flush();
     expect(screen.queryByText("正在停止…")).not.toBeInTheDocument();
-    expect(screen.getByText("准备就绪")).toBeInTheDocument();
+    expect(screen.queryByText("准备就绪")).not.toBeInTheDocument();
     await act(async () => finishStop());
     expect(agentApi.interruptSession).toHaveBeenCalledWith(session.id);
     expect(screen.queryByText("正在停止…")).not.toBeInTheDocument();

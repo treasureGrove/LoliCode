@@ -5031,22 +5031,26 @@
   },
   "applications": {
     "title": "Applications",
-    "subtitle": "Add applications that share one Agent and model channels",
+    "subtitle": "Creative tools, model rankings and free resources in one place",
+    "libraryTitle": "Discover apps",
+    "appCount": "{{count}} built-in apps",
+    "enabled": "Enabled",
+    "available": "Available",
     "loading": "Loading applications",
     "loadFailed": "Unable to load applications",
     "retry": "Retry",
     "saving": "Saving",
     "changeFailed": "Could not save application state",
     "open": "Open app",
-    "remove": "Remove shortcut",
+    "remove": "Disable",
     "add": "Add app",
-    "retained": "Removing disables its entry and Agent capabilities. Characters, stories and projects are kept for when you add it again.",
+    "retained": "Open your apps from here. Disabling an app keeps its stories, characters and project records.",
     "tavern": {
       "title": "Tavern",
       "description": "Import character cards, manage stories and world books, and roleplay using shared model channels."
     },
     "unreal": {
-      "title": "Unreal workspace",
+      "title": "UEBox · Unreal workspace",
       "description": "Manage local Unreal projects, launch the editor and use the main Agent through an editor plugin. Requires a local Unreal Engine installation."
     },
     "rankings": {

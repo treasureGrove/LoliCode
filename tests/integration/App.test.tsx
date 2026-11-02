@@ -1,8 +1,10 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { http, HttpResponse } from "msw";
 import App from "@/app/App";
+import type { AgentPageProps } from "@/features/agent/AgentPage";
 import { providersApi } from "@/lib/api/providers";
 import { proxyApi } from "@/lib/api/proxy";
 import { settingsApi } from "@/lib/api/settings";
@@ -41,11 +43,14 @@ vi.mock("@/features/agent/AgentPage", () => ({
   AgentPage: ({
     onOpenChannels,
     onCheckUpdate,
-  }: {
-    onOpenChannels: () => void;
-    onCheckUpdate: () => void;
-  }) => (
+    renderSidebar,
+  }: AgentPageProps) => (
     <div data-testid="agent-workspace">
+      {renderSidebar?.({
+        actions: <button>新对话</button>,
+        workspace: <div>项目与对话</div>,
+        onCollapse: () => undefined,
+      })}
       <button onClick={onOpenChannels}>manage-channels</button>
       <button onClick={onCheckUpdate}>check-product-update</button>
     </div>
@@ -193,12 +198,16 @@ describe("LoliCode product shell with retained native compatibility", () => {
   });
 
   it("navigates between the Agent, shared channels, and usage", async () => {
+    const user = userEvent.setup();
     renderApp();
     fireEvent.click(
       await screen.findByRole("button", { name: "manage-channels" }),
     );
     expect(await screen.findByTestId("channel-center")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "nav.usage" }));
+    await user.click(
+      screen.getByRole("button", { name: /^(更多|common\.more)(?: ·|$)/ }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: /^nav.usage/ }));
     expect(await screen.findByTestId("usage-page")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "编程工作台" }));
     expect(await screen.findByTestId("agent-workspace")).toBeInTheDocument();

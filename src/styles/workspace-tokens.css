@@ -1,0 +1,111 @@
+/* Theme contract: keep surfaces, type, and optional decoration independent of layout. */
+:root {
+  --workspace-font:
+    -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI",
+    "Noto Sans SC", "PingFang SC", "Microsoft YaHei UI", sans-serif;
+  --workspace-type-scale: var(--interface-font-scale, 1.15);
+  --workspace-text: calc(14px * var(--workspace-type-scale));
+  --workspace-label: calc(12.5px * var(--workspace-type-scale));
+  --workspace-caption: calc(11px * var(--workspace-type-scale));
+  --workspace-radius: 8px;
+  --workspace-decoration: none;
+  --workspace-decoration-opacity: 0;
+  --workspace-decoration-position: center;
+  --workspace-decoration-size: cover;
+  --workspace-shadow: 0 4px 24px rgb(66 43 39 / 4%);
+}
+
+:root:not(.dark) {
+  --bg-app: #fcfaf7;
+  --bg-sidebar: #f5f1e5;
+  --bg-card: #fffdf8;
+  --bg-subtle: #f2ede5;
+  --bg-selected: #eadfe0;
+  --text-1: #3d3437;
+  --text-2: #665b60;
+  --text-3: #776a70;
+  --action-bg: #a45f77;
+  --action-hover: #8e4b63;
+  --action-text: #8b4b62;
+  --action-fg: #ffffff;
+  --action-soft: #f0dfe5;
+  --border: 30 22% 86%;
+  --input: 30 22% 86%;
+  --ring: 339 27% 49%;
+  --background: 36 45% 98%;
+  --foreground: 340 8% 22%;
+  --card: 42 100% 99%;
+  --card-foreground: 340 8% 22%;
+  --popover: 42 100% 99%;
+  --popover-foreground: 340 8% 22%;
+  --primary: 339 27% 51%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 37 33% 92%;
+  --secondary-foreground: 340 8% 22%;
+  --muted: 37 33% 92%;
+  --muted-foreground: 333 6% 38%;
+  --accent: 340 36% 93%;
+  --accent-foreground: 339 30% 36%;
+  --workspace-user-bubble: #ecd3dc;
+  --workspace-user-ink: var(--text-1);
+  --workspace-assistant-bubble: #f4f0e3;
+  --workspace-avatar-bg: #e6c9d4;
+  --workspace-avatar-fg: #7a3f55;
+  --workspace-composer: #fffdf9;
+  --workspace-bubble-line: rgb(112 82 68 / 5%);
+  --atelier-paper: var(--bg-card);
+  --atelier-ink: var(--text-1);
+  --atelier-header: var(--bg-app);
+  --atelier-toolbar: var(--bg-subtle);
+}
+
+:root.dark {
+  --bg-app: #211e22;
+  --bg-sidebar: #282328;
+  --bg-card: #2e282e;
+  --bg-subtle: #332c32;
+  --bg-selected: #44313c;
+  --text-1: #f0e6e9;
+  --text-2: #cdbdc4;
+  --text-3: #b1a1aa;
+  --action-bg: #bd7c94;
+  --action-fg: #2e1f28;
+  --action-hover: #cb8da4;
+  --action-text: #e1a8be;
+  --action-soft: #46303d;
+  --border: 325 11% 24%;
+  --input: 325 11% 24%;
+  --ring: 338 40% 65%;
+  --background: 285 6% 13%;
+  --foreground: 338 25% 92%;
+  --card: 315 7% 17%;
+  --card-foreground: 338 25% 92%;
+  --popover: 315 7% 16%;
+  --popover-foreground: 338 25% 92%;
+  --primary: 338 33% 61%;
+  --primary-foreground: 324 19% 15%;
+  --secondary: 309 7% 19%;
+  --secondary-foreground: 338 25% 92%;
+  --muted: 309 7% 19%;
+  --muted-foreground: 323 9% 66%;
+  --accent: 325 18% 24%;
+  --accent-foreground: 339 48% 80%;
+  --workspace-user-bubble: #503441;
+  --workspace-user-ink: var(--text-1);
+  --workspace-assistant-bubble: #302b2c;
+  --workspace-avatar-bg: #5d3c4b;
+  --workspace-avatar-fg: #f5ccd9;
+  --workspace-composer: #2b252b;
+  --workspace-bubble-line: rgb(247 220 229 / 5%);
+  --workspace-shadow: 0 4px 24px rgb(0 0 0 / 10%);
+}
+
+body {
+  font-family: var(--workspace-font);
+}
+
+.lolicode-refreshed-shell {
+  font-family: var(--workspace-font);
+  font-size: var(--workspace-label);
+  -webkit-font-smoothing: antialiased;
+}

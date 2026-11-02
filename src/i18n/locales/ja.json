@@ -4978,31 +4978,35 @@
   },
   "applications": {
     "title": "アプリ",
-    "subtitle": "必要なアプリを追加し、同じ Agent とモデルを使用",
+    "subtitle": "創作ツール、モデルランキング、無料リソースを一か所に",
+    "libraryTitle": "アプリを探す",
+    "appCount": "{{count}} 個の内蔵アプリ",
+    "enabled": "有効",
+    "available": "利用可能",
     "loading": "読み込み中",
     "loadFailed": "アプリを読み込めません",
     "retry": "再試行",
     "saving": "保存中",
     "changeFailed": "状態を保存できません",
     "open": "開く",
-    "remove": "入口を削除",
+    "remove": "無効にする",
     "add": "追加",
-    "retained": "削除してもキャラクター、物語、プロジェクトは保持されます。再追加すると利用できます。",
+    "retained": "アプリはここから開けます。無効にしても物語、キャラクター、プロジェクトの記録は保持されます。",
     "tavern": {
       "title": "酒場",
       "description": "キャラクターカードとワールドブックを読み込み、共通モデルで会話できます。"
     },
     "unreal": {
-      "title": "Unreal ワークスペース",
+      "title": "UEBox · Unreal ワークスペース",
       "description": "Unreal プロジェクトを管理し、メイン Agent と連携。Unreal Engine が必要です。"
     },
     "rankings": {
-      "title": "Model rankings",
-      "description": "Explore and bookmark independent model, coding and multimodal leaderboards."
+      "title": "モデルランキング",
+      "description": "モデル、コーディング、マルチモーダルの独立評価を確認し、よく見るランキングを保存できます。"
     },
     "free-ai": {
-      "title": "Free AI directory",
-      "description": "Discover free models, developer trials and platforms with clear conditions and official links."
+      "title": "無料 AI ナビ",
+      "description": "無料モデルや開発者向け体験枠を、利用条件と公式リンクとともに探せます。"
     }
   },
   "resourceUpdates": {

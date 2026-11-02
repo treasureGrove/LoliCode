@@ -20,6 +20,10 @@ import {
   agentMessageParts,
 } from "./AgentParts";
 import { isAgentCancellation } from "./AgentRunError";
+import {
+  AgentMessageFrame,
+  type AgentMessageIdentity,
+} from "./AgentMessageFrame";
 
 type ActivityEntry = { key: string; part: AgentPart };
 type TranscriptBlock =
@@ -231,6 +235,7 @@ export function AgentTranscript({
   status = "idle",
   imageAttachmentsByMessage = {},
   documentAttachmentsByMessage = {},
+  userIdentity,
 }: {
   messages: AgentMessage[];
   projectPath: string;
@@ -238,6 +243,7 @@ export function AgentTranscript({
   status?: AgentStatus;
   imageAttachmentsByMessage?: Record<string, AgentImageAttachment[]>;
   documentAttachmentsByMessage?: Record<string, AgentDocumentAttachment[]>;
+  userIdentity?: AgentMessageIdentity;
 }) {
   const blocks = useMemo(() => groupAgentTranscript(messages), [messages]);
   const active =
@@ -255,26 +261,30 @@ export function AgentTranscript({
             sessionId={sessionId}
             imageAttachments={imageAttachmentsByMessage[block.message.id]}
             documentAttachments={documentAttachmentsByMessage[block.message.id]}
+            userIdentity={userIdentity}
           />
         ) : block.kind === "text" ? (
-          <article
-            className="min-w-0 wb-message-assistant"
-            aria-label="Agent 回复"
-            key={block.key}
-          >
+          <AgentMessageFrame role="assistant" key={block.key}>
             <AgentTextPart
               text={block.text}
               projectPath={projectPath}
               sessionId={sessionId}
             />
-          </article>
+          </AgentMessageFrame>
         ) : (
-          <AgentExecutionGroup
+          <AgentMessageFrame
             key={block.key}
-            entries={block.entries}
-            projectPath={projectPath}
-            active={active && index === blocks.length - 1}
-          />
+            role="assistant"
+            ariaLabel="Agent 执行过程"
+            showAuthor={false}
+            className="wb-chat-message--activity"
+          >
+            <AgentExecutionGroup
+              entries={block.entries}
+              projectPath={projectPath}
+              active={active && index === blocks.length - 1}
+            />
+          </AgentMessageFrame>
         ),
       )}
     </>

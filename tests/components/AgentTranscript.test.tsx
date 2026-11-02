@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -32,6 +32,174 @@ const user = (id: string) =>
   message(id, [{ type: "text", text: `Request ${id}` }], "user");
 const groups = (container: HTMLElement) =>
   container.querySelectorAll<HTMLDetailsElement>(".wb-execution-group");
+
+describe("Agent conversation message frames", () => {
+  it("places user and assistant identities outside their own bubbles and keeps system notices separate", () => {
+    render(
+      <AgentTranscript
+        projectPath="/project"
+        userIdentity={{
+          displayName: "Noble Tung",
+          avatarUrl: "https://example.com/avatar.png",
+        }}
+        messages={[
+          user("question"),
+          message("reply", [{ type: "text", text: "Here is the result." }]),
+          message(
+            "system",
+            [{ type: "text", text: "Session restored." }],
+            "system",
+          ),
+        ]}
+      />,
+    );
+    const question = screen.getByRole("article", { name: "你的消息" });
+    const reply = screen.getByRole("article", { name: "Agent 回复" });
+    const system = screen.getByRole("article", { name: "系统消息" });
+    expect(question).toHaveClass("wb-chat-message", "wb-chat-message--user");
+    expect(reply).toHaveClass("wb-chat-message", "wb-chat-message--assistant");
+    const userAvatar = question.querySelector(".wb-chat-avatar");
+    const assistantAvatar = reply.querySelector(".wb-chat-avatar");
+    expect(userAvatar?.parentElement).toBe(question);
+    expect(assistantAvatar?.parentElement).toBe(reply);
+    expect(userAvatar?.querySelector("img")).toHaveAttribute(
+      "src",
+      "https://example.com/avatar.png",
+    );
+    expect(assistantAvatar?.querySelector("img")).toHaveAttribute(
+      "src",
+      expect.stringContaining("lolicode-icon.png"),
+    );
+    expect(question.querySelector(".wb-chat-author")).toHaveTextContent(
+      "Noble Tung",
+    );
+    expect(reply.querySelector(".wb-chat-author")).toHaveTextContent("小笨狗");
+    expect(
+      question.querySelector(".wb-chat-bubble.wb-message-user"),
+    ).toHaveTextContent("Request question");
+    expect(
+      reply.querySelector(".wb-chat-bubble.wb-message-assistant"),
+    ).toHaveTextContent("Here is the result.");
+    expect(system).toHaveClass("wb-chat-message--system");
+    expect(system.querySelector(".wb-chat-avatar")).toBeNull();
+    expect(system).toHaveTextContent("Session restored.");
+  });
+
+  it("falls back after an avatar error and accepts a later avatar without remounting the message", () => {
+    const messages = [user("question")];
+    const view = render(
+      <AgentTranscript
+        projectPath="/project"
+        messages={messages}
+        userIdentity={{
+          displayName: "noble",
+          avatarUrl: "https://example.com/old.png",
+        }}
+      />,
+    );
+    const article = screen.getByRole("article", { name: "你的消息" });
+    fireEvent.error(article.querySelector(".wb-chat-avatar img")!);
+    expect(article.querySelector(".wb-chat-avatar img")).toBeNull();
+    expect(article.querySelector(".wb-chat-avatar-fallback")).toHaveTextContent(
+      "N",
+    );
+    view.rerender(
+      <AgentTranscript
+        projectPath="/project"
+        messages={messages}
+        userIdentity={{
+          displayName: "noble",
+          avatarUrl: "https://example.com/new.png",
+        }}
+      />,
+    );
+    expect(screen.getByRole("article", { name: "你的消息" })).toBe(article);
+    expect(article.querySelector(".wb-chat-avatar img")).toHaveAttribute(
+      "src",
+      "https://example.com/new.png",
+    );
+    view.rerender(
+      <AgentTranscript projectPath="/project" messages={messages} />,
+    );
+    expect(
+      article.querySelector(".wb-chat-avatar-fallback svg"),
+    ).not.toBeNull();
+    expect(article.querySelector(".wb-chat-author")).toHaveTextContent("你");
+  });
+
+  it("keeps image previews and document attachments inside the user bubble", async () => {
+    render(
+      <AgentTranscript
+        projectPath="/project"
+        messages={[user("attachments")]}
+        imageAttachmentsByMessage={{
+          attachments: [
+            {
+              id: "image",
+              fileName: "reference.png",
+              mime: "image/png",
+              bytes: 3,
+              dataUrl: "data:image/png;base64,YWJj",
+            },
+          ],
+        }}
+        documentAttachmentsByMessage={{
+          attachments: [
+            {
+              id: "document",
+              fileName: "notes.md",
+              mime: "text/markdown",
+              bytes: 5,
+            },
+          ],
+        }}
+      />,
+    );
+    const article = screen.getByRole("article", { name: "你的消息" });
+    const bubble = article.querySelector(".wb-chat-bubble")!;
+    const preview = screen.getByRole("button", {
+      name: "放大查看图片：reference.png",
+    });
+    expect(bubble).toContainElement(preview);
+    expect(bubble).toContainElement(screen.getByText("notes.md"));
+    expect(bubble).toContainElement(
+      screen.getByRole("img", { name: "reference.png" }),
+    );
+    await userEvent.click(preview);
+    expect(await screen.findByRole("dialog")).toBeVisible();
+  });
+
+  it("aligns execution details with assistant replies without changing text/tool boundaries", () => {
+    const view = render(
+      <AgentTranscript
+        projectPath="/project"
+        messages={[
+          user("one"),
+          message("reply", [
+            { type: "text", text: "Checking the project." },
+            tool("write"),
+            { type: "text", text: "Finished." },
+          ]),
+        ]}
+      />,
+    );
+    const execution = screen.getByRole("article", { name: "Agent 执行过程" });
+    expect(execution).toHaveClass(
+      "wb-chat-message--assistant",
+      "wb-chat-message--activity",
+    );
+    expect(execution.querySelector(".wb-chat-avatar")).not.toBeNull();
+    expect(execution.querySelector(".wb-chat-author")).toBeNull();
+    expect(execution.querySelector(".wb-chat-bubble")).toContainElement(
+      groups(view.container)[0],
+    );
+    const rows = [...view.container.querySelectorAll(".wb-chat-message")];
+    expect(rows[0]).toHaveTextContent("Request one");
+    expect(rows[1]).toHaveTextContent("Checking the project.");
+    expect(rows[2]).toBe(execution);
+    expect(rows[3]).toHaveTextContent("Finished.");
+  });
+});
 
 describe("Agent transcript execution groups", () => {
   it("counts completed file targets once across relative and Windows absolute spellings", () => {

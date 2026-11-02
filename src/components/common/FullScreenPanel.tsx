@@ -47,6 +47,11 @@ interface FullScreenPanelProps {
 
 /** 外壳里的内容区（App 的 <main id="content-area">）：二级页只盖住它，侧栏留着 */
 const CONTENT_AREA_ID = "content-area";
+/** Embedded workspaces can keep their own navigation outside the panel host. */
+export const FullScreenPanelHostContext = React.createContext(CONTENT_AREA_ID);
+/** Keep workspace navigation available even when its background is inert. */
+export const FullScreenPanelNavigationContext =
+  React.createContext<React.ReactNode>(null);
 
 let bodyScrollLockCount = 0;
 let bodyOverflowBeforeFirstLock: string | null = null;
@@ -74,6 +79,7 @@ const PanelSurface = React.forwardRef<HTMLDivElement, HTMLMotionProps<"div">>(
     const present = useIsPresent();
     const namespace = React.useId();
     const depth = React.useContext(PanelDepthContext);
+    const contentAreaId = React.useContext(FullScreenPanelHostContext);
     React.useImperativeHandle(forwardedRef, () => localRef.current!);
     React.useLayoutEffect(() => {
       const panel = localRef.current;
@@ -83,8 +89,8 @@ const PanelSurface = React.forwardRef<HTMLDivElement, HTMLMotionProps<"div">>(
           ? document.activeElement
           : null;
       const page = document
-        .getElementById(CONTENT_AREA_ID)
-        ?.querySelector<HTMLElement>(".tai-page");
+        .getElementById(contentAreaId)
+        ?.querySelector<HTMLElement>("[data-panel-background], .tai-page");
       if (page) {
         const lock = pageLocks.get(page) ?? { count: 0, inert: page.inert };
         lock.count += 1;
@@ -123,7 +129,7 @@ const PanelSurface = React.forwardRef<HTMLDivElement, HTMLMotionProps<"div">>(
           previousFocus.focus({ preventScroll: true });
         }
       };
-    }, [depth]);
+    }, [depth, contentAreaId]);
 
     React.useLayoutEffect(() => {
       const node = localRef.current;
@@ -193,6 +199,8 @@ export const FullScreenPanel: React.FC<FullScreenPanelProps> = ({
   const { t } = useTranslation();
   const panelRef = React.useRef<HTMLDivElement>(null);
   const depth = React.useContext(PanelDepthContext);
+  const contentAreaId = React.useContext(FullScreenPanelHostContext);
+  const navigation = React.useContext(FullScreenPanelNavigationContext);
   const prefersReducedMotion = useReducedMotion();
   const disableMotion = motionPreset === "none" || prefersReducedMotion;
   const shouldSlideFromRight =
@@ -233,7 +241,7 @@ export const FullScreenPanel: React.FC<FullScreenPanelProps> = ({
 
   const host =
     typeof document !== "undefined"
-      ? document.getElementById(CONTENT_AREA_ID)
+      ? document.getElementById(contentAreaId)
       : null;
 
   return createPortal(
@@ -266,7 +274,10 @@ export const FullScreenPanel: React.FC<FullScreenPanelProps> = ({
                     duration: motionTokens.duration.panel,
                     ease: motionTokens.ease,
                   }
-                : { duration: disableMotion ? 0 : 0.2 }
+                : {
+                    duration: disableMotion ? 0 : 0.2,
+                    ease: motionTokens.ease,
+                  }
             }
             className={cn(
               "tai-editor-panel inset-0 z-[60] flex flex-col bg-app outline-none",
@@ -281,18 +292,21 @@ export const FullScreenPanel: React.FC<FullScreenPanelProps> = ({
               subtitle={subtitle}
               actions={actions}
               leading={
-                <HoverTip content={backLabel ?? t("common.back")}>
-                  <Button
-                    type="button"
-                    variant="quiet"
-                    size="icon-compact"
-                    className="h-8 w-8"
-                    onClick={onClose}
-                    aria-label={backLabel ?? t("common.back")}
-                  >
-                    <ChevronLeft className="h-4 w-4" strokeWidth={1.5} />
-                  </Button>
-                </HoverTip>
+                <span className="flex items-center gap-1">
+                  {navigation}
+                  <HoverTip content={backLabel ?? t("common.back")}>
+                    <Button
+                      type="button"
+                      variant="quiet"
+                      size="icon-compact"
+                      className="h-8 w-8"
+                      onClick={onClose}
+                      aria-label={backLabel ?? t("common.back")}
+                    >
+                      <ChevronLeft className="h-4 w-4" strokeWidth={1.5} />
+                    </Button>
+                  </HoverTip>
+                </span>
               }
             />
 
