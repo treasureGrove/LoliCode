@@ -125,6 +125,7 @@ def install_web_account(app, authenticate, account_status, forum, *, reject, rea
 
     async def usage(request):
         user = await authenticated_user(request)
+        from credit_meter import credit_value, default_rate
         # Match the quota ledger's UTC+8 date buckets, including pending requests
         # in the request count while keeping their reserved tokens separate.
         from bridge import calendar
@@ -135,26 +136,39 @@ def install_web_account(app, authenticate, account_status, forum, *, reject, rea
             db.execute('BEGIN')
             daily_rows = db.execute('''SELECT day, count(*) AS requests,
                     coalesce(sum(charged),0) AS tokens,
-                    coalesce(sum(CASE WHEN state='pending' THEN reserved ELSE 0 END),0) AS reserved
+                    coalesce(sum(CASE WHEN state='pending' THEN reserved ELSE 0 END),0) AS reserved,
+                    coalesce(sum(coalesce(credit_charged,charged*1000)),0) AS credits,
+                    coalesce(sum(CASE WHEN state='pending' THEN coalesce(credit_reserved,reserved*1000) ELSE 0 END),0) AS credits_reserved
                     FROM requests WHERE forum_id=? AND day>=? AND day<=? AND state!='released'
                     GROUP BY day''', (user['id'], days[0], today)).fetchall()
-            records = db.execute('''SELECT id,model,created_at,state,charged,
+            records = db.execute('''SELECT id,model,created_at,state,charged,credit_rate,token_details,cost_details,billing_snapshot,
+                    coalesce(credit_charged,charged*1000) AS credits,
+                    CASE WHEN state='pending' THEN coalesce(credit_reserved,reserved*1000) ELSE 0 END AS credits_reserved,
                     CASE WHEN state='pending' THEN reserved ELSE 0 END AS reserved
                     FROM requests WHERE forum_id=? ORDER BY created_at DESC,id DESC LIMIT 20''',
                     (user['id'],)).fetchall()
         buckets = {row['day']: {'day': row['day'], 'requests': row['requests'],
-                   'tokens': row['tokens'], 'reservedTokens': row['reserved']}
+                   'tokens': row['tokens'], 'reservedTokens': row['reserved'],
+                   'credits': credit_value(row['credits']), 'creditsReserved': credit_value(row['credits_reserved'])}
                    for row in daily_rows}
-        daily = [buckets.get(day, {'day': day, 'requests': 0, 'tokens': 0, 'reservedTokens': 0})
+        daily = [buckets.get(day, {'day': day, 'requests': 0, 'tokens': 0, 'reservedTokens': 0,
+                                  'credits': 0, 'creditsReserved': 0})
                  for day in days]
         return web.json_response({
             'plan': {'id': 'public-free', 'name': '公益免费', 'currency': 'CNY', 'billedAmount': 0},
-            'today': {key: daily[-1][key] for key in ('requests', 'tokens', 'reservedTokens')},
+            'creditUnit': 'Credit',
+            'today': {key: daily[-1][key] for key in ('requests', 'tokens', 'reservedTokens', 'credits', 'creditsReserved')},
             'timezone': 'Asia/Singapore', 'resetsAt': reset,
             'daily': daily,
             'records': [{'id': row['id'], 'model': row['model'],
                          'createdAt': datetime.fromtimestamp(row['created_at'], timezone.utc).isoformat(),
                          'state': row['state'], 'tokens': row['charged'],
+                         'credits': credit_value(row['credits']),
+                         'creditsReserved': credit_value(row['credits_reserved']),
+                         'creditRate': json.loads(row['credit_rate']) if row['credit_rate'] else default_rate(),
+                         'tokenDetails': json.loads(row['token_details']) if row['token_details'] else None,
+                         'billing': json.loads(row['billing_snapshot']) if row['billing_snapshot'] else {'mode': 'credits', 'rate': json.loads(row['credit_rate']) if row['credit_rate'] else default_rate()},
+                         'costDetails': json.loads(row['cost_details']) if row['cost_details'] else None,
                          'reservedTokens': row['reserved']} for row in records],
         })
 

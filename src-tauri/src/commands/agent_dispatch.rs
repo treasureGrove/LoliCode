@@ -253,7 +253,7 @@ pub async fn create_agent_session(
     if let Some(path) = &project_path {
         check_project(&app, path)?;
     }
-    let mut session: AgentSession = native(&app, "createSession", json!({"projectPath":project_path,"modelId":model_id,"mode":mode,"title":title,"permissionMode":permission_mode.unwrap_or_else(|| "ask".into()),"reasoningEffort":reasoning_effort,"contextLimit":context_limit}), true).await?;
+    let mut session: AgentSession = native(&app, "createSession", json!({"projectPath":project_path,"modelId":model_id,"mode":mode,"title":title,"permissionMode":permission_mode.unwrap_or_else(|| "full_access".into()),"reasoningEffort":reasoning_effort,"contextLimit":context_limit}), true).await?;
     decorate(&app, &mut session)?;
     Ok(session)
 }

@@ -11,10 +11,14 @@
     />
     <link
       rel="stylesheet"
-      href="/relay-assets/public-settings.css?v=20261028-admin3"
+      href="/relay-assets/public-settings.css?v=20261030-account-admin2"
     />
     <script
-      src="/relay-assets/public-settings.js?v=20261028-admin3"
+      src="/relay-assets/admin-accounts.js?v=20261030-account-admin2"
+      defer
+    ></script>
+    <script
+      src="/relay-assets/public-settings.js?v=20261030-account-admin2"
       defer
     ></script>
   </head>
@@ -37,7 +41,9 @@
       <section class="intro" aria-labelledby="page-title">
         <div>
           <h1 id="page-title">中转站管理</h1>
-          <p class="muted">接入 API、选择模型并管理每日额度。</p>
+          <p class="muted">
+            接入 API、选择模型并管理每日 Credit 和模型消耗费率。
+          </p>
         </div>
         <div id="service-state" class="state-badge" role="status">
           <span class="state-dot"></span
@@ -256,7 +262,90 @@
         <h2 id="saved-channels-title">已接入渠道</h2>
         <div id="saved-channels" class="saved-channels"></div>
       </section>
-      <form id="settings-form" hidden>
+      <section
+        id="channel-health-panel"
+        class="panel health-panel"
+        hidden
+        aria-labelledby="channel-health-title"
+      >
+        <div class="section-heading">
+          <h2 id="channel-health-title">渠道巡检</h2>
+          <span class="count">每小时一次</span>
+        </div>
+        <div class="health-schedule">
+          <p>最近运行：<span id="health-last-run">尚无记录</span></p>
+          <p>下次运行：<span id="health-next-run">尚无记录</span></p>
+        </div>
+        <p id="health-refresh-note" class="field-help">
+          每小时由服务器巡检；本页每 60 秒只读取结果，不触发模型测试。
+        </p>
+        <div id="channel-health-results" class="health-results"></div>
+      </section>
+      <section
+        id="accounts-panel"
+        class="panel accounts-panel"
+        hidden
+        aria-labelledby="accounts-title"
+      >
+        <div class="section-heading">
+          <h2 id="accounts-title">用户用量与额度</h2>
+          <button id="accounts-reload" class="button secondary" type="button">
+            刷新用户
+          </button>
+        </div>
+        <p class="muted">
+          显示已接入中转的账号，新账号默认继承全站个人额度。 查看每位用户今日的
+          Credit 消耗。个人每日额度留空继承默认值，0
+          不允许付费消耗；免费模型仍可使用。暂停使用会阻止所有新请求，历史用量不变。
+        </p>
+        <p id="accounts-summary" class="accounts-summary"></p>
+        <form id="accounts-search-form" class="accounts-search" role="search">
+          <label for="accounts-search">搜索用户名或用户 ID</label>
+          <div class="accounts-search-row">
+            <input
+              id="accounts-search"
+              type="search"
+              placeholder="输入用户名或用户 ID"
+              maxlength="128"
+              autocomplete="off"
+            />
+            <button
+              id="accounts-search-submit"
+              class="button secondary"
+              type="submit"
+            >
+              搜索
+            </button>
+          </div>
+        </form>
+        <p
+          id="accounts-message"
+          class="field-help"
+          role="status"
+          aria-live="polite"
+        ></p>
+        <div id="accounts-list" class="accounts-list"></div>
+        <div class="accounts-pagination" aria-label="用户分页">
+          <button
+            id="accounts-prev"
+            class="button secondary"
+            type="button"
+            disabled
+          >
+            上一页
+          </button>
+          <span id="accounts-page" class="muted">尚未读取</span>
+          <button
+            id="accounts-next"
+            class="button secondary"
+            type="button"
+            disabled
+          >
+            下一页
+          </button>
+        </div>
+      </section>
+      <form id="settings-form" hidden novalidate>
         <fieldset id="settings-fields" disabled>
           <section
             class="panel availability-panel"
@@ -316,59 +405,64 @@
               <a class="text-link" href="/channels">添加或测试上游渠道 ↗</a>
             </section>
             <section class="panel quota-panel" aria-labelledby="quota-title">
-              <h2 id="quota-title">每日公益额度</h2>
+              <h2 id="quota-title">每日 Credit 额度</h2>
               <p class="muted">同一账号所有设备共用，新加坡时间零点重置。</p>
               <div class="field-grid">
                 <div class="field">
-                  <label for="daily-requests">每账号请求数 / 天</label
+                  <label for="daily-credits">每账号 Credit / 天</label
                   ><input
-                    id="daily-requests"
+                    id="daily-credits"
                     type="number"
-                    min="1"
-                    step="1"
+                    max="1000000"
+                    min="0"
+                    step="0.000001"
                     required
-                    inputmode="numeric"
+                    inputmode="decimal"
                   />
                 </div>
                 <div class="field">
-                  <label for="daily-tokens">每账号 token / 天</label
+                  <label for="global-daily-credits">全站 Credit / 天</label
                   ><input
-                    id="daily-tokens"
+                    id="global-daily-credits"
                     type="number"
-                    min="1"
-                    step="1"
-                    required
-                    inputmode="numeric"
-                  />
-                </div>
-                <div class="field">
-                  <label for="global-daily-requests">全站请求数 / 天</label
-                  ><input
-                    id="global-daily-requests"
-                    type="number"
-                    min="1"
-                    step="1"
-                    inputmode="numeric"
-                    placeholder="不限"
-                  />
-                </div>
-                <div class="field">
-                  <label for="global-daily-tokens">全站 token / 天</label
-                  ><input
-                    id="global-daily-tokens"
-                    type="number"
-                    min="1"
-                    step="1"
-                    inputmode="numeric"
+                    max="100000000"
+                    min="0"
+                    step="0.000001"
+                    inputmode="decimal"
                     placeholder="不限"
                   />
                 </div>
               </div>
               <p class="field-help">
-                token 按输入与输出合计；全站额度留空表示不限。
+                Credit 按模型费率扣除；只设 Credit
+                额度，不设每日调用次数上限。全站额度留空表示不限。并发和每分钟频率保护仍然有效。
               </p>
             </section>
           </div>
+          <section
+            class="panel credit-rates-panel"
+            aria-labelledby="credit-rates-title"
+          >
+            <div class="section-heading">
+              <h2 id="credit-rates-title">模型 Credit 单价</h2>
+              <span class="count">Credit / 1M（100万）token</span>
+            </div>
+            <p class="muted">
+              直接填写输入、输出、缓存读取和缓存写入的 Credit 单价。
+              新报价保留两位小数，0 表示免费；缓存 token 不重复按普通输入计费。
+              人民币参考报价助手可按固定 100 Credit / 元和默认 10%
+              上浮填入草稿。
+            </p>
+            <p id="credit-rates-empty" class="empty-models">
+              先选择公益模型，再设置对应费率。
+            </p>
+            <div id="model-credit-rates" class="credit-rates"></div>
+            <p class="field-help">
+              保存后对新请求生效；已经开始的请求和历史记录按请求开始时的费率结算。
+              请求先按最高费率预留 Credit，结束后按实际用量结算。
+              未修改的旧报价按原精度保留，结算精度不受报价显示位数影响。
+            </p>
+          </section>
           <details class="panel advanced-panel">
             <summary>
               <span>高级设置</span

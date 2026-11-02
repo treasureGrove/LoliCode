@@ -13,8 +13,14 @@
       rel="icon"
       href="https://lolicode.com/desktop-assets/favicon-32.png"
     />
-    <link rel="stylesheet" href="/relay-assets/portal.css?v=20261021-6" />
-    <script src="/relay-assets/portal.js?v=20261021-7" defer></script>
+    <link
+      rel="stylesheet"
+      href="/relay-assets/portal.css?v=20261030-credit-refactor1"
+    />
+    <script
+      src="/relay-assets/portal.js?v=20261030-credit-refactor1"
+      defer
+    ></script>
   </head>
   <body>
     <a class="skip-link" href="#main">跳到内容</a>
@@ -45,7 +51,12 @@
               >LoliCode 账号登录 <span>↗</span></a
             ><a class="text-link" href="/register" target="_top"
               >注册 LoliCode 账号 ↗</a
-            ><a class="text-link" href="https://lolicode.com/#download" target="_top">下载 LoliCode ↓</a>
+            ><a
+              class="text-link"
+              href="https://lolicode.com/#download"
+              target="_top"
+              >下载 LoliCode ↓</a
+            >
           </div>
           <p class="account-guide">
             公益模型共用 LoliCode
@@ -97,21 +108,13 @@
             </div>
             <div class="quota-row">
               <div>
-                <span class="number" id="request-limit">—</span
-                ><span class="unit">次 / 天</span>
+                <span class="number" id="credit-limit">—</span
+                ><span class="unit">Credit / 天</span>
               </div>
-              <p>成功请求次数</p>
-            </div>
-            <div class="quota-row">
-              <div>
-                <span class="number" id="token-limit">—</span
-                ><span class="unit">token / 天</span>
-              </div>
-              <p>输入与输出合计</p>
+              <p>按模型单价扣除 · 100 Credit = 1 元参考值</p>
             </div>
             <div class="sheet-bottom">
-              <span>每日 00:00 重置 · UTC+8</span
-              ><span>任一额度用完即暂停</span>
+              <span>每日 00:00 重置 · UTC+8</span><span>Credit 用完即暂停</span>
             </div>
           </div>
         </div>
@@ -166,8 +169,8 @@
             没有账号请到
             <a href="/register" target="_top">LoliCode 社区注册 ↗</a>。 已有
             LoliCode 账号无需重复注册，可在
-            <a href="/account" target="_top">我的额度</a>直接登录，客户端也使用同一个账号。
-            管理员后台使用单独的管理员入口。
+            <a href="/account" target="_top">我的额度</a
+            >直接登录，客户端也使用同一个账号。 管理员后台使用单独的管理员入口。
           </p>
         </details>
         <details>
@@ -180,8 +183,10 @@
         <details>
           <summary>额度怎样计算？<span>+</span></summary>
           <p>
-            每日请求次数和输入、输出 token
-            分别计量，任一达到上限就会暂停。请求前会预留额度，完成后按上游返回的用量结算；中断或缺少用量时按预留量计算。应用内可以查看准确的剩余额度。
+            所有模型共用每日 Credit，按各模型的输入、输出及缓存费率乘以实际
+            token 用量扣除。请求前会预留
+            Credit，完成后按上游返回的用量结算；中断或缺少用量时按预留量计费。不设每日调用次数上限，应用内可以查看剩余
+            Credit。
           </p>
         </details>
       </section>

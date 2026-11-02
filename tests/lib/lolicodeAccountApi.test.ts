@@ -16,9 +16,11 @@ beforeEach(() => native.invoke.mockReset().mockResolvedValue(status));
 
 describe("LoliCode website account IPC", () => {
   it("loads public allowance and syncs models without passing credentials through IPC", async () => {
+    await lolicodeAccountApi.refreshRelay();
     await lolicodeAccountApi.relayStatus();
     await lolicodeAccountApi.connectRelay();
     expect(native.invoke.mock.calls).toEqual([
+      ["lolicode_relay_status"],
       ["lolicode_relay_status"],
       ["lolicode_relay_connect"],
     ]);

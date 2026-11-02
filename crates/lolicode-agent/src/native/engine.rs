@@ -660,8 +660,10 @@ impl NativeEngine {
             .ok_or("请选择一个可用模型")?;
         let (model, _) = selection(&binding.catalog, id)?;
         let mode = args["mode"].as_str().unwrap_or("build");
-        let permission = args["permissionMode"].as_str().unwrap_or("ask");
         let background_only = args["backgroundOnly"].as_bool().unwrap_or(false);
+        let permission = args["permissionMode"]
+            .as_str()
+            .unwrap_or(if background_only { "ask" } else { "full_access" });
         if background_only && permission != "ask" {
             return Err("手机后台会话必须逐次审批".into());
         }

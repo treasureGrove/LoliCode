@@ -4,9 +4,9 @@
 
 本指南用于 **LoliCode 正式版**的安装验收、签名和发布。普通 `pnpm build` / `pnpm build:dev` 生成 **LoliCode Dev**，在 Windows 自动注册「LoliCode 开发版」入口，使用独立数据目录并禁用正式更新；详见[开发指南](lolicode-development.md)。正式构建入口为 `pnpm build:release`，下文直接执行 `pnpm tauri build` 的命令同样属于正式打包。GitHub 的 **LoliCode Windows stable release** 与 **LoliCode Windows development** 是独立工作流，Development 产物不能作为正式发布验收凭据。
 
-当前正式产品版本为 **v1.0.3**、原生更新版本为 **4.1.3**，见[本次交付记录](lolicode-v1.0.3-delivery.md)。公开分发提供 **Windows x64 NSIS 安装版与便携 ZIP**，另提供 Android **0.1.0-alpha.4** 测试包；macOS 和 Linux 是产品目标，尚未发布对应安装包。真实发布结果记录在每版交付文档中，不能用待发布清单替代发布证据。
+当前正式产品版本为 **v1.0.5**、原生更新版本为 **4.1.5**，见[本次交付记录](lolicode-v1.0.5-delivery.md)。本轮公开分发 **Windows x64 NSIS 安装版与便携 ZIP**，Android 保留既有 **0.1.0-alpha.4** 测试包；macOS 和 Linux 是产品目标，尚未发布对应安装包。真实发布结果记录在每版交付文档中，不能用待发布清单替代发布证据。
 
-`product-release.json` 区分展示版本和原生构建版本，`scripts/release/lolicode-product-version.mjs` 负责映射。Cargo、package、Tauri 和 feed.version 继续使用递增的 4.1.3；官网、GitHub tag、下载文件名和目录使用 1.0.3，feed.productVersion 用于展示，不能把 updater 版本回退成产品版本号。维护者可使用 `$lolicode-release` skill。
+`product-release.json` 区分展示版本和原生构建版本，`scripts/release/lolicode-product-version.mjs` 负责映射。Cargo、package、Tauri 和 feed.version 继续使用递增的 4.1.5；官网、GitHub tag、下载文件名和目录使用 1.0.5，feed.productVersion 用于展示，不能把 updater 版本回退成产品版本号。维护者可使用 `$lolicode-release` skill。
 
 当前源码冻结与便携包验收入口为 `scripts/dev/lolicode-build-snapshot.mjs`、`scripts/build/lolicode-portable.mjs`。前者在独立 index 和审计 ref 中保存源树并导出构建目录，保留用户分支和 index；后者从真实本轮可执行文件组装 ZIP、逐文件核对并执行离线自检。
 
@@ -194,7 +194,7 @@ GitHub 有新包不能单独作为交付完成依据。版本文件与源码冻�
 node scripts/release/lolicode-verify-delivery.mjs --release-dir <本轮准备目录/version> --public-key-file src-tauri/updater.pub --tauri-config <冻结配置> --output <新的验收回执.json>
 ```
 
-该检查会重新验本地实际包的签名、两个正式清单的版本与一致性、GitHub Latest 及文件 digest，并从官网入口完整下载三份文件对比 SHA256／长度。正式源仍旧、错版本、签名变化、错误镜像或网页入口失配均不能通过。它不会安装；仍要另行用官方 updater SDK 从上一版检查/下载/验签，并检查新版本自查无重复更新。首次安装、覆盖安装与数据迁移也需要各自独立的证据。
+该检查会重新验本地实际包的签名、两个正式清单的版本与一致性、GitHub Latest 及文件 digest，并从官网入口完整下载安装器、签名和便携 ZIP 三份资产对比 SHA256／长度。另发的 `release-build.json` 第四附件需要独立匿名完整下载及发布端现场验真，不能用三安装资产结果代替。正式源仍旧、错版本、签名变化、错误镜像或网页入口失配均不能通过。它不会安装；仍要另行用官方 updater SDK 从上一版检查/下载/验签，并检查新版本自查无重复更新。首次安装、覆盖安装与数据迁移也需要各自独立的证据。
 
 `scripts/release/lolicode-download-router.py` 支持明确列出的多个稳定版本，每版仅安装器、签名和便携包；它不代理正文、不接受任意上游。部署时发布新配置与 Nginx exact 路由，保留旧版入口；短 HEAD 健康检查失败选同版本 GitHub，服务不可用时 Nginx 有固定 GitHub 兜底。运行中断后的跨来源续传仍不支持。
 

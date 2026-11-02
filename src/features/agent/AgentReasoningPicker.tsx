@@ -19,6 +19,10 @@ const TRANSPORT_LABELS = {
   mixed: "存在多路由差异，自动档位取可确认交集",
 } as const;
 
+// A missing catalog enum still permits an explicit session override. These are
+// common choices, not a capability declaration or an automatic default.
+const COMMON_REASONING_EFFORTS = ["low", "medium", "high", "xhigh", "max"];
+
 export function AgentReasoningPicker({
   model,
   value,
@@ -33,17 +37,17 @@ export function AgentReasoningPicker({
   contextValue?: number | null;
 }) {
   const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState(value);
   const contentId = useId();
-  const helpId = useId();
   const declared = Array.isArray(model?.reasoningEfforts);
-  const efforts = [...new Set(model?.reasoningEfforts || [])].filter(Boolean);
+  const declaredEfforts = [...new Set(model?.reasoningEfforts || [])].filter(
+    Boolean,
+  );
+  const efforts = declared ? declaredEfforts : COMMON_REASONING_EFFORTS;
   const configuredDefault = model?.defaultReasoningEffort;
   const defaultEffort =
     configuredDefault ||
-    ["medium", "high"].find((effort) => efforts.includes(effort)) ||
-    efforts[0];
-  const validDraft = !draft || /^[A-Za-z0-9_-]{1,64}$/.test(draft);
+    ["medium", "high"].find((effort) => declaredEfforts.includes(effort)) ||
+    declaredEfforts[0];
   const supportedValue = !value || efforts.includes(value);
   const hasOutputLimit =
     typeof model?.outputLimit === "number" &&
@@ -67,7 +71,6 @@ export function AgentReasoningPicker({
       onOpenChange={(next) => {
         if (next && disabled) return;
         setOpen(next);
-        if (next) setDraft(value);
       }}
     >
       <PopoverTrigger asChild>
@@ -91,9 +94,7 @@ export function AgentReasoningPicker({
           <span className="truncate">
             思考 ·{" "}
             {value
-              ? declared
-                ? value
-                : `${value}（手动）`
+              ? value
               : configuredDefault
                 ? `模型默认 · ${defaultEffort}`
                 : defaultEffort
@@ -184,42 +185,9 @@ export function AgentReasoningPicker({
           </p>
         )}
         {!declared && (
-          <div className="space-y-2 border-t pt-3">
-            <label className="block text-sm">
-              手动档位标识（未验证）
-              <input
-                type="text"
-                value={draft}
-                aria-describedby={helpId}
-                aria-invalid={!validDraft}
-                autoComplete="off"
-                spellCheck={false}
-                maxLength={64}
-                onChange={(event) => setDraft(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") event.preventDefault();
-                }}
-                className="mt-1 block w-full rounded border bg-transparent px-2 py-1.5 text-sm"
-              />
-            </label>
-            <p id={helpId} className="text-xs text-fg-2">
-              渠道未声明可用档位。请按中转服务文档填写，手动值未经验证；允许
-              1–64 位英文字母、数字、下划线或连字符。
-              {configuredDefault
-                ? `留空继承模型默认（${defaultEffort}）。`
-                : defaultEffort
-                  ? `留空使用自动档位（${defaultEffort}）。`
-                  : "留空使用上游默认。"}
-            </p>
-            <button
-              type="button"
-              disabled={!validDraft || disabled}
-              onClick={() => select(draft)}
-              className="rounded border px-3 py-1.5 text-sm disabled:cursor-default disabled:opacity-50"
-            >
-              应用手动档位
-            </button>
-          </div>
+          <p className="text-xs text-fg-2">
+            渠道未提供档位列表，以上为常用档位，实际支持以当前模型和渠道为准。
+          </p>
         )}
       </PopoverContent>
     </Popover>

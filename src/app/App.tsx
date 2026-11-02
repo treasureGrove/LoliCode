@@ -26,6 +26,7 @@ import {
 import { Sidebar, type SidebarProps } from "@/app/shell/Sidebar";
 import { WindowControls } from "@/app/shell/WindowControls";
 import { SimpleUsagePage } from "@/features/usage/SimpleUsagePage";
+import { LolicodeAllowancePage } from "@/features/usage/LolicodeAllowancePage";
 import { APP_IDS, DEFAULT_VISIBLE_APPS } from "@/config/appConfig";
 import { useUpdate } from "@/contexts/UpdateContext";
 import { useTauriEvent } from "@/hooks/useTauriEvent";
@@ -83,6 +84,7 @@ function App() {
   const [appConfigScrollTarget, setAppConfigScrollTarget] = useState<AppId>();
   // 进设置前停留的页面：设置目录里的「← 返回」回到这里
   const settingsReturnViewRef = useRef<View>("channels");
+  const allowanceReturnViewRef = useRef<View>("agent");
   const [channelNavigationBusy, setChannelNavigationBusy] = useState(false);
   const [agentInitialProjectPath, setAgentInitialProjectPath] =
     useState<string>();
@@ -398,12 +400,21 @@ function App() {
     }
     if (managementBusyRef.current) return;
     if (confirmLeave(() => openPage(page))) return;
+    if (page === "allowance" && currentViewRef.current !== "allowance") {
+      allowanceReturnViewRef.current = currentViewRef.current;
+    }
     setActiveAgentTool(null);
     setAgentToolRequest((previous) => ({
       tool: null,
       id: (previous?.id ?? 0) + 1,
     }));
     setCurrentView(productViewOf(page));
+  };
+
+  const exitAllowance = () => {
+    if (managementBusyRef.current) return;
+    if (confirmLeave(exitAllowance)) return;
+    setCurrentView(allowanceReturnViewRef.current);
   };
 
   const openUnrealProjectInAgent = (path: string) => {
@@ -454,6 +465,8 @@ function App() {
 
   const openSettingsRef = useRef(openSettings);
   openSettingsRef.current = openSettings;
+  const exitAllowanceRef = useRef(exitAllowance);
+  exitAllowanceRef.current = exitAllowance;
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -473,6 +486,9 @@ function App() {
       if (view === "settings") {
         event.preventDefault();
         setCurrentView(settingsReturnViewRef.current);
+      } else if (view === "allowance") {
+        event.preventDefault();
+        exitAllowanceRef.current();
       }
     };
 
@@ -615,6 +631,8 @@ function App() {
         );
       case "usage":
         return <SimpleUsagePage />;
+      case "allowance":
+        return <LolicodeAllowancePage onBack={exitAllowance} />;
       case "tavern":
         return <TavernPage onOpenChannels={() => openPage("channels")} />;
       case "rankings":

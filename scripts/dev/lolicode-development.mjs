@@ -1,14 +1,17 @@
 #!/usr/bin/env node
-import { spawnSync } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { spawn, spawnSync } from "node:child_process";
+import { createHash, randomUUID } from "node:crypto";
 import {
   cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
+  closeSync,
   readFileSync,
   readdirSync,
   rmSync,
+  unlinkSync,
   writeFileSync,
 } from "node:fs";
 import os from "node:os";
@@ -24,6 +27,195 @@ export const root = path.resolve(
 );
 export const targetDirectory = path.join(root, "src-tauri/target/development");
 export const packageDirectory = path.join(targetDirectory, "app");
+
+// Hash build inputs themselves: edits to an already-dirty file, new files and
+// deletions must all invalidate the installed app. Generated output is ignored
+// by Git, so a build cannot invalidate its own receipt.
+export function developmentSourceFingerprint(repository = root) {
+  const result = spawnSync(
+    "git",
+    [
+      "ls-files",
+      "--cached",
+      "--others",
+      "--exclude-standard",
+      "-z",
+      "--",
+      "src",
+      "src-tauri",
+      "crates",
+      "packages",
+      "assets",
+      "scripts/build",
+      "scripts/dev",
+      "third-party/zcode",
+      "package.json",
+      "pnpm-lock.yaml",
+      "pnpm-workspace.yaml",
+      "product-release.json",
+      "rust-toolchain.toml",
+      "tsconfig*.json",
+      "vite.config.*",
+      "tailwind.config.*",
+      "postcss.config.*",
+      "LICENSE",
+      "THIRD_PARTY_NOTICES.md",
+    ],
+    {
+      cwd: repository,
+      encoding: "utf8",
+      windowsHide: true,
+      maxBuffer: 16 * 1024 * 1024,
+    },
+  );
+  if (result.error || result.status !== 0)
+    throw new Error("无法检查开发源码，请确认 Git 和源码仓库可用。");
+  const hash = createHash("sha256").update("lolicode-development-source-v1\0");
+  const record = (name, bytes) => {
+    hash.update(JSON.stringify([name, bytes.length]) + "\0");
+    hash.update(bytes);
+  };
+  for (const args of [
+    ["rev-parse", "HEAD"],
+    ["symbolic-ref", "--quiet", "--short", "HEAD"],
+  ]) {
+    const identity = spawnSync("git", args, {
+      cwd: repository,
+      encoding: "utf8",
+      windowsHide: true,
+    });
+    record(args[0], Buffer.from(identity.stdout?.trim() || ""));
+  }
+  for (const file of [
+    ...new Set(result.stdout.split("\0").filter(Boolean)),
+  ].sort()) {
+    try {
+      record(file, readFileSync(path.join(repository, file)));
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+      record(`deleted:${file}`, Buffer.alloc(0));
+    }
+  }
+  return hash.digest("hex");
+}
+
+function developmentIsRunning(binary) {
+  const result = spawnSync(
+    "powershell.exe",
+    [
+      "-NoLogo",
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      "$ErrorActionPreference = 'Stop'; @(Get-Process -Name 'LoliCode Dev' -ErrorAction SilentlyContinue | Where-Object { $_.Path -and [IO.Path]::GetFullPath($_.Path) -eq $env:LOLICODE_DEV_INSTALL_BINARY }).Count",
+    ],
+    {
+      encoding: "utf8",
+      windowsHide: true,
+      env: { ...process.env, LOLICODE_DEV_INSTALL_BINARY: binary },
+    },
+  );
+  if (result.error || result.status !== 0 || !/^\d+\s*$/.test(result.stdout))
+    throw new Error("无法确认开发版是否已退出，未替换程序。");
+  return Number(result.stdout.trim()) > 0;
+}
+
+function launchBinary(binary) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(binary, [], {
+      cwd: path.dirname(binary),
+      detached: true,
+      windowsHide: true,
+      stdio: "ignore",
+    });
+    child.once("error", reject);
+    child.once("spawn", () => {
+      child.unref();
+      resolve();
+    });
+  });
+}
+
+export async function launchDevelopment({
+  repository = root,
+  installDirectory = path.join(
+    process.env.LOCALAPPDATA || "",
+    "Programs",
+    DEVELOPMENT_NAME,
+  ),
+  isRunning = developmentIsRunning,
+  build = () => main(["build"]),
+  launch = launchBinary,
+} = {}) {
+  mkdirSync(path.join(repository, "src-tauri/target/development"), {
+    recursive: true,
+  });
+  const lockPath = path.join(
+    repository,
+    "src-tauri/target/development/launch.lock",
+  );
+  let lock;
+  try {
+    lock = openSync(lockPath, "wx");
+  } catch (error) {
+    if (error.code !== "EEXIST") throw error;
+    const owner = Number(readFileSync(lockPath, "utf8"));
+    let alive = true;
+    if (Number.isSafeInteger(owner) && owner > 0) {
+      try {
+        process.kill(owner, 0);
+      } catch (failure) {
+        alive = failure.code !== "ESRCH";
+      }
+    }
+    if (alive) throw new Error("开发版正在检查或构建，请稍候再打开。");
+    unlinkSync(lockPath);
+    lock = openSync(lockPath, "wx");
+  }
+  try {
+    writeFileSync(lock, String(process.pid));
+    const manifestPath = path.join(installDirectory, "development-build.json");
+    const binary = path.join(installDirectory, `${DEVELOPMENT_NAME}.exe`);
+    const readManifest = () => {
+      if (!existsSync(manifestPath)) {
+        if (existsSync(binary))
+          throw new Error("开发版安装记录缺失，现有程序已保留。");
+        return null;
+      }
+      const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+      if (
+        manifest.identifier !== DEVELOPMENT_ID ||
+        manifest.channel !== "development" ||
+        path.resolve(manifest.sourceDirectory || "").toLowerCase() !==
+          path.resolve(repository).toLowerCase()
+      )
+        throw new Error("开发版属于另一份源码，请从对应仓库重新注册入口。");
+      return manifest;
+    };
+    const before = developmentSourceFingerprint(repository);
+    const installed = readManifest();
+    if (!existsSync(binary) || installed?.sourceFingerprint !== before) {
+      if (isRunning(binary))
+        throw new Error(
+          "源码已有更新。请先从托盘退出 LoliCode 开发版，再双击桌面快捷方式完成构建；正在运行的任务已保留。",
+        );
+      console.log("源码已有变化，正在构建 LoliCode 开发版……");
+      await build();
+      if (
+        developmentSourceFingerprint(repository) !== before ||
+        readManifest()?.sourceFingerprint !== before ||
+        !existsSync(binary)
+      )
+        throw new Error(
+          "构建期间源码发生变化或新构建未安装，请再次打开开发版重试。",
+        );
+    }
+    await launch(binary);
+  } finally {
+    closeSync(lock);
+    unlinkSync(lockPath);
+  }
+}
 
 function git(args) {
   const result = spawnSync("git", args, {
@@ -100,6 +292,7 @@ export function buildEnvironment(channel, source = process.env) {
     delete env.LOLICODE_BUILD_REVISION;
     delete env.LOLICODE_DEV_SOURCE_DIR;
     delete env.LOLICODE_DEV_NODE_PATH;
+    delete env.LOLICODE_DEV_SOURCE_FINGERPRINT;
     // An inherited development shell must not redirect a stable build.
     if (
       env.CARGO_TARGET_DIR &&
@@ -266,6 +459,10 @@ export function stageDevelopmentApp(env) {
     path.join(root, "scripts/dev/register-lolicode-development.ps1"),
     path.join(staging, "register-lolicode-development.ps1"),
   );
+  cpSync(
+    path.join(root, "scripts/dev/launch-lolicode-development.ps1"),
+    path.join(staging, "launch-lolicode-development.ps1"),
+  );
   const product = JSON.parse(
     readFileSync(path.join(root, "product-release.json"), "utf8"),
   );
@@ -282,6 +479,9 @@ export function stageDevelopmentApp(env) {
     workingTreeDirty: env.VITE_LOLICODE_BUILD_DIRTY === "true",
     builtAt: env.VITE_LOLICODE_BUILD_TIMESTAMP,
     sourceDirectory: root,
+    sourceFingerprint: env.LOLICODE_DEV_SOURCE_FINGERPRINT,
+    nodePath: process.execPath,
+    autoBuildOnLaunch: !env.CI && existsSync(path.join(root, ".git")),
     files: fileList(staging),
   };
   writeFileSync(
@@ -398,15 +598,29 @@ export async function main(args) {
         throw new Error(
           "The desktop development package currently targets Windows.",
         );
+      devEnv.LOLICODE_DEV_SOURCE_FINGERPRINT = developmentSourceFingerprint();
       tauri(
         ["build", "--no-bundle", "--config", "src-tauri/tauri.dev.conf.json"],
         devEnv,
       );
+      if (
+        developmentSourceFingerprint() !==
+        devEnv.LOLICODE_DEV_SOURCE_FINGERPRINT
+      )
+        throw new Error(
+          "源码在构建期间发生变化，请重新构建；已安装开发版保持不变。",
+        );
       stageDevelopmentApp(devEnv);
       if (!options.includes("--no-register")) registration("Register");
       console.log(`Development app: ${packageDirectory}`);
       break;
     }
+    case "launch":
+      if (options.length) throw new Error("开发版启动不接受额外参数。");
+      if (process.platform !== "win32")
+        throw new Error("开发版桌面入口目前仅支持 Windows。");
+      await launchDevelopment();
+      break;
     case "release":
       tauri(["build", ...options], buildEnvironment("stable"));
       break;
@@ -425,7 +639,7 @@ export async function main(args) {
       break;
     default:
       throw new Error(
-        "Use dev, build [--no-register], renderer, release, register, or unregister.",
+        "Use dev, build [--no-register], launch, renderer, release, register, or unregister.",
       );
   }
 }

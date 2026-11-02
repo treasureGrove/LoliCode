@@ -129,13 +129,6 @@ import {
 } from "./AgentToolPanel";
 import { AgentToolDraftsContext } from "./AgentToolDrafts";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -545,9 +538,7 @@ export function AgentPage({
   const [showArchived, setShowArchived] = useState(false);
   const [projects, setProjects] = useState<AgentProject[]>([]);
   const [permissionMode, setPermissionMode] =
-    useState<AgentPermissionMode>("ask");
-  const [confirmFullAccess, setConfirmFullAccess] = useState(false);
-  const fullAccessTarget = useRef<string | null>(null);
+    useState<AgentPermissionMode>("full_access");
   const [sessionOverrides, setSessionOverrides] = useState<
     Record<string, AgentSession>
   >({});
@@ -563,6 +554,8 @@ export function AgentPage({
   const [catalogUpdate, setCatalogUpdate] = useState(0);
   const catalogAttempt = useRef({ key: "", at: 0 });
   const [sessions, setSessions] = useState<AgentSession[]>([]);
+  const sessionsRef = useRef(sessions);
+  sessionsRef.current = sessions;
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [modelId, setModelId] = useState("");
   const [reasoningEffort, setReasoningEffort] = useState("");
@@ -593,7 +586,7 @@ export function AgentPage({
   const [workspaceSessionErrors, setWorkspaceSessionErrors] = useState<
     Record<string, boolean>
   >({});
-  const workspaceSessionLoads = useRef(new Set<string>());
+  const workspaceSessionLoads = useRef(new Map<string, object>());
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [composerImagesBySession, setComposerImagesBySession] = useState<
     Record<string, AgentImageAttachment[]>
@@ -1602,10 +1595,42 @@ export function AgentPage({
     result: AgentProjectResult,
     preferredSessionId?: string,
   ) => {
-    if (workspace?.path !== result.workspace.path) {
+    // Expanded inactive projects read this cache instead of the active list.
+    // Retain the full task list, independent of the current search or archive view.
+    const previousWorkspace = workspaceRef.current;
+    const retainedSessions: Record<string, AgentSession[]> = {
+      ...(previousWorkspace && previousWorkspace.path !== result.workspace.path
+        ? {
+            [previousWorkspace.path]: sessionsRef.current.filter(
+              (session) => !session.archived,
+            ),
+          }
+        : {}),
+      [result.workspace.path]: result.sessions.filter(
+        (session) => !session.archived,
+      ),
+    };
+    const retainedPaths = Object.keys(retainedSessions);
+    // An older background expansion must not replace these authoritative lists.
+    for (const path of retainedPaths)
+      workspaceSessionLoads.current.delete(path);
+    setWorkspaceSessions((old) => ({ ...old, ...retainedSessions }));
+    setLoadingWorkspaceSessions((old) => {
+      const next = { ...old };
+      for (const path of retainedPaths) delete next[path];
+      return next;
+    });
+    setWorkspaceSessionErrors((old) => {
+      const next = { ...old };
+      for (const path of retainedPaths) delete next[path];
+      return next;
+    });
+    if (previousWorkspace?.path !== result.workspace.path) {
       setExpandedWorkspaces((old) => ({
         ...old,
-        ...(workspace ? { [workspace.path]: old[workspace.path] ?? true } : {}),
+        ...(previousWorkspace
+          ? { [previousWorkspace.path]: old[previousWorkspace.path] ?? true }
+          : {}),
         [result.workspace.path]: old[result.workspace.path] ?? true,
       }));
     }
@@ -2231,7 +2256,6 @@ export function AgentPage({
         if (patch.modelId) setModelId(patch.modelId);
         if (patch.modelId || patch.reasoningEffort !== undefined)
           setReasoningEffort(result.reasoningEffort || "");
-        if (patch.permissionMode) setPermissionMode(patch.permissionMode);
       }
     } catch (cause) {
       if (mounted.current && selectedId.current === id)
@@ -2309,7 +2333,8 @@ export function AgentPage({
   };
   const loadWorkspaceSessions = async (path: string) => {
     if (workspaceSessionLoads.current.has(path)) return;
-    workspaceSessionLoads.current.add(path);
+    const request = {};
+    workspaceSessionLoads.current.set(path, request);
     setLoadingWorkspaceSessions((old) => ({ ...old, [path]: true }));
     setWorkspaceSessionErrors((old) => {
       const next = { ...old };
@@ -2318,16 +2343,25 @@ export function AgentPage({
     });
     try {
       const items = await agentApi.listSessions(path);
-      if (!mounted.current) return;
+      if (
+        !mounted.current ||
+        workspaceSessionLoads.current.get(path) !== request
+      )
+        return;
       setWorkspaceSessions((old) => ({ ...old, [path]: items }));
       discoverSessionActivity(items);
     } catch {
-      if (mounted.current)
+      if (
+        mounted.current &&
+        workspaceSessionLoads.current.get(path) === request
+      )
         setWorkspaceSessionErrors((old) => ({ ...old, [path]: true }));
     } finally {
-      workspaceSessionLoads.current.delete(path);
-      if (mounted.current)
-        setLoadingWorkspaceSessions((old) => ({ ...old, [path]: false }));
+      if (workspaceSessionLoads.current.get(path) === request) {
+        workspaceSessionLoads.current.delete(path);
+        if (mounted.current)
+          setLoadingWorkspaceSessions((old) => ({ ...old, [path]: false }));
+      }
     }
   };
   const toggleWorkspace = (path: string, expanded: boolean) => {
@@ -3119,13 +3153,9 @@ export function AgentPage({
                     value={permissionMode}
                     disabled={Boolean(busy)}
                     onChange={(event) => {
-                      if (event.target.value === "full_access") {
-                        fullAccessTarget.current = null;
-                        setConfirmFullAccess(true);
-                      } else
-                        setPermissionMode(
-                          event.target.value as AgentPermissionMode,
-                        );
+                      setPermissionMode(
+                        event.target.value as AgentPermissionMode,
+                      );
                     }}
                   >
                     <option value="ask">逐次确认</option>
@@ -3583,7 +3613,7 @@ export function AgentPage({
                         <label htmlFor="agent-permission-mode">执行权限</label>
                         <select
                           id="agent-permission-mode"
-                          title="逐次确认：改动和命令先询问；Auto Mode：常规编辑和安全命令自动允许；完整权限：允许项目内工具，项目外仍需确认。配置从下一次请求或工具检查生效。"
+                          title="逐次确认：改动和命令先询问；Auto Mode：常规编辑和安全命令自动允许；完整权限：工具无需逐次确认。配置从下一次请求或工具检查生效。"
                           value={selectedSession?.permissionMode || "ask"}
                           disabled={
                             readOnlySession ||
@@ -3593,14 +3623,10 @@ export function AgentPage({
                           }
                           onChange={(event) => {
                             if (readOnlySession) return;
-                            if (event.target.value === "full_access") {
-                              fullAccessTarget.current = sessionId;
-                              setConfirmFullAccess(true);
-                            } else
-                              void updateSessionConfig({
-                                permissionMode: event.target
-                                  .value as AgentPermissionMode,
-                              });
+                            void updateSessionConfig({
+                              permissionMode: event.target
+                                .value as AgentPermissionMode,
+                            });
                           }}
                         >
                           <option value="ask">逐次确认</option>
@@ -3735,7 +3761,7 @@ export function AgentPage({
                       "",
                     "build",
                     undefined,
-                    "ask",
+                    permissionMode,
                   )
                   .then((session) => {
                     if (
@@ -3798,35 +3824,6 @@ export function AgentPage({
           </AgentToolDraftsContext.Provider>
         </FullScreenPanelHostContext.Provider>
       </FullScreenPanelNavigationContext.Provider>
-      <Dialog open={confirmFullAccess} onOpenChange={setConfirmFullAccess}>
-        <DialogContent className="wb-extensions wb-permission-confirm p-5">
-          <DialogHeader>
-            <DialogTitle>为此会话启用完整权限？</DialogTitle>
-            <DialogDescription>
-              允许 LoliCode
-              在项目内改动文件、执行命令和运行工具，项目外访问仍需确认。
-            </DialogDescription>
-          </DialogHeader>
-          <div className="mt-4 flex justify-end gap-2">
-            <button
-              className="wb-mode-button"
-              onClick={() => setConfirmFullAccess(false)}
-            >
-              取消
-            </button>
-            <button
-              className="wb-primary"
-              onClick={() => {
-                setConfirmFullAccess(false);
-                if (fullAccessTarget.current === selectedId.current)
-                  void updateSessionConfig({ permissionMode: "full_access" });
-              }}
-            >
-              启用完整权限
-            </button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

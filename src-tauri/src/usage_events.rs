@@ -19,6 +19,21 @@ use tauri::{AppHandle, Emitter};
 /// 前端监听的事件名
 pub const EVENT_USAGE_LOG_RECORDED: &str = "usage-log-recorded";
 
+pub const EVENT_RELAY_REQUEST_COMPLETED: &str = "lolicode-relay-request-completed";
+
+/// Balance refresh is independent of optional local usage logging. The caller
+/// owns the request/body lifecycle and invokes this once after releasing it.
+pub(crate) fn notify_relay_request_completed() {
+    #[cfg(test)]
+    TEST_RELAY_NOTIFY_COUNT.with(|count| count.set(count.get().saturating_add(1)));
+
+    if let Some(handle) = APP_HANDLE.get() {
+        if let Err(error) = handle.emit(EVENT_RELAY_REQUEST_COMPLETED, ()) {
+            log::warn!("emit {EVENT_RELAY_REQUEST_COMPLETED} 失败: {error}");
+        }
+    }
+}
+
 /// 防抖窗口：合并 200ms 内的多次通知。
 const DEBOUNCE_WINDOW: Duration = Duration::from_millis(200);
 
@@ -73,9 +88,15 @@ pub fn notify_log_recorded() {
 #[cfg(test)]
 thread_local! {
     static TEST_NOTIFY_COUNT: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+    static TEST_RELAY_NOTIFY_COUNT: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
 }
 
 #[cfg(test)]
 pub(crate) fn take_test_notify_count() -> u32 {
     TEST_NOTIFY_COUNT.with(|count| count.replace(0))
+}
+
+#[cfg(test)]
+pub(crate) fn take_test_relay_notify_count() -> u32 {
+    TEST_RELAY_NOTIFY_COUNT.with(|count| count.replace(0))
 }

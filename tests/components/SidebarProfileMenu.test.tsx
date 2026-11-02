@@ -38,6 +38,7 @@ vi.mock("@/lib/api/settings", () => ({
 }));
 vi.mock("@/lib/api/lolicode-account", () => ({
   lolicodeAccountApi: {
+    refreshRelay: mocks.relayStatus,
     relayStatus: mocks.relayStatus,
     connectRelay: mocks.connectRelay,
   },
@@ -50,9 +51,10 @@ const account: LolicodeAccount = {
   avatarUrl: "https://lolicode.com/assets/avatars/42.png",
   profileUrl: "https://lolicode.com/u/42",
 };
-function mount(expanded = false) {
+function mount() {
   const onOpenSettings = vi.fn();
   const onOpenUpdates = vi.fn();
+  const onOpenAllowance = vi.fn();
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 } },
   });
@@ -62,16 +64,17 @@ function mount(expanded = false) {
   return {
     ...render(
       <SidebarProfileMenu
-        expanded={expanded}
         selected
         hasUpdate
         onOpenSettings={onOpenSettings}
         onOpenUpdates={onOpenUpdates}
+        onOpenAllowance={onOpenAllowance}
       />,
       { wrapper },
     ),
     onOpenSettings,
     onOpenUpdates,
+    onOpenAllowance,
   };
 }
 async function openMenu() {
@@ -119,16 +122,19 @@ beforeEach(() => {
       tokensUsed: 1200,
       tokensReserved: 800,
       tokensRemaining: 98000,
+      creditUnit: "Credit",
+      creditLimit: 100,
+      creditsUsed: 1.2,
+      creditsReserved: 0.8,
+      creditsRemaining: 98,
     },
   } satisfies LolicodeRelayStatus);
 });
 
 describe("LoliCode sidebar account", () => {
   it("offers a website login with a neutral signed-out avatar", async () => {
-    mount(true);
+    mount();
     const trigger = screen.getByRole("button", { name: "头像与设置" });
-    expect(trigger).toHaveTextContent("未登录");
-    expect(trigger).toHaveTextContent("账户与设置");
     expect(trigger).toHaveAttribute("data-selected", "true");
     expect(trigger.querySelector("img")).toBeNull();
     expect(
@@ -143,35 +149,41 @@ describe("LoliCode sidebar account", () => {
     expect(mocks.login).not.toHaveBeenCalled();
   });
 
-  it("shows the signed-in allowance ring and opens its existing usage manager", async () => {
+  it("opens the allowance page directly from the signed-in ring without a modal", async () => {
     mocks.account = account;
     const user = userEvent.setup();
-    mount();
+    const { onOpenAllowance } = mount();
     const allowance = await screen.findByRole("button", {
-      name: "免费额度 · 今日剩余 85%",
+      name: "免费额度 · 今日剩余 98%",
     });
     expect(
       screen.getByRole("meter", { name: "今日免费额度剩余" }),
-    ).toHaveAttribute("aria-valuenow", "85");
+    ).toHaveAttribute("aria-valuenow", "98");
     await user.click(allowance);
-    expect(
-      await screen.findByRole("dialog", { name: "免费额度" }),
-    ).toHaveTextContent("LoliCode 每日免费额度");
-    await user.click(screen.getByRole("button", { name: "管理用量" }));
-    expect(
-      await screen.findByRole("dialog", { name: "公益模型与每日额度" }),
-    ).toBeInTheDocument();
-    expect(await screen.findByText("17 / 20")).toBeInTheDocument();
-    expect(
-      screen.queryByRole("dialog", { name: "免费额度" }),
-    ).not.toBeInTheDocument();
+    expect(onOpenAllowance).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(document.body.style.pointerEvents).not.toBe("none");
+  });
+
+  it("opens the same allowance page from the account menu and dismisses the menu", async () => {
+    mocks.account = account;
+    const { onOpenAllowance } = mount();
+    await openMenu();
+    await userEvent
+      .setup()
+      .click(screen.getByRole("menuitem", { name: "使用情况与额度" }));
+    expect(onOpenAllowance).toHaveBeenCalledOnce();
+    await waitFor(() =>
+      expect(screen.queryByRole("menu")).not.toBeInTheDocument(),
+    );
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(document.body.style.pointerEvents).not.toBe("none");
   });
 
   it("shows the website nickname/avatar, opens its profile, and refreshes it", async () => {
     mocks.account = account;
-    mount(true);
+    mount();
     const trigger = screen.getByRole("button", { name: "头像与设置" });
-    expect(trigger).toHaveTextContent("小桃");
     expect(trigger.querySelector("img")).toHaveAttribute(
       "src",
       account.avatarUrl,

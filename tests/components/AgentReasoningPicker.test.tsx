@@ -20,7 +20,7 @@ const open = () =>
 describe("AgentReasoningPicker", () => {
   it.each([
     { value: "", expected: "思考 · 上游默认" },
-    { value: "custom", expected: "思考 · custom（手动）" },
+    { value: "custom", expected: "思考 · custom" },
   ])(
     "labels the visible $expected state as reasoning",
     ({ value, expected }) => {
@@ -158,7 +158,7 @@ describe("AgentReasoningPicker", () => {
   });
 
   it.each([undefined, null])(
-    "allows an explicit manual value only when effort metadata is %s",
+    "offers common effort choices without changing the inherited default when metadata is %s",
     (reasoningEfforts) => {
       const select = vi.fn(),
         submit = vi.fn();
@@ -183,17 +183,26 @@ describe("AgentReasoningPicker", () => {
       expect(
         screen.getByText(/模型上限未声明，本地自动基准为 32K tokens/),
       ).toBeVisible();
-      const input = screen.getByRole("textbox", {
-        name: "手动档位标识（未验证）",
-      });
-      fireEvent.change(input, { target: { value: "custom_v2-high" } });
-      expect(select).not.toHaveBeenCalled();
-      fireEvent.keyDown(input, { key: "Enter" });
+      expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "应用手动档位" }),
+      ).not.toBeInTheDocument();
+      for (const effort of ["low", "medium", "high", "xhigh", "max"]) {
+        expect(
+          screen.getByRole("button", { name: `思考档位 ${effort}` }),
+        ).toHaveAttribute("aria-pressed", "false");
+      }
+      expect(
+        screen.getByRole("button", { name: "使用上游默认" }),
+      ).toHaveAttribute("aria-pressed", "true");
+      expect(
+        screen.getByRole("button", { name: "思考档位" }),
+      ).toHaveTextContent("思考 · 上游默认");
       expect(select).not.toHaveBeenCalled();
       expect(submit).not.toHaveBeenCalled();
-      fireEvent.click(screen.getByRole("button", { name: "应用手动档位" }));
+      fireEvent.click(screen.getByRole("button", { name: "思考档位 max" }));
       expect(select).toHaveBeenCalledOnce();
-      expect(select).toHaveBeenCalledWith("custom_v2-high");
+      expect(select).toHaveBeenCalledWith("max");
       expect(submit).not.toHaveBeenCalled();
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     },
@@ -220,11 +229,11 @@ describe("AgentReasoningPicker", () => {
     expect(select).not.toHaveBeenCalled();
   });
 
-  it.each(["bad value", "中文", "a.b", "a/b", "x".repeat(65)])(
-    "rejects invalid manual identifier %s",
-    (value) => {
+  it.each(["low", "medium", "high", "xhigh", "max"])(
+    "selects the common %s effort without a manual editor",
+    (effort) => {
       const select = vi.fn();
-      render(
+      const view = render(
         <AgentReasoningPicker
           model={{ ...model, reasoningEfforts: undefined }}
           value=""
@@ -232,15 +241,28 @@ describe("AgentReasoningPicker", () => {
         />,
       );
       open();
-      const input = screen.getByRole("textbox", {
-        name: "手动档位标识（未验证）",
-      });
-      fireEvent.change(input, { target: { value } });
-      expect(input).toHaveAttribute("aria-invalid", "true");
-      const apply = screen.getByRole("button", { name: "应用手动档位" });
-      expect(apply).toBeDisabled();
-      fireEvent.click(apply);
-      expect(select).not.toHaveBeenCalled();
+      fireEvent.click(
+        screen.getByRole("button", { name: `思考档位 ${effort}` }),
+      );
+      expect(select).toHaveBeenCalledOnce();
+      expect(select).toHaveBeenCalledWith(effort);
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      view.rerender(
+        <AgentReasoningPicker
+          model={{ ...model, reasoningEfforts: undefined }}
+          value={effort}
+          onSelect={select}
+        />,
+      );
+      expect(
+        screen.getByRole("button", { name: "思考档位" }),
+      ).toHaveTextContent(`思考 · ${effort}`);
+      open();
+      expect(
+        screen.getByRole("button", { name: `思考档位 ${effort}` }),
+      ).toHaveAttribute("aria-pressed", "true");
+      expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+      expect(select).toHaveBeenCalledOnce();
     },
   );
 
@@ -271,30 +293,24 @@ describe("AgentReasoningPicker", () => {
     },
   );
 
-  it("can apply an empty manual value to restore the upstream default", () => {
+  it("can restore the upstream default from a previously saved custom effort", () => {
     const select = vi.fn();
     render(<AgentReasoningPicker value="custom" onSelect={select} />);
     open();
-    const input = screen.getByRole("textbox", {
-      name: "手动档位标识（未验证）",
-    });
-    expect(input).toHaveValue("custom");
-    fireEvent.change(input, { target: { value: "" } });
-    fireEvent.click(screen.getByRole("button", { name: "应用手动档位" }));
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(select).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "使用上游默认" }));
     expect(select).toHaveBeenCalledOnce();
     expect(select).toHaveBeenCalledWith("");
   });
 
-  it("stays closed after a temporary disabled state and never applies a draft automatically", () => {
+  it("stays closed after a temporary disabled state without changing the saved effort", () => {
     const select = vi.fn();
     const view = render(
       <AgentReasoningPicker value="manual" onSelect={select} />,
     );
     open();
-    fireEvent.change(
-      screen.getByRole("textbox", { name: "手动档位标识（未验证）" }),
-      { target: { value: "draft" } },
-    );
+    expect(screen.getByRole("button", { name: "思考档位 max" })).toBeVisible();
     view.rerender(
       <AgentReasoningPicker value="manual" onSelect={select} disabled />,
     );
@@ -305,9 +321,41 @@ describe("AgentReasoningPicker", () => {
     view.rerender(<AgentReasoningPicker value="manual" onSelect={select} />);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     open();
+    expect(screen.getByRole("button", { name: "思考档位" })).toHaveTextContent(
+      "思考 · manual",
+    );
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(select).not.toHaveBeenCalled();
+  });
+
+  it("closes when switching models and replaces common choices with the new model's declared efforts", () => {
+    const select = vi.fn();
+    const view = render(
+      <AgentReasoningPicker
+        model={{ ...model, reasoningEfforts: undefined }}
+        value="max"
+        onSelect={select}
+      />,
+    );
+    open();
+    expect(screen.getByRole("button", { name: "思考档位 max" })).toBeVisible();
+    view.rerender(
+      <AgentReasoningPicker
+        model={{ ...model, id: "different/model" }}
+        value="max"
+        onSelect={select}
+      />,
+    );
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(select).not.toHaveBeenCalled();
+    open();
     expect(
-      screen.getByRole("textbox", { name: "手动档位标识（未验证）" }),
-    ).toHaveValue("manual");
+      screen.queryByRole("button", { name: "思考档位 max" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "思考档位 channel_special-2" }),
+    ).toBeVisible();
+    expect(screen.getByText(/当前保存的档位 max/)).toBeVisible();
     expect(select).not.toHaveBeenCalled();
   });
 

@@ -178,7 +178,7 @@ export function AgentWorkflowPanel({
           model,
           "build",
           `工作流 · ${selected.name}`,
-          "ask",
+          "full_access",
           undefined,
           projectPath,
         );

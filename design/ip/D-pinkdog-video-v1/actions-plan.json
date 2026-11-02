@@ -1,0 +1,88 @@
+{
+  "status": "prepared_blocked_by_browser_authority_and_file_permission",
+  "purpose": "图生视频试验小样提示词准备；先试待机动作，再根据真实结果决定后续动作。",
+  "submitted": false,
+  "videoGenerated": false,
+  "permissionDiagnostic": {
+    "exactRuleIdentified": false,
+    "accountTypeConfirmedByUser": "personal",
+    "userSettingsEvidence": "用户提供截图，豆包 origin 的浏览与下载均为始终允许；默认浏览与下载也为始终允许。",
+    "localDiagnostics": "已只读检查桌面客户端当日日志、已有日志目录和正式 config/read(includeLayers:true)、configRequirements/read。独立诊断进程的用户/系统层没有 browser_use，requirements 为 null；不能据此断言当前桌面进程的保存授权状态。",
+    "auditCoverage": "已有 OTel exporter/trace_exporter 为 none，现有日志未提供这次拒绝匹配的 rule ID 或 decision source。",
+    "feedbackDraft": "tmp/doubao-permission-diagnostic-20261102/feedback-payload.json",
+    "feedbackStatus": "submitted_after_explicit_user_authorization",
+    "feedbackScope": "用户明确批准发送摘要，并另行批准仅本次进程临时开启 feedback.enabled。正式 feedback/upload 已成功返回；includeLogs=false，threadId=null，无截图、日志或项目附件。持久配置未修改。",
+    "feedbackReceipt": "tmp/doubao-permission-diagnostic-20261102/feedback-upload-result.json",
+    "feedbackReturnedThreadId": "no-active-thread-01a19a3b-8013-7a83-bc12-d418cadf3881",
+    "feedbackLimitation": "提交反馈不代表豆包权限已修复，也没有已知的自动回复订阅或规则来源结果。动画仍未提交。"
+  },
+  "executionNote": "2026-11-02 用户已完成 Edge 豆包登录；此前 Edge 页面已选 Seedance 2.0、16:9、10 秒并填好 v2 提示词。参考图上传失败，扩展要求开启 Allow access to file URLs。用户随后多次明确已允许访问，但工具仍报告 saved permission or managed policy denies access。按用户明确要求已在应用右侧打开豆包（标签元数据确认），仍无法读取该页面，未尝试绕过权限；不能断言右侧的登录及参数状态。没有保存页面截图，没有提交生成，不代表已生成或通过验收。",
+  "referenceImage": "src/assets/atelier/companion.png",
+  "uploadReferenceImage": "design/ip/D-pinkdog-video-v1/idle-reference-green-wide.png",
+  "referencePreparation": "仅等比缩放原始透明角色并居中合成到 1280×720 均匀纯绿 #00FF00 背景，头顶约 15%、脚底约 87%，未重绘角色；上传失败，页面尚无附件。旧方形参考保留。",
+  "firstTrial": {
+    "action": "idle",
+    "promptFile": "idle-prompt-v2.txt",
+    "preferredDurationSeconds": 10,
+    "selectedModel": "Seedance 2.0",
+    "selectedAspectRatio": "16:9",
+    "durationNote": "页面已选择 10 秒，与 DSH 上游公开配方做对照；后续可另试 5–6 秒待机版本。尚未提交。",
+    "description": "保持原有全身姿态，自然眨眼两次，轻呼吸，发梢与耳尖极轻微摆动，首尾睁眼姿态一致。"
+  },
+  "sharedArtDirection": {
+    "identity": "唯一角色为原图中的全身粉发折耳女仆；脸型、蓝绿色眼睛、方形发夹、发色、耳朵、尾巴、服装、配饰与头身比例保持一致。",
+    "camera": "固定机位、固定构图、固定人物大小，无缩放、平移、推拉或旋转。",
+    "background": "均匀纯绿幕 #00FF00，用于后续抠像；不要求平台输出透明视频。",
+    "framing": "头顶发梢、双耳、尾巴和双脚始终完整入镜，四周保留留白。",
+    "motion": "幅度小、节奏舒缓、轮廓稳定，头部大小和眼距不漂移，服饰花纹不闪变。",
+    "forbidden": [
+      "地面和投影阴影",
+      "背景渐变或纹理",
+      "文字、水印、标志和边框",
+      "背景物和新增角色",
+      "额外肢体和手指变形",
+      "大幅歪头、转身、跳跃和镜头运动"
+    ],
+    "actionPropException": "仅 feed 动作使用一条形状清楚的细长金棕色小鱼干。"
+  },
+  "laterActionDrafts": [
+    {
+      "action": "pet",
+      "status": "draft_not_submitted",
+      "description": "被摸头后害羞地微笑，眼睛轻轻弯起，双手靠近脸颊轻轻收拢，耳尖放松；头部几乎不动，最后回到原有姿态。画面不出现另一只手或其他人物。",
+      "playbackIntent": "单次回应，结束后回到待机。"
+    },
+    {
+      "action": "feed",
+      "status": "draft_not_submitted",
+      "description": "双手捧起一条细长金棕色小鱼干，鱼头、鱼身和鱼尾清晰可辨，送到嘴边轻咬，开心地小幅咀嚼；眼睛短暂弯起，吃完后双手回到原位，脸和服饰保持一致。",
+      "playbackIntent": "单次投喂，结束后回到待机。"
+    },
+    {
+      "action": "sleep",
+      "status": "draft_not_submitted",
+      "description": "保持全身姿态，轻轻闭眼休息，头仅略微低垂，双手自然放松；稳定睡姿中只有非常轻微的呼吸、发梢与耳尖运动。无睡眠文字或其他符号。",
+      "playbackIntent": "闭眼过渡与稳定睡姿循环分别处理；循环区间首尾保持相同闭眼姿态。"
+    },
+    {
+      "action": "drag",
+      "status": "draft_not_submitted",
+      "description": "保持同一悬空姿势，双手像小爪子轻轻向前，膝盖略弯、双靴自然垂着，眼神轻微惊讶；头部与躯干稳定，仅耳尖和尾巴尖轻轻晃动，首尾姿态一致。画面不出现抓取她的手或其他人物。",
+      "playbackIntent": "悬空保持或幅度极小的循环；屏幕位置由应用拖拽控制。"
+    },
+    {
+      "action": "wake",
+      "status": "draft_not_submitted",
+      "description": "从已确认的闭眼睡姿开始，缓缓睁眼，露出温柔的小笑容，耳尖轻轻抬起，最后恢复同一角色的原有清醒待机姿态。头部大小与身体比例全程不变。",
+      "playbackIntent": "单次醒来过渡，不作为循环。",
+      "referenceNote": "后续执行时需要使用已确认的睡姿首帧，并继续以原图核对身份；目前仅为草案。"
+    }
+  ],
+  "reviewCriteria": [
+    "角色身份、服饰和比例与原图一致",
+    "全身完整，无裁切和镜头运动",
+    "背景均匀且可用于后续抠像",
+    "发丝、耳朵、手指和配饰无明显变形或闪烁",
+    "待机眨眼节奏自然，首尾姿态可衔接"
+  ]
+}

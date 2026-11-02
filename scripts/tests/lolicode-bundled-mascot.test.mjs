@@ -10,7 +10,7 @@ const root = path.resolve(
   "../..",
 );
 
-test("the production companion embeds the unchanged PNG without an asset request", async () => {
+test("the production companion embeds the original resource key and rig artwork without asset requests", async () => {
   // jsdom/Vite dev imports remain URLs even for ?inline. Exercise the real
   // production asset transform, keeping output in memory and ordinary images
   // external so removing ?inline genuinely makes this regression fail.
@@ -43,6 +43,24 @@ test("the production companion embeds the unchanged PNG without an asset request
     output.some((item) => item.type === "chunk" && item.code.includes(dataUrl)),
   );
   assert.ok(!output.some((item) => /companion[^/]*\.png$/.test(item.fileName)));
+  for (const filename of [
+    "companion-rig-v1.webp",
+    "companion-eyes-closed-v1.webp",
+  ]) {
+    const artwork = await readFile(
+      path.join(root, "src/assets/atelier", filename),
+    );
+    const artworkUrl = `data:image/webp;base64,${artwork.toString("base64")}`;
+    assert.ok(
+      output.some(
+        (item) => item.type === "chunk" && item.code.includes(artworkUrl),
+      ),
+      `${filename} must work offline without a separate request`,
+    );
+  }
+  assert.ok(
+    !output.some((item) => /companion[^/]*\.webp$/.test(item.fileName)),
+  );
 
   const config = JSON.parse(
     await readFile(path.join(root, "src-tauri/tauri.conf.json"), "utf8"),

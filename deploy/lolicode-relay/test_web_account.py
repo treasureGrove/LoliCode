@@ -203,10 +203,12 @@ class BrowserAccount(unittest.IsolatedAsyncioTestCase):
         value = await response.json()
         self.assertEqual(value['plan'], {'id': 'public-free', 'name': '公益免费',
                                        'currency': 'CNY', 'billedAmount': 0})
-        self.assertEqual(value['today'], {'requests': 27, 'tokens': 375, 'reservedTokens': 80})
+        self.assertEqual(value['today'], {'requests': 27, 'tokens': 375, 'reservedTokens': 80,
+                                         'credits': 0.375, 'creditsReserved': 0.08})
         self.assertEqual(len(value['daily']), 7)
         self.assertEqual(value['daily'][0], {'day': (today - timedelta(days=6)).isoformat(),
-                                          'requests': 1, 'tokens': 9, 'reservedTokens': 0})
+                                          'requests': 1, 'tokens': 9, 'reservedTokens': 0,
+                                          'credits': 0.009, 'creditsReserved': 0})
         self.assertEqual(value['daily'][-1]['tokens'], value['today']['tokens'])
         self.assertTrue(all(day['requests'] == 0 for day in value['daily'][1:-1]))
         summary = ledger.summary('42', app['policy'])
@@ -220,7 +222,8 @@ class BrowserAccount(unittest.IsolatedAsyncioTestCase):
         uncertain = next(row for row in value['records'] if row['state'] == 'uncertain')
         self.assertEqual((uncertain['tokens'], uncertain['reservedTokens']), (50, 0))
         for record in value['records']:
-            self.assertEqual(set(record), {'id', 'model', 'createdAt', 'state', 'tokens', 'reservedTokens'})
+            self.assertEqual(set(record), {'id', 'model', 'createdAt', 'state', 'tokens', 'reservedTokens',
+                                           'credits', 'creditsReserved', 'creditRate', 'tokenDetails', 'billing', 'costDetails'})
         text = json.dumps(value)
         for secret in ('other-private', 'a' * 40, 'b' * 40, 'fixture-password',
                        'never-return-this-key', 'private@example.invalid', 'gateway_key', 'prompt'):

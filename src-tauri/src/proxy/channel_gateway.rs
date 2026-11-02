@@ -62,6 +62,11 @@ struct GatewayClient(&'static str);
 #[derive(Clone)]
 struct GatewaySession(String);
 
+/// Set only after validating the forum-authenticated relay source. Incoming
+/// headers and public model metadata cannot mark an ordinary channel as relay.
+#[derive(Clone)]
+struct GatewayRelay;
+
 fn take_native_session(client: &str, headers: &mut HeaderMap) -> Option<String> {
     let value = headers.remove("x-lolicode-session-id")?;
     if client != "lolicode" {
@@ -612,6 +617,7 @@ async fn handle(state: ProxyState, request: Request, wire: Wire) -> Result<Respo
         }
         source.api_key = bearer;
         source.auth_kind = "api_key".into();
+        parts.extensions.insert(GatewayRelay);
     }
     let source = resolve_source_material(source).await?;
     validate_capabilities(&model, &body)?;
@@ -858,6 +864,34 @@ fn prepare_messages_request(
 
 #[allow(clippy::too_many_arguments)]
 async fn forward(
+    state: &ProxyState,
+    source: &ChannelSource,
+    model: &ChannelModel,
+    published_id: &str,
+    body: Value,
+    headers: HeaderMap,
+    extensions: http::Extensions,
+    wire: Wire,
+) -> Result<Response, ProxyError> {
+    let relay = extensions.get::<GatewayRelay>().is_some();
+    super::relay_completion::track(
+        relay,
+        forward_inner(
+            state,
+            source,
+            model,
+            published_id,
+            body,
+            headers,
+            extensions,
+            wire,
+        ),
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn forward_inner(
     state: &ProxyState,
     source: &ChannelSource,
     model: &ChannelModel,
@@ -1846,6 +1880,103 @@ mod tests {
             unknown, unchanged,
             "unknown limits and omitted effort are not guessed"
         );
+    }
+
+    #[tokio::test]
+    async fn relay_completion_does_not_depend_on_usage_logging_or_reported_usage() {
+        use crate::{database::Database, usage_events::take_test_relay_notify_count};
+        use std::sync::Arc;
+
+        let upstream = axum::Router::new().route(
+            "/v1/chat/completions",
+            axum::routing::post(|Json(body): Json<Value>| async move {
+                if body["messages"][0]["content"] == "error" {
+                    return (
+                        http::StatusCode::FORBIDDEN,
+                        Json(json!({"error":{"message":"fixture rejected","type":"permission_error"}})),
+                    )
+                        .into_response();
+                }
+                if body["stream"] == true {
+                    let stream = futures::stream::iter([
+                        Ok::<_, std::io::Error>(Bytes::from_static(
+                            b"data: {\"id\":\"fixture\",\"choices\":[{\"delta\":{\"content\":\"ok\"},\"finish_reason\":\"stop\"}]}\n\n",
+                        )),
+                        Ok(Bytes::from_static(b"data: [DONE]\n\n")),
+                    ]);
+                    return Response::builder()
+                        .header("content-type", "text/event-stream")
+                        .body(axum::body::Body::from_stream(stream))
+                        .unwrap();
+                }
+                Json(json!({"id":"fixture","object":"chat.completion","model":"vendor/model",
+                    "choices":[{"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}]}))
+                    .into_response()
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+            .await
+            .unwrap();
+        let address = listener.local_addr().unwrap();
+        let task = tokio::spawn(async move { axum::serve(listener, upstream).await.unwrap() });
+        let mut source = source();
+        source.base_url = format!("http://{address}/v1");
+        for (logging, streaming, relay, error) in [
+            (false, false, true, false),
+            (false, true, true, false),
+            (true, true, true, false),
+            (false, false, true, true),
+            (false, true, false, false),
+        ] {
+            // Usage writes are asynchronous; isolate cases so an enabled-log
+            // callback cannot arrive during the following disabled-log case.
+            let db = Arc::new(Database::memory().unwrap());
+            let state = ProxyState::for_test(db.clone());
+            state.config.write().await.enable_logging = logging;
+            let logged_before = db
+                .get_usage_summary(None, None, None, None, None)
+                .unwrap()
+                .total_requests;
+            take_test_relay_notify_count();
+            let mut extensions = http::Extensions::new();
+            if relay {
+                // Production sets this extension only after relay account auth.
+                extensions.insert(GatewayRelay);
+            }
+            let result = forward(
+                &state,
+                &source,
+                &source.models[0],
+                "test/vendor/model",
+                json!({"model":"vendor/model","messages":[{"role":"user","content":if error {"error"} else {"hello"}}],"stream":streaming}),
+                HeaderMap::new(),
+                extensions,
+                Wire::Chat,
+            )
+            .await;
+            match result {
+                Ok(response) => {
+                    assert!(!error);
+                    assert_eq!(take_test_relay_notify_count(), 0);
+                    let bytes = axum::body::to_bytes(response.into_body(), 16384)
+                        .await
+                        .unwrap();
+                    assert!(String::from_utf8_lossy(&bytes).contains("ok"));
+                }
+                Err(_) => assert!(error),
+            }
+            assert_eq!(take_test_relay_notify_count(), u32::from(relay));
+            if !logging {
+                assert_eq!(
+                    db.get_usage_summary(None, None, None, None, None)
+                        .unwrap()
+                        .total_requests,
+                    logged_before,
+                    "Completion must work without writing an optional local usage row"
+                );
+            }
+        }
+        task.abort();
     }
 
     #[tokio::test]

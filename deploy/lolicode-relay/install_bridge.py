@@ -4,7 +4,7 @@ import argparse
 from pathlib import Path
 from migrate import remote
 
-FILES = ('bridge.py', 'web_account.py', 'public_settings.py', 'test_public_settings.py', 'verify_public_settings.py', 'test_web_account.py', 'bridge-policy.json', 'test_bridge.py', 'lolicode-relay-bridge.service',
+FILES = ('bridge.py', 'credit_meter.py', 'billing_meter.py', 'quota_snapshot.py', 'admin_accounts.py', 'test_quota_snapshot.py', 'test_admin_accounts.py', 'channel_health.py', 'test_credit_meter.py', 'test_credit_bridge.py', 'test_billing_meter.py', 'test_billing_bridge.py', 'test_system_probes.py', 'test_channel_health.py', 'web_account.py', 'public_settings.py', 'test_public_settings.py', 'verify_public_settings.py', 'test_web_account.py', 'bridge-policy.json', 'test_bridge.py', 'lolicode-relay-bridge.service',
          'bridge-nginx-location.conf', 'bridge-nginx-rate.conf', 'forum_fixture.php', 'verify_bridge.py', 'manage_quota.py')
 
 
@@ -23,7 +23,7 @@ run(['python3', str(ROOT / 'backup.py')])
 marker = ROOT / '.lolicode-relay-bridge-owned'
 installed = marker.is_file() and not marker.is_symlink() and marker.read_text().strip() == 'lolicode-relay-bridge-v1'
 for name, content in payload['files'].items():
-    if name not in ('bridge.py', 'web_account.py', 'public_settings.py', 'test_public_settings.py', 'verify_public_settings.py', 'test_web_account.py', 'bridge-policy.json', 'test_bridge.py', 'lolicode-relay-bridge.service',
+    if name not in ('bridge.py', 'credit_meter.py', 'billing_meter.py', 'quota_snapshot.py', 'admin_accounts.py', 'test_quota_snapshot.py', 'test_admin_accounts.py', 'channel_health.py', 'test_credit_meter.py', 'test_credit_bridge.py', 'test_billing_meter.py', 'test_billing_bridge.py', 'test_system_probes.py', 'test_channel_health.py', 'web_account.py', 'public_settings.py', 'test_public_settings.py', 'verify_public_settings.py', 'test_web_account.py', 'bridge-policy.json', 'test_bridge.py', 'lolicode-relay-bridge.service',
                     'bridge-nginx-location.conf', 'bridge-nginx-rate.conf', 'forum_fixture.php', 'verify_bridge.py', 'manage_quota.py'):
         raise RuntimeError('Unexpected bridge member')
     target = ROOT / name
@@ -39,7 +39,7 @@ state = ROOT / 'bridge-state'
 if state.is_symlink():
     raise RuntimeError('Unexpected bridge state symlink')
 state.mkdir(mode=0o700, exist_ok=True)
-run(['python3', '-m', 'unittest', '-v', 'test_bridge', 'test_web_account', 'test_public_settings'], cwd=ROOT)
+run(['python3', '-m', 'unittest', '-v', 'test_admin_accounts', 'test_quota_snapshot', 'test_billing_meter', 'test_billing_bridge', 'test_credit_meter', 'test_credit_bridge', 'test_system_probes', 'test_channel_health', 'test_bridge', 'test_web_account', 'test_public_settings'], cwd=ROOT)
 unit = pathlib.Path('/etc/systemd/system/lolicode-relay-bridge.service')
 if unit.is_symlink() or (unit.exists() and not installed):
     raise RuntimeError('Unowned bridge service exists')

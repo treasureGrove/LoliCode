@@ -74,7 +74,7 @@ export const agentApi = {
     modelId: string,
     mode: AgentMode,
     title?: string,
-    permissionMode?: AgentPermissionMode,
+    permissionMode: AgentPermissionMode = "full_access",
     reasoningEffort?: string,
     projectPath?: string,
     contextLimit?: number,

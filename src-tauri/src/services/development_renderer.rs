@@ -119,7 +119,10 @@ pub(super) fn load(
     if metadata.native_contract != super::super::renderer_updates::native_contract()
         || metadata.native_version != env!("CARGO_PKG_VERSION")
     {
-        return Err("后端代码已变化，请运行 pnpm build:dev 完整重建开发版".into());
+        return Err(
+            "后端代码已变化，请退出开发版后从桌面重新打开以完整重建；也可运行 pnpm build:dev"
+                .into(),
+        );
     }
     let root = source.join("src-tauri/target/development/renderers");
     guard(&root)?;
@@ -205,8 +208,27 @@ fn read_tree(
 }
 
 pub(super) fn load_current(source: &Path) -> Result<DevelopmentSnapshot, String> {
-    let metadata = serde_json::from_slice(&read_limited(&pointer_path(source), MAX_MANIFEST)?)
-        .map_err(|_| "开发界面指针无效")?;
+    load_current_for_native_build(source, option_env!("LOLICODE_BUILD_TIMESTAMP"))
+}
+
+pub(super) fn load_current_for_native_build(
+    source: &Path,
+    native_built_at: Option<&str>,
+) -> Result<DevelopmentSnapshot, String> {
+    let metadata: DevelopmentFrontendBuild =
+        serde_json::from_slice(&read_limited(&pointer_path(source), MAX_MANIFEST)?)
+            .map_err(|_| "开发界面指针无效")?;
+    // A complete native rebuild includes a newer bundled frontend even when its
+    // backend contract is unchanged. Only startup reuse needs this lower bound.
+    if let Some(native_built_at) = native_built_at.filter(|value| !value.is_empty()) {
+        let native_built_at = chrono::DateTime::parse_from_rfc3339(native_built_at)
+            .map_err(|_| "原生开发构建时间无效，使用内置界面")?;
+        let renderer_built_at = chrono::DateTime::parse_from_rfc3339(&metadata.built_at)
+            .map_err(|_| "开发界面构建时间无效")?;
+        if renderer_built_at < native_built_at {
+            return Err("本地开发界面早于原生构建，使用内置界面".into());
+        }
+    }
     load(source, metadata)
 }
 

@@ -1,0 +1,33 @@
+{
+  "version": "4.1.5",
+  "items": [
+    {
+      "type": "new",
+      "zh": "统一 Credit 额度，支持按用户管理每日用量",
+      "zh-TW": "統一 Credit 額度，支援按使用者管理每日用量",
+      "en": "Unify Credit allowances and add per-user daily usage controls",
+      "ja": "Credit残量を統一し、ユーザー別の1日利用枠を管理"
+    },
+    {
+      "type": "fix",
+      "zh": "修复请求完成与账号切换后的额度刷新",
+      "zh-TW": "修正請求完成與帳號切換後的額度更新",
+      "en": "Keep balances in sync after requests, refreshes and account changes",
+      "ja": "リクエスト完了・更新・アカウント切り替え時に残量を同期"
+    },
+    {
+      "type": "improve",
+      "zh": "优化模型 Credit 单价，增加人民币参考报价助手",
+      "zh-TW": "改善模型 Credit 單價，新增人民幣參考報價助手",
+      "en": "Configure model prices in Credit with a CNY reference-price helper",
+      "ja": "モデルのCredit単価設定と人民元の参考価格ヘルパーを追加"
+    },
+    {
+      "type": "improve",
+      "zh": "新前台会话默认完全访问，完善工作台与开发版更新",
+      "zh-TW": "新前景工作階段預設完整存取，完善工作台與開發版更新",
+      "en": "Default new foreground sessions to full access; refine workspace and development updates",
+      "ja": "新規前面セッションの既定をフルアクセスにし、画面と開発版更新を改善"
+    }
+  ]
+}

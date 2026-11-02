@@ -1029,7 +1029,7 @@ describe("AgentPage", () => {
       catalog.defaultModel,
       "build",
       undefined,
-      "ask",
+      "full_access",
       undefined,
       path,
     );
@@ -1953,41 +1953,40 @@ describe("AgentPage", () => {
     expect(agentApi.sendMessage).not.toHaveBeenCalled();
   });
 
-  it("keeps the saved effort when an explicit manual override fails", async () => {
+  it("keeps the saved effort and draft when a common effort choice fails", async () => {
     vi.mocked(agentApi.updateSession).mockRejectedValue(
       new Error("中转不接受此思考档位"),
     );
     render(<AgentPage />);
     await flush();
+    fill("保留思考档位切换前的输入");
     fireEvent.click(composerSettingButton("思考档位"));
-    fireEvent.change(screen.getByLabelText("手动档位标识（未验证）"), {
-      target: { value: "high" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "应用手动档位" }));
+    fireEvent.click(screen.getByRole("button", { name: "思考档位 high" }));
     await flush();
     expect(agentApi.updateSession).toHaveBeenCalledWith(session.id, {
       reasoningEffort: "high",
     });
     expect(composerSettingButton("思考档位")).toHaveTextContent("上游默认");
     expect(screen.getByText("中转不接受此思考档位")).toBeInTheDocument();
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
+      "保留思考档位切换前的输入",
+    );
+    expect(agentApi.sendMessage).not.toHaveBeenCalled();
   });
 
-  it("passes an explicit reasoning override when creating a new conversation", async () => {
+  it("passes the chosen common effort when creating a new conversation", async () => {
     vi.mocked(agentApi.listSessions).mockResolvedValue([]);
     render(<AgentPage />);
     await flush();
     fireEvent.click(composerSettingButton("思考档位"));
-    fireEvent.change(screen.getByLabelText("手动档位标识（未验证）"), {
-      target: { value: "high" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "应用手动档位" }));
+    fireEvent.click(screen.getByRole("button", { name: "思考档位 high" }));
     fireEvent.click(sessionCreationButton());
     await flush();
     expect(agentApi.createSession).toHaveBeenCalledWith(
       catalog.models[0].id,
       "build",
       undefined,
-      "ask",
+      "full_access",
       "high",
     );
   });
@@ -2013,7 +2012,7 @@ describe("AgentPage", () => {
       catalog.models[0].id,
       "build",
       undefined,
-      "ask",
+      "full_access",
       undefined,
       undefined,
       1000000,
@@ -2042,26 +2041,126 @@ describe("AgentPage", () => {
       catalog.models[1].id,
       "build",
       undefined,
-      "ask",
+      "full_access",
       undefined,
     );
   });
 
-  it("requires an explicit confirmation before enabling full access", async () => {
+  it("defaults a new task to full access and creates it without a permission confirmation", async () => {
+    vi.mocked(agentApi.listSessions).mockResolvedValue([]);
+    render(<AgentPage />);
+    await flush();
+    expect(composerPermissionSelect()).toHaveValue("full_access");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(agentApi.updateSession).not.toHaveBeenCalled();
+    fireEvent.click(sessionCreationButton());
+    await flush();
+    expect(agentApi.createSession).toHaveBeenCalledWith(
+      catalog.defaultModel,
+      "build",
+      undefined,
+      "full_access",
+      undefined,
+    );
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("honors an explicit ask selection for a new task", async () => {
+    vi.mocked(agentApi.listSessions).mockResolvedValue([]);
+    render(<AgentPage />);
+    await flush();
+    expect(composerPermissionSelect()).toHaveValue("full_access");
+    fireEvent.change(composerPermissionSelect(), {
+      target: { value: "ask" },
+    });
+    expect(composerPermissionSelect()).toHaveValue("ask");
+    fireEvent.click(sessionCreationButton());
+    await flush();
+    expect(agentApi.createSession).toHaveBeenCalledWith(
+      catalog.defaultModel,
+      "build",
+      undefined,
+      "ask",
+      undefined,
+    );
+    expect(agentApi.updateSession).not.toHaveBeenCalled();
+  });
+
+  it("keeps an existing explicit ask permission when reopening the task", async () => {
+    snapshot.session.permissionMode = "ask";
+    vi.mocked(agentApi.listSessions).mockResolvedValue([
+      structuredClone(snapshot.session),
+    ]);
+    const view = render(<AgentPage />);
+    await flush();
+    expect(composerPermissionSelect()).toHaveValue("ask");
+    view.unmount();
+    render(<AgentPage />);
+    await flush();
+    expect(composerPermissionSelect()).toHaveValue("ask");
+    expect(agentApi.updateSession).not.toHaveBeenCalled();
+    expect(agentApi.createSession).not.toHaveBeenCalled();
+  });
+
+  it("keeps the new-task full-access default separate from an existing task's permission changes", async () => {
+    snapshot.session.permissionMode = "ask";
+    render(<AgentPage />);
+    await flush();
+    fireEvent.change(composerPermissionSelect(), {
+      target: { value: "auto" },
+    });
+    await flush();
+    expect(agentApi.updateSession).toHaveBeenCalledWith(session.id, {
+      permissionMode: "auto",
+    });
+    expect(composerPermissionSelect()).toHaveValue("auto");
+    fireEvent.click(sessionCreationButton());
+    await flush();
+    expect(agentApi.createSession).toHaveBeenCalledWith(
+      catalog.defaultModel,
+      "build",
+      undefined,
+      "full_access",
+      undefined,
+    );
+  });
+
+  it("creates a full-access task directly when composing a workflow from an empty workspace", async () => {
+    vi.mocked(agentApi.listSessions).mockResolvedValue([]);
+    snapshot.session.id = "lc:new";
+    render(<AgentPage toolRequest={{ tool: "workflows", id: 1 }} />);
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: "在会话中创建工作流" }));
+    await flush();
+    expect(agentApi.createSession).toHaveBeenCalledWith(
+      catalog.defaultModel,
+      "build",
+      undefined,
+      "full_access",
+    );
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveProperty(
+      "value",
+      expect.stringContaining("请根据当前项目帮我创建可复用工作流"),
+    );
+    expect(agentApi.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("enables full access immediately without another confirmation", async () => {
+    snapshot.session.permissionMode = "ask";
     render(<AgentPage />);
     await flush();
     fireEvent.change(composerPermissionSelect(), {
       target: { value: "full_access" },
     });
-    expect(
-      screen.getByRole("dialog", { name: "为此会话启用完整权限？" }),
-    ).toBeInTheDocument();
-    expect(agentApi.updateSession).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "启用完整权限" }));
     await flush();
+    expect(screen.getAllByRole("dialog")).toEqual([
+      screen.getByRole("dialog", { name: "对话设置" }),
+    ]);
     expect(agentApi.updateSession).toHaveBeenCalledWith(session.id, {
       permissionMode: "full_access",
     });
+    expect(composerPermissionSelect()).toHaveValue("full_access");
   });
 
   it.each(["running", "waiting_permission", "waiting_question"] as const)(
@@ -2171,6 +2270,268 @@ describe("AgentPage", () => {
     await tick(1500);
     expect(modelRefreshButton()).toBeEnabled();
   });
+
+  it("keeps expanded workspace task lists isolated when switching projects and back", async () => {
+    const otherPath = "D:/fixture/other-project";
+    const anotherSession: AgentSession = {
+      ...session,
+      id: "another_project_task",
+      title: "当前项目的另一任务",
+    };
+    const otherSession: AgentSession = {
+      ...session,
+      id: "other_project_task",
+      title: "其他工作区的任务",
+      projectPath: otherPath,
+    };
+    vi.mocked(agentApi.listProjects).mockResolvedValue([
+      { path: project, name: "project", pinned: false, lastOpenedAt: 2 },
+      {
+        path: otherPath,
+        name: "other-project",
+        pinned: false,
+        lastOpenedAt: 3,
+      },
+    ]);
+    vi.mocked(agentApi.listSessions).mockImplementation(async (path) =>
+      path === otherPath ? [otherSession] : [session, anotherSession],
+    );
+    vi.mocked(agentApi.openProject).mockImplementation(async (path) => ({
+      workspace: {
+        path,
+        name: path === otherPath ? "other-project" : "project",
+      },
+      catalog,
+      sessions: path === otherPath ? [otherSession] : [session, anotherSession],
+    }));
+    vi.mocked(agentApi.getSession).mockImplementation(async (id) => ({
+      ...emptySnapshot(),
+      session: id === otherSession.id ? otherSession : session,
+    }));
+
+    render(<AgentPage />);
+    await flush();
+    expect(
+      within(screen.getByRole("group", { name: "project 的任务" })).getByRole(
+        "button",
+        { name: /^修复测试/ },
+      ),
+    ).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("textbox", { name: "搜索会话" }), {
+      target: { value: "修复" },
+    });
+    expect(
+      screen.queryByRole("button", { name: /^当前项目的另一任务/ }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "other-project" }));
+    await flush();
+
+    const previousTasks = within(
+      screen.getByRole("group", { name: "project 的任务" }),
+    );
+    expect(
+      previousTasks.getByRole("button", { name: /^修复测试/ }),
+    ).toBeInTheDocument();
+    expect(
+      previousTasks.queryByRole("button", { name: /^其他工作区的任务/ }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "清空会话搜索" }));
+    expect(
+      previousTasks.getByRole("button", { name: /^当前项目的另一任务/ }),
+    ).toBeInTheDocument();
+    expect(
+      within(
+        screen.getByRole("group", {
+          name: "other-project 的任务",
+        }),
+      ).getByRole("button", { name: /^其他工作区的任务/ }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "project" }));
+    await flush();
+
+    const currentTasks = within(
+      screen.getByRole("group", { name: "project 的任务" }),
+    );
+    const otherTasks = within(
+      screen.getByRole("group", { name: "other-project 的任务" }),
+    );
+    expect(
+      currentTasks.getByRole("button", { name: /^修复测试/ }),
+    ).toBeInTheDocument();
+    expect(
+      currentTasks.queryByRole("button", { name: /^其他工作区的任务/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      currentTasks.getByRole("button", { name: /^当前项目的另一任务/ }),
+    ).toBeInTheDocument();
+    expect(
+      otherTasks.getByRole("button", { name: /^其他工作区的任务/ }),
+    ).toBeInTheDocument();
+    expect(
+      otherTasks.queryByRole("button", { name: /^修复测试/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows only unarchived tasks in the previous workspace after leaving its archive view", async () => {
+    const otherPath = "D:/fixture/other-project";
+    const archivedSession: AgentSession = {
+      ...session,
+      id: "archived_project_task",
+      title: "原项目的归档任务",
+      archived: true,
+    };
+    const otherSession: AgentSession = {
+      ...session,
+      id: "other_project_task",
+      title: "其他工作区的任务",
+      projectPath: otherPath,
+    };
+    vi.mocked(agentApi.listProjects).mockResolvedValue([
+      { path: project, name: "project", pinned: false, lastOpenedAt: 2 },
+      {
+        path: otherPath,
+        name: "other-project",
+        pinned: false,
+        lastOpenedAt: 3,
+      },
+    ]);
+    vi.mocked(agentApi.listSessions).mockImplementation(async (path) =>
+      path === otherPath ? [otherSession] : [session, archivedSession],
+    );
+    vi.mocked(agentApi.openProject).mockResolvedValue({
+      workspace: { path: otherPath, name: "other-project" },
+      catalog,
+      sessions: [otherSession],
+    });
+    vi.mocked(agentApi.getSession).mockImplementation(async (id) => ({
+      ...emptySnapshot(),
+      session: id === otherSession.id ? otherSession : session,
+    }));
+
+    render(<AgentPage />);
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: "显示归档会话" }));
+    await flush();
+    expect(
+      screen.getByRole("button", { name: /^原项目的归档任务/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /^修复测试/ }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "other-project" }));
+    await flush();
+
+    const previousTasks = within(
+      screen.getByRole("group", { name: "project 的任务" }),
+    );
+    expect(
+      previousTasks.getByRole("button", { name: /^修复测试/ }),
+    ).toBeInTheDocument();
+    expect(
+      previousTasks.queryByRole("button", { name: /^原项目的归档任务/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(
+        screen.getByRole("group", {
+          name: "other-project 的任务",
+        }),
+      ).getByRole("button", { name: /^其他工作区的任务/ }),
+    ).toBeInTheDocument();
+  });
+
+  it.each(["empty response", "failure"] as const)(
+    "ignores a stale workspace expansion %s after opening the project and switching away",
+    async (outcome) => {
+      const otherPath = "D:/fixture/other-project";
+      const otherSession: AgentSession = {
+        ...session,
+        id: "other_project_task",
+        title: "其他工作区的新任务",
+        projectPath: otherPath,
+      };
+      let resolveExpansion!: (items: AgentSession[]) => void;
+      let rejectExpansion!: (error: Error) => void;
+      const expansion = new Promise<AgentSession[]>((resolve, reject) => {
+        resolveExpansion = resolve;
+        rejectExpansion = reject;
+      });
+      vi.mocked(agentApi.listProjects).mockResolvedValue([
+        { path: project, name: "project", pinned: false, lastOpenedAt: 2 },
+        {
+          path: otherPath,
+          name: "other-project",
+          pinned: false,
+          lastOpenedAt: 3,
+        },
+      ]);
+      vi.mocked(agentApi.listSessions).mockImplementation(async (path) =>
+        path === otherPath ? expansion : [session],
+      );
+      vi.mocked(agentApi.openProject).mockImplementation(async (path) => ({
+        workspace: {
+          path,
+          name: path === otherPath ? "other-project" : "project",
+        },
+        catalog,
+        sessions: [path === otherPath ? otherSession : session],
+      }));
+      vi.mocked(agentApi.getSession).mockImplementation(async (id) => ({
+        ...emptySnapshot(),
+        session: id === otherSession.id ? otherSession : session,
+      }));
+
+      render(<AgentPage />);
+      await flush();
+      fireEvent.click(
+        screen.getByRole("button", { name: "展开 other-project 的任务" }),
+      );
+      await flush();
+      expect(agentApi.listSessions).toHaveBeenCalledWith(otherPath);
+      expect(
+        within(
+          screen.getByRole("group", {
+            name: "other-project 的任务",
+          }),
+        ).getByRole("status"),
+      ).toHaveTextContent("正在加载任务…");
+
+      fireEvent.click(screen.getByRole("button", { name: "other-project" }));
+      await flush();
+      fireEvent.click(screen.getByRole("button", { name: "project" }));
+      await flush();
+
+      const otherTasks = within(
+        screen.getByRole("group", {
+          name: "other-project 的任务",
+        }),
+      );
+      expect(
+        otherTasks.getByRole("button", { name: /^其他工作区的新任务/ }),
+      ).toBeInTheDocument();
+      expect(otherTasks.queryByRole("status")).not.toBeInTheDocument();
+
+      await act(async () => {
+        if (outcome === "empty response") resolveExpansion([]);
+        else rejectExpansion(new Error("旧工作区请求失败"));
+      });
+      await flush();
+
+      expect(
+        otherTasks.getByRole("button", { name: /^其他工作区的新任务/ }),
+      ).toBeInTheDocument();
+      expect(otherTasks.queryByRole("status")).not.toBeInTheDocument();
+      expect(
+        otherTasks.queryByRole("button", { name: "加载失败，点击重试" }),
+      ).not.toBeInTheDocument();
+      expect(
+        otherTasks.queryByText("此工作区还没有任务。"),
+      ).not.toBeInTheDocument();
+    },
+  );
 
   it("expands a workspace to show its tasks and opens the selected task", async () => {
     const otherPath = "D:/fixture/other-project";
@@ -2331,7 +2692,7 @@ describe("AgentPage", () => {
       catalog.models[1].id,
       "build",
       undefined,
-      "ask",
+      "full_access",
       undefined,
     );
     expect(agentApi.openProject).not.toHaveBeenCalled();
@@ -2441,7 +2802,7 @@ describe("AgentPage", () => {
       "lolicode/new-channel/new-model",
       "build",
       undefined,
-      "ask",
+      "full_access",
       undefined,
     );
   });

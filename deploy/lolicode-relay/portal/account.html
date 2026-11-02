@@ -5,9 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#ffffff" />
     <title>我的用量 · LoliCode Relay</title>
-    <link rel="icon" href="https://lolicode.com/desktop-assets/favicon-32.png" />
-    <link rel="stylesheet" href="/relay-assets/account.css?v=20261028-console3" />
-    <script src="/relay-assets/account.js?v=20261028-console3" defer></script>
+    <link
+      rel="icon"
+      href="https://lolicode.com/desktop-assets/favicon-32.png"
+    />
+    <link
+      rel="stylesheet"
+      href="/relay-assets/account.css?v=20261030-credit-refactor1"
+    />
+    <script
+      src="/relay-assets/account.js?v=20261030-credit-refactor1"
+      defer
+    ></script>
   </head>
   <body>
     <header class="site-header">
@@ -16,68 +25,144 @@
         <nav aria-label="主导航">
           <a href="/account" aria-current="page">我的用量</a>
           <a href="/admin">管理后台</a>
-          <button id="logout" class="nav-button" type="button" hidden>退出</button>
+          <button id="logout" class="nav-button" type="button" hidden>
+            退出
+          </button>
         </nav>
       </div>
     </header>
     <main class="page-width">
-      <p id="message" class="message" role="status" aria-live="polite">正在确认登录状态…</p>
-      <section id="login-panel" class="login-panel" hidden aria-labelledby="login-title">
+      <p id="message" class="message" role="status" aria-live="polite">
+        正在确认登录状态…
+      </p>
+      <section
+        id="login-panel"
+        class="login-panel"
+        hidden
+        aria-labelledby="login-title"
+      >
         <div class="card login-card">
           <h1 id="login-title">登录账号</h1>
-          <p class="muted">使用原有 LoliCode 社区账号，查看额度与用量。</p>
+          <p class="muted">
+            使用原有 LoliCode 社区账号，查看 Credit 额度与用量。
+          </p>
           <form id="login-form">
             <label for="identification">用户名或邮箱</label>
-            <input id="identification" name="username" autocomplete="username" maxlength="512" required />
+            <input
+              id="identification"
+              name="username"
+              autocomplete="username"
+              maxlength="512"
+              required
+            />
             <label for="password">密码</label>
-            <input id="password" name="password" type="password" autocomplete="current-password" maxlength="1024" required />
-            <button id="login-submit" class="button primary" type="submit">登录</button>
+            <input
+              id="password"
+              name="password"
+              type="password"
+              autocomplete="current-password"
+              maxlength="1024"
+              required
+            />
+            <button id="login-submit" class="button primary" type="submit">
+              登录
+            </button>
           </form>
-          <div class="account-links"><a href="/register">注册账号</a><a href="https://lolicode.com/all?account=login">忘记密码</a></div>
+          <div class="account-links">
+            <a href="/register">注册账号</a
+            ><a href="https://lolicode.com/all?account=login">忘记密码</a>
+          </div>
         </div>
       </section>
       <section id="account-panel" hidden aria-labelledby="account-title">
         <div class="page-heading">
-          <div><h1 id="account-title">我的用量</h1><p id="account-name" class="muted"></p></div>
+          <div>
+            <h1 id="account-title">我的用量</h1>
+            <p id="account-name" class="muted"></p>
+          </div>
           <button id="refresh" class="button" type="button">刷新</button>
         </div>
         <div class="summary-grid">
           <article class="card summary-card plan-card">
-            <h2>当前方案</h2><p id="plan-name" class="plan-name">公益免费</p>
-            <div class="plan-price"><strong id="platform-fee">¥0.00</strong><span>本平台费用</span></div>
-            <p class="card-note">按日提供免费额度</p>
+            <h2>当前方案</h2>
+            <p id="plan-name" class="plan-name">公益免费</p>
+            <div class="plan-price">
+              <strong id="platform-fee">¥0.00</strong><span>本平台费用</span>
+            </div>
+            <p class="card-note">按日提供免费 Credit</p>
           </article>
           <article class="card summary-card">
-            <h2>今日剩余请求</h2><p class="amount"><strong id="requests-remaining">—</strong><span>次</span></p>
-            <progress id="requests-progress" aria-label="今日剩余请求"></progress>
-            <p class="card-note">今日已用 <strong id="requests-used">—</strong> / <span id="requests-limit">—</span> 次</p>
-          </article>
-          <article class="card summary-card">
-            <h2>今日剩余 token</h2><p class="amount"><strong id="tokens-remaining">—</strong></p>
-            <progress id="tokens-progress" aria-label="今日剩余 token"></progress>
-            <p class="card-note">今日已用 <strong id="tokens-used">—</strong> / <span id="tokens-limit">—</span></p>
+            <h2>今日剩余 Credit</h2>
+            <p class="amount">
+              <strong id="credits-remaining">—</strong><span>Credit</span>
+            </p>
+            <progress
+              id="credits-progress"
+              aria-label="今日剩余 Credit"
+            ></progress>
+            <p class="card-note">
+              今日已用 <strong id="credits-used">—</strong> /
+              <span id="credits-limit">—</span> Credit
+            </p>
+            <p class="card-note">
+              今日调用 <span id="requests-used">—</span> 次 · 已计用量
+              <span id="tokens-used">—</span> token
+            </p>
           </article>
         </div>
-        <div class="account-meta"><p id="reset"></p><p id="reserved"></p></div>
+        <div class="account-meta">
+          <p id="reset"></p>
+          <p id="reserved"></p>
+        </div>
         <section class="card chart-card" aria-labelledby="chart-title">
-          <div class="section-heading"><h2 id="chart-title">近 7 天用量</h2><span class="muted">输入与输出 token 合计</span></div>
-          <div id="daily-chart" class="daily-chart" role="img" aria-label="近七天 token 用量"></div>
+          <div class="section-heading">
+            <h2 id="chart-title">近 7 天用量</h2>
+            <span class="muted">Credit 消耗，不含处理中预留</span>
+          </div>
+          <div
+            id="daily-chart"
+            class="daily-chart"
+            role="img"
+            aria-label="近七天 Credit 消耗"
+          ></div>
           <p id="chart-caption" class="card-note"></p>
         </section>
         <section class="card records-card" aria-labelledby="records-title">
-          <div class="section-heading"><h2 id="records-title">最近请求</h2><span class="muted">最近 20 条</span></div>
-          <div class="table-scroll"><table>
-            <thead><tr><th scope="col">时间</th><th scope="col">模型</th><th scope="col">状态</th><th scope="col" class="numeric">已计 token</th></tr></thead>
-            <tbody id="usage-records"></tbody>
-          </table></div>
+          <div class="section-heading">
+            <h2 id="records-title">最近请求</h2>
+            <span class="muted">最近 20 条</span>
+          </div>
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">时间</th>
+                  <th scope="col">模型</th>
+                  <th scope="col">状态</th>
+                  <th scope="col" class="numeric">已计 Credit</th>
+                  <th scope="col" class="numeric">已计 token</th>
+                </tr>
+              </thead>
+              <tbody id="usage-records"></tbody>
+            </table>
+          </div>
           <p id="records-empty" class="empty-state" hidden>暂无请求记录</p>
         </section>
         <section class="card model-card" aria-labelledby="models-title">
-          <h2 id="models-title">可用模型</h2><p id="availability" class="muted"></p><div id="models" class="models"></div>
+          <h2 id="models-title">可用模型</h2>
+          <p id="availability" class="muted"></p>
+          <div id="models" class="models"></div>
         </section>
-        <p class="usage-note">额度按新加坡时间（UTC+8）每日重置。处理中请求占用次数，预留 token 单独显示；已退回的请求不占用额度。</p>
+        <p class="usage-note">
+          Credit 按模型每 1M token 的单价和实际用量扣除；100 Credit = 1
+          元参考值。公益 Credit
+          按新加坡时间（UTC+8）每日重置，不设每日调用次数上限。处理中预留 Credit
+          单独显示；已退回的请求不扣除 Credit。
+        </p>
       </section>
-      <noscript><p class="message error">请启用 JavaScript 后查看用量。</p></noscript>
+      <noscript
+        ><p class="message error">请启用 JavaScript 后查看用量。</p></noscript
+      >
     </main>
   </body>
 </html>

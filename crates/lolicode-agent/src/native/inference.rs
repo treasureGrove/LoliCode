@@ -636,6 +636,10 @@ fn rate_error_reason(value: &Value) -> Option<&'static str> {
         "service_rate_limited" => Some("公益模型全站请求频率受限"),
         "account_busy" => Some("当前账号已有模型请求处理中"),
         "service_busy" => Some("公益模型服务繁忙"),
+        "daily_credits_exhausted" => {
+            Some("个人公益 Credit 不足以处理当前上下文或预留输出，请缩短内容或降低输出预算")
+        }
+        "service_daily_credits_exhausted" => Some("全站公益 Credit 额度不足，零点后恢复"),
         "daily_requests_exhausted" => Some("今日公益请求次数已用完，零点后恢复"),
         "daily_tokens_exhausted" => Some("今日公益 token 额度已用完，零点后恢复"),
         "service_daily_requests_exhausted" => Some("今日公益请求总额度已用完，零点后恢复"),

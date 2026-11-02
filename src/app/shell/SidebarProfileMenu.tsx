@@ -1,6 +1,7 @@
 import { useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
+  ChartColumn,
   Download,
   ExternalLink,
   Eye,
@@ -36,7 +37,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import "./sidebar-profile-menu.css";
-import { LolicodeRelayDialog } from "./LolicodeRelayDialog";
 import { MobileCompanionDialog } from "./MobileCompanionDialog";
 import { SidebarQuotaRing } from "./SidebarQuotaRing";
 
@@ -44,6 +44,7 @@ export interface SidebarProfileMenuProps {
   expanded?: boolean;
   onOpenSettings: () => void;
   onOpenUpdates: () => void;
+  onOpenAllowance: () => void;
   hasUpdate?: boolean;
   selected?: boolean;
 }
@@ -79,6 +80,7 @@ export function SidebarProfileMenu({
   expanded = false,
   onOpenSettings,
   onOpenUpdates,
+  onOpenAllowance,
   hasUpdate = false,
   selected = false,
 }: SidebarProfileMenuProps) {
@@ -88,8 +90,6 @@ export function SidebarProfileMenu({
   const identity = useLolicodeAccount();
   const { account } = identity;
   const [loginOpen, setLoginOpen] = useState(false);
-  const [relayOpen, setRelayOpen] = useState(false);
-  const [quotaRevision, setQuotaRevision] = useState(0);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [identification, setIdentification] = useState("");
   const [password, setPassword] = useState("");
@@ -149,8 +149,7 @@ export function SidebarProfileMenu({
         <SidebarQuotaRing
           key={account.id}
           accountId={account.id}
-          refreshRevision={quotaRevision}
-          onManage={() => setRelayOpen(true)}
+          onManage={onOpenAllowance}
         />
       )}
       <DropdownMenu>
@@ -218,11 +217,9 @@ export function SidebarProfileMenu({
           )}
           {account ? (
             <>
-              <DropdownMenuItem onSelect={() => setRelayOpen(true)}>
-                {text(
-                  "公益模型与每日额度",
-                  "Sponsored models and daily allowance",
-                )}
+              <DropdownMenuItem onSelect={onOpenAllowance}>
+                <ChartColumn size={15} aria-hidden="true" />
+                {text("使用情况与额度", "Usage and allowance")}
               </DropdownMenuItem>
               <DropdownMenuItem
                 onSelect={() =>
@@ -452,14 +449,6 @@ export function SidebarProfileMenu({
           </form>
         </DialogContent>
       </Dialog>
-      <LolicodeRelayDialog
-        open={relayOpen}
-        onOpenChange={(open) => {
-          setRelayOpen(open);
-          if (!open) setQuotaRevision((value) => value + 1);
-        }}
-        accountId={account?.id ?? null}
-      />
     </>
   );
 }

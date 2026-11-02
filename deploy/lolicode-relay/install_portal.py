@@ -16,7 +16,7 @@ def main():
     payload = {'files': {name: (here / 'portal' / name).read_text(encoding='utf8')
                          for name in ('index.html', 'portal.css', 'portal.js', 'portal-host.js', 'admin-theme.css',
                                       'account.html', 'account.css', 'account.js', 'public-account.css', 'public-account.js',
-                                      'public-settings.html', 'public-settings.css', 'public-settings.js',
+                                      'public-settings.html', 'public-settings.css', 'public-settings.js', 'admin-accounts.js',
                                       'channel-presets.json')},
                'nginx': (here / 'admin-nginx-https.conf').read_text(encoding='utf8'),
                'backup': (here / 'backup.py').read_text(encoding='utf8'),
@@ -69,7 +69,7 @@ try:
     for name, content in payload['files'].items():
         if name not in ('index.html', 'portal.css', 'portal.js', 'portal-host.js', 'admin-theme.css',
                         'account.html', 'account.css', 'account.js', 'public-account.css', 'public-account.js',
-                        'public-settings.html', 'public-settings.css', 'public-settings.js',
+                        'public-settings.html', 'public-settings.css', 'public-settings.js', 'admin-accounts.js',
                         'channel-presets.json'):
             raise RuntimeError('Unexpected portal member')
         for parent, mode in ((web, 0o644), (source, 0o600)):
@@ -100,7 +100,7 @@ try:
         if response.headers.get('Access-Control-Allow-Origin') != '*':
             raise RuntimeError('Public status is unavailable to the homepage sandbox')
         status = json.load(response)
-    if set(status) != {'ready', 'modelCount', 'dailyRequests', 'dailyTokens', 'timezone', 'resetsAt',
+    if set(status) != {'ready', 'modelCount', 'dailyRequests', 'dailyTokens', 'dailyCredits', 'creditUnit', 'timezone', 'resetsAt',
                        'limits', 'trialEndsAt'}:
         raise RuntimeError('Unexpected public status fields')
     with urllib.request.urlopen('https://relay.lolicode.com/sign-in?admin=1', timeout=10) as response:

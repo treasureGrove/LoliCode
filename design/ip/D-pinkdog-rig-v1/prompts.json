@@ -1,0 +1,35 @@
+{
+  "tool": "built-in image_gen",
+  "generatedOn": "2026-11-02",
+  "transparentBackground": true,
+  "requests": [
+    {
+      "role": "turnaround-reference",
+      "reference": "src/assets/atelier/companion.png",
+      "generatedFile": "C:/Users/admin/.codex/generated_images/01a19252-2863-7031-bfac-baf935e6ddef/exec-51a3f368-8ddd-43e3-807b-b35934958f38.png",
+      "savedAs": "design/ip/D-pinkdog-rig-v1/turnaround-initial.png",
+      "prompt": "Use case: identity-preserve. Asset type: character turnaround reference sheet for the existing desktop pet, not animation frames. Input image 1 is the sole identity and art-quality reference. Draw this exact adorable pink-haired floppy DOG-ear chibi girl in THREE full-body views arranged left to right: front, left profile, back. Wide clean sheet, equal heights and shared foot baseline, generous transparent separation between figures. Preserve original proportions (~2.5 heads), fluffy long pink hair and side braid, the distinctive curved ahoge, square hairclip, teal-blue jewel-like eyes, tiny fang smile, cocoa-brown and cream soft folded canine ears and fluffy canine tail, charcoal/wine-red/ivory couture maid jacket-dress, teal gems, gold chains and star trim, burgundy satin waist bow and boots. The front should retain the original friendly, bright, soft round face and exquisite detailed painted anime quality; calm readable neutral arms slightly open. Side and back are coherent designs of the same clothing and hair, not new outfits. Soft hand-painted shading and crisp delicate linework, natural anatomy, cozy cute puppy personality, no plastic 3D look, no pixel art, no simplification of face or outfit. All figures completely visible, same character scale and colors. Genuine transparent alpha around the figures; no solid backdrop, checkerboard, floor, cast shadow, labels, lettering, borders, captions or extra props. This is design documentation; no model controls, no UI."
+    },
+    {
+      "role": "blink-local-expression-source",
+      "reference": "src/assets/atelier/companion.png",
+      "generatedFile": "C:/Users/admin/.codex/generated_images/01a19252-2863-7031-bfac-baf935e6ddef/exec-8b2b9489-3859-484a-941d-84bbf1a5abc7.png",
+      "savedAs": "design/ip/D-pinkdog-rig-v1/eyes-closed-source.png",
+      "prompt": "Use case: precise-object-edit, identity-preserve. Input image 1 is the EDIT TARGET. Create one exact aligned variant of this existing full-body pink-haired puppy-girl illustration for a blink expression. Change ONLY BOTH EYES: close them gently with soft curved dark eyelashes in a natural cute peaceful blink, with delicate upper eyelids and the same surrounding blush/skin. The smile and tiny fang remain EXACTLY unchanged. The tilted head, face shape, eyebrows, nose, mouth, hair strands, floppy ears, ahoge, hairclip, hands, whole pose, dress, skirt, boots, accessories, outline, canvas and composition must all stay in precisely the same positions and sizes as the original. No redesign or reframing. This image will be registered to the original so only the tiny eye regions are used as local expression overlays; therefore pixel-position matching of the two eyes is essential. Preserve the original beautiful polished detailed anime rendering, pink hair and teal costume gems. Output ONE full-body figure on genuine transparency, same portrait aspect and same full-body framing. No extra characters, panels, diagrams, text, shadows, checkerboard or props."
+    },
+    {
+      "role": "tail-color-corrected-runtime-base",
+      "reference": "src/assets/atelier/companion.png",
+      "generatedFile": "C:/Users/admin/.codex/generated_images/01a19252-2863-7031-bfac-baf935e6ddef/exec-3cbbf7dd-694f-4eae-8e53-f9ab588264b5.png",
+      "savedAs": "design/ip/D-pinkdog-rig-v1/tail-matched-source.png",
+      "prompt": "Use case: precise-object-edit. Input image is the EDIT TARGET. Change ONLY the fluffy DOG TAIL fur colors at lower viewer-left behind the skirt: the tail must match the existing folded DOG EARS exactly, warm cocoa-brown fur on the main tail body with a soft CREAM-WHITE tip, same cocoa and cream colors as ears. Remove pink fur from the tail entirely. Preserve tail silhouette, size, fur texture and shading, attachment and position. Preserve every other part of this image EXACTLY: original open teal eyes, smiling mouth/fang, face, tilted head, flowing PINK hair, ears, hairclip, all clothes and accessories, arms, legs, boots, existing pose, canvas, camera and framing. Do not redraw or reframe the character. One full-body figure, identical canvas aspect, genuine transparent alpha. No ground, text, shadows or other objects. This is a minimal tail-color correction to an otherwise approved high-quality original character."
+    },
+    {
+      "role": "tail-color-corrected-turnaround",
+      "reference": "design/ip/D-pinkdog-rig-v1/turnaround-initial.png",
+      "generatedFile": "C:/Users/admin/.codex/generated_images/01a19252-2863-7031-bfac-baf935e6ddef/exec-cdd4fefa-6ced-4830-b37f-8cc491684c69.png",
+      "savedAs": "design/ip/D-pinkdog-rig-v1/turnaround.png",
+      "prompt": "Use case: precise-object-edit. Input image is the EDIT TARGET: a three-view turnaround sheet of one pink-haired floppy-dog-ear chibi girl. Correct ONLY the TAIL COLOR in all three views so it matches the ears: main fluffy tail fur warm COCOA BROWN, soft CREAM WHITE tip. Match the exact warm brown and ivory/cream of the existing dog ears. Absolutely NO pink tail fur. Keep all PINK HAIR unchanged. Every other part of this approved sheet must remain unchanged: all three full-body poses/views, face, eyes, ears, proportions, outfit, colors, accessories, scale, foot baselines and composition. Preserve exquisite detailed painted-anime finish and genuine transparent background. No text/labels, no extraobjects, no recoloring hair or clothes, no repositioning or cropping. A minimal color-consistency correction only."
+    }
+  ]
+}

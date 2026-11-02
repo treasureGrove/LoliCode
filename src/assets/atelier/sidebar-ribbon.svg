@@ -1,0 +1,46 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="164"
+  height="24"
+  viewBox="0 0 164 24"
+  fill="none"
+>
+  <title>Fixed-size cherry-red sidebar ribbon</title>
+  <defs>
+    <linearGradient
+      id="satin"
+      x1="82"
+      y1="3"
+      x2="82"
+      y2="22"
+      gradientUnits="userSpaceOnUse"
+    >
+      <stop stop-color="#a74456" />
+      <stop offset=".48" stop-color="#8c3044" />
+      <stop offset="1" stop-color="#632335" />
+    </linearGradient>
+  </defs>
+  <path
+    d="M2 3c47 5 113 5 160 0l-5 10 6 9c-48-5-114-5-162 0l6-9Z"
+    fill="url(#satin)"
+    stroke="#8a3c4b"
+  />
+  <path
+    d="M4 5c46 5 110 5 156 0M4 20c46-5 110-5 156 0"
+    stroke="#d5ba91"
+    stroke-opacity=".86"
+    stroke-width=".8"
+  />
+  <path
+    d="m8 7 8 7-10 5m150-12-8 7 10 5"
+    stroke="#d9b6a5"
+    stroke-opacity=".28"
+  />
+  <path
+    d="m82 14 4 4-4 5-4-5Z"
+    fill="#d5b78e"
+    stroke="#a88b63"
+    stroke-width=".6"
+  />
+  <path d="m82 15 2.5 3H82Z" fill="#f3e7d0" />
+</svg>

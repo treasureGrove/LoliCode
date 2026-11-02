@@ -5,10 +5,8 @@
   const publicFields = byId("settings-fields");
   const upstreamFields = byId("upstream-fields");
   const numericFields = {
-    dailyRequests: "daily-requests",
-    dailyTokens: "daily-tokens",
-    globalDailyRequests: "global-daily-requests",
-    globalDailyTokens: "global-daily-tokens",
+    dailyCredits: "daily-credits",
+    globalDailyCredits: "global-daily-credits",
     maxConcurrentPerAccount: "max-concurrent-per-account",
     maxConcurrentGlobal: "max-concurrent-global",
     globalRequestsPerMinute: "global-requests-per-minute",
@@ -16,8 +14,7 @@
     maxRequestBytes: "max-request-bytes",
   };
   const optionalNumbers = new Set([
-    "globalDailyRequests",
-    "globalDailyTokens",
+    "globalDailyCredits",
     "maxConcurrentGlobal",
     "globalRequestsPerMinute",
   ]);
@@ -49,6 +46,129 @@
   let keyOrigin = "";
   let apiModelCount = 0;
   let knownChannels = [];
+  let modelCreditRates = new Map();
+  const referenceDrafts = new Map();
+  let pricingMigrationErrors = new Map();
+  let legacyBillingConfig = null;
+  let editedCreditRates = new Map();
+  let healthRefreshing = false;
+  let healthTimer;
+  let accountsAdmin;
+  let legacyTokenLimits = {};
+  const creditFields = new Set(["dailyCredits", "globalDailyCredits"]);
+  const rateFields = {
+    input: "输入",
+    output: "输出",
+    cacheRead: "缓存读取",
+    cacheWrite: "缓存写入",
+  };
+  // Editing is per million tokens; the bridge wire format remains per thousand.
+  const defaultRate = () => ({
+    input: 1000,
+    output: 1000,
+    cacheRead: 1000,
+    cacheWrite: 1000,
+  });
+  function creditNumber(value, maximum) {
+    const text = String(value).trim();
+    if (
+      !/^(?:0|[1-9]\d*)(?:\.\d{1,6})?$/.test(text) ||
+      !Number.isFinite(Number(text)) ||
+      Number(text) > maximum
+    )
+      throw new Error(
+        `Credit 请填写 0 至 ${maximum.toLocaleString("zh-CN")} 的数字，最多六位小数。`,
+      );
+    return Number(text);
+  }
+
+  const DECIMAL_SCALE = 1000000n;
+  function decimalUnits(value, label, maximum) {
+    const text = String(value ?? "").trim();
+    if (!/^(?:0|[1-9]\d*)(?:\.\d{1,6})?$/.test(text))
+      throw new Error(
+        `${label}请明确填写有效数字，最多六位小数；免费项须填写 0。`,
+      );
+    const [whole, fraction = ""] = text.split(".");
+    const units =
+      BigInt(whole) * DECIMAL_SCALE + BigInt(fraction.padEnd(6, "0"));
+    if (units > BigInt(maximum) * DECIMAL_SCALE)
+      throw new Error(`${label}超过允许范围。`);
+    return units;
+  }
+  function quoteToTwoDecimals(value, label) {
+    const units = decimalUnits(value, label, 10000000);
+    const cents = (units + 5000n) / 10000n;
+    if (units > 0n && cents === 0n)
+      throw new Error(
+        `${label}是非零报价，保留两位后会变成 0；请提高报价或明确填写 0，避免误设为免费。`,
+      );
+    return Number(cents) / 100;
+  }
+  function legacyMonetaryRate(config, entry) {
+    if (entry?.mode !== "tokens")
+      throw new Error(
+        "该模型仍使用旧按次计费，无法自动换算为每百万 token 单价；请先明确迁移方案或取消开放此模型，原定价不会被覆盖。",
+      );
+    const conversion = decimalUnits(config.creditsPerUnit, "旧兑换率", 1000000);
+    if (conversion === 0n)
+      throw new Error("旧兑换率无效，无法无损迁移该模型。");
+    return Object.fromEntries(
+      Object.keys(rateFields).map((key) => {
+        const product =
+          decimalUnits(entry.prices?.[key], "旧模型价格", 1000000) * conversion;
+        if (
+          product % DECIMAL_SCALE !== 0n ||
+          product / DECIMAL_SCALE > 10000000n * DECIMAL_SCALE
+        )
+          throw new Error(
+            "旧报价无法精确表示为当前 Credit 单价；请先处理精度或范围，原定价不会被覆盖。",
+          );
+        return [key, Number(product / DECIMAL_SCALE) / 1000000];
+      }),
+    );
+  }
+  function referenceDraft(id) {
+    if (!referenceDrafts.has(id))
+      referenceDrafts.set(id, {
+        prices: Object.fromEntries(
+          Object.keys(rateFields).map((key) => [key, ""]),
+        ),
+        markup: "10",
+        open: false,
+      });
+    return referenceDrafts.get(id);
+  }
+  function referenceQuote(draft) {
+    if (
+      Object.keys(rateFields).some(
+        (key) => String(draft.prices[key]).trim() === "",
+      )
+    )
+      throw new Error("请填写全部四项人民币参考报价；免费项须明确填写 0。");
+    const markup = decimalUnits(draft.markup, "上浮比例", 1000);
+    const denominator = DECIMAL_SCALE * 100000000n;
+    return Object.fromEntries(
+      Object.keys(rateFields).map((key) => {
+        const price = decimalUnits(
+          draft.prices[key],
+          `${rateFields[key]}参考报价`,
+          1000000,
+        );
+        const numerator = price * 100n * (100000000n + markup);
+        const cents = (numerator * 100n + denominator / 2n) / denominator;
+        if (numerator > 0n && cents === 0n)
+          throw new Error(
+            `${rateFields[key]}参考报价换算后非零，但保留两位会变成 0；未填入，避免误设为免费。`,
+          );
+        if (cents > 1000000000n)
+          throw new Error(
+            `${rateFields[key]}换算后的 Credit 单价超过允许范围。`,
+          );
+        return [key, Number(cents) / 100];
+      }),
+    );
+  }
 
   const node = (tag, className, text) => {
     const element = document.createElement(tag);
@@ -136,8 +256,12 @@
   }
   function requireLogin() {
     accessToken = "";
+    accountsAdmin?.setAuthorized(false);
+    clearInterval(healthTimer);
+    healthTimer = undefined;
     cancelDiscovery();
     byId("login-panel").hidden = false;
+    byId("channel-health-panel").hidden = true;
     statusMessage("管理员登录已失效或权限不足，请登录管理后台后返回。", true);
     controls();
   }
@@ -176,6 +300,9 @@
       throw error;
     }
     accessToken = result.data.access_token;
+    accountsAdmin?.setAuthorized(true);
+    if (healthTimer === undefined)
+      healthTimer = setInterval(() => void refreshHealth(), 60000);
     byId("login-panel").hidden = true;
     byId("upstream-panel").hidden = false;
     controls();
@@ -222,6 +349,19 @@
       throw new Error("公益设置资料不完整，请重新读取。");
     return result;
   }
+
+  accountsAdmin = window.RelayAdminAccounts({
+    request: async (...args) => {
+      try {
+        return await request(...args);
+      } catch (error) {
+        // Account controls require root; an ordinary admin's 403 must not
+        // invalidate their independently authorized channel/settings forms.
+        if (error.status === 401) requireLogin();
+        throw error;
+      }
+    },
+  });
 
   function presetOptions() {
     const query = byId("preset-search").value.trim().toLocaleLowerCase();
@@ -560,7 +700,7 @@
       input.type = "checkbox";
       input.value = model.id;
       input.checked = selectedModels.has(model.id);
-      input.setAttribute("aria-label", `${model.name || model.id} · free`);
+      input.setAttribute("aria-label", `${model.name || model.id} · 公益模型`);
       input.addEventListener("change", () => {
         if (
           input.checked &&
@@ -579,6 +719,7 @@
         else selectedModels.delete(model.id);
         if (!model.available && !input.checked) input.disabled = true;
         byId("model-count").textContent = `${selectedModels.size} 个已选`;
+        renderCreditRates();
       });
       const copy = node("span", "model-copy");
       copy.append(
@@ -591,10 +732,308 @@
             : "原配置中的模型，当前渠道不可用；可取消选择。",
         ),
       );
-      label.append(input, copy, node("span", "free-badge", "free"));
+      label.append(input, copy, node("span", "free-badge", "Credit"));
       list.append(label);
     }
     byId("model-count").textContent = `${selectedModels.size} 个已选`;
+    renderCreditRates();
+  }
+  function renderCreditRates() {
+    const names = new Map(
+      knownChannels.flatMap((channel) =>
+        (channel.models || []).map((model) => [
+          model.id,
+          model.name || model.id,
+        ]),
+      ),
+    );
+    const list = byId("model-credit-rates");
+    list.replaceChildren();
+    byId("credit-rates-empty").hidden = selectedModels.size > 0;
+    for (const id of selectedModels) {
+      if (!modelCreditRates.has(id)) modelCreditRates.set(id, defaultRate());
+      const rates = modelCreditRates.get(id);
+      const row = node("div", "credit-rate-row");
+      const heading = node("div", "credit-rate-model");
+      heading.append(node("strong", "model-name", names.get(id) || id));
+      if (names.has(id) && names.get(id) !== id)
+        heading.append(node("span", "model-source", id));
+      row.append(heading);
+      if (pricingMigrationErrors.has(id)) {
+        const warning = node(
+          "p",
+          "message error",
+          `旧定价待迁移：${pricingMigrationErrors.get(id)}`,
+        );
+        warning.setAttribute("role", "status");
+        row.append(warning);
+        list.append(row);
+        continue;
+      }
+      row.append(
+        node("p", "billing-unit field-help", "Credit / 1M（100万）token"),
+      );
+      const fields = node("div", "credit-rate-fields");
+      for (const [key, title] of Object.entries(rateFields)) {
+        const label = node("label", "field");
+        const input = node("input");
+        input.type = "number";
+        input.min = "0";
+        input.max = "10000000";
+        input.step = "0.01";
+        input.required = true;
+        input.inputMode = "decimal";
+        input.value = rates[key] ?? 1000;
+        input.dataset.modelId = id;
+        input.dataset.rate = key;
+        input.setAttribute(
+          "aria-label",
+          `${names.get(id) || id} ${title} Credit / 1M（100万）token`,
+        );
+        input.addEventListener("input", () => {
+          rates[key] = input.value;
+          if (!editedCreditRates.has(id)) editedCreditRates.set(id, new Set());
+          editedCreditRates.get(id).add(key);
+        });
+        input.addEventListener("change", () => {
+          try {
+            rates[key] = quoteToTwoDecimals(
+              input.value,
+              `${title} Credit 单价`,
+            ).toFixed(2);
+            input.value = rates[key];
+          } catch (error) {
+            resultMessage("save-result", error.message, "error");
+          }
+        });
+        label.append(node("span", "", title), input);
+        fields.append(label);
+      }
+      row.append(fields);
+      const draft = referenceDraft(id);
+      const reference = node("details", "reference-pricing");
+      reference.open = draft.open;
+      reference.append(node("summary", "", "人民币参考报价（可选）"));
+      reference.addEventListener("toggle", () => {
+        draft.open = reference.open;
+      });
+      reference.append(
+        node(
+          "p",
+          "field-help",
+          "填写原渠道人民币 / 1M token 报价，固定 1 元 = 100 Credit；按所填上浮比例换算，仅在点击填入后修改 Credit 草稿。",
+        ),
+      );
+      const referenceFields = node("div", "credit-rate-fields");
+      const preview = node("p", "reference-preview field-help");
+      preview.setAttribute("role", "status");
+      preview.setAttribute("aria-live", "polite");
+      const updatePreview = () => {
+        try {
+          const quote = referenceQuote(draft);
+          preview.textContent = `参考价 × 100 × (1 + ${draft.markup}%) → ${Object.entries(
+            rateFields,
+          )
+            .map(([key, title]) => `${title} ${quote[key].toFixed(2)}`)
+            .join(" / ")} Credit/M`;
+          preview.classList.remove("error");
+        } catch (error) {
+          preview.textContent = error.message;
+          preview.classList.add("error");
+        }
+      };
+      for (const [key, title] of Object.entries(rateFields)) {
+        const label = node("label", "field");
+        const input = node("input");
+        input.type = "number";
+        input.min = "0";
+        input.max = "1000000";
+        input.step = "0.000001";
+        input.inputMode = "decimal";
+        input.value = draft.prices[key];
+        input.placeholder = "免费请明确填 0";
+        input.dataset.referencePrice = key;
+        input.dataset.modelId = id;
+        input.setAttribute(
+          "aria-label",
+          `${names.get(id) || id} ${title}人民币参考报价 / 1M token`,
+        );
+        input.addEventListener("input", () => {
+          draft.prices[key] = input.value;
+          updatePreview();
+        });
+        label.append(node("span", "", `${title}（元 / 1M）`), input);
+        referenceFields.append(label);
+      }
+      const markupLabel = node("label", "field reference-markup");
+      const markup = node("input");
+      markup.type = "number";
+      markup.min = "0";
+      markup.max = "1000";
+      markup.step = "0.01";
+      markup.value = draft.markup;
+      markup.dataset.referenceMarkup = "true";
+      markup.setAttribute("aria-label", `${names.get(id) || id}报价上浮百分比`);
+      markup.addEventListener("input", () => {
+        draft.markup = markup.value;
+        updatePreview();
+      });
+      markupLabel.append(node("span", "", "报价上浮（%）"), markup);
+      const apply = node("button", "button secondary", "填入 Credit 单价");
+      apply.type = "button";
+      apply.dataset.applyReference = id;
+      apply.addEventListener("click", () => {
+        try {
+          const quote = referenceQuote(draft);
+          for (const key of Object.keys(rateFields))
+            rates[key] = quote[key].toFixed(2);
+          editedCreditRates.set(id, new Set(Object.keys(rateFields)));
+          draft.open = true;
+          editVersion += 1;
+          renderCreditRates();
+          byId("save-note").textContent =
+            "参考报价已填入草稿，整体保存后生效。";
+          resultMessage(
+            "save-result",
+            "已按人民币参考报价填入 Credit 单价，尚未保存。",
+            "success",
+          );
+        } catch (error) {
+          resultMessage("save-result", error.message, "error");
+        }
+      });
+      updatePreview();
+      reference.append(referenceFields, markupLabel, preview, apply);
+      row.append(reference);
+      list.append(row);
+    }
+  }
+  function healthDate(value) {
+    const parsed = new Date(value);
+    return value && Number.isFinite(parsed.getTime())
+      ? parsed.toLocaleString("zh-CN", {
+          timeZone: "Asia/Singapore",
+          hour12: false,
+        })
+      : "尚无记录";
+  }
+  function renderChannelHealth(health, channels = knownChannels) {
+    byId("channel-health-panel").hidden = !accessToken;
+    byId("health-last-run").textContent = healthDate(health?.lastRunAt);
+    byId("health-next-run").textContent = healthDate(health?.nextRunAt);
+    byId("health-refresh-note").textContent =
+      "每小时由服务器巡检；本页每 60 秒只读取结果，不触发模型测试。";
+    const list = byId("channel-health-results");
+    const results = Array.isArray(health?.results)
+      ? health.results.filter((entry) => entry && typeof entry === "object")
+      : [];
+    const names = new Map(
+      channels.map((channel) => [String(channel.id), channel.name]),
+    );
+    const statuses = {
+      healthy: "连接正常",
+      failed: "连接失败",
+      timeout: "巡检超时",
+      skipped: "本轮跳过",
+      unknown: "尚未检测",
+      stale: "结果已过期",
+    };
+    list.replaceChildren();
+    const entries = [...results];
+    for (const channel of channels) {
+      if (
+        !entries.some((entry) => String(entry.channelId) === String(channel.id))
+      )
+        entries.push({
+          channelId: channel.id,
+          model: channel.models?.[0]?.id,
+          status: "unknown",
+        });
+    }
+    for (const entry of entries) {
+      if (!entry || typeof entry !== "object") continue;
+      const name =
+        names.get(String(entry.channelId)) ||
+        `渠道 ${String(entry.channelId ?? "未知")}`;
+      const checked = new Date(entry.checkedAt).getTime();
+      const interval =
+        Number.isFinite(health?.intervalSeconds) && health.intervalSeconds > 0
+          ? health.intervalSeconds
+          : 3600;
+      const status =
+        entry.status === "healthy" &&
+        (!entry.checkedAt || !Number.isFinite(checked))
+          ? "unknown"
+          : entry.status === "healthy" && Date.now() - checked > interval * 2000
+            ? "stale"
+            : Object.hasOwn(statuses, entry.status)
+              ? entry.status
+              : "unknown";
+      const row = node("div", "health-result");
+      const heading = node("div", "health-result-heading");
+      const badge = node("span", "health-status", statuses[status]);
+      badge.dataset.status = status;
+      heading.append(node("strong", "", name), badge);
+      row.append(heading);
+      row.append(
+        node("p", "model-source", `代表模型：${entry.model || "尚无模型"}`),
+      );
+      const latency =
+        typeof entry.latencyMs === "number" &&
+        Number.isFinite(entry.latencyMs) &&
+        entry.latencyMs >= 0
+          ? `${entry.latencyMs.toLocaleString("zh-CN", { maximumFractionDigits: 2 })} ms`
+          : "—";
+      row.append(
+        node(
+          "p",
+          "health-detail",
+          `检测时间：${healthDate(entry.checkedAt)} · 延迟：${latency}`,
+        ),
+      );
+      if (typeof entry.reason === "string" && entry.reason)
+        row.append(node("p", "health-reason", entry.reason));
+      if (
+        Number.isSafeInteger(entry.consecutiveFailures) &&
+        entry.consecutiveFailures > 0
+      )
+        row.append(
+          node(
+            "p",
+            "health-detail",
+            `连续失败 ${entry.consecutiveFailures} 次`,
+          ),
+        );
+      list.append(row);
+    }
+    if (!list.children.length)
+      list.append(node("p", "empty-models", "尚未接入渠道，暂无巡检记录。"));
+  }
+  async function refreshHealth() {
+    if (
+      !accessToken ||
+      document.hidden ||
+      healthRefreshing ||
+      settingsLoading ||
+      settingsSaving ||
+      upstreamSaving
+    )
+      return;
+    healthRefreshing = true;
+    try {
+      const data = await request("GET");
+      if (!accessToken) return;
+      renderChannelHealth(data.channelHealth, data.channels);
+    } catch (error) {
+      if (authFailure(error)) {
+        requireLogin();
+        byId("channel-health-panel").hidden = true;
+      } else
+        byId("health-refresh-note").textContent =
+          "巡检结果暂时无法更新，以下为上次读取的结果；不会自动发起模型测试。";
+    } finally {
+      healthRefreshing = false;
+    }
   }
   function savedChannels(channels) {
     knownChannels = channels;
@@ -666,7 +1105,43 @@
             .slice(0, 16)
         : "";
     for (const [key, id] of Object.entries(numericFields))
-      byId(id).value = settings[key] ?? "";
+      byId(id).value =
+        settings[key] ??
+        (key === "dailyCredits"
+          ? settings.dailyTokens / 1000
+          : key === "globalDailyCredits" && settings.globalDailyTokens != null
+            ? settings.globalDailyTokens / 1000
+            : "");
+    legacyTokenLimits = {
+      dailyTokens: settings.dailyTokens,
+      globalDailyTokens: settings.globalDailyTokens,
+    };
+    modelCreditRates = new Map(
+      Object.entries(settings.modelCreditRates || {}).map(([id, rate]) => [
+        id,
+        Object.fromEntries(
+          Object.keys(rateFields).map((key) => [
+            key,
+            Number((Number(rate[key] ?? 1) * 1000).toFixed(6)),
+          ]),
+        ),
+      ]),
+    );
+    pricingMigrationErrors = new Map();
+    editedCreditRates = new Map();
+    const legacyBilling = settings.billingConfig;
+    legacyBillingConfig = legacyBilling
+      ? JSON.parse(JSON.stringify(legacyBilling))
+      : null;
+    for (const [id, entry] of Object.entries(
+      legacyBilling?.modelPrices || {},
+    )) {
+      try {
+        modelCreditRates.set(id, legacyMonetaryRate(legacyBilling, entry));
+      } catch (error) {
+        pricingMigrationErrors.set(id, error.message);
+      }
+    }
     selectedModels = new Set(settings.modelIds);
     modelChoices(data.channels);
     availability();
@@ -685,6 +1160,7 @@
         : state === "open"
           ? `已开放 · ${data.status.modelCount} 个模型`
           : "已关闭";
+    renderChannelHealth(data.channelHealth, data.channels);
     form.hidden = false;
     byId("save-note").textContent = "设置保存后立即生效。";
   }
@@ -702,6 +1178,7 @@
       const data = await request("GET");
       if (current !== settingsGeneration) return;
       if (edits !== editVersion) {
+        renderChannelHealth(data.channelHealth, data.channels);
         statusMessage("已保留你的修改，未用服务器结果覆盖输入。");
         byId("load-retry").hidden = false;
         return;
@@ -736,16 +1213,69 @@
       throw new Error("请选择未来的截止时间，或改为长期开放。");
     if (byId("enabled").checked && !selectedModels.size)
       throw new Error("请至少选择一个公益模型后再开放。");
+    const blocked = [...selectedModels].find((id) =>
+      pricingMigrationErrors.has(id),
+    );
+    if (blocked)
+      throw new Error(
+        `模型 ${blocked} 旧定价待迁移：${pricingMigrationErrors.get(blocked)}`,
+      );
+    const preservedLegacyPrices = Object.fromEntries(
+      Object.entries(legacyBillingConfig?.modelPrices || {}).filter(
+        ([id]) => pricingMigrationErrors.has(id) && !selectedModels.has(id),
+      ),
+    );
+    const billingConfig = Object.keys(preservedLegacyPrices).length
+      ? {
+          currency: legacyBillingConfig.currency,
+          creditsPerUnit: legacyBillingConfig.creditsPerUnit,
+          modelPrices: preservedLegacyPrices,
+        }
+      : { currency: "CNY", creditsPerUnit: 100, modelPrices: {} };
     const settings = {
       revision,
       enabled: byId("enabled").checked,
       availabilityMode: until ? "until" : "permanent",
       availableUntil: until ? date.toISOString() : null,
       modelIds: [...selectedModels],
+      dailyRequests: null,
+      globalDailyRequests: null,
+      ...legacyTokenLimits,
+      billingConfig,
+      modelCreditRates: Object.fromEntries(
+        [...new Set([...modelCreditRates.keys(), ...selectedModels])].map(
+          (id) => [
+            id,
+            Object.fromEntries(
+              Object.keys(rateFields).map((key) => [
+                key,
+                Number(
+                  (
+                    (editedCreditRates.get(id)?.has(key)
+                      ? quoteToTwoDecimals(
+                          modelCreditRates.get(id)?.[key],
+                          `${rateFields[key]} Credit 单价`,
+                        )
+                      : creditNumber(
+                          modelCreditRates.get(id)?.[key] ?? 1000,
+                          10000000,
+                        )) / 1000
+                  ).toFixed(9),
+                ),
+              ]),
+            ),
+          ],
+        ),
+      ),
     };
     for (const [key, id] of Object.entries(numericFields)) {
       const value = byId(id).value.trim();
       if (!value && optionalNumbers.has(key)) settings[key] = null;
+      else if (creditFields.has(key))
+        settings[key] = creditNumber(
+          value,
+          key === "dailyCredits" ? 1000000 : 100000000,
+        );
       else if (
         !value ||
         !Number.isSafeInteger(Number(value)) ||

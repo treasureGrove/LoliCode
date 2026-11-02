@@ -15,10 +15,19 @@ from zoneinfo import ZoneInfo
 
 import aiohttp
 from aiohttp import web
+from credit_meter import (charge_units, credit_units, credit_value, daily_credit_units,
+                          default_rate, model_rate, output_capacity, reservation_units, usage_details)
+from billing_meter import (billing_snapshot, charge_units as bill_charge_units,
+                           reservation_units as bill_reservation_units, cost_details,
+                           output_capacity as bill_output_capacity, derived_credit_rate)
+from quota_snapshot import MAX_REVISION, credit_balance, credit_pricing, credit_projection
 
 ROOT = Path('/opt/lolicode-relay')
 TZ = ZoneInfo('Asia/Singapore')
 AUTH = re.compile(r'Bearer lc1\.([1-9][0-9]{0,16})\.([a-zA-Z0-9]{40})\Z')
+# Old desktops require unsigned numeric fields. This protocol-only value never
+# participates in enforcement; absent/null daily request caps mean unlimited.
+UNLIMITED_REQUEST_LIMIT = 2**53 - 1
 
 
 class Rejected(Exception):
@@ -64,11 +73,15 @@ def public_models(policy):
     # native context planning allows two UTF-8 bytes per token, with room for
     # the remaining HTTP request fields. Keep the upstream policy unchanged.
     transport_context = max(1, (policy['max_request_bytes'] - 8192) // 2)
-    return [{**model, 'contextLimit': min(model.get('contextLimit', 1000000), transport_context),
-             'upstreamContextLimit': model.get('contextLimit', 1000000),
+    result = []
+    for model in active_models(policy):
+        snapshot = billing_snapshot(policy, model['id'])
+        result.append({**model, 'contextLimit': min(model.get('contextLimit', 1000000), transport_context),
+             'creditPricing': credit_pricing(snapshot), 'creditRate': derived_credit_rate(snapshot),
+             'billing': snapshot, 'upstreamContextLimit': model.get('contextLimit', 1000000),
              'maxRequestBytes': policy['max_request_bytes'],
-             'outputLimit': min(model.get('outputLimit', 32000), policy['max_output_tokens'])}
-            for model in active_models(policy)]
+             'outputLimit': min(model.get('outputLimit', 32000), policy['max_output_tokens'])})
+    return result
 
 
 def public_limits(policy):
@@ -78,7 +91,9 @@ def public_limits(policy):
             'maxConcurrentGlobal': policy.get('max_concurrent_global'),
             'globalRequestsPerMinute': policy.get('global_requests_per_minute'),
             'globalDailyRequests': policy.get('global_daily_requests'),
-            'globalDailyTokens': policy.get('global_daily_tokens')}
+            'globalDailyTokens': policy.get('global_daily_tokens'),
+            'globalDailyCredits': (credit_value(daily_credit_units(policy, global_pool=True))
+                                   if daily_credit_units(policy, global_pool=True) is not None else None)}
 
 
 class Ledger:
@@ -100,7 +115,33 @@ class Ledger:
                 CREATE INDEX IF NOT EXISTS request_account_day ON requests(forum_id,day,state);
                 CREATE INDEX IF NOT EXISTS request_day_state ON requests(day,state);
                 CREATE INDEX IF NOT EXISTS request_created_at ON requests(created_at);
+                CREATE TABLE IF NOT EXISTS channel_probes (
+                    id TEXT PRIMARY KEY, created_at REAL NOT NULL,
+                    expires_at REAL NOT NULL, state TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS probe_activity ON channel_probes(created_at,state,expires_at);
+                CREATE TABLE IF NOT EXISTS quota_ledger_revision (
+                    singleton INTEGER PRIMARY KEY CHECK(singleton=1),
+                    revision INTEGER NOT NULL CHECK(revision>=0)
+                );
+                INSERT OR IGNORE INTO quota_ledger_revision(singleton,revision) VALUES(1,0);
             ''')
+            db.execute('BEGIN IMMEDIATE')
+            account_columns = {row['name'] for row in db.execute('PRAGMA table_info(accounts)')}
+            for name, kind in (('daily_credit_override', 'INTEGER'),
+                               ('quota_revision', 'INTEGER NOT NULL DEFAULT 0')):
+                if name not in account_columns:
+                    db.execute('ALTER TABLE accounts ADD COLUMN ' + name + ' ' + kind)
+            columns = {row['name'] for row in db.execute('PRAGMA table_info(requests)')}
+            for name, kind in (('credit_reserved', 'INTEGER'), ('credit_charged', 'INTEGER'),
+                               ('credit_rate', 'TEXT'), ('token_details', 'TEXT'),
+                               ('billing_snapshot', 'TEXT'), ('cost_details', 'TEXT')):
+                if name not in columns:
+                    db.execute('ALTER TABLE requests ADD COLUMN ' + name + ' ' + kind)
+            # Migrate once at the original 1 Credit / 1000 token baseline.
+            # NULL fallbacks also keep old operator tools and historical rows usable.
+            db.execute('UPDATE requests SET credit_reserved=reserved*1000 WHERE credit_reserved IS NULL')
+            db.execute('UPDATE requests SET credit_charged=charged*1000 WHERE credit_charged IS NULL')
 
     @contextmanager
     def connect(self):
@@ -116,7 +157,17 @@ class Ledger:
         # The service runs one process. After a crash, unfinished calls cannot
         # receive a free retry: retain their reservation as conservative usage.
         with self.connect() as db:
-            db.execute("UPDATE requests SET charged=reserved,state='uncertain' WHERE state='pending'")
+            db.execute('BEGIN IMMEDIATE')
+            changed = db.execute("""UPDATE requests SET charged=reserved,
+                credit_charged=coalesce(credit_reserved,reserved*1000),state='uncertain' WHERE state='pending'""")
+            if changed.rowcount:
+                self._advance_revision(db)
+
+    @staticmethod
+    def _advance_revision(db):
+        if db.execute('''UPDATE quota_ledger_revision SET revision=revision+1
+                         WHERE singleton=1 AND revision<?''', (MAX_REVISION,)).rowcount != 1:
+            raise ValueError('ledger_revision_exhausted')
 
     def account(self, identity):
         with self.connect() as db:
@@ -134,73 +185,198 @@ class Ledger:
             db.execute('UPDATE accounts SET gateway_id=?,gateway_key=? WHERE forum_id=?',
                        (gateway_id, key, identity['id']))
 
+    @staticmethod
+    def _account_daily_units(db, forum_id, policy):
+        account = db.execute('SELECT daily_credit_override FROM accounts WHERE forum_id=?', (forum_id,)).fetchone()
+        return (account['daily_credit_override'] if account is not None and account['daily_credit_override'] is not None
+                else daily_credit_units(policy))
+
+    def _admin_account(self, row, policy, now, db):
+        return {'id': row['forum_id'], 'username': row['username'], 'displayName': row['display_name'],
+                'disabled': bool(row['disabled']), 'revision': row['quota_revision'],
+                'dailyCreditsOverride': (None if row['daily_credit_override'] is None
+                                         else credit_value(row['daily_credit_override'])),
+                'quota': self.summary(row['forum_id'], policy, now, db)}
+
+    def admin_accounts(self, policy, *, page=1, page_size=50, query='', now=None):
+        current = now or datetime.now(timezone.utc)
+        term = '%' + query.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_') + '%'
+        where = "WHERE forum_id LIKE ? ESCAPE '\\' OR username LIKE ? ESCAPE '\\' OR display_name LIKE ? ESCAPE '\\'"
+        with self.connect() as db:
+            db.execute('BEGIN')
+            total = db.execute('SELECT count(*) FROM accounts ' + where, (term, term, term)).fetchone()[0]
+            rows = db.execute('SELECT forum_id,username,display_name,disabled,daily_credit_override,quota_revision '
+                              'FROM accounts ' + where + ' ORDER BY cast(forum_id AS INTEGER),forum_id LIMIT ? OFFSET ?',
+                              (term, term, term, page_size, (page - 1) * page_size)).fetchall()
+            global_limit = daily_credit_units(policy, global_pool=True)
+            pool = db.execute('''SELECT coalesce(sum(coalesce(credit_charged,charged*1000)),0) AS used,
+                coalesce(sum(CASE WHEN state='pending' THEN coalesce(credit_reserved,reserved*1000) ELSE 0 END),0) AS reserved
+                FROM requests WHERE day=? AND state!='released' ''', (calendar(current)[0],)).fetchone()
+            return {'accounts': [self._admin_account(row, policy, current, db) for row in rows],
+                    'total': total, 'page': page, 'pageSize': page_size,
+                    'defaultDailyCredits': credit_value(daily_credit_units(policy)),
+                    'globalDailyCredits': None if global_limit is None else credit_value(global_limit),
+                    'globalUsage': {'used': credit_value(pool['used']), 'reserved': credit_value(pool['reserved']),
+                                    'remaining': (None if global_limit is None else
+                                                  credit_value(max(0, global_limit - pool['used'] - pool['reserved'])))}}
+
+    def update_account_controls(self, forum_id, revision, daily_override, disabled, policy):
+        if (type(revision) is not int or not 0 <= revision < MAX_REVISION or type(disabled) is not bool):
+            raise ValueError('invalid_account_controls')
+        units = None if daily_override is None else credit_units(daily_override, maximum=1000000)
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            row = db.execute('SELECT forum_id,username,display_name,disabled,daily_credit_override,quota_revision '
+                             'FROM accounts WHERE forum_id=?', (forum_id,)).fetchone()
+            if row is None:
+                reject(404, 'account_not_found', '此账户尚未使用公益服务。')
+            if row['quota_revision'] != revision:
+                reject(409, 'account_conflict', '此账户的设置已更新，请刷新后重试。')
+            if row['daily_credit_override'] != units or bool(row['disabled']) != disabled:
+                db.execute('UPDATE accounts SET daily_credit_override=?,disabled=?,quota_revision=quota_revision+1 '
+                           'WHERE forum_id=? AND quota_revision=?', (units, int(disabled), forum_id, revision))
+                self._advance_revision(db)
+                row = db.execute('SELECT forum_id,username,display_name,disabled,daily_credit_override,quota_revision '
+                                 'FROM accounts WHERE forum_id=?', (forum_id,)).fetchone()
+            return self._admin_account(row, policy, datetime.now(timezone.utc), db)
+
     def summary(self, forum_id, policy, now=None, db=None):
         day, reset = calendar(now)
         if db is None:
             with self.connect() as connection:
+                # Usage totals and their version must describe one SQLite read
+                # snapshot even if another connection settles a request now.
+                connection.execute('BEGIN')
                 return self.summary(forum_id, policy, now, connection)
         row = db.execute('''SELECT count(*) AS requests,
                 coalesce(sum(charged),0) AS used,
-                coalesce(sum(CASE WHEN state='pending' THEN reserved ELSE 0 END),0) AS reserved
+                coalesce(sum(CASE WHEN state='pending' THEN reserved ELSE 0 END),0) AS reserved,
+                coalesce(sum(coalesce(credit_charged,charged*1000)),0) AS credits_used,
+                coalesce(sum(CASE WHEN state='pending' THEN coalesce(credit_reserved,reserved*1000) ELSE 0 END),0) AS credits_reserved
                 FROM requests WHERE forum_id=? AND day=? AND state!='released' ''', (forum_id, day)).fetchone()
+        request_limit = policy.get('daily_requests')
+        protocol_limit = UNLIMITED_REQUEST_LIMIT if request_limit is None else request_limit
+        ledger_revision = db.execute('SELECT revision FROM quota_ledger_revision WHERE singleton=1').fetchone()[0]
+        balance = credit_balance(self._account_daily_units(db, forum_id, policy), row['credits_used'], row['credits_reserved'],
+                                 pricing_revision=policy.get('billing_revision', 0), ledger_revision=ledger_revision)
         return {'day': day, 'timezone': 'Asia/Singapore', 'resetsAt': reset,
-                    'requestLimit': policy['daily_requests'], 'tokenLimit': policy['daily_tokens'],
+                    **credit_projection(balance),
+                    'requestsUnlimited': request_limit is None,
+                    'requestLimit': protocol_limit, 'tokenLimit': policy['daily_tokens'],
                     'requestsUsed': row['requests'], 'tokensUsed': row['used'], 'tokensReserved': row['reserved'],
-                    'requestsRemaining': max(0, policy['daily_requests'] - row['requests']),
+                    'requestsRemaining': max(0, protocol_limit - row['requests']),
                     'tokensRemaining': max(0, policy['daily_tokens'] - row['used'] - row['reserved'])}
 
     def reserve(self, forum_id, model, input_bound, output, policy, now=None):
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
+            account = db.execute('SELECT disabled FROM accounts WHERE forum_id=?', (forum_id,)).fetchone()
+            if account is not None and account['disabled']:
+                reject(403, 'account_disabled', '此账号的公益模型权限已停用。')
             if not active_models(policy, now):
                 reject(503, 'trial_unavailable', '本轮公益试用已结束或暂未开放，请等待管理员续期。')
+            if model not in {entry['id'] for entry in active_models(policy, now)}:
+                reject(403, 'model_not_allowed', '此模型尚未开放公益使用。')
             summary = self.summary(forum_id, policy, now, db)
-            if summary['requestsRemaining'] <= 0:
+            request_limit = policy.get('daily_requests')
+            if request_limit is not None and summary['requestsUsed'] >= request_limit:
                 reject(429, 'daily_requests_exhausted', '今日公益请求次数已用完，零点后恢复。')
             active = db.execute("SELECT count(*) FROM requests WHERE forum_id=? AND state='pending'", (forum_id,)).fetchone()[0]
             if active >= policy['max_concurrent_per_account']:
                 reject(429, 'account_busy', '同一账号正在处理其他请求，请稍后重试。')
             global_concurrent = policy.get('max_concurrent_global')
+            timestamp = (now or datetime.now(timezone.utc)).timestamp()
             if global_concurrent is not None:
                 running = db.execute("SELECT count(*) FROM requests WHERE state='pending'").fetchone()[0]
+                running += db.execute("SELECT count(*) FROM channel_probes WHERE state='pending' AND expires_at>?", (timestamp,)).fetchone()[0]
                 if running >= global_concurrent:
                     reject(429, 'service_busy', '公益模型正在处理其他请求，请稍后重试。', 2)
-            timestamp = (now or datetime.now(timezone.utc)).timestamp()
             rpm = policy.get('global_requests_per_minute')
             if rpm is not None:
-                recent = db.execute('SELECT count(*),min(created_at) FROM requests WHERE created_at>?',
-                                    (timestamp - 60,)).fetchone()
+                recent = db.execute('''SELECT count(*),min(created_at) FROM (
+                    SELECT created_at FROM requests WHERE created_at>?
+                    UNION ALL SELECT created_at FROM channel_probes WHERE created_at>?)''',
+                                    (timestamp - 60, timestamp - 60)).fetchone()
                 if recent[0] >= rpm:
                     # Attempts reaching the upstream count here even if later refunded.
                     retry = max(1, int(recent[1] + 60 - timestamp) + 1)
                     reject(429, 'service_rate_limited', '公益模型本分钟请求较多，请稍后重试。', retry)
-            pool = db.execute('''SELECT count(*) AS requests,coalesce(sum(charged),0) AS used,
-                coalesce(sum(CASE WHEN state='pending' THEN reserved ELSE 0 END),0) AS reserved
+            pool = db.execute('''SELECT count(*) AS requests,
+                coalesce(sum(coalesce(credit_charged,charged*1000)),0) AS used,
+                coalesce(sum(CASE WHEN state='pending' THEN coalesce(credit_reserved,reserved*1000) ELSE 0 END),0) AS reserved
                 FROM requests WHERE day=? AND state!='released' ''', (summary['day'],)).fetchone()
             global_requests = policy.get('global_daily_requests')
             if global_requests is not None and pool['requests'] >= global_requests:
                 reject(429, 'service_daily_requests_exhausted', '今日公益请求总额度已用完，零点后恢复。')
-            output = min(output, summary['tokensRemaining'] - input_bound)
+            rate = model_rate(policy, model)
+            snapshot = billing_snapshot(policy, model)
+            output = bill_output_capacity(credit_units(summary['creditsRemaining']), input_bound, output, snapshot)
             if output < 1:
-                reject(429, 'daily_tokens_exhausted', '今日剩余 token 不足以处理当前上下文，请缩短内容或明日再试。')
-            global_tokens = policy.get('global_daily_tokens')
-            if global_tokens is not None:
-                output = min(output, global_tokens - pool['used'] - pool['reserved'] - input_bound)
+                reject(429, 'daily_credits_exhausted', '今日剩余 Credit 不足以处理当前上下文，请缩短内容或明日再试。')
+            global_credits = daily_credit_units(policy, global_pool=True)
+            if global_credits is not None:
+                output = bill_output_capacity(max(0, global_credits - pool['used'] - pool['reserved']), input_bound, output, snapshot)
                 if output < 1:
-                    reject(429, 'service_daily_tokens_exhausted', '今日公益 token 总额度已用完，零点后恢复。')
+                    reject(429, 'service_daily_credits_exhausted', '今日公益 Credit 总额度不足，零点后恢复。')
             request_id = uuid.uuid4().hex
-            db.execute('INSERT INTO requests(id,forum_id,day,reserved,state,model,created_at) VALUES(?,?,?,?,?,?,?)',
-                       (request_id, forum_id, summary['day'], input_bound + output, 'pending', model, timestamp))
+            db.execute('''INSERT INTO requests(id,forum_id,day,reserved,state,model,created_at,
+                          credit_reserved,credit_charged,credit_rate,billing_snapshot,cost_details)
+                          VALUES(?,?,?,?,?,?,?,?,?,?,?,?)''',
+                       (request_id, forum_id, summary['day'], input_bound + output, 'pending', model, timestamp,
+                        bill_reservation_units(input_bound, output, snapshot), 0, json.dumps(rate), json.dumps(snapshot),
+                        json.dumps(cost_details(None, snapshot, reserved_tokens=(input_bound, output)))))
+            self._advance_revision(db)
         return request_id, output
 
-    def finish(self, request_id, usage=None, release=False):
+    def finish(self, request_id, usage=None, release=False, completed=False):
         with self.connect() as db:
-            row = db.execute('SELECT reserved,state FROM requests WHERE id=?', (request_id,)).fetchone()
+            db.execute('BEGIN IMMEDIATE')
+            row = db.execute('SELECT reserved,state,credit_reserved,credit_rate,billing_snapshot,cost_details FROM requests WHERE id=?', (request_id,)).fetchone()
             if row is None or row['state'] != 'pending':
                 return
-            charged = 0 if release else usage if usage is not None else row['reserved']
-            db.execute('UPDATE requests SET charged=?,state=? WHERE id=?',
-                       (charged, 'released' if release else 'charged' if usage is not None else 'uncertain', request_id))
+            if type(usage) is int:
+                usage = usage_details({'usage': {'total_tokens': usage}})
+            rate = json.loads(row['credit_rate']) if row['credit_rate'] else default_rate()
+            snapshot = (json.loads(row['billing_snapshot']) if row['billing_snapshot'] else {'mode': 'credits', 'rate': rate})
+            fixed_success = snapshot['mode'] == 'request' and completed
+            settled = usage is not None or fixed_success
+            charged = 0 if release else usage['total'] if usage is not None else 0 if fixed_success else row['reserved']
+            credits = (0 if release else bill_charge_units(usage, snapshot) if settled else
+                       row['credit_reserved'] if row['credit_reserved'] is not None else row['reserved'] * 1000)
+            money = None if release else cost_details(usage, snapshot) if settled else json.loads(row['cost_details']) if row['cost_details'] else None
+            db.execute('UPDATE requests SET charged=?,credit_charged=?,token_details=?,cost_details=?,state=? WHERE id=?',
+                       (charged, credits, json.dumps(usage) if usage is not None and not release else None,
+                        json.dumps(money) if money is not None else None,
+                        'released' if release else 'charged' if settled else 'uncertain', request_id))
+            self._advance_revision(db)
+
+    def acquire_probe(self, policy, now=None):
+        """System probes share concurrency/RPM, never an account's daily balance."""
+        timestamp = (now or datetime.now(timezone.utc)).timestamp()
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            concurrent = policy.get('max_concurrent_global')
+            running = db.execute("SELECT count(*) FROM requests WHERE state='pending'").fetchone()[0]
+            running += db.execute("SELECT count(*) FROM channel_probes WHERE state='pending' AND expires_at>?", (timestamp,)).fetchone()[0]
+            if concurrent is not None and running >= concurrent:
+                reject(429, 'service_busy', '正在处理用户请求，巡检本轮跳过。', 2)
+            rpm = policy.get('global_requests_per_minute')
+            recent = db.execute('''SELECT count(*) FROM (
+                SELECT created_at FROM requests WHERE created_at>?
+                UNION ALL SELECT created_at FROM channel_probes WHERE created_at>?)''',
+                (timestamp - 60, timestamp - 60)).fetchone()[0]
+            if rpm is not None and recent >= rpm:
+                reject(429, 'service_rate_limited', '本分钟请求较多，巡检本轮跳过。', 60)
+            probe_id = uuid.uuid4().hex
+            db.execute('INSERT INTO channel_probes(id,created_at,expires_at,state) VALUES(?,?,?,?)',
+                       (probe_id, timestamp, timestamp + 360, 'pending'))
+            db.execute("DELETE FROM channel_probes WHERE created_at<? AND expires_at<?", (timestamp - 86400, timestamp))
+            return probe_id
+
+    def finish_probe(self, probe_id, uncertain=False):
+        if not uncertain:
+            with self.connect() as db:
+                db.execute("UPDATE channel_probes SET state='finished' WHERE id=?", (probe_id,))
 
 
 def parse_identity(value, expected_id, policy):
@@ -482,7 +658,7 @@ def create_app(policy, database, *, forum='https://lolicode.com', gateway='http:
         key = await app['gateway'].material(user)
         request_id, output = ledger.reserve(user['id'], payload['model'], input_bound, output, policy)
         payload['max_tokens'] = output
-        sent, usage, release = False, None, False
+        sent, usage, release, completed = False, None, False, False
         try:
             sent = True
             # A productive stream may last beyond the old trial's total timeout.
@@ -503,6 +679,7 @@ def create_app(policy, database, *, forum='https://lolicode.com', gateway='http:
                     await response.prepare(request)
                     pending = b''
                     output_buffer = b''
+                    stream_error, produced_output, saw_done, valid_choice = False, False, False, False
                     secret = key.encode()
                     async for chunk in upstream.content.iter_chunked(16384):
                         pending += chunk
@@ -510,9 +687,23 @@ def create_app(policy, database, *, forum='https://lolicode.com', gateway='http:
                             raise ValueError('Oversize SSE event')
                         while b'\n' in pending:
                             line, pending = pending.split(b'\n', 1)
+                            if line.strip() == b'data: [DONE]':
+                                saw_done = True
                             if line.startswith(b'data: ') and line.strip() != b'data: [DONE]':
                                 parsed = json.loads(line[6:])
-                                count = usage_tokens(parsed)
+                                if isinstance(parsed, dict) and parsed.get('error') is not None:
+                                    stream_error = True
+                                    release = not produced_output
+                                if isinstance(parsed, dict):
+                                    for choice in parsed.get('choices', []) if isinstance(parsed.get('choices'), list) else []:
+                                        if isinstance(choice, dict):
+                                            delta = choice.get('delta') or {}
+                                            if (isinstance(choice.get('delta'), dict)
+                                                    or choice.get('finish_reason') is not None):
+                                                valid_choice = True
+                                            if isinstance(delta, dict) and any(delta.get(key) for key in ('content', 'tool_calls', 'function_call', 'refusal')):
+                                                produced_output = True
+                                count = usage_details(parsed)
                                 if count is not None:
                                     usage = count
                         output_buffer = (output_buffer + chunk).replace(secret, b'[redacted]')
@@ -523,23 +714,35 @@ def create_app(policy, database, *, forum='https://lolicode.com', gateway='http:
                     if output_buffer:
                         await response.write(output_buffer.replace(secret, b'[redacted]'))
                     await response.write_eof()
+                    completed = not stream_error and saw_done and valid_choice
                     return response
                 raw = await read_limited(upstream, 4 * 1024**2)
                 if len(raw) > 4 * 1024**2:
                     raise ValueError('Oversize response')
                 result = json.loads(raw.replace(key.encode(), b'[redacted]'))
-                usage = usage_tokens(result)
+                if isinstance(result, dict) and result.get('error') is not None:
+                    release = True
+                    reject(503, 'upstream_unavailable', '模型返回了错误，本次未扣除 Credit。')
+                if not isinstance(result, dict) or not isinstance(result.get('choices'), list) or not result['choices']:
+                    raise ValueError('Invalid completion response')
+                if not all(isinstance(choice, dict) and isinstance(choice.get('message'), dict)
+                           and any(key in choice['message'] for key in ('role', 'content', 'tool_calls', 'refusal', 'function_call'))
+                           for choice in result['choices']):
+                    raise ValueError('Invalid completion choices')
+                usage = usage_details(result)
+                completed = True
                 return web.json_response(result)
         finally:
             # Includes cancellation/disconnection, missing usage and exceptions.
-            ledger.finish(request_id, usage, release=release or not sent)
+            ledger.finish(request_id, usage, release=release or not sent, completed=completed)
 
     app.on_startup.append(startup)
     app.on_cleanup.append(cleanup)
     app.router.add_get('/health', lambda request: web.json_response({'ok': True}))
     app.router.add_get('/public/status', lambda request: web.json_response({
         'ready': bool(active_models(policy)), 'modelCount': len(active_models(policy)),
-        'dailyRequests': policy['daily_requests'], 'dailyTokens': policy['daily_tokens'],
+        'dailyRequests': policy.get('daily_requests'), 'dailyTokens': policy['daily_tokens'],
+        'dailyCredits': credit_value(daily_credit_units(policy)), 'creditUnit': 'Credit',
         'timezone': 'Asia/Singapore', 'resetsAt': calendar()[1],
         'limits': public_limits(policy), 'trialEndsAt': policy.get('available_until')}))
     app.router.add_get('/account', account)

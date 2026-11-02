@@ -1,0 +1,36 @@
+{
+  "width": 1215,
+  "height": 1295,
+  "method": "Local eye-region extraction from the built-in imagegen edit; alpha masks feather only the surrounding face. No full-body frame blending.",
+  "eyeMasks": [
+    {
+      "x": 484,
+      "y": 447,
+      "rx": 82,
+      "ry": 76,
+      "angle": -0.36
+    },
+    {
+      "x": 666,
+      "y": 384,
+      "rx": 80,
+      "ry": 74,
+      "angle": -0.36
+    }
+  ],
+  "coveredPixels": 37866,
+  "maskBoundsInclusive": {
+    "minX": 404,
+    "minY": 310,
+    "maxX": 744,
+    "maxY": 523
+  },
+  "hashes": {
+    "tail-matched-source.png": "50f26ac85079dda9f155b453840cd4652ff26fd0ae464d5b03c4e08a5891339b",
+    "eyes-closed-source.png": "d57fbbc04560c7420e96a80404ab8330c509485990d074959370a5f7b032e915",
+    "eyes-closed-overlay.png": "fe10e604a5d98feedc075f09acb1ab4ce90b25cf67bc115d5e51ee9b0cb7e663",
+    "turnaround.png": "c6326b5eb24e57164edb79562522e1b29678b4e039f131e7729d9473c935918b"
+  },
+  "correction": "Tail main fur cocoa brown, tip cream white, matched to ears. Original historical PNG remains unchanged.",
+  "turnaroundNote": "Front follows selected character; unseen side/back clothing details are inferred design references, not a 3D or Cubism model."
+}

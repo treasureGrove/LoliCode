@@ -1,20 +1,5 @@
 @import "./atelier-workbench.css";
 
-.tai-shell-more-menu {
-  min-width: 220px;
-}
-.tai-shell-more-menu [aria-current="page"] {
-  background: var(--bg-subtle);
-  color: var(--text-1);
-}
-.tai-shell-menu-notice {
-  width: 6px;
-  height: 6px;
-  margin-inline-start: auto;
-  border-radius: 50%;
-  background: var(--success, #54a58c);
-}
-
 /* Cherry Atelier: the shared palette also reaches Radix portals outside the shell. */
 :root {
   color-scheme: light;
@@ -238,87 +223,124 @@
   background: var(--atelier-reading);
 }
 .lolicode-global-rail.tai-shell-sidebar {
-  --bg-sidebar: #211722;
-  --bg-subtle: #382632;
-  --bg-selected: #4b2d3f;
-  --text-1: #eadce3;
-  --text-2: #c4acbb;
-  --text-3: #b39ba9;
-  --border: 326 19% 26%;
-  --ring: 35 37% 65%;
+  width: 72px;
   color: var(--text-1);
-  background: linear-gradient(180deg, #2b1b2a, #1b131e);
-  border-inline-end: 1px solid var(--atelier-line);
+  background: var(--bg-sidebar);
+  border-inline-end: 1px solid hsl(var(--border) / 0.5);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
-.lolicode-global-rail .tai-shell-brand,
-.lolicode-global-rail[data-collapsed="true"] .tai-shell-brand {
-  height: 66px;
-  min-height: 66px;
-  padding: 10px;
-  justify-content: center;
+/* Warm neutrals coordinate with the original cherry-and-gold ivory workbench. */
+:root:not(.dark) .lolicode-global-rail.tai-shell-sidebar {
+  --bg-sidebar: #eee7df;
+  --bg-subtle: #e8ddd3;
+  --bg-selected: #e4d6d0;
+  --bg-card: #fbf7ee;
+  --text-1: #6b3d49;
+  --text-2: #7c6e66;
+  --text-3: #8a7a70;
+  --border: 30 22% 81%;
+  --ring: 341 38% 37%;
 }
-.lolicode-global-rail .tai-shell-brand-lockup {
-  width: 38px;
-  height: 34px;
-  justify-content: center;
-  background: transparent;
+:root:not(.dark) .lolicode-global-rail .tai-shell-selection {
+  background: var(--bg-selected);
 }
-.lolicode-global-rail .tai-shell-brand-lockup::before {
-  content: "";
-  width: 14px;
-  height: 20px;
-  border: 2px solid #c8ab82;
-  border-radius: 45%;
-  background: linear-gradient(
-    135deg,
-    #98c2bc 0 28%,
-    #366e6d 29% 55%,
-    #234a54 56% 75%,
-    #7bafaa 76%
-  );
-  box-shadow: 0 0 0 3px rgb(200 171 130 / 15%);
+:root:not(.dark)
+  .lolicode-global-rail
+  .tai-shell-nav-item[aria-expanded="true"] {
+  background: var(--bg-subtle);
+  color: var(--text-1);
 }
-.lolicode-global-rail .lolicode-mark {
-  display: none;
+:root:not(.dark) .lolicode-global-rail .tai-shell-profile-picture {
+  border-color: #d8c5b0;
+  background: #efe3d7;
+  color: #6b3d49;
+}
+:root:not(.dark) .lolicode-global-rail .tai-shell-profile-notice {
+  border-color: var(--bg-sidebar);
+}
+:root:not(.dark) .lolicode-global-rail :focus-visible {
+  outline-color: hsl(var(--ring));
+}
+:root:not(.dark)
+  .lolicode-global-rail
+  .tai-shell-profile:is(:hover, [data-state="open"], [data-selected="true"]) {
+  border-color: #c9b298;
+  background: var(--bg-subtle);
+}
+.lolicode-global-rail .tai-shell-drag-spacer {
+  height: 24px;
+}
+.lolicode-global-rail .tai-shell-drag-spacer-mac {
+  height: 56px;
 }
 .lolicode-global-rail .tai-shell-directory {
-  padding: 7px 6px 8px;
+  padding: 4px 12px 12px;
 }
 .lolicode-global-rail .tai-shell-task-group {
-  gap: 9px;
+  gap: 12px;
 }
 .lolicode-global-rail[data-collapsed="true"] .tai-shell-nav-item {
   width: 48px;
-  min-height: 58px;
+  height: 48px;
+  min-height: 48px;
   margin-inline: auto;
   padding: 0;
   justify-content: center;
-  flex-direction: column;
-  gap: 5px;
+  flex-direction: row;
   border: 1px solid transparent;
   border-radius: 12px;
 }
+.lolicode-global-rail .tai-shell-nav-glyph > svg {
+  width: 22px;
+  height: 22px;
+  stroke-width: 1.8;
+}
+.lolicode-global-rail .tai-shell-rail-divider {
+  height: 1px;
+  margin: 18px 9px;
+  background: hsl(var(--border) / 0.65);
+}
 .lolicode-global-rail .tai-shell-footer {
-  padding: 12px 6px;
-  gap: 9px;
+  padding: 12px 12px 16px;
+  gap: 12px;
+  border-top: 0;
 }
 .lolicode-global-rail .tai-shell-selection {
-  background: linear-gradient(135deg, #633746, #3e2736);
-  box-shadow: inset 0 0 0 1px rgb(200 171 130 / 28%);
+  border: 0;
+  background: color-mix(in srgb, var(--text-1) 10%, transparent);
+  box-shadow: none;
   border-radius: 11px;
 }
-.lolicode-global-rail .tai-shell-nav-item[aria-current="page"] {
-  color: #f1d7ce;
+.lolicode-global-rail .tai-shell-nav-item[aria-current="page"],
+.lolicode-global-rail .tai-shell-nav-item[data-selected="true"],
+.lolicode-global-rail .tai-shell-nav-item[data-state="open"] {
+  color: var(--text-1);
 }
-.lolicode-global-rail .tai-shell-nav-item[aria-current="page"]::before {
-  content: "";
-  position: absolute;
-  inset-inline-start: -4px;
-  top: 13px;
-  width: 2px;
-  height: 14px;
-  border-radius: 2px;
-  background: var(--atelier-gold);
+.lolicode-global-rail .tai-shell-nav-item[data-state="open"] {
+  background: var(--bg-subtle);
+}
+.tai-shell-more-menu {
+  min-width: 220px;
+}
+.tai-shell-more-menu [aria-current="page"] {
+  background: var(--bg-subtle);
+  color: var(--text-1);
+}
+.tai-shell-menu-notice {
+  width: 6px;
+  height: 6px;
+  margin-inline-start: auto;
+  border-radius: 50%;
+  background: var(--success, #54a58c);
+}
+@media (max-height: 620px) {
+  .lolicode-global-rail .tai-shell-task-group {
+    gap: 4px;
+  }
+  .lolicode-global-rail .tai-shell-rail-divider {
+    margin-block: 12px;
+  }
 }
 .tai-shell-sidebar :focus-visible {
   outline-color: var(--atelier-gold);

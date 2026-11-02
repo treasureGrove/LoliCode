@@ -453,7 +453,7 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
           {IS_DEVELOPMENT_BUILD
             ? t("buildChannel.updateHelp", {
                 defaultValue:
-                  "界面改动点击「热更新界面」；后端改动运行 pnpm build:dev 完整构建，再从桌面「LoliCode 开发版」启动。",
+                  "界面改动点击「热更新界面」；后端改动请退出开发版，再打开桌面「LoliCode 开发版」，它会自动构建并更新。",
               })
             : isPortable === null
               ? t("settings.appUpdate.unknownModeHelp", {

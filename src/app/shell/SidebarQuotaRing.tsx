@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { ArrowUpRight, RefreshCw } from "lucide-react";
-import { lolicodeAccountApi } from "@/lib/api/lolicode-account";
+import {
+  RELAY_POLL_INTERVAL_MS,
+  useLolicodeRelayStatus,
+} from "@/hooks/useLolicodeRelayStatus";
+import { formatCredit, relayCreditQuota } from "@/lib/relay-credit";
 import {
   Popover,
   PopoverContent,
@@ -10,7 +13,7 @@ import {
 } from "@/components/ui/popover";
 import "./sidebar-quota-ring.css";
 
-/** Either daily limit can stop the relay; the ring follows the tighter allowance. */
+/** Credit is the daily allowance; request counts are usage statistics only. */
 function remainingRatio(remaining: number, limit: number) {
   if (!Number.isFinite(remaining) || !Number.isFinite(limit)) return null;
   if (limit <= 0) return 0;
@@ -30,42 +33,20 @@ export function SidebarQuotaRing({
   const chinese = i18n.language.startsWith("zh");
   const text = (zh: string, en: string) => (chinese ? zh : en);
   const [open, setOpen] = useState(false);
-  const [expired, setExpired] = useState(false);
   const leaveTimer = useRef<ReturnType<typeof setTimeout>>();
   const openedByPointer = useRef(false);
   const revision = useRef(refreshRevision);
-  const query = useQuery({
-    queryKey: ["lolicode-account", "relay-quota", accountId],
-    queryFn: async ({ signal }) => {
-      const status = await lolicodeAccountApi.relayStatus();
-      if (signal.aborted || status.account.id !== accountId)
-        throw new Error(
-          text(
-            "账户已变化，请重新读取额度。",
-            "Account changed. Reload your allowance.",
-          ),
-        );
-      return status;
-    },
-    staleTime: 30_000,
-    refetchInterval: 5 * 60_000,
-    retry: false,
-  });
-  const fetchQuota = query.refetch;
+  const query = useLolicodeRelayStatus(accountId);
   const refetch = useCallback(
-    () => fetchQuota({ cancelRefetch: false }),
-    [fetchQuota],
+    () => query.refresh().catch(() => undefined),
+    [query.refresh],
   );
-  const status = query.isError || expired ? undefined : query.data;
+  const status = query.data;
   const quota = status?.quota;
-  const requests = quota
-    ? remainingRatio(quota.requestsRemaining, quota.requestLimit)
+  const credits = quota ? relayCreditQuota(quota) : null;
+  const ratio = credits
+    ? remainingRatio(credits.remaining, credits.limit)
     : null;
-  const tokens = quota
-    ? remainingRatio(quota.tokensRemaining, quota.tokenLimit)
-    : null;
-  const ratio =
-    requests === null || tokens === null ? null : Math.min(requests, tokens);
   const percentage = (value: number) =>
     value > 0 && value < 0.01 ? "<1%" : `${Math.round(value * 100)}%`;
   const remaining = ratio === null ? null : percentage(ratio);
@@ -84,33 +65,14 @@ export function SidebarQuotaRing({
     revision.current = refreshRevision;
     void refetch();
   }, [refreshRevision, refetch]);
-  useEffect(() => {
-    const resetAt = Date.parse(query.data?.quota.resetsAt ?? "");
-    const delay = resetAt - Date.now();
-    const alreadyReset = Number.isFinite(resetAt) && delay <= 0;
-    setExpired(alreadyReset);
-    if (!Number.isFinite(resetAt)) return;
-    if (alreadyReset) {
-      if (query.dataUpdatedAt < resetAt) void refetch();
-      return;
-    }
-    const timer = setTimeout(
-      () => {
-        setExpired(Date.now() >= resetAt);
-        void refetch();
-      },
-      Math.min(delay + 250, 2_147_483_647),
-    );
-    return () => clearTimeout(timer);
-  }, [query.data, query.dataUpdatedAt, refetch]);
-
   const keepOpen = () => clearTimeout(leaveTimer.current);
   const openDetails = () => {
     keepOpen();
     setOpen(true);
     if (
       !query.isFetching &&
-      (query.isError || Date.now() - query.dataUpdatedAt >= 30_000)
+      (query.isError ||
+        Date.now() - query.dataUpdatedAt >= RELAY_POLL_INTERVAL_MS)
     )
       void refetch();
   };
@@ -119,7 +81,7 @@ export function SidebarQuotaRing({
     leaveTimer.current = setTimeout(() => setOpen(false), 180);
   };
   const counts = (value: number, limit: number) =>
-    `${value.toLocaleString(i18n.language)} / ${limit.toLocaleString(i18n.language)}`;
+    `${formatCredit(value, i18n.language)} / ${formatCredit(limit, i18n.language)}`;
   const resetDate = quota ? new Date(quota.resetsAt) : null;
   const resetLabel =
     resetDate && Number.isFinite(resetDate.getTime())
@@ -156,8 +118,10 @@ export function SidebarQuotaRing({
           onPointerLeave={closeSoon}
           onClick={(event) => {
             event.preventDefault();
+            keepOpen();
             openedByPointer.current = false;
-            openDetails();
+            setOpen(false);
+            onManage();
           }}
         >
           <svg
@@ -232,7 +196,7 @@ export function SidebarQuotaRing({
             />
           </button>
         </div>
-        {quota && ratio !== null ? (
+        {quota && credits && ratio !== null ? (
           <div className="tai-shell-quota-details">
             <div className="tai-shell-quota-summary">
               <span>{text("今日额度", "Daily allowance")}</span>
@@ -241,18 +205,22 @@ export function SidebarQuotaRing({
               </strong>
             </div>
             <div className="tai-shell-quota-row">
-              <span>{text("请求数", "Requests")}</span>
-              <span>{counts(quota.requestsRemaining, quota.requestLimit)}</span>
+              <span>Credit</span>
+              <span>{counts(credits.remaining, credits.limit)}</span>
             </div>
             <div className="tai-shell-quota-row">
-              <span>Token</span>
-              <span>{counts(quota.tokensRemaining, quota.tokenLimit)}</span>
+              <span>{text("今日调用", "Requests today")}</span>
+              <span>{quota.requestsUsed.toLocaleString(i18n.language)}</span>
             </div>
-            {quota.tokensReserved > 0 && (
+            <div className="tai-shell-quota-row">
+              <span>{text("已使用 Token", "Tokens used")}</span>
+              <span>{quota.tokensUsed.toLocaleString(i18n.language)}</span>
+            </div>
+            {credits.reserved > 0 && (
               <p className="tai-shell-quota-note">
                 {text(
-                  `其中 ${quota.tokensReserved.toLocaleString(i18n.language)} Token 已预留，未计入剩余。`,
-                  `${quota.tokensReserved.toLocaleString(i18n.language)} reserved tokens are excluded from the remaining allowance.`,
+                  `其中 ${formatCredit(credits.reserved, i18n.language)} Credit 已预留，未计入剩余。`,
+                  `${formatCredit(credits.reserved, i18n.language)} reserved Credit is excluded from the remaining allowance.`,
                 )}
               </p>
             )}

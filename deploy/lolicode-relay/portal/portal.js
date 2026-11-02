@@ -41,18 +41,25 @@ if (window.parent !== window) {
     if (event.data?.themeMode === "dark" || event.data?.themeMode === "light") {
       document.documentElement.dataset.theme = event.data.themeMode;
     }
-    if (event.data?.type === "lolicode:portal-account" && typeof event.data.signedIn === "boolean") {
+    if (
+      event.data?.type === "lolicode:portal-account" &&
+      typeof event.data.signedIn === "boolean"
+    ) {
       const entry = document.getElementById("hero-account-entry");
       entry.dataset.signedIn = String(event.data.signedIn);
-      entry.textContent = event.data.signedIn ? "进入我的额度 ↗" : "LoliCode 账号登录 ↗";
+      entry.textContent = event.data.signedIn
+        ? "进入我的额度 ↗"
+        : "LoliCode 账号登录 ↗";
     }
   });
-  document.getElementById("hero-account-entry").addEventListener("click", (event) => {
-    // If the parent login UI failed to load, preserve the ordinary /account link.
-    if (event.currentTarget.dataset.signedIn !== "false") return;
-    event.preventDefault();
-    window.parent.postMessage({ type: "lolicode:portal-login" }, hostOrigin);
-  });
+  document
+    .getElementById("hero-account-entry")
+    .addEventListener("click", (event) => {
+      // If the parent login UI failed to load, preserve the ordinary /account link.
+      if (event.currentTarget.dataset.signedIn !== "false") return;
+      event.preventDefault();
+      window.parent.postMessage({ type: "lolicode:portal-login" }, hostOrigin);
+    });
   window.parent.postMessage({ type: "lolicode:portal-ready" }, hostOrigin);
   reportHeight();
 }
@@ -70,20 +77,15 @@ async function loadStatus() {
     });
     if (!response.ok) throw new Error("Unavailable");
     const data = await response.json();
+    const dailyCredits = data.dailyCredits ?? data.dailyTokens / 1000;
     if (
       typeof data.ready !== "boolean" ||
-      !Number.isInteger(data.dailyRequests) ||
-      !Number.isInteger(data.dailyTokens) ||
-      data.dailyRequests < 1 ||
-      data.dailyTokens < 1
+      !Number.isFinite(dailyCredits) ||
+      dailyCredits < 0
     )
       throw new Error("Invalid status");
-    document.getElementById("request-limit").textContent =
-      data.dailyRequests.toLocaleString("zh-CN");
-    document.getElementById("token-limit").textContent =
-      data.dailyTokens >= 10000
-        ? `${data.dailyTokens / 10000}万`
-        : data.dailyTokens.toLocaleString("zh-CN");
+    document.getElementById("credit-limit").textContent =
+      dailyCredits.toLocaleString("zh-CN", { maximumFractionDigits: 6 });
     status.textContent = data.ready
       ? `公益模型已开放 · ${data.modelCount} 个模型`
       : "模型接入中 · 暂未开放使用";
@@ -105,13 +107,30 @@ async function loadStatus() {
       : "接入完成后，在包含公益入口的 LoliCode 客户端中使用。";
     if (data.ready) note.textContent += trialNote;
     const limits = data.limits;
-    const poolNote =
-      limits &&
-      Number.isInteger(limits.globalDailyRequests) &&
-      Number.isInteger(limits.globalDailyTokens) &&
-      Number.isInteger(limits.maxConcurrentGlobal)
-        ? ` 全站每天共用 ${limits.globalDailyRequests} 次、${(limits.globalDailyTokens / 10000).toLocaleString("zh-CN")} 万 token，最多同时处理 ${limits.maxConcurrentGlobal} 个请求；繁忙时请稍后重试。`
-        : "";
+    const globalCredits =
+      limits && Object.hasOwn(limits, "globalDailyCredits")
+        ? limits.globalDailyCredits
+        : limits?.globalDailyTokens != null
+          ? limits.globalDailyTokens / 1000
+          : null;
+    const poolParts = [];
+    if (Number.isFinite(globalCredits))
+      poolParts.push(
+        `全站每日共用 ${globalCredits.toLocaleString("zh-CN", { maximumFractionDigits: 6 })} Credit`,
+      );
+    if (
+      Number.isInteger(limits?.maxConcurrentGlobal) &&
+      limits.maxConcurrentGlobal > 0
+    )
+      poolParts.push(`最多同时处理 ${limits.maxConcurrentGlobal} 个请求`);
+    if (
+      Number.isInteger(limits?.globalRequestsPerMinute) &&
+      limits.globalRequestsPerMinute > 0
+    )
+      poolParts.push(`每分钟最多 ${limits.globalRequestsPerMinute} 次调用`);
+    const poolNote = poolParts.length
+      ? ` ${poolParts.join("，")}；繁忙时请稍后重试。`
+      : "";
     document.getElementById("availability-answer").textContent = data.ready
       ? "模型已开放。请使用包含公益入口的客户端，并在头像菜单中查看可用模型和每日额度。" +
         poolNote +

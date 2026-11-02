@@ -1,7 +1,158 @@
 {
   "selectedOn": "2026-10-16",
-  "note": "Selected existing project assets; no artwork regenerated or recolored during UI polish. Source design paths refer to the local design workspace.",
+  "note": "Original assets selected on 2026-10-16. The 2026-10-30 portrait light-frame draft is retained as superseded design history. Current default sidebar frames are native SVG nine-slice geometry with separate fixed-size cherry-red ribbon artwork; original raster artwork remains for legacy resource compatibility. Since 2026-11-02 the default companion uses the cocoa-and-cream-tail rig artwork with a local eye overlay; painted motion atlases and the unchanged original companion PNG are retained as history.",
   "assets": [
+    {
+      "file": "companion-rig-v1.webp",
+      "status": "current-default",
+      "generatedOn": "2026-11-02",
+      "tool": "built-in image_gen edit; FFmpeg lossless WebP encoding",
+      "reference": "companion.png",
+      "sourceDesign": "design/ip/D-pinkdog-rig-v1/tail-matched-source.png",
+      "sourceSha256": "50f26ac85079dda9f155b453840cd4652ff26fd0ae464d5b03c4e08a5891339b",
+      "originalGeneratedPath": "C:/Users/admin/.codex/generated_images/01a19252-2863-7031-bfac-baf935e6ddef/exec-3cbbf7dd-694f-4eae-8e53-f9ab588264b5.png",
+      "promptFile": "design/ip/D-pinkdog-rig-v1/prompts.json",
+      "preparationScript": "design/ip/D-pinkdog-rig-v1/prepare-assets.mjs",
+      "preparationReport": "design/ip/D-pinkdog-rig-v1/asset-report.json",
+      "supportingDesignRecords": [
+        {
+          "file": "design/ip/D-pinkdog-rig-v1/turnaround-initial.png",
+          "status": "superseded-design-reference",
+          "sha256": "294044c37ce145771ec5319cbc45fc8f5da88a4f0466a429e5b493860328304e"
+        },
+        {
+          "file": "design/ip/D-pinkdog-rig-v1/turnaround.png",
+          "status": "tail-matched-design-reference",
+          "sha256": "c6326b5eb24e57164edb79562522e1b29678b4e039f131e7729d9473c935918b",
+          "note": "Three-view design documentation; unseen side/back details are inferred and are not a runtime rig or Cubism model."
+        }
+      ],
+      "width": 1215,
+      "height": 1295,
+      "note": "Tail main fur corrected to cocoa brown with a cream-white tip to match the folded dog ears. The original companion.png remains unchanged. This single high-resolution illustration supplies the active character, default static fallback, and care-panel portrait.",
+      "rendering": "continuous local WebGL mesh deformation with an aligned eye overlay; inline authored SVG fish and crumbs; not a Cubism/Live2D model; no SDK or generated video",
+      "runtime": "Vite ?inline data URI; offline playback; no Doubao or browser permissions required",
+      "sha256": "a8a7156effaa53bd561959247dbbc5d4972a39d5e1b78ece20fec602491ac477"
+    },
+    {
+      "file": "companion-eyes-closed-v1.webp",
+      "status": "current-default-overlay",
+      "generatedOn": "2026-11-02",
+      "tool": "built-in image_gen edit; local alpha-mask extraction; FFmpeg lossless WebP encoding",
+      "reference": "companion.png",
+      "sourceDesign": "design/ip/D-pinkdog-rig-v1/eyes-closed-source.png",
+      "sourceSha256": "d57fbbc04560c7420e96a80404ab8330c509485990d074959370a5f7b032e915",
+      "originalGeneratedPath": "C:/Users/admin/.codex/generated_images/01a19252-2863-7031-bfac-baf935e6ddef/exec-8b2b9489-3859-484a-941d-84bbf1a5abc7.png",
+      "promptFile": "design/ip/D-pinkdog-rig-v1/prompts.json",
+      "maskedSource": "design/ip/D-pinkdog-rig-v1/eyes-closed-overlay.png",
+      "maskedSourceSha256": "fe10e604a5d98feedc075f09acb1ab4ce90b25cf67bc115d5e51ee9b0cb7e663",
+      "preparationScript": "design/ip/D-pinkdog-rig-v1/prepare-assets.mjs",
+      "preparationReport": "design/ip/D-pinkdog-rig-v1/asset-report.json",
+      "width": 1215,
+      "height": 1295,
+      "coveredPixels": 37866,
+      "maskBoundsInclusive": [404, 310, 744, 523],
+      "note": "Two feathered eye-region masks on the same full canvas as the rig base. Pixels outside those local regions are transparent. The edited full body's tail and other details are not blended into the runtime base.",
+      "rendering": "premultiplied-alpha eye blend on the same continuously deformed WebGL mesh",
+      "sha256": "6e24f98ee8c496e4619082a606cde4cf259f1c42dab6d7f173a0da9fc3c675ee"
+    },
+    {
+      "file": "companion-motion-v2.webp",
+      "status": "superseded",
+      "replacedBy": "companion-rig-v1.webp",
+      "generatedOn": "2026-11-01",
+      "tool": "built-in image_gen; connected-component normalization; FFmpeg lossless WebP encoding",
+      "references": [
+        "companion.png",
+        "design/ip/D-pinkdog-motion-v1/idle-0.png"
+      ],
+      "sourceDesign": "design/ip/D-pinkdog-motion-v2/source-atlas.png",
+      "sourceSha256": "90103cb40df1be7ba5f9f1691b2ef75c9d62ccc242a3cc05e15eef6a2e3548a9",
+      "promptFile": "design/ip/D-pinkdog-motion-v2/prompt.txt",
+      "normalizationScript": "design/ip/D-pinkdog-motion-v2/normalize-atlas.mjs",
+      "normalizationReport": "design/ip/D-pinkdog-motion-v2/normalized-report.json",
+      "stabilityReport": "design/ip/D-pinkdog-motion-v2/stability-report.json",
+      "width": 1536,
+      "height": 1280,
+      "columns": 6,
+      "rows": 5,
+      "frameSize": [256, 256],
+      "motions": ["idle", "feed", "pet", "sleep", "drag"],
+      "note": "Calmer silhouettes, a distinct fish-shaped snack, selected low-change blink/pet/sleep sequences and a held suspended drag pose. All frames share one scale; raised boots in dragging poses are intentional.",
+      "rendering": "painted frames on Canvas; 120ms action transitions; not a Live2D/Cubism model",
+      "sha256": "d510a5d69177799e06e6647c692a9d26a6c2f4eea5b8b9c825f3713d422def24"
+    },
+    {
+      "file": "companion-motion-v1.webp",
+      "status": "superseded",
+      "replacedBy": "companion-motion-v2.webp",
+      "generatedOn": "2026-11-01",
+      "tool": "built-in image_gen; connected-component normalization; FFmpeg lossless WebP encoding",
+      "reference": "companion.png",
+      "sourceDesign": "design/ip/D-pinkdog-motion-v1/source-atlas.png",
+      "sourceSha256": "7f3e030ca9d8e95ad308ee37982a2426dbe63e7e0f2a3fb85442b55d6cbf2f31",
+      "promptFile": "design/ip/D-pinkdog-motion-v1/prompt.txt",
+      "normalizationScript": "design/ip/D-pinkdog-motion-v1/normalize-atlas.mjs",
+      "normalizationReport": "design/ip/D-pinkdog-motion-v1/normalized-report.json",
+      "width": 1536,
+      "height": 1280,
+      "columns": 6,
+      "rows": 5,
+      "frameSize": [256, 256],
+      "motions": ["idle", "feed", "pet", "sleep", "drag"],
+      "rendering": "painted frames on Canvas; not a Live2D/Cubism model",
+      "sha256": "dd8b52f1da51f654539005b91cf47ef58c8fcdd03f0947aad5c63276ddffdb91"
+    },
+    {
+      "file": "sidebar-frame-light-9slice.svg",
+      "createdOn": "2026-10-30",
+      "tool": "repo-native SVG",
+      "theme": "light",
+      "palette": ["ivory", "muted cherry red", "champagne gold"],
+      "width": 128,
+      "height": 128,
+      "sourceSlicePixels": 20,
+      "displayCornerPixels": 20,
+      "centerFill": false,
+      "note": "Square fixed corners and plain edge strips only; ribbon artwork is rendered independently.",
+      "sha256": "1db0dd1fb4a4c08d76bd3276427f25bee49ff465281fdc90cded061765e70f0b"
+    },
+    {
+      "file": "sidebar-frame-dark-9slice.svg",
+      "createdOn": "2026-10-30",
+      "tool": "repo-native SVG",
+      "theme": "dark",
+      "width": 128,
+      "height": 128,
+      "sourceSlicePixels": 20,
+      "displayCornerPixels": 20,
+      "centerFill": false,
+      "note": "Square fixed corners and plain edge strips only; legacy raster resource packs keep their separate slicing contract.",
+      "sha256": "7ef74ac956baae67e25744819c28ee14bcfce7c524e403125b9fd4cd4159ed40"
+    },
+    {
+      "file": "sidebar-ribbon.svg",
+      "createdOn": "2026-10-30",
+      "tool": "repo-native SVG",
+      "width": 164,
+      "height": 24,
+      "displayWidthPixels": 140,
+      "note": "Cherry-red footer ribbon rendered with its intrinsic aspect ratio at a fixed width; not part of the stretchable frame.",
+      "sha256": "7787f1ecbe4da06f006770be3f9fa3a524d8c8364b75bd24bac6c4ca591703cf"
+    },
+    {
+      "file": "sidebar-frame-light.png",
+      "status": "superseded",
+      "replacedBy": "sidebar-frame-light-9slice.svg",
+      "sourceDesign": "sidebar-frame.png",
+      "generatedOn": "2026-10-30",
+      "tool": "built-in image_gen",
+      "theme": "light",
+      "width": 724,
+      "height": 2172,
+      "prompt": "Use case: precise-object-edit / style-transfer. Asset type: a production nine-slice ornamental desktop sidebar panel, not a screenshot or a mockup. Image 1 is the EDIT TARGET: preserve its exact very tall narrow 1:3 canvas proportions, outer rounded rectangular silhouette, transparent exterior, the top-left bow location and footprint, top-right small star details, all thin side rails, bottom ribbon/frill strip, and broad completely empty central space. Redraw ONLY the color/material treatment as an elegant, comfortable LIGHT THEME to coordinate with warm ivory app content and a pale neutral gray sidebar. Replace the almost black burgundy central fill with very pale warm ivory #f7f7f2, a nearly imperceptible fine paper texture, no strong gradients or shadows. Replace bright antique-gold rails with slim soft champagne-silver, low contrast and delicate. Redraw the bow as soft muted dusty-rose fabric with pale cream piping, a small desaturated sage/sea-glass jewel, and gentle taupe metalwork; it must remain small, quiet and confined to the same top-left corner. Bottom ribbon should be pale dusty rose and ivory, restrained not saturated. Maintain crisp geometry: straight thin side borders with no ornaments in their middle stretch so the frame can be nine-sliced vertically without artifacts; all decorative shapes remain entirely in the original top 10.6%, bottom 6.7%, and side 12.4% bands. Interior is fully opaque ivory, exterior genuinely transparent alpha. Keep the central fill entirely blank with no text, icons, characters, controls or logos. Preserve existing transparency outside the rounded panel. Avoid black, maroon, saturated red, yellow-gold glare, heavy leather texture, new flourishes or added objects. The result is the standalone flat asset, front-on, no perspective, no surrounding UI.",
+      "sha256": "0f84830c772631082472a935ce868c41ab5e7aeb051ccd484fa92bd96f4f938a"
+    },
     {
       "sourceDesign": "design/ip/D-pinkdog-ui-v1/costume-raster-v2/ribbon-atelier.png",
       "file": "ribbon-atelier.png",
@@ -31,5 +182,5 @@
     }
   ],
   "version": 1,
-  "tool": "built-in image_gen"
+  "tool": "built-in image_gen and repo-native SVG"
 }

@@ -229,6 +229,33 @@ async fn daily_and_billing_quotas_never_retry_even_with_short_header() {
 }
 
 #[tokio::test]
+async fn credit_limits_distinguish_personal_context_from_shared_pool_without_retrying() {
+    for (code, reason) in [
+        (
+            "daily_credits_exhausted",
+            "个人公益 Credit 不足以处理当前上下文或预留输出",
+        ),
+        (
+            "service_daily_credits_exhausted",
+            "全站公益 Credit 额度不足",
+        ),
+    ] {
+        let server = RateServer::start(move |_, _| limited(code, Some("0"))).await;
+        let error = infer(&server).await.err().unwrap();
+        assert_eq!(server.count(), 1, "Credit limit must not retry: {code}");
+        assert!(
+            error.contains(reason),
+            "Wrong Credit scope for {code}: {error}"
+        );
+        assert!(error.contains("HTTP 429"));
+        assert!(error.contains("恢复后继续"));
+        assert!(!error.contains("模型渠道额度不足"));
+        assert!(!error.contains("PRIVATE_UPSTREAM_SECRET"));
+        assert!(!error.contains("owned-private-gateway"));
+    }
+}
+
+#[tokio::test]
 async fn transient_and_generic_429_have_a_fixed_retry_count() {
     for code in [
         "account_busy",
@@ -250,38 +277,54 @@ async fn transient_and_generic_429_have_a_fixed_retry_count() {
 
 #[tokio::test]
 async fn a_stream_error_after_output_does_not_retry_or_duplicate_text() {
-    let server=RateServer::start(|_,_|HttpReply{status:200,retry_after:Some("0"),json:false,
+    for (code, reason) in [
+        ("service_rate_limited", "请求频率受限"),
+        (
+            "daily_credits_exhausted",
+            "个人公益 Credit 不足以处理当前上下文或预留输出",
+        ),
+        (
+            "service_daily_credits_exhausted",
+            "全站公益 Credit 额度不足",
+        ),
+    ] {
+        let server=RateServer::start(move |_,_|HttpReply{status:200,retry_after:Some("0"),json:false,
         body:format!("data: {}\n\ndata: {}\n\n",json!({"choices":[{"delta":{"content":"PRESERVED_PARTIAL_TEXT"},"finish_reason":null}]}),
-            json!({"error":{"code":"service_rate_limited","message":"PRIVATE_UPSTREAM_SECRET"}}))}).await;
-    let client = reqwest::Client::builder().no_proxy().build().unwrap();
-    let (_sender, cancel) = tokio::sync::watch::channel(false);
-    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
-    let error = inference::infer_with_policy(
-        &client,
-        &server.gateway,
-        "channel/opaque/model",
-        None,
-        32000,
-        vec![],
-        vec![],
-        tx,
-        cancel,
-        ReadPolicy::default(),
-        None,
-    )
-    .await
-    .err()
-    .unwrap();
-    assert_eq!(server.count(), 1);
-    assert!(error.contains("请求频率受限"));
-    let mut text = String::new();
-    while let Ok(delta) = rx.try_recv() {
-        if let Delta::Text(value) = delta {
-            text.push_str(&value);
+            json!({"error":{"code":code,"message":"PRIVATE_UPSTREAM_SECRET"}}))}).await;
+        let client = reqwest::Client::builder().no_proxy().build().unwrap();
+        let (_sender, cancel) = tokio::sync::watch::channel(false);
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let error = inference::infer_with_policy(
+            &client,
+            &server.gateway,
+            "channel/opaque/model",
+            None,
+            32000,
+            vec![],
+            vec![],
+            tx,
+            cancel,
+            ReadPolicy::default(),
+            None,
+        )
+        .await
+        .err()
+        .unwrap();
+        assert_eq!(server.count(), 1);
+        assert!(
+            error.contains(reason),
+            "Wrong stream error scope for {code}: {error}"
+        );
+        assert!(!error.contains("模型渠道额度不足"));
+        let mut text = String::new();
+        while let Ok(delta) = rx.try_recv() {
+            if let Delta::Text(value) = delta {
+                text.push_str(&value);
+            }
         }
+        assert_eq!(text, "PRESERVED_PARTIAL_TEXT");
+        assert!(!error.contains("PRIVATE_UPSTREAM_SECRET"));
     }
-    assert_eq!(text, "PRESERVED_PARTIAL_TEXT");
-    assert!(!error.contains("PRIVATE_UPSTREAM_SECRET"));
 }
 
 #[tokio::test]

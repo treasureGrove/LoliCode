@@ -16,12 +16,14 @@ import uuid
 
 import aiohttp
 from aiohttp import web
+from credit_meter import credit_units, credit_value, daily_credit_units, default_rate, normalize_rates
+from billing_meter import default_billing_config, normalize_billing_config
 
 ORIGIN = 'https://relay.lolicode.com'
-MAX_BODY = 65536
+MAX_BODY = 262144
 MAX_MODELS = 128
 FIELDS = {
-    'dailyRequests': ('daily_requests', 1, 1000000, False),
+    'dailyRequests': ('daily_requests', 1, 1000000, True),
     'dailyTokens': ('daily_tokens', 1, 1000000000, False),
     'globalDailyRequests': ('global_daily_requests', 1, 10000000, True),
     'globalDailyTokens': ('global_daily_tokens', 1, 100000000000, True),
@@ -31,7 +33,10 @@ FIELDS = {
     'maxOutputTokens': ('max_output_tokens', 1, 128000, False),
     'maxRequestBytes': ('max_request_bytes', 8192, 3 * 1024**2, False),
 }
-SETTING_KEYS = set(FIELDS) | {'revision', 'enabled', 'availabilityMode', 'availableUntil', 'modelIds'}
+CREDIT_KEYS = {'dailyCredits', 'globalDailyCredits', 'modelCreditRates'}
+LEGACY_SETTING_KEYS = set(FIELDS) | {'revision', 'enabled', 'availabilityMode', 'availableUntil', 'modelIds'}
+CREDIT_SETTING_KEYS = LEGACY_SETTING_KEYS | CREDIT_KEYS
+SETTING_KEYS = CREDIT_SETTING_KEYS | {'billingConfig'}
 MODEL_FIELDS = {'id', 'name', 'contextLimit', 'contextLimits', 'outputLimit', 'supportsTools', 'inputModalities', 'protocol'}
 CONTEXT_SCALARS = ('context_window', 'contextWindow', 'context_limit', 'contextLimit',
                    'context_length', 'contextLength', 'context/length', 'max_context_tokens',
@@ -69,8 +74,15 @@ def valid_model_id(value):
 
 
 def validate_settings(value, *, loading=False):
-    if not isinstance(value, dict) or set(value) != SETTING_KEYS:
+    if not isinstance(value, dict) or set(value) not in (LEGACY_SETTING_KEYS, CREDIT_SETTING_KEYS, SETTING_KEYS):
         raise ValueError('invalid_fields')
+    value = deepcopy(value)
+    if set(value) == LEGACY_SETTING_KEYS:
+        value.update(dailyCredits=value['dailyTokens'] / 1000,
+                     globalDailyCredits=(value['globalDailyTokens'] / 1000
+                                         if value['globalDailyTokens'] is not None else None),
+                     modelCreditRates={})
+    value.setdefault('billingConfig', default_billing_config())
     if type(value['revision']) is not int or not 0 <= value['revision'] <= 2**53 - 2:
         raise ValueError('invalid_revision')
     if type(value['enabled']) is not bool:
@@ -95,6 +107,17 @@ def validate_settings(value, *, loading=False):
             continue
         if type(entry) is not int or not low <= entry <= high:
             raise ValueError('invalid_limit')
+    value['dailyCredits'] = credit_value(credit_units(value['dailyCredits'], maximum=1000000))
+    if value['globalDailyCredits'] is not None:
+        value['globalDailyCredits'] = credit_value(credit_units(value['globalDailyCredits']))
+    rates = value['modelCreditRates']
+    if (not isinstance(rates, dict) or len(rates) > MAX_DISCOVERED_MODELS
+            or any(not valid_model_id(model_id) for model_id in rates)):
+        raise ValueError('invalid_credit_rates')
+    value['modelCreditRates'] = {model_id: normalize_rates(rate) for model_id, rate in rates.items()}
+    for model_id in ids:
+        value['modelCreditRates'].setdefault(model_id, default_rate())
+    value['billingConfig'] = normalize_billing_config(value['billingConfig'])
     return deepcopy(value)
 
 
@@ -103,6 +126,12 @@ def initial_settings(policy):
     return {'revision': 0, 'enabled': bool(policy['models']),
             'availabilityMode': 'until' if end is not None else 'permanent',
             'availableUntil': end, 'modelIds': [model['id'] for model in policy['models']],
+            'billingConfig': normalize_billing_config(policy.get('billing_config', default_billing_config())),
+            'dailyCredits': credit_value(daily_credit_units(policy)),
+            'globalDailyCredits': (credit_value(daily_credit_units(policy, global_pool=True))
+                                   if daily_credit_units(policy, global_pool=True) is not None else None),
+            'modelCreditRates': {model['id']: normalize_rates(policy.get('model_credit_rates', {}).get(
+                                model['id'], default_rate())) for model in policy['models']},
             **{field: policy.get(key) for field, (key, *_rest) in FIELDS.items()}}
 
 
@@ -412,10 +441,10 @@ class PublicSettings:
         self.configuration_error = False
         if self.path.exists() or self.path.is_symlink():
             try:
-                if self.state.is_symlink() or self.path.is_symlink() or self.path.stat().st_size > 262144:
+                if self.state.is_symlink() or self.path.is_symlink() or self.path.stat().st_size > 1048576:
                     raise ValueError('invalid_path')
                 stored = json.loads(self.path.read_text(encoding='utf8'))
-                if stored.get('version') != 1:
+                if stored.get('version') not in (1, 2, 3):
                     raise ValueError('invalid_version')
                 settings = validate_settings(stored['settings'], loading=True)
                 models = stored['models']
@@ -438,6 +467,11 @@ class PublicSettings:
                 self.policy.pop(key, None)
             else:
                 self.policy[key] = settings[field]
+        self.policy['daily_credits'] = settings['dailyCredits']
+        self.policy['global_daily_credits'] = settings['globalDailyCredits']
+        self.policy['model_credit_rates'] = deepcopy(settings['modelCreditRates'])
+        self.policy['billing_config'] = deepcopy(settings['billingConfig'])
+        self.policy['billing_revision'] = settings['revision']
         if settings['availabilityMode'] == 'permanent':
             self.policy.pop('available_until', None)
         else:
@@ -482,7 +516,7 @@ class PublicSettings:
                 model['name'] = allowed[model_id]['name']
             models.append(model)
         settings = {**settings, 'revision': settings['revision'] + 1}
-        stored = {'version': 1, 'settings': settings, 'models': models}
+        stored = {'version': 3, 'settings': settings, 'models': models}
         if self.state.is_symlink() or self.path.is_symlink() or not self.state.is_dir():
             raise OSError('invalid_settings_path')
         temporary = None
@@ -543,16 +577,16 @@ def install_public_settings(app, policy, gateway, state_directory, *, reject, re
                 reject(503, 'admin_service_unavailable', '暂时无法读取中转站后台，请稍后重试。')
             return value.get('data')
 
-    async def authenticate(request):
+    async def authenticate(request, *, minimum_role=10):
         user = await api(request, '/api/user/self')
-        user_id = user.get('id')
-        if (type(user_id) is not int or user_id <= 0 or type(user.get('role')) is not int
-                or user['role'] < 10 or user.get('status') != 1):
+        if (not isinstance(user, dict) or type(user.get('id')) is not int or user['id'] <= 0
+                or type(user.get('role')) is not int or user['role'] < minimum_role
+                or type(user.get('status')) is not int or user['status'] != 1):
             reject(403, 'admin_required', '此设置仅限中转站管理员。')
 
     async def native_channels(request):
         result, seen = [], set()
-        for page in range(6):
+        for page in range(1, 7):
             listing = await api(request, f'/api/channel/?p={page}&page_size=50')
             rows = listing.get('items')
             total = listing.get('total')
@@ -571,9 +605,9 @@ def install_public_settings(app, policy, gateway, state_directory, *, reject, re
                 break
         reject(503, 'catalog_invalid', '渠道分页资料不完整，请刷新后重试。')
 
-    async def channels(request):
+    async def channels(request, rows=None):
         result, model_ids, entries = [], set(), 0
-        rows = await native_channels(request)
+        rows = await native_channels(request) if rows is None else rows
         for channel in sorted(rows, key=lambda row: row.get('priority', 0) if type(row.get('priority')) is int else 0):
             if channel.get('status') != 1 or channel.get('type') not in (1, 8, 14, 24):
                 continue
@@ -593,9 +627,16 @@ def install_public_settings(app, policy, gateway, state_directory, *, reject, re
 
     async def get_settings(request):
         await authenticate(request)
-        catalog = await channels(request)
+        rows = await native_channels(request)
+        catalog = await channels(request, rows)
         async with manager.lock:
-            return web.json_response(manager.view(catalog))
+            return web.json_response(admin_view(catalog, rows))
+
+    def admin_view(catalog, rows):
+        from channel_health import health_view
+        result = manager.view(catalog)
+        result['channelHealth'] = health_view(state_directory, rows, public_model_ids=manager.settings['modelIds'])
+        return result
 
     async def put_settings(request):
         if request.headers.get('Origin') != ORIGIN or request.content_type != 'application/json':
@@ -611,10 +652,17 @@ def install_public_settings(app, policy, gateway, state_directory, *, reject, re
             if (isinstance(value, dict) and type(value.get('revision')) is int
                     and value['revision'] >= 0 and value['revision'] != manager.settings['revision']):
                 reject(409, 'settings_conflict', '设置已在其他页面更新，请刷新后重试。')
+            if isinstance(value, dict) and set(value) == LEGACY_SETTING_KEYS:
+                # Older open administrator tabs may edit availability, but must
+                # never silently reset Credit prices already chosen elsewhere.
+                value.update({key: deepcopy(manager.settings[key]) for key in CREDIT_KEYS})
+            if isinstance(value, dict) and set(value) == CREDIT_SETTING_KEYS:
+                value['billingConfig'] = deepcopy(manager.settings['billingConfig'])
             settings = validate_settings(value)
         except (ValueError, TypeError):
             reject(400, 'invalid_settings', '设置无效，请检查额度、模型和开放时间。')
-        catalog = await channels(request)
+        rows = await native_channels(request)
+        catalog = await channels(request, rows)
         async with manager.lock:
             try:
                 manager.save(settings, catalog)
@@ -624,7 +672,7 @@ def install_public_settings(app, policy, gateway, state_directory, *, reject, re
                 reject(400, 'model_unavailable', '所选模型不在当前启用的 Chat 渠道中。')
             except OSError:
                 reject(503, 'settings_write_failed', '设置暂时无法保存，原配置已保留。')
-            return web.json_response(manager.view(catalog))
+            return web.json_response(admin_view(catalog, rows))
 
     async def add_upstream(request):
         if request.headers.get('Origin') != ORIGIN or request.content_type != 'application/json':
@@ -788,4 +836,6 @@ def install_public_settings(app, policy, gateway, state_directory, *, reject, re
     app.router.add_put('/admin/public-settings', put_settings)
     app.router.add_post('/admin/upstream', add_upstream)
     app.router.add_post('/admin/upstream/models', discover_upstream_models)
+    from admin_accounts import install_admin_accounts
+    install_admin_accounts(app, policy, authenticate=authenticate, origin=ORIGIN, reject=reject)
     return manager

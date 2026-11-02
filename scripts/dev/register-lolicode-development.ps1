@@ -10,6 +10,15 @@ $taskInstallDirectory = [IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA 'Pro
 $taskBinary = Join-Path $taskInstallDirectory 'LoliCode Dev.exe'
 $taskManifestPath = Join-Path $taskInstallDirectory 'development-build.json'
 $taskRegistryPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\$taskIdentifier"
+$taskLauncher = Join-Path $taskInstallDirectory 'launch-lolicode-development.ps1'
+$taskPowerShell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+$taskLaunchArguments = '-NoLogo -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + $taskLauncher + '"'
+
+function Test-DevelopmentShortcut($Shortcut) {
+    return $Shortcut.TargetPath -eq $taskBinary -or (
+        $Shortcut.TargetPath -eq $taskPowerShell -and $Shortcut.Arguments -eq $taskLaunchArguments
+    )
+}
 
 function Read-DevelopmentManifest([string]$ManifestPath) {
     $taskManifest = Get-Content -LiteralPath $ManifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
@@ -54,7 +63,7 @@ if ($Action -eq 'Unregister') {
     foreach ($taskShortcutPath in (Development-ShortcutPaths $taskManifest.shortcutName)) {
         if (Test-Path -LiteralPath $taskShortcutPath) {
             $taskShortcut = $taskShell.CreateShortcut($taskShortcutPath)
-            if ($taskShortcut.TargetPath -eq $taskBinary) { Remove-Item -LiteralPath $taskShortcutPath }
+            if (Test-DevelopmentShortcut $taskShortcut) { Remove-Item -LiteralPath $taskShortcutPath }
         }
     }
     if (Test-Path -LiteralPath $taskRegistryPath) {
@@ -88,7 +97,7 @@ $taskShell = New-Object -ComObject WScript.Shell
 foreach ($taskShortcutPath in (Development-ShortcutPaths $taskManifest.shortcutName)) {
     if (Test-Path -LiteralPath $taskShortcutPath) {
         $taskOldShortcut = $taskShell.CreateShortcut($taskShortcutPath)
-        if ($taskOldShortcut.TargetPath -ne $taskBinary) { throw 'A different app owns the development shortcut; preserved.' }
+        if (-not (Test-DevelopmentShortcut $taskOldShortcut)) { throw 'A different app owns the development shortcut; preserved.' }
     }
 }
 if (Test-Path -LiteralPath $taskRegistryPath) {
@@ -123,7 +132,13 @@ foreach ($taskRelativeFile in @($taskManifest.files) + @('development-build.json
 
 foreach ($taskShortcutPath in (Development-ShortcutPaths $taskManifest.shortcutName)) {
     $taskShortcut = $taskShell.CreateShortcut($taskShortcutPath)
-    $taskShortcut.TargetPath = $taskBinary
+    if ($taskManifest.files -contains 'launch-lolicode-development.ps1') {
+        $taskShortcut.TargetPath = $taskPowerShell
+        $taskShortcut.Arguments = $taskLaunchArguments
+    } else {
+        $taskShortcut.TargetPath = $taskBinary
+        $taskShortcut.Arguments = ''
+    }
     $taskShortcut.WorkingDirectory = $taskInstallDirectory
     $taskShortcut.IconLocation = "$taskBinary,0"
     $taskShortcut.Description = "LoliCode development - $($taskManifest.developmentBuildNumber) - $($taskManifest.revision)"
@@ -131,7 +146,6 @@ foreach ($taskShortcutPath in (Development-ShortcutPaths $taskManifest.shortcutN
 }
 
 $taskUninstaller = Join-Path $taskInstallDirectory 'register-lolicode-development.ps1'
-$taskPowerShell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
 $taskUninstallCommand = '"' + $taskPowerShell + '" -NoLogo -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + $taskUninstaller + '" -Action Unregister'
 $null = New-Item -Path $taskRegistryPath -Force
 $taskRegistryValues = @{

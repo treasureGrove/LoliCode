@@ -193,6 +193,8 @@ function payloadFromGeneratedScript(filename) {
   for (const raw of block.split(/\r?\n/u)) {
     const line = raw.trim();
     if (!line || line.startsWith(";")) continue;
+    // Root-level notices make Tauri explicitly create the existing install root.
+    if (line === 'CreateDirectory "$INSTDIR\\"') continue;
     if (line === 'File "${MAINBINARYSRCPATH}"') {
       assert(!files.some((file) => file.destination === "LoliCode.exe"));
       const file = {
@@ -303,6 +305,7 @@ test("actual NSIS payload parser requires both official companion license bytes 
           "Section Install",
           "; Copy main executable",
           '  File "${MAINBINARYSRCPATH}"',
+          '  CreateDirectory "$INSTDIR\\"',
           resource(
             "agent\\extensions\\manifest.json",
             path.join(extensionRoot, "manifest.json"),
@@ -393,6 +396,20 @@ test(
   (context) => {
     assert(existsSync(makensis), `NSIS compiler not found: ${makensis}`);
     const payload = payloadFromGeneratedScript(path.resolve(generatedScript));
+    for (const name of ["LICENSE", "THIRD_PARTY_NOTICES.md"]) {
+      const notice = payload.files.find((file) => file.destination === name);
+      assert(notice, `Actual NSIS payload must include ${name}`);
+      assert.equal(
+        readFileSync(notice.source, "utf8").replace(/\r\n/g, "\n"),
+        readFileSync(path.join(repositoryRoot, name), "utf8").replace(/\r\n/g, "\n"),
+        `Actual NSIS ${name} must preserve the frozen release notice`,
+      );
+      if (name === "THIRD_PARTY_NOTICES.md") {
+        const content = readFileSync(notice.source, "utf8");
+        assert(content.includes("73aaf9e3daec8bb174accdf56ecade90b34c27c8"));
+        assert(content.includes("Copyright (c) 2023 Berri AI"));
+      }
+    }
     const expectedHashes = new Map(
       payload.files.map((file) => [file.destination, sha256(file.source)]),
     );

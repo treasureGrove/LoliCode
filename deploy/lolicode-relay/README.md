@@ -1,8 +1,87 @@
 # LoliCode 中转站基底
 
-部署 New API、PostgreSQL 15、Redis 7.4 和 LoliCode 账号/每日额度桥接服务。
+部署 New API、PostgreSQL 15、Redis 7.4 和 LoliCode 账号/每日 Credit 桥接服务。
 镜像由 `images.lock.json` 固定版本及摘要。网关部署脚本只管理自身目录和服务；
 `install_bridge.py` 另外为既有 HTTPS 网站增加 `/relay/` 路由，并保存原站点配置备份。
+
+## 当前计量：Credit（2026-10-30）
+
+本节覆盖下文早期部署记录中的每日原始 token 扣额规则。普通用户的主额度为 **Credit**，
+管理员在 `https://relay.lolicode.com/admin` 编辑个人/全站每日 Credit 及各模型输入、输出、
+缓存读取、缓存写入费率，界面单位统一为 **Credit / 1M（100万）token**；0 表示该项免费。
+新编辑的报价保留两位小数，旧报价等价迁移时保留原精度。每日请求次数只作统计，
+每日额度仅由 Credit 决定；并发、分钟限流、模型上下文和单次输出限制继续生效。
+尚未加入充值或付费套餐。
+
+初始费率在新界面等值显示为 1000 Credit / 1M token，旧额度及历史用量按 **1 Credit = 1,000 token** 一次性固定换算，
+不清空用量，不根据新费率重算旧请求。个人和全站每日 Credit 以后台保存的配置为准，
+重构不重置管理员已修改的额度。旧 token 字段保留作兼容与原始用量统计，
+不再决定 Credit 余额。New API 自身内部余额独立，不可当作用户 Credit。
+
+请求在同一 SQLite 写事务中按最高费率预留输入和最大输出所需 Credit；
+结束后按真实输入、输出和缓存分类结算，缓存不重复计为普通输入，退回差额。
+预留时保存费率快照，后台改价只影响后续请求。费率和账本内部用整数 microCredit
+（1 Credit = 1,000,000 microCredit）计算，合并所有类别后才向上舍入到最小单位。
+上游明确失败退还预留；用量缺失、畸形、连接中断或进程崩溃按预留记为待确认消耗，
+避免断线重试绕过额度；只有 total 的有效用量按最高费率结算。原始 token 统计依赖上游如实上报。
+
+配置加载兼容旧 version 1/2，保存升级为 version 3。账本仅增加 Credit、分类明细和费用快照字段，
+保留原表数据与会话。后台 revision 冲突保护及原子文件保存继续有效。
+`credit_meter.py`、`quota_snapshot.py`、`billing_meter.py`、`channel_health.py` 必须与桥接代码一起部署；备份包含这些模块、Credit 配置和巡检状态。
+
+### 人民币参考报价、余额同步与每小时渠道巡检
+
+主表只编辑每日 Credit 额度和模型四项 Credit/M 单价。可展开人民币参考报价助手，
+填写渠道人民币/M 单价，按 **1 元参考价 = 100 Credit** 和默认 10% 上浮换算，
+预览后填入草稿，整体保存后生效。没有余额币种切换、实时汇率或自动采购报价。
+当前模型使用官方人民币参考价（DeepSeek 为固定高峰档）；这不代表渠道实际采购成本。
+
+旧按量货币配置按已有单价与 Credit 兑换率等价转换，不再次上浮；历史费用和请求快照继续可读，
+不会重算。旧按次价格无法无损改成按 token 价格时阻止覆盖，保留原有兼容结算。
+
+后台通过同一 SQLite 快照生成 `quota.creditBalance` 的额度、已用、预留、剩余与账本/定价版本，
+旧 Credit 字段从该结果投影。客户端使用一个共享额度查询，请求完成、账号切换、手动刷新、
+恢复前台和周期刷新均更新同一份余额；模型目录与额度使用同一次响应。
+详细接口、迁移规则和开源来源见 [CREDIT_ARCHITECTURE.md](CREDIT_ARCHITECTURE.md)。
+
+站长可在“用户用量与额度”查询已接入中转的账号，单独设置每日 Credit 或暂停新请求。
+个人覆盖留空时继承默认值；修改个人额度不清空已用量。全站共享额度仍独立生效。
+保存使用账户版本防止覆盖并发修改，CLI 与网页共用同一控制逻辑。
+
+为兼容旧客户端，API 的 `modelCreditRates` / `creditRate` 仍使用原每千 token 量纲，
+界面读取乘 1000、保存除 1000；内部费率支持九位小数，对应界面每百万费率六位小数。
+账户金额仍只有六位小数。此兼容转换不会改变实际收费。
+
+`lolicode-relay-health.timer` 每小时整点后最多 30 秒启动一次，断电后补跑一轮。
+服务端对已启用且包含公开模型的渠道测试一个代表模型，复用锁定 New API 的最小 `hi` / 16 token
+OpenAI 测试。渠道覆盖参数可能改变测试预算时跳过；不自动启停渠道，不扣用户每日 Credit。
+测试和用户请求共用原子的并发/分钟频率限制，繁忙时跳过。单次总超时 90 秒，串行间隔至少 11 秒，
+整轮预算 3000 秒；小时标记在发请求前原子落盘，重启或重复启动不会重测已发起的同渠道请求。
+状态与最多七天/168轮历史在 `bridge-state/channel-health.json`，页面仅每 60 秒读取结果。
+只换高级后台隐藏的 Key 无法即时判断旧结果过期，下一轮会用新 Key 重测。
+
+```bash
+python3 /opt/lolicode-relay/channel_health.py --dry-run
+systemctl status lolicode-relay-health.timer
+systemctl start lolicode-relay-health.service
+```
+
+参考的是公开项目的结构，未导入其价表：[New API 计费](https://github.com/QuantumNous/new-api/blob/6cf0d90b5ff27f901697dddd61e0c28aba8efefc/service/text_quota.go)、
+[New API 原生渠道测试](https://github.com/QuantumNous/new-api/blob/6cf0d90b5ff27f901697dddd61e0c28aba8efefc/controller/channel-test.go)、
+[One API 渠道测试](https://github.com/songquanpeng/one-api/blob/main/controller/channel-test.go)。
+
+离线验证（所有论坛/模型请求均为本地模拟）：
+
+```powershell
+cd deploy/lolicode-relay
+python -m unittest -q test_admin_accounts test_quota_snapshot test_billing_meter test_billing_bridge test_credit_meter test_credit_bridge test_system_probes test_channel_health test_bridge test_web_account test_public_settings
+```
+
+网站交互回归在仓库根目录运行：
+
+```powershell
+node --test scripts/tests/relay-admin-ui.test.mjs scripts/tests/relay-account-ui.test.mjs
+```
 
 ## 安装
 

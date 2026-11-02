@@ -22,6 +22,7 @@ MODELS_ROUTE = '/admin-api/upstream/models'
 MAX_RESPONSE = 2 * 1024 * 1024
 SETTING_FIELDS = {
     'revision', 'enabled', 'availabilityMode', 'availableUntil', 'modelIds',
+    'dailyCredits', 'globalDailyCredits', 'modelCreditRates', 'billingConfig',
     'dailyRequests', 'dailyTokens', 'globalDailyRequests', 'globalDailyTokens',
     'maxConcurrentPerAccount', 'maxConcurrentGlobal', 'globalRequestsPerMinute',
     'maxOutputTokens', 'maxRequestBytes',
@@ -32,7 +33,7 @@ LIMIT_FIELDS = {
     'globalDailyTokens',
 }
 NULLABLE_LIMITS = {
-    'maxConcurrentGlobal', 'globalRequestsPerMinute', 'globalDailyRequests',
+    'dailyRequests', 'maxConcurrentGlobal', 'globalRequestsPerMinute', 'globalDailyRequests',
     'globalDailyTokens',
 }
 SECRET_FIELDS = {
@@ -81,7 +82,7 @@ def no_credentials(value, token=None):
 
 
 def validate_view(value, token):
-    require(isinstance(value, dict) and set(value) == {'settings', 'channels', 'status'},
+    require(isinstance(value, dict) and set(value) == {'settings', 'channels', 'status', 'channelHealth'},
             'admin_view_shape')
     no_credentials(value, token)
     settings, channels, status = value['settings'], value['channels'], value['status']
@@ -108,6 +109,18 @@ def validate_view(value, token):
         limit = settings[field]
         require((field in NULLABLE_LIMITS and limit is None)
                 or (type(limit) is int and limit > 0), 'limit_shape')
+    from credit_meter import credit_units, normalize_rates
+    from billing_meter import normalize_billing_config
+    try:
+        credit_units(settings['dailyCredits'], maximum=1000000)
+        if settings['globalDailyCredits'] is not None:
+            credit_units(settings['globalDailyCredits'])
+        require(isinstance(settings['modelCreditRates'], dict), 'credit_rate_shape')
+        for rate in settings['modelCreditRates'].values():
+            normalize_rates(rate)
+        normalize_billing_config(settings['billingConfig'])
+    except (ValueError, TypeError):
+        raise VerificationError('credit_settings_shape') from None
     require(isinstance(channels, list), 'channel_catalog_shape')
     for channel in channels:
         require(isinstance(channel, dict)
@@ -126,7 +139,8 @@ def validate_view(value, token):
                     and endpoint.username is None and endpoint.password is None
                     and not endpoint.query and not endpoint.fragment, 'channel_endpoint_has_no_credentials')
         for model in channel['models']:
-            require(isinstance(model, dict) and set(model) == {'id', 'name'}
+            require(isinstance(model, dict) and {'id', 'name'} <= set(model)
+                    and set(model) <= {'id', 'name', 'contextLimit', 'contextLimits', 'outputLimit'}
                     and isinstance(model['id'], str) and bool(model['id'])
                     and isinstance(model['name'], str), 'channel_catalog_shape')
     require(isinstance(status, dict)
@@ -150,7 +164,8 @@ def validate_public_status(value):
     require(value['timezone'] == 'Asia/Singapore' and isinstance(value['resetsAt'], str),
             'community_status_types')
     for field in ('dailyRequests', 'dailyTokens'):
-        require(type(value[field]) is int and value[field] > 0, 'community_status_types')
+        require((field in NULLABLE_LIMITS and value[field] is None)
+                or (type(value[field]) is int and value[field] > 0), 'community_status_types')
     require(value['trialEndsAt'] is None or isinstance(value['trialEndsAt'], str),
             'community_status_types')
     require(isinstance(value['limits'], dict)

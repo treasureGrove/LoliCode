@@ -3,6 +3,8 @@ import {
   parseView,
   productViewOf,
   readStoredView,
+  storeView,
+  isGlobalPage,
   VIEW_STORAGE_KEY,
 } from "@/lib/navigation";
 
@@ -39,6 +41,7 @@ describe("LoliCode startup navigation", () => {
       "agent",
       "channels",
       "usage",
+      "allowance",
       "apps",
       "settings",
     ] as const) {
@@ -47,6 +50,13 @@ describe("LoliCode startup navigation", () => {
     }
     expect(parseView("providers")).toBe("providers");
     expect(parseView("openclawTools")).toBe("openclawConfig");
+  });
+  it("persists the allowance destination as a standalone global page", () => {
+    storeView("allowance");
+    expect(parseView(localStorage.getItem(VIEW_STORAGE_KEY))).toBe("allowance");
+    expect(isGlobalPage("allowance")).toBe(true);
+    expect(productViewOf("allowance")).toBe("allowance");
+    expect(readStoredView()).toBe("allowance");
   });
   it("redirects internal legacy navigation without an empty product page", () => {
     for (const view of [

@@ -1,0 +1,26 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="128"
+  height="128"
+  viewBox="0 0 128 128"
+  fill="none"
+>
+  <title>Dark sidebar frame with fixed twenty-pixel corners</title>
+  <!-- Keep all corner detail inside the 20 px caps; edge strips stay straight. -->
+  <rect
+    x="2"
+    y="2"
+    width="124"
+    height="124"
+    rx="14"
+    stroke="#b89a70"
+    stroke-opacity=".88"
+  />
+  <rect x="6" y="6" width="116" height="116" rx="10" stroke="#6c5048" />
+  <g fill="#c8ab82" fill-opacity=".8">
+    <path d="m13 10 1 2 2 1-2 1-1 2-1-2-2-1 2-1Z" />
+    <path d="m115 10 1 2 2 1-2 1-1 2-1-2-2-1 2-1Z" />
+    <path d="m13 112 1 2 2 1-2 1-1 2-1-2-2-1 2-1Z" />
+    <path d="m115 112 1 2 2 1-2 1-1 2-1-2-2-1 2-1Z" />
+  </g>
+</svg>

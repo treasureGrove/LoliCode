@@ -9,6 +9,10 @@ import {
   lolicodeAccountApi,
   type LolicodeAccountStatus,
 } from "@/lib/api/lolicode-account";
+import {
+  beginRelaySessionTransition,
+  endRelaySessionTransition,
+} from "@/lib/relay-query-state";
 
 export const LOLICODE_ACCOUNT_QUERY_KEY = [
   "lolicode-account",
@@ -86,6 +90,7 @@ export function useLolicodeAccount(): UseLolicodeAccountResult {
     ) => {
       const generation = accountGeneration(queryClient);
       const requestGeneration = ++generation.value;
+      const relayGeneration = beginRelaySessionTransition(queryClient);
       const operationId = Symbol(kind);
       latestOperation.current = operationId;
       if (mounted.current) {
@@ -114,6 +119,7 @@ export function useLolicodeAccount(): UseLolicodeAccountResult {
           setOperationError(errorMessage(cause));
         throw cause;
       } finally {
+        endRelaySessionTransition(queryClient, relayGeneration);
         if (latestOperation.current === operationId && mounted.current)
           setOperation(null);
       }

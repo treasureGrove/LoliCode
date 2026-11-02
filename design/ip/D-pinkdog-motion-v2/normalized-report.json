@@ -1,0 +1,867 @@
+{
+  "input": "source-atlas.png",
+  "sourceSha256": "90103cb40df1be7ba5f9f1691b2ef75c9d62ccc242a3cc05e15eef6a2e3548a9",
+  "sourceSize": [
+    1374,
+    1145
+  ],
+  "output": "normalized-atlas.png",
+  "outputSize": [
+    1536,
+    1280
+  ],
+  "outputSha256": "3a822b5758474c439b3a918c9b0783bf41e073f0ebe1ff1cf22337d6cfc79b65",
+  "columns": 6,
+  "rows": 5,
+  "cell": 256,
+  "alphaThreshold": 30,
+  "connectivity": 8,
+  "minimumComponentPixels": 1000,
+  "globalScale": 1,
+  "horizontalCenter": 128,
+  "footBaseline": 244,
+  "maxBoundingBox": 224,
+  "resampling": "bilinear with premultiplied-alpha interpolation; component ownership prevents adjacent-frame contamination",
+  "frames": [
+    {
+      "frame": 0,
+      "action": "idle",
+      "actionFrame": 0,
+      "sourcePixels": 28190,
+      "sourceBBox": [
+        38,
+        5,
+        240,
+        227
+      ],
+      "sourceCenter": [
+        138.90177367860943,
+        123.15870876197233
+      ],
+      "sourceFootBaseline": 227,
+      "globalScale": 1,
+      "normalizedBBox": [
+        26,
+        22,
+        228,
+        244
+      ],
+      "normalizedPixels": 28264,
+      "horizontalCenter": 128,
+      "footBaseline": 244,
+      "baselineCorrection": 0
+    },
+    {
+      "frame": 1,
+      "action": "idle",
+      "actionFrame": 1,
+      "sourcePixels": 27799,
+      "sourceBBox": [
+        258,
+        5,
+        457,
+        228
+      ],
+      "sourceCenter": [
+        356.59822295766037,
+        123.25392999748192
+      ],
+      "sourceFootBaseline": 228,
+      "globalScale": 1,
+      "normalizedBBox": [
+        28,
+        21,
+        227,
+        244
+      ],
+      "normalizedPixels": 27799,
+      "horizontalCenter": 128,
+      "footBaseline": 244,
+      "baselineCorrection": 0
+    },
+    {
+      "frame": 2,
+      "action": "idle",
+      "actionFrame": 2,
+      "sourcePixels": 27628,
+      "sourceBBox": [
+        477,
+        5,
+        674,
+        227
+      ],
+      "sourceCenter": [
+        574.273309685826,
+        123.0241783697698
+      ],
+      "sourceFootBaseline": 227,
+      "globalScale": 1,
+      "normalizedBBox": [
+        29,
+        22,
+        226,
+        244
+      ],
+      "normalizedPixels": 27628,
+      "horizontalCenter": 128,
+      "footBaseline": 244,
+      "baselineCorrection": 0
+    },
+    {
+      "frame": 3,
+      "action": "idle",
+      "actionFrame": 3,
+      "sourcePixels": 27715,
+      "sourceBBox": [
+        692,
+        5,
+        891,
+        227
+      ],
+      "sourceCenter": [
+        790.1058993324914,
+        123.09467797221721
+      ],
+      "sourceFootBaseline": 227,
+      "globalScale": 1,
+      "normalizedBBox": [
+        28,
+        22,
+        227,
+        244
+      ],
+      "normalizedPixels": 27715,
+      "horizontalCenter": 128,
+      "footBaseline": 244,
+      "baselineCorrection": 0
+    },
+    {
+      "frame": 4,
+      "action": "idle",
+      "actionFrame": 4,
+      "sourcePixels": 27494,
+      "sourceBBox": [
+        916,
+        6,
+        1114,
+        227
+      ],
+      "sourceCenter": [
+        1013.7914454062704,
+        123.2596930239325
+      ],
+      "sourceFootBaseline": 227,
+      "globalScale": 1,
+      "normalizedBBox": [
+        29,
+        23,
+        226,
+        244
+      ],
+      "normalizedPixels": 27582,
+      "horizontalCenter": 128,
+      "footBaseline": 244,
+      "baselineCorrection": 0
+    },
+    {
+      "frame": 5,
+      "action": "idle",
+      "actionFrame": 5,
+      "sourcePixels": 27602,
+      "sourceBBox": [
+        1136,
+        5,
+        1330,
+        227
+      ],
+      "sourceCenter": [
+        1232.452575900297,
+        122.62810665893775
+      ],
+      "sourceFootBaseline": 227,
+      "globalScale": 1,
+      "normalizedBBox": [
+        30,
+        22,
+        224,
+        244
+      ],
+      "normalizedPixels": 27619,
+      "horizontalCenter": 128,
+      "footBaseline": 244,
+      "baselineCorrection": 0
+    },
+    {
+      "frame": 6,
+      "action": "feed",
+      "actionFrame": 0,
+      "sourcePixels": 28969,
+      "sourceBBox": [
+        37,
+        231,
+        243,
+        453
+      ],
+      "sourceCenter": [
+        138.96458282992165,
+        349.15923918671683
+      ],
+      "sourceFootBaseline": 453,
+      "globalScale": 1,
+      "normalizedBBox": [
+        25,
+        22,
+        230,
+        244
+      ],
+      "normalizedPixels": 29017,
+      "horizontalCenter": 128,
+      "footBaseline": 244,
+      "baselineCorrection": 0
+    },
+    {
+      "frame": 7,
+      "action": "feed",
+      "actionFrame": 1,
+      "sourcePixels": 29305,
+      "sourceBBox": [
+        254,
+        231,
+        460,
+        453
+      ],
+      "sourceCenter": [
+        355.8327930387306,
+        348.7309674117045
+      ],
+      "sourceFootBaseline": 453,
+      "globalScale": 1,
+      "normalizedBBox": [
+        24,
+        22,
+        230,
+        244
+      ],
+      "normalizedPixels": 29363,
+      "horizontalCenter": 128,
+      "footBaseline": 244,
+      "baselineCorrection": 0
+    },
+    {
+      "frame": 8,
+      "action": "feed",
+      "actionFrame": 2,
+      "sourcePixels": 28697,
+      "sourceBBox": [
+        474,
+        231,
+        677,
+        453
+      ],
+      "sourceCenter": [
+        573.7794891452069,
+        349.10199672439626
+      ],
+      "sourceFootBaseline": 453,
+      "globalScale": 1,
+      "normalizedBBox": [
+        26,
+        22,
+        229,
+        244
+      ],
+      "normalizedPixels": 28697,
+      "horizontalCenter": 128,
+      "footBaseline": 244,
+      "baselineCorrection": 0
+    },
+    {
+      "frame": 9,
+      "action": "feed",
+      "actionFrame": 3,
+      "sourcePixels": 28750,
+      "sourceBBox": [
+        692,
+        231,
+        894,
+        453
+      ],
+      "sourceCenter": [
+        791.9801043478261,
+        348.83078260869564
+      ],
+      "sourceFootBaseline": 453,
+      "globalScale": 1,
+      "normalizedBBox": [
+        26,
+        22,
+        228,
+        244
+      ],
+      "normalizedPixels": 28802,
+      "horizontalCenter": 128,
+      "footBaseline": 244,
+      "baselineCorrection": 0
+    },
+    {
+      "frame": 10,
+      "action": "feed",
+      "actionFrame": 4,
+      "sourcePixels": 28656,
+      "sourceBBox": [
+        915,
+        231,
+        1117,
+        453
+      ],
+      "sourceCenter": [
+        1014.1193467336683,
+        349.29117811278616
+      ],
+      "sourceFootBaseline": 453,
+      "globalScale": 1,
+      "normalizedBBox": [
+        26,
+        22,
+        228,
+        244
+      ],
+      "normalizedPixels": 28683,
+      "horizontalCenter": 128,
+      "footBaseline": 244,
+      "baselineCorrection": 0
+    },
+    {
+      "frame": 11,
+      "action": "feed",
+      "actionFrame": 5,
+      "sourcePixels": 28680,
+      "sourceBBox": [
+        1131,
+        231,
+        1334,
+        453
+      ],
+      "sourceCenter": [
+        1231.86209902371,
+        349.07217573221754
+      ],
+      "sourceFootBaseline": 453,
+      "globalScale": 1,
+      "normalizedBBox": [
+        26,
+        22,
+        229,
+        244
+      ],
+      "normalizedPixels": 28680,
+      "horizontalCenter": 128,
+      "footBaseline": 244,
+      "baselineCorrection": 0
+    },
+    {
+      "frame": 12,
+      "action": "pet",
+      "actionFrame": 0,
+      "sourcePixels": 29040,
+      "sourceBBox": [
+        40,
+        458,
+        244,
+        681
+      ],
+      "sourceCenter": [
+        141.37620523415978,
+        575.6845730027549
+      ],
+      "sourceFootBaseline": 681,
+      "globalScale": 1,
+      "normalizedBBox": [
+        25,
+        21,
+        229,
+        244
+      ],
+      "normalizedPixels": 29073,
+      "horizontalCenter": 128,
+      "footBaseline": 244,
+      "baselineCorrection": 0
+    },
+    {
+      "frame": 13,
+      "action": "pet",
+      "actionFrame": 1,
+      "sourcePixels": 29009,
+      "sourceBBox": [
+        259,
+        458,
+        463,
+        681
+      ],
+      "sourceCenter": [
+        360.15291805991245,
+        575.7065048777965
+      ],
+      "sourceFootBaseline": 681,
+      "globalScale": 1,
+      "normalizedBBox": [
+        26,
+        21,
+        229,
+        244
+      ],
+      "normalizedPixels": 29074,
+      "horizontalCenter": 128,
+      "footBaseline": 244,
+      "baselineCorrection": 0
+    },
+    {
+      "frame": 14,
+      "action": "pet",
+      "actionFrame": 2,
+      "sourcePixels": 28889,
+      "sourceBBox": [
+        476,
+        458,
+        679,
+        681
+      ],
+      "sourceCenter": [
+        576.4178753158642,
+        575.6173283948908
+      ],
+      "sourceFootBaseline": 681,
+      "globalScale": 1,
+      "normalizedBBox": [
+        26,
+        21,
+        229,
+        244
+      ],
+      "normalizedPixels": 28889,
+      "horizontalCenter": 128,
+      "footBaseline": 244,
+      "baselineCorrection": 0
+    },
+    {
+      "frame": 15,
+      "action": "pet",
+      "actionFrame": 3,
+      "sourcePixels": 28892,
+      "sourceBBox": [
+        692,
+        458,
+        894,
+        681
+      ],
+      "sourceCenter": [
+        791.9866399003184,
+        575.7372629101482
+      ],
+      "sourceFootBaseline": 681,
+      "globalScale": 1,
+      "normalizedBBox": [
+        26,
+        21,
+        228,
+        244
+      ],
+      "normalizedPixels": 28912,
+      "horizontalCenter": 128,
+      "footBaseline": 244,
+      "baselineCorrection": 0
+    },
+    {
+      "frame": 16,
+      "action": "pet",
+      "actionFrame": 4,
+      "sourcePixels": 28669,
+      "sourceBBox": [
+        912,
+        458,
+        1114,
+        681
+      ],
+      "sourceCenter": [
+        1011.3403676444941,
+        575.8962991384423
+      ],
+      "sourceFootBaseline": 681,
+      "globalScale": 1,
+      "normalizedBBox": [
+        26,
+        21,
+        228,
+        244
+      ],
+      "normalizedPixels": 28722,
+      "horizontalCenter": 128,
+      "footBaseline": 244,
+      "baselineCorrection": 0
+    },
+    {
+      "frame": 17,
+      "action": "pet",
+      "actionFrame": 5,
+      "sourcePixels": 28920,
+      "sourceBBox": [
+        1132,
+        458,
+        1335,
+        681
+      ],
+      "sourceCenter": [
+        1232.3426002766253,
+        575.8896611341632
+      ],
+      "sourceFootBaseline": 681,
+      "globalScale": 1,
+      "normalizedBBox": [
+        26,
+        21,
+        229,
+        244
+      ],
+      "normalizedPixels": 28920,
+      "horizontalCenter": 128,
+      "footBaseline": 244,
+      "baselineCorrection": 0
+    },
+    {
+      "frame": 18,
+      "action": "sleep",
+      "actionFrame": 0,
+      "sourcePixels": 27753,
+      "sourceBBox": [
+        41,
+        687,
+        243,
+        903
+      ],
+      "sourceCenter": [
+        140.77681692069325,
+        802.3367203545563
+      ],
+      "sourceFootBaseline": 903,
+      "globalScale": 1,
+      "normalizedBBox": [
+        26,
+        28,
+        228,
+        244
+      ],
+      "normalizedPixels": 27803,
+      "horizontalCenter": 128,
+      "footBaseline": 244,
+      "baselineCorrection": 0
+    },
+    {
+      "frame": 19,
+      "action": "sleep",
+      "actionFrame": 1,
+      "sourcePixels": 27255,
+      "sourceBBox": [
+        261,
+        687,
+        459,
+        903
+      ],
+      "sourceCenter": [
+        358.0604292790314,
+        802.4188956154834
+      ],
+      "sourceFootBaseline": 903,
+      "globalScale": 1,
+      "normalizedBBox": [
+        29,
+        28,
+        226,
+        244
+      ],
+      "normalizedPixels": 27298,
+      "horizontalCenter": 128,
+      "footBaseline": 244,
+      "baselineCorrection": 0
+    },
+    {
+      "frame": 20,
+      "action": "sleep",
+      "actionFrame": 2,
+      "sourcePixels": 27048,
+      "sourceBBox": [
+        479,
+        687,
+        676,
+        902
+      ],
+      "sourceCenter": [
+        574.8718574386277,
+        802.4296805678794
+      ],
+      "sourceFootBaseline": 902,
+      "globalScale": 1,
+      "normalizedBBox": [
+        29,
+        29,
+        226,
+        244
+      ],
+      "normalizedPixels": 27048,
+      "horizontalCenter": 128,
+      "footBaseline": 244,
+      "baselineCorrection": 0
+    },
+    {
+      "frame": 21,
+      "action": "sleep",
+      "actionFrame": 3,
+      "sourcePixels": 26830,
+      "sourceBBox": [
+        696,
+        687,
+        891,
+        903
+      ],
+      "sourceCenter": [
+        791.1441297055535,
+        802.6924338427134
+      ],
+      "sourceFootBaseline": 903,
+      "globalScale": 1,
+      "normalizedBBox": [
+        30,
+        28,
+        225,
+        244
+      ],
+      "normalizedPixels": 26830,
+      "horizontalCenter": 128,
+      "footBaseline": 244,
+      "baselineCorrection": 0
+    },
+    {
+      "frame": 22,
+      "action": "sleep",
+      "actionFrame": 4,
+      "sourcePixels": 27314,
+      "sourceBBox": [
+        917,
+        687,
+        1116,
+        903
+      ],
+      "sourceCenter": [
+        1014.7746210734422,
+        802.3760708794025
+      ],
+      "sourceFootBaseline": 903,
+      "globalScale": 1,
+      "normalizedBBox": [
+        28,
+        28,
+        227,
+        244
+      ],
+      "normalizedPixels": 27314,
+      "horizontalCenter": 128,
+      "footBaseline": 244,
+      "baselineCorrection": 0
+    },
+    {
+      "frame": 23,
+      "action": "sleep",
+      "actionFrame": 5,
+      "sourcePixels": 27398,
+      "sourceBBox": [
+        1137,
+        687,
+        1336,
+        903
+      ],
+      "sourceCenter": [
+        1234.6273085626688,
+        802.3693335279947
+      ],
+      "sourceFootBaseline": 903,
+      "globalScale": 1,
+      "normalizedBBox": [
+        28,
+        28,
+        227,
+        244
+      ],
+      "normalizedPixels": 27398,
+      "horizontalCenter": 128,
+      "footBaseline": 244,
+      "baselineCorrection": 0
+    },
+    {
+      "frame": 24,
+      "action": "drag",
+      "actionFrame": 0,
+      "sourcePixels": 29292,
+      "sourceBBox": [
+        39,
+        907,
+        244,
+        1129
+      ],
+      "sourceCenter": [
+        141.82042878601666,
+        1024.4614911921344
+      ],
+      "sourceFootBaseline": 1129,
+      "globalScale": 1,
+      "normalizedBBox": [
+        25,
+        22,
+        230,
+        244
+      ],
+      "normalizedPixels": 29292,
+      "horizontalCenter": 128,
+      "footBaseline": 244,
+      "baselineCorrection": 0
+    },
+    {
+      "frame": 25,
+      "action": "drag",
+      "actionFrame": 1,
+      "sourcePixels": 29092,
+      "sourceBBox": [
+        254,
+        907,
+        458,
+        1129
+      ],
+      "sourceCenter": [
+        356.4669668637426,
+        1024.7248728172694
+      ],
+      "sourceFootBaseline": 1129,
+      "globalScale": 1,
+      "normalizedBBox": [
+        26,
+        22,
+        229,
+        244
+      ],
+      "normalizedPixels": 29132,
+      "horizontalCenter": 128,
+      "footBaseline": 244,
+      "baselineCorrection": 0
+    },
+    {
+      "frame": 26,
+      "action": "drag",
+      "actionFrame": 2,
+      "sourcePixels": 28995,
+      "sourceBBox": [
+        474,
+        907,
+        676,
+        1129
+      ],
+      "sourceCenter": [
+        575.4148646318331,
+        1025.1175030177617
+      ],
+      "sourceFootBaseline": 1129,
+      "globalScale": 1,
+      "normalizedBBox": [
+        26,
+        22,
+        228,
+        244
+      ],
+      "normalizedPixels": 29040,
+      "horizontalCenter": 128,
+      "footBaseline": 244,
+      "baselineCorrection": 0
+    },
+    {
+      "frame": 27,
+      "action": "drag",
+      "actionFrame": 3,
+      "sourcePixels": 29282,
+      "sourceBBox": [
+        687,
+        907,
+        891,
+        1129
+      ],
+      "sourceCenter": [
+        789.4574482617307,
+        1024.9243221091456
+      ],
+      "sourceFootBaseline": 1129,
+      "globalScale": 1,
+      "normalizedBBox": [
+        26,
+        22,
+        229,
+        244
+      ],
+      "normalizedPixels": 29329,
+      "horizontalCenter": 128,
+      "footBaseline": 244,
+      "baselineCorrection": 0
+    },
+    {
+      "frame": 28,
+      "action": "drag",
+      "actionFrame": 4,
+      "sourcePixels": 29098,
+      "sourceBBox": [
+        914,
+        907,
+        1116,
+        1130
+      ],
+      "sourceCenter": [
+        1014.0207918069971,
+        1023.8875524091003
+      ],
+      "sourceFootBaseline": 1130,
+      "globalScale": 1,
+      "normalizedBBox": [
+        26,
+        21,
+        228,
+        244
+      ],
+      "normalizedPixels": 29136,
+      "horizontalCenter": 128,
+      "footBaseline": 244,
+      "baselineCorrection": 0
+    },
+    {
+      "frame": 29,
+      "action": "drag",
+      "actionFrame": 5,
+      "sourcePixels": 29132,
+      "sourceBBox": [
+        1134,
+        907,
+        1337,
+        1121
+      ],
+      "sourceCenter": [
+        1234.6013661952493,
+        1023.022071948373
+      ],
+      "sourceFootBaseline": 1121,
+      "globalScale": 1,
+      "normalizedBBox": [
+        26,
+        30,
+        229,
+        244
+      ],
+      "normalizedPixels": 29132,
+      "horizontalCenter": 128,
+      "footBaseline": 244,
+      "baselineCorrection": 0
+    }
+  ]
+}

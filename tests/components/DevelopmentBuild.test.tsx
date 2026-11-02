@@ -119,7 +119,9 @@ describe("development application identity", () => {
     expect(
       screen.getByRole("button", { name: "开发版 · 本地构建更新" }),
     ).toBeDisabled();
-    expect(screen.getByText(/后端改动运行 pnpm build:dev/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/后端改动请退出开发版，再打开桌面「LoliCode 开发版」/),
+    ).toHaveTextContent("它会自动构建并更新");
     expect(
       screen.queryByText("Stable resource updates"),
     ).not.toBeInTheDocument();

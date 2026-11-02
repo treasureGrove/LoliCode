@@ -28,3 +28,33 @@ MiMo-Code、DeepSeek Harness 和 Claude Code 的公开流程作为设计参考�
 酒馆可按用户选择下载 [硅基女友 v2 9B GGUF](https://huggingface.co/RX5950XT/silicon-based-girlfriend-v2-GGUF) 与 [llama.cpp b11729](https://github.com/ggml-org/llama.cpp/releases/tag/b11729) 官方 Windows CUDA 13.4 运行时，默认安装包不包含模型权重。模型来源标注 Apache-2.0，llama.cpp 为 MIT；CUDA、OpenMP 等运行时组件保留其各自许可，压缩包中的许可文件原样保留。固定文件、版本、摘要、配置和测试边界见 `docs/guides/tavern-local-companion.md`。
 
 2026-10-25 的本地只读文档查看器使用 [PDF.js](https://github.com/mozilla/pdf.js)（`pdfjs-dist` 5.4.296，Apache-2.0）、quick-xml 0.38.4（MIT）和 lopdf 0.44.0（MIT）。PDF.js 的 worker、CMap、标准字体及 Wasm 编解码器从锁定 npm 包本地打包；其根 LICENSE 与资源目录各自的许可证一同保留在 `pdfjs/` 资源下，字体和编解码器适用各自声明。Office 解析、查看器状态与 MCP 宿主由本项目独立实现；工具搜索的行为参考 ZCode `3c5b227649371507ddc4eb46ac5133afe6db1cab`，未升级或修改固定 vendor 源码，不含上游官方云服务及凭据。
+
+## Credit quota synchronization: LiteLLM community patterns
+
+The Credit quota refactor adapts the shared current-user query, budget draft, and
+cache-invalidation patterns from the MIT community portions of BerriAI/LiteLLM,
+reviewed at commit `73aaf9e3daec8bb174accdf56ecade90b34c27c8`. It does not distribute
+the LiteLLM runtime or enterprise code. Source paths and local adaptations are
+recorded in `third_party/litellm/README.md`. The applicable upstream notice is:
+
+MIT License
+
+Copyright (c) 2023 Berri AI
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

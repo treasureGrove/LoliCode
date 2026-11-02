@@ -22,6 +22,7 @@ export type GlobalPage =
   | "free-ai"
   | "channels"
   | "usage"
+  | "allowance"
   | "auth"
   | "mcp"
   | "skills"
@@ -65,6 +66,7 @@ const GLOBAL_PAGES: GlobalPage[] = [
   "free-ai",
   "channels",
   "usage",
+  "allowance",
   "auth",
   "mcp",
   "skills",

@@ -37,14 +37,14 @@
   position: relative;
   isolation: isolate;
   margin: 6px 0 6px 5px;
-  padding: 45px 14px 25px;
+  padding: 60px 14px 30px;
   color: var(--wb-text);
   background: #211722;
   border: 1px solid var(--atelier-line-soft);
   border-radius: 12px;
   box-shadow: 4px 0 18px rgb(35 20 31 / 5%);
 }
-/* Nine-slicing preserves the bow and the bottom trim when the user resizes the pane. */
+/* The 128 px atlas uses 20 px caps at 1:1 scale; only plain edge strips stretch. */
 .lolicode-workbench .wb-sidebar::before {
   content: "";
   position: absolute;
@@ -52,18 +52,47 @@
   inset: -1px;
   border-style: solid;
   border-color: transparent;
+  border-width: 20px;
+  border-image-source: url("../assets/atelier/sidebar-frame-dark-9slice.svg");
+  border-image-slice: 20;
+  border-image-width: 20px;
+  border-image-repeat: stretch;
+  opacity: 1;
+  pointer-events: none;
+}
+/* Ribbon artwork is independent of the frame and never follows the panel scale. */
+.lolicode-workbench .wb-sidebar::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background-image:
+    var(--atelier-brooch), url("../assets/atelier/sidebar-ribbon.svg");
+  background-position:
+    left 8px top 0,
+    center bottom 5px;
+  background-size:
+    96px auto,
+    140px auto;
+  background-repeat: no-repeat;
+  pointer-events: none;
+}
+/* Installed legacy dark skins retain their original image and slicing contract. */
+:root.dark[data-resource-sidebar] .lolicode-workbench .wb-sidebar::before {
   border-width: 55px 13px 32px;
   border-image-source: var(--atelier-sidebar);
   border-image-slice: 230 90 145 90 fill;
   border-image-width: 55px 13px 32px;
-  border-image-repeat: stretch;
   opacity: 0.82;
-  pointer-events: none;
+}
+:root.dark[data-resource-sidebar] .lolicode-workbench .wb-sidebar::after {
+  display: none;
 }
 .lolicode-workbench .wb-brand {
   padding: 0 8px;
   height: 43px;
   gap: 8px;
+  overflow: hidden;
 }
 .lolicode-workbench .wb-brand-mark {
   display: none;
@@ -76,6 +105,8 @@
   display: none;
 }
 .lolicode-workbench .wb-brand-label {
+  min-width: 0;
+  overflow: hidden;
   flex-direction: row;
   align-items: baseline;
   font-family: Georgia, "Microsoft YaHei UI", serif;
@@ -228,6 +259,127 @@
 .lolicode-workbench :is(.wb-companion-hide, .wb-companion-restore):hover {
   background: var(--wb-hover);
   color: var(--wb-text);
+}
+/* The original cherry-and-gold styling on a quiet ivory surface. */
+:root:not(.dark) .lolicode-workbench .wb-sidebar {
+  color-scheme: light;
+  --wb-sidebar: #fbf7ee;
+  --wb-input: #fffdf7;
+  --wb-panel: #fffdf7;
+  --wb-text: #483b36;
+  --wb-muted: #7a6c61;
+  --wb-border: #e2d4bf;
+  --wb-accent: #8b4059;
+  --wb-accent-soft: #f0e4df;
+  --wb-hover: #f2eae0;
+  --wb-selected: #eddfd9;
+  --wb-selected-text: #6c3e4c;
+  --wb-selected-muted: #79545c;
+  --wb-selected-hover: #e4d1ca;
+  --wb-selected-ring: #92714e;
+  --wb-heading: #6b3d49;
+  --wb-section-text: #7b6853;
+  background: var(--wb-sidebar);
+  border-color: var(--wb-border);
+  box-shadow: 4px 0 18px rgb(71 47 37 / 5%);
+}
+:root:not(.dark) .lolicode-workbench .wb-sidebar::before {
+  border-image-source: url("../assets/atelier/sidebar-frame-light-9slice.svg");
+}
+:root:not(.dark) .lolicode-workbench .wb-sidebar::after {
+  background-position:
+    left 8px top 0,
+    center bottom 5px;
+}
+:root:not(.dark) .lolicode-workbench .wb-sidebar .wb-brand {
+  justify-content: flex-start;
+}
+:root:not(.dark) .lolicode-workbench .wb-sidebar .wb-brand-label {
+  justify-content: flex-start;
+  color: var(--wb-heading);
+  letter-spacing: 0.045em;
+}
+:root:not(.dark) .lolicode-workbench .wb-sidebar .wb-brand-label > span {
+  color: var(--wb-muted);
+}
+:root:not(.dark) .lolicode-workbench .wb-sidebar .wb-create-task {
+  border-color: #854355;
+  color: #fff9f0;
+  background: linear-gradient(125deg, #8e4e5d, #743c4e);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 16%),
+    0 3px 8px rgb(105 51 67 / 10%);
+}
+:root:not(.dark) .lolicode-workbench .wb-sidebar .wb-create-task-options {
+  border-left-color: rgb(255 255 255 / 24%);
+}
+:root:not(.dark)
+  .lolicode-workbench
+  .wb-sidebar
+  .wb-create-task
+  > .wb-nav-create:hover:not(:disabled),
+:root:not(.dark)
+  .lolicode-workbench
+  .wb-sidebar
+  .wb-create-task-options:hover:not(:disabled) {
+  background: #7f4152;
+}
+:root:not(.dark) .lolicode-workbench .wb-sidebar .wb-search {
+  background: var(--wb-input);
+}
+:root:not(.dark) .lolicode-workbench .wb-sidebar .wb-search:focus-within {
+  border-color: #9c774e;
+  box-shadow: 0 0 0 2px rgb(156 119 78 / 12%);
+}
+:root:not(.dark) .lolicode-workbench .wb-sidebar .wb-section-label {
+  color: var(--wb-section-text);
+}
+:root:not(.dark)
+  .lolicode-workbench
+  .wb-sidebar
+  .wb-session-row[aria-pressed="true"] {
+  background: var(--wb-selected);
+  color: var(--wb-selected-text);
+  box-shadow: inset 3px 0 0 var(--wb-selected-ring);
+}
+:root:not(.dark)
+  .lolicode-workbench
+  .wb-sidebar
+  .wb-session-row[aria-pressed="true"]
+  small {
+  color: var(--wb-selected-muted);
+}
+:root:not(.dark)
+  .lolicode-workbench
+  .wb-sidebar
+  .wb-session-row[aria-pressed="true"]
+  ~ .wb-session-menu {
+  color: var(--wb-selected-text);
+  background: var(--wb-selected);
+}
+:root:not(.dark)
+  .lolicode-workbench
+  .wb-sidebar
+  .wb-session-row[aria-pressed="true"]
+  ~ .wb-session-menu:is(:hover, [data-state="open"]) {
+  background: var(--wb-selected-hover);
+}
+:root:not(.dark)
+  .lolicode-workbench
+  .wb-sidebar
+  .wb-session-row[aria-pressed="true"]
+  ~ .wb-session-menu:focus-visible {
+  outline-color: var(--wb-selected-ring);
+}
+:root:not(.dark) .lolicode-workbench .wb-sidebar .wb-companion-stage {
+  background: radial-gradient(
+    ellipse at 50% 80%,
+    rgb(166 117 87 / 5%),
+    transparent 65%
+  );
+}
+:root:not(.dark) .lolicode-workbench .wb-sidebar .wb-companion-image {
+  filter: drop-shadow(0 3px 5px rgb(71 47 37 / 8%));
 }
 .lolicode-workbench .wb-titlebar {
   background: var(--atelier-header);
@@ -533,7 +685,8 @@
 :root[data-decoration="soft"] .lolicode-workbench .wb-sidebar {
   padding-top: 12px;
 }
-:root[data-decoration="soft"] .lolicode-workbench .wb-sidebar::before {
+:root[data-decoration="soft"] .lolicode-workbench .wb-sidebar::before,
+:root[data-decoration="soft"] .lolicode-workbench .wb-sidebar::after {
   display: none;
 }
 :root[data-decoration="soft"] .lolicode-workbench .wb-composer::after {
@@ -547,6 +700,7 @@
   padding-bottom: 8px;
 }
 :root[data-decoration="off"] .lolicode-workbench .wb-sidebar::before,
+:root[data-decoration="off"] .lolicode-workbench .wb-sidebar::after,
 :root[data-decoration="off"] .lolicode-workbench .wb-composer::after {
   display: none;
 }
@@ -639,8 +793,8 @@
     height: 92px;
   }
   .lolicode-workbench .wb-sidebar {
-    padding-top: 45px;
-    padding-bottom: 20px;
+    padding-top: 60px;
+    padding-bottom: 30px;
   }
   .lolicode-workbench .wb-brand {
     height: 36px;
@@ -661,6 +815,7 @@
     outline-offset: 2px;
   }
   .lolicode-workbench .wb-sidebar::before,
+  .lolicode-workbench .wb-sidebar::after,
   .lolicode-workbench .wb-composer::after {
     display: none;
   }
@@ -668,6 +823,56 @@
     border: 1px solid CanvasText;
     background: Canvas;
     color: CanvasText;
+    box-shadow: none;
+  }
+  :root:not(.dark) .lolicode-workbench .wb-sidebar {
+    --wb-sidebar: Canvas;
+    --wb-input: Canvas;
+    --wb-panel: Canvas;
+    --wb-text: CanvasText;
+    --wb-muted: CanvasText;
+    --wb-border: CanvasText;
+    --wb-accent: LinkText;
+    --wb-accent-soft: Canvas;
+    --wb-hover: Canvas;
+    --wb-selected: Highlight;
+    --wb-selected-text: HighlightText;
+    --wb-selected-muted: HighlightText;
+    --wb-selected-hover: Highlight;
+    --wb-selected-ring: HighlightText;
+    --wb-heading: CanvasText;
+    --wb-section-text: CanvasText;
+    background: Canvas;
+    border-color: CanvasText;
+    color: CanvasText;
+    box-shadow: none;
+  }
+  :root:not(.dark) .lolicode-workbench .wb-sidebar .wb-create-task,
+  :root:not(.dark) .lolicode-workbench .wb-sidebar .wb-create-task-options,
+  :root:not(.dark)
+    .lolicode-workbench
+    .wb-sidebar
+    .wb-create-task
+    > .wb-nav-create:hover:not(:disabled),
+  :root:not(.dark)
+    .lolicode-workbench
+    .wb-sidebar
+    .wb-create-task-options:hover:not(:disabled) {
+    border-color: ButtonText;
+    background: ButtonFace;
+    color: ButtonText;
+    box-shadow: none;
+  }
+  :root:not(.dark) .lolicode-workbench .wb-sidebar .wb-search:focus-within {
+    border-color: Highlight;
+    box-shadow: none;
+  }
+  :root:not(.dark)
+    .lolicode-workbench
+    .wb-sidebar
+    .wb-session-row[aria-pressed="true"] {
+    background: Highlight;
+    color: HighlightText;
     box-shadow: none;
   }
 }

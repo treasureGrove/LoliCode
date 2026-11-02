@@ -134,6 +134,7 @@ export function Sidebar(props: SidebarProps) {
               selected={props.view === "settings"}
               onOpenSettings={() => props.onSelectPage("settings")}
               onOpenUpdates={props.onOpenUpdates}
+              onOpenAllowance={() => props.onSelectPage("allowance")}
             />
           </div>
           <MoreMenu {...props} {...status} hasUpdate={hasUpdate} />
@@ -256,7 +257,7 @@ function MoreMenu({
   const noticeId = useId();
   const activeTool = view === "agent" ? activeAgentTool : null;
   const applicationsSelected = view === "applications" || isBuiltinApp(view);
-  const usageSelected = view === "usage";
+  const usageSelected = view === "usage" || view === "allowance";
   const usageLabel = t("nav.usage");
   const costLabel =
     todayCost > 0

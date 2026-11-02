@@ -45,6 +45,7 @@ class Accounting(unittest.TestCase):
             results = list(workers.map(attempt, range(40)))
         self.assertEqual(sum(item is not None for item in results), 20)
         self.assertEqual(self.ledger.summary('42', policy)['requestsRemaining'], 0)
+        self.assertFalse(self.ledger.summary('42', policy)['requestsUnlimited'])
 
     def test_token_reservation_settlement_rename_and_failure(self):
         first, _ = self.ledger.reserve('42', 'mock-model', 90000, 9999, POLICY)
@@ -156,7 +157,7 @@ class Accounting(unittest.TestCase):
         self.ledger.finish(first, 90)
         with self.assertRaises(Rejected) as blocked:
             self.ledger.reserve('43', 'mock-model', 10, 20, policy)
-        self.assertEqual(blocked.exception.code, 'service_daily_tokens_exhausted')
+        self.assertEqual(blocked.exception.code, 'service_daily_credits_exhausted')
 
     def test_global_token_reservations_clip_output_and_reset_at_midnight(self):
         policy = {**POLICY, 'max_concurrent_global': 10, 'global_daily_tokens': 100}
@@ -241,6 +242,24 @@ class HttpBridge(unittest.IsolatedAsyncioTestCase):
         await self.remote.close()
         self.temp.cleanup()
 
+    async def test_unlimited_daily_request_metadata_keeps_legacy_account_numbers(self):
+        for missing in (False, True):
+            if missing:
+                self.policy.pop('daily_requests', None)
+                self.policy.pop('global_daily_requests', None)
+            else:
+                self.policy.update(daily_requests=None, global_daily_requests=None)
+            public = await (await self.client.get('/public/status')).json()
+            self.assertIsNone(public['dailyRequests'])
+            self.assertIsNone(public['limits']['globalDailyRequests'])
+            response = await self.client.get('/account', headers=self.headers)
+            self.assertEqual(response.status, 200)
+            value = await response.json()
+            self.assertTrue(value['quota']['requestsUnlimited'])
+            self.assertEqual(value['quota']['requestLimit'], 2**53 - 1)
+            self.assertEqual(value['quota']['requestsRemaining'], 2**53 - 1)
+        self.assertEqual(self.calls, 0)
+
     async def test_forum_auth_ban_revoke_and_usage_are_enforced_per_request(self):
         response = await self.client.post('/v1/chat/completions', json=self.payload)
         self.assertEqual(response.status, 401)
@@ -307,7 +326,7 @@ class HttpBridge(unittest.IsolatedAsyncioTestCase):
         response = await self.client.get('/public/status')
         data = await response.json()
         self.assertEqual(response.status, 200)
-        self.assertEqual(set(data), {'ready', 'modelCount', 'dailyRequests', 'dailyTokens',
+        self.assertEqual(set(data), {'ready', 'modelCount', 'dailyRequests', 'dailyTokens', 'dailyCredits', 'creditUnit',
                                     'timezone', 'resetsAt', 'limits', 'trialEndsAt'})
         self.assertEqual(data['dailyRequests'], 20)
         self.assertEqual(data['dailyTokens'], 100000)

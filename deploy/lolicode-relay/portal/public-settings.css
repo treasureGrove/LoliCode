@@ -1242,3 +1242,330 @@ footer {
   flex-direction: column;
   gap: 4px;
 }
+
+.credit-rates-panel {
+  margin-top: 20px;
+  padding: 22px 24px;
+}
+.credit-rates-panel > .muted {
+  line-height: 1.8;
+}
+.credit-rate-row {
+  padding: 18px 0;
+  border-top: 1px solid var(--line);
+}
+.credit-rate-model {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  margin-bottom: 14px;
+  overflow-wrap: anywhere;
+}
+.credit-rate-fields {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+.credit-rate-fields .field {
+  min-width: 0;
+}
+.credit-rate-fields input {
+  width: 100%;
+  min-width: 0;
+}
+@media (max-width: 680px) {
+  .credit-rates-panel {
+    margin-top: 16px;
+    padding: 20px 17px;
+  }
+  .credit-rate-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .credit-rates-panel .section-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 9px;
+  }
+}
+
+.credit-rate-fields .field > span {
+  display: block;
+  margin-bottom: 7px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.billing-config-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  gap: 18px;
+  margin-top: 20px;
+}
+.billing-mode {
+  display: block;
+  max-width: 320px;
+  margin-bottom: 10px;
+}
+.billing-mode > span {
+  display: block;
+  margin-bottom: 7px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.billing-mode select {
+  width: 100%;
+}
+.billing-unit {
+  margin-bottom: 12px;
+}
+.health-panel {
+  padding: 22px 24px;
+  margin-top: 20px;
+  margin-bottom: 20px;
+}
+.health-schedule {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  margin-top: 14px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.health-results {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+.health-result {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  overflow-wrap: anywhere;
+}
+.health-result-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.health-status {
+  flex-shrink: 0;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 11px;
+  color: #535964;
+  background: #eef0f3;
+}
+.health-status[data-status="healthy"] {
+  color: #20563c;
+  background: #e6f3eb;
+}
+.health-status[data-status="failed"],
+.health-status[data-status="timeout"] {
+  color: #8d2637;
+  background: #f9e8eb;
+}
+.health-status[data-status="stale"] {
+  color: #785313;
+  background: #fff2d8;
+}
+.health-detail,
+.health-reason {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+.health-reason {
+  color: var(--ink);
+}
+@media (max-width: 680px) {
+  .billing-config-fields {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .health-panel {
+    padding: 20px 17px;
+    margin-block: 16px;
+  }
+  .health-results {
+    grid-template-columns: 1fr;
+  }
+  .health-result-heading {
+    flex-wrap: wrap;
+    gap: 7px;
+  }
+}
+
+.reference-pricing {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.reference-pricing > summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--muted);
+}
+.reference-pricing .credit-rate-fields {
+  margin-top: 14px;
+}
+.reference-markup {
+  display: block;
+  width: min(100%, 180px);
+  margin-top: 14px;
+}
+.reference-markup > span {
+  display: block;
+  margin-bottom: 7px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.reference-markup input {
+  width: 100%;
+}
+.reference-preview {
+  line-height: 1.8;
+}
+.reference-preview.error {
+  color: #8d2637;
+}
+
+.accounts-panel {
+  padding: 22px 24px;
+  margin-block: 20px;
+}
+.accounts-summary {
+  margin: 14px 0;
+  font-size: 12px;
+  line-height: 1.9;
+  color: var(--muted);
+}
+.accounts-search {
+  max-width: 520px;
+}
+.accounts-search > label,
+.account-admin-override > span {
+  display: block;
+  margin-bottom: 7px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.accounts-search-row {
+  display: flex;
+  gap: 10px;
+}
+.accounts-search-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid #d3d8e0;
+  border-radius: 5px;
+  background: #fff;
+}
+.accounts-list {
+  margin-top: 14px;
+}
+.account-admin-row {
+  padding-block: 18px;
+  border-top: 1px solid var(--line);
+}
+.account-admin-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 14px;
+  overflow-wrap: anywhere;
+}
+.account-admin-heading .muted {
+  margin: 0;
+  font-size: 12px;
+}
+.account-admin-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+.account-admin-stats dt {
+  font-size: 12px;
+  color: var(--muted);
+}
+.account-admin-stats dd {
+  margin: 7px 0 0;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.account-admin-edit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px 18px;
+}
+.account-admin-override {
+  width: min(100%, 230px);
+}
+.account-admin-override input {
+  width: 100%;
+  min-width: 0;
+}
+.account-admin-paused {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 39px;
+  font-size: 13px;
+}
+.account-admin-paused input {
+  accent-color: var(--wine);
+}
+.account-admin-result {
+  min-height: 18px;
+}
+.account-admin-result.error,
+#accounts-message.error {
+  color: #8d2637;
+}
+.accounts-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 14px;
+}
+.accounts-pagination .muted {
+  margin: 0;
+  font-size: 12px;
+}
+@media (max-width: 680px) {
+  .accounts-panel {
+    padding: 20px 17px;
+    margin-block: 16px;
+  }
+  .accounts-panel > .section-heading {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .account-admin-stats {
+    gap: 9px;
+  }
+  .account-admin-stats dd {
+    font-size: 12px;
+  }
+  .account-admin-override {
+    width: 100%;
+  }
+  .account-admin-edit {
+    gap: 10px;
+  }
+  .account-admin-edit .button {
+    min-height: 40px;
+  }
+}

@@ -1,0 +1,12 @@
+[Unit]
+Description=Hourly LoliCode public channel connectivity checks
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+RandomizedDelaySec=30
+AccuracySec=1s
+Unit=lolicode-relay-health.service
+
+[Install]
+WantedBy=timers.target

@@ -12,8 +12,9 @@ from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
 from bridge import Ledger, active_models, create_app
-from public_settings import ORIGIN, PublicSettings, UPSTREAM_NAME, UPSTREAM_MARKER, catalog_model_metadata
+from public_settings import ORIGIN, PublicSettings, UPSTREAM_NAME, UPSTREAM_MARKER, catalog_model_metadata, initial_settings
 from test_bridge import POLICY, USER
+from verify_public_settings import LIMIT_FIELDS, VerificationError, validate_public_status, validate_view
 
 
 def native_channel(channel_id=1, **changes):
@@ -51,7 +52,7 @@ class PublicSettingsHttp(unittest.IsolatedAsyncioTestCase):
         async def channels(request):
             self.native_calls.append(request.path)
             self.assertEqual(request.headers.get('Authorization'), 'Bearer native-admin-token')
-            offset = int(request.query['p']) * int(request.query['page_size'])
+            offset = (int(request.query['p']) - 1) * int(request.query['page_size'])
             return web.json_response({'success': True, 'data': {
                 'items': self.channel_rows[offset:offset + 50], 'total': len(self.channel_rows)}})
 
@@ -183,7 +184,9 @@ class PublicSettingsHttp(unittest.IsolatedAsyncioTestCase):
         settings = (await self.read())['settings']
         settings.update(enabled=True, availabilityMode='permanent', availableUntil=None)
         await self.save(settings, 403, {**self.headers, 'Origin': 'https://hostile.invalid'})
-        for changes in ({'apiKey': 'do-not-save'}, {'dailyRequests': True}, {'maxRequestBytes': 3 * 1024**2 + 1},
+        for changes in ({'apiKey': 'do-not-save'}, {'dailyRequests': True}, {'dailyRequests': 0},
+                        {'dailyRequests': -1}, {'dailyRequests': 1.5}, {'globalDailyRequests': 0},
+                        {'globalDailyRequests': False}, {'maxRequestBytes': 3 * 1024**2 + 1},
                         {'availabilityMode': 'permanent', 'availableUntil': '2999-01-01T00:00:00Z'},
                         {'availabilityMode': 'until', 'availableUntil': '2999-01-01T00:00:00'},
                         {'modelIds': ['mock-model,new-model']}, {'modelIds': ['mock model']},
@@ -193,10 +196,32 @@ class PublicSettingsHttp(unittest.IsolatedAsyncioTestCase):
         result = await self.save({**settings, 'modelIds': ['not-in-enabled-channel']}, 400)
         self.assertEqual(result['error']['code'], 'model_unavailable')
         self.assertFalse(self.path.exists())
-        response = await self.client.put(self.url, data=b' ' * 65537,
+        response = await self.client.put(self.url, data=b' ' * 262145,
             headers={**self.headers, 'Content-Type': 'application/json'})
         self.assertEqual(response.status, 413)
         self.assertFalse(self.path.exists())
+
+    async def test_null_request_caps_save_restart_and_keep_credit_policy(self):
+        original = (await self.read())['settings']
+        settings = {**original, 'enabled': True, 'availabilityMode': 'permanent', 'availableUntil': None,
+                    'dailyRequests': None, 'globalDailyRequests': None}
+        result = await self.save(settings)
+        self.assertIsNone(result['settings']['dailyRequests'])
+        self.assertIsNone(result['settings']['globalDailyRequests'])
+        self.assertEqual(result['settings']['dailyCredits'], original['dailyCredits'])
+        self.assertEqual(result['settings']['globalDailyCredits'], original['globalDailyCredits'])
+        self.assertEqual(result['settings']['modelCreditRates'], original['modelCreditRates'])
+        self.assertEqual(result['settings']['billingConfig'], original['billingConfig'])
+        self.assertNotIn('daily_requests', self.policy)
+        self.assertNotIn('global_daily_requests', self.policy)
+        restarted_policy = deepcopy(POLICY)
+        restarted_policy['global_daily_requests'] = 200
+        manager = PublicSettings(restarted_policy, self.temp.name)
+        self.assertFalse(manager.configuration_error)
+        self.assertEqual(manager.settings, result['settings'])
+        self.assertNotIn('daily_requests', restarted_policy)
+        self.assertNotIn('global_daily_requests', restarted_policy)
+        self.assertTrue(self.client.app['ledger'].summary('42', restarted_policy)['requestsUnlimited'])
 
     async def test_permanent_publish_preserves_capability_usage_and_restart(self):
         ledger = self.client.app['ledger']
@@ -258,6 +283,56 @@ class PublicSettingsHttp(unittest.IsolatedAsyncioTestCase):
             'availabilityMode': 'until', 'availableUntil': end.isoformat()})
         self.assertTrue(reopened['status']['ready'])
         self.assertEqual(active_models(self.policy, end), [])
+
+    async def test_credit_settings_persist_without_repricing_existing_usage(self):
+        settings = (await self.read())['settings']
+        self.assertEqual(settings['dailyCredits'], 100)
+        rates = {'input': 2, 'output': 4, 'cacheRead': 0.125, 'cacheWrite': 2.5}
+        settings.update(enabled=True, availabilityMode='permanent', availableUntil=None,
+                        dailyCredits=12.345678, globalDailyCredits=100.5,
+                        modelCreditRates={'mock-model': rates})
+        result = await self.save(settings)
+        self.assertEqual(self.policy['daily_credits'], 12.345678)
+        self.assertEqual(self.policy['model_credit_rates']['mock-model'], rates)
+        reloaded = PublicSettings(deepcopy(POLICY), self.temp.name)
+        self.assertFalse(reloaded.configuration_error)
+        self.assertEqual(reloaded.settings, result['settings'])
+        # A still-open legacy administrator page preserves the new prices.
+        legacy = {key: value for key, value in result['settings'].items()
+                  if key not in ('dailyCredits', 'globalDailyCredits', 'modelCreditRates', 'billingConfig')}
+        legacy['dailyRequests'] = 25
+        updated = await self.save(legacy)
+        self.assertEqual(updated['settings']['dailyCredits'], 12.345678)
+        self.assertEqual(updated['settings']['modelCreditRates']['mock-model'], rates)
+        # Saving policy neither calls an upstream model nor rewrites the ledger.
+        self.assertEqual(self.model_calls, 0)
+
+    async def test_invalid_credit_rates_and_limits_never_write(self):
+        settings = (await self.read())['settings']
+        settings.update(enabled=True, availabilityMode='permanent', availableUntil=None)
+        for changes in ({'dailyCredits': True}, {'dailyCredits': -1}, {'dailyCredits': 1000001},
+                        {'dailyCredits': 0.0000001}, {'globalDailyCredits': 100000001},
+                        {'modelCreditRates': {'mock-model': {'input': 1}}},
+                        {'modelCreditRates': {'mock-model': {'input': -1, 'output': 1, 'cacheRead': 1, 'cacheWrite': 1}}},
+                        {'modelCreditRates': {'mock-model': {'input': 1, 'output': True, 'cacheRead': 1, 'cacheWrite': 1}}}):
+            await self.save({**settings, **changes}, 400)
+            self.assertFalse(self.path.exists())
+
+    async def test_v1_settings_load_as_fixed_credit_baseline_without_rewriting_file(self):
+        original = (await self.read())['settings']
+        legacy = {key: value for key, value in original.items()
+                  if key not in ('dailyCredits', 'globalDailyCredits', 'modelCreditRates', 'billingConfig')}
+        legacy.update(enabled=True, availabilityMode='permanent', availableUntil=None,
+                      dailyTokens=10000000, globalDailyTokens=100000000)
+        self.path.write_text(json.dumps({'version': 1, 'settings': legacy,
+                                        'models': self.policy['models']}), encoding='utf8')
+        before = self.path.read_bytes()
+        manager = PublicSettings(deepcopy(POLICY), self.temp.name)
+        self.assertFalse(manager.configuration_error)
+        self.assertEqual(manager.settings['dailyCredits'], 10000)
+        self.assertEqual(manager.settings['globalDailyCredits'], 100000)
+        self.assertEqual(manager.settings['modelCreditRates']['mock-model']['input'], 1)
+        self.assertEqual(self.path.read_bytes(), before)
 
     async def test_enabled_custom_chat_channels_and_pagination(self):
         self.channel_rows = [native_channel(index, status=2) for index in range(1, 52)]
@@ -551,6 +626,39 @@ class PublicSettingsHttp(unittest.IsolatedAsyncioTestCase):
             failure = await self.post_upstream({**first, 'protocol': 'gemini_native',
                 'baseUrl': 'https://gemini.example/v1'}, 400)
         self.assertEqual(failure['error']['code'], 'unsupported_upstream_version')
+
+
+class VerifierLimitCompatibility(unittest.TestCase):
+    def setUp(self):
+        settings = initial_settings(deepcopy(POLICY))
+        settings.update(dailyRequests=None, globalDailyRequests=None)
+        self.view = {'settings': settings, 'channels': [], 'channelHealth': {},
+                     'status': {'ready': True, 'expired': False, 'modelCount': 1}}
+        self.public = {'ready': True, 'modelCount': 1, 'dailyRequests': None,
+                       'dailyTokens': settings['dailyTokens'], 'timezone': 'Asia/Singapore',
+                       'resetsAt': '2026-10-31T00:00:00+08:00', 'trialEndsAt': None,
+                       'limits': {field: settings[field] for field in LIMIT_FIELDS}}
+
+    def test_verifiers_accept_unlimited_and_legacy_finite_daily_request_caps(self):
+        for limit in (None, 20):
+            with self.subTest(limit=limit):
+                self.view['settings']['dailyRequests'] = limit
+                self.public['dailyRequests'] = limit
+                validate_view(self.view, 'verifier-admin-token')
+                validate_public_status(self.public)
+
+    def test_unlimited_requests_do_not_weaken_token_or_numeric_type_validation(self):
+        for field in ('dailyRequests', 'dailyTokens'):
+            invalid = (0, -1, True, False, 1.5, '20') + ((None,) if field == 'dailyTokens' else ())
+            for value in invalid:
+                with self.subTest(field=field, value=value):
+                    view, public = deepcopy(self.view), deepcopy(self.public)
+                    view['settings'][field] = value
+                    public[field] = value
+                    with self.assertRaises(VerificationError):
+                        validate_view(view, 'verifier-admin-token')
+                    with self.assertRaises(VerificationError):
+                        validate_public_status(public)
 
 
 class ModelContextMetadata(unittest.TestCase):

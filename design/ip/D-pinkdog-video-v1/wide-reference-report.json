@@ -1,0 +1,31 @@
+{
+  "source": "src/assets/atelier/companion.png",
+  "sourceDimensions": [
+    1214,
+    1295
+  ],
+  "sourceSha256": "57df11bc05392e3c73b4bdab1e1112dc85323c9836109032bd81e5db45d774de",
+  "output": "design/ip/D-pinkdog-video-v1/idle-reference-green-wide.png",
+  "outputDimensions": [
+    1280,
+    720
+  ],
+  "outputSha256": "3536d8808bbf59925ade2a42edf1f36cd1bd0204fbe3762ece2f3d612b7cb161",
+  "background": "#00FF00",
+  "preparation": "Area resample in premultiplied alpha, uniformly scale original character, center on solid green. No redraw or pose change.",
+  "characterCanvas": {
+    "left": 397,
+    "top": 108,
+    "width": 486,
+    "height": 518
+  },
+  "foregroundAlphaThreshold": 16,
+  "foregroundBoundsInclusive": {
+    "left": 422,
+    "top": 110,
+    "right": 865,
+    "bottom": 624
+  },
+  "topMarginPercent": 15.277777777777779,
+  "bottomPositionPercent": 86.80555555555556
+}

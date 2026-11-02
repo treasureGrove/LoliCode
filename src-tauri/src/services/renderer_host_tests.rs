@@ -136,7 +136,9 @@ fn local_development_build(source: &Path, id: &str) -> DevelopmentFrontendBuild 
         development_build_number: format!("DEV-{id}"),
         source_branch: "TG/test-renderer".into(),
         revision: "test-revision+dirty".into(),
-        built_at: "2026-10-28T10:04:01Z".into(),
+        built_at: option_env!("LOLICODE_BUILD_TIMESTAMP")
+            .unwrap_or("2026-10-28T10:04:01Z")
+            .into(),
         working_tree_dirty: true,
         output_directory: directory.clone(),
         native_contract: native_contract(),
@@ -148,6 +150,45 @@ fn local_development_build(source: &Path, id: &str) -> DevelopmentFrontendBuild 
     )
     .unwrap();
     metadata
+}
+
+#[test]
+fn startup_ignores_local_snapshots_older_than_the_bundled_native_build() {
+    let temp = tempfile::tempdir().unwrap();
+    let mut metadata = local_development_build(temp.path(), "cached");
+    metadata.built_at = "2026-10-28T10:04:01Z".into();
+    std::fs::write(
+        metadata.output_directory.join("development-renderer.json"),
+        serde_json::to_vec(&metadata).unwrap(),
+    )
+    .unwrap();
+    let host = RendererHost::default();
+    // A snapshot remains valid for an explicit in-process refresh. Only reusing
+    // the pointer on the next startup should respect the bundled build's age.
+    host.activate_development_renderer(
+        temp.path(),
+        development::load(temp.path(), metadata.clone()).unwrap(),
+    )
+    .unwrap();
+    assert!(
+        development::load_current_for_native_build(temp.path(), Some("2026-10-28T10:04:02Z"))
+            .err()
+            .unwrap()
+            .contains("早于原生构建")
+    );
+    for native_built_at in [
+        Some("2026-10-28T10:04:00Z"),
+        Some("2026-10-28T18:04:01+08:00"),
+        None,
+    ] {
+        assert_eq!(
+            development::load_current_for_native_build(temp.path(), native_built_at)
+                .unwrap()
+                .metadata,
+            metadata,
+        );
+    }
+    assert!(development::load(temp.path(), metadata).is_ok());
 }
 
 #[test]

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import {
@@ -19,6 +19,7 @@ import {
   builtinAppsKey,
   useBuiltinApps,
   type BuiltinAppId,
+  type BuiltinAppState,
 } from "@/lib/api/builtin-apps";
 import { toast } from "@/lib/toast";
 import "./builtin-applications.css";
@@ -39,16 +40,32 @@ export function BuiltinApplicationsPage({
   const apps = useBuiltinApps();
   const client = useQueryClient();
   const [pending, setPending] = useState<BuiltinAppId | null>(null);
-  const toggle = async (id: BuiltinAppId, enabled: boolean) => {
+  const mutation = useRef(false);
+  const toggle = async (
+    id: BuiltinAppId,
+    enabled: boolean,
+    openAfter = false,
+  ) => {
+    if (mutation.current) return;
+    mutation.current = true;
     setPending(id);
     try {
       await builtinAppsApi.setEnabled(id, enabled);
-      await client.invalidateQueries({ queryKey: builtinAppsKey });
+      await client.cancelQueries({ queryKey: builtinAppsKey });
+      client.setQueryData<BuiltinAppState[]>(builtinAppsKey, (current) => {
+        const next = current ?? [];
+        return next.some((app) => app.id === id)
+          ? next.map((app) => (app.id === id ? { ...app, enabled } : app))
+          : [...next, { id, enabled }];
+      });
+      void client.invalidateQueries({ queryKey: builtinAppsKey });
+      if (openAfter) onOpen(id);
     } catch (error) {
       toast.error(t("applications.changeFailed"), {
         description: String(error),
       });
     } finally {
+      mutation.current = false;
       setPending(null);
     }
   };
@@ -122,7 +139,11 @@ export function BuiltinApplicationsPage({
                   <div className="builtin-app-actions">
                     {enabled ? (
                       <>
-                        <Button type="button" onClick={() => onOpen(id)}>
+                        <Button
+                          type="button"
+                          disabled={pending !== null}
+                          onClick={() => onOpen(id)}
+                        >
                           {t("applications.open")}
                           <ArrowUpRight size={14} aria-hidden="true" />
                         </Button>
@@ -140,10 +161,10 @@ export function BuiltinApplicationsPage({
                         type="button"
                         variant="outline"
                         disabled={!apps.data || pending !== null}
-                        onClick={() => void toggle(id, true)}
+                        onClick={() => void toggle(id, true, true)}
                       >
                         <Power size={14} aria-hidden="true" />
-                        {t("applications.add")}
+                        {t("applications.enableAndOpen")}
                       </Button>
                     )}
                     {pending === id && (

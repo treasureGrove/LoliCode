@@ -1,0 +1,22 @@
+[Unit]
+Description=Hourly LoliCode public channel connectivity checks
+Requires=lolicode-relay.service lolicode-relay-bridge.service
+After=lolicode-relay.service lolicode-relay-bridge.service network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/lolicode-relay
+ExecStart=/usr/bin/python3 /opt/lolicode-relay/channel_health.py
+User=root
+UMask=0077
+TimeoutStartSec=3300
+MemoryMax=128M
+CPUQuota=25%
+TasksMax=16
+Nice=10
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/lolicode-relay/bridge-state
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
