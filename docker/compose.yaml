@@ -1,0 +1,72 @@
+name: lolicode-dev
+
+services:
+  dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # 与宿主机 UID/GID 对齐，容器里生成的文件不会变成 root 所有
+        USER_UID: ${HOST_UID:-1000}
+        USER_GID: ${HOST_GID:-1000}
+        NODE_VERSION: ${NODE_VERSION:-22.12.0}
+        PNPM_VERSION: ${PNPM_VERSION:-10.12.3}
+        RUST_VERSION: ${RUST_VERSION:-1.95}
+    image: lolicode-dev:local
+    container_name: lolicode-dev
+    hostname: lolicode-dev
+    working_dir: /workspace
+    init: true
+    # WebKit 子进程需要足够的共享内存，默认 64MB 容易崩
+    shm_size: "1gb"
+    stdin_open: true
+    tty: true
+    ports:
+      # Vite：3000 = 正式渠道界面，3001 = 开发渠道界面
+      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:3001:3001"
+      # noVNC（浏览器里的桌面）和裸 VNC
+      - "127.0.0.1:6080:6080"
+      - "127.0.0.1:5900:5900"
+    environment:
+      TZ: Asia/Shanghai
+      START_GUI: ${START_GUI:-1}
+      SCREEN_GEOMETRY: ${SCREEN_GEOMETRY:-1680x1050x24}
+    extra_hosts:
+      # 容器里可以用 host.docker.internal 访问宿主机上的服务
+      - "host.docker.internal:host-gateway"
+    volumes:
+      # 仓库源码：直接挂载宿主机目录，macOS 上照样用本地编辑器改代码
+      - ..:/workspace
+      # 下面的命名卷把“又大又碎”的构建产物留在容器里，
+      # 避免 macOS 绑定挂载上的 node_modules / target 又慢又容易出错。
+      - node-modules:/workspace/node_modules
+      - contracts-node-modules:/workspace/packages/contracts/node_modules
+      - platform-client-node-modules:/workspace/packages/platform-client/node_modules
+      - platform-host-node-modules:/workspace/packages/platform-host/node_modules
+      - opencode-adapter-node-modules:/workspace/packages/adapters/opencode/node_modules
+      # pnpm-workspace.yaml 里 storeDir: ./.pnpm-store
+      - pnpm-store:/workspace/.pnpm-store
+      - pnpm-home:/home/dev/.local/share/pnpm
+      - npm-cache:/home/dev/.npm
+      # Rust 构建产物与依赖缓存
+      - tauri-target:/workspace/src-tauri/target
+      - agent-target:/workspace/crates/lolicode-agent/target
+      - cargo-registry:/home/dev/.cargo/registry
+      - cargo-git:/home/dev/.cargo/git
+    command: ["sleep", "infinity"]
+    stop_grace_period: 10s
+
+volumes:
+  node-modules:
+  contracts-node-modules:
+  platform-client-node-modules:
+  platform-host-node-modules:
+  opencode-adapter-node-modules:
+  pnpm-store:
+  pnpm-home:
+  npm-cache:
+  tauri-target:
+  agent-target:
+  cargo-registry:
+  cargo-git:

@@ -31,6 +31,9 @@ import { settingsApi, type AppId } from "@/lib/api";
 import { useSettingsQuery } from "@/lib/query";
 import type { SettingsSection } from "@/lib/navigation";
 import { AppPageHeader } from "@/app/shell/AppPageHeader";
+import { ChannelCenterPanel } from "@/features/channels/ChannelCenterPanel";
+import { TavernLocalModelPanel } from "@/features/tavern/TavernLocalModelPanel";
+import { useQueryClient } from "@tanstack/react-query";
 import { MotionSurface } from "@/components/motion/MotionSurface";
 import { DirectoryInput } from "@/features/settings/DirectorySettings";
 import { ImportExportSection } from "@/features/settings/ImportExportSection";
@@ -58,6 +61,7 @@ const SECTION_ICON: Record<
   ComponentType<{ className?: string; strokeWidth?: number | string }>
 > = {
   general: SlidersHorizontal,
+  models: SlidersHorizontal,
   appConfig: Folder,
   routing: Route,
   network: Globe,
@@ -88,6 +92,7 @@ export function SettingsPage({
   onOpenApp,
 }: SettingsPageProps) {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
   const {
     settings,
     isLoading,
@@ -369,6 +374,8 @@ export function SettingsPage({
   const renderSection = () => {
     if (!settings) return null;
     switch (section) {
+      case "models":
+        return <><ChannelCenterPanel /><TavernLocalModelPanel onChange={() => queryClient.invalidateQueries({ queryKey: ["tavern", "catalog"] })} /></>;
       case "general":
         return (
           <GeneralSection
@@ -532,7 +539,7 @@ export function SettingsPage({
     <>
       <AppPageHeader
         icon={<SectionIcon className="h-5 w-5" strokeWidth={1.5} />}
-        title={t(`settings.sections.${section}`)}
+        title={section === "models" ? t("channelCenter.navigation", { defaultValue: "渠道与模型" }) : t(`settings.sections.${section}`)}
         subtitle={t("nav.settings")}
       />
       <div

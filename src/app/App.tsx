@@ -21,6 +21,7 @@ import { MotionSurface } from "@/components/motion/MotionSurface";
 import { SettingsPage } from "@/features/settings/SettingsPage";
 import {
   AppPageHeader,
+  PageBackContext,
   WindowControlsContext,
 } from "@/app/shell/AppPageHeader";
 import { Sidebar, type SidebarProps } from "@/app/shell/Sidebar";
@@ -82,7 +83,8 @@ function App() {
     useState<SettingsSection>("general");
   const [appConfigScrollTarget, setAppConfigScrollTarget] = useState<AppId>();
   // 进设置前停留的页面：设置目录里的「← 返回」回到这里
-  const settingsReturnViewRef = useRef<View>("channels");
+  const settingsReturnViewRef = useRef<View>("agent");
+  const pageReturnViewRef = useRef<View>("agent");
   const [channelNavigationBusy, setChannelNavigationBusy] = useState(false);
   const [agentInitialProjectPath, setAgentInitialProjectPath] =
     useState<string>();
@@ -94,6 +96,7 @@ function App() {
   const [activeAgentTool, setActiveAgentTool] = useState<AgentTool | null>(
     null,
   );
+  const [tavernCharacterId, setTavernCharacterId] = useState<string | null>(null);
 
   useEffect(() => {
     storeView(currentView);
@@ -398,12 +401,18 @@ function App() {
     }
     if (managementBusyRef.current) return;
     if (confirmLeave(() => openPage(page))) return;
+    const destination = productViewOf(page);
+    if (destination !== currentViewRef.current) {
+      pageReturnViewRef.current = currentViewRef.current === "settings"
+        ? settingsReturnViewRef.current
+        : currentViewRef.current;
+    }
     setActiveAgentTool(null);
     setAgentToolRequest((previous) => ({
       tool: null,
       id: (previous?.id ?? 0) + 1,
     }));
-    setCurrentView(productViewOf(page));
+    setCurrentView(destination);
   };
 
   const openUnrealProjectInAgent = (path: string) => {
@@ -512,6 +521,8 @@ function App() {
       {...slots}
       onOpenAgentTool={openAgentTool}
       activeAgentTool={currentView === "agent" ? activeAgentTool : null}
+      selectedTavernCharacterId={tavernCharacterId}
+      onSelectTavernCharacter={setTavernCharacterId}
       activeApp={activeApp}
       view={currentView}
       visibleApps={visibleApps}
@@ -565,7 +576,7 @@ function App() {
                 onInitialProjectConsumed={() =>
                   setAgentInitialProjectPath(undefined)
                 }
-                onOpenChannels={() => openPage("channels")}
+                onOpenChannels={() => openSettings("models")}
                 onOpenAbout={() => openSettings("about")}
                 onCheckUpdate={() => {
                   void checkUpdate()
@@ -616,7 +627,7 @@ function App() {
       case "usage":
         return <SimpleUsagePage />;
       case "tavern":
-        return <TavernPage onOpenChannels={() => openPage("channels")} />;
+        return <TavernPage characterId={tavernCharacterId} onCharacterChange={setTavernCharacterId} onOpenChannels={() => openSettings("models")} />;
       case "rankings":
       case "free-ai":
         return <DiscoveryPage key={productView} kind={productView} />;
@@ -651,6 +662,7 @@ function App() {
     <WindowControlsContext.Provider
       value={useAppWindowControls ? <WindowControls /> : null}
     >
+      <PageBackContext.Provider value={currentView !== "agent" && currentView !== "settings" && currentView !== "tavern" ? () => openPage(pageReturnViewRef.current === currentView ? "agent" : pageReturnViewRef.current as GlobalPage) : null}>
       <LayoutGroup id="desktop-navigation">
         <div className="tai-shell lolicode-refreshed-shell flex h-screen overflow-hidden bg-app text-fg-1 selection:bg-action/25">
           {currentView !== "agent" && renderSidebar()}
@@ -701,6 +713,7 @@ function App() {
           </main>
         </div>
       </LayoutGroup>
+      </PageBackContext.Provider>
       <AgentCompanion />
 
       <ConfirmDialog

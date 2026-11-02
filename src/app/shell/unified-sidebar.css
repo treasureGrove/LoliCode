@@ -41,6 +41,40 @@
   border: 0;
 }
 
+.lolicode-unified-sidebar[data-tavern-compact="true"] {
+  flex-basis: 72px;
+  width: 72px;
+  padding-inline: 8px;
+}
+
+.lolicode-unified-sidebar[data-tavern-compact="true"] .lolicode-sidebar-brand {
+  justify-content: center;
+  padding-inline: 0;
+}
+
+.lolicode-unified-sidebar[data-tavern-compact="true"] .lolicode-sidebar-wordmark,
+.lolicode-unified-sidebar[data-tavern-compact="true"] .lolicode-sidebar-nav-label,
+.lolicode-unified-sidebar[data-tavern-compact="true"] .lolicode-sidebar-more,
+.lolicode-unified-sidebar[data-tavern-compact="true"] .tai-shell-quota-button {
+  display: none;
+}
+
+.lolicode-unified-sidebar[data-tavern-compact="true"] .lolicode-sidebar-segments {
+  grid-template-columns: 1fr;
+}
+
+.lolicode-unified-sidebar[data-tavern-compact="true"] .lolicode-sidebar-segments .lolicode-sidebar-nav-item,
+.lolicode-unified-sidebar[data-tavern-compact="true"] .lolicode-sidebar-footer,
+.lolicode-unified-sidebar[data-tavern-compact="true"] .lolicode-sidebar-account {
+  justify-content: center;
+}
+
+.lolicode-unified-sidebar[data-tavern-compact="true"] .lolicode-sidebar-account .tai-shell-profile {
+  flex: 0 0 44px;
+  width: 44px;
+  justify-content: center;
+}
+
 .lolicode-unified-sidebar :focus-visible {
   outline: 2px solid var(--sidebar-accent);
   outline-offset: 2px;
@@ -304,7 +338,7 @@
   flex-shrink: 0;
   gap: 5px;
   min-height: 68px;
-  margin-top: 0;
+  margin-top: auto;
   padding: 10px 0;
   border-top: 1px solid var(--sidebar-line);
 }
@@ -474,6 +508,10 @@
     .wb-create-task-options {
     flex-basis: 28px;
   }
+}
+
+.lolicode-unified-sidebar[data-tavern-compact="true"] .lolicode-sidebar-segments .lolicode-sidebar-nav-icon {
+  display: block;
 }
 
 @media (max-height: 620px) {

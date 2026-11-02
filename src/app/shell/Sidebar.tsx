@@ -1,4 +1,4 @@
-import { useId, type ComponentType, type ReactNode } from "react";
+import { useId, useState, type ComponentType, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { LayoutGroup, motion, useReducedMotion } from "framer-motion";
 import {
@@ -14,6 +14,7 @@ import {
   Info,
   MoreHorizontal,
   PanelLeftClose,
+  PanelLeftOpen,
   Plus,
   SlidersHorizontal,
   Workflow,
@@ -22,7 +23,6 @@ import { isBuiltinApp } from "@/lib/api/builtin-apps";
 import type { AppId } from "@/lib/api";
 import type { VisibleApps } from "@/types";
 import type { GlobalPage, SettingsSection, View } from "@/lib/navigation";
-import { isAppPage } from "@/lib/navigation";
 import { useUpdate } from "@/contexts/UpdateContext";
 import { useSidebarStatus } from "@/hooks/useSidebarStatus";
 import {
@@ -42,6 +42,7 @@ import { SidebarProfileMenu } from "./SidebarProfileMenu";
 import { APP_NAME } from "@/lib/branding";
 import { WorkspaceGlyph } from "./WorkspaceGlyph";
 import type { AgentTool, AgentToolTab } from "@/features/agent/AgentToolPanel";
+import { TavernSidebar } from "@/features/tavern/TavernSidebar";
 import "./unified-sidebar.css";
 
 type IconComponent = ComponentType<{ className?: string }>;
@@ -65,6 +66,8 @@ interface SidebarProps {
   onCollapse?: () => void;
   onOpenAgentTool?: (tool: AgentTool, initialTab?: AgentToolTab) => void;
   activeAgentTool?: AgentTool | null;
+  selectedTavernCharacterId?: string | null;
+  onSelectTavernCharacter?: (id: string) => void;
   activeApp: AppId;
   view: View;
   visibleApps: VisibleApps;
@@ -83,12 +86,15 @@ export function Sidebar(props: SidebarProps) {
   const chinese = i18n.language.startsWith("zh");
   const status = useSidebarStatus();
   const { hasUpdate } = useUpdate();
+  const [tavernCompact, setTavernCompact] = useState(false);
+  const compact = props.view === "tavern" && tavernCompact;
 
   return (
     <LayoutGroup id="unified-sidebar">
       <nav
         data-collapsed="false"
         data-embedded={Boolean(props.embedded)}
+        data-tavern-compact={compact}
         aria-label={t("nav.mainLabel")}
         className="lolicode-unified-sidebar"
       >
@@ -104,19 +110,19 @@ export function Sidebar(props: SidebarProps) {
             Loli<span>code</span>
             <i aria-hidden="true" />
           </span>
-          {props.onCollapse && (
+          {(props.onCollapse || props.view === "tavern") && (
             <HoverTip
-              content={chinese ? "收起侧栏" : "Collapse sidebar"}
+              content={compact ? (chinese ? "展开侧栏" : "Expand sidebar") : (chinese ? "收起侧栏" : "Collapse sidebar")}
               side="right"
             >
               <button
                 type="button"
                 className="lolicode-sidebar-icon-button"
-                aria-label={chinese ? "收起侧栏" : "Collapse sidebar"}
-                onClick={props.onCollapse}
+                aria-label={compact ? (chinese ? "展开侧栏" : "Expand sidebar") : (chinese ? "收起侧栏" : "Collapse sidebar")}
+                onClick={props.view === "tavern" ? () => setTavernCompact((value) => !value) : props.onCollapse}
                 style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
               >
-                <PanelLeftClose aria-hidden="true" />
+                {compact ? <PanelLeftOpen aria-hidden="true" /> : <PanelLeftClose aria-hidden="true" />}
               </button>
             </HoverTip>
           )}
@@ -124,12 +130,15 @@ export function Sidebar(props: SidebarProps) {
         {props.view === "settings" ? (
           <SettingsDirectory {...props} />
         ) : (
-          <MainDirectory {...props} {...status} />
+          <>
+            <MainDirectory {...props} {...status} />
+            {props.view === "tavern" && <TavernSidebar compact={compact} selectedId={props.selectedTavernCharacterId ?? null} onSelect={(id) => props.onSelectTavernCharacter?.(id)} onAdd={(source) => window.dispatchEvent(new CustomEvent("lolicode:tavern-add", { detail: source }))} />}
+          </>
         )}
         <div className="lolicode-sidebar-footer">
           <div className="lolicode-sidebar-account">
             <SidebarProfileMenu
-              expanded
+              expanded={!compact}
               hasUpdate={hasUpdate}
               selected={props.view === "settings"}
               onOpenSettings={() => props.onSelectPage("settings")}
@@ -146,17 +155,13 @@ export function Sidebar(props: SidebarProps) {
 function MainDirectory({
   view,
   onSelectPage,
-  authNeedsAttention,
   onOpenAgentTool,
   activeAgentTool,
   workspaceActions,
   workspaceContent,
 }: SidebarProps & ReturnType<typeof useSidebarStatus>) {
-  const { t, i18n } = useTranslation();
+  const { i18n } = useTranslation();
   const chinese = i18n.language.startsWith("zh");
-  const channels = t("channelCenter.navigation", {
-    defaultValue: chinese ? "渠道与模型" : "Channels & models",
-  });
   return (
     <>
       <div
@@ -165,42 +170,36 @@ function MainDirectory({
         className="lolicode-sidebar-segments"
       >
         <NavItem
-          selected={
-            view === "channels" ||
-            view === "auth" ||
-            view === "apps" ||
-            isAppPage(view)
-          }
+          selected={view === "agent"}
           icon={ModelsGlyph}
           selectionLayout="mode-selection"
-          label={channels}
-          visibleLabel={chinese ? "模型" : "Models"}
-          alert={authNeedsAttention ? t("nav.authNeedsReauth") : undefined}
-          onClick={() => onSelectPage("channels")}
-        />
-        <NavItem
-          selected={view === "agent"}
-          icon={ChatGlyph}
-          selectionLayout="mode-selection"
-          label={chinese ? "编程工作台" : "Coding workspace"}
-          visibleLabel={chinese ? "对话" : "Chat"}
+          label={chinese ? "代理工作区" : "Agent workspace"}
+          visibleLabel={chinese ? "代理" : "Agent"}
           onClick={() => onSelectPage("agent")}
         />
+        <NavItem
+          selected={view === "tavern"}
+          icon={ChatGlyph}
+          selectionLayout="mode-selection"
+          label={chinese ? "角色对话" : "Character chat"}
+          visibleLabel={chinese ? "对话" : "Chat"}
+          onClick={() => onSelectPage("tavern")}
+        />
       </div>
-      <div className="lolicode-sidebar-actions">
+      {view === "agent" && <div className="lolicode-sidebar-actions">
         {workspaceActions ?? (
           <button
             type="button"
             className="lolicode-sidebar-new-chat"
-            onClick={() => onSelectPage("agent")}
+            onClick={() => onSelectPage("tavern")}
           >
             <Plus aria-hidden="true" />
             {chinese ? "开始对话" : "Start a chat"}
           </button>
         )}
-      </div>
-      <div className="lolicode-sidebar-workspaces">{workspaceContent}</div>
-      <div
+      </div>}
+      {view === "agent" && <div className="lolicode-sidebar-workspaces">{workspaceContent}</div>}
+      {view === "agent" && <div
         className="lolicode-sidebar-shortcuts"
         role="group"
         aria-label={chinese ? "工作台工具" : "Workspace tools"}
@@ -222,7 +221,7 @@ function MainDirectory({
           disabled={!onOpenAgentTool}
           onClick={() => onOpenAgentTool?.("skills", "plugins")}
         />
-      </div>
+      </div>}
     </>
   );
 }
@@ -413,6 +412,7 @@ function NavItem({
 
 const SETTINGS_ITEMS: { section: SettingsSection; icon: IconComponent }[] = [
   { section: "general", icon: SlidersHorizontal },
+  { section: "models", icon: ModelsGlyph },
   { section: "appConfig", icon: Folder },
   { section: "network", icon: Globe },
   { section: "data", icon: Database },
@@ -442,7 +442,7 @@ function SettingsDirectory(props: SidebarProps) {
             selected={props.settingsSection === section}
             icon={icon}
             selectionLayout="settings-selection"
-            label={t(`settings.sections.${section}`)}
+            label={section === "models" ? (t("channelCenter.navigation", { defaultValue: "渠道与模型" })) : t(`settings.sections.${section}`)}
             dot={section === "about" && hasUpdate}
             title={
               section === "about" && hasUpdate

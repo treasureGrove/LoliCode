@@ -221,7 +221,17 @@ pub fn import_character(state: &AppState, path: &str) -> Result<TavernCharacter,
         .and_then(|value| value.to_str())
         .unwrap_or_default()
         .to_ascii_lowercase();
-    let (raw_data, source_format, avatar_bytes) = if extension == "json" {
+    let (raw_data, source_format, avatar_bytes) = if extension == "md" {
+        if bytes.len() > MAX_CARD_JSON_BYTES {
+            return Err("人格 Markdown 超过 8 MB".into());
+        }
+        let content = String::from_utf8(bytes).map_err(|_| "人格 Markdown 不是 UTF-8 文本")?;
+        let name = content.lines().find_map(|line| {
+            line.strip_prefix("# ").map(str::trim).filter(|name| !name.is_empty())
+        }).or_else(|| path.file_stem().and_then(|name| name.to_str())).unwrap_or("新智能体").to_string();
+        let description = content.lines().find(|line| !line.trim().is_empty()).unwrap_or("").trim_start_matches('#').trim().to_string();
+        (json!({"name": name, "description": description, "system_prompt": content}), "markdown".to_string(), None)
+    } else if extension == "json" {
         if bytes.len() > MAX_CARD_JSON_BYTES {
             return Err("角色卡 JSON 超过 8 MB".into());
         }
@@ -236,7 +246,7 @@ pub fn import_character(state: &AppState, path: &str) -> Result<TavernCharacter,
         let format = card_format(&value);
         (value, format, Some(bytes.as_slice()))
     } else {
-        return Err("目前支持 SillyTavern PNG 角色卡和 JSON 角色卡".into());
+        return Err("支持 Markdown 人格文件、SillyTavern PNG 和 JSON 角色卡".into());
     };
 
     let data = raw_data
@@ -342,6 +352,9 @@ pub fn create_story(
 ) -> Result<TavernStory, String> {
     let _write = store_gate().lock().map_err(|_| "酒馆存储繁忙，请重试")?;
     let mut store = read_store(state)?;
+    if let Some(existing) = store.stories.iter().filter(|story| story.character_id == character_id).max_by_key(|story| story.updated_at) {
+        return Ok(existing.clone());
+    }
     let character = store
         .characters
         .iter()

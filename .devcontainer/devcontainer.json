@@ -1,0 +1,24 @@
+{
+  "name": "LoliCode Dev",
+  "dockerComposeFile": "../docker/compose.yaml",
+  "service": "dev",
+  "workspaceFolder": "/workspace",
+  "shutdownAction": "stopCompose",
+  "remoteUser": "dev",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "rust-lang.rust-analyzer",
+        "tauri-apps.tauri-vscode",
+        "bradlc.vscode-tailwindcss",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode"
+      ],
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "rust-analyzer.cargo.targetDir": true
+      }
+    }
+  },
+  "postCreateCommand": "pnpm install --frozen-lockfile"
+}
