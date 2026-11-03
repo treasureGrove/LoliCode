@@ -1,5 +1,8 @@
 use super::*;
 
+#[path = "secretary_worktree_cases.rs"]
+mod worktree_cases;
+
 async fn secretary(engine: &NativeEngine, permission: &str) -> String {
     engine
         .call(
@@ -219,6 +222,61 @@ async fn secretary_long_request_ids_report_once_and_conflicting_replays_leave_qu
         )
         .await
         .unwrap();
+    engine.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn context_notes_reach_live_workers_without_queuing_or_resuming_work() {
+    let fake = Fake::start(|input| {
+        if !chief(input) {
+            return if last_tool(input).is_none() {
+                tool("write_file", json!({"path":"note-fixture.txt","content":"done","expected_content":null}))
+            } else if input["messages"][0]["content"].as_str().unwrap_or_default().contains("Shared fixture: use UTF-8") {
+                text("Observed context-only note")
+            } else {
+                text("Missing note")
+            };
+        }
+        let messages = input["messages"].as_array().unwrap();
+        let index = messages.iter().rposition(|item| item["role"] == "user").unwrap();
+        if messages[index + 1..].iter().any(|item| item["role"] == "tool") {
+            return text("Note attempt finished");
+        }
+        let user = messages[index]["content"].as_str().unwrap_or_default();
+        let report = serde_json::from_str::<Value>(user).unwrap_or(Value::Null);
+        let target = if report["status"] == "waiting_permission" {
+            report["taskId"].as_str()
+        } else {
+            user.strip_prefix("Note for ended task: ")
+        };
+        match target {
+            Some(id) => tool("send_task_note", json!({"task_id":id,"text":"Shared fixture: use UTF-8"})),
+            None => text("Report observed"),
+        }
+    }).await;
+    let (_data, _project, engine, _) = setup(&fake).await;
+    let parent = secretary(&engine, "ask").await;
+    let task = delegate(&engine, &parent, "note-task", "Prepare the fixture").await;
+    let worker = task["sessionId"].as_str().unwrap();
+    let pending = wait(&engine, worker, |snapshot| {
+        snapshot["status"] == "waiting_permission"
+            && snapshot.to_string().contains("Shared fixture: use UTF-8")
+    }).await;
+    assert_eq!(pending["queuedMessages"], json!([]));
+    engine.call("replyPermission", json!({
+        "sessionId":worker,"requestId":pending["permissions"][0]["id"],"decision":"once"
+    })).await.unwrap();
+    let finished = wait(&engine, worker, |snapshot| snapshot["status"] == "idle").await;
+    assert!(finished.to_string().contains("Observed context-only note"));
+    wait(&engine, &parent, |snapshot| {
+        snapshot["status"] == "idle" && snapshot.to_string().contains("Report observed")
+    }).await;
+    let target = task["id"].as_str().unwrap();
+    send(&engine, &parent, "late-note", &format!("Note for ended task: {target}")).await;
+    wait(&engine, &parent, |snapshot| {
+        snapshot["status"] == "idle" && snapshot.to_string().contains("只能给正在执行或等待执行的任务添加便签")
+    }).await;
+    assert_eq!(snapshot(&engine, worker).await["messages"], finished["messages"]);
     engine.shutdown().await.unwrap();
 }
 

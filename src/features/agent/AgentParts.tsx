@@ -54,6 +54,7 @@ const TOOL_NAMES: Record<string, string> = {
   delegate_task: "分派工作任务",
   list_tasks: "查看工作任务",
   send_task_message: "补充工作要求",
+  send_task_note: "转交任务便签",
   cancel_task: "取消工作任务",
   webfetch: "读取网页",
   websearch: "搜索网页",

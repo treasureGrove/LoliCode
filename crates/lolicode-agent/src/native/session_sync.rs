@@ -378,6 +378,7 @@ fn coordinated(record: &Record) -> bool {
     record.stored.snapshot.session.coordination.is_some()
         || !record.stored.secretary_tasks.is_empty()
         || !record.stored.secretary_reports.is_empty()
+        || record.stored.secretary_worktree.is_some()
 }
 
 fn exchange(

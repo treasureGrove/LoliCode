@@ -59,6 +59,24 @@ describe("secretary companion projection", () => {
       target: { workerSessionId: "worker" },
     });
   });
+  it("opens the secretary overview when multiple workers are active", () => {
+    const session = owner();
+    session.tasks.push(
+      { ...session.tasks[0], id: "another", sessionId: "worker-two" },
+      {
+        ...session.tasks[0],
+        id: "next",
+        sessionId: "worker-next",
+        status: "queued",
+      },
+    );
+    const state = summarizeSecretaryActivity([session]);
+    expect(state).toMatchObject({ phase: "working", running: 2, queued: 1 });
+    expect(state.target).toEqual({
+      sessionId: "chief",
+      projectPath: "D:/owned/project",
+    });
+  });
   it("opens the secretary for its question even when an older worker failed", () => {
     const state = owner("failed");
     state.status = "waiting_question";

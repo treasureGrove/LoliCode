@@ -1,4 +1,4 @@
-use crate::{AgentSnapshot, AgentSecretaryTask};
+use crate::{AgentSecretaryTask, AgentSecretaryWorktree, AgentSnapshot};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -94,6 +94,13 @@ pub(super) struct StoredSession {
     /// Routing instructions cannot replace this source or expand its scope.
     #[serde(default)]
     pub secretary_origin: Option<SecretaryOrigin>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub secretary_notes: Vec<SecretaryNote>,
+    /// Worktree roots are allocated by the host, never accepted from callers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub secretary_worktree: Option<AgentSecretaryWorktree>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub secretary_source_context: Option<String>,
 }
 
 #[derive(Clone, Serialize, Deserialize, PartialEq)]
@@ -104,6 +111,14 @@ pub(super) struct SecretaryOrigin {
     pub text: String,
     pub images_forwarded: usize,
     pub other_attachments: Vec<Value>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct SecretaryNote {
+    pub id: String,
+    pub text: String,
+    pub created_at: u64,
 }
 
 #[derive(Clone, Serialize, Deserialize)]

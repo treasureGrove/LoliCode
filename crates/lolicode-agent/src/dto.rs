@@ -63,6 +63,28 @@ pub struct AgentSecretaryTask {
     pub error: Option<String>,
     pub project_path: String,
     pub request_id: String,
+    #[serde(default)]
+    pub execution_mode: AgentSecretaryExecutionMode,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub worktree: Option<AgentSecretaryWorktree>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentSecretaryExecutionMode {
+    #[default]
+    Shared,
+    Worktree,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSecretaryWorktree {
+    pub path: String,
+    pub branch: String,
+    pub base_revision: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

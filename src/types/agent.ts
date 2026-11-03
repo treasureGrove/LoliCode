@@ -93,6 +93,8 @@ export type AgentSecretaryTaskStatus =
   | "cancelled"
   | "interrupted";
 
+export type AgentSecretaryExecutionMode = "shared" | "worktree";
+
 export interface AgentSecretaryTask {
   id: string;
   parentSessionId: string;
@@ -106,11 +108,45 @@ export interface AgentSecretaryTask {
   error?: string | null;
   projectPath: string;
   requestId: string;
+  executionMode?: AgentSecretaryExecutionMode;
+  worktree?: { path: string; branch: string; baseRevision: string } | null;
+  sourceUrl?: string;
 }
 
 export interface AgentSecretaryState {
   sessionId: string;
   tasks: AgentSecretaryTask[];
+}
+
+export interface AgentSecretaryGithubItem {
+  id: string;
+  kind: "issue" | "pull_request" | "comment" | "ci";
+  number: number;
+  title: string;
+  url: string;
+  state: string;
+  actor: string | null;
+  updatedAt: number;
+  body: string | null;
+  taskId: string | null;
+  headSha?: string;
+  pullRequestNumbers?: number[];
+}
+
+export interface AgentSecretaryGithubState {
+  repository: string | null;
+  login: string | null;
+  lastSyncedAt: number | null;
+  monitoring: boolean;
+  error: string | null;
+  items: AgentSecretaryGithubItem[];
+}
+
+export interface AgentSecretaryGithubReplyReceipt {
+  status: "pending" | "sent";
+  body: string;
+  url?: string | null;
+  error?: string | null;
 }
 
 /** Read-only global projection for the companion; no task prompts or results. */

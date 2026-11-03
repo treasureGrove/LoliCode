@@ -11,6 +11,7 @@ use std::{
 use tokio::sync::watch;
 
 mod command;
+pub(super) use command::safe_program;
 mod search;
 #[cfg(test)]
 mod tests;
@@ -687,10 +688,20 @@ pub async fn execute(
     input: &Value,
     cancel: watch::Receiver<bool>,
 ) -> Result<ToolOutput, String> {
+    execute_scoped(project, name, input, cancel, false).await
+}
+
+pub(super) async fn execute_scoped(
+    project: &Path,
+    name: &str,
+    input: &Value,
+    cancel: watch::Receiver<bool>,
+    isolated: bool,
+) -> Result<ToolOutput, String> {
     cancelled(&cancel)?;
     let (root, call) = parse(project, name, input)?;
     if let Call::Command(workdir, command, seconds) = call {
-        return command::execute(&root, &workdir, &command, seconds, cancel).await;
+        return command::execute(&root, &workdir, &command, seconds, cancel, isolated).await;
     }
     if let Call::Unreal(method, params) = call {
         let result = super::unreal::request(&root, &method, &params, cancel).await?;

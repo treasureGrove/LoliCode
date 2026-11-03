@@ -11,7 +11,7 @@ use crate::store::AppState;
 use lolicode_agent::native::{NativeEngine, NativeGateway};
 use serde::de::DeserializeOwned;
 use serde_json::{json, Value};
-use std::{collections::BTreeSet, path::Path, sync::Arc};
+use std::{collections::BTreeSet, path::Path, sync::Arc, time::Duration};
 use tauri::Manager;
 use tokio::sync::{Mutex, MutexGuard, OnceCell, RwLock};
 
@@ -25,6 +25,7 @@ pub struct InprocessAgentState {
     skill_snapshot: RwLock<Option<SkillSnapshot>>,
     mcp: OnceCell<Arc<super::native_mcp::NativeMcpTools>>,
     mcp_error: RwLock<Option<String>>,
+    secretary_github_monitor: Mutex<Option<tokio::task::JoinHandle<()>>>,
 }
 
 pub struct NativeUpdateLease<'a> {
@@ -86,6 +87,8 @@ impl InprocessAgentState {
             let _ = self.extensions.set(Arc::new(store));
         }
         *self.engine.write().await = Some(engine.clone());
+        *self.secretary_github_monitor.lock().await =
+            Some(start_secretary_github_monitor(app.clone(), engine.clone()));
         if let Err(error) = self.sync_mcp_config().await {
             log::warn!("MCP 暂不可用：{error}");
         }
@@ -619,6 +622,10 @@ impl InprocessAgentState {
         Ok(())
     }
     pub async fn shutdown(&self) -> Result<(), String> {
+        if let Some(monitor) = self.secretary_github_monitor.lock().await.take() {
+            monitor.abort();
+            let _ = monitor.await;
+        }
         let engine = self.engine.write().await.take();
         self.binding.write().await.take();
         *self.skill_snapshot.write().await = None;
@@ -635,4 +642,29 @@ impl InprocessAgentState {
         *self.mcp_error.write().await = None;
         engine_result.and(mcp_result)
     }
+}
+
+fn start_secretary_github_monitor(
+    app: tauri::AppHandle,
+    engine: NativeEngine,
+) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        let period = Duration::from_secs(60);
+        let mut timer = tokio::time::interval_at(tokio::time::Instant::now() + period, period);
+        timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        loop {
+            timer.tick().await;
+            let Ok(activity) = engine.call("getSecretaryActivity", json!({})).await else {
+                continue;
+            };
+            let Some(secretaries) = activity.as_array() else {
+                continue;
+            };
+            for secretary in secretaries {
+                if let Some(id) = secretary["sessionId"].as_str() {
+                    let _ = crate::commands::refresh_monitored_secretary(&app, id).await;
+                }
+            }
+        }
+    })
 }

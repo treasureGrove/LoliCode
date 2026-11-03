@@ -60,7 +60,7 @@ pub async fn get_agent_secretary_activity(
     Ok(registered_activity(activity, &preferences))
 }
 
-fn verify_task(
+pub(super) fn verify_task(
     app: &AppHandle,
     parent_session_id: &str,
     project_path: &str,
@@ -136,6 +136,7 @@ pub async fn delegate_agent_secretary_task(
     instructions: String,
     request_id: String,
     locale: Option<String>,
+    execution_mode: Option<String>,
 ) -> Result<AgentSecretaryTask, String> {
     let project = session_project(&app, &session_id).await?;
     let task: AgentSecretaryTask = native(
@@ -143,7 +144,7 @@ pub async fn delegate_agent_secretary_task(
         "delegateSecretaryTask",
         json!({
             "sessionId":session_id,"title":title,"instructions":instructions,
-            "requestId":request_id,"locale":locale,
+            "requestId":request_id,"locale":locale,"executionMode":execution_mode,
         }),
         true,
     )

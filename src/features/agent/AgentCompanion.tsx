@@ -550,19 +550,45 @@ export function AgentCompanion({
     ),
   };
   const toggleLabel = t("settings.atelier.hideCompanion");
-  const secretaryStatus = t(`agentSecretary.companion.${secretary.phase}`, {
-    count: secretary.running + secretary.queued,
-    defaultValue: {
-      unknown: "工作状态暂未确认",
-      idle: "和秘书聊聊",
-      thinking: "正在梳理你的安排",
-      working: "正在跟进 {{count}} 项工作",
-      waiting_permission: "有工作需要你授权",
-      waiting_question: "有问题想请你决定",
-      failed: "有工作需要你查看",
-      completed: "工作有结果啦",
-    }[secretary.phase],
+  const runningLabel = t(
+    secretary.running > 1
+      ? "agentSecretary.companion.workingParallel"
+      : "agentSecretary.companion.working",
+    {
+      count: secretary.running,
+      defaultValue:
+        secretary.running > 1
+          ? "{{count}} 项并行执行中"
+          : "正在跟进 {{count}} 项工作",
+    },
+  );
+  const queuedLabel = t("agentSecretary.companion.queuedOnly", {
+    count: secretary.queued,
+    defaultValue: "{{count}} 项排队中",
   });
+  const workQueue = secretary.running
+    ? secretary.queued
+      ? t("agentSecretary.companion.workQueue", {
+          running: runningLabel,
+          queued: queuedLabel,
+          defaultValue: "{{running}} · {{queued}}",
+        })
+      : runningLabel
+    : queuedLabel;
+  const secretaryStatus =
+    secretary.phase === "working"
+      ? workQueue
+      : t(`agentSecretary.companion.${secretary.phase}`, {
+          defaultValue: {
+            unknown: "工作状态暂未确认",
+            idle: "和秘书聊聊",
+            thinking: "正在梳理你的安排",
+            waiting_permission: "有工作需要你授权",
+            waiting_question: "有问题想请你决定",
+            failed: "有工作需要你查看",
+            completed: "工作有结果啦",
+          }[secretary.phase],
+        });
   const openSecretary = () => {
     setPanelOpen(false);
     onOpenSecretary?.(secretary.target);

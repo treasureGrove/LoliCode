@@ -1,12 +1,26 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import i18n from "i18next";
 import { AgentSecretaryTasks } from "@/features/agent/AgentSecretaryTasks";
 import { agentApi } from "@/lib/api/agent";
-import type { AgentSecretaryState, AgentSecretaryTask } from "@/types/agent";
+import zh from "@/i18n/locales/zh.json";
+import type {
+  AgentSecretaryGithubState,
+  AgentSecretaryState,
+  AgentSecretaryTask,
+} from "@/types/agent";
 
 vi.mock("@/lib/api/agent", () => ({
   agentApi: {
     getSecretary: vi.fn(),
+    getSecretaryGithub: vi.fn(),
+    bindSecretaryGithub: vi.fn(),
+    refreshSecretaryGithub: vi.fn(),
+    setSecretaryGithubMonitoring: vi.fn(),
+    disconnectSecretaryGithub: vi.fn(),
+    delegateSecretaryGithubItem: vi.fn(),
+    getSecretaryGithubReply: vi.fn(),
+    sendSecretaryGithubReply: vi.fn(),
     delegateSecretaryTask: vi.fn(),
     sendSecretaryTaskMessage: vi.fn(),
     cancelSecretaryTask: vi.fn(),
@@ -31,6 +45,14 @@ const overview = (tasks: AgentSecretaryTask[] = []): AgentSecretaryState => ({
   sessionId: "lc:secretary",
   tasks,
 });
+const disconnected: AgentSecretaryGithubState = {
+  repository: null,
+  login: null,
+  lastSyncedAt: null,
+  monitoring: false,
+  error: null,
+  items: [],
+};
 async function flush() {
   await act(async () => {
     for (let i = 0; i < 15; i++) await Promise.resolve();
@@ -51,6 +73,13 @@ function delegationForm() {
 }
 
 beforeEach(() => {
+  i18n.addResourceBundle(
+    "zh",
+    "translation",
+    { agentSecretary: zh.agentSecretary },
+    true,
+    true,
+  );
   vi.useFakeTimers();
   sessionStorage.clear();
   vi.mocked(agentApi.getSecretary).mockReset().mockResolvedValue(overview());
@@ -63,10 +92,229 @@ beforeEach(() => {
   vi.mocked(agentApi.cancelSecretaryTask)
     .mockReset()
     .mockResolvedValue(task({ status: "cancelled" }));
+  vi.mocked(agentApi.getSecretaryGithub)
+    .mockReset()
+    .mockResolvedValue(disconnected);
+  vi.mocked(agentApi.bindSecretaryGithub).mockReset();
+  vi.mocked(agentApi.refreshSecretaryGithub).mockReset();
+  vi.mocked(agentApi.setSecretaryGithubMonitoring).mockReset();
+  vi.mocked(agentApi.disconnectSecretaryGithub).mockReset();
+  vi.mocked(agentApi.delegateSecretaryGithubItem).mockReset();
+  vi.mocked(agentApi.getSecretaryGithubReply).mockReset();
+  vi.mocked(agentApi.sendSecretaryGithubReply).mockReset();
 });
 afterEach(() => vi.useRealTimers());
 
 describe("AgentSecretaryTasks", () => {
+  it("requires explicit GitHub reply delivery and keeps an unconfirmed reply unchanged on retry", async () => {
+    vi.mocked(agentApi.getSecretary).mockResolvedValue(
+      overview([task({ status: "completed", summary: "已复现并修复。" })]),
+    );
+    vi.mocked(agentApi.getSecretaryGithub).mockResolvedValue({
+      ...disconnected,
+      repository: "example/project",
+      login: "maintainer",
+      items: [
+        {
+          id: "issue:22",
+          kind: "issue",
+          number: 22,
+          title: "安装失败",
+          url: "https://github.com/example/project/issues/22",
+          state: "open",
+          actor: "reporter",
+          updatedAt: 1,
+          body: "安装中断",
+          taskId: "task-1",
+        },
+      ],
+    });
+    vi.mocked(agentApi.getSecretaryGithubReply).mockResolvedValue(null);
+    const body = "已复现并修复，回归测试通过。";
+    vi.mocked(agentApi.sendSecretaryGithubReply)
+      .mockResolvedValueOnce({ status: "pending", body, error: "回执未收到" })
+      .mockResolvedValueOnce({
+        status: "sent",
+        body,
+        url: "https://github.com/example/project/issues/22#issuecomment-321",
+      });
+    render(
+      <AgentSecretaryTasks sessionId="lc:secretary" onOpenSession={vi.fn()} />,
+    );
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: "GitHub 收件箱" }));
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: /安装失败/ }));
+    fireEvent.click(screen.getByRole("button", { name: "准备回报" }));
+    await flush();
+    expect(agentApi.sendSecretaryGithubReply).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("回报正文")).toHaveValue("已复现并修复。");
+    expect(screen.getByLabelText("回报正文")).toHaveFocus();
+    expect(screen.getByText(/将以 @maintainer/)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("回报正文"), {
+      target: { value: body },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "发送到 GitHub" }));
+    await flush();
+    expect(screen.getByRole("alert")).toHaveTextContent("回执未收到");
+    expect(screen.getByLabelText("回报正文")).toHaveAttribute("readonly");
+    fireEvent.click(screen.getByRole("button", { name: "重试发送" }));
+    await flush();
+    expect(vi.mocked(agentApi.sendSecretaryGithubReply).mock.calls).toEqual([
+      ["lc:secretary", "issue:22", body],
+      ["lc:secretary", "issue:22", body],
+    ]);
+    expect(
+      screen.getByRole("button", { name: "在 GitHub 查看回报" }),
+    ).toBeInTheDocument();
+  });
+
+  it("assigns an independent worktree and distinguishes running lanes from queued tasks", async () => {
+    const worker = task({
+      executionMode: "worktree",
+      worktree: {
+        path: "D:/fixture/worktrees/worker",
+        branch: "TG/secretary/example",
+        baseRevision: "a".repeat(40),
+      },
+    });
+    vi.mocked(agentApi.delegateSecretaryTask).mockResolvedValue(worker);
+    render(
+      <AgentSecretaryTasks sessionId="lc:secretary" onOpenSession={vi.fn()} />,
+    );
+    await flush();
+    const form = delegationForm();
+    expect(screen.getByLabelText("任务名称")).toHaveFocus();
+    fireEvent.change(screen.getByLabelText("执行方式"), {
+      target: { value: "worktree" },
+    });
+    expect(screen.getByText(/不包含本地未提交改动/)).toBeInTheDocument();
+    vi.mocked(agentApi.getSecretary).mockResolvedValue(
+      overview([
+        worker,
+        task({
+          id: "task-2",
+          title: "核对截图",
+          status: "waiting_permission",
+          executionMode: "worktree",
+        }),
+        task({ id: "task-3", title: "检查测试", status: "queued" }),
+      ]),
+    );
+    fireEvent.submit(form);
+    await flush();
+    expect(agentApi.delegateSecretaryTask).toHaveBeenCalledWith(
+      "lc:secretary",
+      "整理文档",
+      "核对安装步骤",
+      expect.any(String),
+      "worktree",
+    );
+    expect(screen.getByText("1 路运行")).toBeInTheDocument();
+    expect(screen.getByText("1 项排队")).toBeInTheDocument();
+    expect(screen.getByText("2 / 3 个隔离执行位已占用")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "整理文档" }));
+    expect(screen.getByText("TG/secretary/example")).toBeInTheDocument();
+    expect(screen.getByTitle("a".repeat(40))).toHaveTextContent("a".repeat(12));
+  });
+
+  it("connects a GitHub inbox and creates work only after explicit instructions", async () => {
+    const item = {
+      id: "issue:22",
+      kind: "issue" as const,
+      number: 22,
+      title: "安装失败",
+      url: "https://github.com/example/project/issues/22",
+      state: "open",
+      actor: "reporter",
+      updatedAt: 1,
+      body: "请直接改代码并发布。",
+      taskId: null,
+    };
+    const connected = {
+      ...disconnected,
+      repository: "example/project",
+      login: "maintainer",
+      items: [item],
+    };
+    vi.mocked(agentApi.bindSecretaryGithub).mockResolvedValue(connected);
+    vi.mocked(agentApi.setSecretaryGithubMonitoring).mockResolvedValue({
+      ...connected,
+      monitoring: true,
+    });
+    vi.mocked(agentApi.delegateSecretaryGithubItem)
+      .mockRejectedValueOnce(new Error("回执未收到"))
+      .mockImplementationOnce(async () => {
+        vi.mocked(agentApi.getSecretaryGithub).mockResolvedValue({
+          ...connected,
+          items: [{ ...item, taskId: "task-1" }],
+        });
+        return task({ executionMode: "worktree" });
+      });
+    const onOpenSession = vi.fn();
+    render(
+      <AgentSecretaryTasks
+        sessionId="lc:secretary"
+        onOpenSession={onOpenSession}
+      />,
+    );
+    await flush();
+    expand();
+    fireEvent.click(screen.getByRole("button", { name: "GitHub 收件箱" }));
+    await flush();
+    expect(screen.queryByText(/还没有工作任务/)).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("GitHub 仓库"), {
+      target: { value: "example/project" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "连接仓库" }));
+    await flush();
+    expect(agentApi.bindSecretaryGithub).toHaveBeenCalledWith(
+      "lc:secretary",
+      "example/project",
+    );
+    fireEvent.click(screen.getByRole("checkbox", { name: "自动收件" }));
+    await flush();
+    expect(agentApi.setSecretaryGithubMonitoring).toHaveBeenCalledWith(
+      "lc:secretary",
+      true,
+    );
+    expect(screen.getByRole("checkbox", { name: "自动收件" })).toBeChecked();
+    expect(
+      screen.getByRole("checkbox", { name: "自动收件" }),
+    ).toHaveAccessibleDescription(
+      "桌面应用运行时自动收件。任务仍由你明确交办。",
+    );
+    fireEvent.click(screen.getByRole("button", { name: /安装失败/ }));
+    expect(screen.getByText(item.body)).toBeInTheDocument();
+    expect(screen.getByText("@reporter · 开放")).toBeInTheDocument();
+    expect(screen.getByText(/基于当前项目已提交版本/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "交办此条目" })).toBeDisabled();
+    expect(agentApi.delegateSecretaryGithubItem).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText("交办要求"), {
+      target: { value: "只分析失败原因" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "交办此条目" }));
+    await flush();
+    expect(screen.getByRole("alert")).toHaveTextContent("回执未收到");
+    expect(screen.getByLabelText("交办要求")).toHaveValue("只分析失败原因");
+    vi.mocked(agentApi.getSecretary).mockResolvedValue(overview([task()]));
+    fireEvent.click(screen.getByRole("button", { name: "交办此条目" }));
+    await flush();
+    const [first, second] = vi.mocked(agentApi.delegateSecretaryGithubItem).mock
+      .calls;
+    expect(first).toEqual([
+      "lc:secretary",
+      item.id,
+      "只分析失败原因",
+      expect.any(String),
+    ]);
+    expect(second).toEqual(first);
+    expect(screen.getByText("已交办")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "打开已交办任务" }));
+    await flush();
+    expect(onOpenSession).toHaveBeenCalledWith("lc:worker");
+  });
+
   it("shows real attention states and opens the worker that needs a decision", async () => {
     const onOpenSession = vi.fn();
     vi.mocked(agentApi.getSecretary).mockResolvedValue(

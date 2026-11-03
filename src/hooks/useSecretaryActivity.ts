@@ -107,7 +107,9 @@ export function summarizeSecretaryActivity(
       ? {
           sessionId: owner.sessionId,
           projectPath: owner.projectPath,
-          ...(useWorker ? { workerSessionId: selected!.task.sessionId } : {}),
+          ...(useWorker && (phase !== "working" || running + queued === 1)
+            ? { workerSessionId: selected!.task.sessionId }
+            : {}),
         }
       : undefined,
   };

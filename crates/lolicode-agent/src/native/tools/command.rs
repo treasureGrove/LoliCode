@@ -171,7 +171,7 @@ fn kill_group(pid: u32) {
     }
 }
 
-fn safe_program(project: &Path, name: &str) -> Result<std::path::PathBuf, String> {
+pub(in crate::native) fn safe_program(project: &Path, name: &str) -> Result<std::path::PathBuf, String> {
     // A bare tool in a project directory or a PATH-relative entry is not an
     // automatically trusted system program (Windows also searches cwd first).
     for directory in std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default()) {
@@ -201,6 +201,7 @@ pub(super) async fn execute(
     input: &str,
     seconds: u64,
     mut cancel: watch::Receiver<bool>,
+    isolated: bool,
 ) -> Result<ToolOutput, String> {
     cancelled(&cancel)?;
     let safe = safe_command(input);
@@ -259,6 +260,24 @@ pub(super) async fn execute(
             "PYTHONSTARTUP",
             "RUSTC_WRAPPER",
             "RUSTC_WORKSPACE_WRAPPER",
+            "GIT_CONFIG_PARAMETERS",
+            "GIT_CONFIG_COUNT",
+        ] {
+            command.env_remove(key);
+        }
+    }
+    if isolated {
+        // Starting a shell in the worktree is insufficient when the app was
+        // launched under a Git command with inherited repository overrides.
+        for key in [
+            "GIT_DIR",
+            "GIT_COMMON_DIR",
+            "GIT_WORK_TREE",
+            "GIT_INDEX_FILE",
+            "GIT_OBJECT_DIRECTORY",
+            "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+            "GIT_NAMESPACE",
+            "GIT_CONFIG",
             "GIT_CONFIG_PARAMETERS",
             "GIT_CONFIG_COUNT",
         ] {

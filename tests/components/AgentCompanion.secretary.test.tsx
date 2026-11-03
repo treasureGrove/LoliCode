@@ -113,6 +113,13 @@ describe("companion secretary interaction", () => {
     expect(open).toHaveBeenCalledWith(target);
     expect(readCompanionState().sleeping).toBe(true);
   });
+  it("distinguishes concurrent execution from queued work", () => {
+    status.mockReturnValue(activity({ running: 2, queued: 3 }));
+    render(<AgentCompanion onOpenSecretary={vi.fn()} />);
+    expect(
+      screen.getByRole("button", { name: "打开 Loli 秘书" }),
+    ).toHaveAttribute("title", "2 项并行执行中 · 3 项排队中");
+  });
   it("stops status observation when the companion is hidden without cancelling tasks", () => {
     saveInterfaceAppearance({ companionVisible: false });
     const open = vi.fn();

@@ -1461,6 +1461,20 @@ pub fn run() {
                     log::warn!("渠道中心后台连接未能恢复，请在渠道页面重试配置: {error}");
                 }
                 crate::services::agent_automation::start_worker(app_handle.clone());
+                let github_monitor_app = app_handle.clone();
+                let github_monitor_db = state.db.clone();
+                tauri::async_runtime::spawn(async move {
+                    match services::secretary_github::monitoring_configured(&github_monitor_db) {
+                        Ok(true) => {
+                            let agent = github_monitor_app.state::<services::inprocess_agent::InprocessAgentState>();
+                            if let Err(error) = agent.ensure_started(&github_monitor_app).await {
+                                log::warn!("GitHub 自动收件启动失败: {error}");
+                            }
+                        }
+                        Ok(false) => {}
+                        Err(error) => log::warn!("{error}"),
+                    }
+                });
                 app_handle.state::<services::mobile_companion::MobileCompanionState>().restore(app_handle.clone()).await;
                 #[cfg(all(debug_assertions, feature = "test-hooks"))]
                 services::mobile_companion::start_real_acceptance(app_handle.clone());
@@ -1940,6 +1954,14 @@ pub fn run() {
             commands::delegate_agent_secretary_task,
             commands::send_agent_secretary_task_message,
             commands::cancel_agent_secretary_task,
+            commands::get_agent_secretary_github,
+            commands::bind_agent_secretary_github,
+            commands::refresh_agent_secretary_github,
+            commands::set_agent_secretary_github_monitoring,
+            commands::disconnect_agent_secretary_github,
+            commands::delegate_agent_secretary_github_item,
+            commands::get_agent_secretary_github_reply,
+            commands::send_agent_secretary_github_reply,
             commands::update_agent_session,
             commands::rename_agent_session,
             commands::set_agent_session_metadata,

@@ -19,6 +19,9 @@ import type {
   AgentQuestionAnswer,
   AgentQueuedInput,
   AgentSecretaryActivity,
+  AgentSecretaryExecutionMode,
+  AgentSecretaryGithubReplyReceipt,
+  AgentSecretaryGithubState,
   AgentSecretaryState,
   AgentSecretaryTask,
   AgentSession,
@@ -170,14 +173,61 @@ export const agentApi = {
     title: string,
     instructions: string,
     requestId: string,
+    executionMode?: AgentSecretaryExecutionMode,
   ) =>
     invoke<AgentSecretaryTask>("delegate_agent_secretary_task", {
       sessionId,
       title,
       instructions,
       requestId,
+      ...(executionMode ? { executionMode } : {}),
       locale: messageLocale(),
     }),
+  getSecretaryGithub: (sessionId: string) =>
+    invoke<AgentSecretaryGithubState>("get_agent_secretary_github", {
+      sessionId,
+    }),
+  bindSecretaryGithub: (sessionId: string, repository: string) =>
+    invoke<AgentSecretaryGithubState>("bind_agent_secretary_github", {
+      sessionId,
+      repository,
+    }),
+  refreshSecretaryGithub: (sessionId: string) =>
+    invoke<AgentSecretaryGithubState>("refresh_agent_secretary_github", {
+      sessionId,
+    }),
+  setSecretaryGithubMonitoring: (sessionId: string, enabled: boolean) =>
+    invoke<AgentSecretaryGithubState>("set_agent_secretary_github_monitoring", {
+      sessionId,
+      enabled,
+    }),
+  disconnectSecretaryGithub: (sessionId: string) =>
+    invoke<AgentSecretaryGithubState>("disconnect_agent_secretary_github", {
+      sessionId,
+    }),
+  delegateSecretaryGithubItem: (
+    sessionId: string,
+    itemId: string,
+    instructions: string,
+    requestId: string,
+  ) =>
+    invoke<AgentSecretaryTask>("delegate_agent_secretary_github_item", {
+      sessionId,
+      itemId,
+      instructions,
+      requestId,
+      locale: messageLocale(),
+    }),
+  getSecretaryGithubReply: (sessionId: string, itemId: string) =>
+    invoke<AgentSecretaryGithubReplyReceipt | null>(
+      "get_agent_secretary_github_reply",
+      { sessionId, itemId },
+    ),
+  sendSecretaryGithubReply: (sessionId: string, itemId: string, body: string) =>
+    invoke<AgentSecretaryGithubReplyReceipt>(
+      "send_agent_secretary_github_reply",
+      { sessionId, itemId, body },
+    ),
   sendSecretaryTaskMessage: (
     sessionId: string,
     taskId: string,

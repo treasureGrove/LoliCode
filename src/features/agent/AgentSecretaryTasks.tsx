@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   ArrowLeft,
@@ -6,6 +6,8 @@ import {
   ChevronDown,
   ChevronRight,
   CircleCheck,
+  Github,
+  GitBranch,
   ListTodo,
   LoaderCircle,
   Plus,
@@ -14,16 +16,24 @@ import {
   Square,
 } from "lucide-react";
 import { agentApi } from "@/lib/api/agent";
+import { settingsApi } from "@/lib/api/settings";
 import { agentErrorMessage } from "@/hooks/useAgentSnapshot";
-import type { AgentSecretaryState, AgentSecretaryTask } from "@/types/agent";
+import type {
+  AgentSecretaryExecutionMode,
+  AgentSecretaryState,
+  AgentSecretaryTask,
+} from "@/types/agent";
 import assistantPortrait from "@/assets/brand/lolicode-icon.png";
+import { AgentSecretaryGithub } from "./AgentSecretaryGithub";
+import {
+  bounded,
+  clearRequestIdentity,
+  requestIdentity,
+  safeGithubUrl,
+} from "./secretaryRequests";
 import "./agent-secretary.css";
 
 const terminal = new Set(["completed", "failed", "cancelled", "interrupted"]);
-const requestIdentities = new Map<
-  string,
-  { fingerprint: string; id: string }
->();
 const statusLabels: Record<AgentSecretaryTask["status"], string> = {
   queued: "等待执行",
   running: "正在工作",
@@ -34,54 +44,6 @@ const statusLabels: Record<AgentSecretaryTask["status"], string> = {
   cancelled: "已取消",
   interrupted: "已中断",
 };
-
-/** Keep an uncertain submission's identity across retries and page reloads. */
-function requestIdentity(scope: string, fingerprint: string): string {
-  const key = `lolicode.agent.secretary-request:${scope}`;
-  const local = requestIdentities.get(key);
-  if (local?.fingerprint === fingerprint) return local.id;
-  try {
-    const saved = JSON.parse(sessionStorage.getItem(key) || "null");
-    if (saved?.fingerprint === fingerprint && typeof saved.id === "string") {
-      requestIdentities.set(key, saved);
-      return saved.id;
-    }
-  } catch {
-    // Storage may be unavailable; the backend still deduplicates this request ID.
-  }
-  const id = `secretary:${crypto.randomUUID()}`;
-  requestIdentities.set(key, { fingerprint, id });
-  try {
-    sessionStorage.setItem(key, JSON.stringify({ fingerprint, id }));
-  } catch {
-    // A storage failure must not prevent ordinary work.
-  }
-  return id;
-}
-
-function clearRequestIdentity(scope: string) {
-  const key = `lolicode.agent.secretary-request:${scope}`;
-  requestIdentities.delete(key);
-  try {
-    sessionStorage.removeItem(key);
-  } catch {
-    // The operation is already confirmed even if local cleanup fails.
-  }
-}
-
-async function bounded<T>(request: Promise<T>, message: string): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      request,
-      new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error(message)), 30_000);
-      }),
-    ]);
-  } finally {
-    clearTimeout(timer);
-  }
-}
 
 export function AgentSecretaryTasks({
   sessionId,
@@ -102,9 +64,13 @@ export function AgentSecretaryTasks({
   ) => t(`agentSecretary.${key}`, { defaultValue: fallback, ...values });
   const [state, setState] = useState<AgentSecretaryState | null>(null);
   const [expanded, setExpanded] = useState(false);
+  const [githubOpen, setGithubOpen] = useState(false);
+  const [githubVisited, setGithubVisited] = useState(false);
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState("");
   const [instructions, setInstructions] = useState("");
+  const [executionMode, setExecutionMode] =
+    useState<AgentSecretaryExecutionMode>("shared");
   const [followups, setFollowups] = useState<Record<string, string>>({});
   const [openedTask, setOpenedTask] = useState<string | null>(null);
   const [readError, setReadError] = useState<string | null>(null);
@@ -116,11 +82,24 @@ export function AgentSecretaryTasks({
   scope.current = sessionId;
   const lifetime = useRef(0);
   const pending = useRef(false);
-  const drafts = useRef({ title, instructions, followups });
-  drafts.current = { title, instructions, followups };
+  const titleInput = useRef<HTMLInputElement>(null);
+  const tasksId = useId();
+  const githubId = useId();
+  const drafts = useRef({ title, instructions, executionMode, followups });
+  drafts.current = { title, instructions, executionMode, followups };
   const stateHere = state?.sessionId === sessionId ? state : null;
   const tasks = stateHere?.tasks || [];
-  const activeTasks = tasks.filter((task) => !terminal.has(task.status));
+  const runningCount = tasks.filter((task) => task.status === "running").length;
+  const queuedCount = tasks.filter((task) => task.status === "queued").length;
+  const occupied = tasks.filter(
+    ({ status }) =>
+      status === "running" ||
+      status === "waiting_permission" ||
+      status === "waiting_question",
+  );
+  const worktreeCount = occupied.filter(
+    (task) => task.executionMode === "worktree",
+  ).length;
   const needsAttention = tasks.filter((task) =>
     [
       "waiting_permission",
@@ -134,6 +113,7 @@ export function AgentSecretaryTasks({
     lifetime.current += 1;
     setTitle("");
     setInstructions("");
+    setExecutionMode("shared");
     setFollowups({});
     setOpenedTask(null);
     setAdding(false);
@@ -146,6 +126,9 @@ export function AgentSecretaryTasks({
   }, [sessionId]);
 
   useEffect(() => setOpenedTask(workerTaskId || null), [workerTaskId]);
+  useEffect(() => {
+    if (expanded && adding) titleInput.current?.focus();
+  }, [expanded, adding]);
 
   useEffect(() => {
     if (!active) return;
@@ -192,6 +175,20 @@ export function AgentSecretaryTasks({
     };
   }, [sessionId, active, revision]);
 
+  const acceptTask = (task: AgentSecretaryTask) => {
+    readSequence.current += 1;
+    setState((old) => ({
+      sessionId,
+      tasks: [
+        task,
+        ...(old?.sessionId === sessionId ? old.tasks : []).filter(
+          (item) => item.id !== task.id,
+        ),
+      ],
+    }));
+    setRevision((value) => value + 1);
+  };
+
   const act = async (
     action: string,
     request: () => Promise<AgentSecretaryTask | void>,
@@ -210,19 +207,9 @@ export function AgentSecretaryTasks({
         label("actionTimeout", "操作结果尚未确认，输入已保留；请重试核对。"),
       );
       if (scope.current !== id || lifetime.current !== epoch) return;
-      readSequence.current += 1;
-      if (task)
-        setState((old) => ({
-          sessionId: id,
-          tasks: [
-            task,
-            ...(old?.sessionId === id ? old.tasks : []).filter(
-              (item) => item.id !== task.id,
-            ),
-          ],
-        }));
+      if (task) acceptTask(task);
       done?.();
-      setRevision((value) => value + 1);
+      if (!task) setRevision((value) => value + 1);
     } catch (cause) {
       if (scope.current === id && lifetime.current === epoch)
         setActionError(agentErrorMessage(cause));
@@ -240,19 +227,30 @@ export function AgentSecretaryTasks({
     if (!name || !text) return;
     const requestId = requestIdentity(
       `${sessionId}:delegate`,
-      JSON.stringify([name, text]),
+      JSON.stringify([name, text, executionMode]),
     );
     void act(
       "delegate",
-      () => agentApi.delegateSecretaryTask(sessionId, name, text, requestId),
+      () =>
+        executionMode === "worktree"
+          ? agentApi.delegateSecretaryTask(
+              sessionId,
+              name,
+              text,
+              requestId,
+              executionMode,
+            )
+          : agentApi.delegateSecretaryTask(sessionId, name, text, requestId),
       () => {
         clearRequestIdentity(`${sessionId}:delegate`);
         if (
           drafts.current.title === title &&
-          drafts.current.instructions === instructions
+          drafts.current.instructions === instructions &&
+          drafts.current.executionMode === executionMode
         ) {
           setTitle("");
           setInstructions("");
+          setExecutionMode("shared");
           setAdding(false);
         }
         setExpanded(true);
@@ -284,19 +282,29 @@ export function AgentSecretaryTasks({
           type="button"
           className="wb-secretary-toggle"
           aria-expanded={expanded}
-          onClick={() => setExpanded((value) => !value)}
+          aria-controls={tasksId}
+          onClick={() => {
+            setGithubOpen(false);
+            setExpanded((value) => !value);
+          }}
         >
           <ListTodo aria-hidden="true" />
           <strong>{label("tasks", "工作任务")}</strong>
-          {stateHere && (
+          {stateHere && runningCount === 0 && queuedCount === 0 && (
             <span className="wb-secretary-count">
-              {activeTasks.length
-                ? label("activeCount", "{{count}} 项进行中", {
-                    count: activeTasks.length,
-                  })
-                : label("totalCount", "共 {{count}} 项", {
-                    count: tasks.length,
-                  })}
+              {label("totalCount", "共 {{count}} 项", { count: tasks.length })}
+            </span>
+          )}
+          {runningCount > 0 && (
+            <span className="wb-secretary-running">
+              {label("runningCount", "{{count}} 路运行", {
+                count: runningCount,
+              })}
+            </span>
+          )}
+          {queuedCount > 0 && (
+            <span className="wb-secretary-count">
+              {label("queuedCount", "{{count}} 项排队", { count: queuedCount })}
             </span>
           )}
           {needsAttention.length > 0 && (
@@ -321,12 +329,31 @@ export function AgentSecretaryTasks({
         {!workerTaskId && (
           <button
             type="button"
+            className="wb-secretary-source"
+            aria-label={label("github.title", "GitHub 收件箱")}
+            aria-expanded={githubOpen}
+            aria-controls={githubId}
+            title={label("github.title", "GitHub 收件箱")}
+            onClick={() => {
+              setGithubVisited(true);
+              setExpanded(false);
+              setGithubOpen((value) => !value);
+            }}
+          >
+            <Github aria-hidden="true" />
+            <span>GitHub</span>
+          </button>
+        )}
+        {!workerTaskId && (
+          <button
+            type="button"
             className="wb-secretary-add"
             aria-label={label("delegate", "分派任务")}
-            aria-expanded={adding}
+            aria-expanded={expanded && adding}
             onClick={() => {
+              setGithubOpen(false);
               setExpanded(true);
-              setAdding((value) => !value);
+              setAdding((value) => !expanded || !value);
             }}
           >
             <Plus aria-hidden="true" />
@@ -351,14 +378,43 @@ export function AgentSecretaryTasks({
           {actionError}
         </p>
       )}
+      {!workerTaskId && githubVisited && (
+        <div
+          id={githubId}
+          hidden={!githubOpen}
+          className="wb-secretary-content"
+        >
+          <AgentSecretaryGithub
+            key={sessionId}
+            sessionId={sessionId}
+            active={active && githubOpen}
+            tasks={tasks}
+            onTaskCreated={acceptTask}
+            onOpenSession={onOpenSession}
+          />
+        </div>
+      )}
       {expanded && (
-        <div className="wb-secretary-content">
+        <div id={tasksId} className="wb-secretary-content">
           <p className="wb-secretary-note">
             {label(
               "description",
               "把目标交给我，我来安排工作、跟进结果。你可以继续和我聊。",
             )}
           </p>
+          {worktreeCount > 0 && (
+            <p className="wb-secretary-lanes">
+              <GitBranch aria-hidden="true" />
+              {label(
+                "worktreeCount",
+                "{{count}} / {{limit}} 个隔离执行位已占用",
+                {
+                  count: worktreeCount,
+                  limit: 3,
+                },
+              )}
+            </p>
+          )}
           {adding && !workerTaskId && (
             <form
               className="wb-secretary-form"
@@ -370,6 +426,7 @@ export function AgentSecretaryTasks({
               <label>
                 {label("taskTitle", "任务名称")}
                 <input
+                  ref={titleInput}
                   value={title}
                   maxLength={100}
                   onChange={(event) => setTitle(event.target.value)}
@@ -391,12 +448,35 @@ export function AgentSecretaryTasks({
                   required
                 />
               </label>
+              <label>
+                {label("executionMode", "执行方式")}
+                <select
+                  value={executionMode}
+                  onChange={(event) =>
+                    setExecutionMode(
+                      event.target.value === "worktree" ? "worktree" : "shared",
+                    )
+                  }
+                >
+                  <option value="shared">
+                    {label("sharedMode", "当前项目 · 串行")}
+                  </option>
+                  <option value="worktree">
+                    {label("worktreeMode", "独立工作树 · 并行")}
+                  </option>
+                </select>
+              </label>
               <div className="wb-secretary-form-actions">
                 <span>
-                  {label(
-                    "serialNote",
-                    "同一项目的工作任务依次执行，避免修改冲突。",
-                  )}
+                  {executionMode === "worktree"
+                    ? label(
+                        "worktreeNote",
+                        "从当前提交创建独立分支，可与其他任务同时运行。工作树不包含本地未提交改动。",
+                      )
+                    : label(
+                        "serialNote",
+                        "使用当前目录和本地改动。共享目录中的任务依次执行。",
+                      )}
                 </span>
                 <button
                   type="submit"
@@ -425,6 +505,8 @@ export function AgentSecretaryTasks({
           <div className="wb-secretary-task-list">
             {tasks.map((task) => {
               const opened = openedTask === task.id;
+              const sourceHref =
+                task.sourceUrl && safeGithubUrl(task.sourceUrl);
               const attention = [
                 "waiting_permission",
                 "waiting_question",
@@ -510,6 +592,39 @@ export function AgentSecretaryTasks({
                   {opened && (
                     <div className="wb-secretary-task-detail">
                       <p>{task.instructions}</p>
+                      {sourceHref && (
+                        <button
+                          type="button"
+                          className="wb-secretary-task-open"
+                          disabled={Boolean(busy)}
+                          onClick={() =>
+                            void act(`source:${task.id}`, () =>
+                              settingsApi.openExternal(sourceHref),
+                            )
+                          }
+                        >
+                          <Github aria-hidden="true" />
+                          {label("github.openSource", "在 GitHub 打开")}
+                        </button>
+                      )}
+                      {task.worktree && (
+                        <dl className="wb-secretary-worktree">
+                          <dt>{label("branch", "工作分支")}</dt>
+                          <dd>
+                            <code>{task.worktree.branch}</code>
+                          </dd>
+                          <dt>{label("baseRevision", "基线提交")}</dt>
+                          <dd>
+                            <code title={task.worktree.baseRevision}>
+                              {task.worktree.baseRevision.slice(0, 12)}
+                            </code>
+                          </dd>
+                          <dt>{label("worktreePath", "工作目录")}</dt>
+                          <dd>
+                            <code>{task.worktree.path}</code>
+                          </dd>
+                        </dl>
+                      )}
                       {task.summary && (
                         <p className="wb-secretary-task-summary">
                           {task.summary}
