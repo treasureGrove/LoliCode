@@ -17,12 +17,70 @@ import type {
   AgentPermissionDecision,
   AgentProjectResult,
   AgentQuestionAnswer,
+  AgentQueuedInput,
+  AgentSecretaryActivity,
+  AgentSecretaryState,
+  AgentSecretaryTask,
   AgentSession,
   AgentSnapshot,
 } from "@/types/agent";
 
+const messageLocale = () => {
+  const locale = i18n.resolvedLanguage || i18n.language;
+  return ["zh", "zh-TW", "en", "ja"].includes(locale) ? locale : undefined;
+};
+
+const messagePayload = (
+  sessionId: string,
+  text: string,
+  requestId: string,
+  images: AgentImageAttachment[] = [],
+  documents: AgentDocumentAttachment[] = [],
+) => ({
+  sessionId,
+  text,
+  requestId,
+  ...(images.length || documents.length
+    ? {
+        attachments: [
+          ...images.map(({ dataUrl, fileName, mime, bytes }) => ({
+            ref: dataUrl,
+            fileName,
+            mime,
+            bytes,
+          })),
+          ...documents.map(
+            ({ dataBase64, localPath, fileName, mime, bytes }) => ({
+              ...(dataBase64 ? { dataBase64 } : {}),
+              ...(localPath ? { localPath } : {}),
+              fileName,
+              mime,
+              bytes,
+            }),
+          ),
+        ],
+      }
+    : {}),
+  locale: messageLocale(),
+});
+
 /** Thin desktop transport. Engine state and credentials stay in the backend. */
+export type AgentSessionSyncDirection = "both" | "import" | "export";
+
+export interface AgentSessionSyncResult {
+  imported: number;
+  exported: number;
+  duplicates: number;
+  conflicts: number;
+  skippedBusy: number;
+  skippedUnsupported: number;
+  peerName: string;
+  warnings: string[];
+}
+
 export const agentApi = {
+  syncSessions: (direction: AgentSessionSyncDirection = "both") =>
+    invoke<AgentSessionSyncResult>("sync_agent_sessions", { direction }),
   getNativeActivity: () =>
     invoke<AgentNativeActivity>("get_agent_native_activity"),
   native: <T = unknown>(
@@ -88,6 +146,55 @@ export const agentApi = {
       ...(contextLimit !== undefined ? { contextLimit } : {}),
       ...(projectPath ? { projectPath } : {}),
     }),
+  openSecretary: (
+    modelId: string,
+    permissionMode: AgentPermissionMode = "full_access",
+    reasoningEffort?: string,
+    projectPath?: string,
+    contextLimit?: number,
+  ) =>
+    invoke<AgentSession>("open_agent_secretary", {
+      modelId,
+      permissionMode,
+      reasoningEffort,
+      ...(projectPath ? { projectPath } : {}),
+      ...(contextLimit !== undefined ? { contextLimit } : {}),
+      locale: messageLocale(),
+    }),
+  getSecretary: (sessionId: string) =>
+    invoke<AgentSecretaryState>("get_agent_secretary", { sessionId }),
+  getSecretaryActivity: () =>
+    invoke<AgentSecretaryActivity[]>("get_agent_secretary_activity"),
+  delegateSecretaryTask: (
+    sessionId: string,
+    title: string,
+    instructions: string,
+    requestId: string,
+  ) =>
+    invoke<AgentSecretaryTask>("delegate_agent_secretary_task", {
+      sessionId,
+      title,
+      instructions,
+      requestId,
+      locale: messageLocale(),
+    }),
+  sendSecretaryTaskMessage: (
+    sessionId: string,
+    taskId: string,
+    text: string,
+    requestId: string,
+    images: AgentImageAttachment[] = [],
+    documents: AgentDocumentAttachment[] = [],
+  ) =>
+    invoke<AgentSecretaryTask>("send_agent_secretary_task_message", {
+      ...messagePayload(sessionId, text, requestId, images, documents),
+      taskId,
+    }),
+  cancelSecretaryTask: (sessionId: string, taskId: string) =>
+    invoke<AgentSecretaryTask>("cancel_agent_secretary_task", {
+      sessionId,
+      taskId,
+    }),
   updateSession: (
     sessionId: string,
     patch: {
@@ -128,37 +235,28 @@ export const agentApi = {
     images: AgentImageAttachment[] = [],
     documents: AgentDocumentAttachment[] = [],
   ) =>
-    invoke<void>("send_agent_message", {
+    invoke<void>(
+      "send_agent_message",
+      messagePayload(sessionId, text, requestId, images, documents),
+    ),
+  enqueueMessage: (
+    sessionId: string,
+    text: string,
+    requestId: string,
+    images: AgentImageAttachment[] = [],
+    documents: AgentDocumentAttachment[] = [],
+  ) =>
+    invoke<{ status: "accepted" | "rejected"; message?: string }>(
+      "enqueue_agent_message",
+      messagePayload(sessionId, text, requestId, images, documents),
+    ),
+  removeQueuedMessage: (sessionId: string, requestId: string) =>
+    invoke<AgentQueuedInput>("remove_queued_agent_message", {
       sessionId,
-      text,
       requestId,
-      ...(images.length || documents.length
-        ? {
-            attachments: [
-              ...images.map(({ dataUrl, fileName, mime, bytes }) => ({
-                ref: dataUrl,
-                fileName,
-                mime,
-                bytes,
-              })),
-              ...documents.map(
-                ({ dataBase64, localPath, fileName, mime, bytes }) => ({
-                  ...(dataBase64 ? { dataBase64 } : {}),
-                  ...(localPath ? { localPath } : {}),
-                  fileName,
-                  mime,
-                  bytes,
-                }),
-              ),
-            ],
-          }
-        : {}),
-      locale: ["zh", "zh-TW", "en", "ja"].includes(
-        i18n.resolvedLanguage || i18n.language,
-      )
-        ? i18n.resolvedLanguage || i18n.language
-        : undefined,
     }),
+  sendQueuedMessageNow: (sessionId: string, requestId: string) =>
+    invoke<void>("send_queued_agent_message_now", { sessionId, requestId }),
   queryCommand: (sessionId: string, requestId: string) =>
     invoke<{
       status: "unknown" | "accepted" | "rejected" | "failed";

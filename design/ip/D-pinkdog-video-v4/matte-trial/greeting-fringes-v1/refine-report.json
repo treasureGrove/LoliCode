@@ -1,0 +1,99 @@
+{
+  "inputAlphaDir": "D:\\projectGithub\\TAI-Switch\\design\\ip\\D-pinkdog-video-v3\\processed\\greeting-mini-v1\\alpha-frames",
+  "sourceDir": "D:\\projectGithub\\TAI-Switch\\design\\ip\\D-pinkdog-video-v3\\processed\\greeting-mini-v1\\source-frames",
+  "outputDir": "D:\\projectGithub\\TAI-Switch\\design\\ip\\D-pinkdog-video-v4\\matte-trial\\greeting-fringes-v1",
+  "frames": 3,
+  "method": "Only a 2px band adjoining existing transparency (alpha<=4). Green-channel spill is capped against local trusted foreground ratios; red/blue and the interior are unchanged. Teal foreground references are excluded. No watermark treatment, no whole-image blur or AI redraw.",
+  "shrinkPixels": 0.35,
+  "alphaPolicy": "At most shrinkPixels times the local 1px alpha gradient; shrink is restricted to 0..0.5 and only pixels with verified green spill. Alpha is never increased.",
+  "qaLayout": "Rows = sampled frames; left = original matte, right = refined; upper = light background, lower = dark background. Crop is QA only; output frame dimensions are unchanged.",
+  "qaFrames": [
+    {
+      "name": "000001.png",
+      "crop": {
+        "left": 352,
+        "top": 72,
+        "width": 576,
+        "height": 576
+      }
+    },
+    {
+      "name": "000061.png",
+      "crop": {
+        "left": 352,
+        "top": 72,
+        "width": 576,
+        "height": 576
+      }
+    },
+    {
+      "name": "000120.png",
+      "crop": {
+        "left": 352,
+        "top": 72,
+        "width": 576,
+        "height": 576
+      }
+    }
+  ],
+  "allInputsUnchanged": true,
+  "protectedCoreChanges": 0,
+  "protectedCoreTealChanges": 0,
+  "changedPixels": 11602,
+  "perFrame": [
+    {
+      "name": "000001.png",
+      "changedPixels": 4676,
+      "greenChanged": 4676,
+      "alphaChanged": 3551,
+      "coreChanged": 0,
+      "coreTealPixels": 916,
+      "coreTealChanged": 0,
+      "referencesProtectedAsTeal": 0,
+      "missingReference": 1973,
+      "maximumGreenReduction": 159,
+      "maximumAlphaReduction": 89,
+      "sourceUnchanged": true,
+      "matteUnchanged": true,
+      "sourceSha256": "5b99fc09103f276ab8bd0063e02b21efa74e0c7e870082585203fe09ad88e22b",
+      "inputAlphaSha256": "081cecb40d1c6c3939aaaed4433d7ddc4abd4065343ef8eddca71f1c554becfb",
+      "outputSha256": "0b86534eef29b58e971e88254dbe1f6dc87c731485ef124a29eec0429af7f49c"
+    },
+    {
+      "name": "000061.png",
+      "changedPixels": 3036,
+      "greenChanged": 3036,
+      "alphaChanged": 2209,
+      "coreChanged": 0,
+      "coreTealPixels": 4619,
+      "coreTealChanged": 0,
+      "referencesProtectedAsTeal": 0,
+      "missingReference": 3798,
+      "maximumGreenReduction": 99,
+      "maximumAlphaReduction": 55,
+      "sourceUnchanged": true,
+      "matteUnchanged": true,
+      "sourceSha256": "5b42b0befff7780ea5eed494ea10fb850da1b884ebf2a73940e9767b9955b340",
+      "inputAlphaSha256": "5bb113ce3462c55ba8da934713c93dcc5b4104001273f3b1ea301f47db85d168",
+      "outputSha256": "1ccc6ac3e1c8f5914ec08f2b432e43a6743b20f818f7a1e517c72c08ce023d66"
+    },
+    {
+      "name": "000120.png",
+      "changedPixels": 3890,
+      "greenChanged": 3890,
+      "alphaChanged": 2981,
+      "coreChanged": 0,
+      "coreTealPixels": 840,
+      "coreTealChanged": 0,
+      "referencesProtectedAsTeal": 0,
+      "missingReference": 1979,
+      "maximumGreenReduction": 140,
+      "maximumAlphaReduction": 89,
+      "sourceUnchanged": true,
+      "matteUnchanged": true,
+      "sourceSha256": "980b8c3d8bf80baa8b128904dfa387e783ddfacb8ee6eb2019af12cb5961d14b",
+      "inputAlphaSha256": "a6adb164c348bfb3c605502013956e3aac84da7ed4fb2bbab074b86eb3b7ad86",
+      "outputSha256": "3a8fc2ec0144244e8864743dd42fdc79b79972f0489e09d797b3b7b8e95811f8"
+    }
+  ]
+}

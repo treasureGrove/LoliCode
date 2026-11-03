@@ -1,0 +1,61 @@
+{
+  "date": "2026-11-02",
+  "recipe": "沿用DSH单动作绿幕素材链，在独立即梦网页采用肆喵作者Seedance2.0 mini/5秒小样配方，保留本项目角色身份",
+  "recipeSource": "https://github.com/PC2005-cloud/dsh-pet/blob/main/MAKE-YOUR-OWN-PET.md",
+  "activeGenerationRecipeSource": "https://github.com/sijin14514-sys/simiao-dsh-pet/blob/main/docs/01-%E6%95%B4%E4%BD%93%E6%B5%81%E7%A8%8B.md",
+  "serviceRequested": "豆包网页；按作者教程改试独立即梦网页服务",
+  "status": "greeting_submitted_queued",
+  "model": "即梦 Seedance 2.0 mini",
+  "modelNote": "即梦网页实际显示并已提交的选项，采用肆喵作者5秒小样配方；豆包网页没有提交。",
+  "durationSecondsIntended": 5,
+  "aspectRatio": "16:9",
+  "background": "#00FF00",
+  "masterImage": "standard-pose-source.png",
+  "firstFrame": "first-frame-green.png",
+  "framing": {
+    "width": 1280,
+    "height": 720,
+    "contentTop": 144,
+    "footBaseline": 612,
+    "alignment": "水平居中，双脚落地；所有动作共用同一站姿参考"
+  },
+  "motions": [
+    {
+      "name": "greeting",
+      "prompt": "prompts/greeting-mini-5s.txt",
+      "submitted": true,
+      "videoGenerated": false,
+      "workspaceUrl": "https://jimeng.jianying.com/ai-tool/generate?workspace=24052377636364",
+      "stateObserved": "排队加速中，预计剩余超过2分钟",
+      "performance": "发现主人、微愣、开心招手、歪头眨眼、恢复首帧"
+    },
+    {
+      "name": "feed",
+      "prompt": "prompts/feed-mini-5s.txt",
+      "submitted": false,
+      "videoGenerated": false,
+      "performance": "收到一条鱼干、期待接住、小口吃完、满足眯眼、清空道具并恢复首帧"
+    }
+  ],
+  "submissionChecks": [
+    "网页确实显示本次首帧预览，不能把头像或旧缩略图当作上传成功",
+    "核对模型、10秒、16:9和实际额度后再提交",
+    "按新任务核对结果，不误取历史视频"
+  ],
+  "postProduction": [
+    "保留真实原始MP4，检查脸、双手、耳尾配色和四周安全余量",
+    "先试现有本地绿幕导入工具；逐帧检查青蓝眼睛与宝石，复杂边缘另行修整",
+    "统一全片尺寸、人物高度与脚底线，再导出透明WebM",
+    "深浅背景播放验收，检查首尾衔接；不把文字要求回首帧视作已经无缝循环",
+    "真实成片通过后接入，保留应用的拖动、鱼干投喂与冷却逻辑"
+  ],
+  "execution": {
+    "browserSubmitted": true,
+    "sourceVideosExist": false,
+    "runtimeReplaced": false,
+    "browser": "支持的IAB网页操作，用户已完成即梦登录；通过页面图片粘贴上传同一张首尾帧，两个1280x720 blob预览均已验证。",
+    "uploadNote": "文件选择事件未触发；使用页面原有图片粘贴功能成功上传，已恢复之前的空剪贴板。未运行第三方浏览器脚本或修改豆包规则。",
+    "creditObservation": "本次招手任务页面显示使用30积分，余额由775变为745；没有购买积分或会员。",
+    "blocker": null
+  }
+}

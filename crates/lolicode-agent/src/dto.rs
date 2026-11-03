@@ -32,6 +32,44 @@ pub struct AgentSession {
     pub reasoning_effort: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_limit: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub coordination: Option<AgentSessionCoordination>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionCoordination {
+    pub role: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_session_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSecretaryTask {
+    pub id: String,
+    pub parent_session_id: String,
+    pub session_id: String,
+    pub title: String,
+    pub instructions: String,
+    pub status: String,
+    pub created_at: u64,
+    pub updated_at: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    pub project_path: String,
+    pub request_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSecretaryState {
+    pub session_id: String,
+    pub tasks: Vec<AgentSecretaryTask>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -117,6 +155,27 @@ pub struct AgentSnapshot {
     pub usage: Option<AgentUsage>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model_phase: Option<AgentModelPhase>,
+    #[serde(default)]
+    pub queued_messages: Vec<AgentQueuedMessage>,
+    #[serde(default)]
+    pub queue_paused: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentQueuedMessage {
+    pub id: String,
+    pub text: String,
+    pub created_at: u64,
+    pub attachments: Vec<AgentQueuedAttachment>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentQueuedAttachment {
+    pub file_name: String,
+    pub mime: String,
+    pub bytes: u64,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]

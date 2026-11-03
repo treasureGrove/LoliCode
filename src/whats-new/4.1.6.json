@@ -1,0 +1,33 @@
+{
+  "version": "4.1.6",
+  "items": [
+    {
+      "type": "new",
+      "zh": "新增 Loli 秘书，统一管理工作对话与任务进度",
+      "zh-TW": "新增 Loli 秘書，統一管理工作對話與任務進度",
+      "en": "Add Loli Secretary to coordinate work chats and track task progress",
+      "ja": "Loli秘書で作業チャットとタスクの進捗を管理"
+    },
+    {
+      "type": "new",
+      "zh": "通过对话构建自动化，确认配置卡后保存运行计划",
+      "zh-TW": "透過對話建立自動化，確認設定卡後儲存執行計畫",
+      "en": "Build automations through conversation and review a settings card before saving",
+      "ja": "会話で自動化を設計し、設定カードを確認して実行計画を保存"
+    },
+    {
+      "type": "improve",
+      "zh": "支持消息排队、撤回编辑、立即发送与临时上游错误重试",
+      "zh-TW": "支援訊息排隊、撤回編輯、立即傳送與暫時上游錯誤重試",
+      "en": "Queue, recall, and send messages immediately; retry transient upstream failures",
+      "ja": "メッセージの待機・編集への取り消し・即時送信と一時的な上流エラー再試行に対応"
+    },
+    {
+      "type": "fix",
+      "zh": "完善会话同步、图片预览、模型图标、宠物动画和个人空间",
+      "zh-TW": "完善對話同步、圖片預覽、模型圖示、寵物動畫與個人空間",
+      "en": "Refine session sync, image previews, model icons, companion animations, and community profiles",
+      "ja": "会話同期・画像プレビュー・モデルアイコン・ペット動画・個人ページを改善"
+    }
+  ]
+}

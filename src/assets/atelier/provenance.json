@@ -1,10 +1,336 @@
 {
   "selectedOn": "2026-10-16",
-  "note": "Original assets selected on 2026-10-16. The 2026-10-30 portrait light-frame draft is retained as superseded design history. Current default sidebar frames are native SVG nine-slice geometry with separate fixed-size cherry-red ribbon artwork; original raster artwork remains for legacy resource compatibility. Since 2026-11-02 the default companion uses the cocoa-and-cream-tail rig artwork with a local eye overlay; painted motion atlases and the unchanged original companion PNG are retained as history.",
+  "note": "Original assets selected on 2026-10-16. The 2026-10-30 portrait light-frame draft is retained as superseded design history. Current default sidebar frames are native SVG nine-slice geometry with separate fixed-size cherry-red ribbon artwork; original raster artwork remains for legacy resource compatibility. Since 2026-11-02 the default companion uses five generated video actions with transparent backgrounds and a matching static poster, plus two UI-rest video poses (sit and lie) with matching posters and measured contact points. The previous cocoa-and-cream-tail mesh rig, eye overlay, painted motion atlases and unchanged original companion PNG remain as history.",
   "assets": [
     {
-      "file": "companion-rig-v1.webp",
+      "file": "companion-sit-video-v5.webm",
+      "status": "current-ui-rest",
+      "pose": "sit",
+      "generatedOn": "2026-11-02",
+      "tool": "Jimeng web Seedance 2.0 VIP; local green key, matte refinement and VP9 alpha encoding",
+      "model": "Seedance 2.0 VIP",
+      "sourceDesign": "design/ip/D-pinkdog-ui-rest-v5/source-videos/sit-rest-seedance20-square-v1.mp4",
+      "sourceSha256": "11e821a38c0063f2776142fbcc94d433bce6cc32df1f18a0087e481aad6d38ee",
+      "reference": "design/ip/D-pinkdog-ui-rest-v5/first-frame-sit-green-square.png",
+      "poseDesign": "design/ip/D-pinkdog-ui-rest-v5/sit-source.png",
+      "imagePromptFile": "design/ip/D-pinkdog-ui-rest-v5/image-prompts.json",
+      "promptFile": "design/ip/D-pinkdog-ui-rest-v5/prompts/sit-rest-seedance20-5s.txt",
+      "preparationScript": "design/ip/D-pinkdog-ui-rest-v5/process-rest-video.mjs",
+      "preparationReport": "design/ip/D-pinkdog-ui-rest-v5/processed/sit-v1/processing-report.json",
+      "native": {
+        "width": 960,
+        "height": 960,
+        "fps": "60/1",
+        "duration": "5.061950"
+      },
+      "crop": null,
+      "width": 640,
+      "height": 640,
+      "fps": 24,
+      "durationSeconds": 5.041666666666667,
+      "audio": false,
+      "bytes": 2176491,
+      "sha256": "36ad437aedde7a8b7d22c6cbbf43580ab94b16a275cbc098b9edf6543ebf4087",
+      "contact": {
+        "x": 0.5,
+        "y": 0.738,
+        "canvas": [
+          192,
+          192
+        ]
+      },
+      "officialEnhancement": false,
+      "note": "Locally bundled offline loop. Contact follows eligible real UI top edges; not a Live2D/Cubism model."
+    },
+    {
+      "file": "companion-sit-poster-v5.webp",
+      "status": "current-ui-rest",
+      "pose": "sit",
+      "generatedOn": "2026-11-02",
+      "tool": "First refined video frame; FFmpeg lossless WebP",
+      "sourceDesign": "design/ip/D-pinkdog-ui-rest-v5/processed/sit-v1/alpha-frames/000001.png",
+      "sourceSha256": "305c8ce80d2cead057b558380dd38d2594620a91b8250ec822c4065bf8af7ecc",
+      "reference": "design/ip/D-pinkdog-ui-rest-v5/first-frame-sit-green-square.png",
+      "poseDesign": "design/ip/D-pinkdog-ui-rest-v5/sit-source.png",
+      "imagePromptFile": "design/ip/D-pinkdog-ui-rest-v5/image-prompts.json",
+      "promptFile": "design/ip/D-pinkdog-ui-rest-v5/prompts/sit-rest-seedance20-5s.txt",
+      "preparationScript": "design/ip/D-pinkdog-ui-rest-v5/process-rest-video.mjs",
+      "preparationReport": "design/ip/D-pinkdog-ui-rest-v5/processed/sit-v1/processing-report.json",
+      "native": {
+        "width": 960,
+        "height": 960,
+        "fps": "60/1",
+        "duration": "5.061950"
+      },
+      "crop": null,
+      "width": 640,
+      "height": 640,
+      "audio": false,
+      "bytes": 262564,
+      "sha256": "d4d51396e0aa6522e4c588313c402b30a5f10dea2c56d10d98f441d5f6a01a03",
+      "contact": {
+        "x": 0.5,
+        "y": 0.738,
+        "canvas": [
+          192,
+          192
+        ]
+      },
+      "officialEnhancement": false,
+      "note": "Matching reduced-motion/loading/failure fallback; inline image."
+    },
+    {
+      "file": "companion-lie-video-v5.webm",
+      "status": "current-ui-rest",
+      "pose": "lie",
+      "generatedOn": "2026-11-02",
+      "tool": "Jimeng web Seedance 2.0 VIP; local green key, matte refinement and VP9 alpha encoding",
+      "model": "Seedance 2.0 VIP",
+      "sourceDesign": "design/ip/D-pinkdog-ui-rest-v5/source-videos/lie-rest-seedance20-4x3-v2.mp4",
+      "sourceSha256": "21f0057c9d1cf1841816dbb5075164ae1d17f54096848b6281f3b090461ed959",
+      "reference": "design/ip/D-pinkdog-ui-rest-v5/first-frame-lie-green-4x3.png",
+      "poseDesign": "design/ip/D-pinkdog-ui-rest-v5/lie-source.png",
+      "imagePromptFile": "design/ip/D-pinkdog-ui-rest-v5/image-prompts.json",
+      "promptFile": "design/ip/D-pinkdog-ui-rest-v5/prompts/lie-rest-seedance20-5s-v2.txt",
+      "preparationScript": "design/ip/D-pinkdog-ui-rest-v5/process-rest-video.mjs",
+      "preparationReport": "design/ip/D-pinkdog-ui-rest-v5/processed/lie-v1/processing-report.json",
+      "native": {
+        "width": 1112,
+        "height": 834,
+        "fps": "60/1",
+        "duration": "5.088005"
+      },
+      "crop": "format=rgba,crop=1110:740:1:47",
+      "width": 768,
+      "height": 512,
+      "fps": 24,
+      "durationSeconds": 5.041666666666667,
+      "audio": false,
+      "bytes": 2609074,
+      "sha256": "551c7015772b53a492d5162965c00abcbcbf8a99efb219d4cc92e753a86073a7",
+      "contact": {
+        "x": 0.5,
+        "y": 0.8,
+        "canvas": [
+          240,
+          160
+        ]
+      },
+      "officialEnhancement": false,
+      "note": "Locally bundled offline loop. Contact follows eligible real UI top edges; not a Live2D/Cubism model."
+    },
+    {
+      "file": "companion-lie-poster-v5.webp",
+      "status": "current-ui-rest",
+      "pose": "lie",
+      "generatedOn": "2026-11-02",
+      "tool": "First refined video frame; FFmpeg lossless WebP",
+      "sourceDesign": "design/ip/D-pinkdog-ui-rest-v5/processed/lie-v1/alpha-frames/000001.png",
+      "sourceSha256": "d5bca5bb2aebdcbf7a92520b6c92e7ce5127dd8bf6b7cc28a4fe0a483c621bf1",
+      "reference": "design/ip/D-pinkdog-ui-rest-v5/first-frame-lie-green-4x3.png",
+      "poseDesign": "design/ip/D-pinkdog-ui-rest-v5/lie-source.png",
+      "imagePromptFile": "design/ip/D-pinkdog-ui-rest-v5/image-prompts.json",
+      "promptFile": "design/ip/D-pinkdog-ui-rest-v5/prompts/lie-rest-seedance20-5s-v2.txt",
+      "preparationScript": "design/ip/D-pinkdog-ui-rest-v5/process-rest-video.mjs",
+      "preparationReport": "design/ip/D-pinkdog-ui-rest-v5/processed/lie-v1/processing-report.json",
+      "native": {
+        "width": 1112,
+        "height": 834,
+        "fps": "60/1",
+        "duration": "5.088005"
+      },
+      "crop": "format=rgba,crop=1110:740:1:47",
+      "width": 768,
+      "height": 512,
+      "audio": false,
+      "bytes": 286354,
+      "sha256": "7472cccbe35ae243c8e854b0a5f8ec4a55549c81c5488dc8c0a134c05e927e58",
+      "contact": {
+        "x": 0.5,
+        "y": 0.8,
+        "canvas": [
+          240,
+          160
+        ]
+      },
+      "officialEnhancement": false,
+      "note": "Matching reduced-motion/loading/failure fallback; inline image."
+    },
+    {
+      "file": "companion-idle-video-v4.webm",
       "status": "current-default",
+      "generatedOn": "2026-11-02",
+      "tool": "Jimeng web video generation; local chroma key and edge refinement; FFmpeg VP9 alpha encoding",
+      "model": "Seedance 2.0 mini",
+      "generationSize": [
+        960,
+        960
+      ],
+      "officialEnhancement": {
+        "tool": "Jimeng Smart Ultra HD, 2K option",
+        "actualSize": [
+          1792,
+          1792
+        ]
+      },
+      "reference": "design/ip/D-pinkdog-video-v4/first-frame-green-square.png",
+      "sourceDesign": "design/ip/D-pinkdog-video-v4/source-videos/idle-square-2k-v1.mp4",
+      "sourceSha256": "1e03569a6e9f6a99c531ce4998571f59e1ead297f63a5134deefdc4eb2aa5a80",
+      "promptFile": "design/ip/D-pinkdog-video-v4/prompts/idle-mini-5s-square.txt",
+      "preparationScript": "design/ip/D-pinkdog-video-v4/encode-runtime.mjs",
+      "preparationReport": "design/ip/D-pinkdog-video-v4/runtime-build-final/runtime-report.json",
+      "matteReport": "design/ip/D-pinkdog-video-v4/refined/idle-square-2k-clean-v2/refine-report.json",
+      "width": 640,
+      "height": 640,
+      "fps": 24,
+      "frames": 121,
+      "durationSeconds": 5.041666666666667,
+      "audio": false,
+      "bytes": 4122238,
+      "sha256": "bdaceee138729ab273638f531b9446b77384056259de693db3ae85e80d121483",
+      "rendering": "Local same-origin VP9 alpha WebM; shared canvas and baseline; not a Live2D/Cubism model"
+    },
+    {
+      "file": "companion-greeting-video-v4.webm",
+      "status": "current-default",
+      "generatedOn": "2026-11-02",
+      "tool": "Jimeng web video generation; local chroma key and edge refinement; FFmpeg VP9 alpha encoding",
+      "model": "Seedance 2.0 VIP",
+      "generationSize": [
+        960,
+        960
+      ],
+      "officialEnhancement": {
+        "tool": "Jimeng Smart Ultra HD, 2K option",
+        "actualSize": [
+          1792,
+          1792
+        ]
+      },
+      "reference": "design/ip/D-pinkdog-video-v4/first-frame-green-square.png",
+      "sourceDesign": "design/ip/D-pinkdog-video-v4/source-videos/greeting-seedance20-square-2k-v2.mp4",
+      "sourceSha256": "040f4c863017ce8dfa4bbb6bd76d0effb4fc27d472149f90f2f0fdb542b88639",
+      "promptFile": "design/ip/D-pinkdog-video-v4/prompts/greeting-seedance20-v2-square.txt",
+      "preparationScript": "design/ip/D-pinkdog-video-v4/encode-runtime.mjs",
+      "preparationReport": "design/ip/D-pinkdog-video-v4/runtime-build-final/runtime-report.json",
+      "matteReport": "design/ip/D-pinkdog-video-v4/refined/greeting-seedance20-square-2k-clean-v2/refine-report.json",
+      "width": 640,
+      "height": 640,
+      "fps": 24,
+      "frames": 121,
+      "durationSeconds": 5.041666666666667,
+      "audio": false,
+      "bytes": 3777381,
+      "sha256": "7784746798f7bbe662fb4d5a6a349a95dcc5cfe9eb3bd785efbd2bb77a9f1167",
+      "rendering": "Local same-origin VP9 alpha WebM; shared canvas and baseline; not a Live2D/Cubism model"
+    },
+    {
+      "file": "companion-feed-video-v4.webm",
+      "status": "current-default",
+      "generatedOn": "2026-11-02",
+      "tool": "Jimeng web video generation; local chroma key and edge refinement; FFmpeg VP9 alpha encoding",
+      "model": "Seedance 2.0 VIP",
+      "generationSize": [
+        960,
+        960
+      ],
+      "officialEnhancement": {
+        "tool": "Jimeng Smart Ultra HD, 2K option",
+        "actualSize": [
+          1792,
+          1792
+        ]
+      },
+      "reference": "design/ip/D-pinkdog-video-v4/first-frame-green-square.png",
+      "sourceDesign": "design/ip/D-pinkdog-video-v4/source-videos/feed-seedance20-square-2k-v2.mp4",
+      "sourceSha256": "db689dd44d45fb536b57cde862c4c00261af34a4f4426d94140bb3a450d3db4c",
+      "promptFile": "design/ip/D-pinkdog-video-v4/prompts/feed-seedance20-v2-square.txt",
+      "preparationScript": "design/ip/D-pinkdog-video-v4/encode-runtime.mjs",
+      "preparationReport": "design/ip/D-pinkdog-video-v4/runtime-build-final/runtime-report.json",
+      "matteReport": "design/ip/D-pinkdog-video-v4/refined/feed-seedance20-square-2k-clean-v2/refine-report.json",
+      "width": 640,
+      "height": 640,
+      "fps": 24,
+      "frames": 121,
+      "durationSeconds": 5.041666666666667,
+      "audio": false,
+      "bytes": 3778894,
+      "sha256": "f7a26f07b8f7056d1546b4382cb4ea63e2c53799a8f1e06cb5deb9fb3f4f4da3",
+      "rendering": "Local same-origin VP9 alpha WebM; shared canvas and baseline; not a Live2D/Cubism model"
+    },
+    {
+      "file": "companion-snack-video-v4.webm",
+      "status": "current-default",
+      "generatedOn": "2026-11-02",
+      "tool": "Jimeng web video generation; local chroma key and edge refinement; FFmpeg VP9 alpha encoding",
+      "model": "Seedance 2.0 VIP",
+      "generationSize": [
+        960,
+        960
+      ],
+      "officialEnhancement": null,
+      "reference": "design/ip/D-pinkdog-video-v4/first-frame-green-square.png",
+      "sourceDesign": "design/ip/D-pinkdog-video-v4/source-videos/snack-cookie-seedance20-square-v1.mp4",
+      "sourceSha256": "5649d8ef67304fc842668cc24c3b63bd8158d9d95782c9e9b66fed97a0b3abc4",
+      "promptFile": "design/ip/D-pinkdog-video-v4/prompts/snack-cookie-seedance20-square.txt",
+      "preparationScript": "design/ip/D-pinkdog-video-v4/encode-runtime.mjs",
+      "preparationReport": "design/ip/D-pinkdog-video-v4/runtime-build-final/runtime-report.json",
+      "matteReport": "design/ip/D-pinkdog-video-v4/refined/snack-cookie-seedance20-square-clean-v1/refine-report.json",
+      "width": 640,
+      "height": 640,
+      "fps": 24,
+      "frames": 120,
+      "durationSeconds": 5,
+      "audio": false,
+      "bytes": 3761086,
+      "sha256": "762ed05b5d045650bc3b56b51ebcbe3fd6f1eb8ff4baaec1e5d62f7d09257640",
+      "rendering": "Local same-origin VP9 alpha WebM; shared canvas and baseline; not a Live2D/Cubism model"
+    },
+    {
+      "file": "companion-curious-video-v4.webm",
+      "status": "current-default",
+      "generatedOn": "2026-11-02",
+      "tool": "Jimeng web video generation; local chroma key and edge refinement; FFmpeg VP9 alpha encoding",
+      "model": "Seedance 2.0 VIP",
+      "generationSize": [
+        960,
+        960
+      ],
+      "officialEnhancement": null,
+      "reference": "design/ip/D-pinkdog-video-v4/first-frame-green-square.png",
+      "sourceDesign": "design/ip/D-pinkdog-video-v4/source-videos/idle-curious-seedance20-square-v1.mp4",
+      "sourceSha256": "39eab8a754e339ab85eb63f7c663f02f4aeb7fd98519bd2b54576541a1d25181",
+      "promptFile": "design/ip/D-pinkdog-video-v4/prompts/idle-curious-seedance20-square.txt",
+      "preparationScript": "design/ip/D-pinkdog-video-v4/encode-runtime.mjs",
+      "preparationReport": "design/ip/D-pinkdog-video-v4/runtime-build-final/runtime-report.json",
+      "matteReport": "design/ip/D-pinkdog-video-v4/refined/idle-curious-seedance20-square-clean-v1/refine-report.json",
+      "width": 640,
+      "height": 640,
+      "fps": 24,
+      "frames": 121,
+      "durationSeconds": 5.041666666666667,
+      "audio": false,
+      "bytes": 3321244,
+      "sha256": "d6f30144b805d7de1fb3bbdf615038c5d02f1f553e45f154d30aa97729667d10",
+      "rendering": "Local same-origin VP9 alpha WebM; shared canvas and baseline; not a Live2D/Cubism model"
+    },
+    {
+      "file": "companion-video-poster-v4.webp",
+      "status": "current-default-fallback",
+      "generatedOn": "2026-11-02",
+      "tool": "First refined idle frame, premultiplied-alpha Lanczos downsample and lossless WebP encoding",
+      "sourceDesign": "design/ip/D-pinkdog-video-v4/refined/idle-square-2k-clean-v2/alpha-frames/000001.png",
+      "preparationScript": "design/ip/D-pinkdog-video-v4/encode-runtime.mjs",
+      "preparationReport": "design/ip/D-pinkdog-video-v4/runtime-build-final/runtime-report.json",
+      "width": 640,
+      "height": 640,
+      "bytes": 268694,
+      "sha256": "275740527c84913599a47f2db9ee72d75a5b41cb416c6b0abe42844f629678ba",
+      "note": "Matching static fallback for loading, reduced motion, rest and failed playback; inline asset."
+    },
+    {
+      "file": "companion-rig-v1.webp",
+      "status": "superseded",
       "generatedOn": "2026-11-02",
       "tool": "built-in image_gen edit; FFmpeg lossless WebP encoding",
       "reference": "companion.png",
@@ -29,14 +355,15 @@
       ],
       "width": 1215,
       "height": 1295,
-      "note": "Tail main fur corrected to cocoa brown with a cream-white tip to match the folded dog ears. The original companion.png remains unchanged. This single high-resolution illustration supplies the active character, default static fallback, and care-panel portrait.",
-      "rendering": "continuous local WebGL mesh deformation with an aligned eye overlay; inline authored SVG fish and crumbs; not a Cubism/Live2D model; no SDK or generated video",
+      "note": "Historical cocoa-and-cream-tail illustration and WebGL rig. Tail fur matches the folded dog ears. No longer the active character or care-panel portrait. The original companion.png remains unchanged.",
+      "rendering": "Historical continuous local WebGL mesh deformation with an aligned eye overlay; not a Cubism/Live2D model.",
       "runtime": "Vite ?inline data URI; offline playback; no Doubao or browser permissions required",
-      "sha256": "a8a7156effaa53bd561959247dbbc5d4972a39d5e1b78ece20fec602491ac477"
+      "sha256": "a8a7156effaa53bd561959247dbbc5d4972a39d5e1b78ece20fec602491ac477",
+      "replacedBy": "companion-idle-video-v4.webm"
     },
     {
       "file": "companion-eyes-closed-v1.webp",
-      "status": "current-default-overlay",
+      "status": "superseded-overlay",
       "generatedOn": "2026-11-02",
       "tool": "built-in image_gen edit; local alpha-mask extraction; FFmpeg lossless WebP encoding",
       "reference": "companion.png",
@@ -51,10 +378,16 @@
       "width": 1215,
       "height": 1295,
       "coveredPixels": 37866,
-      "maskBoundsInclusive": [404, 310, 744, 523],
-      "note": "Two feathered eye-region masks on the same full canvas as the rig base. Pixels outside those local regions are transparent. The edited full body's tail and other details are not blended into the runtime base.",
+      "maskBoundsInclusive": [
+        404,
+        310,
+        744,
+        523
+      ],
+      "note": "Two feathered eye-region masks on the same full canvas as the rig base. Pixels outside those local regions are transparent. The edited full body's tail and other details are not blended into the runtime base. Historical overlay; not used by the v4 video actor.",
       "rendering": "premultiplied-alpha eye blend on the same continuously deformed WebGL mesh",
-      "sha256": "6e24f98ee8c496e4619082a606cde4cf259f1c42dab6d7f173a0da9fc3c675ee"
+      "sha256": "6e24f98ee8c496e4619082a606cde4cf259f1c42dab6d7f173a0da9fc3c675ee",
+      "replacedBy": "companion-idle-video-v4.webm"
     },
     {
       "file": "companion-motion-v2.webp",
@@ -76,8 +409,17 @@
       "height": 1280,
       "columns": 6,
       "rows": 5,
-      "frameSize": [256, 256],
-      "motions": ["idle", "feed", "pet", "sleep", "drag"],
+      "frameSize": [
+        256,
+        256
+      ],
+      "motions": [
+        "idle",
+        "feed",
+        "pet",
+        "sleep",
+        "drag"
+      ],
       "note": "Calmer silhouettes, a distinct fish-shaped snack, selected low-change blink/pet/sleep sequences and a held suspended drag pose. All frames share one scale; raised boots in dragging poses are intentional.",
       "rendering": "painted frames on Canvas; 120ms action transitions; not a Live2D/Cubism model",
       "sha256": "d510a5d69177799e06e6647c692a9d26a6c2f4eea5b8b9c825f3713d422def24"
@@ -98,8 +440,17 @@
       "height": 1280,
       "columns": 6,
       "rows": 5,
-      "frameSize": [256, 256],
-      "motions": ["idle", "feed", "pet", "sleep", "drag"],
+      "frameSize": [
+        256,
+        256
+      ],
+      "motions": [
+        "idle",
+        "feed",
+        "pet",
+        "sleep",
+        "drag"
+      ],
       "rendering": "painted frames on Canvas; not a Live2D/Cubism model",
       "sha256": "dd8b52f1da51f654539005b91cf47ef58c8fcdd03f0947aad5c63276ddffdb91"
     },
@@ -108,7 +459,11 @@
       "createdOn": "2026-10-30",
       "tool": "repo-native SVG",
       "theme": "light",
-      "palette": ["ivory", "muted cherry red", "champagne gold"],
+      "palette": [
+        "ivory",
+        "muted cherry red",
+        "champagne gold"
+      ],
       "width": 128,
       "height": 128,
       "sourceSlicePixels": 20,
@@ -182,5 +537,5 @@
     }
   ],
   "version": 1,
-  "tool": "built-in image_gen and repo-native SVG"
+  "tool": "built-in image_gen, Jimeng web video generation, local media processing and repo-native SVG"
 }

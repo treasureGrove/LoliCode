@@ -12,6 +12,15 @@ dist/
 dist-dev/
 # Only the root delivery output is generated; scripts/release/ contains source.
 /release/
+# Rebuildable animation frames; retain source videos, reports and final media.
+/design/ip/D-pinkdog-video-v3/**/source-frames/
+/design/ip/D-pinkdog-video-v3/**/alpha-frames/
+/design/ip/D-pinkdog-video-v4/**/source-frames/
+/design/ip/D-pinkdog-video-v4/**/alpha-frames/
+/design/ip/D-pinkdog-video-v4/evidence/*frames*/
+/design/ip/D-pinkdog-ui-rest-v5/**/source-frames/
+/design/ip/D-pinkdog-ui-rest-v5/**/alpha-frames/
+/design/ip/D-pinkdog-ui-rest-v5/evidence/frames-*/
 src-tauri/resources/agent/
 src-tauri/resources/zcode-runtime/
 packages/lolicode-zcode-runtime/.build/

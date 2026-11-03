@@ -1,0 +1,197 @@
+{
+  "sourceDir": "D:\\projectGithub\\TAI-Switch\\design\\ip\\D-pinkdog-video-v4\\processed\\idle-square-2k-v1\\source-frames",
+  "previousAlphaDir": "D:\\projectGithub\\TAI-Switch\\design\\ip\\D-pinkdog-video-v4\\processed\\idle-square-2k-v1\\alpha-frames",
+  "outputDir": "D:\\projectGithub\\TAI-Switch\\design\\ip\\D-pinkdog-video-v4\\matte-trial\\idle-square-2k-rekey-v1",
+  "frames": 3,
+  "fps": 24,
+  "method": "Opt-in keyFrame clearStrongConnectedGreen. Strongly green-dominant pixels in existing connected green regions are fully transparent instead of retaining alpha from a global brightness estimate. Connected regions include border flood-fill and strict saturated interior seeds for hair holes. No geometry erosion, blur, watermark masks, or redraw.",
+  "thresholds": {
+    "hueMinimum": 80,
+    "hueMaximum": 145,
+    "saturationMinimum": 0.45,
+    "greenMinimum": 65,
+    "greenOverMaximumRedBlue": 1.7
+  },
+  "defaultImporterUnchanged": true,
+  "residualGreenAlphaCleared": 223219,
+  "strongConnectedGreenPixels": 5943454,
+  "protectedTealAlphaChanges": 0,
+  "protectedTealRgbChanges": 0,
+  "protectedPinkCoreChanges": 0,
+  "opaqueForegroundChanges": 0,
+  "allInputsUnchanged": true,
+  "qaLayout": "Left = previous matte; right = rekeyed matte; upper = light background, lower = dark. Main QA is full-frame for square inputs. Detail QA is 360px on the left hair edge; crops are inspection only.",
+  "qaFrames": [
+    {
+      "name": "000001.png",
+      "crop": {
+        "left": 0,
+        "top": 0,
+        "width": 1792,
+        "height": 1792
+      }
+    },
+    {
+      "name": "000061.png",
+      "crop": {
+        "left": 0,
+        "top": 0,
+        "width": 1792,
+        "height": 1792
+      }
+    },
+    {
+      "name": "000121.png",
+      "crop": {
+        "left": 0,
+        "top": 0,
+        "width": 1792,
+        "height": 1792
+      }
+    }
+  ],
+  "detailQaFrames": [
+    {
+      "name": "000001.png",
+      "crop": {
+        "left": 236,
+        "top": 626,
+        "width": 360,
+        "height": 360
+      }
+    },
+    {
+      "name": "000061.png",
+      "crop": {
+        "left": 212,
+        "top": 626,
+        "width": 360,
+        "height": 360
+      }
+    },
+    {
+      "name": "000121.png",
+      "crop": {
+        "left": 236,
+        "top": 626,
+        "width": 360,
+        "height": 360
+      }
+    }
+  ],
+  "limitations": [
+    "This is a color matte, not semantic segmentation. Strong green clothing or props would need a protected mask; this character has no such clothing.",
+    "Highly green-dominant mixed edge pixels may become transparent. Review fine hairs on light and dark backgrounds before runtime use.",
+    "All watermarks and non-green overlays are retained and can affect frame bounds."
+  ],
+  "perFrame": [
+    {
+      "name": "000001.png",
+      "background": [
+        0,
+        207,
+        0
+      ],
+      "keyedPixels": 1997734,
+      "pureGreenSeedPixels": 1974970,
+      "protectedTealPixels": 9609,
+      "protectedTealChanged": 0,
+      "clearStrongConnectedGreen": true,
+      "strongConnectedGreenPixels": 1992611,
+      "residualGreenAlphaCleared": 45096,
+      "boundsInclusive": {
+        "left": 220,
+        "top": 112,
+        "right": 1571,
+        "bottom": 1719
+      },
+      "transparentPixels": 1992611,
+      "opaquePixels": 1213530,
+      "translucentPixels": 5123,
+      "transparentFraction": 0.6205067537268814,
+      "tealPixels": 9609,
+      "tealAlphaChanges": 0,
+      "tealRgbChanges": 0,
+      "pinkCorePixels": 1049631,
+      "pinkCoreChanges": 0,
+      "opaqueForegroundChanges": 0,
+      "sourceUnchanged": true,
+      "previousUnchanged": true,
+      "sourceSha256": "1f8c7ce920d5e908b9ebb305ce735be6921354e6e5330d416badbf66578006ab",
+      "previousAlphaSha256": "b0f2ceb28a2d43fcd16cd27e27cf9a13c25d138570a7021e15f34fc0d2bb6b73",
+      "outputSha256": "86e4c588b5bff126636fc56ec2268c5baa549e7f2ccba1605ab9a99d97328722"
+    },
+    {
+      "name": "000061.png",
+      "background": [
+        0,
+        155,
+        6
+      ],
+      "keyedPixels": 1968383,
+      "pureGreenSeedPixels": 1934224,
+      "protectedTealPixels": 10133,
+      "protectedTealChanged": 0,
+      "clearStrongConnectedGreen": true,
+      "strongConnectedGreenPixels": 1961152,
+      "residualGreenAlphaCleared": 128230,
+      "boundsInclusive": {
+        "left": 240,
+        "top": 114,
+        "right": 1601,
+        "bottom": 1721
+      },
+      "transparentPixels": 1961152,
+      "opaquePixels": 1242881,
+      "translucentPixels": 7231,
+      "transparentFraction": 0.610710299744898,
+      "tealPixels": 10133,
+      "tealAlphaChanges": 0,
+      "tealRgbChanges": 0,
+      "pinkCorePixels": 1142788,
+      "pinkCoreChanges": 0,
+      "opaqueForegroundChanges": 0,
+      "sourceUnchanged": true,
+      "previousUnchanged": true,
+      "sourceSha256": "7361768809707988b5613d39b87a6d51dd704271f10ff74a8fc9cf1e85b37918",
+      "previousAlphaSha256": "cadefd3e33f906818c5cf6c0bc368998cd09e83696ca046ea00c2a9a37883da9",
+      "outputSha256": "4cd4b4d9cbc46293dfe9c2190b8f25b229dd53e10319782aae65127cfa2ec9ee"
+    },
+    {
+      "name": "000121.png",
+      "background": [
+        0,
+        209,
+        0
+      ],
+      "keyedPixels": 1995874,
+      "pureGreenSeedPixels": 1970579,
+      "protectedTealPixels": 10040,
+      "protectedTealChanged": 0,
+      "clearStrongConnectedGreen": true,
+      "strongConnectedGreenPixels": 1989691,
+      "residualGreenAlphaCleared": 49893,
+      "boundsInclusive": {
+        "left": 220,
+        "top": 112,
+        "right": 1571,
+        "bottom": 1720
+      },
+      "transparentPixels": 1989691,
+      "opaquePixels": 1215390,
+      "translucentPixels": 6183,
+      "transparentFraction": 0.6195974544602998,
+      "tealPixels": 10040,
+      "tealAlphaChanges": 0,
+      "tealRgbChanges": 0,
+      "pinkCorePixels": 1051154,
+      "pinkCoreChanges": 0,
+      "opaqueForegroundChanges": 0,
+      "sourceUnchanged": true,
+      "previousUnchanged": true,
+      "sourceSha256": "f0cb1e7ee64bbc5d8e69ebdec1fd67eb162cabc38df389ce999fa212b8b9506d",
+      "previousAlphaSha256": "b99a261c08fefdf7ea8d377ab06ec7759dd002265d7454052a5526ebaf73843f",
+      "outputSha256": "315a93d9da015ed284a1b5ea21a81f922bfae93da9ddbcd084d7cb542f19c598"
+    }
+  ]
+}

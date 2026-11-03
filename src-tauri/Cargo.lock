@@ -3489,7 +3489,7 @@ dependencies = [
 
 [[package]]
 name = "lolicode"
-version = "4.1.5"
+version = "4.1.6"
 dependencies = [
  "anyhow",
  "arboard",
@@ -3586,6 +3586,7 @@ dependencies = [
  "reqwest 0.12.28",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "tokio",
  "tokio-tungstenite",
  "url",

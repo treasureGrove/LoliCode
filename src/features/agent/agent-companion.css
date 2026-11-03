@@ -11,6 +11,49 @@
   -webkit-app-region: no-drag;
 }
 
+/* Only the short release into a pose eases position. Pointer drags and live
+   surface following always remain attached to their actual coordinates. */
+.lc-pet[data-settling="true"]:not([data-dragging="pet"]) {
+  transition:
+    left 300ms cubic-bezier(0.2, 0.75, 0.25, 1),
+    top 300ms cubic-bezier(0.2, 0.75, 0.25, 1);
+}
+
+.lc-pet[data-docked] .lc-pet-character {
+  width: var(--companion-width);
+  height: var(--companion-height);
+  pointer-events: none;
+}
+
+/* The transparent canvas and dangling feet must not intercept typing or
+   selecting text below the edge. Only the visible upper body is a drag grip. */
+.lc-pet[data-docked] .lc-pet-character::after {
+  content: "";
+  position: absolute;
+  top: 12%;
+  right: 22%;
+  bottom: calc(100% - var(--companion-rest-contact) + 7px);
+  left: 22%;
+  border-radius: 44% 44% 24% 24%;
+  pointer-events: auto;
+}
+
+.lc-pet[data-docked] .lc-pet-shadow,
+.lc-pet[data-docked] .lc-pet-aura {
+  opacity: 0;
+}
+
+.lc-pet[data-docked] .lc-pet-bubble {
+  top: -50px;
+  left: calc(50% - 96px);
+}
+
+.lc-pet[data-docked] .lc-pet-tools {
+  top: 0;
+  bottom: auto;
+  left: calc(50% - 96px);
+}
+
 .lc-pet[data-visible="false"] {
   height: 34px;
 }
@@ -125,7 +168,8 @@
   opacity: 0;
 }
 
-.lc-pet-character .lc-companion-actor {
+.lc-pet-character .lc-companion-actor,
+.lc-pet-character .lc-companion-video-actor {
   filter: drop-shadow(0 5px 5px #35182616);
   pointer-events: none;
   -webkit-user-drag: none;
@@ -135,7 +179,8 @@
   cursor: grabbing;
 }
 
-.lc-pet[data-dragging="pet"] .lc-companion-actor {
+.lc-pet[data-dragging="pet"] .lc-companion-actor,
+.lc-pet[data-dragging="pet"] .lc-companion-video-actor {
   filter: drop-shadow(0 12px 7px #35182625);
 }
 
@@ -702,7 +747,65 @@
   }
 }
 
+.lc-pet-work {
+  position: absolute;
+  left: 2px;
+  top: 4px;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 30px;
+  height: 30px;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  color: var(--text-2);
+  background: var(--bg-card);
+  font-size: 11px;
+  line-height: 1.35;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.lc-pet-work svg {
+  flex-shrink: 0;
+}
+.lc-pet-work:focus-visible {
+  outline: 2px solid var(--action-text);
+  outline-offset: 3px;
+}
+.lc-pet-work[data-state="waiting_permission"],
+.lc-pet-work[data-state="waiting_question"],
+.lc-pet-work[data-state="failed"] {
+  color: var(--action-text);
+}
+.lc-pet-work strong {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  font-size: 9px;
+  line-height: 14px;
+  min-width: 14px;
+  border-radius: 7px;
+  background: var(--bg-card);
+}
+.lc-pet-secretary-action {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 7px;
+  padding: 8px;
+  margin: 4px 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--text-2);
+  text-align: left;
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .lc-pet,
   .lc-pet *,
   .lc-pet-panel *,
   .lc-pet-food-ghost {

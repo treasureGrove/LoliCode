@@ -1,0 +1,9 @@
+{
+  "tool": "built-in image_gen",
+  "date": "2026-11-02",
+  "reference": "design/ip/D-pinkdog-rig-v1/tail-matched-source.png",
+  "generatedFile": "C:/Users/admin/.codex/generated_images/01a19252-2863-7031-bfac-baf935e6ddef/exec-a391c800-8fdc-4aaa-9508-3f2408014119.png",
+  "savedAs": "standard-pose-source.png",
+  "transparentBackground": true,
+  "prompt": "Use case: identity-preserve. Asset type: single standard full-body first frame for an image-to-video desktop companion production pipeline. Input image 1 is the exact identity and art-quality reference. Draw the SAME pink-haired floppy DOG-ear chibi maid in one clean neutral FRONT standing pose. Change the pose only: both boots resting naturally on the same invisible horizontal ground line, legs uncrossed, arms lowered in a relaxed gentle A-pose with both hands visible near the sides, shoulders relaxed, head almost upright with a slight friendly tilt, open teal-blue eyes, tiny warm closed or barely-open fang smile. Preserve the original cute round face, fine delicate anime painting, long voluminous pink curls and one braid, curved ahoge, square ivory hairclip, detailed charcoal/wine-red/ivory maid jacket-dress with gold chain/star trim, teal gems, burgundy bows and matching boots. DOG EARS AND TAIL MUST MATCH: warm cocoa-brown main fur with soft cream-white tips; no pink tail, hair stays pink. Keep the same chibi proportions (~2.5 heads) and luxurious layered garment detail, do not simplify or turn into a doll/3D render. ONE character only, centered front view; complete ahoge, ears, hair, fingers, tail, skirt and boots visible with generous empty margin. Genuine transparent alpha around character; no green background in this master (we will composite exact green deterministically), no floor/shadow, no props, no extra hands, no panels or turnaround sheet, no labels/text, no UI. This is a calm standardized start/end pose, not a dancing or one-leg-up pose."
+}

@@ -1,0 +1,184 @@
+.wb-message-queue {
+  position: relative;
+  min-width: 0;
+  max-width: 808px;
+  margin: 0 auto -16px;
+  padding: 2px 4px 18px;
+  border: 1px solid var(--wb-border, hsl(var(--border)));
+  border-bottom: 0;
+  border-radius: 20px 20px 0 0;
+  background: color-mix(
+    in srgb,
+    var(--wb-panel, var(--bg-card)) 48%,
+    var(--wb-hover, var(--bg-subtle))
+  );
+  color: var(--wb-text, var(--text-1));
+  font-size: var(--workspace-text, 14px);
+  line-height: 1.45;
+}
+.wb-message-queue-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 132px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  list-style: none;
+}
+.wb-message-queue-item {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: 42px;
+  padding: 5px 10px;
+}
+.wb-message-queue-item + .wb-message-queue-item {
+  border-top: 1px solid color-mix(in srgb, var(--wb-border) 65%, transparent);
+}
+.wb-message-queue-icon {
+  flex-shrink: 0;
+  color: var(--wb-muted, var(--text-3));
+  stroke-width: 1.6;
+}
+.wb-message-queue-content {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.wb-message-queue-text {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wb-message-queue-attachments {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 3px;
+  margin: 0;
+  color: var(--wb-muted, var(--text-3));
+  font-size: 11px;
+}
+.wb-message-queue-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 2px;
+}
+.wb-message-queue-actions .tai-button {
+  height: 28px;
+  border: 0;
+  border-radius: 7px;
+  color: var(--wb-muted, var(--text-3));
+  background: transparent;
+  box-shadow: none;
+  font-size: var(--workspace-label, 13px);
+  font-weight: 400;
+}
+.wb-message-queue-actions .tai-button:hover:not(:disabled),
+.wb-message-queue-actions .tai-button[data-state="open"] {
+  color: var(--wb-text, var(--text-1));
+  background: var(--wb-hover, var(--bg-subtle));
+}
+.wb-message-queue-actions .wb-message-queue-send {
+  gap: 5px;
+  padding-inline: 7px;
+}
+.wb-message-queue-actions .wb-message-queue-delete:hover:not(:disabled) {
+  color: var(--danger-text);
+}
+:root.dark .wb-message-queue {
+  background: color-mix(
+    in srgb,
+    var(--wb-bg, var(--bg-app)) 60%,
+    var(--wb-panel, var(--bg-card))
+  );
+}
+.wb-message-queue-paused {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 12px 1px;
+  color: var(--wb-muted, var(--text-3));
+  font-size: 11px;
+}
+.wb-message-queue-menu {
+  width: min(320px, calc(100vw - 24px));
+}
+.wb-message-queue-detail {
+  max-height: 176px;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  font-size: 12px;
+  font-weight: 400;
+}
+.wb-message-queue-detail p {
+  margin: 0;
+}
+.wb-message-queue-detail small {
+  display: block;
+  margin-top: 6px;
+  color: var(--text-3);
+}
+
+/* The tray sits behind the composer's rounded upper edge. */
+.wb-composer-area:has(.wb-message-queue) .wb-composer {
+  position: relative;
+  z-index: 1;
+  border-radius: 24px;
+}
+:root .lolicode-workbench.wb-unified .wb-composer-area:has(.wb-message-queue) {
+  padding: 0 18px 14px;
+  border-top: 0;
+  background: transparent;
+}
+:root .lolicode-workbench.wb-unified .wb-message-queue {
+  max-width: none;
+  margin-inline: 16px;
+}
+:root
+  .lolicode-workbench.wb-unified
+  .wb-composer-area:has(.wb-message-queue)
+  .wb-composer {
+  border: 1px solid var(--wb-border);
+  border-radius: 24px;
+  background: var(--workspace-composer, var(--wb-input));
+  box-shadow: 0 2px 8px rgb(0 0 0 / 3%);
+}
+:root
+  .lolicode-workbench.wb-unified
+  .wb-composer-area:has(.wb-message-queue)
+  .wb-composer:focus-within {
+  border-color: color-mix(in srgb, var(--wb-accent) 35%, var(--wb-border));
+}
+@media (max-width: 600px) {
+  :root
+    .lolicode-workbench.wb-unified
+    .wb-composer-area:has(.wb-message-queue) {
+    padding-inline: 8px;
+    padding-bottom: 8px;
+  }
+  :root .lolicode-workbench.wb-unified .wb-message-queue {
+    margin-inline: 10px;
+  }
+  .wb-message-queue-item {
+    gap: 6px;
+    padding-inline: 6px;
+  }
+  .wb-message-queue-actions {
+    gap: 0;
+  }
+  .wb-message-queue-actions .wb-message-queue-send {
+    padding-inline: 5px;
+    font-size: 11px;
+  }
+}

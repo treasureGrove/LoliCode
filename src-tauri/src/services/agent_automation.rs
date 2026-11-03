@@ -23,6 +23,11 @@ use std::{
 };
 use tauri::{AppHandle, Manager};
 use tokio::sync::Mutex;
+#[path = "agent_automation_idempotency.rs"]
+mod idempotency;
+#[cfg(test)]
+#[path = "agent_automation_idempotency_tests.rs"]
+mod idempotency_tests;
 #[cfg(test)]
 #[path = "agent_automation_tests.rs"]
 mod integration_tests;
@@ -66,7 +71,7 @@ impl AutomationRuntime for DesktopAutomationRuntime {
     ) -> BoxFuture<'a, Result<Value, String>> {
         Box::pin(async move {
             let carrier = self.0.state::<InprocessAgentState>();
-            if method == "busy" {
+            if matches!(method, "busy" | "getSession" | "recordAutomationSave") {
                 carrier.ensure_started(&self.0).await?;
             }
             carrier.call(method, params, mutate).await
@@ -140,6 +145,8 @@ struct Store {
     jobs: Vec<Job>,
     #[serde(default)]
     runs: Vec<Run>,
+    #[serde(default)]
+    save_receipts: Vec<idempotency::SaveReceipt>,
 }
 
 fn mutation_lock() -> &'static Mutex<()> {
@@ -168,7 +175,7 @@ fn save(db: &crate::database::Database, store: &Store) -> Result<(), String> {
         .map_err(|error| error.to_string())
 }
 
-fn cron_parts(expr: &str) -> Result<(u32, Option<u32>, Option<u32>), String> {
+fn cron_parts(expr: &str) -> Result<(u32, Option<u32>, Option<Vec<u32>>), String> {
     let fields: Vec<_> = expr.split_whitespace().collect();
     if fields.len() != 5 || fields[2] != "*" || fields[3] != "*" {
         return Err("目前只支持每小时、每天或每周运行的计划".into());
@@ -189,16 +196,24 @@ fn cron_parts(expr: &str) -> Result<(u32, Option<u32>, Option<u32>), String> {
     if fields[4] == "*" {
         return Ok((minute, Some(hour), None));
     }
-    let weekday = fields[4]
-        .parse::<u32>()
-        .ok()
-        .filter(|value| *value <= 6)
-        .ok_or("计划星期无效")?;
-    Ok((minute, Some(hour), Some(weekday)))
+    let mut weekdays = Vec::new();
+    for field in fields[4].split(',') {
+        if field.len() != 1 || !field.as_bytes()[0].is_ascii_digit() {
+            return Err("计划星期无效，请选择星期日到星期六".into());
+        }
+        let weekday = field.parse::<u32>().map_err(|_| "计划星期无效")?;
+        if weekday > 6 {
+            return Err("计划星期无效，请选择星期日到星期六".into());
+        }
+        if !weekdays.contains(&weekday) {
+            weekdays.push(weekday);
+        }
+    }
+    Ok((minute, Some(hour), Some(weekdays)))
 }
 
 fn next_run_at(expr: &str, after_ms: u64) -> Result<u64, String> {
-    let (minute, hour, weekday) = cron_parts(expr)?;
+    let (minute, hour, weekdays) = cron_parts(expr)?;
     let after = Local
         .timestamp_millis_opt(after_ms as i64)
         .single()
@@ -211,7 +226,9 @@ fn next_run_at(expr: &str, after_ms: u64) -> Result<u64, String> {
     for _ in 0..(8 * 24 * 60) {
         if candidate.minute() == minute
             && hour.is_none_or(|expected| candidate.hour() == expected)
-            && weekday.is_none_or(|expected| candidate.weekday().num_days_from_sunday() == expected)
+            && weekdays.as_ref().is_none_or(|expected| {
+                expected.contains(&candidate.weekday().num_days_from_sunday())
+            })
         {
             return Ok(candidate.timestamp_millis().max(0) as u64);
         }
@@ -619,18 +636,20 @@ async fn dispatch_run(
             record.session_id = Some(session.id.clone());
         })
         .await?;
-        // Serialize the final cancellation check and send acknowledgement. An
-        // interrupt cannot race ahead of the engine creating its flight.
-        let send_guard = mutation_lock().lock().await;
-        if load(&db)?
-            .runs
-            .iter()
-            .find(|item| item.run_id == run.run_id)
-            .is_none_or(|item| item.cancel_requested)
         {
-            return Err("任务已取消".into());
+            // Only durable store changes belong under the global lock. Waiting
+            // for admission here used to freeze every project's management UI.
+            let _guard = mutation_lock().lock().await;
+            if load(&db)?
+                .runs
+                .iter()
+                .find(|item| item.run_id == run.run_id)
+                .is_none_or(|item| item.cancel_requested)
+            {
+                return Err("任务已取消".into());
+            }
         }
-        runtime
+        let admission = runtime
             .call(
                 "sendMessage",
                 json!({
@@ -641,8 +660,27 @@ async fn dispatch_run(
                 }),
                 true,
             )
-            .await?;
-        drop(send_guard);
+            .await;
+        // Stop may have reached an idle native actor while this send waited for
+        // admission. Persisted intent survives that early ACK; stop it again
+        // after admission, without holding up reads or unrelated mutations.
+        if admission.is_ok()
+            && load(&db)?
+                .runs
+                .iter()
+                .find(|item| item.run_id == run.run_id)
+                .is_none_or(|item| item.cancel_requested)
+        {
+            if let Err(error) = runtime
+                .call("interruptSession", json!({"sessionId":session.id}), false)
+                .await
+            {
+                // Admission is proven even if interrupt fails. Keep monitoring
+                // the live session rather than inventing a terminal receipt.
+                log::warn!("自动化已接收，停止确认仍待处理：{error}");
+            }
+        }
+        admission?;
         update_run(&db, &run.run_id, |record| {
             record.dispatch_status = "dispatched".into();
         })
@@ -796,6 +834,7 @@ mod tests {
             Store {
                 jobs: vec![job],
                 runs: vec![],
+                save_receipts: vec![],
             },
             registered,
         )
@@ -952,17 +991,59 @@ mod tests {
     fn automation_cron_validation_does_not_silently_rewrite_unsupported_schedules() {
         assert!(cron_parts("0 * * * *").is_ok());
         assert!(cron_parts("35 14 * * 3").is_ok());
+        assert_eq!(
+            cron_parts("35 14 * * 1,3,5").unwrap(),
+            (35, Some(14), Some(vec![1, 3, 5]))
+        );
         for expr in [
             "61 * * * *",
             "0 24 * * *",
             "0 9 * * 7",
             "*/5 * * * *",
             "0 9 1 * *",
+            "0 9 * * 1,7",
+            "0 9 * * 1,,3",
+            "0 9 * * ,1",
+            "0 9 * * 1,",
+            "0 9 * * 1-5",
+            "0 9 * * 1,+3",
+            "0 9 * * 1,*",
+            "0 * * * 1,3",
         ] {
             assert!(cron_parts(expr).is_err(), "{expr}");
         }
         let now = now_ms();
         assert!(next_run_at("0 9 * * *", now).unwrap() > now);
+    }
+
+    #[test]
+    fn automation_weekday_selection_uses_next_matching_local_time_and_wraps_the_week() {
+        let local = |day, hour, minute, second| {
+            Local
+                .with_ymd_and_hms(2026, 11, day, hour, minute, second)
+                .single()
+                .unwrap()
+                .timestamp_millis() as u64
+        };
+        // 2026-11-02 is a Monday. Selection order and duplicate days must not
+        // alter the next occurrence, and an exact scheduled time is exclusive.
+        let selected = "30 9 * * 5,1,3,1";
+        for (after, expected) in [
+            (local(2, 9, 29, 30), local(2, 9, 30, 0)),
+            (local(2, 9, 30, 0), local(4, 9, 30, 0)),
+            (local(3, 10, 0, 0), local(4, 9, 30, 0)),
+            (local(6, 9, 30, 30), local(9, 9, 30, 0)),
+        ] {
+            assert_eq!(next_run_at(selected, after).unwrap(), expected);
+        }
+        assert_eq!(
+            next_run_at("30 9 * * 0,6", local(7, 10, 0, 0)).unwrap(),
+            local(8, 9, 30, 0)
+        );
+        assert_eq!(
+            next_run_at("30 9 * * 1", local(2, 9, 30, 0)).unwrap(),
+            local(9, 9, 30, 0)
+        );
     }
     #[test]
     fn automation_history_retention_never_evicts_an_active_run() {
@@ -1035,15 +1116,164 @@ pub async fn create_saved_job(
     input: &Value,
 ) -> Result<Value, String> {
     let workspace = workspace_from_scope(Some(input))?;
-    let job = validate_job(input, workspace, db)?;
+    let job = validate_job(input, workspace.clone(), db)?;
+    let request_id = idempotency::request_id(input)?;
+    let fingerprint = request_id
+        .map(|_| idempotency::fingerprint(input, &workspace, "create", None))
+        .transpose()?;
     let _guard = mutation_lock().lock().await;
     let mut store = load(db)?;
+    if let (Some(request_id), Some(fingerprint)) = (request_id, fingerprint.as_deref()) {
+        if let Some(job) =
+            idempotency::replay(&store, &workspace, request_id, "create", fingerprint)?
+        {
+            return Ok(json!(job));
+        }
+    }
     if store.jobs.len() >= MAX_JOBS {
         return Err("自动化数量达到上限".into());
     }
     store.jobs.push(job.clone());
+    if let (Some(request_id), Some(fingerprint)) = (request_id, fingerprint) {
+        idempotency::remember(
+            &mut store,
+            &workspace,
+            request_id,
+            "create",
+            &job.automation_id,
+            fingerprint,
+        );
+    }
     save(db, &store)?;
     Ok(json!(job))
+}
+
+async fn update_saved_job(
+    db: &crate::database::Database,
+    id: &str,
+    input: &Value,
+    workspace: String,
+) -> Result<Value, String> {
+    let replacement = validate_job(input, workspace.clone(), db)?;
+    let request_id = idempotency::request_id(input)?;
+    let fingerprint = request_id
+        .map(|_| idempotency::fingerprint(input, &workspace, "update", Some(id)))
+        .transpose()?;
+    let _guard = mutation_lock().lock().await;
+    let mut store = load(db)?;
+    if let (Some(request_id), Some(fingerprint)) = (request_id, fingerprint.as_deref()) {
+        if let Some(job) =
+            idempotency::replay(&store, &workspace, request_id, "update", fingerprint)?
+        {
+            return Ok(json!(job));
+        }
+    }
+    let job = find_job_mut(&mut store, id, &workspace)?;
+    let enabled = job.enabled;
+    let created_at = job.created_at;
+    *job = replacement;
+    job.automation_id = id.into();
+    job.created_at = created_at;
+    job.enabled = enabled;
+    job.lifecycle_status = if enabled { "active" } else { "paused" }.into();
+    if !enabled {
+        job.next_run_at = None;
+    }
+    let result = job.clone();
+    if let (Some(request_id), Some(fingerprint)) = (request_id, fingerprint) {
+        idempotency::remember(
+            &mut store,
+            &workspace,
+            request_id,
+            "update",
+            id,
+            fingerprint,
+        );
+    }
+    save(db, &store)?;
+    Ok(json!(result))
+}
+
+async fn list_saved_jobs(db: &crate::database::Database, workspace: &str) -> Result<Value, String> {
+    registered_project_in_db(db, workspace)?;
+    let _guard = mutation_lock().lock().await;
+    let store = load(db)?;
+    Ok(json!(
+        store
+            .jobs
+            .into_iter()
+            .filter(|job| preferences::path_key(&job.workspace_path)
+                == preferences::path_key(workspace))
+            .collect::<Vec<_>>()
+    ))
+}
+
+async fn confirm_proposal_runtime(
+    runtime: Arc<dyn AutomationRuntime>,
+    db: Arc<crate::database::Database>,
+    automation_id: &str,
+    session_id: &str,
+    tool_call_id: &str,
+    workspace: &str,
+) -> Result<Value, String> {
+    if [automation_id, session_id, tool_call_id]
+        .iter()
+        .any(|id| id.trim().is_empty() || id.len() > 512 || id.contains('\0'))
+    {
+        return Err("自动化配置卡标识无效，未确认保存状态".into());
+    }
+    registered_project_in_db(&db, workspace)?;
+    {
+        let _guard = mutation_lock().lock().await;
+        idempotency::validate_proposal_receipt(
+            &load(&db)?,
+            workspace,
+            automation_id,
+            session_id,
+            tool_call_id,
+        )?;
+    }
+    // Native reads/writes can wait for startup or admission. Never retain the
+    // automation store lock across either call.
+    let snapshot: AgentSnapshot = serde_json::from_value(
+        runtime
+            .call("getSession", json!({"sessionId": session_id}), false)
+            .await?,
+    )
+    .map_err(|_| "自动化设计会话回执无效，未确认保存状态")?;
+    if snapshot.session.id != session_id
+        || preferences::path_key(&snapshot.session.project_path) != preferences::path_key(workspace)
+    {
+        return Err("自动化设计会话不属于当前项目，未确认保存状态".into());
+    }
+    // A job may have been deleted while the native read was waiting.
+    {
+        let _guard = mutation_lock().lock().await;
+        registered_project_in_db(&db, workspace)?;
+        idempotency::validate_proposal_receipt(
+            &load(&db)?,
+            workspace,
+            automation_id,
+            session_id,
+            tool_call_id,
+        )?;
+    }
+    let confirmed = runtime
+        .call(
+            "recordAutomationSave",
+            json!({
+                "sessionId": session_id, "toolCallId": tool_call_id, "automationId": automation_id,
+            }),
+            true,
+        )
+        .await?;
+    if confirmed["status"].as_str() != Some("saved")
+        || confirmed["automationId"].as_str() != Some(automation_id)
+        || confirmed["toolCallId"].as_str() != Some(tool_call_id)
+    {
+        return Err("自动化保存确认回执与原配置卡不一致，请重试确认".into());
+    }
+    Ok(confirmed)
 }
 
 pub async fn invoke(app: &AppHandle, method: &str, args: Vec<Value>) -> Result<Value, String> {
@@ -1051,19 +1281,32 @@ pub async fn invoke(app: &AppHandle, method: &str, args: Vec<Value>) -> Result<V
     match method {
         "list" => {
             let workspace = workspace_from_scope(args.first())?;
-            registered_project(&state, &workspace)?;
-            let _guard = mutation_lock().lock().await;
-            let store = load(&state.db)?;
-            Ok(json!(store
-                .jobs
-                .into_iter()
-                .filter(|job| preferences::path_key(&job.workspace_path)
-                    == preferences::path_key(&workspace))
-                .collect::<Vec<_>>()))
+            list_saved_jobs(&state.db, &workspace).await
         }
         "create" => {
             let input = arg(&args, 0, "自动化内容")?;
             create_saved_job(&state.db, input).await
+        }
+        "confirmProposal" => {
+            let automation_id = arg(&args, 0, "自动化编号")?
+                .as_str()
+                .ok_or("自动化编号无效")?;
+            let session_id = arg(&args, 1, "设计会话编号")?
+                .as_str()
+                .ok_or("设计会话编号无效")?;
+            let tool_call_id = arg(&args, 2, "配置卡编号")?
+                .as_str()
+                .ok_or("配置卡编号无效")?;
+            let workspace = workspace_from_scope(args.get(3))?;
+            confirm_proposal_runtime(
+                Arc::new(DesktopAutomationRuntime(app.clone())),
+                state.db.clone(),
+                automation_id,
+                session_id,
+                tool_call_id,
+                &workspace,
+            )
+            .await
         }
         "runNow" => {
             let id = arg(&args, 0, "自动化编号")?
@@ -1104,23 +1347,7 @@ pub async fn invoke(app: &AppHandle, method: &str, args: Vec<Value>) -> Result<V
                 .ok_or("自动化编号无效")?;
             let input = arg(&args, 1, "自动化内容")?;
             let workspace = workspace_from_scope(args.get(2))?;
-            let replacement = validate_job(input, workspace.clone(), &state.db)?;
-            let _guard = mutation_lock().lock().await;
-            let mut store = load(&state.db)?;
-            let job = find_job_mut(&mut store, id, &workspace)?;
-            let enabled = job.enabled;
-            let created_at = job.created_at;
-            *job = replacement;
-            job.automation_id = id.into();
-            job.created_at = created_at;
-            job.enabled = enabled;
-            job.lifecycle_status = if enabled { "active" } else { "paused" }.into();
-            if !enabled {
-                job.next_run_at = None;
-            }
-            let result = job.clone();
-            save(&state.db, &store)?;
-            Ok(json!(result))
+            update_saved_job(&state.db, id, input, workspace).await
         }
         "cancelRun" => {
             let id = arg(&args, 0, "运行编号")?.as_str().ok_or("运行编号无效")?;

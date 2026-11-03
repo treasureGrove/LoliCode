@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   logout: vi.fn(),
   refresh: vi.fn(),
   openExternal: vi.fn(),
+  toastError: vi.fn(),
   relayStatus: vi.fn(),
   connectRelay: vi.fn(),
 }));
@@ -36,6 +37,7 @@ vi.mock("@/hooks/useLolicodeAccount", () => ({
 vi.mock("@/lib/api/settings", () => ({
   settingsApi: { openExternal: mocks.openExternal },
 }));
+vi.mock("sonner", () => ({ toast: { error: mocks.toastError } }));
 vi.mock("@/lib/api/lolicode-account", () => ({
   lolicodeAccountApi: {
     refreshRelay: mocks.relayStatus,
@@ -49,7 +51,7 @@ const account: LolicodeAccount = {
   username: "forum-user",
   displayName: "小桃",
   avatarUrl: "https://lolicode.com/assets/avatars/42.png",
-  profileUrl: "https://lolicode.com/u/42",
+  profileUrl: "https://lolicode.com/u/forum-user",
 };
 function mount() {
   const onOpenSettings = vi.fn();
@@ -103,6 +105,7 @@ beforeEach(() => {
   mocks.logout.mockResolvedValue({ account: null });
   mocks.refresh.mockResolvedValue({ account });
   mocks.connectRelay.mockResolvedValue(undefined);
+  mocks.openExternal.mockResolvedValue(undefined);
   mocks.relayStatus.mockResolvedValue({
     account: {
       id: account.id,
@@ -204,8 +207,63 @@ describe("LoliCode sidebar account", () => {
     await waitFor(() => expect(mocks.refresh).toHaveBeenCalledOnce());
     await userEvent
       .setup()
-      .click(screen.getByRole("menuitem", { name: "个人主页" }));
+      .click(screen.getByRole("menuitem", { name: "个人空间" }));
     expect(mocks.openExternal).toHaveBeenCalledWith(account.profileUrl);
+    await waitFor(() =>
+      expect(screen.queryByRole("menu")).not.toBeInTheDocument(),
+    );
+  });
+
+  it("opens the forum entry without requiring a desktop sign-in", async () => {
+    mount();
+    await openMenu();
+    expect(
+      screen.queryByRole("menuitem", { name: "个人空间" }),
+    ).not.toBeInTheDocument();
+    await userEvent
+      .setup()
+      .click(screen.getByRole("menuitem", { name: "社区网站" }));
+    expect(mocks.openExternal).toHaveBeenCalledWith("https://lolicode.com/all");
+    expect(mocks.login).not.toHaveBeenCalled();
+  });
+
+  it("opens registration and account recovery at the community rather than the product homepage", async () => {
+    mount();
+    await openLogin();
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "注册或找回密码 ↗" }));
+    expect(mocks.openExternal).toHaveBeenCalledWith("https://lolicode.com/all");
+  });
+
+  it("keeps website launch failures visible after the profile menu closes and allows a retry", async () => {
+    mocks.account = account;
+    mocks.openExternal.mockRejectedValueOnce(
+      new Error("private opener details"),
+    );
+    mount();
+    await openMenu();
+    await userEvent
+      .setup()
+      .click(screen.getByRole("menuitem", { name: "个人空间" }));
+    await waitFor(() =>
+      expect(mocks.toastError).toHaveBeenCalledWith(
+        "无法打开社区网站，请重试。",
+      ),
+    );
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    await openMenu();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "无法打开社区网站，请重试。",
+    );
+    expect(screen.getByRole("status")).not.toHaveTextContent(
+      "private opener details",
+    );
+    await userEvent
+      .setup()
+      .click(screen.getByRole("menuitem", { name: "个人空间" }));
+    expect(mocks.openExternal).toHaveBeenCalledTimes(2);
+    expect(mocks.openExternal).toHaveBeenLastCalledWith(account.profileUrl);
   });
 
   it("falls back to the nickname when the real avatar cannot load", () => {
@@ -280,6 +338,8 @@ describe("LoliCode sidebar account", () => {
     expect(
       screen.getByRole("menuitem", { name: "登录 LoliCode" }),
     ).toHaveFocus();
+    await user.keyboard("{ArrowDown}");
+    expect(screen.getByRole("menuitem", { name: "社区网站" })).toHaveFocus();
     await user.keyboard("{ArrowDown}");
     expect(screen.getByRole("menuitem", { name: "连接手机" })).toHaveFocus();
     await user.keyboard("{ArrowDown}{Enter}");

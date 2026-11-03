@@ -29,6 +29,14 @@
   min-height: 0;
   min-width: 0;
 }
+/* Only the edge currently under a dragged companion receives a soft cue. */
+:root
+  .lolicode-workbench.wb-unified
+  [data-companion-surface][data-companion-target="true"] {
+  box-shadow:
+    inset 0 2px 0 color-mix(in srgb, var(--wb-accent) 62%, transparent),
+    0 -4px 14px color-mix(in srgb, var(--wb-accent) 8%, transparent);
+}
 .lolicode-workbench button,
 .lolicode-workbench select,
 .lolicode-workbench input,
@@ -1223,7 +1231,7 @@
 .wb-changes {
   width: 100%;
   max-width: 840px;
-  margin: 0 auto;
+  margin: 0 auto 12px;
   border: 1px solid var(--wb-border);
   border-radius: 9px;
   background: var(--wb-input);
@@ -2428,6 +2436,45 @@
 .wb-send-spinner {
   animation: wb-spin 900ms linear infinite;
 }
+.wb-interrupt-send {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  min-height: 32px;
+  padding: 5px 8px;
+  border-radius: 9px;
+  color: var(--wb-muted);
+  font-size: 11px !important;
+}
+.wb-interrupt-send:hover:not(:disabled) {
+  background: var(--wb-hover);
+  color: var(--wb-text);
+}
+.wb-queue-recovery {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 840px;
+  margin: 0 auto 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--wb-border);
+  border-radius: 10px;
+  color: var(--wb-muted);
+  background: var(--wb-panel);
+  font-size: 12px;
+}
+.wb-queue-recovery span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wb-queue-recovery button {
+  flex-shrink: 0;
+  color: var(--wb-accent);
+}
 .wb-composer-meta {
   display: flex;
   justify-content: space-between;
@@ -2583,6 +2630,106 @@
 .wb-automation {
   width: 100%;
   color: var(--wb-text);
+}
+.wb-automation-settings {
+  width: min(100%, 760px);
+  margin-inline: auto;
+  color: var(--wb-text);
+}
+.wb-automation-settings-heading {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 24px;
+}
+.wb-automation-settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 22px 0;
+  border-top: 1px solid var(--wb-border);
+}
+.wb-automation-settings-section h3 {
+  font-size: 14px;
+  font-weight: 600;
+}
+.wb-automation-settings-section label {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 7px;
+  font-size: 13px;
+}
+.wb-automation-settings textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+.wb-automation-project {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--wb-hover);
+  font-size: 13px;
+}
+.wb-automation-project p {
+  margin-top: 3px;
+  overflow-wrap: anywhere;
+}
+.wb-automation-weekdays {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: 13px;
+}
+.wb-automation-weekdays > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.wb-automation-weekdays button {
+  width: 34px;
+  height: 36px;
+  border: 1px solid var(--wb-border);
+  border-radius: 9px;
+  color: var(--wb-muted);
+}
+.wb-automation-weekdays button[aria-pressed="true"] {
+  border-color: var(--wb-accent);
+  background: color-mix(in srgb, var(--wb-accent) 12%, transparent);
+  color: var(--wb-accent);
+}
+.wb-automation-weekdays button:focus-visible {
+  outline: 2px solid var(--wb-accent);
+  outline-offset: 2px;
+}
+.wb-automation-settings-footer {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 0;
+  border-top: 1px solid var(--wb-border);
+  background: var(--wb-panel);
+}
+.wb-automation-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--wb-muted);
+  font-size: 12px;
+}
+.wb-automation-summary svg {
+  flex-shrink: 0;
+}
+.wb-automation-settings-error {
+  flex-basis: 100%;
+  order: -1;
+  white-space: pre-wrap;
 }
 .wb-automation-menu-item {
   display: flex;

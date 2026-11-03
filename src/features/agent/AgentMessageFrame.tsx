@@ -53,6 +53,7 @@ export const AgentMessageFrame = memo(function AgentMessageFrame({
   ariaLabel,
   showAuthor = true,
   className,
+  companionSurface,
   children,
 }: {
   role: AgentMessage["role"];
@@ -60,8 +61,17 @@ export const AgentMessageFrame = memo(function AgentMessageFrame({
   ariaLabel?: string;
   showAuthor?: boolean;
   className?: string;
+  companionSurface?: { id: string; text: string };
   children: ReactNode;
 }) {
+  // Code and execution surfaces stay clear; the companion checks the remaining
+  // bubble's visible width and headroom before offering its top edge.
+  const companionSurfaceId =
+    role !== "system" &&
+    companionSurface?.text.trim() &&
+    !/`|^\s*~{3,}|^(?: {4}|\t)\S/m.test(companionSurface.text)
+      ? companionSurface.id
+      : undefined;
   const author =
     role === "user"
       ? identity?.displayName?.trim() || "你"
@@ -87,7 +97,12 @@ export const AgentMessageFrame = memo(function AgentMessageFrame({
             {author}
           </p>
         )}
-        <div className={cn("wb-chat-bubble", `wb-message-${role}`)}>
+        <div
+          className={cn("wb-chat-bubble", `wb-message-${role}`)}
+          data-companion-surface={companionSurfaceId}
+          data-companion-dock-id={companionSurfaceId}
+          data-companion-rest={companionSurfaceId ? "sit" : undefined}
+        >
           {children}
         </div>
       </div>

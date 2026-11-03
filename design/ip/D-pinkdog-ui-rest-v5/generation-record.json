@@ -1,0 +1,33 @@
+{
+  "date": "2026-11-02",
+  "service": "Jimeng webpage",
+  "workspace": "24052377636364",
+  "model": "Seedance 2.0 VIP",
+  "durationRequested": 5,
+  "resolutionOption": "720P",
+  "creditsObservedBefore": 285,
+  "creditsObservedAfter": 75,
+  "creditsConsumed": 210,
+  "jobs": [
+    {
+      "pose": "sit",
+      "source": "source-videos/sit-rest-seedance20-square-v1.mp4",
+      "status": "accepted",
+      "credits": 70
+    },
+    {
+      "pose": "lie",
+      "source": "source-videos/lie-rest-seedance20-4x3-v1.mp4",
+      "status": "rejected-framing",
+      "reason": "3:2 upload was auto-covered into4:3 and clipped hair tips",
+      "credits": 70
+    },
+    {
+      "pose": "lie",
+      "source": "source-videos/lie-rest-seedance20-4x3-v2.mp4",
+      "status": "accepted",
+      "credits": 70
+    }
+  ],
+  "officialHdEnhancement": false
+}

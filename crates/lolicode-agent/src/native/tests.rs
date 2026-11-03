@@ -148,10 +148,10 @@ impl Fake {
                     if reply.status != 200 {
                         if reply.json_response {
                             let body = serde_json::to_string(&reply.frames[0]).unwrap();
-                            let _=stream.write_all(format!("HTTP/1.1 {} Error\r\nConnection: close\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",reply.status,body.len(),body).as_bytes()).await;
+                            let _=stream.write_all(format!("HTTP/1.1 {} Error\r\nConnection: close\r\nRetry-After: 0\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",reply.status,body.len(),body).as_bytes()).await;
                             return;
                         }
-                        let _=stream.write_all(format!("HTTP/1.1 {} Error\r\nConnection: close\r\nContent-Length: 43\r\n\r\nupstream echoed owned-private-gateway secret",reply.status).as_bytes()).await;
+                        let _=stream.write_all(format!("HTTP/1.1 {} Error\r\nConnection: close\r\nRetry-After: 0\r\nContent-Length: 43\r\n\r\nupstream echoed owned-private-gateway secret",reply.status).as_bytes()).await;
                         return;
                     }
                     if reply.json_response {
@@ -367,12 +367,14 @@ async fn send(engine: &NativeEngine, id: &str, request: &str, text: &str) {
         .unwrap();
 }
 fn last_tool(input: &Value) -> Option<&str> {
-    input["messages"]
-        .as_array()?
-        .iter()
-        .rev()
-        .find(|v| v["role"] == "tool")?["tool_call_id"]
-        .as_str()
+    let messages = input["messages"].as_array()?;
+    let id = messages.iter().rev().find(|message| message["role"] == "tool")?["tool_call_id"].as_str()?;
+    // Scripted fixture branches describe tool names. Match the actual assistant
+    // call/result pair, while production IDs remain unique and opaque.
+    let name = messages.iter().rev().filter_map(|message| message["tool_calls"].as_array())
+        .flatten().find(|call| call["id"] == id).and_then(|call| call["function"]["name"].as_str());
+    const FIXTURE_TOOL_NAMES: &[&str] = &["call-write_file", "call-read_file", "call-ask_user", "call-propose_automation", "call-tool_search", "call-glob", "call-grep"];
+    FIXTURE_TOOL_NAMES.iter().copied().find(|label| label.strip_prefix("call-") == name).or(Some(id))
 }
 
 #[tokio::test]
@@ -433,6 +435,9 @@ fn is_compaction(input: &Value) -> bool {
 mod context_cases;
 mod stream_usage_cases;
 mod rate_limit_cases;
+mod queue_cases;
+mod automation_proposal_cases;
+mod automation_receipt_cases;
 mod transport_budget_cases;
 mod output_budget_cases;
 mod image_output_cases;
@@ -441,6 +446,7 @@ mod tool_search_cases;
 mod deferred_tool_cases;
 mod background_flight_cases;
 mod permission_default_cases;
+mod secretary_cases;
 
 #[tokio::test]
 async fn long_tool_tasks_complete_real_edits_after_more_than_twenty_four_rounds() {

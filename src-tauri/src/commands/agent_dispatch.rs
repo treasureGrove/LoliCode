@@ -69,7 +69,7 @@ fn historical_read_only<T>() -> Result<T, String> {
     Err("旧引擎会话保持只读，原数据已保留；请新建本体会话继续，不会启动旧引擎。".into())
 }
 
-fn check_project(app: &AppHandle, path: &str) -> Result<(), String> {
+pub(crate) fn check_project(app: &AppHandle, path: &str) -> Result<(), String> {
     let state = app.state::<AppState>();
     if !preferences::load(&state.db)?
         .projects
@@ -79,7 +79,7 @@ fn check_project(app: &AppHandle, path: &str) -> Result<(), String> {
     }
     Ok(())
 }
-fn decorate(app: &AppHandle, session: &mut AgentSession) -> Result<(), String> {
+pub(crate) fn decorate(app: &AppHandle, session: &mut AgentSession) -> Result<(), String> {
     check_project(app, &session.project_path)?;
     preferences::decorate(&preferences::load(&app.state::<AppState>().db)?, session);
     Ok(())
@@ -375,6 +375,37 @@ pub async fn send_agent_message(
     locale: Option<String>,
     attachments: Option<Vec<AgentAttachmentInput>>,
 ) -> Result<(), String> {
+    dispatch_agent_message(app, session_id, text, request_id, locale, attachments, "sendMessage").await
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub async fn enqueue_agent_message(
+    app: AppHandle, session_id: String, text: String, request_id: String,
+    locale: Option<String>, attachments: Option<Vec<AgentAttachmentInput>>,
+) -> Result<Value, String> {
+    // Explicit validation/admission failures have a known outcome. Only an
+    // interrupted IPC leaves the renderer uncertain and requires reconciliation.
+    Ok(match dispatch_agent_message(app, session_id, text, request_id, locale, attachments, "enqueueMessage").await {
+        Ok(()) => json!({"status":"accepted"}),
+        Err(message) => json!({"status":"rejected","message":message}),
+    })
+}
+
+async fn dispatch_agent_message(
+    app: AppHandle, session_id: String, text: String, request_id: String,
+    locale: Option<String>, attachments: Option<Vec<AgentAttachmentInput>>, method: &str,
+) -> Result<(), String> {
+    let args = validated_message_payload(session_id, text, request_id, locale, attachments).await?;
+    native(&app, method, args, true).await
+}
+
+pub(crate) async fn validated_message_payload(
+    session_id: String,
+    text: String,
+    request_id: String,
+    locale: Option<String>,
+    attachments: Option<Vec<AgentAttachmentInput>>,
+) -> Result<Value, String> {
     let attachments = attachments.unwrap_or_default();
     if (text.trim().is_empty() && attachments.is_empty()) || text.len() > 1024 * 1024 {
         return Err("请输入任务内容或添加附件；文本不能超过 1MiB".into());
@@ -503,7 +534,23 @@ pub async fn send_agent_message(
     if !attachment_values.is_empty() {
         args["attachments"] = Value::Array(attachment_values);
     }
-    native(&app, "sendMessage", args, true).await
+    Ok(args)
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub async fn remove_queued_agent_message(
+    app: AppHandle, session_id: String, request_id: String,
+) -> Result<Value, String> {
+    if legacy_id(&session_id)? { return historical_read_only(); }
+    native(&app, "removeQueuedMessage", json!({"sessionId":session_id,"requestId":request_id}), true).await
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub async fn send_queued_agent_message_now(
+    app: AppHandle, session_id: String, request_id: String,
+) -> Result<(), String> {
+    if legacy_id(&session_id)? { return historical_read_only(); }
+    native(&app, "sendQueuedMessageNow", json!({"sessionId":session_id,"requestId":request_id}), true).await
 }
 
 #[derive(Debug, Deserialize)]
@@ -659,7 +706,7 @@ fn command_receipt(value: &Value, session_id: &str, request_id: &str) -> Value {
         return json!({"status":"unknown"});
     }
     let status = match result["status"].as_str() {
-        Some("accepted" | "duplicate" | "completed" | "cancelled") => "accepted",
+        Some("accepted" | "duplicate" | "completed" | "cancelled" | "queued" | "withdrawn") => "accepted",
         Some("rejected") => "rejected",
         Some("failed") => "failed",
         _ => "unknown",
@@ -1041,7 +1088,7 @@ mod tests {
     use super::*;
     #[test]
     fn completed_and_cancelled_receipts_remain_accepted_after_lost_renderer_ack() {
-        for status in ["accepted", "completed", "cancelled"] {
+        for status in ["accepted", "completed", "cancelled", "queued", "withdrawn"] {
             let result = json!({"results":[{"key":{"sessionId":"owned","commandId":"owned-request"},"result":{"commandId":"owned-request","status":status}}]});
             assert_eq!(
                 command_receipt(&result, "lc:owned", "owned-request")["status"],

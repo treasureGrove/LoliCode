@@ -1,0 +1,92 @@
+{
+  "clips": [
+    {
+      "kind": "sit",
+      "source": "source-videos/sit-rest-seedance20-square-v1.mp4",
+      "sourceSha256": "11e821a38c0063f2776142fbcc94d433bce6cc32df1f18a0087e481aad6d38ee",
+      "native": {
+        "width": 960,
+        "height": 960,
+        "fps": "60/1",
+        "duration": "5.061950"
+      },
+      "crop": null,
+      "width": 640,
+      "height": 640,
+      "fps": 24,
+      "frames": 121,
+      "durationSeconds": 5.041666666666667,
+      "method": "v4 connected-green key + protected two-pixel matte refinement; premultiplied Lanczos; VP9 alpha; no region-erasure masks",
+      "assets": [
+        {
+          "file": "companion-sit-video-v5.webm",
+          "bytes": 2176491,
+          "sha256": "36ad437aedde7a8b7d22c6cbbf43580ab94b16a275cbc098b9edf6543ebf4087"
+        },
+        {
+          "file": "companion-sit-poster-v5.webp",
+          "bytes": 262564,
+          "sha256": "d4d51396e0aa6522e4c588313c402b30a5f10dea2c56d10d98f441d5f6a01a03"
+        }
+      ],
+      "decoded": [
+        {
+          "frame": 0,
+          "transparentFraction": 0.6230615234375
+        },
+        {
+          "frame": 60,
+          "transparentFraction": 0.62165771484375
+        },
+        {
+          "frame": 120,
+          "transparentFraction": 0.62337158203125
+        }
+      ]
+    },
+    {
+      "kind": "lie",
+      "source": "source-videos/lie-rest-seedance20-4x3-v2.mp4",
+      "sourceSha256": "21f0057c9d1cf1841816dbb5075164ae1d17f54096848b6281f3b090461ed959",
+      "native": {
+        "width": 1112,
+        "height": 834,
+        "fps": "60/1",
+        "duration": "5.088005"
+      },
+      "crop": "format=rgba,crop=1110:740:1:47",
+      "width": 768,
+      "height": 512,
+      "fps": 24,
+      "frames": 121,
+      "durationSeconds": 5.041666666666667,
+      "method": "v4 connected-green key + protected two-pixel matte refinement; premultiplied Lanczos; VP9 alpha; no region-erasure masks",
+      "assets": [
+        {
+          "file": "companion-lie-video-v5.webm",
+          "bytes": 2609074,
+          "sha256": "551c7015772b53a492d5162965c00abcbcbf8a99efb219d4cc92e753a86073a7"
+        },
+        {
+          "file": "companion-lie-poster-v5.webp",
+          "bytes": 286354,
+          "sha256": "7472cccbe35ae243c8e854b0a5f8ec4a55549c81c5488dc8c0a134c05e927e58"
+        }
+      ],
+      "decoded": [
+        {
+          "frame": 0,
+          "transparentFraction": 0.5577392578125
+        },
+        {
+          "frame": 60,
+          "transparentFraction": 0.5586802164713541
+        },
+        {
+          "frame": 120,
+          "transparentFraction": 0.5575790405273438
+        }
+      ]
+    }
+  ]
+}

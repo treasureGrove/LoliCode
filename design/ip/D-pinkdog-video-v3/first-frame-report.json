@@ -1,0 +1,43 @@
+{
+  "source": "standard-pose-source.png",
+  "sourceDimensions": [
+    1215,
+    1295
+  ],
+  "sourceSha256": "c5b96924368ae4b0b7970cca1ce5dc701df18120586b1fde90528e607dd15084",
+  "sourceTransparentPixels": 765178,
+  "sourceAlphaThreshold": 16,
+  "sourceContentBoundsInclusive": {
+    "left": 99,
+    "top": 6,
+    "right": 1172,
+    "bottom": 1281
+  },
+  "output": "first-frame-green.png",
+  "outputDimensions": [
+    1280,
+    720
+  ],
+  "outputSha256": "e9e1e28ea792ba15af9668ece58c6f227ea8f4a6d8d1d4daa9dafa1d9b8a871e",
+  "background": "#00FF00",
+  "transform": {
+    "uniformScale": 0.3667711598746082,
+    "destinationContentRect": {
+      "left": 443.0438871473354,
+      "top": 143.99999999999994,
+      "width": 393.9122257053292,
+      "height": 468.00000000000006
+    },
+    "footlineExclusive": 612,
+    "desiredHeight": 468,
+    "maximumWidth": 1024,
+    "limitedByWidth": false
+  },
+  "resampledForegroundBoundsInclusive": {
+    "left": 443,
+    "top": 144,
+    "right": 836,
+    "bottom": 611
+  },
+  "preparation": "Crop to visible alpha bounds (>16); uniformly area-resample in premultiplied alpha; composite onto exact green. Source colors and pose are unchanged; no chroma keying or recoloring."
+}

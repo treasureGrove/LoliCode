@@ -19,6 +19,8 @@ LoliCode 4.0.15 的新会话使用本项目的 Rust 应用内核心，默认发�
 
 MiMo-Code、DeepSeek Harness 和 Claude Code 的公开流程作为设计参考，未随本版分发其执行引擎。保留的旧 ZCode 复用范围见 `packages/lolicode-zcode-runtime/README.md`；当前本体能力与迁移边界见 `docs/guides/lolicode-inprocess-agent.md`，没有随包提供上游官方账号、云端私有服务或不可用的 Computer Use 实现。
 
+Loli 秘书的原生协调机制参考 [DeepSeek Superagent](https://github.com/deepseek-ai/dsh-superagent-prototype) 提交 `6337fc823ce20251c8de8085948165c81aaa701e`（MIT，Copyright (c) 2026 DeepSeek Harness Team）的协调者／工作者分工、来源与授权边界、任务关联和持久回报设计。当前未分发该项目的完整 TypeScript 源码或 DSH 运行时；参考许可留档于 `third-party/deepseek-superagent/`，具体适配与未实现范围见 `docs/architecture/deepseek-superagent-adaptation.md`。
+
 4.0.18 的本机记忆参考 [NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent) 的有界双存储、工具整理与上下文快照设计，核验提交为 `848fc0ad8be766b9dc10fe42bd80b5fc2d45d95c`（MIT）。存储、权限、上下文与界面由本项目独立实现，未包含 Hermes 运行时或其记忆插件；范围见 `docs/architecture/agent-memory.md`。
 
 4.0.18 新增的 ZCode 官方 CLI 市场适配只随包带入目录元数据及校验值；完整 CLI 技能包由用户按需从原发布服务获取，保留原包声明、许可证与引用文件。未把所有市场条目标为同一开源许可，也不承诺通用 JS/MCP 宿主兼容。八类 CLI 的来源及仍待核实的许可边界见 `docs/guides/agent-workflows-cli-adapter.md`。

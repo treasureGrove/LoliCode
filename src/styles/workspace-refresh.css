@@ -11,6 +11,7 @@
 }
 
 :root .lolicode-workbench.wb-unified {
+  --wb-header-height: 58px;
   background: transparent;
 }
 
@@ -331,13 +332,34 @@
 }
 
 :root .lolicode-workbench.wb-unified .wb-titlebar {
-  height: 58px;
-  min-height: 58px;
+  height: var(--wb-header-height);
+  min-height: var(--wb-header-height);
   padding-inline: 20px 8px;
   gap: 6px;
   flex-wrap: nowrap;
   border-bottom: 1px solid hsl(var(--border) / 0.65);
   background: var(--bg-app);
+}
+
+/* Both pane controls share a row and mirrored icon geometry. */
+:root .lolicode-workbench.wb-unified .wb-sidebar .wb-brand,
+:root
+  .lolicode-workbench.wb-unified
+  .wb-sidebar
+  .lolicode-sidebar-brand:not(.is-mac) {
+  height: var(--wb-header-height);
+  min-height: var(--wb-header-height);
+  flex-shrink: 0;
+  box-sizing: border-box;
+  border-bottom: 1px solid transparent;
+}
+:root
+  .lolicode-workbench.wb-unified
+  .wb-icon-button.wb-pane-toggle
+  > svg.lucide {
+  width: 18px;
+  height: 18px;
+  stroke-width: 1.7;
 }
 
 :root .lolicode-workbench.wb-unified .wb-titlebar h1 {
@@ -831,9 +853,12 @@
 }
 
 @media (max-height: 650px) {
+  :root .lolicode-workbench.wb-unified {
+    --wb-header-height: 56px;
+  }
   :root .lolicode-workbench.wb-unified .wb-titlebar {
-    height: 56px;
-    min-height: 56px;
+    height: var(--wb-header-height);
+    min-height: var(--wb-header-height);
   }
   :root .lolicode-workbench.wb-unified .wb-empty-content {
     padding: 12px 20px;

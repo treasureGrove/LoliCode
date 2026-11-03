@@ -74,6 +74,37 @@ export function clearSubmittedAgentDraft(token: AgentDraftToken): boolean {
   }
 }
 
+/** Includes an empty editor, whose text key is deliberately absent. */
+export function isAgentDraftCurrent(token: AgentDraftToken): boolean {
+  try {
+    const current = JSON.parse(
+      sessionStorage.getItem(revisionKey(token.key)) || "null",
+    ) as AgentDraftToken | null;
+    return (
+      current?.revision === token.revision &&
+      (sessionStorage.getItem(token.key) || "") === token.text
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** Recover an unconfirmed input after reload without replacing a newer draft. */
+export function restoreAgentDraft(token: AgentDraftToken): boolean {
+  try {
+    if (
+      sessionStorage.getItem(revisionKey(token.key)) !== null ||
+      sessionStorage.getItem(token.key) !== null
+    )
+      return false;
+    sessionStorage.setItem(revisionKey(token.key), JSON.stringify(token));
+    if (token.text) sessionStorage.setItem(token.key, token.text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function readAgentSubmission(
   project: string,
   id: string,

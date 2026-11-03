@@ -5,12 +5,14 @@
 ## 开源作者明确记录
 
 - **PC2005-cloud/dsh-pet**：素材由豆包生成；一个动作一段 10 秒视频，16:9，背景纯绿 `#00FF00`，人物大小与位置固定、动作完整入画，首尾恢复标准姿势，提示词按秒拆解动作。睡觉分入睡、循环、醒来三段，循环段首尾应一致。后期抠像、统一位置和脚底线，再输出 640×360 的 VP9 alpha WebM。作者特别说明实际素材最终采用 PR 手工抠像，自动 HSV 抠绿是兜底，不能据此保证纯绿视频能自动获得干净边缘。[作者完整制作流程](https://github.com/PC2005-cloud/dsh-pet/blob/main/MAKE-YOUR-OWN-PET.md)、[作者动作配方](https://github.com/PC2005-cloud/dsh-pet/blob/main/prompts/%E6%A1%8C%E9%9D%A2%E5%AE%A0%E7%89%A9%2010%20%E7%A7%92%E5%8A%A8%E4%BD%9C%E6%8F%90%E7%A4%BA%E8%AF%8D.md)
-- **sijin14514-sys/simiao-dsh-pet（肆喵）**：动作使用即梦 Seedance，但没有明确具体版本；每段 3–10 秒，多为 5 秒。作者要求逐项锁定角色特征、全身构图和发型，固定镜头与人物位置，尾帧回原姿。输出规范为 640×360、24fps、VP9 alpha；验收包括首帧真的上传成功、不裁脚、绿幕色纯、结果没有重复、解码后确有透明像素。[项目说明](https://github.com/sijin14514-sys/simiao-dsh-pet)、[作者素材规范](https://raw.githubusercontent.com/sijin14514-sys/simiao-dsh-pet/main/docs/03-%E7%B4%A0%E6%9D%90%E8%A7%84%E8%8C%83%E4%B8%8E%E9%AA%8C%E6%94%B6%E6%B8%85%E5%8D%95.md)
+- **sijin14514-sys/simiao-dsh-pet（肆喵）**：本轮重新核对，作者当前整体流程已明确 **即梦 Seedance 2.0 mini、5 秒、720P、16:9**；这是即梦网页，不能称作豆包网页实测。作者要求逐项锁定角色特征、全身构图和发型，固定镜头与人物位置，尾帧回原姿。输出规范为 640×360、24fps、VP9 alpha；验收包括首帧真的上传成功、不裁脚、绿幕色纯、结果没有重复、解码后确有透明像素。[作者整体流程](https://github.com/sijin14514-sys/simiao-dsh-pet/blob/main/docs/01-%E6%95%B4%E4%BD%93%E6%B5%81%E7%A8%8B.md)、[作者素材规范](https://raw.githubusercontent.com/sijin14514-sys/simiao-dsh-pet/main/docs/03-%E7%B4%A0%E6%9D%90%E8%A7%84%E8%8C%83%E4%B8%8E%E9%AA%8C%E6%94%B6%E6%B8%85%E5%8D%95.md)
+- **网页自动化的一手实现**：肆喵使用 Playwright 驱动持久登录的专用 Chrome，上传首帧并确认大尺寸预览，再填写动作、提交、匹配新任务和下载 MP4。曾误把头像或旧缩略图当作首帧；当前脚本以 `blob:` 且 `naturalWidth >= 600` 识别参考预览，这只是作者当时页面的校验方式，不是平台上传规范。只读核对，未安装或运行这些脚本。[作者自动化说明](https://github.com/sijin14514-sys/simiao-dsh-pet/blob/main/docs/02-%E5%8D%B3%E6%A2%A6%E5%9B%BE%E7%94%9F%E8%A7%86%E9%A2%91%E8%87%AA%E5%8A%A8%E5%8C%96.md)、[批量生成脚本](https://github.com/sijin14514-sys/simiao-dsh-pet/blob/main/tools/%E5%8D%B3%E6%A2%A6-26-%E6%89%B9%E9%87%8F%E7%94%9F%E6%88%90v2.mjs)
 
 ## 模型官方资料
 
 - 字节官方于 2026-07-31 公布 Seedance 2.5，介绍参考一致性、编辑和绿幕能力，并列出即梦及 Doubao Pro 入口。官方能力范围不等于当前网页每个账户都开放相同选项。[Seedance 2.5 官方公告](https://seed.bytedance.com/en/blog/one-take-creation-flexible-referencing-introducing-seedance-2-5)
 - 火山引擎文档建议：需要严格保持首尾图片时，优先使用真正的图生视频首尾帧模式（`first_frame` / `last_frame`），而不只是用文字要求尾帧回原姿。[Seedance 2.0 官方文档](https://docs.volcengine.com/docs/ark/seedance-2-0?lang=en)
+- 当前官方 2.0 提示词指南建议用具体身体细节表达情绪，交代动作惯性和过渡；精确到秒的控制支持不稳定。其人物一致性章节建议全身图配独立面部特写，提醒多视图容易被识别成多个主体。因此本项目三视图作为设定审阅，不直接作为首帧；第一段视频仍上传单张完整立绘。[官方提示词指南](https://docs.volcengine.com/docs/ark/seedance-2-0-prompt-guide?lang=zh)
 
 ## 当前豆包网页实测
 

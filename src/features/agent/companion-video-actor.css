@@ -1,0 +1,54 @@
+.lc-companion-video-actor {
+  position: relative;
+  display: grid;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  user-select: none;
+  isolation: isolate;
+  transform-origin: 50% 18%;
+}
+
+.lc-companion-video-poster,
+.lc-companion-video-clip {
+  grid-area: 1 / 1;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.lc-companion-video-clip {
+  visibility: hidden;
+}
+
+.lc-companion-video-clip[data-ready="true"] {
+  visibility: visible;
+}
+
+.lc-companion-video-actor[data-video-ready="true"] .lc-companion-video-poster {
+  visibility: hidden;
+}
+
+.lc-companion-video-actor[data-motion="drag"] {
+  animation: lc-companion-video-suspend 1000ms ease-in-out infinite alternate;
+}
+
+.lc-companion-video-actor[data-reduced-motion="true"] {
+  animation: none;
+}
+
+@keyframes lc-companion-video-suspend {
+  from {
+    transform: translateY(-2px) rotate(-1.2deg);
+  }
+  to {
+    transform: translateY(-3px) rotate(1.2deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lc-companion-video-actor {
+    animation: none !important;
+  }
+}

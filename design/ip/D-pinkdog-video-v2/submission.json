@@ -1,0 +1,36 @@
+{
+  "date": "2026-11-02",
+  "purpose": "更有情绪和表演节奏的桌宠图生视频小样",
+  "serviceRequested": "豆包网页",
+  "status": "prepared_not_submitted_browser_policy_denied",
+  "submitted": false,
+  "videoGenerated": false,
+  "browserAttempt": {
+    "url": "https://www.doubao.com/chat/?from_login=1",
+    "outcome": "在页面加载前被浏览器工具保存的站点权限规则拒绝，未读取页面或上传文件",
+    "ruleId": null,
+    "note": "工具未返回具体规则 ID；不推断用户设置错误，不声称规则已修复。"
+  },
+  "firstFrame": "design/ip/D-pinkdog-rig-v1/tail-matched-source.png",
+  "turnaroundForIdentityReview": "design/ip/D-pinkdog-rig-v1/turnaround.png",
+  "uploadReference": "design/ip/D-pinkdog-video-v2/greeting-reference-green.png",
+  "referencePreparation": {
+    "method": "仅用本机已有 FFmpeg 等比缩放修正耳尾配色的原立绘，并合成到均匀纯绿背景，未重绘角色",
+    "dimensions": [1280, 720],
+    "characterCanvas": { "left": 397, "top": 108, "width": 486, "height": 518 },
+    "sourceSha256": "50f26ac85079dda9f155b453840cd4652ff26fd0ae464d5b03c4e08a5891339b",
+    "outputSha256": "2229a70f8265fb804f13631f99d00ab72d64a410586530ae055a3dc4196e89b5"
+  },
+  "prompt": "design/ip/D-pinkdog-video-v2/lively-greeting-prompt.txt",
+  "durationSecondsIntended": 5,
+  "model": null,
+  "modelNote": "未进入网页，无法核对当前可用模型、时长选项或额度。5秒为动作设计目标，并非已选中的页面参数。",
+  "identity": "粉发犬耳女仆，犬耳和尾巴为一致的棕白配色",
+  "motion": "先看见用户，再开心歪头招手，耳尾晚半拍跟随；一次回应，不强求循环",
+  "reviewCriteria": [
+    "眼神先有反应、笑容再展开，招手和耳尾存在先后与停顿",
+    "脸、耳尾颜色、服饰和手指保持一致，不发生整张贴纸式晃动",
+    "固定镜头，全身不裁切，背景便于后续抠像"
+  ],
+  "integration": "尚无真实生成视频；现有拖动、喂鱼和本地连续动画未被替换。"
+}

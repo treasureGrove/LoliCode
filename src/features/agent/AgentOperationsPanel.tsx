@@ -21,6 +21,7 @@ export function AgentOperationsPanel({
   working,
   onSession,
   onCompose,
+  onBuildAutomation,
   onOpenProject,
   initialTab,
 }: {
@@ -31,6 +32,7 @@ export function AgentOperationsPanel({
   working: boolean;
   onSession: (session: AgentSession) => void;
   onCompose: (text: string) => void;
+  onBuildAutomation?: (text: string) => Promise<void>;
   onOpenProject?: (path: string) => void | Promise<void>;
   initialTab?: "workflows" | "automation" | "remote";
 }) {
@@ -49,18 +51,30 @@ export function AgentOperationsPanel({
     setCapabilityError(null);
     if (!open || legacyMock) return;
     let disposed = false;
+    const timer = setTimeout(() => {
+      if (disposed) return;
+      disposed = true;
+      setCapabilityError("读取当前引擎的可用功能超时，请重新读取。");
+    }, 30_000);
     void agentApi
       .getNativeActivity()
       .then((value) => {
-        if (!disposed) setActivity(value);
+        if (!disposed) {
+          clearTimeout(timer);
+          setActivity(value);
+        }
       })
       .catch((error) => {
-        if (!disposed) setCapabilityError(agentErrorMessage(error));
+        if (!disposed) {
+          clearTimeout(timer);
+          setCapabilityError(agentErrorMessage(error));
+        }
       });
     return () => {
       disposed = true;
+      clearTimeout(timer);
     };
-  }, [open, capabilityRevision, legacyMock]);
+  }, [open, capabilityRevision, legacyMock, projectPath]);
   const ready = legacyMock || activity !== null;
   const supported = (feature: "workflows" | "automation" | "remote") => {
     if (!ready) return false;
@@ -186,6 +200,14 @@ export function AgentOperationsPanel({
               <AgentAutomationPanel
                 projectPath={projectPath}
                 catalog={catalog}
+                onBuildAutomation={
+                  onBuildAutomation
+                    ? async (text) => {
+                        await onBuildAutomation(text);
+                        onOpenChange(false);
+                      }
+                    : undefined
+                }
                 onSession={(session) => {
                   onSession(session);
                   onOpenChange(false);

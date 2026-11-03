@@ -432,7 +432,7 @@ impl InprocessAgentState {
             None
         };
         let engine = self.connected().await?;
-        if matches!(method, "sendMessage" | "createSession") {
+        if matches!(method, "sendMessage" | "createSession" | "enqueueMessage" | "sendQueuedMessageNow" | "openSecretary" | "delegateSecretaryTask" | "sendSecretaryTaskMessage") {
             self.sync_optional_skills(&engine).await?;
         }
         let result = match self.extension_call(&engine, method, &args).await? {

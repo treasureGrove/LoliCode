@@ -6,6 +6,7 @@ import {
   screen,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import userEvent from "@testing-library/user-event";
 import { InterfaceAppearanceRoot } from "@/app/shell/InterfaceAppearanceRoot";
 import { InterfaceAppearanceSettings } from "@/features/settings/InterfaceAppearanceSettings";
 import { AgentCompanion } from "@/features/agent/AgentCompanion";
@@ -209,32 +210,59 @@ describe("interface appearance", () => {
     expect(screen.getByRole("img")).toBeInTheDocument();
   });
 
-  it("restores the companion from its sidebar control independently of decoration mode", () => {
-    saveInterfaceAppearance({ mode: "off", companionVisible: false });
-    render(
-      <>
-        <AgentCompanion />
-        <InterfaceAppearanceSettings />
-      </>,
-    );
-    const toggle = screen.getByRole("button", {
-      name: "settings.atelier.showCompanion",
-    });
-    toggle.focus();
-    fireEvent.click(toggle);
-    expect(screen.getByRole("img")).toBeInTheDocument();
-    expect(toggle).toHaveFocus();
-    expect(toggle).toHaveAttribute("aria-expanded", "true");
-    expect(
-      screen.getByRole("switch", { name: "settings.atelier.companion" }),
-    ).toBeChecked();
-    expect(JSON.parse(localStorage.getItem(INTERFACE_APPEARANCE_KEY)!)).toEqual(
-      {
-        mode: "off",
-        intensity: 48,
+  it.each(["full", "soft", "off"] as const)(
+    "restores the hidden companion from settings with decoration mode %s",
+    async (mode) => {
+      const user = userEvent.setup();
+      saveInterfaceAppearance({ mode, companionVisible: false });
+      const view = render(
+        <>
+          <InterfaceAppearanceRoot />
+          <AgentCompanion />
+          <InterfaceAppearanceSettings />
+        </>,
+      );
+      const toggle = screen.getByRole("switch", {
+        name: "settings.atelier.companion",
+      });
+      expect(toggle).not.toBeChecked();
+      expect(toggle).toBeEnabled();
+      expect(screen.queryByRole("img")).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", {
+          name: "settings.atelier.showCompanion",
+        }),
+      ).not.toBeInTheDocument();
+
+      toggle.focus();
+      await user.keyboard(" ");
+      expect(screen.getByRole("img")).toHaveAccessibleName(
+        "settings.atelier.companionAlt",
+      );
+      expect(toggle).toHaveFocus();
+      expect(toggle).toBeChecked();
+      expect(document.documentElement).toHaveAttribute("data-decoration", mode);
+      expect(
+        JSON.parse(localStorage.getItem(INTERFACE_APPEARANCE_KEY)!),
+      ).toEqual({
+        ...DEFAULT_INTERFACE_APPEARANCE,
+        mode,
         companionVisible: true,
-        fontSize: 115,
-      },
-    );
-  });
+      });
+
+      view.unmount();
+      render(
+        <>
+          <InterfaceAppearanceRoot />
+          <AgentCompanion />
+          <InterfaceAppearanceSettings />
+        </>,
+      );
+      expect(screen.getByRole("img")).toBeInTheDocument();
+      expect(
+        screen.getByRole("switch", { name: "settings.atelier.companion" }),
+      ).toBeChecked();
+      expect(document.documentElement).toHaveAttribute("data-decoration", mode);
+    },
+  );
 });

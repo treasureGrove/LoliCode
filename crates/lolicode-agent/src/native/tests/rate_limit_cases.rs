@@ -105,6 +105,9 @@ impl RateServer {
                     };
                     handler(index, &body)
                 };
+                if reply.status == 0 {
+                    continue; // The upstream accepted the request, then disconnected.
+                }
                 let retry = reply
                     .retry_after
                     .map(|value| format!("Retry-After: {value}\r\n"))
@@ -141,7 +144,7 @@ async fn infer(server: &RateServer) -> Result<inference::Turn, String> {
         vec![json!({"role":"user","content":"Continue after the completed tool"}),
              json!({"role":"assistant","content":null,"tool_calls":[{"id":"completed-tool-once","type":"function","function":{"name":"write_file","arguments":"{}"}}]}),
              json!({"role":"tool","tool_call_id":"completed-tool-once","content":"ALREADY_WRITTEN"})],
-        vec![],tx,cancel,ReadPolicy{progress_timeout:Duration::from_secs(2),terminal_grace:Duration::from_millis(10)},
+        vec![],tx,cancel,ReadPolicy{progress_timeout:Duration::from_secs(2),terminal_grace:Duration::from_millis(10), retry_base_delay: Duration::ZERO,},
         Some("lc:00000000-0000-4000-8000-000000000001")).await
 }
 
@@ -171,22 +174,28 @@ async fn short_rate_limit_retries_identical_request_then_accepts_stream_or_json(
 }
 
 #[tokio::test]
-async fn missing_invalid_or_long_retry_after_does_not_replay_and_errors_are_safe() {
+async fn missing_or_invalid_retry_after_uses_bounded_backoff_and_errors_are_safe() {
     for header in [
         None,
         Some("invalid"),
         Some("-1"),
-        Some("61"),
         Some("999999999999999999999999"),
     ] {
         let server = RateServer::start(move |_, _| limited("service_rate_limited", header)).await;
         let error = infer(&server).await.err().unwrap();
-        assert_eq!(server.count(), 1);
+        assert_eq!(server.count(), 6);
         assert!(error.contains("请求频率受限"));
         assert!(error.contains("HTTP 429"));
         assert!(!error.contains("PRIVATE_UPSTREAM_SECRET"));
         assert!(!error.contains("owned-private-gateway"));
     }
+}
+
+#[tokio::test]
+async fn a_long_retry_after_is_not_retried_before_the_requested_delay() {
+    let server = RateServer::start(|_, _| limited("service_rate_limited", Some("61"))).await;
+    assert!(infer(&server).await.err().unwrap().contains("HTTP 429"));
+    assert_eq!(server.count(), 1);
 }
 
 #[tokio::test]
@@ -268,8 +277,8 @@ async fn transient_and_generic_429_have_a_fixed_retry_count() {
         let error = infer(&server).await.err().unwrap();
         assert_eq!(
             server.count(),
-            4,
-            "one admitted attempt and at most three retries"
+            6,
+            "one admitted attempt and at most five retries"
         );
         assert!(error.contains("HTTP 429"));
     }
@@ -485,4 +494,77 @@ async fn unsupported_parameter_after_successful_http_never_replays_the_stream() 
         assert!(infer_alias_fixture(&server).await.is_err());
         assert_eq!(server.count(), 1);
     }
+}
+
+#[tokio::test]
+async fn transient_http_and_connection_failures_retry_identical_history_before_recovering() {
+    for status in [0, 408, 409, 500, 502, 503, 504] {
+        let server = RateServer::start(move |index, _| {
+            if index < 3 {
+                HttpReply { status, retry_after: Some("0"), json: true,
+                    body: json!({"error":{"code":"server_error","message":"PRIVATE_UPSTREAM_SECRET"}}).to_string() }
+            } else { successful(index % 2 == 0) }
+        }).await;
+        assert_eq!(infer(&server).await.unwrap().content, "RATE_LIMIT_RECOVERED", "HTTP {status}");
+        let requests = server.requests.lock().unwrap();
+        assert_eq!(requests.len(), 3);
+        assert!(requests.iter().all(|request| request == &requests[0]), "HTTP {status}: completed tools and session attribution must stay identical");
+    }
+}
+
+#[tokio::test]
+async fn permanent_http_errors_fail_once_and_transient_errors_stop_after_five_retries() {
+    for status in [400, 401, 403, 404, 422, 503] {
+        let server = RateServer::start(move |_, _| HttpReply { status, retry_after: Some("0"), json: true,
+            body: json!({"error":{"code":"unknown_error","message":"PRIVATE_UPSTREAM_SECRET"}}).to_string() }).await;
+        let error = infer(&server).await.err().unwrap();
+        assert_eq!(server.count(), if status == 503 { 6 } else { 1 }, "HTTP {status}");
+        assert!(!error.contains("PRIVATE_UPSTREAM_SECRET"));
+        assert!(!error.contains("owned-private-gateway"));
+    }
+}
+
+#[tokio::test]
+async fn empty_or_transient_error_streams_retry_only_before_any_published_output() {
+    for initial in ["", "data: [DONE]\n\n", "data: {\"error\":{\"code\":\"server_error\"}}\n\n",
+        "data: {\"error\":{\"code\":\"service_busy\"}}\n\n"] {
+        let server = RateServer::start(move |index, _| {
+            if index == 1 { HttpReply { status: 200, retry_after: None, body: initial.into(), json: false } }
+            else { successful(false) }
+        }).await;
+        assert_eq!(infer(&server).await.unwrap().content, "RATE_LIMIT_RECOVERED");
+        assert_eq!(server.count(), 2);
+    }
+}
+
+#[tokio::test]
+async fn all_transient_failure_kinds_share_one_retry_budget() {
+    let server = RateServer::start(|index, _| match index % 3 {
+        0 => HttpReply { status: 200, retry_after: None, body: String::new(), json: false },
+        1 => limited("service_busy", Some("0")),
+        _ => HttpReply { status: 503, retry_after: Some("0"), body: String::new(), json: true },
+    }).await;
+    assert!(infer(&server).await.is_err());
+    assert_eq!(server.count(), 6);
+}
+
+#[tokio::test]
+async fn reasoning_tool_input_and_usage_prevent_replay_after_a_stream_disconnect() {
+    for delta in [json!({"choices":[{"delta":{"reasoning_content":"PRESERVED_REASONING"}}]}),
+        json!({"choices":[{"delta":{"tool_calls":[{"index":0,"id":"partial-tool","function":{"name":"write_file","arguments":"{"}}]}}]}),
+        json!({"usage":{"prompt_tokens":12,"completion_tokens":1},"choices":[]})] {
+        let server = RateServer::start(move |_, _| HttpReply { status: 200, retry_after: None, json: false,
+            body: format!("data: {delta}\n\ndata: {{\"error\":{{\"code\":\"server_error\"}}}}\n\n") }).await;
+        assert!(infer(&server).await.is_err());
+        assert_eq!(server.count(), 1, "published reasoning, partial tool input and usage must not be replayed");
+    }
+}
+
+#[tokio::test]
+async fn a_missing_retry_after_uses_a_real_delay_before_recovery() {
+    let server = RateServer::start(|index, _| if index == 1 { limited("service_busy", None) } else { successful(false) }).await;
+    let started = tokio::time::Instant::now();
+    assert!(infer_alias_fixture(&server).await.is_ok());
+    assert_eq!(server.count(), 2);
+    assert!(started.elapsed() >= Duration::from_millis(900));
 }

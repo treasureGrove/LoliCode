@@ -8,7 +8,12 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AgentCompanion } from "@/features/agent/AgentCompanion";
 import * as resourceImages from "@/app/shell/ResourcePackProvider";
-import * as actorModule from "@/features/agent/CompanionRig";
+import * as actorModule from "@/features/agent/CompanionVideoActor";
+import {
+  COMPANION_REST_POSES,
+  COMPANION_STANDING_FOOT_Y,
+  type CompanionRest,
+} from "@/features/agent/companionDocking";
 import {
   COMPANION_STORAGE_KEY,
   FEED_COOLDOWN_MS,
@@ -94,6 +99,9 @@ beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(NOW);
   vi.stubGlobal("PointerEvent", TestPointerEvent);
+  vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+  vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
+  vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => {});
   localStorage.removeItem(COMPANION_STORAGE_KEY);
   saveInterfaceAppearance(DEFAULT_INTERFACE_APPEARANCE);
   resize(1024, 768);
@@ -121,6 +129,13 @@ describe("floating companion gestures", () => {
     expect(
       screen.getByRole("button", { name: "companion.moveLabel" }),
     ).toBeInTheDocument();
+    expect(
+      container.querySelector(".lc-companion-video-actor"),
+    ).toHaveAttribute("data-clip", "pet");
+    expect(container.querySelector("video")).toHaveAttribute(
+      "src",
+      expect.stringContaining("companion-greeting-video-v4"),
+    );
   });
 
   it("removes the companion and care panel when hidden, retaining care when reenabled from settings", () => {
@@ -362,17 +377,21 @@ describe("floating companion gestures", () => {
     }
   });
 
-  it("routes care and real dragging to the painted action clips, then returns to idle", () => {
+  it("keeps five-second video reactions intact and routes real dragging independently", () => {
     const { root, character, food } = mount();
     expect(root).toHaveAttribute("data-motion", "idle");
     fireEvent.click(character);
     expect(root).toHaveAttribute("data-motion", "pet");
     act(() => vi.advanceTimersByTime(1800));
+    expect(root).toHaveAttribute("data-motion", "pet");
+    act(() => vi.advanceTimersByTime(3400));
     expect(root).toHaveAttribute("data-motion", "idle");
 
     fireEvent.click(food);
     expect(root).toHaveAttribute("data-motion", "feed");
     act(() => vi.advanceTimersByTime(3199));
+    expect(root).toHaveAttribute("data-motion", "feed");
+    act(() => vi.advanceTimersByTime(2000));
     expect(root).toHaveAttribute("data-motion", "feed");
     act(() => vi.advanceTimersByTime(1));
     expect(root).toHaveAttribute("data-motion", "idle");
@@ -382,7 +401,7 @@ describe("floating companion gestures", () => {
     act(() => vi.advanceTimersByTime(5000));
     expect(root).toHaveAttribute("data-motion", "sleep");
     fireEvent.click(screen.getByRole("button", { name: "companion.wake" }));
-    act(() => vi.advanceTimersByTime(1800));
+    act(() => vi.advanceTimersByTime(5200));
     expect(root).toHaveAttribute("data-motion", "idle");
 
     pointer(character, "down", 150, 200);
@@ -394,29 +413,38 @@ describe("floating companion gestures", () => {
     expect(root).toHaveAttribute("data-motion", "idle");
   });
 
-  it("keeps a custom resource-pack character and never applies the bundled character atlas", () => {
+  it("keeps a custom resource-pack character without loading bundled videos or changing its reaction timing", () => {
     const custom = "data:image/png;base64,custom-resource-character";
     vi.spyOn(resourceImages, "useResourceImage").mockReturnValue(custom);
     const imageConstructor = vi.fn();
     vi.stubGlobal("Image", imageConstructor);
+    const videoActor = vi.spyOn(actorModule, "CompanionVideoActor");
     const { root, character, food, container } = mount();
     expect(screen.getByRole("img")).toHaveAttribute("src", custom);
     expect(container.querySelector("canvas")).not.toBeInTheDocument();
+    expect(container.querySelector("video")).not.toBeInTheDocument();
+    expect(videoActor).not.toHaveBeenCalled();
     expect(imageConstructor).not.toHaveBeenCalled();
 
     fireEvent.click(character);
     expect(root).toHaveAttribute("data-motion", "pet");
+    act(() => vi.advanceTimersByTime(1800));
+    expect(root).toHaveAttribute("data-motion", "idle");
     fireEvent.click(food);
     expect(root).toHaveAttribute("data-motion", "feed");
+    act(() => vi.advanceTimersByTime(3200));
+    expect(root).toHaveAttribute("data-motion", "idle");
     fireEvent.click(screen.getByRole("button", { name: "companion.sleep" }));
     expect(root).toHaveAttribute("data-motion", "sleep");
     expect(screen.getByRole("img")).toHaveAttribute("src", custom);
     expect(container.querySelector("canvas")).not.toBeInTheDocument();
+    expect(container.querySelector("video")).not.toBeInTheDocument();
+    expect(videoActor).not.toHaveBeenCalled();
     expect(imageConstructor).not.toHaveBeenCalled();
   });
 
   it("does not interrupt or extend the feeding animation when food is clicked repeatedly during cooldown", () => {
-    const renders = vi.spyOn(actorModule, "CompanionRig");
+    const renders = vi.spyOn(actorModule, "CompanionVideoActor");
     const { root, food } = mount();
     fireEvent.click(food);
     const feedingKey = renders.mock.calls.at(-1)![0].playbackKey;
@@ -432,13 +460,17 @@ describe("floating companion gestures", () => {
     fireEvent.click(food);
     expect(root).toHaveAttribute("data-motion", "feed");
     act(() => vi.advanceTimersByTime(1));
+    expect(root).toHaveAttribute("data-motion", "feed");
+    act(() => vi.advanceTimersByTime(1999));
+    expect(root).toHaveAttribute("data-motion", "feed");
+    act(() => vi.advanceTimersByTime(1));
     expect(root).toHaveAttribute("data-reaction", "idle");
     expect(root).toHaveAttribute("data-motion", "idle");
     expect(readCompanionState()).toMatchObject({ feedCount: 1, affection: 2 });
   });
 
   it("replays repeated head pats while keeping the five-second affection cooldown", () => {
-    const renders = vi.spyOn(actorModule, "CompanionRig");
+    const renders = vi.spyOn(actorModule, "CompanionVideoActor");
     const { character, root } = mount();
     const initialKey = Number(renders.mock.calls.at(-1)![0].playbackKey);
     fireEvent.click(character);
@@ -558,5 +590,486 @@ describe("floating companion gestures", () => {
     expect(top + measuredHeight).toBeLessThanOrEqual(480 - 8);
     view.unmount();
     expect(disconnect).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("companion surface docking", () => {
+  const surfaces: HTMLElement[] = [];
+
+  function addSurface(kind: CompanionRest = "sit") {
+    const element = document.createElement("div");
+    element.dataset.companionSurface = "message-session-a";
+    element.dataset.companionDockId = "message-session-a";
+    element.dataset.companionRest = kind;
+    document.body.append(element);
+    let bounds = { left: 100, top: 400, width: 500, height: 120 };
+    vi.spyOn(element, "getBoundingClientRect").mockImplementation(() => ({
+      ...bounds,
+      x: bounds.left,
+      y: bounds.top,
+      right: bounds.left + bounds.width,
+      bottom: bounds.top + bounds.height,
+      toJSON: () => ({}),
+    }));
+    surfaces.push(element);
+    return {
+      element,
+      move(next: Partial<typeof bounds>) {
+        bounds = { ...bounds, ...next };
+      },
+    };
+  }
+
+  function dragOntoSurface(view: ReturnType<typeof mount>) {
+    const origin = {
+      x: Number.parseFloat(view.root.style.left),
+      y: Number.parseFloat(view.root.style.top),
+    };
+    const dx = 300 - 96 - origin.x;
+    const dy = 400 - COMPANION_STANDING_FOOT_Y - origin.y;
+    pointer(view.character, "down", 150, 200);
+    pointer(view.character, "move", 150 + dx, 200 + dy);
+    return () => pointer(view.character, "up", 150 + dx, 200 + dy);
+  }
+
+  afterEach(() => {
+    surfaces.splice(0).forEach((element) => element.remove());
+  });
+
+  it.each(["sit", "lie"] as const)(
+    "offers a %s target while dragging and switches to its own looping canvas on release",
+    (kind) => {
+      const { element } = addSurface(kind);
+      const view = mount();
+      const release = dragOntoSurface(view);
+      expect(element).toHaveAttribute("data-companion-target", "true");
+      expect(view.container.querySelector(".lc-pet-bubble")).toHaveTextContent(
+        kind === "sit" ? "companion.dockHintSit" : "companion.dockHintLie",
+      );
+      release();
+      const pose = COMPANION_REST_POSES[kind];
+      expect(view.root).toHaveAttribute("data-docked", kind);
+      expect(view.root).toHaveAttribute("data-settling", "true");
+      expect(element).not.toHaveAttribute("data-companion-target");
+      expect(
+        Number.parseFloat(view.root.style.left) + pose.width * pose.contactX,
+      ).toBe(300);
+      expect(
+        Number.parseFloat(view.root.style.top) +
+          20 +
+          pose.height * pose.contactY,
+      ).toBe(400);
+      expect(view.container.querySelector("video")).toHaveAttribute(
+        "src",
+        expect.stringContaining(`companion-${kind}-video-v5`),
+      );
+      expect(
+        view.container.querySelector(".lc-companion-video-poster"),
+      ).toHaveAttribute(
+        "src",
+        expect.stringContaining(`companion-${kind}-poster-v5`),
+      );
+      expect(
+        view.container.querySelector(".lc-companion-video-actor"),
+      ).toHaveAttribute("data-motion", "idle");
+      expect(view.character).toHaveAttribute(
+        "aria-describedby",
+        "companion-dock-status",
+      );
+      expect(screen.getByText(/companion.leaveDockHint/)).toBeInTheDocument();
+      // Rest positions are ephemeral; reopening starts from a safe standing pose.
+      expect(readCompanionState().position).toEqual({
+        x: 204,
+        y: 400 - COMPANION_STANDING_FOOT_Y,
+      });
+      act(() => vi.advanceTimersByTime(320));
+      expect(view.root).not.toHaveAttribute("data-settling");
+    },
+  );
+
+  it("follows element resize and captured scroll without applying a standing clamp", () => {
+    const callbacks: ResizeObserverCallback[] = [];
+    const disconnect = vi.fn();
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(callback: ResizeObserverCallback) {
+          callbacks.push(callback);
+        }
+        observe() {}
+        disconnect = disconnect;
+      },
+    );
+    const surface = addSurface("lie");
+    const view = mount();
+    dragOntoSurface(view)();
+    surface.move({ left: 200, top: 460, width: 600 });
+    act(() => {
+      callbacks[0]([], {} as ResizeObserver);
+      vi.advanceTimersByTime(20);
+    });
+    expect(view.root).toHaveAttribute("data-docked", "lie");
+    expect(view.root).not.toHaveAttribute("data-settling");
+    const pose = COMPANION_REST_POSES.lie;
+    expect(
+      Number.parseFloat(view.root.style.left) + pose.width * pose.contactX,
+    ).toBe(440);
+    expect(
+      Number.parseFloat(view.root.style.top) + 20 + pose.height * pose.contactY,
+    ).toBe(460);
+    surface.move({ top: 430 });
+    act(() => {
+      fireEvent.scroll(surface.element);
+      vi.advanceTimersByTime(20);
+    });
+    expect(
+      Number.parseFloat(view.root.style.top) + 20 + pose.height * pose.contactY,
+    ).toBe(430);
+    view.unmount();
+    expect(disconnect).toHaveBeenCalled();
+  });
+
+  it("uses the painted position when a fresh drag interrupts the settling transition", () => {
+    addSurface("lie");
+    const view = mount();
+    dragOntoSurface(view)();
+    expect(view.root).toHaveAttribute("data-settling", "true");
+    vi.spyOn(view.root, "getBoundingClientRect").mockReturnValue({
+      x: 250,
+      y: 300,
+      left: 250,
+      top: 300,
+      right: 490,
+      bottom: 518,
+      width: 240,
+      height: 218,
+      toJSON: () => ({}),
+    });
+    pointer(view.character, "down", 300, 330);
+    pointer(view.character, "move", 310, 320);
+    expect(view.root).not.toHaveAttribute("data-docked");
+    expect(view.root).not.toHaveAttribute("data-settling");
+    expect(view.root.style.left).toBe("284px");
+    expect(view.root.style.top).toBe("290px");
+    pointer(view.character, "up", 310, 320);
+  });
+
+  it("keeps its pose when the same session rebuilds a message and observes the new element", async () => {
+    const observed: Element[] = [];
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe(element: Element) {
+          observed.push(element);
+        }
+        disconnect() {}
+      },
+    );
+    const original = addSurface("sit");
+    const view = mount();
+    dragOntoSurface(view)();
+    const replacement = addSurface("sit");
+    replacement.move({ left: 200, top: 420, width: 600 });
+    original.element.replaceWith(replacement.element);
+    await act(async () => {
+      await Promise.resolve();
+      vi.advanceTimersByTime(20);
+    });
+    expect(view.root).toHaveAttribute("data-docked", "sit");
+    expect(observed).toContain(replacement.element);
+    const pose = COMPANION_REST_POSES.sit;
+    expect(
+      Number.parseFloat(view.root.style.left) + pose.width * pose.contactX,
+    ).toBe(440);
+    replacement.move({ top: 450 });
+    act(() => {
+      fireEvent.scroll(window);
+      vi.advanceTimersByTime(20);
+    });
+    expect(
+      Number.parseFloat(view.root.style.top) + 20 + pose.height * pose.contactY,
+    ).toBe(450);
+  });
+
+  it("keeps exact edge contact on window resize and releases if the pose no longer fits", () => {
+    const surface = addSurface("lie");
+    const view = mount();
+    dragOntoSurface(view)();
+    surface.move({ top: 460 });
+    act(() => resize(800, 520));
+    const pose = COMPANION_REST_POSES.lie;
+    expect(view.root).toHaveAttribute("data-docked", "lie");
+    expect(
+      Number.parseFloat(view.root.style.top) + 20 + pose.height * pose.contactY,
+    ).toBe(460);
+    act(() => resize(360, 480));
+    expect(view.root).not.toHaveAttribute("data-docked");
+    expect(Number.parseFloat(view.root.style.left)).toBeLessThanOrEqual(160);
+    expect(Number.parseFloat(view.root.style.top)).toBeLessThanOrEqual(222);
+  });
+
+  it.each(["removed", "navigation", "offscreen"] as const)(
+    "safely resumes standing when the surface is %s",
+    async (reason) => {
+      const surface = addSurface("lie");
+      const view = mount();
+      dragOntoSurface(view)();
+      if (reason === "removed") surface.element.remove();
+      if (reason === "navigation")
+        surface.element.dataset.companionDockId = "message-session-b";
+      if (reason === "offscreen") surface.move({ top: 20 });
+      await act(async () => {
+        await Promise.resolve();
+        fireEvent.scroll(window);
+        vi.advanceTimersByTime(20);
+      });
+      expect(view.root).not.toHaveAttribute("data-docked");
+      expect(view.root.style.width).toBe("192px");
+      expect(Number.parseFloat(view.root.style.left)).toBeGreaterThanOrEqual(8);
+      expect(Number.parseFloat(view.root.style.top)).toBeGreaterThanOrEqual(8);
+      expect(view.container.querySelector("video")).not.toHaveAttribute(
+        "src",
+        expect.stringContaining("companion-lie"),
+      );
+    },
+  );
+
+  it.each(["arrow", "drag", "pet", "feed"] as const)(
+    "leaves its resting canvas before a %s interaction",
+    (action) => {
+      addSurface("lie");
+      const view = mount();
+      dragOntoSurface(view)();
+      act(() => vi.advanceTimersByTime(500));
+      if (action === "arrow")
+        fireEvent.keyDown(view.character, { key: "ArrowRight" });
+      if (action === "drag") {
+        pointer(view.character, "down", 300, 300);
+        pointer(view.character, "move", 380, 140);
+        expect(view.root).not.toHaveAttribute("data-settling");
+        pointer(view.character, "up", 380, 140);
+      }
+      if (action === "pet") fireEvent.click(view.character);
+      if (action === "feed") {
+        pointer(view.food, "down", 300, 270);
+        pointer(view.food, "move", 155, 190);
+        expect(view.character).toHaveAttribute("data-food-over", "true");
+        pointer(view.food, "up", 155, 190);
+        fireEvent.click(view.food);
+      }
+      expect(view.root).not.toHaveAttribute("data-docked");
+      expect(view.root.style.width).toBe("192px");
+      if (action === "feed") {
+        expect(readCompanionState()).toMatchObject({
+          feedCount: 1,
+          affection: 2,
+        });
+        expect(view.container.querySelector("video")).toHaveAttribute(
+          "src",
+          expect.stringContaining("companion-feed-video-v4"),
+        );
+      }
+      if (action === "pet") {
+        expect(readCompanionState().affection).toBe(1);
+        expect(view.container.querySelector("video")).toHaveAttribute(
+          "src",
+          expect.stringContaining("companion-greeting-video-v4"),
+        );
+      }
+    },
+  );
+
+  it("retains custom resource-pack behavior without offering unsupported poses", () => {
+    vi.spyOn(resourceImages, "useResourceImage").mockReturnValue("custom.png");
+    const { element } = addSurface();
+    const view = mount();
+    dragOntoSurface(view)();
+    expect(element).not.toHaveAttribute("data-companion-target");
+    expect(view.root).not.toHaveAttribute("data-docked");
+    expect(screen.getByRole("img")).toHaveAttribute("src", "custom.png");
+    expect(view.container.querySelector("video")).toBeNull();
+  });
+
+  it("uses the resting poster for reduced motion and clears the dock and observers when hidden", () => {
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn(() => ({
+        matches: true,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      })),
+    );
+    addSurface("lie");
+    const view = mount();
+    dragOntoSurface(view)();
+    expect(view.root).toHaveAttribute("data-docked", "lie");
+    expect(view.container.querySelector("video")).toBeNull();
+    expect(
+      view.container.querySelector(".lc-companion-video-poster"),
+    ).toHaveAttribute(
+      "src",
+      expect.stringContaining("companion-lie-poster-v5"),
+    );
+    act(() => saveInterfaceAppearance({ companionVisible: false }));
+    expect(view.container).toBeEmptyDOMElement();
+    act(() => saveInterfaceAppearance({ companionVisible: true }));
+    expect(view.container.querySelector(".lc-pet")).not.toHaveAttribute(
+      "data-docked",
+    );
+    expect(
+      view.container.querySelector(".lc-companion-video-poster"),
+    ).toHaveAttribute(
+      "src",
+      expect.stringContaining("companion-video-poster-v4"),
+    );
+    view.unmount();
+    act(() => vi.advanceTimersByTime(0));
+    expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
+describe("quiet companion activities", () => {
+  function settleCurrentClip(container: HTMLElement) {
+    const current = container.querySelector("video")!;
+    Object.defineProperty(current, "readyState", {
+      configurable: true,
+      value: 2,
+    });
+    Object.defineProperty(current, "duration", {
+      configurable: true,
+      value: 5,
+    });
+    fireEvent.loadedData(current);
+    fireEvent.ended(current);
+    const idle = container.querySelector("video")!;
+    Object.defineProperty(idle, "readyState", { configurable: true, value: 2 });
+    fireEvent.loadedData(idle);
+  }
+
+  it("waits at least 35 seconds and alternates the two quiet activities without changing care state", () => {
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    vi.spyOn(document, "hidden", "get").mockReturnValue(false);
+    const renders = vi.spyOn(actorModule, "CompanionVideoActor");
+    const { container, root } = mount();
+    settleCurrentClip(container);
+    act(() => vi.advanceTimersByTime(34_999));
+    expect(renders.mock.calls.at(-1)![0].ambient).toBeUndefined();
+    act(() => vi.advanceTimersByTime(1));
+    const first = renders.mock.calls.at(-1)![0].ambient!;
+    expect(first.source).toContain("companion-snack-video-v4");
+    expect(root).toHaveAttribute("data-motion", "idle");
+    expect(readCompanionState()).toMatchObject({ feedCount: 0, affection: 0 });
+    settleCurrentClip(container);
+    act(() => vi.advanceTimersByTime(35_000));
+    const second = renders.mock.calls.at(-1)![0].ambient!;
+    expect(second.key).not.toBe(first.key);
+    expect(second.source).toContain("companion-curious-video-v4");
+    settleCurrentClip(container);
+    act(() => vi.advanceTimersByTime(35_000));
+    expect(renders.mock.calls.at(-1)![0].ambient!.source).toBe(first.source);
+  });
+
+  it("can leave a full minute between quiet activities", () => {
+    vi.spyOn(Math, "random").mockReturnValue(0.999999);
+    vi.spyOn(document, "hidden", "get").mockReturnValue(false);
+    const renders = vi.spyOn(actorModule, "CompanionVideoActor");
+    const { container } = mount();
+    settleCurrentClip(container);
+    act(() => vi.advanceTimersByTime(59_999));
+    expect(renders.mock.calls.at(-1)![0].ambient).toBeUndefined();
+    act(() => vi.advanceTimersByTime(1));
+    expect(renders.mock.calls.at(-1)![0].ambient?.source).toContain(
+      "companion-curious-video-v4",
+    );
+  });
+
+  it("gives recent user interaction twenty seconds of quiet", () => {
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    vi.spyOn(document, "hidden", "get").mockReturnValue(false);
+    const renders = vi.spyOn(actorModule, "CompanionVideoActor");
+    const { character, container } = mount();
+    settleCurrentClip(container);
+    act(() => vi.advanceTimersByTime(20_000));
+    fireEvent.click(character);
+    act(() => vi.advanceTimersByTime(15_000));
+    expect(renders.mock.calls.at(-1)![0].ambient).toBeUndefined();
+    act(() => vi.advanceTimersByTime(35_000));
+    expect(renders.mock.calls.at(-1)![0].ambient?.source).toContain(
+      "companion-snack-video-v4",
+    );
+  });
+
+  it.each(["hidden", "reduced", "sleep", "drag"] as const)(
+    "does not schedule a quiet activity while %s",
+    (reason) => {
+      vi.spyOn(Math, "random").mockReturnValue(0);
+      vi.spyOn(document, "hidden", "get").mockReturnValue(reason === "hidden");
+      if (reason === "reduced")
+        vi.stubGlobal(
+          "matchMedia",
+          vi.fn(() => ({
+            matches: true,
+            addEventListener: vi.fn(),
+            removeEventListener: vi.fn(),
+          })),
+        );
+      const renders = vi.spyOn(actorModule, "CompanionVideoActor");
+      const { character } = mount();
+      if (reason === "sleep")
+        fireEvent.click(
+          screen.getByRole("button", { name: "companion.sleep" }),
+        );
+      if (reason === "drag") {
+        pointer(character, "down", 150, 200);
+        pointer(character, "move", 230, 180);
+      }
+      act(() => vi.advanceTimersByTime(35_000));
+      expect(renders.mock.calls.at(-1)![0].ambient).toBeUndefined();
+    },
+  );
+
+  it("counts the end of a long drag as recent interaction", () => {
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    vi.spyOn(document, "hidden", "get").mockReturnValue(false);
+    const renders = vi.spyOn(actorModule, "CompanionVideoActor");
+    const { character } = mount();
+    pointer(character, "down", 150, 200);
+    pointer(character, "move", 230, 180);
+    act(() => vi.advanceTimersByTime(69_000));
+    pointer(character, "up", 230, 180);
+    act(() => vi.advanceTimersByTime(1_000));
+    expect(renders.mock.calls.at(-1)![0].ambient).toBeUndefined();
+    act(() => vi.advanceTimersByTime(35_000));
+    expect(renders.mock.calls.at(-1)![0].ambient?.source).toContain(
+      "companion-snack-video-v4",
+    );
+  });
+
+  it("does not load quiet activities for a custom resource character", () => {
+    vi.spyOn(resourceImages, "useResourceImage").mockReturnValue("custom.png");
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    const renders = vi.spyOn(actorModule, "CompanionVideoActor");
+    const { container } = mount();
+    act(() => vi.advanceTimersByTime(120_000));
+    expect(renders).not.toHaveBeenCalled();
+    expect(container.querySelector("video")).toBeNull();
+    expect(screen.getByRole("img")).toHaveAttribute("src", "custom.png");
+  });
+
+  it("clears activity timers on hiding and releases all timers on unmount", () => {
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    const renders = vi.spyOn(actorModule, "CompanionVideoActor");
+    const view = mount();
+    fireEvent.click(
+      screen.getByRole("button", { name: "settings.atelier.hideCompanion" }),
+    );
+    const hiddenRenders = renders.mock.calls.length;
+    act(() => vi.advanceTimersByTime(70_000));
+    expect(renders).toHaveBeenCalledTimes(hiddenRenders);
+    expect(view.container).toBeEmptyDOMElement();
+    view.unmount();
+    // jsdom delivers the final localStorage save as a zero-delay storage event.
+    act(() => vi.advanceTimersByTime(0));
+    expect(vi.getTimerCount()).toBe(0);
   });
 });

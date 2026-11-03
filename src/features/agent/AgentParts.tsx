@@ -21,6 +21,8 @@ import { AgentImage } from "./AgentImage";
 import { AgentAttachmentImage } from "./AgentAttachmentImage";
 import { AgentDisclosure, type AgentDisclosureState } from "./AgentDisclosure";
 import { isAgentCancellation } from "./AgentRunError";
+import { parseAutomationProposal } from "@/lib/agentAutomation";
+import { AgentAutomationProposalCard } from "./AgentAutomationProposalCard";
 import {
   AgentMessageFrame,
   type AgentMessageIdentity,
@@ -49,11 +51,16 @@ const TOOL_NAMES: Record<string, string> = {
   shell: "运行命令",
   run_command: "运行命令",
   task: "执行子任务",
+  delegate_task: "分派工作任务",
+  list_tasks: "查看工作任务",
+  send_task_message: "补充工作要求",
+  cancel_task: "取消工作任务",
   webfetch: "读取网页",
   websearch: "搜索网页",
   todowrite: "更新计划",
   question: "询问你的意见",
   ask_user: "询问你的意见",
+  propose_automation: "设计自动化",
   exit_plan_mode: "确认实施计划",
   read_skill: "读取技能",
   tavern_list_characters: "查看酒馆角色",
@@ -70,6 +77,8 @@ function toolTarget(part: Extract<AgentPart, { type: "tool" }>) {
   const input = part.input as Record<string, unknown>;
   if (part.name === "read_skill" && typeof input.id === "string")
     return input.id.slice(0, 200);
+  if (part.name === "delegate_task" && typeof input.title === "string")
+    return input.title.slice(0, 200);
   for (const key of [
     "filePath",
     "file_path",
@@ -91,11 +100,19 @@ export const AgentToolPart = memo(function AgentToolPart({
   part,
   grouped = false,
   disclosureState,
+  projectPath = "",
+  sessionId,
 }: {
   part: Extract<AgentPart, { type: "tool" }>;
   grouped?: boolean;
   disclosureState?: AgentDisclosureState;
+  projectPath?: string;
+  sessionId?: string;
 }) {
+  const proposal =
+    part.name === "propose_automation" && part.state === "completed"
+      ? parseAutomationProposal(part.output)
+      : null;
   const active = part.state === "pending" || part.state === "running";
   const cancelled = part.state === "error" && isAgentCancellation(part.error);
   const label = TOOL_NAMES[part.name] || part.name;
@@ -106,6 +123,16 @@ export const AgentToolPart = memo(function AgentToolPart({
           .map((key) => (part.input as Record<string, unknown>)[key])
           .find((value): value is string => typeof value === "string")
       : undefined;
+  if (proposal)
+    return (
+      <AgentAutomationProposalCard
+        key={`${sessionId}:${part.id}`}
+        proposal={proposal}
+        toolCallId={part.id}
+        projectPath={projectPath}
+        sessionId={sessionId}
+      />
+    );
   return (
     <AgentDisclosure
       className={cn("wb-tool wb-disclosure my-2", grouped && "wb-tool-step")}
@@ -207,10 +234,12 @@ export const AgentTextPart = memo(function AgentTextPart({
   text,
   projectPath,
   sessionId,
+  variant,
 }: {
   text: string;
   projectPath: string;
   sessionId?: string;
+  variant?: "body" | "note";
 }) {
   const renderLocalImage = useCallback(
     (path: string, alt: string) => (
@@ -233,6 +262,7 @@ export const AgentTextPart = memo(function AgentTextPart({
     <SessionMarkdown
       content={text}
       projectDir={projectPath}
+      variant={variant}
       renderLocalImage={renderLocalImage}
       renderLocalPath={renderLocalPath}
       previewLocalImageLinks
@@ -245,18 +275,14 @@ export const AgentTextPart = memo(function AgentTextPart({
 export const AgentReasoningPart = memo(function AgentReasoningPart({
   part,
   projectPath,
+  sessionId,
   disclosureState,
 }: {
   part: { text: string };
   projectPath: string;
+  sessionId?: string;
   disclosureState?: AgentDisclosureState;
 }) {
-  const renderLocalPath = useCallback(
-    (path: string, label?: React.ReactNode) => (
-      <AgentFilePath path={path} label={label} />
-    ),
-    [],
-  );
   return (
     <AgentDisclosure
       className="wb-reasoning wb-disclosure my-2 text-caption"
@@ -273,11 +299,11 @@ export const AgentReasoningPart = memo(function AgentReasoningPart({
       }
     >
       {() => (
-        <SessionMarkdown
-          content={part.text}
-          projectDir={projectPath}
+        <AgentTextPart
+          text={part.text}
+          projectPath={projectPath}
+          sessionId={sessionId}
           variant="note"
-          renderLocalPath={renderLocalPath}
         />
       )}
     </AgentDisclosure>
@@ -309,12 +335,35 @@ export const AgentMessageView = memo(function AgentMessageView({
   userIdentity?: AgentMessageIdentity;
 }) {
   return (
-    <AgentMessageFrame role={message.role} identity={userIdentity}>
+    <AgentMessageFrame
+      role={message.role}
+      identity={userIdentity}
+      companionSurface={
+        message.parts.every((part) => part.type === "text")
+          ? {
+              id: `message-${sessionId || projectPath}-${message.id}`,
+              text: message.parts
+                .map((part) => (part.type === "text" ? part.text : ""))
+                .join("\n"),
+            }
+          : undefined
+      }
+    >
       {agentMessageParts(message).map(({ part, key }) =>
         part.type === "tool" ? (
-          <AgentToolPart key={key} part={part} />
+          <AgentToolPart
+            key={key}
+            part={part}
+            projectPath={projectPath}
+            sessionId={sessionId}
+          />
         ) : part.type === "reasoning" ? (
-          <AgentReasoningPart key={key} part={part} projectPath={projectPath} />
+          <AgentReasoningPart
+            key={key}
+            part={part}
+            projectPath={projectPath}
+            sessionId={sessionId}
+          />
         ) : (
           <AgentTextPart
             key={key}

@@ -248,6 +248,29 @@ fn public_text(value: Option<&Value>, max: usize) -> Option<String> {
         .then(|| text.to_owned())
 }
 
+fn forum_profile_url(attrs: &Value, username: &str) -> Result<String, ForumFailure> {
+    // Flarum's public user route uses the site's configured slug driver, not
+    // the numeric database ID used by /api/users/{id} and authentication.
+    let slug = match attrs.get("slug") {
+        None | Some(Value::Null) => username,
+        Some(Value::String(slug)) => slug.as_str(),
+        Some(_) => return Err(ForumFailure::InvalidResponse),
+    };
+    if slug.trim().is_empty()
+        || slug.len() > 512
+        || slug.chars().any(char::is_control)
+        || matches!(slug, "." | "..")
+    {
+        return Err(ForumFailure::InvalidResponse);
+    }
+    let mut url = Url::parse(ORIGIN).map_err(|_| ForumFailure::InvalidResponse)?;
+    url.path_segments_mut()
+        .map_err(|_| ForumFailure::InvalidResponse)?
+        .push("u")
+        .push(slug);
+    Ok(url.into())
+}
+
 fn safe_avatar(value: Option<&Value>) -> Option<String> {
     let text = value?.as_str()?;
     if text.len() > 4096 || text.chars().any(char::is_control) || text.contains('\\') {
@@ -293,12 +316,13 @@ fn parse_profile(value: Value, expected_id: &str) -> Result<LolicodeAccount, For
     let display_name = public_text(attrs.get("displayName"), 512)
         .or_else(|| public_text(attrs.get("nickname"), 512))
         .unwrap_or_else(|| username.clone());
+    let profile_url = forum_profile_url(attrs, &username)?;
     Ok(LolicodeAccount {
         id: expected_id.to_owned(),
         username,
         display_name,
         avatar_url: safe_avatar(attrs.get("avatarUrl")),
-        profile_url: format!("{ORIGIN}/u/{expected_id}"),
+        profile_url,
     })
 }
 
@@ -496,15 +520,15 @@ mod tests {
         }
     }
 
+    fn profile_document() -> Value {
+        json!({"data":{"type":"users","id":"42","attributes":{
+            "username":"test-user","displayName":"昵称","avatarUrl":"/assets/avatars/test.png",
+            "isEmailConfirmed":true,"email":"fixture@example.invalid","isAdmin":false
+        }}})
+    }
+
     fn account() -> LolicodeAccount {
-        parse_profile(
-            json!({"data":{"type":"users","id":"42","attributes":{
-                "username":"test-user","displayName":"昵称","avatarUrl":"/assets/avatars/test.png",
-                "isEmailConfirmed":true,"email":"fixture@example.invalid","isAdmin":false
-            }}}),
-            "42",
-        )
-        .unwrap_or_else(|_| panic!("valid profile"))
+        parse_profile(profile_document(), "42").unwrap_or_else(|_| panic!("valid profile"))
     }
 
     #[derive(Default)]
@@ -576,7 +600,7 @@ mod tests {
             profile.avatar_url.as_deref(),
             Some("https://lolicode.com/assets/avatars/test.png")
         );
-        assert_eq!(profile.profile_url, "https://lolicode.com/u/42");
+        assert_eq!(profile.profile_url, "https://lolicode.com/u/test-user");
         assert!(parse_profile(
             json!({"data":{"type":"users","id":"43","attributes":{"username":"other"}}}),
             "42"
@@ -590,6 +614,85 @@ mod tests {
         let serialized = serde_json::to_string(&profile).unwrap();
         assert!(serialized.contains("displayName") && serialized.contains("avatarUrl"));
         assert!(!serialized.contains("token") && !serialized.contains("password"));
+    }
+
+    #[test]
+    fn profile_uses_the_public_slug_and_keeps_numeric_identity_for_authentication() {
+        let mut document = profile_document();
+        document["data"]["attributes"]["slug"] = json!("public-handle");
+        let profile = parse_profile(document, "42").unwrap_or_else(|_| panic!("valid slug"));
+        assert_eq!(profile.profile_url, "https://lolicode.com/u/public-handle");
+        assert_eq!(profile.id, "42");
+        assert_eq!(profile.username, "test-user");
+        let mut missing_slug = profile_document();
+        missing_slug["data"]["attributes"]["slug"] = Value::Null;
+        let profile =
+            parse_profile(missing_slug, "42").unwrap_or_else(|_| panic!("legacy profile"));
+        assert_eq!(profile.profile_url, "https://lolicode.com/u/test-user");
+    }
+
+    #[test]
+    fn profile_slug_is_one_encoded_segment_including_unicode_spaces_and_reserved_characters() {
+        for (slug, encoded) in [
+            ("萌 新", "%E8%90%8C%20%E6%96%B0"),
+            ("user/name?#%", "user%2Fname%3F%23%25"),
+            (" leading and trailing ", "%20leading%20and%20trailing%20"),
+        ] {
+            let mut document = profile_document();
+            document["data"]["attributes"]["slug"] = json!(slug);
+            let profile = parse_profile(document, "42").unwrap_or_else(|_| panic!("valid slug"));
+            assert_eq!(profile.profile_url, format!("{ORIGIN}/u/{encoded}"));
+        }
+        let mut document = profile_document();
+        document["data"]["attributes"]["username"] = json!("社区 用户");
+        let profile = parse_profile(document, "42").unwrap_or_else(|_| panic!("valid username"));
+        assert_eq!(
+            profile.profile_url,
+            "https://lolicode.com/u/%E7%A4%BE%E5%8C%BA%20%E7%94%A8%E6%88%B7"
+        );
+    }
+
+    #[test]
+    fn profile_slug_cannot_replace_the_origin_or_add_query_fragment_or_path_segments() {
+        for slug in [
+            "https://other.invalid/a?token=x#anchor",
+            "//other.invalid/profile",
+            "../admin",
+            "\\other.invalid\\profile",
+        ] {
+            let mut document = profile_document();
+            document["data"]["attributes"]["slug"] = json!(slug);
+            let profile = parse_profile(document, "42").unwrap_or_else(|_| panic!("encoded slug"));
+            let url = Url::parse(&profile.profile_url).unwrap();
+            assert_eq!(url.origin().ascii_serialization(), ORIGIN);
+            assert!(url.username().is_empty() && url.password().is_none());
+            assert!(url.query().is_none() && url.fragment().is_none());
+            let parts = url.path_segments().unwrap().collect::<Vec<_>>();
+            assert_eq!(parts.len(), 2);
+            assert_eq!(parts[0], "u");
+        }
+    }
+
+    #[test]
+    fn profile_rejects_invalid_present_slugs_instead_of_hiding_them_with_a_fallback() {
+        for slug in [
+            json!(""),
+            json!(" "),
+            json!("\nvalid"),
+            json!("valid\r\n"),
+            json!("."),
+            json!(".."),
+            json!(42),
+            json!([]),
+            json!("x".repeat(513)),
+        ] {
+            let mut document = profile_document();
+            document["data"]["attributes"]["slug"] = slug;
+            assert!(matches!(
+                parse_profile(document, "42"),
+                Err(ForumFailure::InvalidResponse)
+            ));
+        }
     }
 
     #[test]

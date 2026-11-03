@@ -15,6 +15,7 @@ import { settingsApi } from "@/lib/api";
 import { agentMemoryApi } from "@/lib/api/agent-memory";
 import { usageApi } from "@/lib/api/usage";
 import { toast } from "@/lib/toast";
+import { saveAgentQueueSubmission } from "@/lib/agentQueueLedger";
 import {
   captureAgentDraft,
   readAgentSubmission,
@@ -62,6 +63,11 @@ vi.mock("@/lib/api/agent", () => ({
     renameProject: vi.fn(),
     removeProject: vi.fn(),
     createSession: vi.fn(),
+    openSecretary: vi.fn(),
+    getSecretary: vi.fn(),
+    delegateSecretaryTask: vi.fn(),
+    sendSecretaryTaskMessage: vi.fn(),
+    cancelSecretaryTask: vi.fn(),
     updateSession: vi.fn(),
     renameSession: vi.fn(),
     setSessionMetadata: vi.fn(),
@@ -73,6 +79,9 @@ vi.mock("@/lib/api/agent", () => ({
     automation: vi.fn(),
     getSession: vi.fn(),
     sendMessage: vi.fn(),
+    enqueueMessage: vi.fn(),
+    removeQueuedMessage: vi.fn(),
+    sendQueuedMessageNow: vi.fn(),
     queryCommand: vi.fn(),
     interruptSession: vi.fn(),
     replyPermission: vi.fn(),
@@ -151,6 +160,14 @@ function fill(text = "修复这个项目的测试") {
   fireEvent.change(screen.getByLabelText("发送给 Agent 的消息"), {
     target: { value: text },
   });
+}
+async function queueRecallAction(ordinal = 1) {
+  fireEvent.keyDown(
+    screen.getByRole("button", { name: `第 ${ordinal} 条消息的更多操作` }),
+    { key: "Enter" },
+  );
+  await flush();
+  return screen.getByRole("menuitem", { name: `撤回编辑第 ${ordinal} 条消息` });
 }
 function openComposerOptions() {
   const trigger = screen.getByRole("button", { name: "对话设置" });
@@ -247,7 +264,11 @@ beforeEach(() => {
   vi.spyOn(toast, "warning").mockClear().mockReturnValue(0);
   sessionStorage.clear();
   for (const key of Object.keys(localStorage))
-    if (key.startsWith("lolicode.agent.input:")) localStorage.removeItem(key);
+    if (
+      key.startsWith("lolicode.agent.input:") ||
+      key.startsWith("lolicode.agent.queue-")
+    )
+      localStorage.removeItem(key);
   localStorage.removeItem("lolicode.agent.recent-projects");
   snapshot = emptySnapshot();
   vi.mocked(agentApi.getStatus).mockReset().mockResolvedValue({
@@ -336,6 +357,21 @@ beforeEach(() => {
       id: "lc:new",
       title: "新会话",
     });
+  vi.mocked(agentApi.openSecretary)
+    .mockReset()
+    .mockImplementation(async () => {
+      snapshot.session = {
+        ...structuredClone(session),
+        id: "lc:secretary",
+        title: "Loli 秘书",
+        coordination: { role: "secretary" },
+      };
+      return structuredClone(snapshot.session);
+    });
+  vi.mocked(agentApi.getSecretary)
+    .mockReset()
+    .mockResolvedValue({ sessionId: "lc:secretary", tasks: [] });
+  vi.mocked(agentApi.sendSecretaryTaskMessage).mockReset();
   vi.mocked(agentApi.openStandalone)
     .mockReset()
     .mockResolvedValue({
@@ -348,6 +384,27 @@ beforeEach(() => {
       sessions: [],
     });
   vi.mocked(agentApi.sendMessage).mockReset().mockResolvedValue();
+  vi.mocked(agentApi.enqueueMessage)
+    .mockReset()
+    .mockImplementation(async (_id, text, requestId) => {
+      snapshot.queuedMessages = [
+        ...(snapshot.queuedMessages || []),
+        { id: requestId, text, attachments: [] },
+      ];
+      return { status: "accepted" as const };
+    });
+  vi.mocked(agentApi.removeQueuedMessage)
+    .mockReset()
+    .mockImplementation(async (_id, requestId) => {
+      const entry = snapshot.queuedMessages?.find(
+        (item) => item.id === requestId,
+      );
+      snapshot.queuedMessages = snapshot.queuedMessages?.filter(
+        (item) => item.id !== requestId,
+      );
+      return { requestId, text: entry?.text || "", attachments: [] };
+    });
+  vi.mocked(agentApi.sendQueuedMessageNow).mockReset().mockResolvedValue();
   vi.mocked(agentApi.queryCommand)
     .mockReset()
     .mockResolvedValue({ status: "unknown" });
@@ -368,11 +425,717 @@ afterEach(async () => {
     for (const finish of pendingStopCleanups) finish();
     pendingStopCleanups.clear();
     for (let i = 0; i < 20; i += 1) await Promise.resolve();
+    // Queue recall schedules focus on the next animation frame. Drain it after
+    // unmounting, before discarding fake timers, so JSDOM's shared RAF scheduler
+    // does not retain a timer ID that can no longer service later focus tests.
+    await vi.advanceTimersByTimeAsync(32);
   });
   vi.useRealTimers();
 });
 
 describe("AgentPage", () => {
+  async function openWorkerConversation(
+    mode = "build",
+    status: AgentSnapshot["status"] = "idle",
+  ) {
+    const secretary: AgentSession = {
+      ...session,
+      id: "lc:secretary",
+      title: "Loli 秘书",
+      coordination: { role: "secretary" },
+    };
+    const worker: AgentSession = {
+      ...session,
+      id: "lc:worker",
+      title: "后台分析任务",
+      mode,
+      coordination: {
+        role: "worker",
+        parentSessionId: secretary.id,
+        taskId: "task-1",
+      },
+    };
+    const parent = { ...emptySnapshot(), session: secretary };
+    snapshot = { ...emptySnapshot(), session: worker, status };
+    vi.mocked(agentApi.listSessions).mockResolvedValue([secretary, worker]);
+    vi.mocked(agentApi.getSession).mockImplementation(async (id) =>
+      structuredClone(id === worker.id ? snapshot : parent),
+    );
+    vi.mocked(agentApi.getSecretary).mockResolvedValue({
+      sessionId: secretary.id,
+      tasks: [
+        {
+          id: "task-1",
+          parentSessionId: secretary.id,
+          sessionId: worker.id,
+          title: "分析任务",
+          instructions: "分析入口",
+          status: status === "running" ? "running" : "cancelled",
+          projectPath: project,
+          requestId: "worker-request",
+          createdAt: 1,
+          updatedAt: 2,
+        },
+      ],
+    });
+    render(<AgentPage />);
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: /^工作任务/ }));
+    fireEvent.click(screen.getByRole("button", { name: "打开工作对话" }));
+    await flush();
+    return { secretary, worker };
+  }
+
+  function acceptWorkerMessage(
+    _parent: string,
+    taskId: string,
+    text: string,
+    requestId: string,
+  ) {
+    snapshot.messages.push({
+      id: requestId,
+      role: "user",
+      createdAt: 3,
+      parts: [{ type: "text", text }],
+    });
+    snapshot.status = "running";
+    return Promise.resolve({
+      id: taskId,
+      parentSessionId: "lc:secretary",
+      sessionId: "lc:worker",
+      title: "分析任务",
+      instructions: "分析入口",
+      status: "running" as const,
+      projectPath: project,
+      requestId: "worker-request",
+      createdAt: 1,
+      updatedAt: 4,
+    });
+  }
+
+  it("resumes a stopped worker through the secretary while preserving its plan scope and request ledger", async () => {
+    const { worker } = await openWorkerConversation("plan");
+    vi.mocked(agentApi.sendSecretaryTaskMessage).mockImplementation(
+      acceptWorkerMessage,
+    );
+    fill("请检查当前现场后继续");
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+    await flush();
+    expect(agentApi.sendSecretaryTaskMessage).toHaveBeenCalledWith(
+      "lc:secretary",
+      "task-1",
+      "请检查当前现场后继续",
+      expect.any(String),
+      [],
+      [],
+    );
+    expect(agentApi.sendMessage).not.toHaveBeenCalled();
+    expect(agentApi.updateSession).not.toHaveBeenCalled();
+    expect(snapshot.session.id).toBe(worker.id);
+    expect(snapshot.session.mode).toBe("plan");
+    expect(screen.getByRole("button", { name: "模型" })).toBeDisabled();
+    expect(
+      within(openComposerOptions()).getByText(/工作对话沿用创建时的模型与权限/),
+    ).toBeInTheDocument();
+    expect(composerPermissionSelect()).toBeDisabled();
+  });
+
+  it("queues a running worker follow-up through its secretary using the worker's original request identity", async () => {
+    await openWorkerConversation("build", "running");
+    vi.mocked(agentApi.sendSecretaryTaskMessage).mockImplementation(
+      async (_parent, taskId, text, requestId) => {
+        snapshot.queuedMessages = [{ id: requestId, text, attachments: [] }];
+        return {
+          id: taskId,
+          parentSessionId: "lc:secretary",
+          sessionId: "lc:worker",
+          title: "分析任务",
+          instructions: "分析入口",
+          status: "running",
+          projectPath: project,
+          requestId: "worker-request",
+          createdAt: 1,
+          updatedAt: 4,
+        };
+      },
+    );
+    fill("完成后继续核对文档");
+    fireEvent.click(screen.getByRole("button", { name: "加入队列" }));
+    await flush();
+    expect(agentApi.enqueueMessage).not.toHaveBeenCalled();
+    expect(agentApi.sendSecretaryTaskMessage).toHaveBeenCalledWith(
+      "lc:secretary",
+      "task-1",
+      "完成后继续核对文档",
+      expect.any(String),
+      [],
+      [],
+    );
+    const requestId = vi.mocked(agentApi.sendSecretaryTaskMessage).mock
+      .calls[0][3];
+    expect(snapshot.queuedMessages?.[0].id).toBe(requestId);
+    expect(
+      screen.getByRole("region", { name: "待发送消息" }),
+    ).toHaveTextContent("完成后继续核对文档");
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue("");
+  });
+
+  it("retries an uncertain worker continuation with the same request ID", async () => {
+    await openWorkerConversation();
+    vi.mocked(agentApi.sendSecretaryTaskMessage)
+      .mockRejectedValueOnce(new Error("工作回执未收到"))
+      .mockImplementationOnce(acceptWorkerMessage);
+    fill("继续完成这个任务");
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+    await flush();
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
+      "继续完成这个任务",
+    );
+    await tick(1000);
+    expect(agentApi.queryCommand).toHaveBeenCalledWith(
+      "lc:worker",
+      vi.mocked(agentApi.sendSecretaryTaskMessage).mock.calls[0][3],
+    );
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+    await flush();
+    const calls = vi.mocked(agentApi.sendSecretaryTaskMessage).mock.calls;
+    expect(calls).toHaveLength(2);
+    expect(calls[1][3]).toBe(calls[0][3]);
+    expect(agentApi.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("preserves recalled image and document payloads when a worker continuation is queued", async () => {
+    await openWorkerConversation("build", "running");
+    snapshot.queuedMessages = [
+      {
+        id: "worker-attachment-queue",
+        text: "核对这两个附件",
+        attachments: [
+          { fileName: "notes.md", mime: "text/markdown", bytes: 4 },
+        ],
+      },
+    ];
+    vi.mocked(agentApi.removeQueuedMessage).mockImplementationOnce(
+      async (_id, requestId) => {
+        snapshot.queuedMessages = [];
+        return {
+          requestId,
+          text: "核对这两个附件",
+          attachments: [
+            {
+              fileName: "preview.png",
+              mime: "image/png",
+              bytes: 4,
+              ref: "data:image/png;base64,dGVzdA==",
+            },
+            {
+              fileName: "notes.md",
+              mime: "text/markdown",
+              bytes: 4,
+              dataBase64: "dGVzdA==",
+            },
+          ],
+        };
+      },
+    );
+    await tick(1000);
+    fireEvent.click(await queueRecallAction());
+    await flush();
+    expect(agentApi.removeQueuedMessage).toHaveBeenCalledWith(
+      "lc:worker",
+      "worker-attachment-queue",
+    );
+    vi.mocked(agentApi.sendSecretaryTaskMessage).mockImplementation(
+      acceptWorkerMessage,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "加入队列" }));
+    await flush();
+    expect(agentApi.sendSecretaryTaskMessage).toHaveBeenCalledWith(
+      "lc:secretary",
+      "task-1",
+      "核对这两个附件",
+      expect.any(String),
+      [
+        expect.objectContaining({
+          fileName: "preview.png",
+          dataUrl: "data:image/png;base64,dGVzdA==",
+        }),
+      ],
+      [
+        expect.objectContaining({
+          fileName: "notes.md",
+          dataBase64: "dGVzdA==",
+        }),
+      ],
+    );
+    expect(agentApi.enqueueMessage).not.toHaveBeenCalled();
+  });
+
+  it("prioritizes an existing worker queue entry without inventing a new follow-up request", async () => {
+    await openWorkerConversation("build", "running");
+    snapshot.queuedMessages = [
+      { id: "worker-priority-queue", text: "优先核对安装", attachments: [] },
+    ];
+    await tick(1000);
+    fill("仍在编辑的任务要求");
+    fireEvent.click(
+      screen.getByRole("button", { name: "立即发送第 1 条消息" }),
+    );
+    await flush();
+    expect(agentApi.sendQueuedMessageNow).toHaveBeenCalledWith(
+      "lc:worker",
+      "worker-priority-queue",
+    );
+    expect(agentApi.sendSecretaryTaskMessage).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
+      "仍在编辑的任务要求",
+    );
+  });
+
+  it("renders trusted secretary reports as system notices while leaving user-authored report-shaped JSON visible", async () => {
+    snapshot.session.coordination = { role: "secretary" };
+    snapshot.messages = [
+      {
+        id: "trusted-report",
+        role: "system",
+        createdAt: 3,
+        completedAt: 3,
+        parts: [{ type: "text", text: "工作任务「整理文档」已完成。" }],
+      },
+      {
+        id: "ordinary-user-json",
+        role: "user",
+        createdAt: 4,
+        completedAt: 4,
+        parts: [
+          {
+            type: "text",
+            text: '{"kind":"secretary_worker_report","note":"这是我提交的数据"}',
+          },
+        ],
+      },
+    ];
+    snapshot.queuedMessages = [
+      {
+        id: "trusted-report-pending",
+        text: "工作任务「核对安装」需要你回答。",
+        attachments: [],
+      },
+    ];
+    vi.mocked(agentApi.getSecretary).mockResolvedValue({
+      sessionId: session.id,
+      tasks: [],
+    });
+    render(<AgentPage />);
+    await flush();
+    const system = screen.getByRole("article", { name: "系统消息" });
+    expect(system).toHaveTextContent("工作任务「整理文档」已完成。");
+    expect(system).not.toHaveTextContent("secretary_worker_report");
+    expect(screen.getByRole("article", { name: "你的消息" })).toHaveTextContent(
+      "secretary_worker_report",
+    );
+    expect(screen.getByRole("article", { name: "你的消息" })).toHaveTextContent(
+      "这是我提交的数据",
+    );
+    expect(
+      screen.getByRole("region", { name: "待发送消息" }),
+    ).toHaveTextContent("工作任务「核对安装」需要你回答。");
+  });
+
+  it("opens a requested secretary once after initialization without consuming the previous conversation draft", async () => {
+    const consumed = vi.fn();
+    const view = render(<AgentPage onSecretaryRequestConsumed={consumed} />);
+    await flush();
+    fill("留给原会话的草稿");
+    view.rerender(
+      <AgentPage
+        secretaryRequest={{ requestId: 1 }}
+        onSecretaryRequestConsumed={consumed}
+      />,
+    );
+    await flush();
+    expect(agentApi.openSecretary).toHaveBeenCalledTimes(1);
+    expect(consumed).toHaveBeenCalledTimes(1);
+    expect(
+      screen.getByRole("heading", { name: "Loli 秘书" }),
+    ).toBeInTheDocument();
+    expect(
+      sessionStorage.getItem(
+        `lolicode.agent.draft:${encodeURIComponent(project)}:${encodeURIComponent(session.id)}`,
+      ),
+    ).toBe("留给原会话的草稿");
+    view.rerender(
+      <AgentPage
+        secretaryRequest={{ requestId: 1 }}
+        onSecretaryRequestConsumed={consumed}
+      />,
+    );
+    await flush();
+    expect(agentApi.openSecretary).toHaveBeenCalledTimes(1);
+    expect(consumed).toHaveBeenCalledTimes(1);
+  });
+
+  it("binds a requested worker's project and verifies its secretary before opening the conversation", async () => {
+    const target = "D:/fixture/secretary-project";
+    const secretary: AgentSession = {
+      ...session,
+      id: "lc:target-secretary",
+      title: "目标秘书",
+      projectPath: target,
+      coordination: { role: "secretary" },
+    };
+    const worker: AgentSession = {
+      ...session,
+      id: "lc:target-worker",
+      title: "目标工作任务",
+      projectPath: target,
+      coordination: {
+        role: "worker",
+        parentSessionId: secretary.id,
+        taskId: "target-task",
+      },
+    };
+    const consumed = vi.fn();
+    vi.mocked(agentApi.getSession).mockImplementation(async (id) => ({
+      ...emptySnapshot(),
+      session: structuredClone(
+        id === worker.id ? worker : id === secretary.id ? secretary : session,
+      ),
+    }));
+    vi.mocked(agentApi.openProject).mockResolvedValue({
+      workspace: { path: target, name: "secretary-project" },
+      catalog,
+      sessions: [secretary, worker],
+    });
+    vi.mocked(agentApi.getSecretary).mockResolvedValue({
+      sessionId: secretary.id,
+      tasks: [],
+    });
+    render(
+      <AgentPage
+        secretaryRequest={{
+          requestId: 2,
+          projectPath: target,
+          sessionId: secretary.id,
+          workerSessionId: worker.id,
+        }}
+        onSecretaryRequestConsumed={consumed}
+      />,
+    );
+    await flush();
+    expect(agentApi.openProject).toHaveBeenCalledWith(target);
+    expect(agentApi.getSession).toHaveBeenCalledWith(secretary.id);
+    expect(
+      screen.getByRole("heading", { name: "目标工作任务" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "返回秘书" }),
+    ).toBeInTheDocument();
+    expect(consumed).toHaveBeenCalledTimes(1);
+    expect(agentApi.openSecretary).not.toHaveBeenCalled();
+  });
+
+  it("rejects a requested worker from a different secretary before changing the workspace", async () => {
+    const worker: AgentSession = {
+      ...session,
+      id: "lc:wrong-worker",
+      coordination: {
+        role: "worker",
+        parentSessionId: "lc:someone-else",
+        taskId: "wrong-task",
+      },
+    };
+    vi.mocked(agentApi.getSession).mockImplementation(async (id) => ({
+      ...emptySnapshot(),
+      session: structuredClone(id === worker.id ? worker : session),
+    }));
+    const consumed = vi.fn();
+    render(
+      <AgentPage
+        secretaryRequest={{
+          requestId: 3,
+          sessionId: "lc:expected",
+          workerSessionId: worker.id,
+        }}
+        onSecretaryRequestConsumed={consumed}
+      />,
+    );
+    await flush();
+    expect(
+      screen.getByRole("heading", { name: session.title }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "工作对话与指定秘书不一致",
+    );
+    expect(agentApi.openProject).not.toHaveBeenCalled();
+    expect(consumed).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens only the latest requested secretary when an older request finishes late", async () => {
+    const oldSecretary: AgentSession = {
+      ...session,
+      id: "lc:old-secretary",
+      title: "旧请求秘书",
+      projectPath: "D:/fixture/old",
+      coordination: { role: "secretary" },
+    };
+    const newSecretary: AgentSession = {
+      ...session,
+      id: "lc:new-secretary",
+      title: "新请求秘书",
+      projectPath: "D:/fixture/new",
+      coordination: { role: "secretary" },
+    };
+    let finish!: (value: AgentSnapshot) => void;
+    vi.mocked(agentApi.getSession).mockImplementation(async (id) =>
+      id === oldSecretary.id
+        ? await new Promise((resolve) => {
+            finish = resolve;
+          })
+        : {
+            ...emptySnapshot(),
+            session: structuredClone(
+              id === newSecretary.id ? newSecretary : session,
+            ),
+          },
+    );
+    vi.mocked(agentApi.openProject).mockResolvedValue({
+      workspace: { path: newSecretary.projectPath, name: "new" },
+      catalog,
+      sessions: [newSecretary],
+    });
+    vi.mocked(agentApi.getSecretary).mockResolvedValue({
+      sessionId: newSecretary.id,
+      tasks: [],
+    });
+    const consumed = vi.fn();
+    const view = render(
+      <AgentPage
+        secretaryRequest={{ requestId: 4, sessionId: oldSecretary.id }}
+        onSecretaryRequestConsumed={consumed}
+      />,
+    );
+    await flush();
+    view.rerender(
+      <AgentPage
+        secretaryRequest={{ requestId: 5, sessionId: newSecretary.id }}
+        onSecretaryRequestConsumed={consumed}
+      />,
+    );
+    await flush();
+    await act(async () =>
+      finish({ ...emptySnapshot(), session: oldSecretary }),
+    );
+    await flush();
+    expect(agentApi.openProject).toHaveBeenCalledTimes(1);
+    expect(agentApi.openProject).toHaveBeenCalledWith(newSecretary.projectPath);
+    expect(
+      screen.getByRole("heading", { name: "新请求秘书" }),
+    ).toBeInTheDocument();
+    expect(consumed).toHaveBeenCalledTimes(1);
+  });
+
+  it("places the secretary beside new conversation and inherits current conversation settings", async () => {
+    snapshot.session.permissionMode = "ask";
+    snapshot.session.reasoningEffort = "high";
+    snapshot.session.contextLimit = 32000;
+    render(<AgentPage />);
+    await flush();
+    const button = screen.getByRole("button", { name: "打开 Loli 秘书" });
+    expect(button.previousElementSibling).toHaveClass("wb-create-task");
+    fireEvent.click(button);
+    await flush();
+    expect(agentApi.openSecretary).toHaveBeenCalledWith(
+      catalog.models[0].id,
+      "ask",
+      "high",
+      project,
+      32000,
+    );
+    expect(
+      screen.getByRole("heading", { name: "Loli 秘书" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("region", { name: "工作任务" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("今天有什么交给我？")).toBeInTheDocument();
+    expect(button).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("does not increase an unfamiliar current permission mode when opening the secretary", async () => {
+    snapshot.session.permissionMode = "custom";
+    render(<AgentPage />);
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: "打开 Loli 秘书" }));
+    await flush();
+    expect(agentApi.openSecretary).toHaveBeenCalledWith(
+      catalog.models[0].id,
+      "ask",
+      undefined,
+      project,
+      undefined,
+    );
+  });
+
+  it("keeps worker conversations out of the sidebar and restores the secretary as the visible conversation", async () => {
+    const secretary: AgentSession = {
+      ...session,
+      id: "lc:secretary",
+      title: "Loli 秘书",
+      coordination: { role: "secretary" },
+    };
+    const worker: AgentSession = {
+      ...session,
+      id: "lc:worker",
+      title: "后台分析任务",
+      coordination: {
+        role: "worker",
+        parentSessionId: secretary.id,
+        taskId: "task-1",
+      },
+    };
+    vi.mocked(agentApi.listSessions).mockResolvedValue([
+      worker,
+      secretary,
+      session,
+    ]);
+    vi.mocked(agentApi.getSession).mockImplementation(async (id) => ({
+      ...emptySnapshot(),
+      session: structuredClone(id === worker.id ? worker : secretary),
+    }));
+    render(<AgentPage />);
+    await flush();
+    expect(
+      screen.getByRole("heading", { name: "Loli 秘书" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "后台分析任务" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("opens a worker requiring attention and returns to the secretary without losing its draft", async () => {
+    const secretary: AgentSession = {
+      ...session,
+      id: "lc:secretary",
+      title: "Loli 秘书",
+      coordination: { role: "secretary" },
+    };
+    const worker: AgentSession = {
+      ...session,
+      id: "lc:worker",
+      title: "后台分析任务",
+      coordination: {
+        role: "worker",
+        parentSessionId: secretary.id,
+        taskId: "task-1",
+      },
+    };
+    vi.mocked(agentApi.listSessions).mockResolvedValue([
+      secretary,
+      worker,
+      session,
+    ]);
+    vi.mocked(agentApi.getSession).mockImplementation(async (id) => ({
+      ...emptySnapshot(),
+      session: structuredClone(id === worker.id ? worker : secretary),
+    }));
+    vi.mocked(agentApi.getSecretary).mockResolvedValue({
+      sessionId: secretary.id,
+      tasks: [
+        {
+          id: "task-1",
+          parentSessionId: secretary.id,
+          sessionId: worker.id,
+          title: "分析任务",
+          instructions: "分析入口",
+          status: "waiting_question",
+          projectPath: project,
+          requestId: "worker-request",
+          createdAt: 1,
+          updatedAt: 2,
+        },
+      ],
+    });
+    render(<AgentPage />);
+    await flush();
+    fill("给秘书保留的补充要求");
+    fireEvent.click(screen.getByRole("button", { name: /^工作任务/ }));
+    fireEvent.click(screen.getByRole("button", { name: "查看并处理" }));
+    await flush();
+    expect(
+      screen.getByRole("heading", { name: "后台分析任务" }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "返回秘书" }));
+    await flush();
+    expect(
+      screen.getByRole("heading", { name: "Loli 秘书" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
+      "给秘书保留的补充要求",
+    );
+  });
+
+  it("preserves the current conversation and input if opening the secretary fails", async () => {
+    vi.mocked(agentApi.openSecretary).mockRejectedValue(
+      new Error("秘书暂时无法打开"),
+    );
+    render(<AgentPage />);
+    await flush();
+    fill("原会话尚未发送的要求");
+    fireEvent.click(screen.getByRole("button", { name: "打开 Loli 秘书" }));
+    await flush();
+    expect(
+      screen.getByRole("heading", { name: session.title }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
+      "原会话尚未发送的要求",
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent("秘书暂时无法打开");
+  });
+
+  it("can open a secretary in the standalone workspace before a project is selected", async () => {
+    vi.mocked(agentApi.getStatus).mockResolvedValue({
+      available: true,
+      running: false,
+    });
+    const standalone = "D:/fixture/app/agent/standalone-workspace";
+    vi.mocked(agentApi.openSecretary).mockImplementation(async () => {
+      snapshot.session = {
+        ...session,
+        id: "lc:secretary",
+        title: "Loli 秘书",
+        projectPath: standalone,
+        coordination: { role: "secretary" },
+      };
+      return structuredClone(snapshot.session);
+    });
+    render(<AgentPage />);
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: "打开 Loli 秘书" }));
+    await flush();
+    expect(agentApi.openStandalone).toHaveBeenCalledTimes(1);
+    expect(agentApi.openSecretary).toHaveBeenCalledWith(
+      catalog.models[0].id,
+      "full_access",
+      undefined,
+      standalone,
+      undefined,
+    );
+    expect(
+      screen.getByRole("heading", { name: "Loli 秘书" }),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps development session synchronization out of the stable workbench", async () => {
+    render(<AgentPage />);
+    await flush();
+    expect(
+      screen.getByRole("heading", { name: session.title }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "同步会话" }),
+    ).not.toBeInTheDocument();
+  });
   it("keeps session status and file preview in the titlebar while preserving the composer", async () => {
     const view = render(<AgentPage />);
     await flush();
@@ -399,6 +1162,9 @@ describe("AgentPage", () => {
     ).not.toBeInTheDocument();
     expect(view.container.querySelector(".wb-context-line")).toBeNull();
     expect(screen.getByRole("button", { name: "模型" })).toBeEnabled();
+    expect(
+      within(header).getByRole("button", { name: "预览项目文件" }),
+    ).toHaveAttribute("aria-expanded", "false");
 
     fireEvent.click(
       within(header).getByRole("button", { name: "预览项目文件" }),
@@ -410,6 +1176,18 @@ describe("AgentPage", () => {
     expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
       "打开文件预览时保留的草稿",
     );
+    const collapsePreview = within(header).getByRole("button", {
+      name: "收起文件预览",
+    });
+    expect(collapsePreview).toHaveAttribute("aria-expanded", "true");
+    fireEvent.click(collapsePreview);
+    expect(
+      screen.queryByRole("complementary", { name: "文件预览" }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(
+      within(header).getByRole("button", { name: "预览项目文件" }),
+    );
+    await flush();
     fireEvent.click(screen.getByRole("button", { name: "关闭预览" }));
     expect(
       screen.queryByRole("complementary", { name: "文件预览" }),
@@ -825,6 +1603,129 @@ describe("AgentPage", () => {
     },
   );
 
+  it("automation design kickoff creates its own conversation and sends the requirement without interrupting the source or losing its draft", async () => {
+    snapshot.status = "running";
+    snapshot.session.permissionMode = "auto";
+    snapshot.session.reasoningEffort = "high";
+    snapshot.session.contextLimit = 64000;
+    const designSession: AgentSession = {
+      ...structuredClone(snapshot.session),
+      id: "lc:automation-design-kickoff",
+      title: "设计自动化",
+      createdAt: 3,
+      updatedAt: 3,
+    };
+    let created = false;
+    vi.mocked(agentApi.createSession).mockImplementation(async () => {
+      created = true;
+      return structuredClone(designSession);
+    });
+    vi.mocked(agentApi.listSessions).mockImplementation(async () =>
+      created
+        ? [structuredClone(designSession), structuredClone(snapshot.session)]
+        : [structuredClone(snapshot.session)],
+    );
+    vi.mocked(agentApi.getSession).mockImplementation(async (id) =>
+      id === designSession.id
+        ? {
+            ...emptySnapshot(),
+            session: structuredClone(designSession),
+          }
+        : structuredClone(snapshot),
+    );
+    const view = render(<AgentPage />);
+    await flush();
+    fill("原运行会话里尚未发送的草稿");
+    view.rerender(
+      <AgentPage
+        toolRequest={{ tool: "workflows", initialTab: "automation", id: 1 }}
+      />,
+    );
+    await flush();
+    fireEvent.change(screen.getByLabelText("描述自动化任务"), {
+      target: { value: "每天早上9点检查代码并汇总风险" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "开始对话构建" }));
+    await flush();
+    await tick(1);
+    await flush();
+    expect(agentApi.createSession).toHaveBeenCalledOnce();
+    expect(agentApi.createSession).toHaveBeenCalledWith(
+      catalog.models[0].id,
+      "build",
+      "设计自动化",
+      "auto",
+      "high",
+      project,
+      64000,
+    );
+    expect(agentApi.getSession).toHaveBeenCalledWith(designSession.id);
+    expect(agentApi.sendMessage).toHaveBeenCalledOnce();
+    expect(agentApi.sendMessage).toHaveBeenCalledWith(
+      designSession.id,
+      expect.stringContaining("每天早上9点检查代码并汇总风险"),
+      expect.any(String),
+      [],
+      [],
+    );
+    expect(vi.mocked(agentApi.sendMessage).mock.calls[0][1]).toContain(
+      "自动化配置卡",
+    );
+    expect(agentApi.interruptSession).not.toHaveBeenCalled();
+    expect(agentApi.automation).not.toHaveBeenCalledWith(
+      "create",
+      expect.anything(),
+    );
+    expect(
+      screen.queryByRole("region", { name: "工作流与自动化" }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: new RegExp(`^${session.title}`) }),
+    );
+    await flush();
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
+      "原运行会话里尚未发送的草稿",
+    );
+    expect(agentApi.interruptSession).not.toHaveBeenCalled();
+  });
+
+  it("automation design kickoff rejects an unavailable source model instead of silently choosing another model", async () => {
+    snapshot.session.model = {
+      providerId: "removed-channel",
+      modelId: "removed-model",
+    };
+    const view = render(<AgentPage />);
+    await flush();
+    fill("模型不可用时也要保留的原草稿");
+    view.rerender(
+      <AgentPage
+        toolRequest={{ tool: "workflows", initialTab: "automation", id: 1 }}
+      />,
+    );
+    await flush();
+    fireEvent.change(screen.getByLabelText("描述自动化任务"), {
+      target: { value: "每天9点检查项目" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "开始对话构建" }));
+    await flush();
+    expect(
+      screen.getByText(
+        "当前会话模型不可用，请先选择可用模型，再开始自动化对话。",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("描述自动化任务")).toHaveValue(
+      "每天9点检查项目",
+    );
+    expect(agentApi.createSession).not.toHaveBeenCalled();
+    expect(agentApi.sendMessage).not.toHaveBeenCalled();
+    expect(agentApi.interruptSession).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "返回工作台" }));
+    await flush();
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
+      "模型不可用时也要保留的原草稿",
+    );
+  });
+
   it("returns from a tool to the selected conversation without losing either draft", async () => {
     const second = { ...session, id: "s2", title: "整理项目文档" };
     vi.mocked(agentApi.listSessions).mockResolvedValue([session, second]);
@@ -1168,6 +2069,316 @@ describe("AgentPage", () => {
     ).toContain("保留这段需求");
   });
 
+  it.each(["running", "waiting_permission", "waiting_question"] as const)(
+    "queues Enter during %s without interrupting the current response",
+    async (status) => {
+      snapshot.status = status;
+      render(<AgentPage />);
+      await flush();
+      fill("下一条任务");
+      fireEvent.keyDown(screen.getByLabelText("发送给 Agent 的消息"), {
+        key: "Enter",
+      });
+      await flush();
+      expect(agentApi.enqueueMessage).toHaveBeenCalledWith(
+        session.id,
+        "下一条任务",
+        expect.any(String),
+        [],
+        [],
+      );
+      expect(agentApi.sendMessage).not.toHaveBeenCalled();
+      expect(agentApi.interruptSession).not.toHaveBeenCalled();
+      expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue("");
+      expect(
+        within(screen.getByRole("region", { name: "待发送消息" })).getByText(
+          "下一条任务",
+        ),
+      ).toBeVisible();
+      expect(
+        screen.getByRole("button", { name: "立即发送第 1 条消息" }),
+      ).toBeEnabled();
+    },
+  );
+  it("preserves newer edits when an enqueue acknowledgement arrives late", async () => {
+    snapshot.status = "running";
+    let finish!: () => void;
+    vi.mocked(agentApi.enqueueMessage).mockImplementationOnce(
+      async (_id, text, requestId) => {
+        await new Promise<void>((resolve) => {
+          finish = resolve;
+        });
+        snapshot.queuedMessages = [{ id: requestId, text, attachments: [] }];
+        return { status: "accepted" as const };
+      },
+    );
+    render(<AgentPage />);
+    await flush();
+    fill("捕获的队列消息");
+    fireEvent.click(screen.getByRole("button", { name: "加入队列" }));
+    await flush();
+    fill("新写的草稿");
+    await act(async () => finish());
+    await flush();
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
+      "新写的草稿",
+    );
+    expect(screen.getByText("捕获的队列消息")).toBeVisible();
+    expect(agentApi.interruptSession).not.toHaveBeenCalled();
+  });
+  it("retries an uncertain enqueue with the same request identity", async () => {
+    snapshot.status = "running";
+    vi.mocked(agentApi.enqueueMessage).mockRejectedValueOnce(
+      new Error("入队响应丢失"),
+    );
+    render(<AgentPage />);
+    await flush();
+    fill("保留消息并重试");
+    fireEvent.click(screen.getByRole("button", { name: "加入队列" }));
+    await flush();
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
+      "保留消息并重试",
+    );
+    const first = vi.mocked(agentApi.enqueueMessage).mock.calls[0];
+    fireEvent.click(screen.getByRole("button", { name: "加入队列" }));
+    await flush();
+    expect(vi.mocked(agentApi.enqueueMessage).mock.calls[1]).toEqual(first);
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue("");
+    expect(agentApi.interruptSession).not.toHaveBeenCalled();
+  });
+  it("keeps the editor usable after a definite native queue rejection", async () => {
+    snapshot.status = "running";
+    vi.mocked(agentApi.enqueueMessage).mockResolvedValueOnce({
+      status: "rejected",
+      message: "队列已满",
+    });
+    render(<AgentPage />);
+    await flush();
+    fill("超出队列容量的草稿");
+    fireEvent.click(screen.getByRole("button", { name: "加入队列" }));
+    await flush();
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
+      "超出队列容量的草稿",
+    );
+    expect(screen.getByText("队列已满")).toBeVisible();
+    fill("修改后重新排队");
+    fireEvent.click(screen.getByRole("button", { name: "加入队列" }));
+    await flush();
+    expect(agentApi.enqueueMessage).toHaveBeenCalledTimes(2);
+    expect(screen.getByText("修改后重新排队")).toBeVisible();
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue("");
+  });
+  it("restores an unconfirmed enqueue draft after reload and reuses its exact request ID", async () => {
+    snapshot.status = "running";
+    const storageKey = `lolicode.agent.draft:${encodeURIComponent(project)}:${encodeURIComponent(session.id)}`;
+    saveAgentQueueSubmission({
+      version: 1,
+      projectPath: project,
+      sessionId: session.id,
+      requestId: "queue-recovery-id",
+      text: "重新打开后的待确认草稿",
+      draft: {
+        key: storageKey,
+        revision: "recovered-token",
+        text: "重新打开后的待确认草稿",
+      },
+      imageIds: [],
+      documentIds: [],
+    });
+    render(<AgentPage />);
+    await flush();
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
+      "重新打开后的待确认草稿",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "加入队列" }));
+    await flush();
+    expect(agentApi.enqueueMessage).toHaveBeenCalledWith(
+      session.id,
+      "重新打开后的待确认草稿",
+      "queue-recovery-id",
+      [],
+      [],
+    );
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue("");
+  });
+  it("recovers a lost enqueue response from the native queue snapshot", async () => {
+    snapshot.status = "running";
+    vi.mocked(agentApi.enqueueMessage).mockImplementationOnce(
+      async (_id, text, requestId) => {
+        snapshot.queuedMessages = [{ id: requestId, text, attachments: [] }];
+        throw new Error("transport lost");
+      },
+    );
+    render(<AgentPage />);
+    await flush();
+    fill("原生已接收入队");
+    fireEvent.click(screen.getByRole("button", { name: "加入队列" }));
+    await flush();
+    expect(screen.getByText("原生已接收入队")).toBeVisible();
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue("");
+    expect(screen.queryByText("transport lost")).not.toBeInTheDocument();
+    expect(agentApi.enqueueMessage).toHaveBeenCalledOnce();
+  });
+  it("recalls text and original image/document payloads into the editor", async () => {
+    snapshot.status = "running";
+    snapshot.queuedMessages = [
+      {
+        id: "queue-owned",
+        text: "带附件的消息",
+        attachments: [
+          { fileName: "notes.md", mime: "text/markdown", bytes: 4 },
+        ],
+      },
+    ];
+    vi.mocked(agentApi.removeQueuedMessage).mockImplementationOnce(
+      async (_id, requestId) => {
+        snapshot.queuedMessages = [];
+        return {
+          requestId,
+          text: "带附件的消息",
+          attachments: [
+            {
+              fileName: "preview.png",
+              mime: "image/png",
+              bytes: 4,
+              ref: "data:image/png;base64,dGVzdA==",
+            },
+            {
+              fileName: "notes.md",
+              mime: "text/markdown",
+              bytes: 4,
+              dataBase64: "dGVzdA==",
+            },
+          ],
+        };
+      },
+    );
+    render(<AgentPage />);
+    await flush();
+    fireEvent.click(await queueRecallAction());
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toBeDisabled();
+    await flush();
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
+      "带附件的消息",
+    );
+    expect(
+      screen.getByRole("button", { name: "移除图片：preview.png" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "移除文档：notes.md" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("region", { name: "待发送消息" }),
+    ).not.toBeInTheDocument();
+    expect(agentApi.interruptSession).not.toHaveBeenCalled();
+  });
+  it("keeps a concurrent edit and offers recovery after a late withdrawal response", async () => {
+    snapshot.status = "running";
+    snapshot.queuedMessages = [
+      { id: "queue-owned", text: "已撤回的原消息", attachments: [] },
+    ];
+    let finish!: () => void;
+    vi.mocked(agentApi.removeQueuedMessage).mockImplementation(
+      async (_id, requestId) => {
+        if (!finish)
+          await new Promise<void>((resolve) => {
+            finish = resolve;
+          });
+        snapshot.queuedMessages = [];
+        return { requestId, text: "已撤回的原消息", attachments: [] };
+      },
+    );
+    render(<AgentPage />);
+    await flush();
+    fireEvent.click(await queueRecallAction());
+    await flush();
+    // Another editor/window can change storage despite the local input lock.
+    fill("并发的新草稿");
+    await act(async () => finish());
+    await flush();
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
+      "并发的新草稿",
+    );
+    expect(screen.getByRole("button", { name: "恢复编辑" })).toBeVisible();
+    fill("");
+    fireEvent.click(screen.getByRole("button", { name: "恢复编辑" }));
+    await flush();
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
+      "已撤回的原消息",
+    );
+    expect(
+      screen.queryByRole("button", { name: "恢复编辑" }),
+    ).not.toBeInTheDocument();
+  });
+  it("recovers an acknowledged withdrawal whose transport response was lost", async () => {
+    snapshot.status = "running";
+    snapshot.queuedMessages = [
+      { id: "queue-owned", text: "不能丢的撤回消息", attachments: [] },
+    ];
+    vi.mocked(agentApi.removeQueuedMessage).mockImplementationOnce(async () => {
+      snapshot.queuedMessages = [];
+      throw new Error("撤回响应丢失");
+    });
+    render(<AgentPage />);
+    await flush();
+    fireEvent.click(await queueRecallAction());
+    await flush();
+    expect(screen.getByRole("button", { name: "恢复编辑" })).toBeVisible();
+    vi.mocked(agentApi.removeQueuedMessage).mockResolvedValueOnce({
+      requestId: "queue-owned",
+      text: "不能丢的撤回消息",
+      attachments: [],
+    });
+    fireEvent.click(screen.getByRole("button", { name: "恢复编辑" }));
+    await flush();
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
+      "不能丢的撤回消息",
+    );
+  });
+  it("sends the selected queued item now without consuming the current draft", async () => {
+    snapshot.status = "running";
+    snapshot.queuedMessages = [
+      { id: "queue-first", text: "稍后任务", attachments: [] },
+      { id: "queue-priority", text: "优先任务", attachments: [] },
+    ];
+    render(<AgentPage />);
+    await flush();
+    fill("继续写的草稿");
+    fireEvent.click(
+      screen.getByRole("button", { name: "立即发送第 2 条消息" }),
+    );
+    await flush();
+    expect(agentApi.sendQueuedMessageNow).toHaveBeenCalledWith(
+      session.id,
+      "queue-priority",
+    );
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
+      "继续写的草稿",
+    );
+    expect(agentApi.interruptSession).not.toHaveBeenCalled();
+    expect(agentApi.sendMessage).not.toHaveBeenCalled();
+  });
+  it("deletes only the selected queued item while preserving the editor", async () => {
+    snapshot.status = "running";
+    snapshot.queuedMessages = [
+      { id: "queue-first", text: "待删除任务", attachments: [] },
+      { id: "queue-second", text: "保留任务", attachments: [] },
+    ];
+    render(<AgentPage />);
+    await flush();
+    fill("保留编辑内容");
+    fireEvent.click(screen.getByRole("button", { name: "删除第 1 条消息" }));
+    await flush();
+    expect(agentApi.removeQueuedMessage).toHaveBeenCalledWith(
+      session.id,
+      "queue-first",
+    );
+    expect(screen.queryByText("待删除任务")).not.toBeInTheDocument();
+    expect(screen.getByText("保留任务")).toBeVisible();
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
+      "保留编辑内容",
+    );
+  });
   it("interrupts once, waits for actual tool settlement, and sends only the captured draft while preserving newer edits", async () => {
     snapshot.status = "running";
     snapshot.messages = [
@@ -2194,7 +3405,7 @@ describe("AgentPage", () => {
       expect(input).toHaveValue("任务结束后再发送的草稿");
       expect(input).toBeEnabled();
       expect(screen.getByRole("button", { name: "打断并发送" })).toBeEnabled();
-      fireEvent.keyDown(input, { key: "Enter" });
+      fireEvent.keyDown(input, { key: "Enter", ctrlKey: true });
       fireEvent.submit(input.closest("form")!);
       await flush();
       expect(agentApi.sendMessage).not.toHaveBeenCalled();

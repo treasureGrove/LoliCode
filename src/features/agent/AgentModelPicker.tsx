@@ -1,12 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
-import {
-  Check,
-  ChevronDown,
-  Search,
-  Settings2,
-  Sparkles,
-  RefreshCw,
-} from "lucide-react";
+import { Check, ChevronDown, Search, Settings2, RefreshCw } from "lucide-react";
 import {
   Popover,
   PopoverContent,
@@ -14,6 +7,8 @@ import {
 } from "@/components/ui/popover";
 import type { AgentModel } from "@/types/agent";
 import { FreeModelBadge } from "@/components/ui/free-model-badge";
+import { cn } from "@/lib/utils";
+import { AgentModelIcon } from "./AgentModelIcon";
 
 const humanLabel = (value: string) =>
   value
@@ -46,6 +41,8 @@ export function AgentModelPicker({
   refreshDisabled = false,
   notice,
   excludedSources = [],
+  ariaLabel = "模型",
+  side = "top",
 }: {
   models: AgentModel[];
   value: string;
@@ -58,6 +55,8 @@ export function AgentModelPicker({
   refreshDisabled?: boolean;
   notice?: string;
   excludedSources?: string[];
+  ariaLabel?: string;
+  side?: "top" | "bottom";
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -107,14 +106,17 @@ export function AgentModelPicker({
       <PopoverTrigger asChild>
         <button
           type="button"
-          aria-label={selected?.isFree ? "模型，free" : "模型"}
+          aria-label={selected?.isFree ? `${ariaLabel}，free` : ariaLabel}
           aria-controls={contentId}
           disabled={disabled}
           title={selected ? agentModelLabel(selected) : unavailableLabel}
-          className={`wb-picker-trigger inline-flex max-w-[280px] items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-xs hover:bg-black/5 dark:hover:bg-white/5 ${className}`}
+          className={cn(
+            "wb-picker-trigger inline-flex max-w-[280px] items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-xs hover:bg-black/5 dark:hover:bg-white/5",
+            className,
+          )}
         >
-          <Sparkles size={13} className="shrink-0" aria-hidden="true" />
-          <span className="truncate">
+          <AgentModelIcon model={selected} size={16} />
+          <span className="min-w-0 flex-1 truncate">
             {selected
               ? modelName(selected)
               : unavailableLabel || "还没有可用模型"}
@@ -127,7 +129,7 @@ export function AgentModelPicker({
         id={contentId}
         aria-label="选择模型"
         align="start"
-        side="top"
+        side={side}
         collisionPadding={12}
         className="wb-model-picker-content w-[min(360px,calc(100vw-24px))] p-0"
       >
@@ -246,6 +248,7 @@ export function AgentModelPicker({
                           setOpen(false);
                         }}
                       >
+                        <AgentModelIcon model={model} size={16} />
                         <span className="min-w-0 flex-1">
                           <span className="flex min-w-0 items-center gap-1.5">
                             <span className="truncate">{modelName(model)}</span>

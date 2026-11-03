@@ -9,12 +9,14 @@ import {
   Loader2,
   LogIn,
   LogOut,
+  MessagesSquare,
   RefreshCw,
   Settings,
   Smartphone,
   UserRound,
 } from "lucide-react";
-import { APP_NAME } from "@/lib/branding";
+import { APP_COMMUNITY, APP_NAME } from "@/lib/branding";
+import { toast } from "sonner";
 import { useLolicodeAccount } from "@/hooks/useLolicodeAccount";
 import type { LolicodeAccount } from "@/lib/api/lolicode-account";
 import { settingsApi } from "@/lib/api/settings";
@@ -142,6 +144,20 @@ export function SidebarProfileMenu({
       );
     }
   };
+  const openWebsite = async (url: string) => {
+    setActionError(null);
+    try {
+      await settingsApi.openExternal(url);
+    } catch {
+      const message = text(
+        "无法打开社区网站，请重试。",
+        "Unable to open the community website. Please try again.",
+      );
+      setActionError(message);
+      // The menu closes on selection; keep failures visible after it closes.
+      toast.error(message);
+    }
+  };
 
   return (
     <>
@@ -222,14 +238,14 @@ export function SidebarProfileMenu({
                 {text("使用情况与额度", "Usage and allowance")}
               </DropdownMenuItem>
               <DropdownMenuItem
-                onSelect={() =>
-                  void perform(() =>
-                    settingsApi.openExternal(account.profileUrl),
-                  )
-                }
+                onSelect={() => void openWebsite(account.profileUrl)}
+                title={text(
+                  "在浏览器打开社区个人空间",
+                  "Open your community profile in the browser",
+                )}
               >
                 <ExternalLink size={15} aria-hidden="true" />
-                {text("个人主页", "Your profile")}
+                {text("个人空间", "Your profile")}
               </DropdownMenuItem>
               <DropdownMenuItem
                 disabled={identity.isPending || identity.isRefreshing}
@@ -255,6 +271,16 @@ export function SidebarProfileMenu({
               {text("登录 LoliCode", "Sign in to LoliCode")}
             </DropdownMenuItem>
           )}
+          <DropdownMenuItem
+            onSelect={() => void openWebsite(APP_COMMUNITY)}
+            title={text(
+              "在浏览器打开 LoliCode 社区",
+              "Open the LoliCode community in the browser",
+            )}
+          >
+            <MessagesSquare size={15} aria-hidden="true" />
+            {text("社区网站", "Community website")}
+          </DropdownMenuItem>
           {!account && identity.error && (
             <DropdownMenuItem
               disabled={identity.isRefreshing}
@@ -410,11 +436,7 @@ export function SidebarProfileMenu({
                 className="tai-shell-account-website"
                 type="button"
                 variant="link"
-                onClick={() =>
-                  void perform(() =>
-                    settingsApi.openExternal("https://lolicode.com"),
-                  )
-                }
+                onClick={() => void openWebsite(APP_COMMUNITY)}
               >
                 {text("注册或找回密码 ↗", "Register or recover password ↗")}
               </Button>

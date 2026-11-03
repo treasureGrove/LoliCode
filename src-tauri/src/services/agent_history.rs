@@ -148,6 +148,7 @@ fn metadata(value: &Value) -> Option<AgentSession> {
         activity: None,
         reasoning_effort: None,
         context_limit: None,
+        coordination: None,
     })
 }
 fn valid_id(id: &str) -> bool {
@@ -414,6 +415,8 @@ pub fn legacy_snapshot(root: &Path, session_id: &str) -> Result<AgentSnapshot, S
         compacting: false,
         usage: None,
         model_phase: None,
+        queued_messages: Vec::new(),
+        queue_paused: false,
     })
 }
 fn notice(id: &str, text: &str) -> AgentMessage {

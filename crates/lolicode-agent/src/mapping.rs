@@ -49,6 +49,7 @@ pub(crate) fn session(value: &Value) -> Result<AgentSession, String> {
         activity: None,
         reasoning_effort: None,
         context_limit: None,
+        coordination: None,
     })
 }
 

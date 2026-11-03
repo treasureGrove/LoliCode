@@ -586,6 +586,7 @@ pub fn legacy_sessions(root: &Path, project: Option<&str>) -> Result<Vec<AgentSe
             activity: None,
             reasoning_effort: None,
             context_limit: None,
+            coordination: None,
         });
     }
     sessions.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));

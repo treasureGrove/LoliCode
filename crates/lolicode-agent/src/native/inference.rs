@@ -11,9 +11,76 @@ use tokio::sync::{mpsc, watch};
 pub(super) const CANCELLED: &str = "任务已停止";
 pub(super) const CONTEXT_EXCEEDED: &str = "[context_length_exceeded] 模型网关明确报告上下文超限";
 const LIMIT: usize = 8 * 1024 * 1024;
-const MAX_RATE_RETRIES: usize = 3;
-const MAX_RATE_DELAY: Duration = Duration::from_secs(60);
-const MAX_RATE_WAIT: Duration = Duration::from_secs(120);
+const MAX_TRANSIENT_RETRIES: usize = 5;
+const MAX_RETRY_DELAY: Duration = Duration::from_secs(60);
+const MAX_RETRY_WAIT: Duration = Duration::from_secs(120);
+
+#[derive(Default)]
+struct RetryBudget {
+    attempts: usize,
+    waited: Duration,
+    base_delay: Duration,
+}
+impl RetryBudget {
+    async fn wait(
+        &mut self,
+        retry_after: Option<Duration>,
+        cancel: &mut watch::Receiver<bool>,
+    ) -> Result<bool, String> {
+        let delay = retry_after.unwrap_or_else(|| self.base_delay * (1 << self.attempts.min(5)));
+        if self.attempts >= MAX_TRANSIENT_RETRIES
+            || delay > MAX_RETRY_DELAY
+            || self.waited + delay > MAX_RETRY_WAIT
+        {
+            return Ok(false);
+        }
+        self.attempts += 1;
+        self.waited += delay;
+        tokio::select! {
+            biased;
+            _ = cancelled(cancel) => Err(CANCELLED.into()),
+            _ = tokio::time::sleep(delay) => Ok(true),
+        }
+    }
+}
+
+struct StreamFailure {
+    message: String,
+    retryable: bool,
+}
+impl From<&str> for StreamFailure {
+    fn from(message: &str) -> Self {
+        Self {
+            message: message.into(),
+            retryable: false,
+        }
+    }
+}
+impl From<String> for StreamFailure {
+    fn from(message: String) -> Self {
+        Self {
+            message,
+            retryable: false,
+        }
+    }
+}
+// No text, reasoning, tool arguments or reported usage may be published twice.
+// Completed tool history belongs to the identical request and is never rerun.
+fn transient_stream_failure(
+    message: &str,
+    result: &Turn,
+    calls: &BTreeMap<usize, ToolCall>,
+    finish: &Option<String>,
+) -> StreamFailure {
+    StreamFailure {
+        message: message.into(),
+        retryable: result.content.is_empty()
+            && result.reasoning.is_empty()
+            && calls.is_empty()
+            && !result.usage.reported()
+            && finish.is_none(),
+    }
+}
 #[derive(Clone)]
 pub(super) enum Delta {
     Text(String),
@@ -40,12 +107,14 @@ pub(super) struct Turn {
 pub(super) struct ReadPolicy {
     pub progress_timeout: Duration,
     pub terminal_grace: Duration,
+    pub retry_base_delay: Duration,
 }
 impl Default for ReadPolicy {
     fn default() -> Self {
         Self {
             progress_timeout: Duration::from_secs(120),
             terminal_grace: Duration::from_secs(2),
+            retry_base_delay: Duration::from_secs(1),
         }
     }
 }
@@ -136,12 +205,14 @@ pub(super) async fn infer_with_policy(
     if let Some(effort) = reasoning_effort {
         body["reasoning_effort"] = json!(effort);
     }
-    let mut rate_retries = 0;
-    let mut rate_wait = Duration::ZERO;
+    let mut retries = RetryBudget {
+        base_delay: policy.retry_base_delay,
+        ..RetryBudget::default()
+    };
     let mut output_alias_retried = false;
-    // Retry only an explicit pre-response refusal. The request and completed
-    // tool history stay identical; a stream is never replayed after it starts.
-    let response = loop {
+    // Transient failures share one bounded budget, including errors before the
+    // first stream output. Once anything is published, the stream is preserved.
+    loop {
         let mut request = client
             .post(endpoint.clone())
             .bearer_auth(&gateway.bearer_token)
@@ -152,12 +223,35 @@ pub(super) async fn infer_with_policy(
         let response = tokio::select! {
             biased;
             _ = cancelled(&mut cancel) => return Err(CANCELLED.into()),
-            result = tokio::time::timeout(policy.progress_timeout, request.send()) =>
-                result.map_err(|_| "模型等待首个响应超时；尚未执行新的工具，可以重试或切换模型。")?
-                    .map_err(|_| "无法连接模型网关，请检查渠道后重试")?,
+            result = tokio::time::timeout(policy.progress_timeout, request.send()) => result,
+        };
+        let response = match response {
+            Ok(Ok(response)) => response,
+            failure => {
+                if retries.wait(None, &mut cancel).await? {
+                    continue;
+                }
+                return Err(if failure.is_err() {
+                    "模型等待首个响应超时，自动重试后仍未恢复；尚未执行新的工具，请稍后继续或切换模型。"
+                } else {
+                    "无法连接模型网关，自动重试后仍未恢复；请检查渠道后继续。"
+                }.into());
+            }
         };
         if response.status().is_success() {
-            break response;
+            match read_completion(response, &tx, &mut cancel, policy).await {
+                Ok(turn) => return Ok(turn),
+                Err(error) if error.retryable => {
+                    if retries.wait(None, &mut cancel).await? {
+                        continue;
+                    }
+                    return Err(format!(
+                        "{}（已自动重试 {} 次）",
+                        error.message, retries.attempts
+                    ));
+                }
+                Err(error) => return Err(error.message),
+            }
         }
         let status = response.status().as_u16();
         let retry_after = response
@@ -165,26 +259,22 @@ pub(super) async fn infer_with_policy(
             .get(reqwest::header::RETRY_AFTER)
             .and_then(|value| value.to_str().ok())
             .and_then(|value| value.trim().parse::<u64>().ok())
-            .map(Duration::from_secs)
-            .filter(|delay| *delay <= MAX_RATE_DELAY);
+            .map(Duration::from_secs);
+        if matches!(status, 408 | 409 | 500..=599) {
+            drop(response);
+            if retries.wait(retry_after, &mut cancel).await? {
+                continue;
+            }
+            return Err(format!(
+                "模型上游暂时不可用（HTTP {status}，已自动重试 {} 次），请稍后继续或切换渠道。",
+                retries.attempts
+            ));
+        }
         if matches!(status, 400 | 413 | 422 | 429) {
             let error = read_error(response, &mut cancel, policy.progress_timeout).await?;
             if status == 429 {
                 let terminal = error.as_ref().is_some_and(terminal_quota_error);
-                if let Some(delay) = retry_after.filter(|delay| {
-                    !terminal
-                        && rate_retries < MAX_RATE_RETRIES
-                        && rate_wait + *delay <= MAX_RATE_WAIT
-                }) {
-                    rate_retries += 1;
-                    rate_wait += delay;
-                    // The engine's model phase remains Waiting until this infer
-                    // resolves, and stopping the task interrupts the wait.
-                    tokio::select! {
-                        biased;
-                        _ = cancelled(&mut cancel) => return Err(CANCELLED.into()),
-                        _ = tokio::time::sleep(delay) => {},
-                    }
+                if !terminal && retries.wait(retry_after, &mut cancel).await? {
                     continue;
                 }
                 let reason = error
@@ -234,7 +324,15 @@ pub(super) async fn infer_with_policy(
             "模型请求失败（HTTP {}），请检查渠道与模型。",
             status
         ));
-    };
+    }
+}
+
+async fn read_completion(
+    response: reqwest::Response,
+    tx: &mpsc::UnboundedSender<Delta>,
+    cancel: &mut watch::Receiver<bool>,
+    policy: ReadPolicy,
+) -> Result<Turn, StreamFailure> {
     let json_response = response
         .headers()
         .get(reqwest::header::CONTENT_TYPE)
@@ -261,10 +359,13 @@ pub(super) async fn infer_with_policy(
     loop {
         let deadline = terminal_deadline.unwrap_or(progress_deadline);
         let next = tokio::select! {
-            _ = cancelled(&mut cancel) => return Err(CANCELLED.into()),
+            _ = cancelled(cancel) => return Err(CANCELLED.into()),
             _ = tokio::time::sleep_until(deadline) => {
                 if terminal_deadline.is_some() { break; }
-                return Err(if progressed { "模型流在输出后长时间没有新内容；已收到的文字与已完成工具保留，请重试。" } else { "模型等待首个有效输出超时；心跳不能代替回答，请重试或切换模型。" }.into());
+                return Err(transient_stream_failure(
+                    if progressed { "模型流在输出后长时间没有新内容；已收到的文字与已完成工具保留，请重试。" } else { "模型等待首个有效输出超时；心跳不能代替回答，请重试或切换模型。" },
+                    &result, &calls, &finish,
+                ));
             },
             value = stream.next() => value,
         };
@@ -274,7 +375,14 @@ pub(super) async fn infer_with_policy(
         let chunk = match chunk {
             Ok(chunk) => chunk,
             Err(_) if terminal_deadline.is_some() => break,
-            Err(_) => return Err("模型连接中断，已收到的文字保留，请重试".into()),
+            Err(_) => {
+                return Err(transient_stream_failure(
+                    "模型连接中断，已收到的文字保留，请重试",
+                    &result,
+                    &calls,
+                    &finish,
+                ))
+            }
         };
         total += chunk.len();
         if total > LIMIT {
@@ -305,14 +413,14 @@ pub(super) async fn infer_with_policy(
                     }
                     if finish.is_some() {
                         if let Ok(value) = serde_json::from_str::<Value>(event.trim()) {
-                            consume_usage(&value, &tx, &mut result);
+                            consume_usage(&value, tx, &mut result);
                         }
                     } else {
                         let value: Value = serde_json::from_str(event.trim())
                             .map_err(|_| "模型流格式无效，请检查渠道兼容性")?;
                         consume(
                             &value,
-                            &tx,
+                            tx,
                             &mut result,
                             &mut calls,
                             &mut finish,
@@ -351,14 +459,15 @@ pub(super) async fn infer_with_policy(
     if !event.is_empty() && event.trim() != "[DONE]" {
         if finish.is_some() {
             if let Ok(value) = serde_json::from_str::<Value>(event.trim()) {
-                consume_usage(&value, &tx, &mut result);
+                consume_usage(&value, tx, &mut result);
             }
         } else {
-            let value: Value =
-                serde_json::from_str(event.trim()).map_err(|_| "模型流在结束前中断")?;
+            let value: Value = serde_json::from_str(event.trim()).map_err(|_| {
+                transient_stream_failure("模型流在结束前中断", &result, &calls, &finish)
+            })?;
             consume(
                 &value,
-                &tx,
+                tx,
                 &mut result,
                 &mut calls,
                 &mut finish,
@@ -371,7 +480,7 @@ pub(super) async fn infer_with_policy(
         if let Ok(value) = serde_json::from_slice::<Value>(&bytes) {
             consume(
                 &value,
-                &tx,
+                tx,
                 &mut result,
                 &mut calls,
                 &mut finish,
@@ -384,7 +493,14 @@ pub(super) async fn infer_with_policy(
         Some("length") => {
             return Err("模型达到输出长度限制，已收到的内容保留，请继续或更换模型。".into())
         }
-        _ => return Err("模型连接未返回明确的完成状态，已收到的内容保留。".into()),
+        _ => {
+            return Err(transient_stream_failure(
+                "模型连接未返回明确的完成状态，已收到的内容保留。",
+                &result,
+                &calls,
+                &finish,
+            ))
+        }
     }
     result.finish_reason = finish.unwrap_or_default();
     for (_, call) in calls {
@@ -410,14 +526,37 @@ fn consume(
     calls: &mut BTreeMap<usize, ToolCall>,
     finish: &mut Option<String>,
     images: &mut ImageMarkdown,
-) -> Result<(), String> {
+) -> Result<(), StreamFailure> {
     if value.get("error").is_some() {
         if context_error(value) {
             return Err(CONTEXT_EXCEEDED.into());
         }
         if let Some(reason) = rate_error_reason(value) {
-            return Err(format!(
-                "{reason}；已收到的内容和已完成工具保留，请稍后继续。"
+            let message = format!("{reason}；已收到的内容和已完成工具保留，请稍后继续。");
+            return Err(if terminal_quota_error(value) {
+                message.into()
+            } else {
+                transient_stream_failure(&message, result, calls, finish)
+            });
+        }
+        if error_codes(value).any(|code| {
+            matches!(
+                code,
+                "server_error"
+                    | "internal_error"
+                    | "internal_server_error"
+                    | "service_unavailable"
+                    | "overloaded_error"
+                    | "server_overloaded"
+                    | "timeout"
+                    | "request_timeout"
+            )
+        }) {
+            return Err(transient_stream_failure(
+                "模型上游暂时不可用，请稍后继续或切换渠道。",
+                result,
+                calls,
+                finish,
             ));
         }
         return Err("模型网关返回错误，请检查渠道后重试".into());

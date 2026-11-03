@@ -39,13 +39,40 @@ vi.mock("@tauri-apps/api/window", () => ({
 vi.mock("@/app/shell/WindowControls", () => ({
   WindowControls: () => null,
 }));
+vi.mock("@/features/agent/AgentCompanion", () => ({
+  AgentCompanion: ({
+    onOpenSecretary,
+  }: {
+    onOpenSecretary: (target: {
+      sessionId: string;
+      projectPath: string;
+      workerSessionId: string;
+    }) => void;
+  }) => (
+    <button
+      onClick={() =>
+        onOpenSecretary({
+          sessionId: "secretary-one",
+          projectPath: "D:/owned/pet-project",
+          workerSessionId: "worker-one",
+        })
+      }
+    >
+      open-secretary-from-pet
+    </button>
+  ),
+}));
 vi.mock("@/features/agent/AgentPage", () => ({
   AgentPage: ({
     onOpenChannels,
     onCheckUpdate,
     renderSidebar,
+    secretaryRequest,
   }: AgentPageProps) => (
-    <div data-testid="agent-workspace">
+    <div
+      data-testid="agent-workspace"
+      data-secretary-request={JSON.stringify(secretaryRequest)}
+    >
       {renderSidebar?.({
         actions: <button>新对话</button>,
         workspace: <div>项目与对话</div>,
@@ -138,6 +165,39 @@ afterEach(() => {
 });
 
 describe("LoliCode product shell with retained native compatibility", () => {
+  it("does not replay an unconsumed pet request after leaving and reopening the workspace", async () => {
+    renderApp();
+    await screen.findByTestId("agent-workspace");
+    fireEvent.click(
+      screen.getByRole("button", { name: "open-secretary-from-pet" }),
+    );
+    expect(screen.getByTestId("agent-workspace")).toHaveAttribute(
+      "data-secretary-request",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "manage-channels" }));
+    await screen.findByTestId("channel-center");
+    fireEvent.click(screen.getByRole("button", { name: "编程工作台" }));
+    expect(await screen.findByTestId("agent-workspace")).not.toHaveAttribute(
+      "data-secretary-request",
+    );
+  });
+  it("opens the companion's pending task through the existing Agent workspace", async () => {
+    localStorage.setItem(VIEW_STORAGE_KEY, "channels");
+    renderApp();
+    expect(await screen.findByTestId("channel-center")).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "open-secretary-from-pet" }),
+    );
+    const workspace = await screen.findByTestId("agent-workspace");
+    expect(
+      JSON.parse(workspace.getAttribute("data-secretary-request")!),
+    ).toMatchObject({
+      sessionId: "secretary-one",
+      projectPath: "D:/owned/pet-project",
+      workerSessionId: "worker-one",
+    });
+  });
+
   it("starts in the Agent without legacy provider prefetch or configuration rewrites", async () => {
     const getAll = vi.spyOn(providersApi, "getAll");
     const save = vi.spyOn(settingsApi, "save");

@@ -21,6 +21,71 @@ const models: AgentModel[] = [
 ];
 
 describe("AgentModelPicker", () => {
+  it("shows each model's supplier icon through a shared channel and keeps exact selection identities", () => {
+    const branded = [
+      {
+        ...models[0],
+        id: "opaque-openai",
+        modelId: "shared/gpt-6.1-codex",
+        name: "GPT 6.1 Codex",
+        providerId: "lolicode",
+        channelName: "Shared",
+      },
+      {
+        ...models[0],
+        id: "opaque-claude",
+        modelId: "shared/claude-sonnet-4-5",
+        name: "Claude Sonnet 4.5",
+        providerId: "lolicode",
+        channelName: "Shared",
+      },
+      {
+        ...models[0],
+        id: "opaque-deepseek",
+        modelId: "shared/deepseek-v4",
+        name: "DeepSeek V4",
+        providerId: "lolicode",
+        channelName: "Shared",
+      },
+    ];
+    const onSelect = vi.fn();
+    const view = render(
+      <AgentModelPicker
+        models={branded}
+        value={branded[0].id}
+        onSelect={onSelect}
+      />,
+    );
+    expect(
+      screen
+        .getByRole("button", { name: "模型" })
+        .querySelector('[data-model-provider="openai"]'),
+    ).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "模型" }));
+    expect(
+      screen
+        .getByRole("button", { name: "Shared · Claude Sonnet 4.5" })
+        .querySelector('[data-model-provider="claude"]'),
+    ).not.toBeNull();
+    const option = screen.getByRole("button", { name: "Shared · DeepSeek V4" });
+    expect(
+      option.querySelector('[data-model-provider="deepseek"]'),
+    ).not.toBeNull();
+    fireEvent.click(option);
+    expect(onSelect).toHaveBeenCalledWith(branded[2].id);
+    view.rerender(
+      <AgentModelPicker
+        models={branded}
+        value={branded[2].id}
+        onSelect={onSelect}
+      />,
+    );
+    expect(
+      screen
+        .getByRole("button", { name: "模型" })
+        .querySelector('[data-model-provider="deepseek"]'),
+    ).not.toBeNull();
+  });
   it("marks public models as free in the current selection and searchable options", () => {
     const select = vi.fn();
     const publicModel = {

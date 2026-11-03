@@ -1,0 +1,125 @@
+{
+  "tool": "built-in image_gen for raster poses; FFmpeg premultiplied-alpha scale and pure-green composite",
+  "records": [
+    {
+      "file": "sit-source.png",
+      "source": "C:/Users/admin/.codex/generated_images/01a19252-2863-7031-bfac-baf935e6ddef/exec-5591358f-9a41-4c11-8c79-d05f9b5a8a61.png",
+      "width": 1254,
+      "height": 1254,
+      "sha256": "cb09da1518ec344e427d25bde649fd2bf37c8a4e877fb436d818d32dce3bd4d4",
+      "alphaBounds": {
+        "left": 116,
+        "top": 12,
+        "right": 1174,
+        "bottom": 1240
+      }
+    },
+    {
+      "file": "lie-source.png",
+      "source": "C:/Users/admin/.codex/generated_images/01a19252-2863-7031-bfac-baf935e6ddef/exec-27e107f8-aeb0-4459-8aa0-84248f06f86c.png",
+      "width": 1536,
+      "height": 1024,
+      "sha256": "b761d2a6cfa66ca73ee88358da6197adde2235d8e2fce210f91db0893e1f1b74",
+      "alphaBounds": {
+        "left": 58,
+        "top": 98,
+        "right": 1488,
+        "bottom": 856
+      }
+    },
+    {
+      "file": "lie-source-initial.png",
+      "source": "C:/Users/admin/.codex/generated_images/01a19252-2863-7031-bfac-baf935e6ddef/exec-56809aac-d8f0-4f7d-87e6-a2c0385c7ebf.png",
+      "width": 1536,
+      "height": 1024,
+      "sha256": "0541949ba4e81a952a0b6a671009a6115e96e3e9a136301960b765b8facd88bd",
+      "alphaBounds": {
+        "left": 3,
+        "top": 64,
+        "right": 1533,
+        "bottom": 911
+      }
+    },
+    {
+      "file": "first-frame-sit-green-square.png",
+      "source": "tmp/ui-rest-v5-root/sit-green.png",
+      "width": 720,
+      "height": 720,
+      "sha256": "a064db03f105620e5b31a700ac477c3afc0081f7e6530ef79005a3ae5f8174b5",
+      "alphaBounds": {
+        "left": 0,
+        "top": 0,
+        "right": 719,
+        "bottom": 719
+      }
+    },
+    {
+      "file": "first-frame-lie-green-3x2.png",
+      "source": "tmp/ui-rest-v5-root/lie-green.png",
+      "width": 960,
+      "height": 640,
+      "sha256": "6de986ddddf497c469ca9356ae159b1c670976cfb39f3385b0af8ed4657f8eae",
+      "alphaBounds": {
+        "left": 0,
+        "top": 0,
+        "right": 959,
+        "bottom": 639
+      }
+    },
+    {
+      "file": "first-frame-lie-green-4x3.png",
+      "source": "tmp/ui-rest-v5-root/lie-green-4x3.png",
+      "width": 960,
+      "height": 720,
+      "sha256": "e237b7444d6348006c7d5cdc4f454ee51215d9506f238b5b41869e4db8d3e4d3",
+      "alphaBounds": {
+        "left": 0,
+        "top": 0,
+        "right": 959,
+        "bottom": 719
+      }
+    }
+  ],
+  "transforms": {
+    "sit": {
+      "sourceCanvas": [
+        1254,
+        1254
+      ],
+      "scaledCanvas": [
+        664,
+        664
+      ],
+      "outputCanvas": [
+        720,
+        720
+      ],
+      "offset": [
+        28,
+        28
+      ]
+    },
+    "lie": {
+      "sourceCanvas": [
+        1536,
+        1024
+      ],
+      "scaledCanvas": [
+        960,
+        640
+      ],
+      "outputCanvas": [
+        960,
+        720
+      ],
+      "offset": [
+        0,
+        40
+      ]
+    }
+  },
+  "notes": [
+    "Alpha compositing ignores hidden RGB glow in transparent pixels.",
+    "True4:3 lie first frame fixes Jimeng automatic aspect-ratio cover cropping. Runtime removes only extra green padding."
+  ]
+}

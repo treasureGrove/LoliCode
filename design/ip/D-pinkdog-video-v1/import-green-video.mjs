@@ -73,7 +73,7 @@ function bounds(png, minAlpha = 16) {
 
 // Green regions seeded by the border or an intentionally narrow pure-green hole test.
 // No watermark masks or region erasure. Cyan/teal hues >= 160 degrees are never keyed.
-export function keyFrame(source) {
+export function keyFrame(source, { clearStrongConnectedGreen = false } = {}) {
   const count = source.width * source.height;
   const candidates = new Uint8Array(count);
   const strict = new Uint8Array(count);
@@ -145,7 +145,9 @@ export function keyFrame(source) {
   source.data.copy(output.data);
   let keyedPixels = 0,
     pureGreenSeedPixels = 0,
-    protectedTealChanged = 0;
+    protectedTealChanged = 0,
+    strongConnectedGreenPixels = 0,
+    residualGreenAlphaCleared = 0;
   for (let i = 0; i < count; i++) {
     const p = i * 4;
     const [h, s] = hueSaturation(
@@ -160,9 +162,27 @@ export function keyFrame(source) {
       const nearBackground = background.every(
         (value, c) => Math.abs(source.data[p + c] - value) <= 12,
       );
-      const alpha = nearBackground
+      const estimatedAlpha = nearBackground
         ? 0
         : clamp(1 - excess / background[1], 0, 1);
+      // Opt-in cleanup for confirmed green regions. A global background
+      // brightness estimate otherwise leaves a gray/cyan alpha haze when
+      // compression slightly shifts the source green near fine hair.
+      // Hue >=160 (eyes/gems) is outside this strict green test.
+      const strongConnectedGreen =
+        clearStrongConnectedGreen &&
+        connected[i] &&
+        h >= 80 &&
+        h <= 145 &&
+        s >= 0.45 &&
+        source.data[p + 1] >= 65 &&
+        source.data[p + 1] > Math.max(source.data[p], source.data[p + 2]) * 1.7;
+      if (strongConnectedGreen) {
+        strongConnectedGreenPixels++;
+        if (Math.round(source.data[p + 3] * estimatedAlpha) > 0)
+          residualGreenAlphaCleared++;
+      }
+      const alpha = strongConnectedGreen ? 0 : estimatedAlpha;
       output.data[p + 3] = Math.round(source.data[p + 3] * alpha);
       for (let c = 0; c < 3; c++)
         output.data[p + c] =
@@ -193,6 +213,9 @@ export function keyFrame(source) {
       pureGreenSeedPixels,
       protectedTealPixels,
       protectedTealChanged,
+      clearStrongConnectedGreen,
+      strongConnectedGreenPixels,
+      residualGreenAlphaCleared,
       ...bounds(output),
     },
   };

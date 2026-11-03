@@ -1,0 +1,76 @@
+.wb-automation-proposal {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: min(100%, 640px);
+  padding: 18px;
+  border: 1px solid var(--wb-border);
+  border-radius: 14px;
+  background: var(--wb-panel);
+  color: var(--wb-text);
+  font-size: 13px;
+}
+.wb-automation-proposal > header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.wb-automation-proposal > header > svg {
+  flex-shrink: 0;
+  color: var(--wb-accent);
+}
+.wb-automation-proposal > header > div {
+  flex: 1;
+  min-width: 0;
+}
+.wb-automation-proposal > header p,
+.wb-automation-proposal > header > span {
+  color: var(--wb-muted);
+  font-size: 11px;
+}
+.wb-automation-proposal h3 {
+  margin-top: 2px;
+  font-size: 15px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.wb-automation-proposal-prompt {
+  max-height: 180px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.6;
+}
+.wb-automation-proposal dl {
+  display: grid;
+  gap: 8px;
+  padding-block: 12px;
+  border-block: 1px solid var(--wb-border);
+}
+.wb-automation-proposal dl > div {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 10px;
+}
+.wb-automation-proposal dt,
+.wb-automation-proposal-hint {
+  color: var(--wb-muted);
+  font-size: 12px;
+}
+.wb-automation-proposal dd {
+  overflow-wrap: anywhere;
+}
+.wb-automation-proposal footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.wb-automation-proposal footer > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--wb-muted);
+  font-size: 12px;
+}

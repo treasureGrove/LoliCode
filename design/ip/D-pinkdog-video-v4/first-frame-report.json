@@ -1,0 +1,43 @@
+{
+  "source": "../D-pinkdog-video-v3/standard-pose-source.png",
+  "sourceDimensions": [
+    1215,
+    1295
+  ],
+  "sourceSha256": "c5b96924368ae4b0b7970cca1ce5dc701df18120586b1fde90528e607dd15084",
+  "sourceTransparentPixels": 765178,
+  "sourceAlphaThreshold": 16,
+  "sourceContentBoundsInclusive": {
+    "left": 99,
+    "top": 6,
+    "right": 1172,
+    "bottom": 1281
+  },
+  "output": "first-frame-green-square.png",
+  "outputDimensions": [
+    720,
+    720
+  ],
+  "outputSha256": "6f9e13b303163616e48c62b120e5715a92da4898908b8b4342f17a099a13f83b",
+  "background": "#00FF00",
+  "transform": {
+    "uniformScale": 0.5078369905956113,
+    "destinationContentRect": {
+      "left": 87.29153605015676,
+      "top": 44,
+      "width": 545.4169278996865,
+      "height": 648
+    },
+    "footlineExclusive": 692,
+    "desiredHeight": 648,
+    "maximumWidth": 600,
+    "limitedByWidth": false
+  },
+  "resampledForegroundBoundsInclusive": {
+    "left": 87,
+    "top": 44,
+    "right": 632,
+    "bottom": 691
+  },
+  "preparation": "Crop to visible alpha bounds (>16); uniformly area-resample in premultiplied alpha; composite onto exact green. Source colors and pose are unchanged; no chroma keying or recoloring."
+}

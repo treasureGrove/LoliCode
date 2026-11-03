@@ -4,6 +4,7 @@ import { FirstRunNoticeDialog } from "@/components/FirstRunNoticeDialog";
 import { WhatsNewNotice } from "@/components/WhatsNewDialog";
 import { AgentPage } from "@/features/agent/AgentPage";
 import { AgentCompanion } from "@/features/agent/AgentCompanion";
+import type { SecretaryOpenTarget } from "@/hooks/useSecretaryActivity";
 import type { AgentTool, AgentToolTab } from "@/features/agent/AgentToolPanel";
 import { LayoutGroup } from "framer-motion";
 import { BuiltinApplicationsPage } from "@/features/apps/BuiltinApplicationsPage";
@@ -88,6 +89,19 @@ function App() {
   const [channelNavigationBusy, setChannelNavigationBusy] = useState(false);
   const [agentInitialProjectPath, setAgentInitialProjectPath] =
     useState<string>();
+  const [secretaryRequest, setSecretaryRequest] = useState<{
+    requestId: number;
+    sessionId?: string;
+    projectPath?: string;
+    workerSessionId?: string;
+  }>();
+  const secretaryRequestSequence = useRef(0);
+  useEffect(() => {
+    // A pet navigation intent belongs to this visit. Leaving the workspace
+    // must not replay a slow, unconsumed request on a later ordinary visit.
+    if (currentView !== "agent" && secretaryRequest)
+      setSecretaryRequest(undefined);
+  }, [currentView, secretaryRequest]);
   const [agentToolRequest, setAgentToolRequest] = useState<{
     tool: AgentTool | null;
     id: number;
@@ -400,6 +414,7 @@ function App() {
     }
     if (managementBusyRef.current) return;
     if (confirmLeave(() => openPage(page))) return;
+    setSecretaryRequest(undefined);
     if (page === "allowance" && currentViewRef.current !== "allowance") {
       allowanceReturnViewRef.current = currentViewRef.current;
     }
@@ -420,6 +435,7 @@ function App() {
   const openUnrealProjectInAgent = (path: string) => {
     const navigate = () => openUnrealProjectInAgent(path);
     if (managementBusyRef.current || confirmLeave(navigate)) return;
+    setSecretaryRequest(undefined);
     setActiveAgentTool(null);
     setAgentToolRequest((previous) => ({
       tool: null,
@@ -432,6 +448,7 @@ function App() {
   const openAgentTool = (tool: AgentTool, initialTab?: AgentToolTab) => {
     if (managementBusyRef.current) return;
     if (confirmLeave(() => openAgentTool(tool, initialTab))) return;
+    setSecretaryRequest(undefined);
     setActiveAgentTool(tool);
     setCurrentView("agent");
     setAgentToolRequest((previous) => ({
@@ -439,6 +456,25 @@ function App() {
       initialTab,
       id: (previous?.id ?? 0) + 1,
     }));
+  };
+
+  const openSecretaryFromCompanion = (target?: SecretaryOpenTarget) => {
+    if (
+      managementBusyRef.current ||
+      confirmLeave(() => openSecretaryFromCompanion(target))
+    )
+      return;
+    setActiveAgentTool(null);
+    setAgentToolRequest((previous) => ({
+      tool: null,
+      id: (previous?.id ?? 0) + 1,
+    }));
+    setAgentInitialProjectPath(undefined);
+    setSecretaryRequest({
+      ...target,
+      requestId: ++secretaryRequestSequence.current,
+    });
+    setCurrentView("agent");
   };
 
   useTrayNavigation((navigation) => {
@@ -578,6 +614,10 @@ function App() {
                 onToolRequestConsumed={() => setAgentToolRequest(undefined)}
                 onActiveToolChange={setActiveAgentTool}
                 initialProjectPath={agentInitialProjectPath}
+                secretaryRequest={secretaryRequest}
+                onSecretaryRequestConsumed={() =>
+                  setSecretaryRequest(undefined)
+                }
                 onInitialProjectConsumed={() =>
                   setAgentInitialProjectPath(undefined)
                 }
@@ -719,7 +759,7 @@ function App() {
           </main>
         </div>
       </LayoutGroup>
-      <AgentCompanion />
+      <AgentCompanion onOpenSecretary={openSecretaryFromCompanion} />
 
       <ConfirmDialog
         isOpen={pendingLeave !== null}

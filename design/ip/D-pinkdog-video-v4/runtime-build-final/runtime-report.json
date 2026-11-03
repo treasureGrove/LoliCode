@@ -1,0 +1,145 @@
+{
+  "width": 640,
+  "height": 640,
+  "fps": 24,
+  "codec": "VP9 alpha",
+  "audio": false,
+  "preparation": "Premultiplied-alpha Lanczos downsample, unpremultiply, VP9 yuva420p with auto-alt-ref disabled. No per-frame crop or scale changes.",
+  "clips": [
+    {
+      "name": "idle",
+      "file": "companion-idle-video-v4.webm",
+      "bytes": 4122238,
+      "sha256": "bdaceee138729ab273638f531b9446b77384056259de693db3ae85e80d121483",
+      "source": "source-videos/idle-square-2k-v1.mp4",
+      "sourceSha256": "1e03569a6e9f6a99c531ce4998571f59e1ead297f63a5134deefdc4eb2aa5a80",
+      "prompt": "prompts/idle-mini-5s-square.txt",
+      "refinedFrames": "refined/idle-square-2k-clean-v2/alpha-frames",
+      "frames": 121,
+      "durationSeconds": 5.041666666666667,
+      "decodedChecks": [
+        {
+          "frame": 1,
+          "transparentFraction": 0.60425048828125
+        },
+        {
+          "frame": 61,
+          "transparentFraction": 0.58964111328125
+        },
+        {
+          "frame": 121,
+          "transparentFraction": 0.598828125
+        }
+      ]
+    },
+    {
+      "name": "greeting",
+      "file": "companion-greeting-video-v4.webm",
+      "bytes": 3777381,
+      "sha256": "7784746798f7bbe662fb4d5a6a349a95dcc5cfe9eb3bd785efbd2bb77a9f1167",
+      "source": "source-videos/greeting-seedance20-square-2k-v2.mp4",
+      "sourceSha256": "040f4c863017ce8dfa4bbb6bd76d0effb4fc27d472149f90f2f0fdb542b88639",
+      "prompt": "prompts/greeting-seedance20-v2-square.txt",
+      "refinedFrames": "refined/greeting-seedance20-square-2k-clean-v2/alpha-frames",
+      "frames": 121,
+      "durationSeconds": 5.041666666666667,
+      "decodedChecks": [
+        {
+          "frame": 1,
+          "transparentFraction": 0.6041748046875
+        },
+        {
+          "frame": 61,
+          "transparentFraction": 0.5943603515625
+        },
+        {
+          "frame": 121,
+          "transparentFraction": 0.59960693359375
+        }
+      ]
+    },
+    {
+      "name": "feed",
+      "file": "companion-feed-video-v4.webm",
+      "bytes": 3778894,
+      "sha256": "f7a26f07b8f7056d1546b4382cb4ea63e2c53799a8f1e06cb5deb9fb3f4f4da3",
+      "source": "source-videos/feed-seedance20-square-2k-v2.mp4",
+      "sourceSha256": "db689dd44d45fb536b57cde862c4c00261af34a4f4426d94140bb3a450d3db4c",
+      "prompt": "prompts/feed-seedance20-v2-square.txt",
+      "refinedFrames": "refined/feed-seedance20-square-2k-clean-v2/alpha-frames",
+      "frames": 121,
+      "durationSeconds": 5.041666666666667,
+      "decodedChecks": [
+        {
+          "frame": 1,
+          "transparentFraction": 0.6040625
+        },
+        {
+          "frame": 61,
+          "transparentFraction": 0.59287109375
+        },
+        {
+          "frame": 121,
+          "transparentFraction": 0.5995263671875
+        }
+      ]
+    },
+    {
+      "name": "snack",
+      "file": "companion-snack-video-v4.webm",
+      "bytes": 3761086,
+      "sha256": "762ed05b5d045650bc3b56b51ebcbe3fd6f1eb8ff4baaec1e5d62f7d09257640",
+      "source": "source-videos/snack-cookie-seedance20-square-v1.mp4",
+      "sourceSha256": "5649d8ef67304fc842668cc24c3b63bd8158d9d95782c9e9b66fed97a0b3abc4",
+      "prompt": "prompts/snack-cookie-seedance20-square.txt",
+      "refinedFrames": "refined/snack-cookie-seedance20-square-clean-v1/alpha-frames",
+      "frames": 120,
+      "durationSeconds": 5,
+      "decodedChecks": [
+        {
+          "frame": 1,
+          "transparentFraction": 0.6031982421875
+        },
+        {
+          "frame": 61,
+          "transparentFraction": 0.59556396484375
+        },
+        {
+          "frame": 120,
+          "transparentFraction": 0.5986181640625
+        }
+      ]
+    },
+    {
+      "name": "curious",
+      "file": "companion-curious-video-v4.webm",
+      "bytes": 3321244,
+      "sha256": "d6f30144b805d7de1fb3bbdf615038c5d02f1f553e45f154d30aa97729667d10",
+      "source": "source-videos/idle-curious-seedance20-square-v1.mp4",
+      "sourceSha256": "39eab8a754e339ab85eb63f7c663f02f4aeb7fd98519bd2b54576541a1d25181",
+      "prompt": "prompts/idle-curious-seedance20-square.txt",
+      "refinedFrames": "refined/idle-curious-seedance20-square-clean-v1/alpha-frames",
+      "frames": 121,
+      "durationSeconds": 5.041666666666667,
+      "decodedChecks": [
+        {
+          "frame": 1,
+          "transparentFraction": 0.6034521484375
+        },
+        {
+          "frame": 61,
+          "transparentFraction": 0.59930908203125
+        },
+        {
+          "frame": 121,
+          "transparentFraction": 0.59990966796875
+        }
+      ]
+    }
+  ],
+  "poster": {
+    "file": "companion-video-poster-v4.webp",
+    "bytes": 268694,
+    "sha256": "275740527c84913599a47f2db9ee72d75a5b41cb416c6b0abe42844f629678ba"
+  }
+}

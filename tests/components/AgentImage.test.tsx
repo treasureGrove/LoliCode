@@ -1,8 +1,10 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { invoke } from "@tauri-apps/api/core";
 import { vi, describe, it, expect, beforeEach } from "vitest";
 import { AgentMessageView } from "@/features/agent/AgentParts";
 import { AgentImage } from "@/features/agent/AgentImage";
+import { AgentTranscript } from "@/features/agent/AgentTranscript";
 import { AgentFileActionsContext } from "@/features/agent/AgentFilePath";
 import { SessionMarkdown } from "@/features/sessions/reader/SessionMarkdown";
 
@@ -30,6 +32,87 @@ describe("generated agent image previews", () => {
       />,
     );
   }
+
+  it.each(["message", "transcript"])(
+    "loads local reasoning images in the %s view after expansion and opens their preview",
+    async (view) => {
+      const props = {
+        sessionId: "zc:fixture",
+        projectPath: "C:/project",
+      };
+      const message = {
+        id: "assistant",
+        role: "assistant" as const,
+        createdAt: 1,
+        parts: [
+          {
+            type: "reasoning" as const,
+            text: "先检查生成结果。\n\n![中间结果](./outputs/intermediate.png)",
+          },
+        ],
+      };
+      render(
+        view === "message" ? (
+          <AgentMessageView {...props} message={message} />
+        ) : (
+          <AgentTranscript {...props} messages={[message]} />
+        ),
+      );
+      expect(screen.queryByRole("img")).not.toBeInTheDocument();
+      expect(invoke).not.toHaveBeenCalled();
+      if (view === "transcript")
+        await userEvent.click(screen.getByText("思考记录"));
+      await userEvent.click(screen.getByText("思考过程"));
+      const image = await screen.findByRole("button", {
+        name: "放大图片：中间结果",
+      });
+      expect(screen.getByRole("img", { name: "中间结果" })).toHaveAttribute(
+        "src",
+        data.dataUrl,
+      );
+      expect(invoke).toHaveBeenCalledWith("get_agent_image", {
+        sessionId: "zc:fixture",
+        path: "./outputs/intermediate.png",
+      });
+      await userEvent.click(image);
+      expect(await screen.findByRole("dialog")).toBeVisible();
+    },
+  );
+
+  it.each([
+    "https://example.com/intermediate.png",
+    "data:image/png;base64,aGVsbG8=",
+  ])("previews a remote or embedded reasoning image: %s", async (src) => {
+    const view = render(
+      <AgentMessageView
+        sessionId="zc:fixture"
+        projectPath="C:/project"
+        message={{
+          id: "assistant",
+          role: "assistant",
+          createdAt: 1,
+          parts: [
+            { type: "reasoning", text: `**分析中**\n\n![过程图片](${src})` },
+          ],
+        }}
+      />,
+    );
+    await userEvent.click(screen.getByText("思考过程"));
+    expect(screen.getByRole("img", { name: "过程图片" })).toHaveAttribute(
+      "src",
+      src,
+    );
+    expect(screen.getByText("分析中").tagName).toBe("STRONG");
+    expect(view.container).not.toHaveTextContent("data:image/");
+    expect(
+      screen.queryByRole("button", { name: /加载远程图片/ }),
+    ).not.toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: "放大查看图片：过程图片" }),
+    );
+    expect(await screen.findByRole("dialog")).toBeVisible();
+    expect(invoke).not.toHaveBeenCalled();
+  });
 
   it("displays a remote assistant image inline and opens its preview", async () => {
     reply("![效果图](https://example.com/generated.png)");

@@ -1,0 +1,128 @@
+{
+  "inputAlphaDir": "D:\\projectGithub\\TAI-Switch\\design\\ip\\D-pinkdog-video-v4\\processed\\idle-square-2k-v1\\alpha-frames",
+  "sourceDir": "D:\\projectGithub\\TAI-Switch\\design\\ip\\D-pinkdog-video-v4\\processed\\idle-square-2k-v1\\source-frames",
+  "outputDir": "D:\\projectGithub\\TAI-Switch\\design\\ip\\D-pinkdog-video-v4\\matte-trial\\idle-square-2k-v1",
+  "frames": 3,
+  "method": "Only a 2px band adjoining existing transparency (alpha<=4). Green-channel spill is capped against local trusted foreground ratios; red/blue and the interior are unchanged. Teal foreground references are excluded. No watermark treatment, no whole-image blur or AI redraw.",
+  "shrinkPixels": 0.35,
+  "alphaPolicy": "At most shrinkPixels times the local 1px alpha gradient; shrink is restricted to 0..0.5 and only pixels with verified green spill. Alpha is never increased.",
+  "qaLayout": "Rows = sampled frames; left = original matte, right = refined; upper = light background, lower = dark background. Crop is QA only; output frame dimensions are unchanged.",
+  "qaFrames": [
+    {
+      "name": "000001.png",
+      "crop": {
+        "left": 0,
+        "top": 0,
+        "width": 1792,
+        "height": 1792
+      }
+    },
+    {
+      "name": "000061.png",
+      "crop": {
+        "left": 0,
+        "top": 0,
+        "width": 1792,
+        "height": 1792
+      }
+    },
+    {
+      "name": "000121.png",
+      "crop": {
+        "left": 0,
+        "top": 0,
+        "width": 1792,
+        "height": 1792
+      }
+    }
+  ],
+  "detailQaFrames": [
+    {
+      "name": "000001.png",
+      "crop": {
+        "left": 236,
+        "top": 626,
+        "width": 360,
+        "height": 360
+      }
+    },
+    {
+      "name": "000061.png",
+      "crop": {
+        "left": 212,
+        "top": 626,
+        "width": 360,
+        "height": 360
+      }
+    },
+    {
+      "name": "000121.png",
+      "crop": {
+        "left": 236,
+        "top": 626,
+        "width": 360,
+        "height": 360
+      }
+    }
+  ],
+  "allInputsUnchanged": true,
+  "protectedCoreChanges": 0,
+  "protectedCoreTealChanges": 0,
+  "changedPixels": 42475,
+  "perFrame": [
+    {
+      "name": "000001.png",
+      "changedPixels": 16276,
+      "greenChanged": 16276,
+      "alphaChanged": 12705,
+      "coreChanged": 0,
+      "coreTealPixels": 13419,
+      "coreTealChanged": 0,
+      "referencesProtectedAsTeal": 0,
+      "missingReference": 7077,
+      "maximumGreenReduction": 188,
+      "maximumAlphaReduction": 89,
+      "sourceUnchanged": true,
+      "matteUnchanged": true,
+      "sourceSha256": "1f8c7ce920d5e908b9ebb305ce735be6921354e6e5330d416badbf66578006ab",
+      "inputAlphaSha256": "b0f2ceb28a2d43fcd16cd27e27cf9a13c25d138570a7021e15f34fc0d2bb6b73",
+      "outputSha256": "80eeb05a6a083eb0dbf84ae236469564443591533391f1f4ebb1aba31edb065f"
+    },
+    {
+      "name": "000061.png",
+      "changedPixels": 11605,
+      "greenChanged": 11605,
+      "alphaChanged": 8923,
+      "coreChanged": 0,
+      "coreTealPixels": 59189,
+      "coreTealChanged": 0,
+      "referencesProtectedAsTeal": 2,
+      "missingReference": 27325,
+      "maximumGreenReduction": 228,
+      "maximumAlphaReduction": 89,
+      "sourceUnchanged": true,
+      "matteUnchanged": true,
+      "sourceSha256": "7361768809707988b5613d39b87a6d51dd704271f10ff74a8fc9cf1e85b37918",
+      "inputAlphaSha256": "cadefd3e33f906818c5cf6c0bc368998cd09e83696ca046ea00c2a9a37883da9",
+      "outputSha256": "e243359a0fe8b9e073c14803ca4da32bf6afbd1fccc798144e77aa8607bb6175"
+    },
+    {
+      "name": "000121.png",
+      "changedPixels": 14594,
+      "greenChanged": 14594,
+      "alphaChanged": 11397,
+      "coreChanged": 0,
+      "coreTealPixels": 14829,
+      "coreTealChanged": 0,
+      "referencesProtectedAsTeal": 6,
+      "missingReference": 7395,
+      "maximumGreenReduction": 186,
+      "maximumAlphaReduction": 89,
+      "sourceUnchanged": true,
+      "matteUnchanged": true,
+      "sourceSha256": "f0cb1e7ee64bbc5d8e69ebdec1fd67eb162cabc38df389ce999fa212b8b9506d",
+      "inputAlphaSha256": "b99a261c08fefdf7ea8d377ab06ec7759dd002265d7454052a5526ebaf73843f",
+      "outputSha256": "1a5c1d82568c518364dd93739229062e00d9b9da8fe7f97f434df905c125bba2"
+    }
+  ]
+}

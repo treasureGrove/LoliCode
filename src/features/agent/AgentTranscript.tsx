@@ -29,6 +29,11 @@ type ActivityEntry = { key: string; part: AgentPart };
 type TranscriptBlock =
   | { kind: "message"; key: string; message: AgentMessage }
   | { kind: "text"; key: string; text: string }
+  | {
+      kind: "proposal";
+      key: string;
+      part: Extract<AgentPart, { type: "tool" }>;
+    }
   | { kind: "activity"; key: string; entries: ActivityEntry[] };
 
 /** Text and user/system messages are ordering boundaries, even within a reply. */
@@ -48,6 +53,9 @@ export function groupAgentTranscript(
         if (!part.text.trim()) continue;
         activity = undefined;
         blocks.push({ kind: "text", key, text: part.text });
+      } else if (part.type === "tool" && part.name === "propose_automation") {
+        activity = undefined;
+        blocks.push({ kind: "proposal", key, part });
       } else {
         if (!activity) {
           activity = { kind: "activity", key: `activity:${key}`, entries: [] };
@@ -120,10 +128,12 @@ const AgentExecutionGroup = memo(function AgentExecutionGroup({
   entries,
   active,
   projectPath,
+  sessionId,
 }: {
   entries: ActivityEntry[];
   active: boolean;
   projectPath: string;
+  sessionId?: string;
 }) {
   const states = useRef(new Map<string, AgentDisclosureState>());
   const stateFor = (key: string) => {
@@ -211,6 +221,8 @@ const AgentExecutionGroup = memo(function AgentExecutionGroup({
             <AgentToolPart
               key={key}
               part={part}
+              projectPath={projectPath}
+              sessionId={sessionId}
               grouped
               disclosureState={stateFor(key)}
             />
@@ -219,6 +231,7 @@ const AgentExecutionGroup = memo(function AgentExecutionGroup({
               key={key}
               part={part}
               projectPath={projectPath}
+              sessionId={sessionId}
               disclosureState={stateFor(key)}
             />
           ) : null,
@@ -264,9 +277,28 @@ export function AgentTranscript({
             userIdentity={userIdentity}
           />
         ) : block.kind === "text" ? (
-          <AgentMessageFrame role="assistant" key={block.key}>
+          <AgentMessageFrame
+            role="assistant"
+            key={block.key}
+            companionSurface={{
+              id: `message-${sessionId || projectPath}-${block.key}`,
+              text: block.text,
+            }}
+          >
             <AgentTextPart
               text={block.text}
+              projectPath={projectPath}
+              sessionId={sessionId}
+            />
+          </AgentMessageFrame>
+        ) : block.kind === "proposal" ? (
+          <AgentMessageFrame
+            role="assistant"
+            key={block.key}
+            ariaLabel="Agent 自动化提案"
+          >
+            <AgentToolPart
+              part={block.part}
               projectPath={projectPath}
               sessionId={sessionId}
             />
@@ -282,6 +314,7 @@ export function AgentTranscript({
             <AgentExecutionGroup
               entries={block.entries}
               projectPath={projectPath}
+              sessionId={sessionId}
               active={active && index === blocks.length - 1}
             />
           </AgentMessageFrame>

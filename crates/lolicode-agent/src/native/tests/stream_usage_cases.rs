@@ -26,6 +26,7 @@ async fn explicit_finish_does_not_wait_for_a_kept_open_socket_and_collects_trail
             ReadPolicy {
                 progress_timeout: Duration::from_secs(1),
                 terminal_grace: Duration::from_millis(60),
+                retry_base_delay: Duration::ZERO,
             },
             None,
         )
@@ -51,27 +52,31 @@ async fn heartbeats_do_not_keep_first_output_or_mid_stream_stalls_alive() {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
         let server = tokio::spawn(async move {
-            let (mut stream, _) = listener.accept().await.unwrap();
-            let mut request = [0u8; 8192];
-            let _ = stream.read(&mut request).await;
-            stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n").await.unwrap();
-            if let Some(content) = prefix {
-                stream
-                    .write_all(
-                        format!(
-                            "data: {}\n\n",
-                            json!({"choices":[{"delta":{"content":content},"finish_reason":null}]})
-                        )
-                        .as_bytes(),
-                    )
-                    .await
-                    .unwrap();
-            }
-            loop {
-                if stream.write_all(b": heartbeat\n\n").await.is_err() {
-                    break;
-                }
-                tokio::time::sleep(Duration::from_millis(5)).await;
+            let mut connections = tokio::task::JoinSet::new();
+            while let Ok((mut stream, _)) = listener.accept().await {
+                connections.spawn(async move {
+                    let mut request = [0u8; 8192];
+                    let _ = stream.read(&mut request).await;
+                    stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n").await.unwrap();
+                    if let Some(content) = prefix {
+                        stream
+                            .write_all(
+                                format!(
+                                    "data: {}\n\n",
+                                    json!({"choices":[{"delta":{"content":content},"finish_reason":null}]})
+                                )
+                                .as_bytes(),
+                            )
+                            .await
+                            .unwrap();
+                    }
+                    loop {
+                        if stream.write_all(b": heartbeat\n\n").await.is_err() {
+                            break;
+                        }
+                        tokio::time::sleep(Duration::from_millis(5)).await;
+                    }
+                });
             }
         });
         let client = reqwest::Client::builder().no_proxy().build().unwrap();
@@ -93,6 +98,7 @@ async fn heartbeats_do_not_keep_first_output_or_mid_stream_stalls_alive() {
             ReadPolicy {
                 progress_timeout: Duration::from_millis(80),
                 terminal_grace: Duration::from_millis(10),
+                retry_base_delay: Duration::ZERO,
             },
             None,
         )
@@ -317,6 +323,7 @@ async fn finished_responses_survive_partial_or_broken_trailers_but_invalid_tools
                 ReadPolicy {
                     progress_timeout: Duration::from_millis(80),
                     terminal_grace: Duration::from_millis(20),
+                retry_base_delay: Duration::ZERO,
                 },
                 None,
             ),

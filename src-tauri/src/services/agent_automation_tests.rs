@@ -55,6 +55,120 @@ impl AutomationRuntime for UnavailableAutomationRuntime {
     }
 }
 
+struct DelayedAdmissionRuntime {
+    catalog: AgentCatalog,
+    session: AgentSession,
+    send_started: tokio::sync::Notify,
+    release_admission: tokio::sync::Notify,
+    admitted: AtomicBool,
+    stop_count: std::sync::atomic::AtomicUsize,
+    stopped_after_admission: AtomicBool,
+}
+impl AutomationRuntime for DelayedAdmissionRuntime {
+    fn bind_project<'a>(&'a self, _path: &'a str) -> BoxFuture<'a, Result<AgentCatalog, String>> {
+        Box::pin(async move { Ok(self.catalog.clone()) })
+    }
+
+    fn call<'a>(
+        &'a self,
+        method: &'a str,
+        _params: Value,
+        _mutate: bool,
+    ) -> BoxFuture<'a, Result<Value, String>> {
+        Box::pin(async move {
+            match method {
+                "createSession" => Ok(json!(self.session)),
+                "sendMessage" => {
+                    self.send_started.notify_one();
+                    self.release_admission.notified().await;
+                    self.admitted.store(true, Ordering::SeqCst);
+                    Ok(Value::Null)
+                }
+                "interruptSession" => {
+                    self.stop_count.fetch_add(1, Ordering::SeqCst);
+                    if self.admitted.load(Ordering::SeqCst) {
+                        self.stopped_after_admission.store(true, Ordering::SeqCst);
+                    }
+                    Ok(Value::Null)
+                }
+                _ => panic!("Unexpected automation method {method}"),
+            }
+        })
+    }
+}
+
+#[tokio::test]
+async fn automation_hung_admission_does_not_block_management_and_honours_late_cancellation() {
+    let project = tempfile::tempdir().unwrap();
+    let path =
+        crate::services::agent_host::canonical_project(&project.path().to_string_lossy()).unwrap();
+    let workspace = path.to_string_lossy().into_owned();
+    let db = Arc::new(crate::database::Database::memory().unwrap());
+    let mut prefs = preferences::Preferences::default();
+    prefs.projects.insert(
+        preferences::path_key(&workspace),
+        AgentProject {
+            standalone: false,
+            path: workspace.clone(),
+            name: "isolated delayed admission".into(),
+            pinned: false,
+            last_opened_at: now_ms(),
+        },
+    );
+    preferences::save(&db, &prefs).unwrap();
+    create_saved_job(&db, &json!({"workspacePath":workspace,"title":"Delayed admission","prompt":"Inspect the project","cronExpr":"0 * * * *","modelSelection":{"providerId":"owned","modelId":"fixture"}})).await.unwrap();
+    let mut store = load(&db).unwrap();
+    let job = store.jobs[0].clone();
+    let run = create_run(&mut store, &job.automation_id);
+    save(&db, &store).unwrap();
+    let runtime = Arc::new(DelayedAdmissionRuntime {
+        catalog: serde_json::from_value(json!({"revision":1,"models":[{"id":"owned/fixture","providerId":"owned","modelId":"fixture","name":"Fixture","channelName":"Owned"}],"defaultModel":"owned/fixture","excludedSources":[]})).unwrap(),
+        session: serde_json::from_value(json!({"id":"lc:delayed-admission","projectPath":workspace,"title":"Fixture","mode":"build","createdAt":1,"updatedAt":1})).unwrap(),
+        send_started: tokio::sync::Notify::new(),
+        release_admission: tokio::sync::Notify::new(),
+        admitted: AtomicBool::new(false),
+        stop_count: std::sync::atomic::AtomicUsize::new(0),
+        stopped_after_admission: AtomicBool::new(false),
+    });
+    let dispatch = tokio::spawn({
+        let runtime = runtime.clone();
+        let db = db.clone();
+        let run = run.clone();
+        async move { dispatch_run(runtime, db, job, run).await }
+    });
+    tokio::time::timeout(Duration::from_secs(2), runtime.send_started.notified())
+        .await
+        .unwrap();
+    // These are the same management paths used by the open automation page.
+    // Release the test actor before asserting, even when testing the old bug.
+    let listed =
+        tokio::time::timeout(Duration::from_millis(150), list_saved_jobs(&db, &workspace)).await;
+    let cancelled = tokio::time::timeout(
+        Duration::from_millis(150),
+        cancel_run_runtime(runtime.clone(), db.clone(), &run.run_id, &workspace),
+    )
+    .await;
+    runtime.release_admission.notify_one();
+    let session = tokio::time::timeout(Duration::from_secs(2), dispatch)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        listed.is_ok(),
+        "A hanging send must not hold the automation list lock"
+    );
+    assert!(
+        cancelled.is_ok(),
+        "Cancellation intent must persist before admission"
+    );
+    assert_eq!(listed.unwrap().unwrap().as_array().unwrap().len(), 1);
+    assert_eq!(cancelled.unwrap().unwrap()["status"], "stopping");
+    assert!(session.is_some());
+    assert_eq!(runtime.stop_count.load(Ordering::SeqCst), 2);
+    assert!(runtime.stopped_after_admission.load(Ordering::SeqCst));
+    assert!(load(&db).unwrap().runs[0].cancel_requested);
+}
+
 #[tokio::test]
 async fn automation_dispatch_preserves_cancelled_and_binding_failure_receipts_without_model_calls()
 {

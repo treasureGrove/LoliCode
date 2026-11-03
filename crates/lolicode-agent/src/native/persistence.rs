@@ -94,6 +94,11 @@ pub(super) async fn load(root: &Path) -> Result<Vec<StoredSession>, String> {
         let title_interrupted = stored.snapshot.title_pending;
         let compaction_interrupted = stored.snapshot.compacting;
         let model_interrupted=stored.snapshot.model_phase.take().is_some();
+        let queue_interrupted = !stored.queued_inputs.is_empty() && !stored.snapshot.queue_paused;
+        let automation_receipts_applied = super::automation_proposal::apply_saved_receipts(&mut stored);
+        if !stored.queued_inputs.is_empty() {
+            stored.snapshot.queue_paused = true;
+        }
         stored.snapshot.title_pending = false;
         stored.snapshot.compacting = false;
         stored.snapshot.session.activity = None;
@@ -129,7 +134,7 @@ pub(super) async fn load(root: &Path) -> Result<Vec<StoredSession>, String> {
             // Repair only missing protocol results; never re-execute a tool.
             repair_history(&mut stored);
             save(root, &stored).await?;
-        } else if title_interrupted || compaction_interrupted || model_interrupted {
+        } else if title_interrupted || compaction_interrupted || model_interrupted || queue_interrupted || automation_receipts_applied {
             save(root, &stored).await?;
         }
         sessions.push(stored);

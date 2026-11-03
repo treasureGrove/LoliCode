@@ -10,7 +10,7 @@ const root = path.resolve(
   "../..",
 );
 
-test("the production companion embeds the original resource key and rig artwork without asset requests", async () => {
+test("the production companion embeds its resource key and matching standing/rest posters and emits all seven clips as local assets", async () => {
   // jsdom/Vite dev imports remain URLs even for ?inline. Exercise the real
   // production asset transform, keeping output in memory and ordinary images
   // external so removing ?inline genuinely makes this regression fail.
@@ -44,8 +44,9 @@ test("the production companion embeds the original resource key and rig artwork 
   );
   assert.ok(!output.some((item) => /companion[^/]*\.png$/.test(item.fileName)));
   for (const filename of [
-    "companion-rig-v1.webp",
-    "companion-eyes-closed-v1.webp",
+    "companion-video-poster-v4.webp",
+    "companion-sit-poster-v5.webp",
+    "companion-lie-poster-v5.webp",
   ]) {
     const artwork = await readFile(
       path.join(root, "src/assets/atelier", filename),
@@ -61,6 +62,47 @@ test("the production companion embeds the original resource key and rig artwork 
   assert.ok(
     !output.some((item) => /companion[^/]*\.webp$/.test(item.fileName)),
   );
+  for (const filename of [
+    "companion-idle-video-v4.webm",
+    "companion-greeting-video-v4.webm",
+    "companion-feed-video-v4.webm",
+    "companion-snack-video-v4.webm",
+    "companion-curious-video-v4.webm",
+    "companion-sit-video-v5.webm",
+    "companion-lie-video-v5.webm",
+  ]) {
+    const footage = await readFile(
+      path.join(root, "src/assets/atelier", filename),
+    );
+    const asset = output.find(
+      (item) =>
+        item.type === "asset" &&
+        item.fileName.endsWith(".webm") &&
+        Buffer.from(item.source).equals(footage),
+    );
+    assert.ok(
+      asset,
+      `${filename} must be included in the desktop asset bundle`,
+    );
+    assert.deepEqual(Buffer.from(asset.source), footage);
+    const chunk = output.find(
+      (item) =>
+        item.type === "chunk" &&
+        item.code.includes(path.basename(asset.fileName)),
+    );
+    assert.ok(chunk, `${filename} must be referenced by the companion`);
+    const references = Array.from(
+      chunk.code.matchAll(/new URL\((["'])(.*?)\1,\s*import\.meta\.url\)/g),
+    );
+    const reference = references.find((match) =>
+      match[2].endsWith(path.basename(asset.fileName)),
+    );
+    assert.ok(reference, `${filename} must resolve beside the local renderer`);
+    assert.ok(
+      !/^(?:[a-z][a-z\d+.-]*:|\/)/i.test(reference[2]),
+      `${filename} must not use a remote or root-relative media URL`,
+    );
+  }
 
   const config = JSON.parse(
     await readFile(path.join(root, "src-tauri/tauri.conf.json"), "utf8"),
@@ -71,5 +113,13 @@ test("the production companion embeds the original resource key and rig artwork 
   assert.ok(
     imagePolicy?.split(/\s+/).includes("data:"),
     "the desktop CSP must permit the embedded PNG",
+  );
+  const directives = config.app.security.csp.split(";");
+  const mediaPolicy =
+    directives.find((directive) => directive.trim().startsWith("media-src ")) ??
+    directives.find((directive) => directive.trim().startsWith("default-src "));
+  assert.ok(
+    mediaPolicy?.split(/\s+/).includes("'self'"),
+    "the desktop CSP must permit the local WebM assets",
   );
 });

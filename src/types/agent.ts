@@ -76,6 +76,56 @@ export interface AgentSession {
   updatedAt: number;
   /** Lightweight list metadata; subsequent snapshots remain authoritative. */
   activity?: { status: AgentStatus; titlePending: boolean };
+  coordination?: {
+    role: "secretary" | "worker";
+    parentSessionId?: string;
+    taskId?: string;
+  };
+}
+
+export type AgentSecretaryTaskStatus =
+  | "queued"
+  | "running"
+  | "waiting_permission"
+  | "waiting_question"
+  | "completed"
+  | "failed"
+  | "cancelled"
+  | "interrupted";
+
+export interface AgentSecretaryTask {
+  id: string;
+  parentSessionId: string;
+  sessionId: string;
+  title: string;
+  instructions: string;
+  status: AgentSecretaryTaskStatus;
+  createdAt: number;
+  updatedAt: number;
+  summary?: string | null;
+  error?: string | null;
+  projectPath: string;
+  requestId: string;
+}
+
+export interface AgentSecretaryState {
+  sessionId: string;
+  tasks: AgentSecretaryTask[];
+}
+
+/** Read-only global projection for the companion; no task prompts or results. */
+export interface AgentSecretaryActivity {
+  sessionId: string;
+  projectPath: string;
+  title: string;
+  status: AgentStatus;
+  tasks: Array<{
+    id: string;
+    sessionId: string;
+    title: string;
+    status: AgentSecretaryTaskStatus;
+    updatedAt: number;
+  }>;
 }
 
 export type AgentPart =
@@ -194,6 +244,26 @@ export interface AgentUsage {
   session?: AgentTokenUsage & { since: number; complete: boolean };
 }
 
+export interface AgentQueuedMessage {
+  id: string;
+  text: string;
+  createdAt?: number;
+  attachments?: { fileName: string; mime: string; bytes: number }[];
+}
+
+export interface AgentQueuedInput {
+  requestId: string;
+  text: string;
+  attachments: {
+    ref?: string;
+    dataBase64?: string;
+    localPath?: string;
+    fileName: string;
+    mime: string;
+    bytes: number;
+  }[];
+}
+
 export interface AgentSnapshot {
   session: AgentSession;
   status: AgentStatus;
@@ -211,6 +281,8 @@ export interface AgentSnapshot {
   modelPhase?: "waiting" | "streaming" | "finishing";
   /** Actual upstream usage; missing counters remain unknown. */
   usage?: AgentUsage;
+  queuedMessages?: AgentQueuedMessage[];
+  queuePaused?: boolean;
 }
 
 export interface AgentProjectResult {

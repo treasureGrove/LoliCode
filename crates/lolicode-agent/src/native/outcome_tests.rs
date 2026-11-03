@@ -21,6 +21,7 @@ async fn fixture() -> (
             background_only: false,
             request_id: "fixture-request".into(),
             cancel: tx,
+            input: queue::parse_input(&json!({"requestId":"fixture-request","text":"fixture"})).unwrap(),
         });
         state.stored.snapshot.status = AgentStatus::Running;
         state.stored.snapshot.messages.push(AgentMessage {

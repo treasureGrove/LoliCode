@@ -944,6 +944,8 @@ impl Engine {
             compacting: false,
             usage: None,
             model_phase: None,
+            queued_messages: Vec::new(),
+            queue_paused: false,
         };
         let mut value = serde_json::to_value(&snapshot).map_err(|_| "会话内容编码失败")?;
         self.redact_value(&mut value);
