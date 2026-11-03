@@ -101,6 +101,8 @@ pub(super) struct StoredSession {
     pub secretary_worktree: Option<AgentSecretaryWorktree>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub secretary_source_context: Option<String>,
+    #[serde(default)]
+    pub secretary_automatic: bool,
 }
 
 #[derive(Clone, Serialize, Deserialize, PartialEq)]

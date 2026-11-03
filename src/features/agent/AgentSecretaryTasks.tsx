@@ -25,6 +25,7 @@ import type {
 } from "@/types/agent";
 import assistantPortrait from "@/assets/brand/lolicode-icon.png";
 import { AgentSecretaryGithub } from "./AgentSecretaryGithub";
+import { AgentSecretaryDraftPrCard } from "./AgentSecretaryDraftPr";
 import {
   bounded,
   clearRequestIdentity,
@@ -538,6 +539,11 @@ export function AgentSecretaryTasks({
                       )}
                       <strong>{task.title}</strong>
                     </button>
+                    {task.automatic && (
+                      <small className="wb-secretary-task-origin">
+                        {label("github.policy.badge", "自动分派")}
+                      </small>
+                    )}
                     <span className="wb-secretary-task-status">
                       {label(
                         `status.${task.status}`,
@@ -633,6 +639,16 @@ export function AgentSecretaryTasks({
                       {task.error && (
                         <p className="wb-secretary-task-error">{task.error}</p>
                       )}
+                      {!workerTaskId &&
+                        task.status === "completed" &&
+                        task.worktree && (
+                          <AgentSecretaryDraftPrCard
+                            key={task.id}
+                            sessionId={sessionId}
+                            taskId={task.id}
+                            disabled={!active || Boolean(busy)}
+                          />
+                        )}
                       {!workerTaskId && (
                         <form
                           className="wb-secretary-followup"

@@ -5,6 +5,7 @@ import { AgentSecretaryTasks } from "@/features/agent/AgentSecretaryTasks";
 import { agentApi } from "@/lib/api/agent";
 import zh from "@/i18n/locales/zh.json";
 import type {
+  AgentSecretaryDraftPr,
   AgentSecretaryGithubState,
   AgentSecretaryState,
   AgentSecretaryTask,
@@ -17,6 +18,9 @@ vi.mock("@/lib/api/agent", () => ({
     bindSecretaryGithub: vi.fn(),
     refreshSecretaryGithub: vi.fn(),
     setSecretaryGithubMonitoring: vi.fn(),
+    setSecretaryGithubPolicy: vi.fn(),
+    getSecretaryDraftPr: vi.fn(),
+    publishSecretaryDraftPr: vi.fn(),
     disconnectSecretaryGithub: vi.fn(),
     delegateSecretaryGithubItem: vi.fn(),
     getSecretaryGithubReply: vi.fn(),
@@ -98,6 +102,9 @@ beforeEach(() => {
   vi.mocked(agentApi.bindSecretaryGithub).mockReset();
   vi.mocked(agentApi.refreshSecretaryGithub).mockReset();
   vi.mocked(agentApi.setSecretaryGithubMonitoring).mockReset();
+  vi.mocked(agentApi.setSecretaryGithubPolicy).mockReset();
+  vi.mocked(agentApi.getSecretaryDraftPr).mockReset();
+  vi.mocked(agentApi.publishSecretaryDraftPr).mockReset();
   vi.mocked(agentApi.disconnectSecretaryGithub).mockReset();
   vi.mocked(agentApi.delegateSecretaryGithubItem).mockReset();
   vi.mocked(agentApi.getSecretaryGithubReply).mockReset();
@@ -106,6 +113,330 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 describe("AgentSecretaryTasks", () => {
+  it("leaves automatic dispatch off until receiving and the reviewed rule are saved", async () => {
+    const source: AgentSecretaryGithubState = {
+      ...disconnected,
+      repository: "example/project",
+      login: "maintainer",
+      policy: { enabled: false, revision: 3, rules: [], decisions: [] },
+    };
+    vi.mocked(agentApi.getSecretaryGithub).mockResolvedValue(source);
+    vi.mocked(agentApi.setSecretaryGithubMonitoring).mockResolvedValue({
+      ...source,
+      monitoring: true,
+    });
+    vi.mocked(agentApi.setSecretaryGithubPolicy).mockImplementation(
+      async (_, enabled, rules) => ({
+        ...source,
+        monitoring: true,
+        policy: {
+          enabled,
+          revision: 4,
+          rules,
+          decisions: [
+            {
+              itemId: "issue:22",
+              title: "安装失败",
+              url: "https://github.com/example/project/issues/22",
+              ruleId: rules[0].id,
+              ruleName: rules[0].name,
+              status: "dispatched",
+              decidedAt: 1000,
+            },
+          ],
+        },
+      }),
+    );
+    render(
+      <AgentSecretaryTasks sessionId="lc:secretary" onOpenSession={vi.fn()} />,
+    );
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: "GitHub 收件箱" }));
+    await flush();
+    fireEvent.click(
+      screen.getByText("自动分派", { selector: "summary strong" }),
+    );
+    const enabled = screen.getByRole("checkbox", { name: "开启自动分派" });
+    expect(enabled).not.toBeChecked();
+    expect(enabled).toBeDisabled();
+    fireEvent.click(screen.getByRole("checkbox", { name: "自动收件" }));
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: "添加规则" }));
+    fireEvent.change(screen.getByLabelText("规则名称"), {
+      target: { value: "安装诊断" },
+    });
+    fireEvent.change(screen.getByLabelText("指令关键词"), {
+      target: { value: "TRIAGE" },
+    });
+    fireEvent.change(screen.getByLabelText("允许的 GitHub 账号"), {
+      target: { value: "@Alice, bob" },
+    });
+    fireEvent.change(screen.getByLabelText("执行要求"), {
+      target: { value: "复现安装问题并提供证据。" },
+    });
+    fireEvent.click(enabled);
+    expect(agentApi.setSecretaryGithubPolicy).not.toHaveBeenCalled();
+    expect(agentApi.delegateSecretaryGithubItem).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "保存自动分派设置" }));
+    await flush();
+    expect(agentApi.setSecretaryGithubPolicy).toHaveBeenCalledWith(
+      "lc:secretary",
+      true,
+      [
+        {
+          id: expect.any(String),
+          name: "安装诊断",
+          keyword: "triage",
+          enabled: true,
+          actors: ["alice", "bob"],
+          kinds: ["issue"],
+          instructions: "复现安装问题并提供证据。",
+        },
+      ],
+      3,
+    );
+    fireEvent.click(screen.getByText(/命中记录/, { selector: "summary" }));
+    expect(screen.getByText("安装失败")).toBeVisible();
+    expect(screen.getByText("已分派")).toBeVisible();
+  });
+
+  it("turns automatic dispatch off immediately without saving an incomplete rule edit", async () => {
+    const rule = {
+      id: "check",
+      name: "检查文档",
+      enabled: true,
+      actors: ["alice"],
+      kinds: ["issue" as const],
+      keyword: "docs",
+      instructions: "检查文档。",
+    };
+    const source: AgentSecretaryGithubState = {
+      ...disconnected,
+      repository: "example/project",
+      monitoring: true,
+      policy: { enabled: true, revision: 5, rules: [rule], decisions: [] },
+    };
+    vi.mocked(agentApi.getSecretaryGithub).mockResolvedValue(source);
+    vi.mocked(agentApi.setSecretaryGithubPolicy).mockImplementation(
+      async (_, enabled, rules, expectedRevision) => ({
+        ...source,
+        policy: {
+          enabled,
+          revision: expectedRevision! + 1,
+          rules,
+          decisions: [],
+        },
+      }),
+    );
+    render(
+      <AgentSecretaryTasks sessionId="lc:secretary" onOpenSession={vi.fn()} />,
+    );
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: "GitHub 收件箱" }));
+    await flush();
+    fireEvent.click(
+      screen.getByText("自动分派", { selector: "summary strong" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /检查文档/ }));
+    fireEvent.change(screen.getByLabelText("执行要求"), {
+      target: { value: "" },
+    });
+    expect(
+      screen.getByRole("button", { name: "保存自动分派设置" }),
+    ).toBeDisabled();
+    fireEvent.click(screen.getByRole("checkbox", { name: "开启自动分派" }));
+    await flush();
+    expect(agentApi.setSecretaryGithubPolicy).toHaveBeenCalledWith(
+      "lc:secretary",
+      false,
+      [rule],
+      5,
+    );
+    expect(screen.getByLabelText("执行要求")).toHaveValue("");
+    expect(
+      screen.getByRole("checkbox", { name: "开启自动分派" }),
+    ).not.toBeChecked();
+    fireEvent.change(screen.getByLabelText("执行要求"), {
+      target: { value: "核对更新后的文档。" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "保存自动分派设置" }));
+    await flush();
+    expect(agentApi.setSecretaryGithubPolicy).toHaveBeenLastCalledWith(
+      "lc:secretary",
+      false,
+      [{ ...rule, instructions: "核对更新后的文档。" }],
+      6,
+    );
+  });
+
+  it("keeps the edited rules and blocks saving after a newer policy arrives", async () => {
+    const source: AgentSecretaryGithubState = {
+      ...disconnected,
+      repository: "example/project",
+      monitoring: true,
+      policy: {
+        enabled: false,
+        revision: 1,
+        rules: [
+          {
+            id: "one",
+            name: "核对安装",
+            enabled: true,
+            actors: ["alice"],
+            kinds: ["issue"],
+            keyword: "install",
+            instructions: "检查安装步骤。",
+          },
+        ],
+        decisions: [],
+      },
+    };
+    vi.mocked(agentApi.getSecretaryGithub).mockResolvedValue(source);
+    render(
+      <AgentSecretaryTasks sessionId="lc:secretary" onOpenSession={vi.fn()} />,
+    );
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: "GitHub 收件箱" }));
+    await flush();
+    fireEvent.click(
+      screen.getByText("自动分派", { selector: "summary strong" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /核对安装/ }));
+    fireEvent.change(screen.getByLabelText("执行要求"), {
+      target: { value: "保留本地编辑" },
+    });
+    vi.mocked(agentApi.getSecretaryGithub).mockResolvedValue({
+      ...source,
+      policy: { ...source.policy!, revision: 2 },
+    });
+    await act(async () => vi.advanceTimersByTimeAsync(5000));
+    expect(screen.getByLabelText("执行要求")).toHaveValue("保留本地编辑");
+    expect(
+      screen.getByRole("button", { name: "保存自动分派设置" }),
+    ).toBeDisabled();
+    expect(screen.getByRole("alert")).toHaveTextContent("已保存的设置有更新");
+    expect(agentApi.setSecretaryGithubPolicy).not.toHaveBeenCalled();
+  });
+
+  const prPreview: AgentSecretaryDraftPr = {
+    repository: "example/project",
+    login: "maintainer",
+    baseBranch: "main",
+    headBranch: "TG/secretary/work",
+    headRevision: "a".repeat(40),
+    baseRevision: "b".repeat(40),
+    treeRevision: "c".repeat(40),
+    changes: [{ status: "M", path: "docs/installation.md" }],
+    changedFileCount: 1,
+    patch: "@@ -1 +1 @@\n-old\n+new",
+    patchTruncated: false,
+    title: "核对安装",
+    body: "文档已更新。",
+  };
+
+  async function openDraftPr() {
+    vi.mocked(agentApi.getSecretary).mockResolvedValue(
+      overview([
+        task({
+          status: "completed",
+          executionMode: "worktree",
+          worktree: {
+            path: "D:/fixture/worker",
+            branch: prPreview.headBranch,
+            baseRevision: prPreview.baseRevision,
+          },
+        }),
+      ]),
+    );
+    render(
+      <AgentSecretaryTasks sessionId="lc:secretary" onOpenSession={vi.fn()} />,
+    );
+    await flush();
+    expand();
+    fireEvent.click(screen.getByRole("button", { name: "整理文档" }));
+    expect(agentApi.getSecretaryDraftPr).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "预览草稿 PR" }));
+    await flush();
+  }
+
+  it("previews the worktree read-only and retries the exact authorized draft publication", async () => {
+    vi.mocked(agentApi.getSecretaryDraftPr).mockResolvedValue(prPreview);
+    vi.mocked(agentApi.publishSecretaryDraftPr)
+      .mockResolvedValueOnce({
+        status: "pending",
+        title: "核对安装文档",
+        body: prPreview.body,
+        error: "正在核对发布结果",
+      })
+      .mockResolvedValueOnce({
+        status: "published",
+        title: "核对安装文档",
+        body: prPreview.body,
+        number: 42,
+        lifecycle: "draft",
+        url: "https://github.com/example/project/pull/42",
+      });
+    await openDraftPr();
+    expect(agentApi.getSecretaryDraftPr).toHaveBeenCalledWith(
+      "lc:secretary",
+      "task-1",
+    );
+    expect(screen.getByText("docs/installation.md")).toBeVisible();
+    expect(screen.getByText("查看差异")).toBeVisible();
+    expect(agentApi.publishSecretaryDraftPr).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText("PR 标题"), {
+      target: { value: "核对安装文档" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "推送分支并创建草稿 PR" }),
+    );
+    await flush();
+    expect(screen.getByLabelText("PR 标题")).toHaveAttribute("readonly");
+    fireEvent.click(
+      screen.getByRole("button", { name: "重试推送并创建草稿 PR" }),
+    );
+    await flush();
+    const outbound = {
+      headRevision: prPreview.headRevision,
+      baseRevision: prPreview.baseRevision,
+      treeRevision: prPreview.treeRevision,
+      title: "核对安装文档",
+      body: prPreview.body,
+    };
+    expect(vi.mocked(agentApi.publishSecretaryDraftPr).mock.calls).toEqual([
+      ["lc:secretary", "task-1", outbound],
+      ["lc:secretary", "task-1", outbound],
+    ]);
+    expect(screen.getByText("已创建草稿 PR #42 · 草稿")).toBeVisible();
+  });
+
+  it("requires a fresh preview after the worktree changes and preserves the edited text", async () => {
+    vi.mocked(agentApi.getSecretaryDraftPr)
+      .mockResolvedValueOnce(prPreview)
+      .mockResolvedValueOnce({ ...prPreview, treeRevision: "d".repeat(40) });
+    vi.mocked(agentApi.publishSecretaryDraftPr).mockRejectedValueOnce(
+      new Error("工作树内容已变化，请重新预览"),
+    );
+    await openDraftPr();
+    fireEvent.change(screen.getByLabelText("PR 正文"), {
+      target: { value: "本地修改过的正文" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "推送分支并创建草稿 PR" }),
+    );
+    await flush();
+    expect(
+      screen.getByRole("button", { name: "推送分支并创建草稿 PR" }),
+    ).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "重新预览" }));
+    await flush();
+    expect(screen.getByLabelText("PR 正文")).toHaveValue("本地修改过的正文");
+    expect(
+      screen.getByRole("button", { name: "推送分支并创建草稿 PR" }),
+    ).toBeEnabled();
+    expect(agentApi.publishSecretaryDraftPr).toHaveBeenCalledTimes(1);
+  });
+
   it("requires explicit GitHub reply delivery and keeps an unconfirmed reply unchanged on retry", async () => {
     vi.mocked(agentApi.getSecretary).mockResolvedValue(
       overview([task({ status: "completed", summary: "已复现并修复。" })]),
@@ -282,7 +613,7 @@ describe("AgentSecretaryTasks", () => {
     expect(
       screen.getByRole("checkbox", { name: "自动收件" }),
     ).toHaveAccessibleDescription(
-      "桌面应用运行时自动收件。任务仍由你明确交办。",
+      "桌面应用运行时自动收件。可在下方设置自动分派规则。",
     );
     fireEvent.click(screen.getByRole("button", { name: /安装失败/ }));
     expect(screen.getByText(item.body)).toBeInTheDocument();

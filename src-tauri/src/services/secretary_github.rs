@@ -5,12 +5,23 @@ use chrono::{DateTime, SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
-use std::{collections::BTreeMap, env, path::PathBuf, process::Stdio, time::Duration};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    env,
+    path::PathBuf,
+    process::Stdio,
+    time::Duration,
+};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     process::Command,
     sync::Mutex,
 };
+
+#[path = "secretary_github_policy.rs"]
+mod policy;
+pub(crate) use policy::{validate_rules, AutoCandidate, DecisionStatus};
+pub use policy::{GithubPolicy, GithubRule};
 
 const PAGE_SIZE: usize = 20;
 const MAX_PAGES: usize = 5;
@@ -37,12 +48,16 @@ pub struct GithubItem {
     pub body: Option<String>,
     pub task_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    created_at: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    human_actor_id: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub head_sha: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub pull_request_numbers: Vec<u64>,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum GithubKind {
     Issue,
@@ -61,6 +76,8 @@ pub struct GithubState {
     pub items: Vec<GithubItem>,
     #[serde(default)]
     pub monitoring: bool,
+    #[serde(default)]
+    pub policy: GithubPolicy,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
@@ -82,6 +99,42 @@ pub(crate) struct Source {
     pub account_id: Option<u64>,
     pub cursor: Cursor,
     pub state: GithubState,
+    #[serde(default)]
+    pub(crate) policy_authority: policy::PolicyAuthority,
+    #[serde(skip)]
+    pub(crate) auto_candidates: Vec<AutoCandidate>,
+}
+
+pub(crate) async fn resolve_policy_actors(
+    account_id: u64,
+    actors: BTreeSet<String>,
+) -> Result<BTreeMap<String, u64>, String> {
+    use futures::{stream, StreamExt, TryStreamExt};
+    let client = reply_client().await?;
+    let api = &client.0;
+    let account = api.get("user", "账户").await?;
+    if account["id"].as_u64() != Some(account_id) {
+        return Err("gh 当前账户已更换，请重新绑定 GitHub 来源".into());
+    }
+    stream::iter(actors)
+        .map(|login| async move {
+            let account = api.get(&format!("users/{login}"), "规则账户").await?;
+            let id = account["id"]
+                .as_u64()
+                .filter(|id| *id > 0)
+                .ok_or_else(|| format!("无法验证 GitHub 账户 @{login}"))?;
+            if account["type"] != "User"
+                || !account["login"]
+                    .as_str()
+                    .is_some_and(|name| name.eq_ignore_ascii_case(&login))
+            {
+                return Err(format!("@{login} 必须是当前有效的 GitHub 用户账户"));
+            }
+            Ok((login, id))
+        })
+        .buffer_unordered(4)
+        .try_collect()
+        .await
 }
 
 fn setting_key(session_id: &str) -> String {
@@ -370,6 +423,82 @@ pub(crate) async fn reply_client() -> Result<GithubReplyClient, String> {
 }
 
 impl GithubReplyClient {
+    pub(crate) fn draft_pr_git_header(&self) -> Result<String, String> {
+        use base64::{engine::general_purpose::STANDARD, Engine};
+        let token = self.0.pinned_token.as_deref().ok_or("GitHub 凭据不可用")?;
+        Ok(format!(
+            "Authorization: Basic {}",
+            STANDARD.encode(format!("x-access-token:{token}"))
+        ))
+    }
+
+    pub(crate) async fn draft_pr_base(
+        &self,
+        repository_name: &str,
+        branch: &str,
+    ) -> Result<Value, String> {
+        let repository_name = repository(repository_name)?;
+        let branch: String = url::form_urlencoded::byte_serialize(branch.as_bytes()).collect();
+        self.0
+            .get(
+                &format!("repos/{repository_name}/branches/{branch}"),
+                "PR 基线",
+            )
+            .await
+    }
+
+    pub(crate) async fn draft_pr_candidates(
+        &self,
+        repository_name: &str,
+        branch: &str,
+    ) -> Result<Value, String> {
+        let repository_name = repository(repository_name)?;
+        let owner = repository_name.split_once('/').ok_or("GitHub 仓库无效")?.0;
+        let query = url::form_urlencoded::Serializer::new(String::new())
+            .append_pair("state", "all")
+            .append_pair("head", &format!("{owner}:{branch}"))
+            .append_pair("per_page", "100")
+            .finish();
+        self.0
+            .get(
+                &format!("repos/{repository_name}/pulls?{query}"),
+                "草稿 PR 核对",
+            )
+            .await
+    }
+
+    pub(crate) async fn draft_pr_detail(
+        &self,
+        repository_name: &str,
+        number: u64,
+    ) -> Result<Value, String> {
+        let repository_name = repository(repository_name)?;
+        self.0
+            .get(
+                &format!("repos/{repository_name}/pulls/{number}"),
+                "PR 状态",
+            )
+            .await
+    }
+
+    pub(crate) async fn create_secretary_draft_pr(
+        &self,
+        repository_name: &str,
+        head: &str,
+        base: &str,
+        title: &str,
+        body: &str,
+    ) -> Result<Value, String> {
+        let repository_name = repository(repository_name)?;
+        self.0
+            .request(
+                &format!("repos/{repository_name}/pulls"),
+                "创建草稿 PR",
+                Some(&json!({"head":head,"base":base,"title":title,"body":body,"draft":true})),
+            )
+            .await
+    }
+
     pub(crate) async fn request(
         &self,
         endpoint: &str,
@@ -522,6 +651,12 @@ fn item(value: &Value, kind: GithubKind, repo: &str) -> Option<GithubItem> {
         url,
         state: bounded(state, 80),
         actor: actor["login"].as_str().map(|value| bounded(value, 100)),
+        created_at: stamp(&value["created_at"]),
+        human_actor_id: (kind != GithubKind::Ci
+            && actor["type"] == "User"
+            && value["performed_via_github_app"].is_null())
+        .then(|| actor["id"].as_u64().filter(|id| *id > 0))
+        .flatten(),
         updated_at,
         body,
         task_id: None,
@@ -538,12 +673,24 @@ struct Page {
     cursor: Option<u64>,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[serde(rename_all = "snake_case")]
 enum ThreadFeed {
     Issue,
     Pull,
     Comment,
     ReviewComment,
+}
+
+impl Cursor {
+    fn for_feed(&mut self, feed: ThreadFeed) -> &mut Option<u64> {
+        match feed {
+            ThreadFeed::Issue => &mut self.issues,
+            ThreadFeed::Pull => &mut self.pulls,
+            ThreadFeed::Comment => &mut self.comments,
+            ThreadFeed::ReviewComment => &mut self.reviews,
+        }
+    }
 }
 
 async fn read_threads(
@@ -621,11 +768,17 @@ async fn read_ci(api: &GitHub, repo: &str) -> Result<Vec<GithubItem>, String> {
 }
 
 pub(crate) async fn synchronize(repo: &str, previous: &Source) -> Result<Source, String> {
-    let api = GitHub {
-        executable: github_cli()?,
-        pinned_token: None,
-        #[cfg(test)]
-        fixture: None,
+    // Pin the credentials for all feeds to the same verified account when
+    // observations may authorize work. Preserve ordinary read-only behavior.
+    let api = if previous.state.policy.enabled {
+        reply_client().await?.0
+    } else {
+        GitHub {
+            executable: github_cli()?,
+            pinned_token: None,
+            #[cfg(test)]
+            fixture: None,
+        }
     };
     synchronize_with(&api, repo, previous).await
 }
@@ -680,22 +833,34 @@ async fn synchronize_with(api: &GitHub, repo: &str, previous: &Source) -> Result
         read_ci(api, &canonical),
     );
     let mut next = previous.clone();
+    next.auto_candidates.clear();
     next.repository_id = Some(repo_id);
     next.account_id = Some(account_id);
     next.state.repository = Some(canonical);
     next.state.login = Some(login.into());
-    next.state.last_synced_at = Some(Utc::now().timestamp_millis().try_into().unwrap_or_default());
+    let observed_at = Utc::now().timestamp_millis().try_into().unwrap_or_default();
+    next.state.last_synced_at = Some(observed_at);
     let mut items = Vec::new();
     let mut errors = Vec::new();
-    for (result, cursor) in [
-        (issues, &mut next.cursor.issues),
-        (pulls, &mut next.cursor.pulls),
-        (comments, &mut next.cursor.comments),
-        (reviews, &mut next.cursor.reviews),
+    for (feed, result) in [
+        (ThreadFeed::Issue, issues),
+        (ThreadFeed::Pull, pulls),
+        (ThreadFeed::Comment, comments),
+        (ThreadFeed::ReviewComment, reviews),
     ] {
         match result {
             Ok(page) => {
+                let cursor = next.cursor.for_feed(feed);
+                let previous_cursor = *cursor;
                 *cursor = page.cursor;
+                next.observe_policy_feed(
+                    previous,
+                    feed,
+                    &page.items,
+                    previous_cursor,
+                    page.cursor,
+                    observed_at,
+                );
                 items.extend(page.items);
             }
             Err(error) => errors.push(error),

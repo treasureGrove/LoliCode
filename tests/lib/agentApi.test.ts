@@ -7,6 +7,38 @@ vi.mock("@tauri-apps/api/core", () => native);
 
 beforeEach(() => native.invoke.mockReset().mockResolvedValue({ id: "lc:new" }));
 
+it("saves a reviewed policy revision and publishes only the previewed PR revisions", async () => {
+  const preview = {
+    headRevision: "a".repeat(40),
+    baseRevision: "b".repeat(40),
+    treeRevision: "c".repeat(40),
+    title: "Review installation",
+    body: "Verified in the worktree.",
+  };
+  await agentApi.setSecretaryGithubPolicy("lc:secretary", false, [], 7);
+  await agentApi.getSecretaryDraftPr("lc:secretary", "task-1");
+  await agentApi.publishSecretaryDraftPr("lc:secretary", "task-1", preview);
+  expect(native.invoke.mock.calls).toEqual([
+    [
+      "set_agent_secretary_github_policy",
+      {
+        sessionId: "lc:secretary",
+        enabled: false,
+        rules: [],
+        expectedRevision: 7,
+      },
+    ],
+    [
+      "get_agent_secretary_draft_pr",
+      { sessionId: "lc:secretary", taskId: "task-1" },
+    ],
+    [
+      "publish_agent_secretary_draft_pr",
+      { sessionId: "lc:secretary", taskId: "task-1", ...preview },
+    ],
+  ]);
+});
+
 describe("queued message transport", () => {
   it("keeps image and document payloads identical to a direct send and targets queue actions by exact request ID", async () => {
     const images = [

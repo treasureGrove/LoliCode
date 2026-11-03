@@ -40,13 +40,14 @@ export function clearRequestIdentity(scope: string) {
 export async function bounded<T>(
   request: Promise<T>,
   message: string,
+  timeout = 30_000,
 ): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
       request,
       new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error(message)), 30_000);
+        timer = setTimeout(() => reject(new Error(message)), timeout);
       }),
     ]);
   } finally {

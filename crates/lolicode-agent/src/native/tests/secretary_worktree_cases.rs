@@ -120,6 +120,20 @@ async fn secretary_worktree_requires_git_and_request_retries_keep_the_same_check
     assert_eq!(replay["id"], task["id"]);
     assert_eq!(replay["worktree"], task["worktree"]);
     assert_eq!(
+        engine
+            .call("getSessionExecutionRoot", json!({"sessionId": worker(&task)}))
+            .await
+            .unwrap(),
+        json!([task["projectPath"], task["worktree"]["path"]])
+    );
+    assert_eq!(
+        engine
+            .call("getSessionExecutionRoot", json!({"sessionId": parent}))
+            .await
+            .unwrap(),
+        json!([task["projectPath"], task["projectPath"]])
+    );
+    assert_eq!(
         replay["sourceUrl"],
         "https://github.com/example/repo/issues/1"
     );
@@ -130,6 +144,52 @@ async fn secretary_worktree_requires_git_and_request_retries_keep_the_same_check
     let mut shared = request;
     shared["executionMode"] = json!("shared");
     assert!(engine.call("delegateSecretaryTask", shared).await.is_err());
+    engine.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn secretary_rule_tasks_cannot_inherit_full_access_or_shell() {
+    let fake = Fake::start(|input| {
+        if chief(input) {
+            return text("Status received");
+        }
+        let schemas = input["tools"].as_array().unwrap();
+        for name in ["run_command", "memory", "propose_automation"] {
+            assert!(!schemas
+                .iter()
+                .any(|schema| schema["function"]["name"] == name));
+        }
+        tool(
+            "write_file",
+            json!({"path":"rule.txt","content":"rule result","expected_content":null}),
+        )
+    })
+    .await;
+    let (_data, project, engine, _) = setup(&fake).await;
+    baseline(project.path()).await;
+    let parent = secretary(&engine, "full_access").await;
+    let task = engine.call("delegateSecretaryTask", json!({
+        "sessionId": parent, "requestId": "automatic-fixture", "title": "Rule request",
+        "instructions": "Create rule.txt", "executionMode": "worktree", "automatic": true,
+        "sourceContext": json!({"source":"github","url":"https://github.com/example/repo/issues/1"}).to_string()
+    })).await.unwrap();
+    assert_eq!(task["automatic"], true);
+    let id = worker(&task);
+    let pending = wait(&engine, id, |snapshot| {
+        snapshot["status"] == "waiting_permission"
+    })
+    .await;
+    assert_eq!(pending["session"]["permissionMode"], "ask");
+    assert!(!directory(&task).join("rule.txt").exists());
+    assert!(engine
+        .call(
+            "replyPermission",
+            json!({
+                "sessionId":id,"requestId":pending["permissions"][0]["id"],"decision":"always"
+            })
+        )
+        .await
+        .is_err());
     engine.shutdown().await.unwrap();
 }
 

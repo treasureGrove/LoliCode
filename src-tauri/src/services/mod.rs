@@ -49,6 +49,7 @@ pub mod s3;
 pub mod s3_auto_sync;
 pub mod s3_sync;
 pub mod secretary_github;
+pub mod secretary_draft_pr;
 pub mod session_usage;
 pub mod session_usage_codex;
 pub mod session_usage_desktop;

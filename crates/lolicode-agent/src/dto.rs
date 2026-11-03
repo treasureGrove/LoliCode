@@ -69,6 +69,8 @@ pub struct AgentSecretaryTask {
     pub worktree: Option<AgentSecretaryWorktree>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_url: Option<String>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub automatic: bool,
 }
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]

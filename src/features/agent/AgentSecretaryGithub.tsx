@@ -21,6 +21,8 @@ import type {
   AgentSecretaryTask,
 } from "@/types/agent";
 import { AgentSecretaryGithubReply } from "./AgentSecretaryGithubReply";
+import { AgentSecretaryGithubPolicy } from "./AgentSecretaryGithubPolicy";
+import { AgentSecretaryDraftPrCard } from "./AgentSecretaryDraftPr";
 import {
   bounded,
   clearRequestIdentity,
@@ -70,7 +72,7 @@ export function AgentSecretaryGithub({
   const monitoringDescriptionId = useId();
   const monitoringDescription = label(
     "monitoringHint",
-    "桌面应用运行时自动收件。任务仍由你明确交办。",
+    "桌面应用运行时自动收件。可在下方设置自动分派规则。",
   );
 
   useEffect(() => {
@@ -140,7 +142,10 @@ export function AgentSecretaryGithub({
         request(),
         label("actionTimeout", "操作结果尚未确认，输入已保留。请刷新或重试。"),
       );
-      if (mounted.current) receive(result);
+      if (mounted.current) {
+        receive(result);
+        return result;
+      }
     } catch (error) {
       if (mounted.current) setActionError(agentErrorMessage(error));
     } finally {
@@ -325,7 +330,7 @@ export function AgentSecretaryGithub({
           <p className="wb-secretary-note">
             {label(
               "connectionHint",
-              "使用本机已登录的 GitHub CLI 接收仓库动态。你选定条目并写明要求后，秘书才会安排执行。",
+              "使用本机已登录的 GitHub CLI 接收仓库动态。默认由你选定条目并交办，也可以按规则开启自动分派。",
             )}
           </p>
           <label>
@@ -357,6 +362,44 @@ export function AgentSecretaryGithub({
       )}
       {source?.repository && (
         <>
+          {source.policy && (
+            <AgentSecretaryGithubPolicy
+              key={source.repository}
+              policy={source.policy}
+              monitoring={source.monitoring}
+              disabled={Boolean(busy) || !active}
+              tasks={tasks}
+              onSave={async (enabled, rules, expectedRevision) =>
+                (
+                  await run(
+                    "policy",
+                    () =>
+                      agentApi.setSecretaryGithubPolicy(
+                        sessionId,
+                        enabled,
+                        rules,
+                        expectedRevision,
+                      ),
+                    applySource,
+                  )
+                )?.policy
+              }
+              onOpenTask={(id) =>
+                void run(
+                  "open",
+                  async () => onOpenSession(id),
+                  () => {},
+                )
+              }
+              onOpenSource={(url) =>
+                void run(
+                  "source",
+                  () => settingsApi.openExternal(url),
+                  () => {},
+                )
+              }
+            />
+          )}
           {!source.items.length && (
             <p className="wb-secretary-empty">
               {label("empty", "暂时没有收件。同步后会在这里显示仓库动态。")}
@@ -444,6 +487,14 @@ export function AgentSecretaryGithub({
                           itemId={item.id}
                           summary={linked.summary ?? ""}
                           login={source.login}
+                        />
+                      )}
+                      {linked?.status === "completed" && linked.worktree && (
+                        <AgentSecretaryDraftPrCard
+                          key={linked.id}
+                          sessionId={sessionId}
+                          taskId={linked.id}
+                          disabled={!active || Boolean(busy)}
                         />
                       )}
                       {!item.taskId && (

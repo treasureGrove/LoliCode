@@ -19,7 +19,10 @@ import type {
   AgentQuestionAnswer,
   AgentQueuedInput,
   AgentSecretaryActivity,
+  AgentSecretaryDraftPr,
+  AgentSecretaryDraftPrReceipt,
   AgentSecretaryExecutionMode,
+  AgentSecretaryGithubRule,
   AgentSecretaryGithubReplyReceipt,
   AgentSecretaryGithubState,
   AgentSecretaryState,
@@ -200,6 +203,36 @@ export const agentApi = {
     invoke<AgentSecretaryGithubState>("set_agent_secretary_github_monitoring", {
       sessionId,
       enabled,
+    }),
+  setSecretaryGithubPolicy: (
+    sessionId: string,
+    enabled: boolean,
+    rules: AgentSecretaryGithubRule[],
+    expectedRevision?: number,
+  ) =>
+    invoke<AgentSecretaryGithubState>("set_agent_secretary_github_policy", {
+      sessionId,
+      enabled,
+      rules,
+      expectedRevision,
+    }),
+  getSecretaryDraftPr: (sessionId: string, taskId: string) =>
+    invoke<AgentSecretaryDraftPr>("get_agent_secretary_draft_pr", {
+      sessionId,
+      taskId,
+    }),
+  publishSecretaryDraftPr: (
+    sessionId: string,
+    taskId: string,
+    preview: Pick<
+      AgentSecretaryDraftPr,
+      "headRevision" | "baseRevision" | "treeRevision" | "title" | "body"
+    >,
+  ) =>
+    invoke<AgentSecretaryDraftPrReceipt>("publish_agent_secretary_draft_pr", {
+      sessionId,
+      taskId,
+      ...preview,
     }),
   disconnectSecretaryGithub: (sessionId: string) =>
     invoke<AgentSecretaryGithubState>("disconnect_agent_secretary_github", {

@@ -445,6 +445,7 @@ impl NativeEngine {
             let mut activity = Vec::new();
             for (id, session_id, title, previous, updated_at) in tasks {
                 let (state, updated_at) = match self.entry(&session_id).await {
+                            automatic: saved.secretary_automatic,
                     Ok(worker) => {
                         let state = worker.lock().await;
                         (
@@ -699,7 +700,7 @@ impl NativeEngine {
             }
             (
                 state.stored.snapshot.session.clone(),
-                state.effective_background_only(),
+                state.effective_background_only() || automatic,
                 state.stored.response_locale.clone(),
             )
         };
@@ -734,6 +735,17 @@ impl NativeEngine {
         {
             let mut state = worker.lock().await;
             state.stored.snapshot.session.coordination = Some(AgentSessionCoordination {
+        let automatic = match args.get("automatic") {
+            None => false,
+            Some(Value::Bool(value)) => *value,
+            _ => return Err("自动派工标记无效".into()),
+        };
+        if automatic && (origin.is_some()
+            || execution_mode != AgentSecretaryExecutionMode::Worktree
+            || source_url.is_none())
+        {
+            return Err("规则派工需要宿主提供 GitHub 来源及独立工作树".into());
+        }
                 role: "worker".into(),
                 parent_session_id: Some(parent.into()),
                 task_id: Some(task_id.clone()),
@@ -755,6 +767,7 @@ impl NativeEngine {
             updated_at: now(),
             summary: None,
             error: None,
+                    || state.stored.secretary_automatic != automatic
             project_path: session.project_path,
             request_id: request.into(),
             execution_mode,
@@ -807,6 +820,7 @@ impl NativeEngine {
         input["backgroundOnly"] = json!(background);
         if let Some(source) = origin {
             let text = arg(args, "text")?;
+            state.stored.secretary_automatic = automatic;
             input["text"] = json!(routed_input(source, text));
             input["attachments"] = json!(images);
         }
@@ -826,6 +840,7 @@ impl NativeEngine {
         {
             let mut state = worker.lock().await;
             if task.status == "completed"
+            automatic,
                 && state.flight.is_none()
                 && state.stored.queued_inputs.is_empty()
             {

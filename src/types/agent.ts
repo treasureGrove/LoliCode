@@ -111,6 +111,7 @@ export interface AgentSecretaryTask {
   executionMode?: AgentSecretaryExecutionMode;
   worktree?: { path: string; branch: string; baseRevision: string } | null;
   sourceUrl?: string;
+  automatic?: boolean;
 }
 
 export interface AgentSecretaryState {
@@ -140,6 +141,68 @@ export interface AgentSecretaryGithubState {
   monitoring: boolean;
   error: string | null;
   items: AgentSecretaryGithubItem[];
+  policy?: AgentSecretaryGithubPolicy;
+}
+
+export type AgentSecretaryGithubRuleKind = Exclude<
+  AgentSecretaryGithubItem["kind"],
+  "ci"
+>;
+
+export interface AgentSecretaryGithubRule {
+  id: string;
+  name: string;
+  enabled: boolean;
+  actors: string[];
+  kinds: AgentSecretaryGithubRuleKind[];
+  keyword: string;
+  instructions: string;
+}
+
+export interface AgentSecretaryGithubPolicy {
+  enabled: boolean;
+  revision: number;
+  rules: AgentSecretaryGithubRule[];
+  decisions: AgentSecretaryGithubDecision[];
+}
+
+export interface AgentSecretaryGithubDecision {
+  itemId: string;
+  title: string;
+  url: string;
+  ruleId: string;
+  ruleName: string;
+  status: "queued" | "dispatched" | "failed";
+  decidedAt: number;
+  taskId?: string;
+  error?: string;
+}
+
+export interface AgentSecretaryDraftPrReceipt {
+  status: "pending" | "published";
+  title: string;
+  body: string;
+  url?: string | null;
+  number?: number | null;
+  lifecycle?: "draft" | "open" | "merged" | "closed";
+  error?: string | null;
+}
+
+export interface AgentSecretaryDraftPr {
+  repository: string;
+  login: string;
+  baseBranch: string;
+  headBranch: string;
+  headRevision: string;
+  baseRevision: string;
+  treeRevision: string;
+  changes: { status: string; path: string }[];
+  changedFileCount: number;
+  patch: string;
+  patchTruncated: boolean;
+  title: string;
+  body: string;
+  receipt?: AgentSecretaryDraftPrReceipt | null;
 }
 
 export interface AgentSecretaryGithubReplyReceipt {
