@@ -33,6 +33,7 @@ const compactOnly = process.argv.includes("--compact");
 const dockToolsOnly = process.argv.includes("--dock-tools");
 const backgroundJobsOnly = process.argv.includes("--background-jobs");
 const nativeModesOnly = process.argv.includes("--native-modes");
+const occupyProxyPort = process.env.LOLICODE_HARNESS_DESKTOP_OCCUPY_PROXY === "1";
 const nativeModes = {
   plan: "DESKTOP_NATIVE_PLAN: implement the revised fixture plan.",
   planFile: "native-approved-plan.txt",
@@ -435,6 +436,8 @@ const modelServer = createServer(async (request, response) => {
           assert.ok(JSON.stringify(toolResult("native-plan-draft").content).includes(nativeModes.feedback));
           toolReply(response, "exit_plan_mode", { plan: "# Revised desktop plan\n- Write the approved file." }, "native-plan-revised");
         } else {
+          assert.ok(hasTool("exit_plan_mode"), "The upstream /plan command did not activate Harness Plan");
+          assert.ok(!hasTool("enter_plan_mode"), "The desktop added a model-facing Plan entry tool");
           toolReply(response, "exit_plan_mode", { plan: "# Initial desktop plan\n- Write the fixture file." }, "native-plan-draft");
         }
       }
@@ -888,6 +891,11 @@ let report;
 let vite;
 let activeChild;
 let firstLaunch = true;
+let occupiedProxyRequests = 0;
+const portReservation = createServer((_request, response) => {
+  occupiedProxyRequests++;
+  response.writeHead(409).end();
+});
 
 const previewTargetIds = new Map();
 
@@ -1221,9 +1229,8 @@ try {
   outputLinks.url = new URL("/output-link", browserTool.url).href;
   outputLinks.secondUrl = new URL("/output-link-second", browserTool.url).href;
   browserTool.blockedRequest = `http://127.0.0.1:${modelPort}/browser-cross-origin-probe`;
-  const portReservation = createServer();
   const proxyPort = await listen(portReservation);
-  await close(portReservation);
+  if (!occupyProxyPort) await close(portReservation);
   const rendererReservation = createServer();
   const rendererPort = reuseConfig ? Number(new URL(reuseConfig.build.devUrl).port) : await listen(rendererReservation);
   if (!reuseConfig) await close(rendererReservation);
@@ -1262,6 +1269,7 @@ try {
     project,
     otherProject,
     proxyPort,
+    occupyProxyPort,
     modelPort,
     fixtureKey,
     model,
@@ -1332,7 +1340,8 @@ try {
   }
   if (dockToolsOnly) {
     const dock = await launch(env, "dock-tools");
-    assert.ok(dock.splitDock && dock.projectTree && dock.interactiveTerminal && dock.foldRetainsTools && dock.terminalClose);
+    assert.ok(dock.splitDock && dock.projectTree && dock.interactiveTerminal && dock.foldRetainsTools &&
+      dock.terminalClose && dock.sharedSidebar);
     fixture.dockSessionId = dock.sessionId;
     fixture.dockSplitWidth = dock.splitWidth;
     const restart = await launch(env, "dock-tools-restart");
@@ -1342,6 +1351,7 @@ try {
   } else if (nativeModesOnly) {
     const modes = await launch(env, "native-modes");
     assert.ok(modes.nativePlan && modes.nativeGoal && observed.nativePlan && observed.nativeGoal);
+    if (occupyProxyPort) assert.equal(modes.occupiedProxyRecovered, true);
     assert.equal(await readFile(path.join(project, nativeModes.planFile), "utf8"), nativeModes.planText);
     fixture.nativeModesSessionId = modes.sessionId;
     const restarted = await launch(env, "native-modes-restart");
@@ -1375,12 +1385,17 @@ try {
     assert.ok(toolProfiles.every((name) => !name.startsWith("tool-")), "Closing the native browsers left disposable WebView2 profiles behind");
     await appendFile(reportPath, `${JSON.stringify({ result: "passed", phase: "browser-tool-cleanup" })}\n`);
   }
+  if (occupyProxyPort) {
+    assert.ok(portReservation.listening, "The conflicting listener stopped during acceptance");
+    assert.equal(occupiedProxyRequests, 0, "The app contacted the process occupying its saved port");
+  }
   console.log(JSON.stringify({ result: "passed", ...observed, reportPath }));
 } finally {
   stopOwnedChild(activeChild);
   await vite?.close();
   if (modelServer.listening) await close(modelServer);
   if (browserPageServer.listening) await close(browserPageServer);
+  if (portReservation.listening) await close(portReservation);
 }
 // Vite plugins can leave development-only handles after their server closes.
 // The acceptance reports and application exits have already been awaited.

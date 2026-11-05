@@ -1,9 +1,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { http, HttpResponse } from "msw";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "@/app/App";
 import type { AgentPageProps } from "@/features/agent/AgentPage";
+import { builtinAppsKey } from "@/lib/api/builtin-apps";
+import { server } from "../msw/server";
 import { setSettings } from "../msw/state";
 
 vi.mock("@/contexts/UpdateContext", () => ({
@@ -143,6 +146,44 @@ describe("LoliCode desktop entry", () => {
       "data-view",
       "applications",
     );
+  });
+
+  it("keeps both visited workspaces mounted while exposing one navigation", async () => {
+    const apps = [{ id: "tavern", enabled: true }];
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    client.setQueryData(builtinAppsKey, apps);
+    server.use(
+      http.post("http://tauri.local/list_builtin_apps", () =>
+        HttpResponse.json(apps),
+      ),
+    );
+    render(
+      <QueryClientProvider client={client}>
+        <App />
+      </QueryClientProvider>,
+    );
+    const agent = await screen.findByTestId("agent-workspace");
+
+    fireEvent.click(screen.getByRole("button", { name: "角色对话" }));
+    const tavern = document.getElementById("main-content");
+    expect(tavern).toBeInTheDocument();
+    expect(document.getElementById("content-area")).toHaveAttribute(
+      "data-view",
+      "tavern",
+    );
+    expect(agent.closest("[aria-hidden=true]")).not.toBeNull();
+    expect(screen.getAllByRole("navigation")).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "编程工作台" }));
+    expect(screen.getByTestId("agent-workspace")).toBe(agent);
+    expect(agent.closest("[aria-hidden=true]")).toBeNull();
+    expect(tavern?.closest("[aria-hidden=true]")).not.toBeNull();
+    expect(screen.getAllByRole("navigation")).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "角色对话" }));
+    expect(document.getElementById("main-content")).toBe(tavern);
   });
 
   it("opens automation and plugins without creating a second navigation, and returns to chat", async () => {

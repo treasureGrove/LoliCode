@@ -9,6 +9,7 @@ use crate::provider::Provider;
 use crate::proxy::server::ProxyServer;
 use crate::proxy::switch_lock::SwitchLockManager;
 use crate::proxy::types::*;
+use crate::proxy::ProxyError;
 use serde_json::{json, Value};
 use std::sync::Arc;
 use tauri::Emitter;
@@ -20,6 +21,8 @@ use crate::live::project::claude::PROXY_TOKEN_PLACEHOLDER;
 pub struct ProxyService {
     db: Arc<Database>,
     server: Arc<RwLock<Option<ProxyServer>>>,
+    // Keep existing in-app bindings usable if the configured port becomes free again.
+    internal_gateway: Arc<RwLock<Option<(ProxyServer, ProxyServerInfo)>>>,
     /// AppHandle，用于传递给 ProxyServer 以支持故障转移时的 UI 更新
     app_handle: Arc<RwLock<Option<tauri::AppHandle>>>,
     switch_locks: SwitchLockManager,
@@ -61,6 +64,7 @@ impl ProxyService {
         Self {
             db,
             server: Arc::new(RwLock::new(None)),
+            internal_gateway: Arc::new(RwLock::new(None)),
             app_handle: Arc::new(RwLock::new(None)),
             switch_locks: SwitchLockManager::new(),
         }
@@ -82,7 +86,15 @@ impl ProxyService {
 
     /// 启动代理服务器。成功、失败都让托盘比对一次（图标圆点、问题区、「退出」的后果跟着变）。
     pub async fn start(&self) -> Result<ProxyServerInfo, String> {
-        let result = self.start_server().await;
+        let result = self.start_server(false).await;
+        self.notify_tray().await;
+        result
+    }
+
+    /// The embedded clients can use a private loopback gateway if the public
+    /// listener is occupied. Existing external clients keep their configured URL.
+    pub(crate) async fn start_internal_gateway(&self) -> Result<ProxyServerInfo, String> {
+        let result = self.start_server(true).await;
         self.notify_tray().await;
         result
     }
@@ -101,59 +113,87 @@ impl ProxyService {
         }
     }
 
-    async fn start_server(&self) -> Result<ProxyServerInfo, String> {
-        // 1. 启动时自动设置 proxy_enabled = true
+    async fn start_server(&self, allow_internal_gateway: bool) -> Result<ProxyServerInfo, String> {
+        let mut server_guard = self.server.write().await;
         let mut global_config = self
             .db
             .get_global_proxy_config()
             .await
             .map_err(|e| format!("获取全局代理配置失败: {e}"))?;
 
-        if !global_config.proxy_enabled {
-            global_config.proxy_enabled = true;
-            self.db
-                .update_global_proxy_config(global_config.clone())
-                .await
-                .map_err(|e| format!("更新代理总开关失败: {e}"))?;
-        }
-
-        // 2. 获取配置
         let config = self
             .db
             .get_proxy_config()
             .await
             .map_err(|e| format!("获取代理配置失败: {e}"))?;
 
-        // 3. 若已在运行：确保持久化状态（如需要）并返回当前信息
-        if let Some(server) = self.server.read().await.as_ref() {
+        let mut started = None;
+        let info = if let Some(server) = server_guard.as_ref() {
             let status = server.get_status().await;
-            return Ok(ProxyServerInfo {
+            ProxyServerInfo {
                 address: status.address,
                 port: status.port,
-                // 无法精确取回首次启动时间，返回当前时间用于 UI 展示即可
                 started_at: chrono::Utc::now().to_rfc3339(),
-            });
+            }
+        } else {
+            let app_handle = self.app_handle.read().await.clone();
+            let server = ProxyServer::new(config.clone(), self.db.clone(), app_handle);
+            match server.start().await {
+                Ok(info) => {
+                    started = Some(server);
+                    info
+                }
+                Err(ProxyError::AddressInUse(address)) if allow_internal_gateway => {
+                    return self.start_channel_fallback(config, address).await;
+                }
+                Err(error) => return Err(format!("启动代理服务器失败: {error}")),
+            }
+        };
+
+        let dynamic = started.is_some() && config.listen_port == 0;
+        if !global_config.proxy_enabled || dynamic {
+            global_config.proxy_enabled = true;
+            if dynamic {
+                global_config.listen_port = info.port;
+            }
+            if let Err(error) = self.db.update_global_proxy_config(global_config).await {
+                if let Some(server) = started {
+                    let _ = server.stop().await;
+                }
+                return Err(format!("保存代理运行配置失败: {error}"));
+            }
         }
 
-        // 4. 创建并启动服务器
+        if let Some(server) = started {
+            *server_guard = Some(server);
+            log::info!("代理服务器已启动: {}:{}", info.address, info.port);
+        }
+        Ok(info)
+    }
+
+    async fn start_channel_fallback(
+        &self,
+        mut config: ProxyConfig,
+        occupied: std::net::SocketAddr,
+    ) -> Result<ProxyServerInfo, String> {
+        let mut gateway = self.internal_gateway.write().await;
+        if let Some((_, info)) = gateway.as_ref() {
+            return Ok(info.clone());
+        }
+        config.listen_address = std::net::Ipv4Addr::LOCALHOST.to_string();
+        config.listen_port = 0;
         let app_handle = self.app_handle.read().await.clone();
-        let server = ProxyServer::new(config.clone(), self.db.clone(), app_handle);
+        let server = ProxyServer::new(config, self.db.clone(), app_handle);
         let info = server
-            .start()
+            .start_internal_gateway()
             .await
-            .map_err(|e| format!("启动代理服务器失败: {e}"))?;
-        if let Err(e) = self
-            .persist_ephemeral_listen_port_if_needed(&config, info.port)
-            .await
-        {
-            let _ = server.stop().await;
-            return Err(e);
-        }
-
-        // 5. 保存服务器实例
-        *self.server.write().await = Some(server);
-
-        log::info!("代理服务器已启动: {}:{}", info.address, info.port);
+            .map_err(|error| format!("地址 {occupied} 已被占用，启动内部渠道服务失败: {error}"))?;
+        log::info!(
+            "地址 {occupied} 已被占用，内部渠道服务监听于 {}:{}",
+            info.address,
+            info.port
+        );
+        *gateway = Some((server, info.clone()));
         Ok(info)
     }
 
@@ -217,7 +257,8 @@ impl ProxyService {
     }
 
     async fn stop_server(&self) -> Result<(), String> {
-        if let Some(server) = self.server.write().await.take() {
+        let mut server_guard = self.server.write().await;
+        if let Some(server) = server_guard.take() {
             server
                 .stop()
                 .await
@@ -466,6 +507,7 @@ impl ProxyService {
     /// 更新代理配置（旧接口：七个字段整份写进四行）。返回代理是否因地址或端口变了而重启：
     /// 重启后调用方要按新地址重写接上代理的客户端（`mode::controller::resync_route`）。
     pub async fn update_config(&self, config: &ProxyConfig) -> Result<bool, String> {
+        let mut server_guard = self.server.write().await;
         // 记录旧配置用于判定是否需要重启
         let previous = self
             .db
@@ -485,14 +527,19 @@ impl ProxyService {
         // 判断是否需要重启（地址或端口变更）
         let require_restart = new_config.listen_address != previous.listen_address
             || new_config.listen_port != previous.listen_port;
-        self.apply_saved_config(require_restart, SavedProxyConfig::Legacy(previous))
-            .await
+        self.apply_saved_config(
+            &mut server_guard,
+            require_restart,
+            SavedProxyConfig::Legacy(previous),
+        )
+        .await
     }
 
     /// 设置页「保存并重启服务」：只写四个全局字段。各应用自己的重试次数和超时不碰——
     /// [`Self::update_config`] 走的旧 DAO 读的是 claude 行、写的是四行，会把 claude 的
     /// 应用级字段广播给其他三家。返回值同 [`Self::update_config`]。
     pub async fn update_global_config(&self, config: &GlobalProxyConfig) -> Result<bool, String> {
+        let mut server_guard = self.server.write().await;
         let previous = self
             .db
             .get_global_proxy_config()
@@ -506,8 +553,12 @@ impl ProxyService {
 
         let require_restart = config.listen_address != previous.listen_address
             || config.listen_port != previous.listen_port;
-        self.apply_saved_config(require_restart, SavedProxyConfig::Global(previous))
-            .await
+        self.apply_saved_config(
+            &mut server_guard,
+            require_restart,
+            SavedProxyConfig::Global(previous),
+        )
+        .await
     }
 
     /// 让运行中的服务用上刚写进库的配置：地址或端口变了就重启（返回 true），否则实时应用。
@@ -516,10 +567,10 @@ impl ProxyService {
     /// 客户端也还指着旧地址。
     async fn apply_saved_config(
         &self,
+        server_guard: &mut Option<ProxyServer>,
         require_restart: bool,
         previous: SavedProxyConfig,
     ) -> Result<bool, String> {
-        let mut server_guard = self.server.write().await;
         if server_guard.is_none() {
             return Ok(false);
         }
@@ -709,6 +760,102 @@ mod tests {
             23456
         );
         assert_app_proxy_configs_unchanged(&db, &configs).await;
+    }
+
+    #[tokio::test]
+    async fn occupied_public_port_uses_one_private_channel_gateway() {
+        let db = Arc::new(Database::memory().unwrap());
+        let service = ProxyService::new(db.clone());
+        let blocker = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let occupied = blocker.local_addr().unwrap();
+        let mut global = db.get_global_proxy_config().await.unwrap();
+        global.proxy_enabled = false;
+        global.listen_address = occupied.ip().to_string();
+        global.listen_port = occupied.port();
+        db.update_global_proxy_config(global.clone()).await.unwrap();
+
+        let (first, second) = tokio::join!(
+            service.start_internal_gateway(),
+            service.start_internal_gateway()
+        );
+        let internal = first.unwrap();
+        assert_eq!(internal.address, "127.0.0.1");
+        assert_ne!(internal.port, 0);
+        assert_ne!(internal.port, occupied.port());
+        assert_eq!(internal.port, second.unwrap().port);
+        assert!(!service.is_running().await);
+        assert!(service
+            .start()
+            .await
+            .unwrap_err()
+            .contains(&occupied.to_string()));
+        assert_eq!(
+            serde_json::to_value(db.get_global_proxy_config().await.unwrap()).unwrap(),
+            serde_json::to_value(global).unwrap()
+        );
+
+        let client = reqwest::Client::builder()
+            .no_proxy()
+            .timeout(std::time::Duration::from_secs(5))
+            .build()
+            .unwrap();
+        let origin = proxy_origin(&internal.address, internal.port);
+        let models = format!("{origin}/tai/v1/models");
+        let response = client.get(&models).send().await.unwrap();
+        assert_eq!(response.status(), reqwest::StatusCode::UNAUTHORIZED);
+        let token = crate::services::channel_center::gateway_token(&db).unwrap();
+        let response = client
+            .get(&models)
+            .bearer_auth(&token)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), reqwest::StatusCode::OK);
+        let response = client.get(format!("{origin}/health")).send().await.unwrap();
+        assert_eq!(response.status(), reqwest::StatusCode::NOT_FOUND);
+
+        drop(blocker);
+        assert_eq!(service.start().await.unwrap().port, occupied.port());
+        let response = client
+            .get(&models)
+            .bearer_auth(&token)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), reqwest::StatusCode::OK);
+        service.stop().await.unwrap();
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn concurrent_public_starts_share_the_same_listener() {
+        let db = Arc::new(Database::memory().unwrap());
+        let service = ProxyService::new(db.clone());
+        let mut global = db.get_global_proxy_config().await.unwrap();
+        global.listen_address = "127.0.0.1".to_string();
+        global.listen_port = 0;
+        db.update_global_proxy_config(global).await.unwrap();
+
+        let callers = 8;
+        let barrier = Arc::new(tokio::sync::Barrier::new(callers));
+        let mut starts = Vec::new();
+        for _ in 0..callers {
+            let service = service.clone();
+            let barrier = barrier.clone();
+            starts.push(tokio::spawn(async move {
+                barrier.wait().await;
+                service.start().await.unwrap().port
+            }));
+        }
+        let first_port = starts.pop().unwrap().await.unwrap();
+        assert_ne!(first_port, 0);
+        for start in starts {
+            assert_eq!(start.await.unwrap(), first_port);
+        }
+        assert_eq!(
+            db.get_global_proxy_config().await.unwrap().listen_port,
+            first_port
+        );
+        service.stop().await.unwrap();
     }
 
     #[tokio::test]

@@ -20,6 +20,9 @@ pub enum ProxyError {
     #[error("地址绑定失败: {0}")]
     BindFailed(String),
 
+    #[error("地址 {0} 已被占用")]
+    AddressInUse(std::net::SocketAddr),
+
     #[error("停止超时")]
     StopTimeout,
 
@@ -138,7 +141,7 @@ impl IntoResponse for ProxyError {
                 let (http_status, message) = match &self {
                     ProxyError::AlreadyRunning => (StatusCode::CONFLICT, self.to_string()),
                     ProxyError::NotRunning => (StatusCode::SERVICE_UNAVAILABLE, self.to_string()),
-                    ProxyError::BindFailed(_) => {
+                    ProxyError::BindFailed(_) | ProxyError::AddressInUse(_) => {
                         (StatusCode::INTERNAL_SERVER_ERROR, self.to_string())
                     }
                     ProxyError::StopTimeout => {

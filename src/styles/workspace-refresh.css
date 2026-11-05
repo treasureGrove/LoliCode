@@ -800,18 +800,22 @@
   color: var(--text-3);
 }
 
-:root .lolicode-workbench.wb-unified .wb-pane-resizer {
+:root .lolicode-workbench.wb-unified .wb-pane-resizer,
+.tai-shell.lolicode-refreshed-shell > .wb-pane-resizer {
   background: var(--bg-app);
 }
 
-:root .lolicode-workbench.wb-unified .wb-pane-resizer::after {
+:root .lolicode-workbench.wb-unified .wb-pane-resizer::after,
+.tai-shell.lolicode-refreshed-shell > .wb-pane-resizer::after {
   width: 1px;
   background: hsl(var(--border) / 0.65);
 }
 
 :root
   .lolicode-workbench.wb-unified
-  .wb-pane-resizer:is(:hover, [data-dragging])::after {
+  .wb-pane-resizer:is(:hover, [data-dragging])::after,
+.tai-shell.lolicode-refreshed-shell
+  > .wb-pane-resizer:is(:hover, [data-dragging])::after {
   width: 2px;
   background: var(--action-text);
 }

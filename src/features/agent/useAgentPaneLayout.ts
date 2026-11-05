@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import type { AgentPaneResizeHandleProps } from "./AgentPaneResizeHandle";
 
 const SIDEBAR_KEY = "lolicode.agent.layout.sidebarWidth";
 const PREVIEW_KEY = "lolicode.agent.layout.previewWidth";
 const HANDLE_WIDTH = 8;
+const COMPACT_SIDEBAR_WIDTH = 72;
 const clamp = (value: number, min: number, max: number) =>
   Math.round(Math.max(min, Math.min(max, value)));
 const readWidth = (key: string, fallback: number) => {
@@ -26,12 +27,16 @@ const saveWidth = (key: string, value: number) => {
 export function computeAgentPaneLayout({
   width,
   sidebarVisible,
+  sidebarCompact = false,
+  sidebarAutoCompact = false,
   previewVisible,
   sidebarPreferred,
   previewPreferred,
 }: {
   width: number;
   sidebarVisible: boolean;
+  sidebarCompact?: boolean;
+  sidebarAutoCompact?: boolean;
   previewVisible: boolean;
   sidebarPreferred: number;
   previewPreferred: number;
@@ -44,28 +49,25 @@ export function computeAgentPaneLayout({
   );
   // On narrow windows, keep both the chat and an open preview usable. Closing
   // the preview restores the user's sidebar visibility without changing it.
-  const sidebarCanOpen =
-    available >=
-    chatMinimum +
-      160 +
-      (previewVisible ? previewMinimum + HANDLE_WIDTH : 0) +
-      HANDLE_WIDTH;
-  const showSidebar = sidebarVisible && sidebarCanOpen;
-  const handles = (Number(showSidebar) + Number(previewVisible)) * HANDLE_WIDTH;
-  const sidebarMax = showSidebar
-    ? Math.max(
-        160,
-        Math.min(
-          420,
-          available -
-            chatMinimum -
-            (previewVisible ? previewMinimum : 0) -
-            handles,
-        ),
-      )
-    : 0;
+  const sidebarBudget =
+    available -
+    chatMinimum -
+    (previewVisible ? previewMinimum + HANDLE_WIDTH : 0);
+  const sidebarCanOpen = sidebarBudget >= 160 + HANDLE_WIDTH;
+  const compact = sidebarCompact || (sidebarAutoCompact && !sidebarCanOpen);
+  const sidebarMinimum = compact ? COMPACT_SIDEBAR_WIDTH : 160;
+  const showSidebar =
+    sidebarVisible &&
+    (compact ? sidebarBudget >= COMPACT_SIDEBAR_WIDTH : sidebarCanOpen);
+  const handles =
+    (Number(showSidebar && !compact) + Number(previewVisible)) * HANDLE_WIDTH;
+  const sidebarMin = showSidebar ? sidebarMinimum : 0;
+  const sidebarMax =
+    showSidebar && !compact
+      ? Math.min(420, sidebarBudget - HANDLE_WIDTH)
+      : sidebarMin;
   const sidebarWidth = showSidebar
-    ? clamp(sidebarPreferred, 160, sidebarMax)
+    ? clamp(sidebarPreferred, sidebarMin, sidebarMax)
     : 0;
   const previewMax = previewVisible
     ? Math.max(
@@ -78,10 +80,11 @@ export function computeAgentPaneLayout({
     : 0;
   return {
     sidebarCanOpen,
+    sidebarCompact: compact,
     sidebarVisible: showSidebar,
     sidebarWidth,
     previewWidth,
-    sidebarMin: showSidebar ? 160 : 0,
+    sidebarMin,
     sidebarMax,
     previewMin: previewVisible ? previewMinimum : 0,
     previewMax,
@@ -90,10 +93,16 @@ export function computeAgentPaneLayout({
 }
 
 export function useAgentPaneLayout({
+  isActive = true,
   sidebarVisible,
+  sidebarCompact,
+  sidebarAutoCompact,
   previewVisible,
 }: {
+  isActive?: boolean;
   sidebarVisible: boolean;
+  sidebarCompact?: boolean;
+  sidebarAutoCompact?: boolean;
   previewVisible: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -104,7 +113,9 @@ export function useAgentPaneLayout({
   const [previewPreferred, setPreview] = useState(() =>
     readWidth(PREVIEW_KEY, 420),
   );
-  useEffect(() => {
+  useLayoutEffect(() => {
+    if (!isActive) return;
+    setSidebar((previous) => readWidth(SIDEBAR_KEY, previous));
     const container = containerRef.current;
     const measure = () =>
       setWidth(
@@ -118,7 +129,7 @@ export function useAgentPaneLayout({
       observer.disconnect();
       window.removeEventListener("resize", measure);
     };
-  }, []);
+  }, [isActive]);
   const changeSidebar = useCallback((next: number) => {
     if (!Number.isFinite(next)) return;
     setSidebar(clamp(next, 160, 420));
@@ -130,6 +141,8 @@ export function useAgentPaneLayout({
   const layout = computeAgentPaneLayout({
     width,
     sidebarVisible,
+    sidebarCompact,
+    sidebarAutoCompact,
     previewVisible,
     sidebarPreferred,
     previewPreferred,

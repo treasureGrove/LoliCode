@@ -34,12 +34,15 @@ const pointer = (
 function Layout({
   sidebar = true,
   preview = true,
+  compact = false,
 }: {
   sidebar?: boolean;
   preview?: boolean;
+  compact?: boolean;
 }) {
   const layout = useAgentPaneLayout({
     sidebarVisible: sidebar,
+    sidebarCompact: compact,
     previewVisible: preview,
   });
   return (
@@ -52,7 +55,7 @@ function Layout({
           chatMinimum: layout.chatMinimum,
         })}
       </output>
-      {layout.sidebarVisible && (
+      {layout.sidebarVisible && !compact && (
         <AgentPaneResizeHandle {...layout.sidebarHandleProps} />
       )}
       {preview && <AgentPaneResizeHandle {...layout.previewHandleProps} />}
@@ -62,7 +65,10 @@ function Layout({
 const layoutValue = () =>
   JSON.parse(screen.getByTestId("layout").textContent || "{}");
 const paint = () =>
-  act(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
+  act(
+    () =>
+      new Promise<void>((resolve) => requestAnimationFrame(() => resolve())),
+  );
 
 beforeEach(() => {
   keys.forEach((key) => localStorage.removeItem(key));
@@ -122,6 +128,42 @@ describe("Agent pane layout", () => {
     const before = Number(right.getAttribute("aria-valuenow"));
     fireEvent.keyDown(right, { key: "ArrowLeft", shiftKey: true });
     expect(Number(right.getAttribute("aria-valuenow"))).toBe(before + 40);
+  });
+
+  it("keeps a shared compact rail without replacing the expanded width preference", () => {
+    localStorage.setItem(keys[0], "320");
+    const view = render(<Layout compact preview={false} />);
+    expect(layoutValue().sidebarWidth).toBe(72);
+    expect(screen.queryByRole("separator")).not.toBeInTheDocument();
+    view.rerender(<Layout preview={false} />);
+    expect(screen.getByRole("separator")).toHaveAttribute(
+      "aria-valuenow",
+      "320",
+    );
+    expect(localStorage.getItem(keys[0])).toBe("320");
+  });
+
+  it("falls back to the compact rail when a visible preview leaves too little room to expand", () => {
+    const panes = {
+      width: 730,
+      sidebarVisible: true,
+      sidebarAutoCompact: true,
+      sidebarPreferred: 320,
+      previewPreferred: 420,
+    };
+    expect(
+      computeAgentPaneLayout({ ...panes, previewVisible: true }),
+    ).toMatchObject({
+      sidebarCompact: true,
+      sidebarVisible: true,
+      sidebarWidth: 72,
+    });
+    expect(
+      computeAgentPaneLayout({ ...panes, previewVisible: false }),
+    ).toMatchObject({
+      sidebarCompact: false,
+      sidebarWidth: 320,
+    });
   });
 
   it("coalesces drag updates, saves only once and restores existing selection styles on cancel", async () => {

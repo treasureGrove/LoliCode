@@ -157,7 +157,7 @@ describe("unified workspace navigation", () => {
     expect(friend).toHaveAttribute("aria-current", "page");
     fireEvent.click(screen.getByRole("button", { name: "收起侧栏" }));
     expect(screen.getByRole("navigation")).toHaveAttribute(
-      "data-tavern-compact",
+      "data-sidebar-compact",
       "true",
     );
     expect(

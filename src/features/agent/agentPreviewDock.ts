@@ -213,7 +213,12 @@ export function readDockFiles(): Record<string, DockFile> {
       ([owner, value]) => {
         if (!value || typeof value !== "object") return [];
         const { path, line } = value as Partial<DockFile>;
-        if (typeof path !== "string" || !path.trim() || path.includes("\0"))
+        // An empty path represents the project root preview.
+        if (
+          typeof path !== "string" ||
+          path.includes("\0") ||
+          (path !== "" && !path.trim())
+        )
           return [];
         return [
           [

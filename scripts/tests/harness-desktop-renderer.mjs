@@ -184,6 +184,10 @@ async function verifyDockTools(fixture) {
   const sessionId = restarted ? fixture.dockSessionId : sessionStorage.getItem(dockKey);
   if (!sessionId) {
     await configureFixtureChannel(fixture);
+    await invoke("set_builtin_app_enabled", { app: "tavern", enabled: true });
+    const [preset] = await invoke("get_tavern_presets");
+    const character = await invoke("add_tavern_preset", { presetId: preset.id });
+    await invoke("create_tavern_story", { characterId: character.id, title: "Workspace switching fixture" });
     await invoke("open_agent_project", { path: fixture.project });
     const catalog = await invoke("get_agent_catalog");
     const session = await invoke("create_agent_session", {
@@ -244,6 +248,95 @@ async function verifyDockTools(fixture) {
   };
 
   await waitFor(() => document.querySelector("#agent-message"), "the dock session");
+  if (!restarted) {
+    const isVisible = (element) =>
+      element.getClientRects().length > 0 && getComputedStyle(element).visibility === "visible";
+    const visible = (selector) => [...document.querySelectorAll(selector)]
+      .find(isVisible);
+    const nav = () => visible("nav.lolicode-unified-sidebar");
+    const leftHandle = () => visible('[role="separator"][aria-label="调整项目侧栏宽度"]');
+    const geometry = (view) => {
+      const content = document.querySelector(view === "agent" ? "#agent-content-area" : '#content-area[data-view="tavern"]');
+      return nav() && content && {
+        width: Math.round(nav().getBoundingClientRect().width),
+        boundary: Math.round(content.getBoundingClientRect().left),
+      };
+    };
+    const switchTo = async (view) => {
+      const button = await waitFor(() => findButton(view === "agent" ? "编程工作台" : "角色对话", nav()), view + " navigation");
+      button.click();
+      await waitFor(() => document.querySelector(`#content-area[data-view="${view}"]`) && geometry(view),
+        view + " sidebar geometry");
+      const surface = visible(view === "agent" ? ".wb-chat-surface" : ".tai-page");
+      check(surface && getComputedStyle(surface).opacity === "1",
+        view + " faded the entire page while switching");
+    };
+    const expectGeometry = (view, target) => waitFor(() => {
+      const current = geometry(view);
+      return current?.width === target.width && current.boundary === target.boundary;
+    }, view + " sidebar preserving the same width and boundary", 20_000);
+    const handle = await waitFor(leftHandle, "the Agent sidebar resize handle");
+    const before = Number(handle.getAttribute("aria-valuenow"));
+    const right = before < Number(handle.getAttribute("aria-valuemax"));
+    keyDown(handle, right ? "ArrowRight" : "ArrowLeft", right ? 39 : 37);
+    await waitFor(() => Number(leftHandle()?.getAttribute("aria-valuenow")) !== before, "the resized Agent sidebar");
+    const expanded = geometry("agent");
+    const composer = visible("#agent-message");
+    const setComposer = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value").set;
+    const writeDraft = (input, value) => {
+      setComposer.call(input, value);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    };
+    const draft = "Unsent draft kept when switching modes";
+    writeDraft(composer, draft);
+    await switchTo("tavern");
+    await expectGeometry("tavern", expanded);
+    check(composer.isConnected && !isVisible(composer),
+      "The inactive Agent composer was destroyed or stayed visible");
+    const chatInput = 'textarea[aria-label="故事消息"]';
+    const chatComposer = await waitFor(() => visible(chatInput), "the Tavern story composer", 15_000);
+    const chatDraft = "Unsent Tavern message";
+    writeDraft(chatComposer, chatDraft);
+    keyDown(leftHandle(), right ? "ArrowLeft" : "ArrowRight", right ? 37 : 39);
+    await waitFor(() => Number(leftHandle()?.getAttribute("aria-valuenow")) === before,
+      "the sidebar width set from chat");
+    const resizedFromChat = geometry("tavern");
+    findButton("收起侧栏", nav()).click();
+    await waitFor(() => nav()?.dataset.sidebarCompact === "true" && !leftHandle(), "the compact chat sidebar");
+    const compact = geometry("tavern");
+    check(compact.width === 72, "The compact chat rail did not keep its width");
+    await switchTo("agent");
+    await expectGeometry("agent", compact);
+    check(visible("#agent-message") === composer && composer.value === draft,
+      "Returning to Agent remounted the composer or lost its draft");
+    check(chatComposer.isConnected && !isVisible(chatComposer),
+      "The inactive Tavern composer was destroyed or stayed visible");
+    writeDraft(composer, "");
+    findButton("展开侧栏", nav()).click();
+    await expectGeometry("agent", resizedFromChat);
+    const search = await waitFor(() => nav()?.querySelector('input[aria-label="搜索会话"]'),
+      "the workspace search control");
+    search.focus();
+    search.dispatchEvent(new KeyboardEvent("keydown", {
+      key: "\\", ctrlKey: true, bubbles: true, cancelable: true,
+    }));
+    await waitFor(() => document.activeElement === findButton("展开侧栏", nav()),
+      "keyboard focus moving to the collapsed sidebar toggle", 10_000);
+    document.activeElement.click();
+    await expectGeometry("agent", resizedFromChat);
+    findButton("预览项目文件").click();
+    await waitFor(() => findButton("收起文件预览"), "the open preview");
+    const withPreview = geometry("agent");
+    await switchTo("tavern");
+    await expectGeometry("tavern", withPreview);
+    check(visible(chatInput) === chatComposer && chatComposer.value === chatDraft,
+      "Returning to Tavern remounted the composer or lost its draft");
+    writeDraft(chatComposer, "");
+    await switchTo("agent");
+    await waitFor(() => findButton("收起文件预览"), "the restored preview", 10_000);
+    await expectGeometry("agent", withPreview);
+    findButton("收起文件预览").click();
+  }
   if (restarted) {
     const loads = await browserLoads();
     await waitFor(() => tab("左", "项目目录") && tab("左", fileName) &&
@@ -365,7 +458,7 @@ async function verifyDockTools(fixture) {
   await waitFor(() => namedButton("启动终端", terminal())?.disabled === false, "the idle terminal tab before restart");
   return {
     sessionId, splitWidth, splitDock: true, projectTree: true, interactiveTerminal: true,
-    foldRetainsTools: true, terminalClose: true,
+      foldRetainsTools: true, terminalClose: true, sharedSidebar: true,
   };
 }
 
@@ -521,15 +614,19 @@ async function verifyNativeModes(fixture) {
     check(state.plan?.active === false && said(state, modes.planText), "Native Plan history was not restored");
     return { sessionId, nativeModesRestored: true };
   }
-  const toggle = await waitFor(() => area() && button("计划模式", area()), "native Plan button");
-  toggle.click();
-  await waitState(state => state.status === "idle" && state.plan?.active === true, "entered native Plan mode");
-  await send("native-plan-work", modes.plan);
+  await waitFor(() => document.querySelector("#agent-message"), "the native modes composer");
+  const planToggle = () => [...document.querySelectorAll("button")]
+    .some((button) => /^(退出)?计划模式$/.test(button.textContent.trim()));
+  check(!planToggle(), "Plan mode is still exposed as a manual switch");
+  check(!(await snapshot()).plan?.active, "The session did not start in its normal mode");
+  await send("native-plan-work", "/plan " + modes.plan);
   const review = (heading) => waitFor(() => {
     const card = document.querySelector('[aria-label="审批实施计划"]');
     return card?.textContent.includes(heading) && card;
   }, heading, 30_000);
   const draft = await review("Initial desktop plan");
+  check((await snapshot()).plan?.active === true, "The upstream command did not enter native Plan");
+  check(!planToggle(), "Planning exposed a manual mode switch");
   const feedback = draft.querySelector("textarea");
   Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value").set.call(feedback, modes.feedback);
   feedback.dispatchEvent(new Event("input", { bubbles: true }));
@@ -541,7 +638,13 @@ async function verifyNativeModes(fixture) {
   await waitState(state => state.status === "idle" && state.goal?.phase === "complete" &&
     state.goal.roundsStarted === 2 && said(state, modes.goalText), "two-round native Goal completion");
   await waitFor(() => area()?.textContent.includes("已完成"), "completed Goal on the composer");
-  return { sessionId, nativePlan: true, nativeGoal: true };
+  if (fixture.occupyProxyPort) {
+    const config = await invoke("get_proxy_config");
+    check(config.listen_port === fixture.proxyPort, "The fallback overwrote the saved proxy port");
+  }
+  return {
+    sessionId, nativePlan: true, nativeGoal: true, occupiedProxyRecovered: fixture.occupyProxyPort,
+  };
 }
 
 async function verifyBrowserTool(fixture) {

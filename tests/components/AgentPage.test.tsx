@@ -4182,19 +4182,18 @@ describe("AgentPage", () => {
     );
   });
 
-  it("does not advertise full permissions while a historical plan is read-only", async () => {
+  it("keeps planning controls out of the composer and shows the configured execution permission", async () => {
     snapshot.session.mode = "plan";
     snapshot.session.permissionMode = "full_access";
+    snapshot.plan = { active: true };
     render(<AgentPage />);
     await flush();
     expect(screen.getByRole("button", { name: "对话设置" })).toHaveTextContent(
-      "计划模式",
+      "完整权限",
     );
     const select = composerPermissionSelect();
     expect(select).toHaveValue("full_access");
-    expect(
-      screen.getByText("当前计划模式只读。执行权限设置在执行模式下生效。"),
-    ).toBeVisible();
+    expect(screen.queryByText(/计划模式/)).not.toBeInTheDocument();
     expect(agentApi.updateSession).not.toHaveBeenCalled();
   });
 

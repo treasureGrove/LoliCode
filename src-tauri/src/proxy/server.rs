@@ -101,6 +101,21 @@ impl ProxyServer {
     }
 
     pub async fn start(&self) -> Result<ProxyServerInfo, ProxyError> {
+        self.start_router(self.build_router(), true).await
+    }
+
+    pub(crate) async fn start_internal_gateway(&self) -> Result<ProxyServerInfo, ProxyError> {
+        let router = Self::channel_routes()
+            .layer(DefaultBodyLimit::max(200 * 1024 * 1024))
+            .with_state(self.state.clone());
+        self.start_router(router, false).await
+    }
+
+    async fn start_router(
+        &self,
+        app: Router,
+        external_proxy: bool,
+    ) -> Result<ProxyServerInfo, ProxyError> {
         // 检查是否已在运行
         if self.shutdown_tx.read().await.is_some() {
             return Err(ProxyError::AlreadyRunning);
@@ -114,13 +129,14 @@ impl ProxyServer {
         // 创建关闭通道
         let (shutdown_tx, shutdown_rx) = oneshot::channel();
 
-        // 构建路由
-        let app = self.build_router();
-
         // 绑定监听器
-        let listener = tokio::net::TcpListener::bind(&addr)
-            .await
-            .map_err(|e| ProxyError::BindFailed(e.to_string()))?;
+        let listener = tokio::net::TcpListener::bind(addr).await.map_err(|error| {
+            if error.kind() == std::io::ErrorKind::AddrInUse {
+                ProxyError::AddressInUse(addr)
+            } else {
+                ProxyError::BindFailed(error.to_string())
+            }
+        })?;
         let local_addr = listener
             .local_addr()
             .map_err(|e| ProxyError::BindFailed(e.to_string()))?;
@@ -128,8 +144,10 @@ impl ProxyServer {
 
         log::info!("[{}] 代理服务器启动于 {local_addr}", log_srv::STARTED);
 
-        // 更新全局代理端口，用于系统代理检测
-        crate::proxy::http_client::set_proxy_port(actual_port);
+        if external_proxy {
+            // 更新全局代理端口，用于系统代理检测
+            crate::proxy::http_client::set_proxy_port(actual_port);
+        }
 
         // 保存关闭句柄
         *self.shutdown_tx.write().await = Some(shutdown_tx);
@@ -298,11 +316,8 @@ impl ProxyServer {
         );
     }
 
-    fn build_router(&self) -> Router {
+    fn channel_routes() -> Router<ProxyState> {
         Router::new()
-            // 健康检查
-            .route("/health", get(handlers::health_check))
-            .route("/status", get(handlers::get_status))
             // Channel center has its own authenticated, explicitly selected upstreams.
             .route("/tai/v1/models", get(channel_gateway::handle_models))
             .route("/tai/v1/messages", post(channel_gateway::handle_messages))
@@ -352,6 +367,12 @@ impl ProxyServer {
                 "/tai/catalogs/:revision/v1beta/*path",
                 any(channel_gateway::handle_gemini),
             )
+    }
+
+    fn build_router(&self) -> Router {
+        Self::channel_routes()
+            .route("/health", get(handlers::health_check))
+            .route("/status", get(handlers::get_status))
             // Claude API (支持带前缀和不带前缀两种格式)
             .route("/v1/messages", post(handlers::handle_messages))
             .route("/claude/v1/messages", post(handlers::handle_messages))

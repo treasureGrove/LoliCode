@@ -2249,12 +2249,16 @@ async fn prepare_agent_binding_with(
     validate_engine(&catalog)?;
     let api_snapshot = api_catalog_snapshot(&snapshot);
     let mut preparation = prepare_agent_gateway_write(state.db.as_ref(), &api_snapshot)?;
-    let info = state.proxy_service.start().await.map_err(|error| {
-        AppError::Message(format!(
-            "本地渠道服务无法启动：{}",
-            crate::error_for_log(&error)
-        ))
-    })?;
+    let info = state
+        .proxy_service
+        .start_internal_gateway()
+        .await
+        .map_err(|error| {
+            AppError::Message(format!(
+                "本地渠道服务无法启动：{}",
+                crate::error_for_log(&error)
+            ))
+        })?;
     let base_url = crate::proxy::channel_gateway::gateway_catalog_base_url(
         &info.address,
         info.port,
@@ -3733,10 +3737,6 @@ mod tests {
                 ),
             ),
         };
-        let mut proxy = db.get_global_proxy_config().await.unwrap();
-        proxy.listen_address = "127.0.0.1".into();
-        proxy.listen_port = 0;
-        db.update_global_proxy_config(proxy).await.unwrap();
         let mut saved = snapshot();
         saved.revision = 22;
         saved
@@ -3745,21 +3745,17 @@ mod tests {
         db.set_setting(SETTINGS_KEY, &serialize(&saved).unwrap())
             .unwrap();
         let expected = api_catalog_snapshot(&saved);
-        // Occupy a local port to exercise a real start failure without contacting
-        // any upstream or using the user's listener or credentials.
-        let occupied = tokio::net::TcpListener::bind(("127.0.0.1", 0))
-            .await
-            .unwrap();
+        // Invalid addresses still fail and roll back background acquisition.
         let mut proxy = db.get_global_proxy_config().await.unwrap();
-        proxy.listen_port = occupied.local_addr().unwrap().port();
+        proxy.listen_address = "invalid-address".into();
         db.update_global_proxy_config(proxy).await.unwrap();
         db.set_setting(BACKGROUND_KEY, "false").unwrap();
         assert!(prepare_agent_catalog(&state).await.is_err());
         assert!(!db.get_bool_flag(BACKGROUND_KEY).unwrap());
         assert!(db.get_setting(APPLIED_KEY).unwrap().is_none());
         assert_eq!(load_catalog(&db, 22).unwrap(), expected);
-        drop(occupied);
         let mut proxy = db.get_global_proxy_config().await.unwrap();
+        proxy.listen_address = "127.0.0.1".into();
         proxy.listen_port = 0;
         db.update_global_proxy_config(proxy).await.unwrap();
         let prepared = prepare_agent_catalog(&state).await.unwrap();

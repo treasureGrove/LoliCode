@@ -72,10 +72,12 @@ function upsertStory(
 }
 
 export function TavernPage({
+  isActive = true,
   characterId: controlledCharacterId,
   onCharacterChange,
   onOpenChannels,
 }: {
+  isActive?: boolean;
   characterId?: string | null;
   onCharacterChange?: (id: string | null) => void;
   onOpenChannels: () => void;
@@ -141,7 +143,7 @@ export function TavernPage({
   const context = useQuery({
     queryKey: ["tavern", "context", selectedStoryId],
     queryFn: () => tavernApi.previewContext(selectedStoryId!),
-    enabled: showContext && Boolean(selectedStoryId),
+    enabled: isActive && showContext && Boolean(selectedStoryId),
     staleTime: 10_000,
   });
 
@@ -232,6 +234,7 @@ export function TavernPage({
   };
 
   useEffect(() => {
+    if (!isActive) return;
     const onAdd = (event: Event) => {
       if ((event as CustomEvent<"preset" | "card">).detail === "preset")
         setShowPresets(true);
@@ -373,7 +376,10 @@ export function TavernPage({
   );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div
+      id={isActive ? "main-content" : undefined}
+      className="flex min-h-0 flex-1 flex-col"
+    >
       <AppPageHeader
         title={
           storyCharacter?.name ??
@@ -616,7 +622,7 @@ export function TavernPage({
           </div>
         </section>
       </div>
-      <Sheet open={showContext} onOpenChange={setShowContext}>
+      <Sheet open={isActive && showContext} onOpenChange={setShowContext}>
         <SheetContent
           closeLabel="关闭对话菜单"
           width={420}
@@ -744,7 +750,7 @@ export function TavernPage({
         </SheetContent>
       </Sheet>
       <TavernPresetGallery
-        open={showPresets}
+        open={isActive && showPresets}
         onOpenChange={setShowPresets}
         onStart={startPreset}
         busy={sending || Boolean(selectedStory?.isGenerating)}

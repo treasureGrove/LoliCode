@@ -90,17 +90,14 @@ export function AgentComposerAdd({
 
 export function AgentComposerOptions({
   permissionMode,
-  planning = false,
   children,
 }: {
   permissionMode: AgentPermissionMode;
-  planning?: boolean;
   children: ReactNode;
 }) {
   const titleId = useId();
-  const permissionLabel = planning
-    ? "计划模式"
-    : permissionMode === "ask"
+  const permissionLabel =
+    permissionMode === "ask"
       ? "逐次确认"
       : permissionMode === "auto"
         ? "Auto Mode"

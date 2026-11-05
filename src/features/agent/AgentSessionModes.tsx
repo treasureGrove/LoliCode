@@ -12,7 +12,6 @@ const goalPhase = {
 
 interface AgentSessionModesProps {
   goal: AgentSnapshot["goal"];
-  plan: AgentSnapshot["plan"];
   disabled: boolean;
   onGoalDraft: (editing: boolean) => void;
   onCommand: (command: string) => Promise<void>;
@@ -20,7 +19,6 @@ interface AgentSessionModesProps {
 
 export function AgentSessionModes({
   goal,
-  plan,
   disabled,
   onGoalDraft,
   onCommand,
@@ -29,7 +27,6 @@ export function AgentSessionModes({
   const [error, setError] = useState<string>();
   const pending = useRef(false);
   const locked = disabled || working;
-  const planSelected = plan?.pending ?? plan?.active ?? false;
   const goalRunning = goal?.phase === "active" && goal.activation === "armed";
   const run = async (command: string) => {
     if (pending.current || locked) return;
@@ -63,22 +60,6 @@ export function AgentSessionModes({
         </div>
       )}
       <div className="wb-agent-mode-actions">
-        <Button
-          type="button"
-          size="compact"
-          variant="quiet"
-          aria-pressed={planSelected}
-          disabled={locked}
-          onClick={() => void run(planSelected ? "/plan off" : "/plan")}
-        >
-          {plan?.pending !== undefined
-            ? planSelected
-              ? "即将进入计划模式"
-              : "即将退出计划模式"
-            : planSelected
-              ? "退出计划模式"
-              : "计划模式"}
-        </Button>
         {!goal || goal.phase === "complete" ? (
           <Button
             type="button"

@@ -41,41 +41,51 @@
   border: 0;
 }
 
-.lolicode-unified-sidebar[data-tavern-compact="true"] {
+.lolicode-unified-sidebar[data-sidebar-resizable="true"] {
+  border: 0;
+}
+
+.lolicode-unified-sidebar[data-sidebar-compact="true"] {
   flex-basis: 72px;
   width: 72px;
   padding-inline: 8px;
 }
 
-.lolicode-unified-sidebar[data-tavern-compact="true"] .lolicode-sidebar-brand {
+.lolicode-unified-sidebar[data-sidebar-compact="true"] .lolicode-sidebar-brand {
   justify-content: center;
   padding-inline: 0;
 }
 
-.lolicode-unified-sidebar[data-tavern-compact="true"]
+.lolicode-unified-sidebar[data-sidebar-compact="true"]
   .lolicode-sidebar-wordmark,
-.lolicode-unified-sidebar[data-tavern-compact="true"]
+.lolicode-unified-sidebar[data-sidebar-compact="true"]
   .lolicode-sidebar-nav-label,
-.lolicode-unified-sidebar[data-tavern-compact="true"] .lolicode-sidebar-more,
-.lolicode-unified-sidebar[data-tavern-compact="true"] .tai-shell-quota-button {
+.lolicode-unified-sidebar[data-sidebar-compact="true"]
+  .lolicode-sidebar-actions,
+.lolicode-unified-sidebar[data-sidebar-compact="true"]
+  .lolicode-sidebar-workspaces,
+.lolicode-unified-sidebar[data-sidebar-compact="true"]
+  .lolicode-sidebar-shortcuts,
+.lolicode-unified-sidebar[data-sidebar-compact="true"] .lolicode-sidebar-more,
+.lolicode-unified-sidebar[data-sidebar-compact="true"] .tai-shell-quota-button {
   display: none;
 }
 
-.lolicode-unified-sidebar[data-tavern-compact="true"]
+.lolicode-unified-sidebar[data-sidebar-compact="true"]
   .lolicode-sidebar-segments {
   grid-template-columns: 1fr;
 }
 
-.lolicode-unified-sidebar[data-tavern-compact="true"]
+.lolicode-unified-sidebar[data-sidebar-compact="true"]
   .lolicode-sidebar-segments
   .lolicode-sidebar-nav-item,
-.lolicode-unified-sidebar[data-tavern-compact="true"] .lolicode-sidebar-footer,
-.lolicode-unified-sidebar[data-tavern-compact="true"]
+.lolicode-unified-sidebar[data-sidebar-compact="true"] .lolicode-sidebar-footer,
+.lolicode-unified-sidebar[data-sidebar-compact="true"]
   .lolicode-sidebar-account {
   justify-content: center;
 }
 
-.lolicode-unified-sidebar[data-tavern-compact="true"]
+.lolicode-unified-sidebar[data-sidebar-compact="true"]
   .lolicode-sidebar-account
   .tai-shell-profile {
   flex: 0 0 44px;
@@ -518,7 +528,7 @@
   }
 }
 
-.lolicode-unified-sidebar[data-tavern-compact="true"]
+.lolicode-unified-sidebar[data-sidebar-compact="true"]
   .lolicode-sidebar-segments
   .lolicode-sidebar-nav-icon {
   display: block;

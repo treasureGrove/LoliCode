@@ -531,10 +531,15 @@ export interface AgentSecretaryRequest {
 }
 
 export interface AgentPageProps {
+  isActive?: boolean;
+  sidebarCompact?: boolean;
+  onSidebarCompactChange?: (compact: boolean) => void;
+  onPreviewVisibilityChange?: (visible: boolean) => void;
   renderSidebar?: (content: {
     actions: ReactNode;
     workspace: ReactNode;
     onCollapse: () => void;
+    compact?: boolean;
   }) => ReactNode;
   toolRequest?: {
     tool: AgentTool | null;
@@ -653,6 +658,10 @@ function AgentHelpMenu({
 }
 
 export function AgentPage({
+  isActive = true,
+  sidebarCompact = false,
+  onSidebarCompactChange,
+  onPreviewVisibilityChange,
   renderSidebar,
   onWorkspaceNavigate,
   toolRequest,
@@ -789,9 +798,7 @@ export function AgentPage({
       DOCK_FILE_STORAGE,
       Object.fromEntries(
         Object.entries(previews).flatMap(([owner, { target }]) =>
-          "path" in target &&
-          target.path &&
-          target.sourceSessionId === dockOwnerSession(owner)
+          "path" in target && target.sourceSessionId === dockOwnerSession(owner)
             ? [[owner, { path: target.path, line: target.line }]]
             : [],
         ),
@@ -824,6 +831,9 @@ export function AgentPage({
   const canOpenBrowser = Boolean(sessionId && isWindows());
   const hasPreview = dock.panes.some(({ tabs }) => tabs.length > 0);
   const previewVisible = hasPreview && !dock.folded;
+  useLayoutEffect(() => {
+    onPreviewVisibilityChange?.(previewVisible);
+  }, [onPreviewVisibilityChange, previewVisible]);
   // Keep the current pane and recent background panes mounted, with a bound on
   // retained document renderers. Older panes can reopen from their saved paths.
   const retainedPreviews = Object.entries(previews)
@@ -2094,7 +2104,6 @@ export function AgentPage({
     sessionPermissionMode(selectedSession?.permissionMode),
     workspace,
   );
-  const planning = snapshot?.plan?.active || selectedSession?.mode === "plan";
   const configurationReadOnly = readOnlySession || isSecretaryWorker;
   const isSecretary = selectedSession?.coordination?.role === "secretary";
   const secretarySessionId = isSecretary
@@ -2173,7 +2182,10 @@ export function AgentPage({
     [textareaRef],
   );
   const paneLayout = useAgentPaneLayout({
+    isActive,
     sidebarVisible: !sidebarCollapsed,
+    sidebarCompact,
+    sidebarAutoCompact: Boolean(onSidebarCompactChange),
     previewVisible,
   });
   const lastSidebarWidth = useRef(paneLayout.sidebarWidth || 252);
@@ -2357,6 +2369,7 @@ export function AgentPage({
   addLocalDocumentsRef.current = addComposerLocalDocuments;
   useEffect(() => {
     if (
+      !isActive ||
       !(window as Window & { __TAURI_INTERNALS__?: unknown })
         .__TAURI_INTERNALS__
     )
@@ -2407,7 +2420,7 @@ export function AgentPage({
       nativeDropSupport.current = false;
       unlisten?.();
     };
-  }, []);
+  }, [isActive]);
   const removeComposerImage = (imageId: string) => {
     if (!sessionId || pending[sessionId]?.uncertain) return;
     const next = { ...composerImagesRef.current };
@@ -4023,6 +4036,18 @@ export function AgentPage({
       focused instanceof HTMLElement &&
       Boolean(focused.closest(".wb-sidebar")) &&
       focused.matches(":focus-visible");
+    if (onSidebarCompactChange) {
+      onSidebarCompactChange(true);
+      if (restoreKeyboardFocus)
+        requestAnimationFrame(() => {
+          paneLayout.containerRef.current
+            ?.querySelector<HTMLButtonElement>(
+              "[data-workspace-sidebar-toggle]",
+            )
+            ?.focus();
+        });
+      return;
+    }
     setSidebarCollapsed(true);
     if (restoreKeyboardFocus)
       requestAnimationFrame(() => {
@@ -4037,20 +4062,24 @@ export function AgentPage({
         });
         target?.focus();
       });
-  }, [paneLayout.containerRef]);
+  }, [onSidebarCompactChange, paneLayout.containerRef]);
   const toggleSidebar = useCallback(() => {
-    if (!paneLayout.sidebarVisible) {
+    if (paneLayout.sidebarCompact || !paneLayout.sidebarVisible) {
       if (previewVisible && !paneLayout.sidebarCanOpen) setPreviewFolded(true);
+      onSidebarCompactChange?.(false);
       setSidebarCollapsed(false);
     } else collapseSidebar();
   }, [
     collapseSidebar,
+    onSidebarCompactChange,
     paneLayout.sidebarCanOpen,
+    paneLayout.sidebarCompact,
     paneLayout.sidebarVisible,
     previewVisible,
     setPreviewFolded,
   ]);
   useEffect(() => {
+    if (!isActive) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.isComposing || event.repeat) return;
       if ((event.ctrlKey || event.metaKey) && event.key === "\\") {
@@ -4071,7 +4100,7 @@ export function AgentPage({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [canOpenBrowser, openWebPreview, toggleSidebar]);
+  }, [canOpenBrowser, isActive, openWebPreview, toggleSidebar]);
   const sidebarToggle = !paneLayout.sidebarVisible ? (
     <button
       type="button"
@@ -4521,7 +4550,7 @@ export function AgentPage({
   );
   const dockColumn = (index: number) => (index === 0 ? 1 : 3);
   const panelColumn = (owner: string, tab: DockTab) => {
-    if (!previewVisible || owner !== identity) return;
+    if (!isActive || !previewVisible || owner !== identity) return;
     const index = visibleDock.panes.findIndex(({ active }) => active === tab);
     if (index !== -1) return dockColumn(index);
   };
@@ -4552,7 +4581,8 @@ export function AgentPage({
               renderSidebar({
                 actions: sidebarActions,
                 workspace: sidebarWorkspace,
-                onCollapse: collapseSidebar,
+                onCollapse: toggleSidebar,
+                compact: paneLayout.sidebarCompact,
               })
             ) : (
               <>
@@ -4587,7 +4617,7 @@ export function AgentPage({
           </aside>
         </div>
       </div>
-      {!sidebarCollapsed && paneLayout.sidebarVisible && (
+      {!paneLayout.sidebarCompact && paneLayout.sidebarVisible && (
         <AgentPaneResizeHandle {...paneLayout.sidebarHandleProps} />
       )}
       <main id="agent-content-area" className="wb-main">
@@ -5110,7 +5140,6 @@ export function AgentPage({
                   <AgentSessionModes
                     key={sessionId}
                     goal={snapshot.goal}
-                    plan={snapshot.plan}
                     disabled={Boolean(busy) || stoppingHere || uncertainHere}
                     onGoalDraft={(editing) => {
                       if (!key) return;
@@ -5394,14 +5423,8 @@ export function AgentPage({
                       />
                     </div>
                     <AgentComposerOptions
-                      permissionMode={planning ? "ask" : selectedPermissionMode}
-                      planning={planning}
+                      permissionMode={selectedPermissionMode}
                     >
-                      {planning && (
-                        <p className="wb-secretary-config-note">
-                          当前计划模式只读。执行权限设置在执行模式下生效。
-                        </p>
-                      )}
                       {isSecretaryWorker && (
                         <p className="wb-secretary-config-note">
                           {workerPermissionLocked
@@ -5455,11 +5478,9 @@ export function AgentPage({
                         <select
                           id="agent-permission-mode"
                           title={
-                            planning
-                              ? "当前计划模式只读。执行权限设置在执行模式下生效。"
-                              : workspace?.remote
-                                ? "远程写入和命令始终逐次确认。"
-                                : "逐次确认会在改动和运行命令前询问。Auto Mode 允许工作区内的常规操作。完整权限会在会话允许的范围内直接执行工具，无需手动批准。Agent 仍可向你提问。当前运行和已排队消息沿用原权限，新设置从下一次独立运行生效。"
+                            workspace?.remote
+                              ? "远程写入和命令始终逐次确认。"
+                              : "逐次确认会在改动和运行命令前询问。Auto Mode 允许工作区内的常规操作。完整权限会在会话允许的范围内直接执行工具，无需手动批准。Agent 仍可向你提问。当前运行和已排队消息沿用原权限，新设置从下一次独立运行生效。"
                           }
                           value={selectedPermissionMode}
                           disabled={
@@ -5815,7 +5836,7 @@ export function AgentPage({
         <FullScreenPanelHostContext.Provider value="agent-content-area">
           <AgentToolDraftsContext.Provider value={toolDrafts.current}>
             <AgentOperationsPanel
-              open={operationsOpen}
+              open={isActive && operationsOpen}
               onOpenChange={setOperationsOpen}
               initialTab={operationsTab}
               projectPath={workspace?.path}
@@ -5883,7 +5904,7 @@ export function AgentPage({
               }}
             />
             <AgentExtensionsPanel
-              open={extensionsOpen}
+              open={isActive && extensionsOpen}
               onOpenChange={setExtensionsOpen}
               projectPath={workspace?.path}
               initialTab={extensionsInitialTab}
@@ -5906,14 +5927,14 @@ export function AgentPage({
               }
             />
             <AgentToolPanel
-              open={activeTool === "memory"}
+              open={isActive && activeTool === "memory"}
               onClose={() => setActiveTool(null)}
               title="记忆"
               description="管理跨会话的用户偏好与项目约定，让 Agent 越用越了解你的工作方式。"
               icon={Brain}
               projectPath={workspace?.path}
             >
-              {activeTool === "memory" && (
+              {isActive && activeTool === "memory" && (
                 <AgentMemoryPanel embedded projectPath={workspace?.path} />
               )}
             </AgentToolPanel>

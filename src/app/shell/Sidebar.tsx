@@ -42,6 +42,10 @@ import { SidebarProfileMenu } from "./SidebarProfileMenu";
 import { APP_NAME } from "@/lib/branding";
 import { WorkspaceGlyph } from "./WorkspaceGlyph";
 import type { AgentTool, AgentToolTab } from "@/features/agent/AgentToolPanel";
+import {
+  AgentPaneResizeHandle,
+  useAgentPaneLayout,
+} from "@/features/agent/AgentPaneLayout";
 import { TavernSidebar } from "@/features/tavern/TavernSidebar";
 import "./unified-sidebar.css";
 
@@ -64,6 +68,8 @@ interface SidebarProps {
   workspaceActions?: ReactNode;
   workspaceContent?: ReactNode;
   onCollapse?: () => void;
+  sidebarCompact?: boolean;
+  paneWidth?: number;
   onOpenAgentTool?: (tool: AgentTool, initialTab?: AgentToolTab) => void;
   activeAgentTool?: AgentTool | null;
   selectedTavernCharacterId?: string | null;
@@ -82,21 +88,29 @@ interface SidebarProps {
 
 /** The same navigation surrounds the workspace tree and other application pages. */
 export function Sidebar(props: SidebarProps) {
+  const layoutId = useId();
   const { t, i18n } = useTranslation();
   const chinese = i18n.language.startsWith("zh");
   const status = useSidebarStatus();
   const { hasUpdate } = useUpdate();
   const [tavernCompact, setTavernCompact] = useState(false);
-  const compact = props.view === "tavern" && tavernCompact;
+  const compact =
+    props.sidebarCompact ?? (props.view === "tavern" && tavernCompact);
 
   return (
-    <LayoutGroup id="unified-sidebar">
+    <LayoutGroup id={layoutId}>
       <nav
         data-collapsed="false"
         data-embedded={Boolean(props.embedded)}
-        data-tavern-compact={compact}
+        data-sidebar-compact={compact}
+        data-sidebar-resizable={props.paneWidth !== undefined && !compact}
         aria-label={t("nav.mainLabel")}
         className="lolicode-unified-sidebar"
+        style={
+          props.paneWidth === undefined
+            ? undefined
+            : { width: props.paneWidth, flexBasis: props.paneWidth }
+        }
       >
         <a href="#main-content" className="tai-shell-skip">
           {t("nav.skipToContent")}
@@ -126,6 +140,7 @@ export function Sidebar(props: SidebarProps) {
               <button
                 type="button"
                 className="lolicode-sidebar-icon-button"
+                data-workspace-sidebar-toggle
                 aria-label={
                   compact
                     ? chinese
@@ -136,9 +151,8 @@ export function Sidebar(props: SidebarProps) {
                       : "Collapse sidebar"
                 }
                 onClick={
-                  props.view === "tavern"
-                    ? () => setTavernCompact((value) => !value)
-                    : props.onCollapse
+                  props.onCollapse ??
+                  (() => setTavernCompact((value) => !value))
                 }
                 style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
               >
@@ -188,6 +202,36 @@ export function Sidebar(props: SidebarProps) {
         </div>
       </nav>
     </LayoutGroup>
+  );
+}
+
+export function TavernNavigationSidebar({
+  reservePreviewSpace,
+  ...props
+}: SidebarProps & { reservePreviewSpace: boolean }) {
+  const [releasedPreviewSpace, setReleasedPreviewSpace] = useState(false);
+  const layout = useAgentPaneLayout({
+    sidebarVisible: true,
+    sidebarCompact: props.sidebarCompact,
+    sidebarAutoCompact: true,
+    previewVisible: reservePreviewSpace && !releasedPreviewSpace,
+  });
+  return (
+    <>
+      <Sidebar
+        {...props}
+        sidebarCompact={layout.sidebarCompact || !layout.sidebarVisible}
+        paneWidth={layout.sidebarWidth || undefined}
+        onCollapse={() => {
+          if (!layout.sidebarCanOpen) setReleasedPreviewSpace(true);
+          if (props.sidebarCompact || layout.sidebarCanOpen)
+            props.onCollapse?.();
+        }}
+      />
+      {layout.sidebarVisible && !layout.sidebarCompact && (
+        <AgentPaneResizeHandle {...layout.sidebarHandleProps} />
+      )}
+    </>
   );
 }
 
