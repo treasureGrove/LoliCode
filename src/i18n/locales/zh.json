@@ -4413,6 +4413,7 @@
     "generating": "正在生成…",
     "generationFailed": "生成失败，已保留你发送的消息",
     "generationFailedShort": "失败，可重新发送",
+    "loadEarlier": "加载更早的消息",
     "send": "发送",
     "enterHint": "Enter 发送 · Shift + Enter 换行",
     "local": {

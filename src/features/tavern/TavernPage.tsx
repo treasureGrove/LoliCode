@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type KeyboardEvent,
@@ -12,7 +13,6 @@ import {
   BookHeart,
   BookOpenText,
   CircleAlert,
-  Clock3,
   LoaderCircle,
   MoreHorizontal,
   Plus,
@@ -38,28 +38,22 @@ import {
 import { toast } from "@/lib/toast";
 import {
   tavernApi,
+  tavernSnapshotQuery,
   TAVERN_PRESETS_KEY,
   type TavernStory,
   type TavernSnapshot,
 } from "@/lib/api/tavern";
 import { TavernPresetGallery } from "./TavernPresetGallery";
+import { TavernTranscript } from "./TavernTranscript";
 import companion from "@/assets/atelier/companion.png";
-import { cn } from "@/lib/utils";
 
-const TAVERN_QUERY_KEY = ["tavern", "snapshot"] as const;
+const TAVERN_QUERY_KEY = tavernSnapshotQuery.queryKey;
 const CATALOG_QUERY_KEY = ["tavern", "catalog"] as const;
 
 function errorText(error: unknown): string {
   if (typeof error === "string") return error;
   if (error instanceof Error) return error.message;
   return String(error);
-}
-
-function formatMessageTime(timestamp: number, locale: string): string {
-  return new Date(timestamp).toLocaleTimeString(locale, {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 }
 
 function upsertStory(
@@ -103,12 +97,11 @@ export function TavernPage({
   const [importing, setImporting] = useState(false);
   const [showContext, setShowContext] = useState(false);
   const [showPresets, setShowPresets] = useState(false);
-  const messageEndRef = useRef<HTMLDivElement>(null);
   const storyActionInFlight = useRef(false);
 
   const snapshot = useQuery({
-    queryKey: TAVERN_QUERY_KEY,
-    queryFn: tavernApi.getSnapshot,
+    ...tavernSnapshotQuery,
+    enabled: isActive,
   });
   const catalog = useQuery({
     queryKey: CATALOG_QUERY_KEY,
@@ -118,15 +111,19 @@ export function TavernPage({
   });
 
   const characters = snapshot.data?.characters ?? [];
-  const stories = snapshot.data?.stories ?? [];
+  const stories = snapshot.data?.stories;
   const selectedCharacter =
     characters.find((item) => item.id === characterId) ?? characters[0];
   const selectedCharacterId = selectedCharacter?.id ?? null;
   const activeCharacterId = useRef(selectedCharacterId);
   activeCharacterId.current = selectedCharacterId;
-  const characterStories = stories
-    .filter((story) => story.characterId === selectedCharacterId)
-    .sort((left, right) => right.updatedAt - left.updatedAt);
+  const characterStories = useMemo(
+    () =>
+      (stories ?? [])
+        .filter((story) => story.characterId === selectedCharacterId)
+        .sort((left, right) => right.updatedAt - left.updatedAt),
+    [selectedCharacterId, stories],
+  );
   const selectedStory =
     characterStories.find((story) => story.id === storyId) ??
     characterStories[0];
@@ -136,7 +133,10 @@ export function TavernPage({
   const avatar = useQuery({
     queryKey: ["tavern", "avatar", selectedCharacter?.id],
     queryFn: () => tavernApi.getAvatar(selectedCharacter!.id),
-    enabled: Boolean(selectedCharacter?.hasAvatar),
+    enabled: Boolean(
+      selectedCharacter?.hasAvatar &&
+        selectedCharacter.id !== "builtin:sillyloli",
+    ),
     staleTime: Infinity,
     retry: false,
   });
@@ -173,10 +173,6 @@ export function TavernPage({
       );
     }
   }, [catalog.data, modelId]);
-
-  useEffect(() => {
-    messageEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [selectedStory?.id, selectedStory?.messages.length]);
 
   const importCharacter = async () => {
     setImporting(true);
@@ -247,10 +243,7 @@ export function TavernPage({
   const startPreset = async (presetId: string) => {
     if (sending || selectedStory?.isGenerating)
       throw new Error(t("tavern.presets.busy"));
-    await queryClient.ensureQueryData({
-      queryKey: TAVERN_QUERY_KEY,
-      queryFn: tavernApi.getSnapshot,
-    });
+    await queryClient.ensureQueryData(tavernSnapshotQuery);
     const character = await tavernApi.addPreset(presetId);
     // Keep the successfully added card even if creating the story fails.
     await queryClient.cancelQueries({ queryKey: TAVERN_QUERY_KEY });
@@ -342,7 +335,6 @@ export function TavernPage({
     }
   };
 
-  const locale = i18n.resolvedLanguage ?? i18n.language;
   const modelOptions = catalog.data?.models ?? [];
   const storyCharacter = selectedCharacter;
   const avatarUrl =
@@ -424,137 +416,82 @@ export function TavernPage({
             </div>
           )}
 
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 lg:px-8">
-            {snapshot.isPending ? (
-              <div
-                role="status"
-                className="flex h-full items-center justify-center gap-2 text-sm text-fg-3"
-              >
-                <LoaderCircle
-                  className="h-4 w-4 animate-spin"
-                  aria-hidden="true"
-                />
-                {t("common.loading")}
-              </div>
-            ) : !selectedStory ? (
-              <div className="flex h-full min-h-[300px] flex-col items-center justify-center text-center">
-                <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-border bg-subtle text-action-text">
-                  {avatarUrl ? (
-                    <img
-                      src={avatarUrl}
-                      alt=""
-                      className="h-full w-full rounded-2xl object-cover"
-                    />
+          {selectedStory?.messages.length ? (
+            <TavernTranscript
+              key={selectedStory.id}
+              active={isActive}
+              avatarUrl={avatarUrl}
+              characterName={storyCharacter?.name}
+              messages={selectedStory.messages}
+              sending={sending}
+            />
+          ) : (
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 lg:px-8">
+              {snapshot.isPending ? (
+                <div
+                  role="status"
+                  className="flex h-full items-center justify-center gap-2 text-sm text-fg-3"
+                >
+                  <LoaderCircle
+                    className="h-4 w-4 animate-spin"
+                    aria-hidden="true"
+                  />
+                  {t("common.loading")}
+                </div>
+              ) : !selectedStory ? (
+                <div className="flex h-full min-h-[300px] flex-col items-center justify-center text-center">
+                  <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-border bg-subtle text-action-text">
+                    {avatarUrl ? (
+                      <img
+                        src={avatarUrl}
+                        alt=""
+                        className="h-full w-full rounded-2xl object-cover"
+                      />
+                    ) : (
+                      <Sparkles className="h-7 w-7" />
+                    )}
+                  </div>
+                  <h3 className="text-lg font-semibold">
+                    {selectedCharacter?.name ?? t("tavern.welcomeTitle")}
+                  </h3>
+                  <p className="mt-2 max-w-md text-sm leading-6 text-fg-3">
+                    {selectedCharacter
+                      ? t("tavern.startStoryHint")
+                      : t("tavern.emptyLibraryHint")}
+                  </p>
+                  {selectedCharacter ? (
+                    <Button
+                      className="mt-5"
+                      onClick={() => void createStory()}
+                      disabled={sending}
+                    >
+                      <Plus className="h-4 w-4" />
+                      {t("tavern.newStory")}
+                    </Button>
                   ) : (
-                    <Sparkles className="h-7 w-7" />
+                    <div className="mt-5 flex flex-wrap justify-center gap-2">
+                      <Button onClick={() => setShowPresets(true)}>
+                        <BookHeart className="h-4 w-4" />
+                        {t("tavern.presets.choose")}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => void importCharacter()}
+                        disabled={importing}
+                      >
+                        <Upload className="h-4 w-4" />
+                        {t("tavern.importCard")}
+                      </Button>
+                    </div>
                   )}
                 </div>
-                <h3 className="text-lg font-semibold">
-                  {selectedCharacter?.name ?? t("tavern.welcomeTitle")}
-                </h3>
-                <p className="mt-2 max-w-md text-sm leading-6 text-fg-3">
-                  {selectedCharacter
-                    ? t("tavern.startStoryHint")
-                    : t("tavern.emptyLibraryHint")}
-                </p>
-                {selectedCharacter ? (
-                  <Button
-                    className="mt-5"
-                    onClick={() => void createStory()}
-                    disabled={sending}
-                  >
-                    <Plus className="h-4 w-4" />
-                    {t("tavern.newStory")}
-                  </Button>
-                ) : (
-                  <div className="mt-5 flex flex-wrap justify-center gap-2">
-                    <Button onClick={() => setShowPresets(true)}>
-                      <BookHeart className="h-4 w-4" />
-                      {t("tavern.presets.choose")}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={() => void importCharacter()}
-                      disabled={importing}
-                    >
-                      <Upload className="h-4 w-4" />
-                      {t("tavern.importCard")}
-                    </Button>
-                  </div>
-                )}
-              </div>
-            ) : selectedStory.messages.length === 0 ? (
-              <div className="flex h-full items-center justify-center text-sm text-fg-3">
-                {t("tavern.emptyStory")}
-              </div>
-            ) : (
-              <div className="mx-auto flex max-w-3xl flex-col gap-5">
-                {selectedStory.messages.map((message) => (
-                  <article
-                    key={message.id}
-                    className={cn(
-                      "flex gap-3",
-                      message.role === "user" && "flex-row-reverse",
-                    )}
-                  >
-                    <div
-                      className={cn(
-                        "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border bg-subtle text-xs font-medium text-fg-2",
-                        message.role === "user" &&
-                          "bg-action/10 text-action-text",
-                      )}
-                    >
-                      {message.role === "assistant" && avatarUrl ? (
-                        <img
-                          src={avatarUrl}
-                          alt=""
-                          className="h-full w-full object-cover"
-                        />
-                      ) : message.role === "assistant" ? (
-                        <BookHeart className="h-4 w-4" />
-                      ) : (
-                        t("tavern.youShort")
-                      )}
-                    </div>
-                    <div
-                      className={cn(
-                        "min-w-0 max-w-[min(82%,680px)] rounded-2xl border border-border bg-subtle/65 px-4 py-3",
-                        message.role === "user" && "bg-action/10",
-                        message.failed && "border-danger/40",
-                      )}
-                    >
-                      <div className="mb-1 flex items-center gap-2 text-[11px] text-fg-3">
-                        <span className="font-medium text-fg-2">
-                          {message.role === "assistant"
-                            ? storyCharacter?.name
-                            : t("tavern.you")}
-                        </span>
-                        <Clock3 className="h-3 w-3" />
-                        <time>
-                          {formatMessageTime(message.createdAt, locale)}
-                        </time>
-                        {message.failed && (
-                          <span className="text-danger">
-                            {t("tavern.generationFailedShort")}
-                          </span>
-                        )}
-                      </div>
-                      <p className="whitespace-pre-wrap break-words text-sm leading-7 text-fg-1">
-                        {message.text}
-                      </p>
-                    </div>
-                  </article>
-                ))}
-                {sending && (
-                  <div className="flex items-center gap-2 self-start rounded-full border border-border bg-subtle/70 px-3 py-1.5 text-xs text-fg-3">
-                    <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
-                    {t("tavern.generating")}
-                  </div>
-                )}
-                <div ref={messageEndRef} />
-              </div>
-            )}
-          </div>
+              ) : (
+                <div className="flex h-full items-center justify-center text-sm text-fg-3">
+                  {t("tavern.emptyStory")}
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="shrink-0 bg-surface px-5 pb-4 pt-3 lg:px-10">
             {selectedStory ? (

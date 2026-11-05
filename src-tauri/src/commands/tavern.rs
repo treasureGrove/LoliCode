@@ -73,12 +73,16 @@ pub fn add_tavern_preset(
 }
 
 #[tauri::command]
-pub fn get_tavern_snapshot(state: State<'_, AppState>) -> Result<tavern::TavernSnapshot, String> {
-    crate::services::builtin_apps::require(
-        &state.db,
-        crate::services::builtin_apps::BuiltinApp::Tavern,
-    )?;
-    tavern::snapshot(&state)
+pub async fn get_tavern_snapshot(
+    state: State<'_, AppState>,
+) -> Result<tavern::TavernSnapshot, String> {
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || {
+        require_tavern(&state)?;
+        tavern::snapshot(&state)
+    })
+    .await
+    .map_err(|_| "读取酒馆记录未完成，请重试".to_owned())?
 }
 
 #[tauri::command]
@@ -94,15 +98,17 @@ pub fn import_tavern_character(
 }
 
 #[tauri::command]
-pub fn get_tavern_avatar(
+pub async fn get_tavern_avatar(
     state: State<'_, AppState>,
     character_id: String,
 ) -> Result<tavern::TavernAvatar, String> {
-    crate::services::builtin_apps::require(
-        &state.db,
-        crate::services::builtin_apps::BuiltinApp::Tavern,
-    )?;
-    tavern::avatar(&state, &character_id)
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || {
+        require_tavern(&state)?;
+        tavern::avatar(&state, &character_id)
+    })
+    .await
+    .map_err(|_| "读取酒馆头像未完成，请重试".to_owned())?
 }
 
 #[tauri::command]

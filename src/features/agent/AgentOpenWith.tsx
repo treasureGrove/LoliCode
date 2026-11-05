@@ -1,4 +1,5 @@
-import type { ReactNode } from "react";
+import { useContext, useEffect, useState, type ReactNode } from "react";
+import { ViewActivityContext } from "@/components/ViewActivityContext";
 import { ChevronDown } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
@@ -15,9 +16,14 @@ export function AgentOpenWith({
   children: ReactNode;
 }) {
   const { t } = useTranslation();
+  const active = useContext(ViewActivityContext);
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!active) setOpen(false);
+  }, [active]);
   const label = t("agentOutput.openWith", { defaultValue: "打开方式" });
   return (
-    <DropdownMenu modal={false}>
+    <DropdownMenu modal={false} open={active && open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
         <button
           type="button"
@@ -28,7 +34,14 @@ export function AgentOpenWith({
           <ChevronDown size={13} aria-hidden="true" />
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start">{children}</DropdownMenuContent>
+      <DropdownMenuContent
+        align="start"
+        onCloseAutoFocus={(event) => {
+          if (!active) event.preventDefault();
+        }}
+      >
+        {children}
+      </DropdownMenuContent>
     </DropdownMenu>
   );
 }

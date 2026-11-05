@@ -1,6 +1,6 @@
 // Runs a hidden Windows development build with a disposable profile and model.
 // Run from a non-elevated shell so WebView2 honors the fixture debugging port.
-// Usage: node scripts/tests/harness-desktop-acceptance.mjs [--permissions | --output-links | --compact | --dock-tools | --background-jobs | --native-modes]
+// Usage: node scripts/tests/harness-desktop-acceptance.mjs [--permissions | --output-links | --compact | --dock-tools | --background-jobs | --native-modes | --switching]
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -33,6 +33,7 @@ const compactOnly = process.argv.includes("--compact");
 const dockToolsOnly = process.argv.includes("--dock-tools");
 const backgroundJobsOnly = process.argv.includes("--background-jobs");
 const nativeModesOnly = process.argv.includes("--native-modes");
+const switchingOnly = process.argv.includes("--switching");
 const occupyProxyPort = process.env.LOLICODE_HARNESS_DESKTOP_OCCUPY_PROXY === "1";
 const nativeModes = {
   plan: "DESKTOP_NATIVE_PLAN: implement the revised fixture plan.",
@@ -1061,6 +1062,9 @@ const vitePlugin = {
       if (request.url === `${namespace}/renderer.mjs`) {
         response.setHeader("Content-Type", "text/javascript");
         response.end(await readFile(fixtureRenderer));
+      } else if (switchingOnly && request.url === `${namespace}/switching.mjs`) {
+        response.setHeader("Content-Type", "text/javascript");
+        response.end(await readFile(new URL("./harness-desktop-switching.mjs", import.meta.url)));
       } else if (request.url === `${namespace}/config`) {
         response.setHeader("Content-Type", "application/json");
         response.end(JSON.stringify(fixture));
@@ -1222,6 +1226,62 @@ async function seedLegacyWorker() {
   return originals;
 }
 
+async function seedSwitchingHistory() {
+  const metadataDirectory = path.join(profile, "agent/harness-sessions");
+  await mkdir(metadataDirectory, { recursive: true });
+  const turns = 160;
+  const sessions = [];
+  for (const label of ["A", "B"]) {
+    const id = randomUUID();
+    const recordDirectory = path.join(profile, "agent/harness-desktop", id);
+    await mkdir(recordDirectory, { recursive: true });
+    const session = {
+      id: `lc:${id}`, title: `切换验收会话 ${label}`, projectPath: project,
+      mode: "build", permissionMode: "full_access", createdAt: 100, updatedAt: label === "A" ? 300 : 200,
+      model: { providerId: "lolicode", modelId: `harness-desktop-fixture/${model}` },
+    };
+    const messages = [];
+    const marker = turn => `SWITCHING-${label}-TURN-${String(turn).padStart(3, "0")}`;
+    for (let turn = 1; turn <= turns; turn++) {
+      const createdAt = 1000 + turn * 2;
+      messages.push({
+        id: `user-${turn}`, role: "user", createdAt, completedAt: createdAt,
+        parts: [{ type: "text", text: `读取测试工作区并记录第 ${turn} 轮的验收结果。` }],
+      }, {
+        id: `assistant-${turn}`, role: "assistant", createdAt: createdAt + 1, completedAt: createdAt + 1,
+        parts: [{
+          type: "tool", id: `read-${turn}`, name: "read", state: "completed",
+          input: { file_path: `fixture/${label}-${turn}.txt` }, output: "Isolated switching fixture result.",
+        }, {
+          type: "text",
+          text: [
+            `### ${marker(turn)}`,
+            "已核对配置、整理结果，并保留了复现步骤。",
+            "1. 读取工作区中的测试数据。\n2. 比较历史结果并记录当前状态。",
+            "```json\n{\"fixture\": true, \"status\": \"verified\"}\n```",
+          ].join("\n\n"),
+        }],
+      });
+    }
+    // Seed only the desktop read model. No real user data or SDK task is replayed.
+    await writeFile(path.join(metadataDirectory, `${id}.json`), JSON.stringify({
+      session, fullAccessSelected: true,
+    }), { flag: "wx" });
+    await writeFile(path.join(recordDirectory, "desktop.json"), JSON.stringify({
+      snapshot: {
+        session, status: "idle", messages, permissions: [], questions: [], diffs: [],
+        error: null, streamConnected: false, streamGap: false,
+      },
+      rootCreated: false, receipts: {},
+    }), { flag: "wx" });
+    sessions.push({ id: session.id, title: session.title, first: marker(1), last: marker(turns) });
+  }
+  return {
+    sessions, turns, source: "seeded-harness-desktop-snapshots",
+    baseline: process.env.LOLICODE_HARNESS_DESKTOP_SWITCHING_BASELINE === "1",
+  };
+}
+
 try {
   const modelPort = await listen(modelServer);
   browserTool.url = `http://127.0.0.1:${await listen(browserPageServer)}/fixture`;
@@ -1283,6 +1343,7 @@ try {
     compact,
     backgroundJobs,
     nativeModes,
+    switching: switchingOnly ? await seedSwitchingHistory() : undefined,
     workerFollowup,
     workerQueue,
   };
@@ -1306,7 +1367,7 @@ try {
     }),
   );
   console.log(`Isolated desktop acceptance reports: ${reportPath}`);
-  if (!permissionsOnly && !outputLinksOnly && !compactOnly && !backgroundJobsOnly && !dockToolsOnly && !nativeModesOnly) {
+  if (!permissionsOnly && !outputLinksOnly && !compactOnly && !backgroundJobsOnly && !dockToolsOnly && !nativeModesOnly && !switchingOnly) {
     const first = await launch(env, "initial");
     assert.equal(first.sendScrollFollow, true);
     assert.ok(observed.image && observed.approved && observed.rejected);
@@ -1348,6 +1409,14 @@ try {
     assert.equal(restart.sessionId, dock.sessionId);
     assert.ok(restart.savedDock && restart.explicitBrowserRestore && restart.terminalRestartRequiresStart &&
       restart.parallelBrowsers && restart.staleBrowserShowIgnored);
+  } else if (switchingOnly) {
+    const result = await launch(env, "switching");
+    assert.ok(result.sessionSwitches.length >= 8 && result.modeSwitches.length >= 8);
+    if (!fixture.switching.baseline) {
+      for (const [name, passed] of Object.entries(result.checks))
+        assert.equal(passed, true, `Desktop switching check failed: ${name}`);
+    }
+    console.log(JSON.stringify(result));
   } else if (nativeModesOnly) {
     const modes = await launch(env, "native-modes");
     assert.ok(modes.nativePlan && modes.nativeGoal && observed.nativePlan && observed.nativeGoal);

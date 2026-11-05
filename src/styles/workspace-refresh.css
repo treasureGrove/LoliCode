@@ -398,7 +398,8 @@
   gap: 10px;
   width: 100%;
   min-width: 0;
-  animation: wb-message-arrive 260ms var(--motion-ease) both;
+  /* History restoration must not replay an entrance animation for every row. */
+  animation: none;
 }
 :root .wb-unified .wb-chat-message--user {
   flex-direction: row-reverse;

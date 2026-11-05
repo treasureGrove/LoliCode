@@ -4416,6 +4416,7 @@
     "generating": "Generating…",
     "generationFailed": "Generation failed; your message was kept",
     "generationFailedShort": "Failed · retry by sending again",
+    "loadEarlier": "Load earlier messages",
     "send": "Send",
     "enterHint": "Enter to send · Shift + Enter for a new line",
     "local": {

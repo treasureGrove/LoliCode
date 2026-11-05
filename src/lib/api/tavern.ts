@@ -119,3 +119,9 @@ export const tavernApi = {
   sendMessage: (storyId: string, text: string, modelId: string) =>
     invoke<TavernStory>("send_tavern_message", { storyId, text, modelId }),
 };
+
+export const tavernSnapshotQuery = {
+  queryKey: ["tavern", "snapshot"] as const,
+  queryFn: tavernApi.getSnapshot,
+  staleTime: 15_000,
+};

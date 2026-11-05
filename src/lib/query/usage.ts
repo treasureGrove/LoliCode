@@ -16,6 +16,7 @@ const DEFAULT_REFETCH_INTERVAL_MS = 30000;
 
 type UsageQueryOptions = {
   enabled?: boolean;
+  refetchOnMount?: boolean;
   refetchInterval?: number | false;
   refetchIntervalInBackground?: boolean;
 };
@@ -202,6 +203,7 @@ export function useUsageSummary(
       );
     },
     placeholderData: keepPreviousData,
+    refetchOnMount: options?.refetchOnMount,
     refetchInterval: options?.refetchInterval ?? DEFAULT_REFETCH_INTERVAL_MS,
     refetchIntervalInBackground: options?.refetchIntervalInBackground ?? false,
   });

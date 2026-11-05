@@ -9,6 +9,36 @@ vi.mock("@/lib/api/agent", () => ({ agentApi: { getSession: vi.fn() } }));
 
 afterEach(() => vi.useRealTimers());
 
+function sessionSnapshot(
+  id: string,
+  status: AgentSnapshot["status"] = "idle",
+): AgentSnapshot {
+  return {
+    session: {
+      id,
+      title: id,
+      projectPath: "D:/project",
+      createdAt: 1,
+      updatedAt: 1,
+    },
+    status,
+    messages: [{ id: `${id}:user`, role: "user", createdAt: 1, parts: [] }],
+    permissions: [],
+    questions: [],
+    diffs: [],
+  };
+}
+
+function follow(initialId: string, onSnapshot = vi.fn()) {
+  return renderHook(
+    ({ id, refresh }) =>
+      useAgentSnapshot(id, { fast: false, refresh, onSnapshot }),
+    {
+      initialProps: { id: initialId, refresh: 0 },
+    },
+  );
+}
+
 it("shows only the selected session's stream tail before polling and preserves it across a stale read", async () => {
   vi.useFakeTimers();
   const sessionId = "lc:stream-fixture";
@@ -143,4 +173,215 @@ it("keeps an unchanged snapshot and reuses history when only the last message ch
   expect(result.current.snapshot?.messages[1].parts).toEqual(
     stored.messages[1].parts,
   );
+});
+
+it("switches back synchronously without issuing another full read for a fresh idle session", async () => {
+  vi.useFakeTimers();
+  const read = vi.mocked(agentApi.getSession);
+  read.mockReset().mockImplementation(async (id) => sessionSnapshot(id));
+  const { result, rerender } = follow("lc:first");
+  await act(async () => {});
+  const first = result.current.snapshot;
+
+  rerender({ id: "lc:second", refresh: 0 });
+  expect(result.current.snapshot).toBeNull();
+  expect(result.current.loading).toBe(true);
+  await act(async () => {});
+  expect(result.current.snapshot?.session.id).toBe("lc:second");
+
+  rerender({ id: "lc:first", refresh: 0 });
+  expect(result.current.snapshot).toBe(first);
+  expect(result.current.loading).toBe(false);
+  expect(read).toHaveBeenCalledTimes(2);
+  await act(async () => vi.advanceTimersByTimeAsync(4999));
+  expect(read).toHaveBeenCalledTimes(2);
+  await act(async () => vi.advanceTimersByTimeAsync(1));
+  expect(read.mock.calls.map(([id]) => id)).toEqual([
+    "lc:first",
+    "lc:second",
+    "lc:first",
+  ]);
+  expect(result.current.snapshot).toBe(first);
+
+  rerender({ id: "lc:first", refresh: 1 });
+  expect(read).toHaveBeenCalledTimes(4);
+  expect(result.current.snapshot).toBe(first);
+  await act(async () => {});
+});
+
+it("reuses a background tail and ignores the read left behind by a switch", async () => {
+  vi.useFakeTimers();
+  const first = sessionSnapshot("lc:first", "running");
+  const second = sessionSnapshot("lc:second");
+  const read = vi.mocked(agentApi.getSession);
+  let resolveOldRead!: (snapshot: AgentSnapshot) => void;
+  read
+    .mockReset()
+    .mockResolvedValueOnce(first)
+    .mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveOldRead = resolve;
+      }),
+    )
+    .mockResolvedValueOnce(second)
+    .mockResolvedValueOnce(structuredClone(first));
+  const onSnapshot = vi.fn();
+  const { result, rerender } = follow(first.session.id, onSnapshot);
+  await act(async () => {});
+  await act(async () => vi.advanceTimersByTimeAsync(800));
+  expect(read).toHaveBeenCalledTimes(2);
+
+  rerender({ id: second.session.id, refresh: 0 });
+  await act(async () => {});
+  const tail = {
+    type: "tail",
+    sessionId: first.session.id,
+    previousMessageId: first.messages[0].id,
+    message: {
+      id: "dsh-live:background",
+      role: "assistant",
+      createdAt: 2,
+      parts: [{ type: "text", text: "Still streaming" }],
+    },
+  };
+  act(() => emitTauriEvent("agent-session-update", tail));
+  expect(result.current.snapshot).toBe(second);
+  await act(async () => resolveOldRead(sessionSnapshot(first.session.id)));
+  expect(result.current.snapshot).toBe(second);
+  expect(
+    onSnapshot.mock.calls.map(([snapshot]) => snapshot.session.id),
+  ).toEqual([first.session.id, second.session.id]);
+
+  rerender({ id: first.session.id, refresh: 0 });
+  expect(result.current.snapshot?.messages.at(-1)).toEqual(tail.message);
+  expect(read).toHaveBeenCalledTimes(3);
+  await act(async () => vi.advanceTimersByTimeAsync(40));
+  expect(read).toHaveBeenCalledTimes(4);
+  expect(result.current.snapshot?.messages.at(-1)).toEqual(tail.message);
+});
+
+it("keeps a cached approval until a read after the latest change confirms its state", async () => {
+  vi.useFakeTimers();
+  const first = sessionSnapshot("lc:first", "waiting_permission");
+  first.permissions = [
+    {
+      id: "approval-1",
+      sessionId: first.session.id,
+      action: "write",
+      resources: ["example.txt"],
+    },
+  ];
+  const second = sessionSnapshot("lc:second");
+  const current = structuredClone(first);
+  current.permissions[0].id = "approval-2";
+  let resolveOldRead!: (snapshot: AgentSnapshot) => void;
+  const read = vi.mocked(agentApi.getSession);
+  read
+    .mockReset()
+    .mockResolvedValueOnce(first)
+    .mockResolvedValueOnce(second)
+    .mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveOldRead = resolve;
+      }),
+    )
+    .mockResolvedValueOnce(current);
+  const onSnapshot = vi.fn();
+  const { result, rerender } = follow(first.session.id, onSnapshot);
+  await act(async () => {});
+  rerender({ id: second.session.id, refresh: 0 });
+  await act(async () => {});
+
+  const changed = { type: "changed", sessionId: first.session.id };
+  act(() => emitTauriEvent("agent-session-update", changed));
+  rerender({ id: first.session.id, refresh: 0 });
+  expect(result.current.snapshot?.permissions[0].id).toBe("approval-1");
+  expect(read).toHaveBeenCalledTimes(2);
+  await act(async () => vi.advanceTimersByTimeAsync(40));
+  expect(read).toHaveBeenCalledTimes(3);
+
+  act(() => emitTauriEvent("agent-session-update", changed));
+  await act(async () => resolveOldRead(sessionSnapshot(first.session.id)));
+  expect(result.current.snapshot?.permissions[0].id).toBe("approval-1");
+  expect(onSnapshot).toHaveBeenCalledTimes(2);
+  await act(async () => vi.advanceTimersByTimeAsync(40));
+  expect(result.current.snapshot?.permissions[0].id).toBe("approval-2");
+  expect(onSnapshot).toHaveBeenCalledTimes(3);
+});
+
+it("bounds retained conversations and ignores notifications for evicted sessions", async () => {
+  vi.useFakeTimers();
+  const read = vi.mocked(agentApi.getSession);
+  read.mockReset().mockImplementation(async (id) => sessionSnapshot(id));
+  const { result, rerender } = follow("lc:0");
+  await act(async () => {});
+  for (let index = 1; index <= 6; index += 1) {
+    rerender({ id: `lc:${index}`, refresh: 0 });
+    await act(async () => {});
+  }
+  act(() =>
+    emitTauriEvent("agent-session-update", {
+      type: "changed",
+      sessionId: "lc:0",
+    }),
+  );
+  expect(result.current.snapshot?.session.id).toBe("lc:6");
+  rerender({ id: "lc:0", refresh: 0 });
+  expect(result.current.snapshot).toBeNull();
+  expect(result.current.loading).toBe(true);
+  expect(read).toHaveBeenLastCalledWith("lc:0");
+  await act(async () => {});
+});
+
+it("publishes progress when durable events invalidate consecutive slow reads", async () => {
+  vi.useFakeTimers();
+  const stored = sessionSnapshot("lc:busy", "running");
+  const progressing = structuredClone(stored);
+  progressing.messages.push({
+    id: "current-step",
+    role: "assistant",
+    createdAt: 2,
+    parts: [],
+  });
+  let resolveFirst!: (snapshot: AgentSnapshot) => void;
+  let resolveSecond!: (snapshot: AgentSnapshot) => void;
+  const read = vi.mocked(agentApi.getSession);
+  read
+    .mockReset()
+    .mockResolvedValueOnce(stored)
+    .mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveFirst = resolve;
+      }),
+    )
+    .mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveSecond = resolve;
+      }),
+    )
+    .mockResolvedValueOnce(progressing);
+  const onSnapshot = vi.fn();
+  const { result } = follow(stored.session.id, onSnapshot);
+  await act(async () => {});
+  const change = () =>
+    act(() =>
+      emitTauriEvent("agent-session-update", {
+        type: "changed",
+        sessionId: stored.session.id,
+      }),
+    );
+
+  change();
+  await act(async () => vi.advanceTimersByTimeAsync(40));
+  change();
+  await act(async () => resolveFirst(structuredClone(progressing)));
+  expect(result.current.snapshot).toBe(stored);
+  await act(async () => vi.advanceTimersByTimeAsync(40));
+  change();
+  await act(async () => resolveSecond(structuredClone(progressing)));
+  expect(result.current.snapshot?.messages.at(-1)?.id).toBe("current-step");
+  expect(onSnapshot).toHaveBeenCalledTimes(2);
+  await act(async () => vi.advanceTimersByTimeAsync(40));
+  expect(read).toHaveBeenCalledTimes(4);
+  expect(onSnapshot).toHaveBeenCalledTimes(3);
 });

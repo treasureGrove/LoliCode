@@ -1,6 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { BookHeart, Plus, Upload } from "lucide-react";
-import { tavernApi } from "@/lib/api/tavern";
+import {
+  tavernApi,
+  tavernSnapshotQuery,
+  type TavernSnapshot,
+} from "@/lib/api/tavern";
 import companion from "@/assets/atelier/companion.png";
 import {
   DropdownMenu,
@@ -8,6 +12,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+
+const selectCharacters = (snapshot: TavernSnapshot) => snapshot.characters;
 
 export function TavernSidebar({
   compact,
@@ -20,14 +26,15 @@ export function TavernSidebar({
   onSelect: (id: string) => void;
   onAdd: (source: "preset" | "card") => void;
 }) {
-  const { data } = useQuery({
-    queryKey: ["tavern", "snapshot"],
-    queryFn: tavernApi.getSnapshot,
+  const { data: characters } = useQuery({
+    ...tavernSnapshotQuery,
+    select: selectCharacters,
+    refetchOnMount: false,
   });
   return (
     <div className="flex min-h-0 flex-1 flex-col pt-4">
       <div className="min-h-0 flex-1 space-y-1 overflow-y-auto">
-        {(data?.characters ?? []).map((character) => (
+        {(characters ?? []).map((character) => (
           <TavernSidebarCharacter
             key={character.id}
             character={character}
@@ -77,13 +84,15 @@ function TavernSidebarCharacter({
   selected: boolean;
   onSelect: () => void;
 }) {
+  const bundled = character.id === "builtin:sillyloli";
   const avatar = useQuery({
     queryKey: ["tavern", "avatar", character.id],
     queryFn: () => tavernApi.getAvatar(character.id),
-    enabled: character.hasAvatar,
+    enabled: !bundled && character.hasAvatar,
+    staleTime: Infinity,
+    retry: false,
   });
-  const image =
-    character.id === "builtin:sillyloli" ? companion : avatar.data?.dataUrl;
+  const image = bundled ? companion : avatar.data?.dataUrl;
   return (
     <button
       type="button"
@@ -95,7 +104,13 @@ function TavernSidebarCharacter({
     >
       <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-subtle">
         {image ? (
-          <img src={image} alt="" className="h-full w-full object-cover" />
+          <img
+            src={image}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            className="h-full w-full object-cover"
+          />
         ) : (
           character.name.slice(0, 1)
         )}

@@ -4,10 +4,12 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import { TavernPage } from "@/features/tavern/TavernPage";
-import type {
-  TavernCharacter,
-  TavernSnapshot,
-  TavernStory,
+import { TavernSidebar } from "@/features/tavern/TavernSidebar";
+import {
+  tavernSnapshotQuery,
+  type TavernCharacter,
+  type TavernSnapshot,
+  type TavernStory,
 } from "@/lib/api/tavern";
 import zh from "@/i18n/locales/zh.json";
 
@@ -224,6 +226,71 @@ async function openGallery(user: ReturnType<typeof userEvent.setup>) {
 }
 const calls = (command: string) =>
   vi.mocked(invoke).mock.calls.filter(([name]) => name === command);
+
+describe("Tavern history rendering", () => {
+  it("renders only the recent history at first and keeps the visible anchor when loading earlier messages", async () => {
+    const user = userEvent.setup();
+    stored.characters = [character];
+    stored.stories = [
+      {
+        id: "long-story",
+        characterId: character.id,
+        title: "长对话",
+        createdAt: 1,
+        updatedAt: 1,
+        isGenerating: false,
+        messages: Array.from({ length: 150 }, (_, index) => ({
+          id: `message-${index}`,
+          role: "assistant",
+          text: `历史消息 ${index}`,
+          createdAt: index,
+          failed: false,
+        })),
+      },
+    ];
+    mount();
+    const latest = await screen.findByText("历史消息 149");
+    const scroll = latest.closest("article")!.parentElement!.parentElement!;
+    Object.defineProperty(scroll, "scrollHeight", {
+      get: () => scroll.querySelectorAll("article").length * 100,
+    });
+    expect(screen.getAllByRole("article")).toHaveLength(64);
+    expect(screen.queryByText("历史消息 0")).not.toBeInTheDocument();
+    scroll.scrollTop = 17;
+
+    await user.click(screen.getByRole("button", { name: "加载更早的消息" }));
+    expect(screen.getAllByRole("article")).toHaveLength(128);
+    expect(screen.getByText("历史消息 149")).toBe(latest);
+    expect(scroll.scrollTop).toBe(6417);
+    await user.click(screen.getByRole("button", { name: "加载更早的消息" }));
+    expect(screen.getByText("历史消息 0")).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "加载更早的消息" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("reuses cached characters when the sidebar mounts without reloading story history or bundled avatars", () => {
+    const client = new QueryClient();
+    client.setQueryData(
+      tavernSnapshotQuery.queryKey,
+      { characters: [{ ...character, hasAvatar: true }], stories: [] },
+      { updatedAt: Date.now() - 60_000 },
+    );
+    render(
+      <QueryClientProvider client={client}>
+        <TavernSidebar
+          compact={false}
+          selectedId={null}
+          onSelect={vi.fn()}
+          onAdd={vi.fn()}
+        />
+      </QueryClientProvider>,
+    );
+    expect(screen.getByRole("button", { name: character.name })).toBeVisible();
+    expect(calls("get_tavern_snapshot")).toHaveLength(0);
+    expect(calls("get_tavern_avatar")).toHaveLength(0);
+  });
+});
 
 describe("Tavern bundled character flow", () => {
   it("refreshes an empty model catalog after local setup and chats with the selected local model", async () => {

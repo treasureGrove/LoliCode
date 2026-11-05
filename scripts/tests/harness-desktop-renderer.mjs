@@ -597,7 +597,11 @@ async function verifyNativeModes(fixture) {
   const button = (text, scope = document) => [...scope.querySelectorAll("button")].find(
     button => button.textContent.trim() === text && !button.disabled,
   );
-  const area = () => document.querySelector('[aria-label="Agent 会话模式"]');
+  const goalControlsHidden = () =>
+    !document.querySelector('[aria-label="Agent 会话模式"]') &&
+    ![...document.querySelectorAll("button")].some(button => button.textContent.trim() === "设置目标");
+  const completedGoalHidden = () =>
+    document.querySelector(".wb-chat-content")?.textContent.includes(modes.goalText) && goalControlsHidden();
   const snapshot = () => invoke("get_agent_session", { sessionId });
   const waitState = (predicate, description) => waitFor(async () => {
     const state = await snapshot();
@@ -608,13 +612,14 @@ async function verifyNativeModes(fixture) {
     message.parts.some(part => part.text?.includes(text)));
   const send = (requestId, text) => invoke("send_agent_message", { sessionId, requestId, text, locale: "zh" });
   if (fixture.phase === "native-modes-restart") {
-    await waitFor(() => area()?.textContent.includes(modes.goal), "restored Goal summary");
+    await waitFor(completedGoalHidden, "restored Goal conversation without the completed goal strip");
     const state = await snapshot();
     check(state.goal?.phase === "complete" && state.goal.roundsStarted === 2, "Native Goal state was not restored");
     check(state.plan?.active === false && said(state, modes.planText), "Native Plan history was not restored");
     return { sessionId, nativeModesRestored: true };
   }
   await waitFor(() => document.querySelector("#agent-message"), "the native modes composer");
+  check(goalControlsHidden(), "A session without a Goal exposed a creation control");
   const planToggle = () => [...document.querySelectorAll("button")]
     .some((button) => /^(退出)?计划模式$/.test(button.textContent.trim()));
   check(!planToggle(), "Plan mode is still exposed as a manual switch");
@@ -637,7 +642,7 @@ async function verifyNativeModes(fixture) {
   await send("native-goal-work", "/goal " + modes.goal);
   await waitState(state => state.status === "idle" && state.goal?.phase === "complete" &&
     state.goal.roundsStarted === 2 && said(state, modes.goalText), "two-round native Goal completion");
-  await waitFor(() => area()?.textContent.includes("已完成"), "completed Goal on the composer");
+  await waitFor(completedGoalHidden, "completed Goal conversation without the goal strip");
   if (fixture.occupyProxyPort) {
     const config = await invoke("get_proxy_config");
     check(config.listen_port === fixture.proxyPort, "The fallback overwrote the saved proxy port");
@@ -1139,6 +1144,10 @@ async function run(fixture) {
   if (fixture.phase === "background-jobs") return verifyBackgroundJobs(fixture);
   if (fixture.phase === "native-modes" || fixture.phase === "native-modes-restart")
     return verifyNativeModes(fixture);
+  if (fixture.phase === "switching") {
+    const { verifySwitching } = await import("./switching.mjs");
+    return verifySwitching(fixture, { configureFixtureChannel, invoke });
+  }
   if (fixture.phase === "browser-tool") {
     if (fixture.permissionsOnly && !sessionStorage.getItem(browserToolKey))
       await configureFixtureChannel(fixture);

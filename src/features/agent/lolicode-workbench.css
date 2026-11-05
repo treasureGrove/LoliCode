@@ -686,6 +686,21 @@
 .wb-chat-content:has(> .wb-empty) {
   min-height: 100%;
 }
+.wb-transcript-pane:not([hidden]) {
+  display: contents;
+}
+.wb-history-earlier {
+  align-self: center;
+  padding: 6px 12px;
+  border: 1px solid var(--wb-border);
+  border-radius: 8px;
+  color: var(--wb-muted);
+  font-size: 12px;
+}
+.wb-history-earlier:hover {
+  color: var(--wb-text);
+  background: var(--wb-hover);
+}
 .wb-message-user {
   padding: 10px 13px;
   background: var(--wb-hover);

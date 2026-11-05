@@ -119,8 +119,9 @@ function WorkspaceModes({
             className={cn(
               "min-h-0 flex-1",
               view === "agent" ? "overflow-hidden" : "flex flex-col",
-              // Keep layout when parked so returning doesn't replay message animations.
-              !active && "pointer-events-none invisible absolute inset-0",
+              // Preserve the mounted page without laying out its inactive subtree.
+              !active &&
+                "pointer-events-none invisible absolute inset-0 [content-visibility:hidden]",
             )}
           >
             {pages[view]}
@@ -660,6 +661,7 @@ function App() {
       activeAgentTool: view === "agent" ? activeAgentTool : null,
       selectedTavernCharacterId: tavernCharacterId,
       onSelectTavernCharacter: setTavernCharacterId,
+      tavernEnabled: tavernEnabled === true,
       activeApp,
       view,
       visibleApps,

@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import {
   AgentTranscript,
+  AgentTranscriptDeck,
   groupAgentTranscript,
 } from "@/features/agent/AgentTranscript";
 import { AgentRunError } from "@/features/agent/AgentRunError";
@@ -32,6 +33,184 @@ const user = (id: string) =>
   message(id, [{ type: "text", text: `Request ${id}` }], "user");
 const groups = (container: HTMLElement) =>
   container.querySelectorAll<HTMLDetailsElement>(".wb-execution-group");
+
+describe("Agent history windows", () => {
+  const history = Array.from({ length: 100 }, (_, index) =>
+    user(String(index)),
+  );
+
+  it("opens recent history and prepends earlier messages without replacing existing rows", () => {
+    const view = render(
+      <AgentTranscript
+        projectPath="/project"
+        sessionId="a"
+        messages={history}
+      />,
+    );
+    expect(screen.getAllByRole("article")).toHaveLength(40);
+    expect(screen.queryByText("Request 0")).toBeNull();
+    const recent = screen.getByText("Request 99").closest("article");
+    fireEvent.click(screen.getByRole("button", { name: "加载更早的消息" }));
+    expect(screen.getAllByRole("article")).toHaveLength(80);
+    expect(screen.getByText("Request 99").closest("article")).toBe(recent);
+    // Streaming/appending must not advance the history window under the reader.
+    view.rerender(
+      <AgentTranscript
+        projectPath="/project"
+        sessionId="a"
+        messages={[...history, user("100")]}
+      />,
+    );
+    expect(screen.getByText("Request 20")).toBeVisible();
+    expect(screen.getByText("Request 100")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "加载更早的消息" }));
+    expect(screen.getAllByRole("article")).toHaveLength(101);
+    expect(screen.queryByRole("button", { name: "加载更早的消息" })).toBeNull();
+    // A replaced native history (e.g. compaction) resets a missing anchor.
+    view.rerender(
+      <AgentTranscript
+        projectPath="/project"
+        sessionId="a"
+        messages={[user("compacted")]}
+      />,
+    );
+    expect(screen.getAllByRole("article")).toHaveLength(1);
+  });
+
+  it("preserves the first visible row's position when earlier history is loaded", () => {
+    const onLoadEarlier = vi.fn();
+    const view = render(
+      <div className="wb-chat">
+        <AgentTranscript
+          projectPath="/project"
+          messages={history}
+          onLoadEarlier={onLoadEarlier}
+        />
+      </div>,
+    );
+    const scroll = view.container.firstElementChild as HTMLElement;
+    const row = screen.getByText("Request 60").closest("article")!;
+    vi.spyOn(row, "getBoundingClientRect")
+      .mockReturnValueOnce({ top: 80 } as DOMRect)
+      .mockReturnValueOnce({ top: 880 } as DOMRect);
+    scroll.scrollTop = 100;
+    fireEvent.click(screen.getByRole("button", { name: "加载更早的消息" }));
+    expect(scroll.scrollTop).toBe(900);
+    expect(onLoadEarlier).toHaveBeenCalledOnce();
+  });
+
+  it("retains recent session DOM and paging without exposing inactive messages", () => {
+    const props = { projectPath: "/project", messages: history };
+    const onEvict = vi.fn();
+    const view = render(
+      <AgentTranscriptDeck {...props} sessionId="a" onEvict={onEvict} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "加载更早的消息" }));
+    const article = screen.getByText("Request 20").closest("article");
+    view.rerender(
+      <AgentTranscriptDeck {...props} sessionId="b" messages={[user("b")]} />,
+    );
+    expect(article).toBeInTheDocument();
+    expect(article).not.toBeVisible();
+    expect(screen.getAllByRole("article")).toHaveLength(1);
+    view.rerender(<AgentTranscriptDeck {...props} sessionId="a" />);
+    expect(screen.getByText("Request 20").closest("article")).toBe(article);
+    expect(article).toBeVisible();
+    expect(screen.getAllByRole("article")).toHaveLength(80);
+    // Three recent views are sufficient; visits cannot accumulate hidden trees.
+    for (const sessionId of ["c", "d", "e"])
+      view.rerender(
+        <AgentTranscriptDeck
+          {...props}
+          sessionId={sessionId}
+          messages={[user(sessionId)]}
+          onEvict={onEvict}
+        />,
+      );
+    expect(article).not.toBeInTheDocument();
+    expect(onEvict).toHaveBeenCalledWith("/project\0a");
+    expect(
+      view.container.querySelectorAll("[data-agent-transcript-session]"),
+    ).toHaveLength(3);
+  });
+
+  it("closes an inactive conversation's image portal without reopening it on return", async () => {
+    const messages = [user("picture")];
+    const imageAttachmentsByMessage = {
+      picture: [
+        {
+          id: "image",
+          fileName: "photo.png",
+          mime: "image/png",
+          bytes: 3,
+          dataUrl: "data:image/png;base64,YWJj",
+        },
+      ],
+    };
+    const props = {
+      projectPath: "/project",
+      sessionId: "a",
+      messages,
+      imageAttachmentsByMessage,
+    };
+    const view = render(<AgentTranscriptDeck {...props} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: "放大查看图片：photo.png" }),
+    );
+    expect(screen.getByRole("dialog")).toBeVisible();
+    view.rerender(
+      <AgentTranscriptDeck {...props} sessionId="b" messages={[user("b")]} />,
+    );
+    expect(screen.queryByRole("dialog")).toBeNull();
+    view.rerender(<AgentTranscriptDeck {...props} />);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", { name: "放大查看图片：photo.png" }),
+    );
+    expect(screen.getByRole("dialog")).toBeVisible();
+    view.rerender(<AgentTranscriptDeck {...props} active={false} />);
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("closes a background file menu and restores the original session's actions", async () => {
+    const previewFirst = vi.fn();
+    const previewSecond = vi.fn();
+    const first = [message("tool", [tool("a")])];
+    const second = [user("b")];
+    const renderDeck = (sessionId: string) => (
+      <AgentFileActionsContext.Provider
+        value={{
+          sessionId,
+          projectPath: "/project",
+          onPreview: sessionId === "a" ? previewFirst : previewSecond,
+        }}
+      >
+        <AgentTranscriptDeck
+          projectPath="/project"
+          sessionId={sessionId}
+          messages={sessionId === "a" ? first : second}
+        />
+      </AgentFileActionsContext.Provider>
+    );
+    const view = render(renderDeck("a"));
+    await userEvent.click(groups(view.container)[0].querySelector("summary")!);
+    const openMenu = () =>
+      fireEvent.keyDown(
+        screen.getByRole("button", { name: "打开方式：a.txt" }),
+        { key: "Enter" },
+      );
+    openMenu();
+    expect(screen.getByRole("menu")).toBeVisible();
+    view.rerender(renderDeck("b"));
+    expect(screen.queryByRole("menu")).toBeNull();
+    view.rerender(renderDeck("a"));
+    expect(screen.queryByRole("menu")).toBeNull();
+    openMenu();
+    await userEvent.click(screen.getByRole("menuitem", { name: "在右栏打开" }));
+    expect(previewFirst).toHaveBeenCalledWith("a.txt");
+    expect(previewSecond).not.toHaveBeenCalled();
+  });
+});
 
 describe("Agent conversation message frames", () => {
   it("places user and assistant identities outside their own bubbles and keeps system notices separate", () => {

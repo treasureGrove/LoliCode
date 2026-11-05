@@ -1542,6 +1542,9 @@ describe("AgentPage", () => {
         id: "unselected-worker-file",
         createdAt: 5,
       };
+      act(() => emitTauriEvent("agent-session-update", {
+        type: "changed", sessionId: snapshot.session.id,
+      }));
       await tick(5000);
       expect(
         screen.queryByRole("complementary", { name: "文件预览" }),
@@ -1550,6 +1553,7 @@ describe("AgentPage", () => {
       expect(panel).not.toBeVisible();
       fireEvent.click(screen.getByRole("button", { name: "打开 Loli 秘书" }));
       await flush();
+      await tick(40);
       expect(
         screen.getByRole("complementary", { name: "文件预览" }),
       ).not.toBe(panel);
@@ -1883,8 +1887,12 @@ describe("AgentPage", () => {
         kind: "file", id: "background-result", sessionId: session.id,
         path: "result.html", createdAt: 3,
       };
+      act(() => emitTauriEvent("agent-session-update", {
+        type: "changed", sessionId: session.id,
+      }));
       fireEvent.click(screen.getByRole("button", { name: session.title }));
       await flush();
+      await tick(40);
       expect(screen.getByRole("complementary", { name: "文件预览" })).toBeVisible();
       expect(preview).toHaveBeenLastCalledWith(session.id, "result.html");
     } finally {
@@ -4195,6 +4203,58 @@ describe("AgentPage", () => {
     expect(select).toHaveValue("full_access");
     expect(screen.queryByText(/计划模式/)).not.toBeInTheDocument();
     expect(agentApi.updateSession).not.toHaveBeenCalled();
+  });
+
+  it.each(["none", "complete"] as const)(
+    "hides the goal strip when the current goal is %s",
+    async (phase) => {
+      if (phase === "complete")
+        snapshot.goal = {
+          objective: "已交付的目标",
+          phase,
+          activation: "disarmed",
+          roundsStarted: 2,
+          maxGoalRounds: 5,
+          revision: 3,
+        };
+      render(<AgentPage />);
+      await flush();
+      expect(
+        screen.queryByRole("region", { name: "Agent 会话模式" }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "设置目标" }),
+      ).not.toBeInTheDocument();
+    },
+  );
+
+  it("keeps the native controls for a goal that is in progress", async () => {
+    snapshot.goal = {
+      objective: "验证当前目标",
+      phase: "active",
+      activation: "armed",
+      roundsStarted: 1,
+      maxGoalRounds: 5,
+      revision: 2,
+    };
+    render(<AgentPage />);
+    await flush();
+    const goal = within(screen.getByRole("region", { name: "Agent 会话模式" }));
+    expect(goal.getByText("验证当前目标")).toBeVisible();
+    expect(goal.getByRole("status")).toHaveTextContent("推进中 · 1/5 轮");
+    expect(goal.queryByRole("button", { name: "设置目标" })).toBeNull();
+    expect(goal.getByRole("button", { name: "清除目标" })).toBeEnabled();
+    fireEvent.click(goal.getByRole("button", { name: "修改目标" }));
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
+      "/goal edit ",
+    );
+    fireEvent.click(goal.getByRole("button", { name: "暂停目标" }));
+    await flush();
+    expect(agentApi.sendMessage).toHaveBeenCalledWith(
+      session.id,
+      "/goal pause",
+      expect.stringMatching(/^mode_/),
+    );
   });
 
   it("keeps an existing explicit ask permission when reopening the task", async () => {

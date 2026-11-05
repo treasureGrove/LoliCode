@@ -74,6 +74,7 @@ interface SidebarProps {
   activeAgentTool?: AgentTool | null;
   selectedTavernCharacterId?: string | null;
   onSelectTavernCharacter?: (id: string) => void;
+  tavernEnabled?: boolean;
   activeApp: AppId;
   view: View;
   visibleApps: VisibleApps;
@@ -173,7 +174,7 @@ export function Sidebar(props: SidebarProps) {
         ) : (
           <>
             <MainDirectory {...props} />
-            {props.view === "tavern" && (
+            {props.view === "tavern" && props.tavernEnabled !== false && (
               <TavernSidebar
                 compact={compact}
                 selectedId={props.selectedTavernCharacterId ?? null}

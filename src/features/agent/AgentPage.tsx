@@ -12,7 +12,6 @@ import {
   type ReactNode,
 } from "react";
 import { useTranslation } from "react-i18next";
-import { MotionSurface } from "@/components/motion/MotionSurface";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
@@ -121,7 +120,7 @@ import type {
   AgentSnapshot,
   AgentWorkspace,
 } from "@/types/agent";
-import { AgentTranscript } from "./AgentTranscript";
+import { AgentTranscriptDeck } from "./AgentTranscript";
 import { AgentMessageQueue } from "./AgentMessageQueue";
 import { AgentRunError, lastAgentUserTurn } from "./AgentRunError";
 import { AgentChanges } from "./AgentChanges";
@@ -1070,6 +1069,14 @@ export function AgentPage({
   const atBottom = useRef(true);
   const readingSession = useRef<string | null>(null);
   const readingPositions = useRef(new Map<string, number>());
+  const forgetTranscriptPosition = useCallback((key: string) => {
+    readingPositions.current.delete(key);
+  }, []);
+  useLayoutEffect(() => {
+    // The empty workspace branch unmounts every retained history window.
+    // Its pixel bookmarks cannot be applied to a fresh recent-history window.
+    if (!workspace || !sessionId) readingPositions.current.clear();
+  }, [workspace, sessionId]);
   const followedScrollTop = useRef(0);
   const smoothChatTarget = useRef<number | null>(null);
   const followAfterCommit = useRef<string | null>(null);
@@ -1089,9 +1096,15 @@ export function AgentPage({
     scroll.scrollTop = scroll.scrollHeight;
     followedScrollTop.current = scroll.scrollTop;
   }, []);
+  const preserveEarlierHistory = useCallback(() => {
+    atBottom.current = false;
+    smoothChatTarget.current = null;
+    if (scrollRef.current) scrollRef.current.dataset.followTail = "false";
+    setShowScrollToBottom(true);
+  }, []);
   const updateChatReadingPosition = useCallback(() => {
     const scroll = scrollRef.current;
-    if (!scroll || readingSession.current !== identity) return;
+    if (!isActive || !scroll || readingSession.current !== identity) return;
     const floor = Math.max(0, scroll.scrollHeight - scroll.clientHeight);
     const top = scroll.scrollTop;
     const reachedTail = top >= floor - 2;
@@ -1117,7 +1130,7 @@ export function AgentPage({
       readingPositions.current.delete(identity);
     } else readingPositions.current.set(identity, top);
     setShowScrollToBottom(!reachedTail);
-  }, [identity]);
+  }, [identity, isActive]);
   const stopSmoothChatScroll = () => {
     const scroll = scrollRef.current;
     if (!scroll || smoothChatTarget.current === null) return;
@@ -2028,7 +2041,7 @@ export function AgentPage({
   const chatReady = Boolean(snapshot);
   useLayoutEffect(() => {
     const scroll = scrollRef.current;
-    if (!chatReady || !scroll) {
+    if (!isActive || !chatReady || !scroll) {
       readingSession.current = null;
       return;
     }
@@ -2040,7 +2053,7 @@ export function AgentPage({
     smoothChatTarget.current = null;
     if (position === undefined) jumpToChatTail(scroll);
     else scroll.scrollTop = position;
-  }, [chatReady, identity, jumpToChatTail]);
+  }, [isActive, chatReady, identity, jumpToChatTail]);
   useLayoutEffect(() => {
     const requested = followAfterCommit.current;
     if (requested === null) return;
@@ -2052,7 +2065,7 @@ export function AgentPage({
   useEffect(() => {
     const scroll = scrollRef.current;
     const content = chatContentRef.current;
-    if (!chatReady || !scroll || !content) return;
+    if (!isActive || !chatReady || !scroll || !content) return;
     const settleSmoothScroll = () => {
       if (smoothChatTarget.current === null) return;
       followedScrollTop.current = smoothChatTarget.current;
@@ -2081,12 +2094,23 @@ export function AgentPage({
       scroll.removeEventListener("scrollend", settleSmoothScroll);
       observer?.disconnect();
     };
-  }, [chatReady, identity, jumpToChatTail, updateChatReadingPosition]);
+  }, [
+    isActive,
+    chatReady,
+    identity,
+    jumpToChatTail,
+    updateChatReadingPosition,
+  ]);
   useEffect(() => {
     const scroll = scrollRef.current;
-    if (typeof ResizeObserver === "undefined" && scroll && atBottom.current)
+    if (
+      isActive &&
+      typeof ResizeObserver === "undefined" &&
+      scroll &&
+      atBottom.current
+    )
       jumpToChatTail(scroll);
-  }, [snapshot, transcriptMessages, jumpToChatTail]);
+  }, [isActive, snapshot, transcriptMessages, jumpToChatTail]);
 
   const working =
     Object.values(statuses).some(activeStatus) ||
@@ -4621,11 +4645,7 @@ export function AgentPage({
         <AgentPaneResizeHandle {...paneLayout.sidebarHandleProps} />
       )}
       <main id="agent-content-area" className="wb-main">
-        <MotionSurface
-          motionKey={`conversation:${sessionId || "welcome"}`}
-          className="wb-chat-surface"
-          data-panel-background
-        >
+        <div className="wb-chat-surface" data-panel-background>
           <header
             className="wb-titlebar"
             {...DRAG_REGION_ATTR}
@@ -4963,14 +4983,17 @@ export function AgentPage({
                   className="wb-chat"
                 >
                   <div ref={chatContentRef} className="wb-chat-content">
-                    <AgentTranscript
+                    <AgentTranscriptDeck
+                      active={isActive}
+                      onEvict={forgetTranscriptPosition}
                       messages={transcriptMessages}
                       userIdentity={userIdentity}
-                      sessionId={snapshot?.session.id}
+                      sessionId={sessionId}
                       projectPath={workspace.path}
                       status={snapshot?.status}
                       imageAttachmentsByMessage={sentImageAttachments}
                       documentAttachmentsByMessage={sentDocumentAttachments}
+                      onLoadEarlier={preserveEarlierHistory}
                     />
                     {snapshot && !transcriptMessages.length && (
                       <div className="wb-empty">
@@ -5136,29 +5159,31 @@ export function AgentPage({
                 <AgentChanges key={sessionId} diffs={snapshot?.diffs || []} />
               </AgentFileActionsContext.Provider>
               <div className="wb-composer-area">
-                {sessionId && snapshot && !configurationReadOnly && (
-                  <AgentSessionModes
-                    key={sessionId}
-                    goal={snapshot.goal}
-                    disabled={Boolean(busy) || stoppingHere || uncertainHere}
-                    onGoalDraft={(editing) => {
-                      if (!key) return;
-                      const prefix = editing ? "/goal edit " : "/goal ";
-                      if (!draft.trimStart().startsWith("/goal "))
-                        writeDraft(key, prefix + draft);
-                      composerInputRef.current?.focus();
-                    }}
-                    onCommand={(command) =>
-                      refreshAfter(() =>
-                        agentApi.sendMessage(
-                          sessionId,
-                          command,
-                          `mode_${crypto.randomUUID().replace(/-/g, "")}`,
-                        ),
-                      )
-                    }
-                  />
-                )}
+                {sessionId &&
+                  snapshot?.session.id === sessionId &&
+                  snapshot.goal &&
+                  !configurationReadOnly && (
+                    <AgentSessionModes
+                      key={sessionId}
+                      goal={snapshot.goal}
+                      disabled={Boolean(busy) || stoppingHere || uncertainHere}
+                      onEditGoal={() => {
+                        if (!key) return;
+                        if (!draft.trimStart().startsWith("/goal "))
+                          writeDraft(key, "/goal edit " + draft);
+                        composerInputRef.current?.focus();
+                      }}
+                      onCommand={(command) =>
+                        refreshAfter(() =>
+                          agentApi.sendMessage(
+                            sessionId,
+                            command,
+                            `mode_${crypto.randomUUID().replace(/-/g, "")}`,
+                          ),
+                        )
+                      }
+                    />
+                  )}
                 {snapshot &&
                   snapshot.session.id === sessionId &&
                   !readOnlySession &&
@@ -5584,7 +5609,7 @@ export function AgentPage({
               </div>
             </>
           )}
-        </MotionSurface>
+        </div>
       </main>
       {previewVisible && (
         <AgentPaneResizeHandle {...paneLayout.previewHandleProps} />

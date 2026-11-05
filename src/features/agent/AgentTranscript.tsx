@@ -1,4 +1,13 @@
-import { memo, useMemo, useRef } from "react";
+import {
+  memo,
+  useContext,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { ViewActivityContext } from "@/components/ViewActivityContext";
+import { AgentFileActionsContext } from "./AgentFilePath";
 import { ChevronRight, CircleAlert, Loader2, Wrench } from "lucide-react";
 import type {
   AgentDocumentAttachment,
@@ -241,6 +250,22 @@ const AgentExecutionGroup = memo(function AgentExecutionGroup({
   );
 });
 
+export interface AgentTranscriptProps {
+  messages: AgentMessage[];
+  projectPath: string;
+  sessionId?: string;
+  status?: AgentStatus;
+  imageAttachmentsByMessage?: Record<string, AgentImageAttachment[]>;
+  documentAttachmentsByMessage?: Record<string, AgentDocumentAttachment[]>;
+  userIdentity?: AgentMessageIdentity;
+  onLoadEarlier?: () => void;
+}
+
+// Like Harness's loaded history window, bound the initial rendering work rather
+// than mounting every historical Markdown/code surface on a session change.
+// This only pages the view; the native session and model context stay complete.
+const HISTORY_PAGE_SIZE = 40;
+
 export const AgentTranscript = memo(function AgentTranscript({
   messages,
   projectPath,
@@ -249,23 +274,66 @@ export const AgentTranscript = memo(function AgentTranscript({
   imageAttachmentsByMessage = {},
   documentAttachmentsByMessage = {},
   userIdentity,
-}: {
-  messages: AgentMessage[];
-  projectPath: string;
-  sessionId?: string;
-  status?: AgentStatus;
-  imageAttachmentsByMessage?: Record<string, AgentImageAttachment[]>;
-  documentAttachmentsByMessage?: Record<string, AgentDocumentAttachment[]>;
-  userIdentity?: AgentMessageIdentity;
-}) {
+  onLoadEarlier,
+}: AgentTranscriptProps) {
   const blocks = useMemo(() => groupAgentTranscript(messages), [messages]);
+  const identity = `${projectPath}\0${sessionId || ""}`;
+  const [window, setWindow] = useState(() => ({
+    identity,
+    first: blocks[Math.max(0, blocks.length - HISTORY_PAGE_SIZE)]?.key,
+  }));
+  let start =
+    window.identity === identity
+      ? blocks.findIndex((block) => block.key === window.first)
+      : -1;
+  if (start < 0) {
+    start = Math.max(0, blocks.length - HISTORY_PAGE_SIZE);
+    const first = blocks[start]?.key;
+    if (window.identity !== identity || window.first !== first)
+      setWindow({ identity, first });
+  }
+  const anchor = useRef<{
+    row: Element;
+    top: number;
+    scroll: HTMLElement;
+  }>();
+  useLayoutEffect(() => {
+    const saved = anchor.current;
+    anchor.current = undefined;
+    if (saved?.row.isConnected)
+      saved.scroll.scrollTop +=
+        saved.row.getBoundingClientRect().top - saved.top;
+  }, [window]);
   const active =
     status === "running" ||
     status === "waiting_permission" ||
     status === "waiting_question";
   return (
     <>
-      {blocks.map((block, index) =>
+      {start > 0 && (
+        <button
+          type="button"
+          className="wb-history-earlier"
+          onClick={(event) => {
+            const row = event.currentTarget.nextElementSibling;
+            const scroll = event.currentTarget.closest<HTMLElement>(".wb-chat");
+            if (row && scroll)
+              anchor.current = {
+                row,
+                top: row.getBoundingClientRect().top,
+                scroll,
+              };
+            onLoadEarlier?.();
+            setWindow({
+              identity,
+              first: blocks[Math.max(0, start - HISTORY_PAGE_SIZE)].key,
+            });
+          }}
+        >
+          加载更早的消息
+        </button>
+      )}
+      {blocks.slice(start).map((block, index) =>
         block.kind === "message" ? (
           <AgentMessageView
             key={block.key}
@@ -315,11 +383,62 @@ export const AgentTranscript = memo(function AgentTranscript({
               entries={block.entries}
               projectPath={projectPath}
               sessionId={sessionId}
-              active={active && index === blocks.length - 1}
+              active={active && index + start === blocks.length - 1}
             />
           </AgentMessageFrame>
         ),
       )}
     </>
   );
+});
+
+/** Keep a small recent-session working set, including disclosure and paging state. */
+export const AgentTranscriptDeck = memo(function AgentTranscriptDeck({
+  active = true,
+  onEvict,
+  ...props
+}: AgentTranscriptProps & {
+  active?: boolean;
+  onEvict?: (identity: string) => void;
+}) {
+  const key = `${props.projectPath}\0${props.sessionId || ""}`;
+  const actions = useContext(AgentFileActionsContext);
+  const [entries, setEntries] = useState(() => [{ key, props, actions }]);
+  const committed = useRef<string[]>([]);
+  useLayoutEffect(() => {
+    const next = entries.map((entry) => entry.key);
+    for (const previous of committed.current)
+      if (!next.includes(previous)) onEvict?.(previous);
+    committed.current = next;
+  }, [entries, onEvict]);
+  const latest = entries.at(-1)!;
+  if (
+    latest.key !== key ||
+    latest.actions !== actions ||
+    (Object.keys(props) as (keyof AgentTranscriptProps)[]).some(
+      (name) => !Object.is(props[name], latest.props[name]),
+    ) ||
+    Object.keys(latest.props).length !== Object.keys(props).length
+  ) {
+    setEntries(
+      [
+        ...entries.filter((entry) => entry.key !== key),
+        { key, props, actions },
+      ].slice(-3),
+    );
+  }
+  return entries.map((entry) => (
+    <div
+      key={entry.key}
+      data-agent-transcript-session={entry.props.sessionId}
+      hidden={entry.key !== key}
+      className="wb-transcript-pane"
+    >
+      <ViewActivityContext.Provider value={active && entry.key === key}>
+        <AgentFileActionsContext.Provider value={entry.actions}>
+          <AgentTranscript {...entry.props} />
+        </AgentFileActionsContext.Provider>
+      </ViewActivityContext.Provider>
+    </div>
+  ));
 });

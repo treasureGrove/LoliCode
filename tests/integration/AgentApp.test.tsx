@@ -1,11 +1,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "@/app/App";
 import type { AgentPageProps } from "@/features/agent/AgentPage";
 import { builtinAppsKey } from "@/lib/api/builtin-apps";
+import { usageKeys } from "@/lib/query/usage";
 import { server } from "../msw/server";
 import { setSettings } from "../msw/state";
 
@@ -148,8 +149,9 @@ describe("LoliCode desktop entry", () => {
     );
   });
 
-  it("keeps both visited workspaces mounted while exposing one navigation", async () => {
+  it("keeps both visited workspaces mounted without laying out the inactive page or refreshing sidebar usage", async () => {
     const apps = [{ id: "tavern", enabled: true }];
+    const summary = { totalCost: "0" };
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
@@ -158,6 +160,9 @@ describe("LoliCode desktop entry", () => {
       http.post("http://tauri.local/list_builtin_apps", () =>
         HttpResponse.json(apps),
       ),
+      http.post("http://tauri.local/get_usage_summary", () =>
+        HttpResponse.json(summary),
+      ),
     );
     render(
       <QueryClientProvider client={client}>
@@ -165,6 +170,8 @@ describe("LoliCode desktop entry", () => {
       </QueryClientProvider>,
     );
     const agent = await screen.findByTestId("agent-workspace");
+    const usageKey = usageKeys.summary("today", undefined, undefined);
+    await waitFor(() => expect(client.getQueryData(usageKey)).toEqual(summary));
 
     fireEvent.click(screen.getByRole("button", { name: "角色对话" }));
     const tavern = document.getElementById("main-content");
@@ -173,17 +180,23 @@ describe("LoliCode desktop entry", () => {
       "data-view",
       "tavern",
     );
-    expect(agent.closest("[aria-hidden=true]")).not.toBeNull();
+    expect(agent.closest("[aria-hidden=true]")).toHaveClass(
+      "[content-visibility:hidden]",
+    );
+    expect(client.isFetching({ queryKey: usageKey })).toBe(0);
     expect(screen.getAllByRole("navigation")).toHaveLength(1);
 
     fireEvent.click(screen.getByRole("button", { name: "编程工作台" }));
     expect(screen.getByTestId("agent-workspace")).toBe(agent);
     expect(agent.closest("[aria-hidden=true]")).toBeNull();
-    expect(tavern?.closest("[aria-hidden=true]")).not.toBeNull();
+    expect(tavern?.closest("[aria-hidden=true]")).toHaveClass(
+      "[content-visibility:hidden]",
+    );
     expect(screen.getAllByRole("navigation")).toHaveLength(1);
 
     fireEvent.click(screen.getByRole("button", { name: "角色对话" }));
     expect(document.getElementById("main-content")).toBe(tavern);
+    expect(client.isFetching({ queryKey: usageKey })).toBe(0);
   });
 
   it("opens automation and plugins without creating a second navigation, and returns to chat", async () => {

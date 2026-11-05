@@ -7,7 +7,7 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { UNKNOWN_PROJECT_DIR_KEY } from "@/features/sessions/utils";
 import { SessionManagerPage } from "@/features/sessions/SessionManagerPage";
 import { piApi } from "@/lib/api/pi";
@@ -81,6 +81,9 @@ const EXPANDED_KEY = "cc-switch.sessionManager.expandedProjects";
 
 describe("SessionManagerPage", () => {
   beforeEach(() => {
+    // Keep today's fixture sessions on the same local day on either side of midnight.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 10, 5, 12));
     toastSuccessMock.mockReset();
     toastErrorMock.mockReset();
     platform.mac = false;
@@ -175,6 +178,8 @@ describe("SessionManagerPage", () => {
 
     setSessionFixtures(sessions, messages);
   });
+
+  afterEach(() => vi.useRealTimers());
 
   it("surfaces a relative Pi sessionDir instead of presenting an empty scan as authoritative", async () => {
     const discovery = vi.spyOn(piApi, "getSessionDiscovery").mockResolvedValue({

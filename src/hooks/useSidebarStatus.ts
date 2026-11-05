@@ -17,6 +17,7 @@ const MANAGED_AUTH_PROVIDERS: ManagedAuthProvider[] = [
  */
 export function useSidebarStatus() {
   const { data: todaySummary } = useUsageSummary(TODAY, undefined, {
+    refetchOnMount: false,
     refetchInterval: 60_000,
   });
 

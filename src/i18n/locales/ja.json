@@ -4412,6 +4412,7 @@
     "generating": "生成中…",
     "generationFailed": "生成に失敗しました。送信した内容は保持されています",
     "generationFailedShort": "失敗 · 再送信できます",
+    "loadEarlier": "以前のメッセージを読み込む",
     "send": "送信",
     "enterHint": "Enter で送信 · Shift + Enter で改行",
     "local": {

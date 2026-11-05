@@ -1,4 +1,5 @@
-import { memo, useState } from "react";
+import { memo, useContext, useEffect, useState } from "react";
+import { ViewActivityContext } from "@/components/ViewActivityContext";
 import { Copy, Maximize2, Minimize2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
@@ -59,6 +60,10 @@ export const SessionImageLightbox = memo(function SessionImageLightbox({
   const { t } = useTranslation();
   const rt = useReaderT();
   const [actualSize, setActualSize] = useState(false);
+  const active = useContext(ViewActivityContext);
+  useEffect(() => {
+    if (!active && open) onOpenChange(false);
+  }, [active, open, onOpenChange]);
 
   const handleCopy = async () => {
     try {
@@ -70,11 +75,14 @@ export const SessionImageLightbox = memo(function SessionImageLightbox({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={active && open} onOpenChange={onOpenChange}>
       <DialogContent
         zIndex="top"
         className="w-[min(92vw,1280px)] max-w-none gap-0 overflow-hidden p-0"
         onInteractOutside={() => onOpenChange(false)}
+        onCloseAutoFocus={(event) => {
+          if (!active) event.preventDefault();
+        }}
       >
         <div className="flex h-10 shrink-0 items-center gap-1 border-b border-border pe-1.5 ps-4">
           <DialogTitle className="min-w-0 flex-1 truncate text-body font-medium">
