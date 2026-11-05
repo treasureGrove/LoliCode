@@ -162,6 +162,10 @@ fn archive(mut snapshot: AgentSnapshot, session: &AgentSession) -> Result<Vec<u8
         .map_err(|_| "无法编码会话归档".into())
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Publishing validates both profiles and reports the result against the shared target stores"
+)]
 fn publish(
     target: &HarnessMigration,
     target_store: &SessionStore,

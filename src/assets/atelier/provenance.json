@@ -34,10 +34,7 @@
       "contact": {
         "x": 0.5,
         "y": 0.738,
-        "canvas": [
-          192,
-          192
-        ]
+        "canvas": [192, 192]
       },
       "officialEnhancement": false,
       "note": "Locally bundled offline loop. Contact follows eligible real UI top edges; not a Live2D/Cubism model."
@@ -71,10 +68,7 @@
       "contact": {
         "x": 0.5,
         "y": 0.738,
-        "canvas": [
-          192,
-          192
-        ]
+        "canvas": [192, 192]
       },
       "officialEnhancement": false,
       "note": "Matching reduced-motion/loading/failure fallback; inline image."
@@ -111,10 +105,7 @@
       "contact": {
         "x": 0.5,
         "y": 0.8,
-        "canvas": [
-          240,
-          160
-        ]
+        "canvas": [240, 160]
       },
       "officialEnhancement": false,
       "note": "Locally bundled offline loop. Contact follows eligible real UI top edges; not a Live2D/Cubism model."
@@ -148,10 +139,7 @@
       "contact": {
         "x": 0.5,
         "y": 0.8,
-        "canvas": [
-          240,
-          160
-        ]
+        "canvas": [240, 160]
       },
       "officialEnhancement": false,
       "note": "Matching reduced-motion/loading/failure fallback; inline image."
@@ -162,16 +150,10 @@
       "generatedOn": "2026-11-02",
       "tool": "Jimeng web video generation; local chroma key and edge refinement; FFmpeg VP9 alpha encoding",
       "model": "Seedance 2.0 mini",
-      "generationSize": [
-        960,
-        960
-      ],
+      "generationSize": [960, 960],
       "officialEnhancement": {
         "tool": "Jimeng Smart Ultra HD, 2K option",
-        "actualSize": [
-          1792,
-          1792
-        ]
+        "actualSize": [1792, 1792]
       },
       "reference": "design/ip/D-pinkdog-video-v4/first-frame-green-square.png",
       "sourceDesign": "design/ip/D-pinkdog-video-v4/source-videos/idle-square-2k-v1.mp4",
@@ -196,16 +178,10 @@
       "generatedOn": "2026-11-02",
       "tool": "Jimeng web video generation; local chroma key and edge refinement; FFmpeg VP9 alpha encoding",
       "model": "Seedance 2.0 VIP",
-      "generationSize": [
-        960,
-        960
-      ],
+      "generationSize": [960, 960],
       "officialEnhancement": {
         "tool": "Jimeng Smart Ultra HD, 2K option",
-        "actualSize": [
-          1792,
-          1792
-        ]
+        "actualSize": [1792, 1792]
       },
       "reference": "design/ip/D-pinkdog-video-v4/first-frame-green-square.png",
       "sourceDesign": "design/ip/D-pinkdog-video-v4/source-videos/greeting-seedance20-square-2k-v2.mp4",
@@ -230,16 +206,10 @@
       "generatedOn": "2026-11-02",
       "tool": "Jimeng web video generation; local chroma key and edge refinement; FFmpeg VP9 alpha encoding",
       "model": "Seedance 2.0 VIP",
-      "generationSize": [
-        960,
-        960
-      ],
+      "generationSize": [960, 960],
       "officialEnhancement": {
         "tool": "Jimeng Smart Ultra HD, 2K option",
-        "actualSize": [
-          1792,
-          1792
-        ]
+        "actualSize": [1792, 1792]
       },
       "reference": "design/ip/D-pinkdog-video-v4/first-frame-green-square.png",
       "sourceDesign": "design/ip/D-pinkdog-video-v4/source-videos/feed-seedance20-square-2k-v2.mp4",
@@ -264,10 +234,7 @@
       "generatedOn": "2026-11-02",
       "tool": "Jimeng web video generation; local chroma key and edge refinement; FFmpeg VP9 alpha encoding",
       "model": "Seedance 2.0 VIP",
-      "generationSize": [
-        960,
-        960
-      ],
+      "generationSize": [960, 960],
       "officialEnhancement": null,
       "reference": "design/ip/D-pinkdog-video-v4/first-frame-green-square.png",
       "sourceDesign": "design/ip/D-pinkdog-video-v4/source-videos/snack-cookie-seedance20-square-v1.mp4",
@@ -292,10 +259,7 @@
       "generatedOn": "2026-11-02",
       "tool": "Jimeng web video generation; local chroma key and edge refinement; FFmpeg VP9 alpha encoding",
       "model": "Seedance 2.0 VIP",
-      "generationSize": [
-        960,
-        960
-      ],
+      "generationSize": [960, 960],
       "officialEnhancement": null,
       "reference": "design/ip/D-pinkdog-video-v4/first-frame-green-square.png",
       "sourceDesign": "design/ip/D-pinkdog-video-v4/source-videos/idle-curious-seedance20-square-v1.mp4",
@@ -378,12 +342,7 @@
       "width": 1215,
       "height": 1295,
       "coveredPixels": 37866,
-      "maskBoundsInclusive": [
-        404,
-        310,
-        744,
-        523
-      ],
+      "maskBoundsInclusive": [404, 310, 744, 523],
       "note": "Two feathered eye-region masks on the same full canvas as the rig base. Pixels outside those local regions are transparent. The edited full body's tail and other details are not blended into the runtime base. Historical overlay; not used by the v4 video actor.",
       "rendering": "premultiplied-alpha eye blend on the same continuously deformed WebGL mesh",
       "sha256": "6e24f98ee8c496e4619082a606cde4cf259f1c42dab6d7f173a0da9fc3c675ee",
@@ -409,17 +368,8 @@
       "height": 1280,
       "columns": 6,
       "rows": 5,
-      "frameSize": [
-        256,
-        256
-      ],
-      "motions": [
-        "idle",
-        "feed",
-        "pet",
-        "sleep",
-        "drag"
-      ],
+      "frameSize": [256, 256],
+      "motions": ["idle", "feed", "pet", "sleep", "drag"],
       "note": "Calmer silhouettes, a distinct fish-shaped snack, selected low-change blink/pet/sleep sequences and a held suspended drag pose. All frames share one scale; raised boots in dragging poses are intentional.",
       "rendering": "painted frames on Canvas; 120ms action transitions; not a Live2D/Cubism model",
       "sha256": "d510a5d69177799e06e6647c692a9d26a6c2f4eea5b8b9c825f3713d422def24"
@@ -440,17 +390,8 @@
       "height": 1280,
       "columns": 6,
       "rows": 5,
-      "frameSize": [
-        256,
-        256
-      ],
-      "motions": [
-        "idle",
-        "feed",
-        "pet",
-        "sleep",
-        "drag"
-      ],
+      "frameSize": [256, 256],
+      "motions": ["idle", "feed", "pet", "sleep", "drag"],
       "rendering": "painted frames on Canvas; not a Live2D/Cubism model",
       "sha256": "dd8b52f1da51f654539005b91cf47ef58c8fcdd03f0947aad5c63276ddffdb91"
     },
@@ -459,11 +400,7 @@
       "createdOn": "2026-10-30",
       "tool": "repo-native SVG",
       "theme": "light",
-      "palette": [
-        "ivory",
-        "muted cherry red",
-        "champagne gold"
-      ],
+      "palette": ["ivory", "muted cherry red", "champagne gold"],
       "width": 128,
       "height": 128,
       "sourceSlicePixels": 20,

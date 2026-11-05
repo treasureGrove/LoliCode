@@ -152,17 +152,16 @@ impl HarnessMcp {
                         return Err("Harness 未能加载全部 LoliCode 工具".into());
                     }
                 }
-                if !local.mcp_schemas.is_empty() {
-                    if client
+                if !local.mcp_schemas.is_empty()
+                    && client
                         .request(
                             "lolicode/session/configure-mcp",
                             json!({"sessionId":session_id,"tools":local.mcp_schemas}),
                         )
                         .await
                         .is_err()
-                    {
-                        log::warn!("本轮未加载 MCP 工具");
-                    }
+                {
+                    log::warn!("本轮未加载 MCP 工具");
                 }
             }
         }

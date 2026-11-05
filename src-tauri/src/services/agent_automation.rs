@@ -169,7 +169,9 @@ fn save(db: &crate::database::Database, store: &Store) -> Result<(), String> {
         .map_err(|error| error.to_string())
 }
 
-fn cron_parts(expr: &str) -> Result<(u32, Option<u32>, Option<Vec<u32>>), String> {
+type CronParts = (u32, Option<u32>, Option<Vec<u32>>);
+
+fn cron_parts(expr: &str) -> Result<CronParts, String> {
     let fields: Vec<_> = expr.split_whitespace().collect();
     if fields.len() != 5 || fields[2] != "*" || fields[3] != "*" {
         return Err("目前只支持每小时、每天或每周运行的计划".into());

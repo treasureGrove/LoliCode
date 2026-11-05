@@ -112,10 +112,6 @@ pub(super) fn verify_task(
     check_project(app, &task.project_path)
 }
 
-#[expect(
-    clippy::too_many_arguments,
-    reason = "Named arguments are part of the desktop secretary IPC contract."
-)]
 #[tauri::command(rename_all = "camelCase")]
 pub async fn open_agent_secretary(
     app: AppHandle,
@@ -189,10 +185,6 @@ pub async fn delegate_agent_secretary_task(
     Ok(task)
 }
 
-#[expect(
-    clippy::too_many_arguments,
-    reason = "Named arguments preserve the existing message and attachment contract."
-)]
 #[tauri::command(rename_all = "camelCase")]
 pub async fn send_agent_secretary_task_message(
     app: AppHandle,

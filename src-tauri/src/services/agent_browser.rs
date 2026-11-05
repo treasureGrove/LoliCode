@@ -130,7 +130,7 @@ struct Browser {
 }
 
 enum BrowserTransport {
-    Headless(HeadlessBrowser),
+    Headless(Box<HeadlessBrowser>),
     #[cfg(windows)]
     Native(super::agent_preview_guest::ToolGuest),
 }
@@ -643,7 +643,7 @@ impl Browser {
         let headless = || async {
             HeadlessBrowser::launch(&owner, address, width, height)
                 .await
-                .map(BrowserTransport::Headless)
+                .map(|browser| BrowserTransport::Headless(Box::new(browser)))
         };
         #[cfg(windows)]
         let transport = if let Some(app) = app {
@@ -1036,9 +1036,9 @@ fn operation<'a>(name: &str, input: &'a Value) -> Result<Operation<'a>, String> 
         ));
     }
     let id = text("browser_id", 64)?;
-    if !id
+    if id
         .strip_prefix("browser-")
-        .is_some_and(|suffix| Uuid::parse_str(suffix).is_ok())
+        .is_none_or(|suffix| Uuid::parse_str(suffix).is_err())
     {
         return Err("浏览器会话标识无效".into());
     }
@@ -1106,6 +1106,10 @@ impl BrowserTools {
     }
 
     #[cfg(windows)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Keep the project ownership check and the preview synchronization fields explicit."
+    )]
     pub(super) async fn sync_native_preview(
         &self,
         app: &tauri::AppHandle,
@@ -1259,9 +1263,9 @@ impl BrowserTools {
             | Operation::Snapshot(id)
             | Operation::Act(id, _)
             | Operation::Screenshot(id) => {
-                if !browsers
+                if browsers
                     .get(id)
-                    .is_some_and(|browser| browser.owner == owner)
+                    .is_none_or(|browser| browser.owner != owner)
                 {
                     return Err("浏览器会话不存在、已关闭或不属于当前项目".into());
                 }

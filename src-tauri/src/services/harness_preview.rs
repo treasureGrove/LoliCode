@@ -342,6 +342,10 @@ impl HarnessPreview {
     }
 
     #[cfg(windows)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Dispatch the desktop preview command with its session, browser and presentation fields."
+    )]
     pub(crate) async fn sync_webview(
         &self,
         app: &AppHandle,

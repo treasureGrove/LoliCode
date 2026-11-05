@@ -28,10 +28,10 @@ pub(super) async fn secretary_project(app: &AppHandle, id: &str) -> Result<Strin
         return Err("只有当前本体秘书可连接 GitHub 来源".into());
     }
     let session = get_agent_session(app.clone(), id.into()).await?.session;
-    if !session
+    if session
         .coordination
         .as_ref()
-        .is_some_and(|value| value.role == "secretary")
+        .is_none_or(|value| value.role != "secretary")
     {
         return Err("只有秘书主会话可管理 GitHub 来源".into());
     }

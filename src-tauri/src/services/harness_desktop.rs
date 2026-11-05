@@ -272,7 +272,8 @@ impl HarnessDesktop {
         let inactive = sessions
             .iter()
             .zip(&flights)
-            .filter_map(|(session, flight)| flight.is_none().then(|| session.id.clone()))
+            .filter(|(_, flight)| flight.is_none())
+            .map(|(session, _)| session.id.clone())
             .collect::<Vec<_>>();
         let profile = config::get_app_config_dir();
         let mut stored = tokio::task::spawn_blocking(move || {
@@ -981,6 +982,10 @@ impl HarnessDesktop {
         }
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Admission combines the desktop state, saved session, request, and optional secretary action"
+    )]
     async fn admit(
         &self,
         app: &AppHandle,
@@ -1831,12 +1836,12 @@ async fn prepare_secretary_action(
     request: &str,
     command: SecretaryCommand,
 ) -> Result<(lolicode_agent::AgentSecretaryTask, WorkerAction), String> {
-    if !record
+    if record
         .snapshot
         .session
         .coordination
         .as_ref()
-        .is_some_and(|link| link.role == "secretary")
+        .is_none_or(|link| link.role != "secretary")
     {
         return Err("只有总秘书可以分派或补充任务".into());
     }
@@ -3199,6 +3204,10 @@ async fn publish_stream_tails(turn: &Turn<'_>, tails: &mut BTreeSet<String>) {
     }
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "The observer routes one turn's root, worker, and command events to their separate identities"
+)]
 async fn observe_turn(
     turn: &mut Turn<'_>,
     client: &HarnessClient,
@@ -3727,6 +3736,10 @@ async fn cancel_root(turn: &Turn<'_>, client: &HarnessClient, sdk_id: &str) -> R
     }
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Dispatch borrows the event loop's projections and pending operations for one event"
+)]
 async fn apply_event(
     event: HarnessEvent,
     turn: &Turn<'_>,

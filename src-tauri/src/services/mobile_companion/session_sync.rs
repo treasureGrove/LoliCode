@@ -43,6 +43,7 @@ pub(super) fn visible(
     values
 }
 
+#[cfg(test)]
 pub(super) fn is_mobile_flight(snapshot: &AgentSnapshot, request: &str) -> bool {
     !matches!(snapshot.status, AgentStatus::Idle | AgentStatus::Error)
         && snapshot

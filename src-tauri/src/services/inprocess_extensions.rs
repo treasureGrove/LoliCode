@@ -52,6 +52,7 @@ pub struct SkillSnapshot {
     pub omitted: Vec<SkillIssue>,
 }
 impl SkillSnapshot {
+    #[cfg(test)]
     pub fn configure_payload(&self) -> Value {
         json!({"revision":self.revision,"skills":self.verified_skills})
     }
