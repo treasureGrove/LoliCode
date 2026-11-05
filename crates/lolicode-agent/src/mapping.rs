@@ -18,6 +18,7 @@ pub(crate) fn array(value: &Value) -> &[Value] {
     value.as_array().map(Vec::as_slice).unwrap_or(&[])
 }
 
+#[cfg(feature = "legacy-runtime")]
 pub(crate) fn session(value: &Value) -> Result<AgentSession, String> {
     let id = string(value, "id");
     let project_path = string(&value["location"], "directory");
@@ -170,6 +171,7 @@ pub(crate) fn message(value: &Value) -> Option<AgentMessage> {
     })
 }
 
+#[cfg(feature = "legacy-runtime")]
 pub(crate) fn permission(value: &Value, messages: &[AgentMessage]) -> AgentPermission {
     let tool_id = string(&value["source"], "id");
     let source_message = string(&value["source"], "messageID");
@@ -196,18 +198,22 @@ pub(crate) fn permission(value: &Value, messages: &[AgentMessage]) -> AgentPermi
         tool_name: tool.as_ref().map(|(name, _)| name.clone()),
         tool_input: tool.map(|(_, input)| input),
         approval_mode: None,
+        edit_preview: None,
     }
 }
 
+#[cfg(feature = "legacy-runtime")]
 pub(crate) fn question(value: &Value) -> AgentQuestion {
     AgentQuestion {
         id: string(value, "id"),
         session_id: string(value, "sessionID"),
         title: string(value, "title"),
         fields: array(&value["fields"]).iter().map(question_field).collect(),
+        plan_review: None,
     }
 }
 
+#[cfg(feature = "legacy-runtime")]
 fn question_field(value: &Value) -> AgentQuestionField {
     AgentQuestionField {
         key: string(value, "key"),
@@ -240,6 +246,7 @@ fn question_field(value: &Value) -> AgentQuestionField {
     }
 }
 
+#[cfg(feature = "legacy-runtime")]
 pub(crate) fn diff(value: &Value) -> AgentDiff {
     AgentDiff {
         path: string(value, "file"),

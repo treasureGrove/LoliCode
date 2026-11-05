@@ -241,7 +241,7 @@ const AgentExecutionGroup = memo(function AgentExecutionGroup({
   );
 });
 
-export function AgentTranscript({
+export const AgentTranscript = memo(function AgentTranscript({
   messages,
   projectPath,
   sessionId,
@@ -322,4 +322,4 @@ export function AgentTranscript({
       )}
     </>
   );
-}
+});

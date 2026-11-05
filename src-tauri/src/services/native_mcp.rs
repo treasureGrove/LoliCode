@@ -697,11 +697,61 @@ impl NativeMcpTools {
         input: &Value,
         cancel: watch::Receiver<bool>,
     ) -> Result<ToolOutput, String> {
+        self.call_checked(project, name, input, None, cancel).await
+    }
+
+    pub(super) fn inspect_approved(
+        &self,
+        project: &Path,
+        name: &str,
+        input: &Value,
+    ) -> Result<(ToolInspection, String), String> {
         let (project, tool) = self.lookup(project, name, input)?;
+        let inspection = ToolInspection {
+            action: "mcp-call".into(),
+            resources: vec![format!(
+                "{project} · MCP {} · {}",
+                tool.server.id, tool.server.fingerprint
+            )],
+            description: format!("调用 MCP 工具 {}", tool.server.redact(&tool.original_name)),
+            mutating: true,
+            requires_approval: true,
+            dangerous: false,
+        };
+        Ok((inspection, tool.server.fingerprint))
+    }
+
+    pub(super) async fn call_approved(
+        &self,
+        project: &Path,
+        name: &str,
+        input: &Value,
+        fingerprint: &str,
+        cancel: watch::Receiver<bool>,
+    ) -> Result<ToolOutput, String> {
+        self.call_checked(project, name, input, Some(fingerprint), cancel)
+            .await
+    }
+
+    async fn call_checked(
+        &self,
+        project: &Path,
+        name: &str,
+        input: &Value,
+        approved: Option<&str>,
+        cancel: watch::Receiver<bool>,
+    ) -> Result<ToolOutput, String> {
+        let (project, tool) = self.lookup(project, name, input)?;
+        if approved.is_some_and(|fingerprint| fingerprint != tool.server.fingerprint) {
+            return Err("MCP 配置已变化，请重新审批".into());
+        }
         let slot = self.slot(&project, &tool.server).await?;
         let mut connection =
             transport::lock(&slot.session, cancel.clone(), self.request_timeout).await?;
-        self.lookup(Path::new(&project), name, input)?;
+        let (_, current) = self.lookup(Path::new(&project), name, input)?;
+        if current.server.fingerprint != tool.server.fingerprint {
+            return Err("MCP 配置已变化，请重新审批".into());
+        }
         let session = connection
             .as_mut()
             .ok_or("MCP 连接已关闭，请重新发现工具后重试")?;
@@ -782,7 +832,23 @@ impl ApplicationTools for NativeMcpTools {
         cancel: watch::Receiver<bool>,
     ) -> ApplicationResult<'a> {
         Box::pin(async move {
-            self.discover(project, cancel).await?;
+            if *cancel.borrow() {
+                return Err("任务已停止".into());
+            }
+            let enabled = self
+                .configuration
+                .read()
+                .is_ok_and(|config| config.servers.values().any(|server| !server.disabled));
+            if enabled {
+                if let Err(error) = self.discover(project, cancel.clone()).await {
+                    if *cancel.borrow() {
+                        return Err("任务已停止".into());
+                    }
+                    // Automatic discovery supplements the turn. The explicit
+                    // MCP connection action still returns discovery errors.
+                    log::warn!("本轮未能发现 MCP 工具：{error}");
+                }
+            }
             Ok(String::new())
         })
     }
@@ -805,21 +871,8 @@ impl ApplicationTools for NativeMcpTools {
             return None;
         }
         Some(
-            self.lookup(project, name, input)
-                .map(|(project, tool)| ToolInspection {
-                    action: "mcp-call".into(),
-                    resources: vec![format!(
-                        "{project} · MCP {} · {}",
-                        tool.server.id, tool.server.fingerprint
-                    )],
-                    description: format!(
-                        "调用 MCP 工具 {}",
-                        tool.server.redact(&tool.original_name)
-                    ),
-                    mutating: true,
-                    requires_approval: true,
-                    dangerous: false,
-                }),
+            self.inspect_approved(project, name, input)
+                .map(|(inspection, _)| inspection),
         )
     }
     fn execute<'a>(

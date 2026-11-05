@@ -78,6 +78,11 @@ describe("queued message transport", () => {
       "enqueue_agent_message",
       payload,
     );
+    await agentApi.enqueueMessage("lc:session", "next", "opaque/request", images, documents, "steer");
+    expect(native.invoke).toHaveBeenLastCalledWith(
+      "enqueue_agent_message",
+      { ...payload, delivery: "steer" },
+    );
     expect(payload.attachments).toEqual([
       {
         ref: images[0].dataUrl,
@@ -101,6 +106,11 @@ describe("queued message transport", () => {
     expect(native.invoke).toHaveBeenLastCalledWith(
       "send_queued_agent_message_now",
       { sessionId: "lc:session", requestId: "opaque/request" },
+    );
+    await agentApi.sendQueuedMessageNow("lc:session", "opaque/request", true);
+    expect(native.invoke).toHaveBeenLastCalledWith(
+      "send_queued_agent_message_now",
+      { sessionId: "lc:session", requestId: "opaque/request", steerOnly: true },
     );
   });
 });
@@ -256,14 +266,25 @@ describe("secretary task transport", () => {
 });
 
 describe("Agent session creation permissions", () => {
-  it("sends full access to the engine when the caller omits a permission mode", async () => {
-    await agentApi.createSession("opaque/model", "build");
-    expect(native.invoke).toHaveBeenCalledWith("create_agent_session", {
+  it.each(["build", "plan"] as const)(
+    "leaves the default for %s sessions to the native host",
+    async (mode) => {
+      await agentApi.createSession("opaque/model", mode);
+      expect(native.invoke).toHaveBeenCalledWith("create_agent_session", {
+        modelId: "opaque/model",
+        mode,
+        title: undefined,
+        reasoningEffort: undefined,
+      });
+    },
+  );
+
+  it("leaves the default for the secretary to the native host", async () => {
+    await agentApi.openSecretary("opaque/model");
+    expect(native.invoke).toHaveBeenCalledWith("open_agent_secretary", {
       modelId: "opaque/model",
-      mode: "build",
-      title: undefined,
-      permissionMode: "full_access",
       reasoningEffort: undefined,
+      locale: expect.any(String),
     });
   });
 

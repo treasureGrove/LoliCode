@@ -28,6 +28,7 @@ struct Supplement {
     context: Option<u64>,
     context_limits: Option<Vec<u64>>,
     output: Option<u64>,
+    input_modalities: Option<Vec<String>>,
     efforts: Option<Vec<String>>,
     source: Option<String>,
     transport: Option<String>,
@@ -243,9 +244,17 @@ fn aggregate(deployments: &[&Value]) -> Supplement {
     let mut declared = 0;
     let mut windows: Option<Vec<u64>> = None;
     let mut windows_complete = true;
+    let mut all_support_images = !deployments.is_empty();
+    let mut any_rejects_images = false;
     for deployment in deployments {
         let info = deployment.get("model_info").unwrap_or(&Value::Null);
         let metadata = super::model_fetch::declared_model_metadata(info);
+        let image_support = metadata
+            .input_modalities
+            .as_deref()
+            .and_then(crate::model_capabilities::image_support_from_modalities);
+        all_support_images &= image_support == Some(true);
+        any_rejects_images |= image_support == Some(false);
         supplement.context = minimum(supplement.context, metadata.context_limit);
         match metadata.context_limits {
             Some(current) => match &mut windows {
@@ -313,6 +322,12 @@ fn aggregate(deployments: &[&Value]) -> Supplement {
     );
     if windows_complete {
         supplement.context_limits = windows.filter(|windows| !windows.is_empty());
+    }
+    // A routed alias can land on any of its deployments.
+    if all_support_images {
+        supplement.input_modalities = Some(vec!["text".into(), "image".into()]);
+    } else if any_rejects_images {
+        supplement.input_modalities = Some(vec!["text".into()]);
     }
     supplement
 }
@@ -385,6 +400,9 @@ fn apply(models: &mut [ChannelModel], catalog: &Catalog) {
             .take()
             .or_else(|| extra.context_limits.clone());
         model.output_limit = model.output_limit.or(extra.output);
+        if model.input_modalities.is_none() {
+            model.input_modalities = extra.input_modalities.clone();
+        }
         if model.reasoning_efforts.is_none() {
             model.reasoning_efforts = extra.efforts.clone();
             model.reasoning_effort_source = extra.source.clone();
@@ -425,6 +443,31 @@ mod tests {
         assert_eq!(aggregate(&[&a, &b]).context_limits, Some(vec![128000]));
         let scalar = json!({"model_info":{"context_window":1000000}});
         assert_eq!(aggregate(&[&a, &scalar]).context_limits, None);
+    }
+
+    #[test]
+    fn vision_defaults_use_deployment_declarations_without_overriding_the_directory() {
+        let vision = json!({"model_info":{"supports_vision":true}});
+        let text = json!({"model_info":{"supports_vision":false}});
+        let unknown = json!({"model_info":{}});
+        let catalog = Catalog::from([
+            ("vision".into(), aggregate(&[&vision, &vision])),
+            ("mixed".into(), aggregate(&[&vision, &text])),
+            ("unknown".into(), aggregate(&[&vision, &unknown])),
+        ]);
+        let mut models = vec![model("vision"), model("mixed"), model("unknown")];
+        apply(&mut models, &catalog);
+        assert_eq!(
+            models[0].input_modalities,
+            Some(vec!["text".into(), "image".into()])
+        );
+        assert_eq!(models[1].input_modalities, Some(vec!["text".into()]));
+        assert_eq!(models[2].input_modalities, None);
+
+        let mut explicit = model("vision");
+        explicit.input_modalities = Some(vec!["text".into()]);
+        apply(std::slice::from_mut(&mut explicit), &catalog);
+        assert_eq!(explicit.input_modalities, Some(vec!["text".into()]));
     }
 
     #[test]

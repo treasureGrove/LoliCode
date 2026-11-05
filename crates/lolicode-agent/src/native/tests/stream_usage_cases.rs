@@ -106,9 +106,11 @@ async fn heartbeats_do_not_keep_first_output_or_mid_stream_stalls_alive() {
         let error = result.err().unwrap();
         if prefix.is_some() {
             assert!(error.contains("输出后"));
+            assert!(inference::is_unfinished_stream(&error));
             assert!(matches!(rx.try_recv(),Ok(Delta::Text(text))if text=="PARTIAL_TEXT"));
         } else {
             assert!(error.contains("首个有效输出"));
+            assert!(!inference::is_unfinished_stream(&error));
         }
         server.abort();
     }

@@ -591,16 +591,21 @@ pub async fn invoke_service(
         .rev()
         .take(51)
     {
-        let snapshot: Result<lolicode_agent::AgentSnapshot, String> = state
-            .call("getSession", json!({"sessionId":record.session_id}), false)
-            .await;
-        let command: Result<Value, String> = state
-            .call(
-                "queryCommand",
-                json!({"sessionId":record.session_id,"requestId":record.request_id}),
+        let snapshot: Result<lolicode_agent::AgentSnapshot, String> =
+            crate::commands::agent_dispatch::native(
+                app,
+                "getSession",
+                json!({"sessionId":record.session_id}),
                 false,
             )
             .await;
+        let command: Result<Value, String> = crate::commands::agent_dispatch::native(
+            app,
+            "queryCommand",
+            json!({"sessionId":record.session_id,"requestId":record.request_id}),
+            false,
+        )
+        .await;
         let status = match (
             snapshot.as_ref(),
             command

@@ -169,6 +169,7 @@ pub(super) fn sync_snapshot(stored: &mut StoredSession) {
             id: input.request_id.clone(),
             text: input.text.clone(),
             created_at: input.created_at,
+            delivery: None,
             attachments: input
                 .attachments
                 .iter()

@@ -1186,6 +1186,40 @@ async fn skills_are_indexed_and_loaded_only_on_demand_with_budget_errors() {
 }
 
 #[tokio::test]
+async fn skill_short_alias_loads_the_registered_id_and_preserves_exact_precedence() {
+    for exact in [false, true] {
+        let fake = Fake::start(move |input| {
+            let receipt = input["messages"].as_array().unwrap().iter()
+                .rev().find(|message| message["role"] == "tool");
+            if let Some(receipt) = receipt {
+                let output = receipt["content"].as_str().unwrap();
+                if exact {
+                    assert_eq!(output, "EXACT_PDF_BODY");
+                } else {
+                    assert!(output.contains("zcode-pdf"));
+                    assert!(output.ends_with("BUNDLED_PDF_BODY"));
+                }
+                return text("PDF skill loaded");
+            }
+            tool("read_skill", json!({"id":"pdf"}))
+        }).await;
+        let (_data, _project, engine, id) = setup(&fake).await;
+        let mut skills = vec![json!({"id":"zcode-pdf","name":"PDF","content":"BUNDLED_PDF_BODY"})];
+        if exact {
+            skills.push(json!({"id":"pdf","name":"Custom PDF","content":"EXACT_PDF_BODY"}));
+        }
+        engine.call("configureSkills", json!({"revision":3,"skills":skills})).await.unwrap();
+        send(&engine, &id, "skill-short-alias", "Use the PDF skill").await;
+        let finished = wait(&engine, &id, |state| state["status"] == "idle").await;
+        assert!(finished.to_string().contains("PDF skill loaded"));
+        assert_eq!(engine.call("loadedSkills", json!({})).await.unwrap(), json!([
+            if exact { "pdf" } else { "zcode-pdf" }
+        ]));
+        engine.shutdown().await.unwrap();
+    }
+}
+
+#[tokio::test]
 async fn gateway_failures_never_echo_tokens_and_invalid_endpoints_are_rejected() {
     let fake = Fake::start(|_| Reply {
         frames: Vec::new(),
@@ -1577,10 +1611,44 @@ async fn project_tool_replacement_fails_closed_for_unhandled_local_tools() {
     }).await;
     let (_data, project, engine, id) = setup(&fake).await;
     std::fs::write(project.path().join("private-local.txt"), "LOCAL_ANCHOR_SECRET").unwrap();
+    std::fs::write(project.path().join("AGENTS.md"), "LOCAL_ANCHOR_SECRET").unwrap();
     engine.set_application_tools(Arc::new(RemoteHostFixture { target: 1.into(), executions: 0.into() })).await;
     send(&engine, &id, "no-fallback", "Read a remote file").await;
     let result = wait(&engine, &id, |v| v["status"] == "idle").await;
     assert!(result.to_string().contains("没有可用的远程执行接口"));
     assert!(!fake.requests.lock().unwrap().last().unwrap()["messages"].to_string().contains("LOCAL_ANCHOR_SECRET"));
+    engine.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn project_instructions_are_scoped_to_native_and_secretary_turns() {
+    let fake = Fake::start(|input| {
+        let system = input["messages"][0]["content"].as_str().unwrap();
+        assert!(system.contains("Host policy, permission decisions, and the current explicit user request take precedence"));
+        assert!(system.contains("Root AGENTS.md"));
+        let rule = if system.contains("persistent LoliCode chief secretary") {
+            "SECOND_PROJECT_RULE"
+        } else {
+            "FIRST_PROJECT_RULE"
+        };
+        assert!(system.contains(rule), "{system}");
+        assert!(input["messages"].as_array().unwrap().iter().skip(1)
+            .all(|message| !message.to_string().contains(rule)));
+        text("Project rules present")
+    }).await;
+    let (_data, project, engine, regular) = setup(&fake).await;
+    tokio::fs::write(project.path().join("AGENTS.md"), "FIRST_PROJECT_RULE").await.unwrap();
+    send(&engine, &regular, "regular-project-rule", "Read project rules").await;
+    let result = wait(&engine, &regular, |value| value["status"] == "idle").await;
+    assert!(result.to_string().contains("Project rules present"));
+    assert!(!result.to_string().contains("FIRST_PROJECT_RULE"));
+
+    tokio::fs::write(project.path().join("AGENTS.md"), "SECOND_PROJECT_RULE").await.unwrap();
+    let secretary = engine.call("openSecretary", json!({"permissionMode":"ask"})).await.unwrap();
+    let secretary = secretary["id"].as_str().unwrap();
+    send(&engine, secretary, "secretary-project-rule", "Read project rules").await;
+    let result = wait(&engine, secretary, |value| value["status"] == "idle").await;
+    assert!(result.to_string().contains("Project rules present"));
+    assert!(!result.to_string().contains("SECOND_PROJECT_RULE"));
     engine.shutdown().await.unwrap();
 }

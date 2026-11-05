@@ -20,6 +20,41 @@ async function flush() {
 }
 
 describe("AgentQuestionCard", () => {
+  it("renders the native plan as Markdown and sends the offered revision choice with feedback", async () => {
+    const reply = vi.fn().mockResolvedValue(undefined);
+    render(
+      <AgentQuestionCard
+        question={{
+          ...question([
+            {
+              key: "plan-review",
+              type: "string",
+              title: "Approve this plan?",
+              description: "# Build the fixture\n\n- Verify the result",
+            },
+          ]),
+          planReview: { approve: "Approve", revise: "Keep planning" },
+        }}
+        onReply={reply}
+        onReject={vi.fn()}
+      />,
+    );
+    expect(
+      screen.getByRole("heading", { name: "Build the fixture" }),
+    ).toBeVisible();
+    fireEvent.change(screen.getByLabelText("修改意见（选填）"), {
+      target: { value: "Add a second case" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "继续规划" }));
+    await flush();
+    expect(reply).toHaveBeenCalledWith({
+      "plan-review": ["Keep planning", "Add a second case"],
+    });
+    expect(
+      screen.getByRole("button", { name: "批准计划并执行" }),
+    ).toBeDisabled();
+  });
+
   it("shows one question at a time, preserves drafts when paging, and submits the batch only at the end", async () => {
     const reply = vi.fn().mockResolvedValue(undefined);
     render(

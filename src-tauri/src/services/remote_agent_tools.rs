@@ -2,6 +2,8 @@
 //! native engine still owns permissions, cancellation, memory, and model I/O.
 use super::{
     agent_applications::DesktopApplicationTools,
+    agent_browser::{BrowserTools, BROWSER_TOOLS},
+    agent_web,
     remote_projects::{RemoteProjects, ResolvedProject},
 };
 use base64::{engine::general_purpose::STANDARD, Engine as _};
@@ -17,6 +19,7 @@ pub struct DesktopToolHost {
     pub local: DesktopApplicationTools,
     pub remote: Arc<RemoteProjects>,
     pub mcp: Option<Arc<super::native_mcp::NativeMcpTools>>,
+    pub browser: BrowserTools,
 }
 const TOOLS: &[&str] = &[
     "read_file",
@@ -29,6 +32,40 @@ const TOOLS: &[&str] = &[
 ];
 const MAX_FILE: usize = 1024 * 1024;
 const MAX_IMAGE: usize = 5 * 1024 * 1024;
+
+pub(super) fn preview_schema() -> Value {
+    json!({"type":"function","function":{
+        "name":"open_preview",
+        "description":"Reveal a project file in the active desktop workbench's read-only preview pane. Accepts raster images, UTF-8 text, and static HTML. For a running HTML, JavaScript, or WebGL preview, start a local server with manage_process and use browser_open on its loopback URL. Use the exact file path; no URLs or folders.",
+        "parameters":{"type":"object","properties":{"path":{"type":"string","minLength":1,"maxLength":4096}},"required":["path"],"additionalProperties":false}
+    }})
+}
+
+pub(super) fn preview_path(input: &Value) -> Result<&str, String> {
+    let object = input.as_object().ok_or("预览参数必须是对象")?;
+    object
+        .get("path")
+        .and_then(Value::as_str)
+        .filter(|path| {
+            object.len() == 1
+                && !path.trim().is_empty()
+                && path.len() <= 4096
+                && !path.contains("://")
+                && !path.chars().any(char::is_control)
+        })
+        .ok_or_else(|| "请选择项目内的预览文件路径".into())
+}
+
+fn preview_inspection(resource: String) -> ToolInspection {
+    ToolInspection {
+        action: "project-preview".into(),
+        resources: vec![resource],
+        description: "在工作台打开只读文件预览".into(),
+        mutating: false,
+        requires_approval: false,
+        dangerous: false,
+    }
+}
 
 pub(crate) fn relative(value: &str) -> Result<String, String> {
     if value.is_empty()
@@ -50,7 +87,7 @@ pub(crate) fn relative(value: &str) -> Result<String, String> {
         parts.join("/")
     })
 }
-fn args(name: &str, input: &Value) -> Result<(Value, String), String> {
+pub(super) fn remote_arguments(name: &str, input: &Value) -> Result<(Value, String), String> {
     let object = input.as_object().ok_or("远程工具参数必须是对象")?;
     let schema = applications::core_tool_schemas()
         .into_iter()
@@ -133,12 +170,12 @@ fn args(name: &str, input: &Value) -> Result<(Value, String), String> {
     normalized[path_key] = json!(path);
     Ok((normalized, path))
 }
-fn inspection(
+pub(super) fn remote_inspection(
     binding: &ResolvedProject,
     name: &str,
     input: &Value,
 ) -> Result<ToolInspection, String> {
-    let (_, path) = args(name, input)?;
+    let (_, path) = remote_arguments(name, input)?;
     let shell = name == "run_command";
     let mutating = shell || matches!(name, "write_file" | "apply_patch");
     let dangerous = shell || mutating && path.split('/').any(|p| p.eq_ignore_ascii_case(".git"));
@@ -210,7 +247,7 @@ pub fn image_data_url(encoded: &str) -> Result<String, String> {
         STANDARD.encode(bytes)
     ))
 }
-fn output(name: &str, path: &str, receipt: Value) -> Result<ToolOutput, String> {
+pub(super) fn remote_output(name: &str, path: &str, receipt: Value) -> Result<ToolOutput, String> {
     let invalid = || {
         if matches!(name, "write_file" | "apply_patch" | "run_command") {
             "[cleanup_uncertain]远程操作已返回，但回执内容无效；请检查已有结果后再决定是否重试。"
@@ -298,6 +335,22 @@ fn output(name: &str, path: &str, receipt: Value) -> Result<ToolOutput, String> 
     })
 }
 
+pub(super) fn remote_schemas() -> Vec<Value> {
+    applications::core_tool_schemas()
+        .into_iter()
+        .filter(|schema| TOOLS.iter().any(|name| schema["function"]["name"] == *name))
+        .map(|mut schema| {
+            if schema["function"]["name"] == "view_image" {
+                schema["function"]["description"] = json!("View a remote project raster image. Supports PNG, JPEG, WebP, GIF and BMP up to 5 MiB; decoding is bounded.");
+            }
+            if schema["function"]["name"] == "run_command" {
+                schema["function"]["description"] = json!("Run a remote shell command in the project with bounded output and a 1–120 second timeout. The remote user's OS privileges apply.");
+            }
+            schema
+        })
+        .collect()
+}
+
 impl ApplicationTools for DesktopToolHost {
     fn prepare<'a>(
         &'a self,
@@ -305,16 +358,30 @@ impl ApplicationTools for DesktopToolHost {
         cancel: watch::Receiver<bool>,
     ) -> ApplicationResult<'a> {
         Box::pin(async move {
-            if !self.remote.owns(project) {
-                if let Some(mcp) = &self.mcp {
-                    mcp.discover(project, cancel).await?;
-                }
+            if self.remote.owns(project) {
+                return Ok(String::new());
+            }
+            let path = project.to_owned();
+            let checked = tokio::task::spawn_blocking(move || {
+                super::agent_host::canonical_project_or_restore_standalone(&path.to_string_lossy())
+            })
+            .await
+            .map_err(|_| "项目目录检查未完成")??;
+            if let Some(mcp) = &self.mcp {
+                mcp.prepare(&checked, cancel).await?;
             }
             Ok(String::new())
         })
     }
     fn schemas(&self) -> Vec<Value> {
         let mut schemas = self.local.schemas();
+        schemas.push(lolicode_agent::native::automation_proposal::schema());
+        if self.local.allows_unreal() {
+            schemas.extend(lolicode_agent::native::unreal::schemas());
+        }
+        schemas.push(preview_schema());
+        schemas.extend(agent_web::schemas());
+        schemas.extend(self.browser.schemas());
         schemas.extend(super::agent_document_tools::DocumentTools.schemas());
         schemas
     }
@@ -341,13 +408,17 @@ impl ApplicationTools for DesktopToolHost {
         self.local.allows_unreal()
     }
     fn project_schemas(&self, project: &Path) -> Option<Vec<Value>> {
-        self.remote.owns(project).then(|| if self.remote.resolve(project).is_ok() {
-            applications::core_tool_schemas().into_iter().filter(|s| TOOLS.iter().any(|name| s["function"]["name"] == *name)).map(|mut s| {
-                if s["function"]["name"] == "view_image" { s["function"]["description"] = json!("View a remote project raster image. Supports PNG, JPEG, WebP, GIF and BMP up to 5 MiB; decoding is bounded."); }
-                if s["function"]["name"] == "run_command" { s["function"]["description"] = json!("Run a remote shell command in the project with bounded output and a 1–120 second timeout. All remote commands require approval unless the user selected full access. The remote user's OS privileges apply; this is not a sandbox."); }
-                s
-            }).collect()
-        } else { vec![] })
+        self.remote.owns(project).then(|| {
+            if self.remote.resolve(project).is_ok() {
+                remote_schemas()
+                    .into_iter()
+                    .chain(std::iter::once(preview_schema()))
+                    .chain(agent_web::schemas())
+                    .collect()
+            } else {
+                vec![]
+            }
+        })
     }
     fn project_context(&self, project: &Path) -> Option<String> {
         if !self.remote.owns(project) {
@@ -364,6 +435,69 @@ impl ApplicationTools for DesktopToolHost {
         name: &str,
         input: &Value,
     ) -> Option<Result<ToolInspection, String>> {
+        if name == "unreal_editor_command" && !self.remote.owns(project) {
+            return Some(self.unreal_command(project, input).map(|(method, _)| {
+                let mutating = lolicode_agent::native::unreal::method_is_mutating(method);
+                ToolInspection {
+                    action: if mutating {
+                        "unreal-edit"
+                    } else {
+                        "unreal-read"
+                    }
+                    .into(),
+                    resources: vec![project.to_string_lossy().into_owned()],
+                    description: format!("Unreal Editor · {method}"),
+                    mutating,
+                    requires_approval: mutating,
+                    dangerous: false,
+                }
+            }));
+        }
+        if name == "propose_automation" && !self.remote.owns(project) {
+            return Some(
+                lolicode_agent::native::automation_proposal::propose(input).map(|_| {
+                    ToolInspection {
+                        action: "automation-proposal".into(),
+                        resources: Vec::new(),
+                        description: "生成供用户确认的自动化草稿".into(),
+                        mutating: false,
+                        requires_approval: false,
+                        dangerous: false,
+                    }
+                }),
+            );
+        }
+        if BROWSER_TOOLS.contains(&name) {
+            return if self.remote.owns(project) {
+                Some(Err("本地浏览器工具仅可在桌面本机项目中使用".into()))
+            } else {
+                self.browser.inspect(project, name, input)
+            };
+        }
+        if let Some(result) = agent_web::inspect(name, input) {
+            return Some(result);
+        }
+        if name == "open_preview" {
+            return Some((|| {
+                let path = preview_path(input)?;
+                if self.remote.owns(project) {
+                    let path = relative(path)?;
+                    if path == "." {
+                        return Err("请选择预览文件".into());
+                    }
+                    let binding = self.remote.resolve(project)?;
+                    let mut policy =
+                        remote_inspection(&binding, "read_file", &json!({"path":path}))?;
+                    policy.action = "project-preview".into();
+                    return Ok(policy);
+                }
+                let (_, target) = crate::commands::agent_files::resolve(project, path)?;
+                if !target.is_file() {
+                    return Err("请选择预览文件".into());
+                }
+                Ok(preview_inspection(target.to_string_lossy().into_owned()))
+            })());
+        }
         if !self.remote.owns(project) {
             if let Some(result) =
                 super::agent_document_tools::DocumentTools.inspect(project, name, input)
@@ -380,7 +514,7 @@ impl ApplicationTools for DesktopToolHost {
         Some(
             self.remote
                 .resolve(project)
-                .and_then(|binding| inspection(&binding, name, input)),
+                .and_then(|binding| remote_inspection(&binding, name, input)),
         )
     }
     fn execute<'a>(
@@ -401,9 +535,89 @@ impl ApplicationTools for DesktopToolHost {
         project: &'a Path,
         name: &'a str,
         input: &'a Value,
-        cancel: watch::Receiver<bool>,
+        mut cancel: watch::Receiver<bool>,
     ) -> ApplicationOutput<'a> {
         Box::pin(async move {
+            if name == "unreal_editor_command" && !self.remote.owns(project) {
+                let (method, params) = self.unreal_command(project, input)?;
+                let value =
+                    lolicode_agent::native::unreal::request(project, method, &params, cancel)
+                        .await?;
+                return Ok(ToolOutput {
+                    text: value.to_string(),
+                    image_data_url: None,
+                    diffs: Vec::new(),
+                    file_changes: Vec::new(),
+                });
+            }
+            if name == "propose_automation" && !self.remote.owns(project) {
+                if *cancel.borrow() {
+                    return Err("任务已停止".into());
+                }
+                return lolicode_agent::native::automation_proposal::propose(input).map(|text| {
+                    ToolOutput {
+                        text,
+                        image_data_url: None,
+                        diffs: Vec::new(),
+                        file_changes: Vec::new(),
+                    }
+                });
+            }
+            if BROWSER_TOOLS.contains(&name) {
+                self.inspect(project, name, input)
+                    .ok_or("本地浏览器工具不可用")??;
+                return self
+                    .browser
+                    .execute_output(project, name, input, cancel)
+                    .await;
+            }
+            if let Some(inspection) = agent_web::inspect(name, input) {
+                inspection?;
+                if *cancel.borrow() {
+                    return Err("任务已停止".into());
+                }
+                let text = tokio::select! {
+                    _ = cancel.changed() => return Err("任务已停止".into()),
+                    result = agent_web::execute(name, input) => result?,
+                };
+                return Ok(ToolOutput {
+                    text,
+                    image_data_url: None,
+                    diffs: vec![],
+                    file_changes: vec![],
+                });
+            }
+            if name == "open_preview" {
+                self.inspect(project, name, input)
+                    .ok_or("预览工具未接入")??;
+                if *cancel.borrow() {
+                    return Err("任务已停止".into());
+                }
+                let path = preview_path(input)?;
+                let read = async {
+                    use crate::commands::agent_files;
+                    if self.remote.owns(project) {
+                        let (path, bytes) = self.remote.preview_bytes(project, path).await?;
+                        let size = bytes.len() as u64;
+                        agent_files::preview_bytes(&path, bytes, size, true)?;
+                    } else {
+                        let project = project.to_owned();
+                        let path = path.to_owned();
+                        tokio::task::spawn_blocking(move || {
+                            agent_files::read_preview(&project, &path)
+                        })
+                        .await
+                        .map_err(|_| "文件预览未完成，请重试")??;
+                    }
+                    Ok(ToolOutput {
+                        text: format!("已为当前工作台会话请求打开文件预览：{path}"),
+                        image_data_url: None,
+                        diffs: vec![],
+                        file_changes: vec![],
+                    })
+                };
+                return tokio::select! { result = read => result, _ = cancel.changed() => Err("任务已停止".into()) };
+            }
             if !self.remote.owns(project) {
                 let documents = super::agent_document_tools::DocumentTools;
                 if documents.inspect(project, name, input).is_some() {
@@ -421,17 +635,210 @@ impl ApplicationTools for DesktopToolHost {
             }
             self.inspect(project, name, input)
                 .ok_or("远程工具未接入")??;
-            let (args, path) = args(name, input)?;
+            let (args, path) = remote_arguments(name, input)?;
             let receipt = self.remote.call(project, name, args, cancel).await?;
-            output(name, &path, receipt)
+            remote_output(name, &path, receipt)
         })
     }
 }
+
+impl DesktopToolHost {
+    fn unreal_command<'a>(
+        &self,
+        project: &Path,
+        input: &'a Value,
+    ) -> Result<(&'a str, Value), String> {
+        use lolicode_agent::native::unreal;
+        if !self.local.allows_unreal() || unreal::find_project_file(project).is_none() {
+            return Err("请先启用 UEBox 并打开 Unreal 工程".into());
+        }
+        let object = input.as_object().ok_or("虚幻编辑器参数必须为对象")?;
+        if object
+            .keys()
+            .any(|key| !matches!(key.as_str(), "method" | "params"))
+        {
+            return Err("虚幻编辑器工具包含未知参数".into());
+        }
+        let method = input["method"]
+            .as_str()
+            .filter(|method| unreal::method_is_allowed(method))
+            .ok_or("当前版本未开放这条 UnrealAgentLink 命令")?;
+        let params = input.get("params").cloned().unwrap_or_else(|| json!({}));
+        if !params.is_object() || params.to_string().len() > 64 * 1024 {
+            return Err("虚幻编辑器参数必须是 64 KiB 以内的 JSON 对象".into());
+        }
+        Ok((method, params))
+    }
+}
+
+#[cfg(test)]
+#[path = "remote_agent_tools_acceptance.rs"]
+mod acceptance;
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::{database::Database, store::AppState};
+
+    #[tokio::test]
+    #[ignore = "requires a local browser and the original 3D demo dev server"]
+    async fn live_bicycle_demo_browser_acceptance() {
+        let url = std::env::var("LOLICODE_BROWSER_ACCEPTANCE_URL").unwrap();
+        let project =
+            std::fs::canonicalize(std::env::var("LOLICODE_BROWSER_ACCEPTANCE_PROJECT").unwrap())
+                .unwrap();
+        let output_dir = std::path::PathBuf::from(
+            std::env::var_os("LOLICODE_BROWSER_ACCEPTANCE_OUTPUT").unwrap(),
+        );
+        assert!(output_dir.is_absolute() && output_dir.is_dir());
+        let scratch = tempfile::tempdir().unwrap();
+        let db = Arc::new(Database::memory().unwrap());
+        let (remote, _) =
+            super::super::remote_projects::fixture(db.clone(), scratch.path().join("anchors"));
+        let host = DesktopToolHost {
+            local: DesktopApplicationTools(AppState::new(db)),
+            remote,
+            mcp: None,
+            browser: BrowserTools::default(),
+        };
+        let (_stop, cancel) = watch::channel(false);
+        let invoke = |name, input| {
+            let project = &project;
+            let host = &host;
+            let cancel = cancel.clone();
+            async move {
+                host.execute_output(project, name, &input, cancel)
+                    .await
+                    .unwrap()
+            }
+        };
+        let opened = invoke("browser_open", json!({"url":url,"width":1280,"height":800})).await;
+        let receipt: Value = serde_json::from_str(&opened.text).unwrap();
+        let id = receipt["browser_id"].as_str().expect("browser id");
+        assert_eq!(receipt["http_status"], 200);
+        let details = invoke("browser_snapshot", json!({"browser_id":id})).await;
+        println!("Page snapshot: {}", details.text);
+        assert!(details.text.contains("小笨狗骑自行车"));
+        assert!(details.text.contains("暂停自动旋转"));
+        assert!(details.text.contains(r#""tag":"canvas""#));
+        invoke(
+            "browser_action",
+            json!({
+                "browser_id":id,"action":"click","selector":"#autoBtn"
+            }),
+        )
+        .await;
+        let paused = invoke("browser_snapshot", json!({"browser_id":id})).await;
+        assert!(paused.text.contains("继续自动旋转"), "{}", paused.text);
+        tokio::time::sleep(std::time::Duration::from_millis(350)).await;
+        let before = invoke("browser_screenshot", json!({"browser_id":id})).await;
+        let action = invoke(
+            "browser_action",
+            json!({
+                "browser_id":id,"action":"drag","x":640,"y":400,"to_x":835,"to_y":470
+            }),
+        )
+        .await;
+        println!("Drag receipt: {}", action.text);
+        let after = invoke("browser_screenshot", json!({"browser_id":id})).await;
+        let preview = host.browser.preview_frame(&project, id).await.unwrap();
+        let preview = STANDARD
+            .decode(preview.strip_prefix("data:image/png;base64,").unwrap())
+            .unwrap();
+        let preview = image::load_from_memory(&preview).unwrap();
+        assert_eq!((preview.width(), preview.height()), (1280, 800));
+        assert!(host
+            .execute_output(
+                &project,
+                "browser_action",
+                &json!({"browser_id":id,"action":"navigate","url":"http://127.0.0.1:1/"}),
+                cancel.clone(),
+            )
+            .await
+            .is_err());
+        invoke("browser_close", json!({"browser_id":id})).await;
+        let png = |image: ToolOutput| {
+            let data = image.image_data_url.expect("original screenshot");
+            STANDARD
+                .decode(data.strip_prefix("data:image/png;base64,").unwrap())
+                .unwrap()
+        };
+        let before = png(before);
+        let after = png(after);
+        assert_ne!(before, after);
+        for (name, bytes) in [
+            ("dog-bike-before.png", before),
+            ("dog-bike-after.png", after),
+        ] {
+            let decoded = image::load_from_memory(&bytes).unwrap();
+            assert_eq!((decoded.width(), decoded.height()), (1280, 800));
+            use std::io::Write;
+            std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(output_dir.join(name))
+                .unwrap()
+                .write_all(&bytes)
+                .unwrap();
+        }
+    }
+
+    #[tokio::test]
+    async fn open_preview_is_project_scoped_and_does_not_feed_artifact_content_to_the_model() {
+        let dir = tempfile::tempdir().unwrap();
+        let project = dir.path().join("project");
+        std::fs::create_dir(&project).unwrap();
+        std::fs::write(
+            project.join("index.html"),
+            "<script>PRIVATE_CONTENT</script>",
+        )
+        .unwrap();
+        std::fs::write(dir.path().join("outside.txt"), "outside").unwrap();
+        let db = Arc::new(Database::memory().unwrap());
+        let (remote, anchor) =
+            super::super::remote_projects::fixture(db.clone(), dir.path().join("anchors"));
+        let host = DesktopToolHost {
+            local: DesktopApplicationTools(AppState::new(db)),
+            remote,
+            mcp: None,
+            browser: BrowserTools::default(),
+        };
+        let input = json!({"path":"index.html"});
+        let inspection = host
+            .inspect(&project, "open_preview", &input)
+            .unwrap()
+            .unwrap();
+        assert_eq!(inspection.action, "project-preview");
+        assert!(!inspection.mutating && !inspection.requires_approval);
+        let (_stop, cancel) = watch::channel(false);
+        let output = host
+            .execute_output(&project, "open_preview", &input, cancel)
+            .await
+            .unwrap();
+        assert!(output.text.contains("index.html"));
+        assert!(!output.text.contains("PRIVATE_CONTENT"));
+        assert!(output.image_data_url.is_none());
+        for path in [
+            "../outside.txt",
+            "https://example.org/",
+            ".",
+            "missing.html",
+        ] {
+            assert!(host
+                .inspect(&project, "open_preview", &json!({"path":path}))
+                .unwrap()
+                .is_err());
+        }
+        assert!(host
+            .project_schemas(&anchor)
+            .unwrap()
+            .iter()
+            .any(|schema| { schema["function"]["name"] == "open_preview" }));
+        assert!(host
+            .inspect(&anchor, "open_preview", &json!({"path":"../outside.txt"}))
+            .unwrap()
+            .is_err());
+    }
 
     #[test]
     fn remote_tool_policies_are_scoped_and_invalid_paths_or_arguments_are_rejected() {
@@ -443,6 +850,7 @@ mod tests {
             local: DesktopApplicationTools(AppState::new(db)),
             remote: remote.clone(),
             mcp: None,
+            browser: BrowserTools::default(),
         };
         let read = host
             .inspect(&anchor, "read_file", &json!({"path":"src/./main.rs"}))
@@ -499,7 +907,7 @@ mod tests {
 
     #[test]
     fn receipts_keep_snapshots_private_and_reject_inconsistent_mutation_results() {
-        let result = output("write_file", "a", json!({"text":"Updated a","fileChanges":[{"path":"a","before":"private-before","after":"private-after"}]})).unwrap();
+        let result = remote_output("write_file", "a", json!({"text":"Updated a","fileChanges":[{"path":"a","before":"private-before","after":"private-after"}]})).unwrap();
         assert_eq!(result.text, "Updated a");
         assert_eq!(
             result.file_changes[0].before.as_deref(),
@@ -511,12 +919,12 @@ mod tests {
             json!({"text":"Updated a","fileChanges":[{"path":"other","before":null,"after":"wrong"}]}),
             json!({"text":"Updated a","fileChanges":[{"path":"a","before":null}]}),
         ] {
-            assert!(output("write_file", "a", invalid)
+            assert!(remote_output("write_file", "a", invalid)
                 .err()
                 .unwrap()
                 .starts_with("[cleanup_uncertain]"));
         }
-        let list = output("list_files", "src", json!({"entries":[{"path":"main.rs","kind":"file"}],"fileChanges":[{"before":"must-not-leak"}]})).unwrap();
+        let list = remote_output("list_files", "src", json!({"entries":[{"path":"main.rs","kind":"file"}],"fileChanges":[{"before":"must-not-leak"}]})).unwrap();
         assert!(list.text.contains("basePath"));
         assert!(!list.text.contains("must-not-leak"));
     }

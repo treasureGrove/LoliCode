@@ -6,6 +6,11 @@ rust-version = "1.85"
 license = "MIT"
 description = "In-process LoliCode Rust coding core and legacy session DTO adapters"
 
+[features]
+default = ["legacy-runtime", "legacy-native-tests"]
+legacy-runtime = []
+legacy-native-tests = []
+
 [dependencies]
 base64 = "0.22"
 glob = "=0.3.3"
@@ -19,6 +24,4 @@ tokio-tungstenite = { version = "0.24", default-features = false, features = ["h
 futures = "0.3"
 uuid = { version = "1", features = ["v4"] }
 url = "2"
-
-[dev-dependencies]
 tempfile = "3"

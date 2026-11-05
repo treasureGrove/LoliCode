@@ -17,7 +17,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import type { AgentSession } from "@/types/agent";
+import type { AgentPermissionMode } from "@/types/agent";
 
 export function AgentComposerAdd({
   attachmentsDisabled,
@@ -90,20 +90,21 @@ export function AgentComposerAdd({
 
 export function AgentComposerOptions({
   permissionMode,
+  planning = false,
   children,
 }: {
-  permissionMode: NonNullable<AgentSession["permissionMode"]>;
+  permissionMode: AgentPermissionMode;
+  planning?: boolean;
   children: ReactNode;
 }) {
   const titleId = useId();
-  const permissionLabel =
-    permissionMode === "ask"
+  const permissionLabel = planning
+    ? "计划模式"
+    : permissionMode === "ask"
       ? "逐次确认"
       : permissionMode === "auto"
         ? "Auto Mode"
-        : permissionMode === "full_access"
-          ? "完整权限"
-          : "自定义权限";
+        : "完整权限";
 
   return (
     <Popover>

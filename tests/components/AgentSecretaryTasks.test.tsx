@@ -25,9 +25,9 @@ vi.mock("@/lib/api/agent", () => ({
     delegateSecretaryGithubItem: vi.fn(),
     getSecretaryGithubReply: vi.fn(),
     sendSecretaryGithubReply: vi.fn(),
-    delegateSecretaryTask: vi.fn(),
     sendSecretaryTaskMessage: vi.fn(),
     cancelSecretaryTask: vi.fn(),
+    deleteSecretaryTask: vi.fn(),
   },
 }));
 
@@ -65,15 +65,12 @@ async function flush() {
 function expand() {
   fireEvent.click(screen.getByRole("button", { name: /^工作任务/ }));
 }
-function delegationForm() {
-  fireEvent.click(screen.getByRole("button", { name: "分派任务" }));
-  fireEvent.change(screen.getByLabelText("任务名称"), {
-    target: { value: "整理文档" },
-  });
-  fireEvent.change(screen.getByLabelText("工作要求"), {
-    target: { value: "核对安装步骤" },
-  });
-  return screen.getByLabelText("任务名称").closest("form")!;
+function followupForm() {
+  expand();
+  fireEvent.click(screen.getByRole("button", { name: "整理文档" }));
+  const input = screen.getByLabelText("补充要求：整理文档");
+  fireEvent.change(input, { target: { value: "核对安装步骤" } });
+  return { input, form: input.closest("form")! };
 }
 
 beforeEach(() => {
@@ -87,15 +84,13 @@ beforeEach(() => {
   vi.useFakeTimers();
   sessionStorage.clear();
   vi.mocked(agentApi.getSecretary).mockReset().mockResolvedValue(overview());
-  vi.mocked(agentApi.delegateSecretaryTask)
-    .mockReset()
-    .mockResolvedValue(task());
   vi.mocked(agentApi.sendSecretaryTaskMessage)
     .mockReset()
     .mockResolvedValue(task());
   vi.mocked(agentApi.cancelSecretaryTask)
     .mockReset()
     .mockResolvedValue(task({ status: "cancelled" }));
+  vi.mocked(agentApi.deleteSecretaryTask).mockReset();
   vi.mocked(agentApi.getSecretaryGithub)
     .mockReset()
     .mockResolvedValue(disconnected);
@@ -500,7 +495,7 @@ describe("AgentSecretaryTasks", () => {
     ).toBeInTheDocument();
   });
 
-  it("assigns an independent worktree and distinguishes running lanes from queued tasks", async () => {
+  it("shows tasks assigned by the secretary and distinguishes running lanes from queued tasks", async () => {
     const worker = task({
       executionMode: "worktree",
       worktree: {
@@ -509,17 +504,12 @@ describe("AgentSecretaryTasks", () => {
         baseRevision: "a".repeat(40),
       },
     });
-    vi.mocked(agentApi.delegateSecretaryTask).mockResolvedValue(worker);
     render(
       <AgentSecretaryTasks sessionId="lc:secretary" onOpenSession={vi.fn()} />,
     );
     await flush();
-    const form = delegationForm();
-    expect(screen.getByLabelText("任务名称")).toHaveFocus();
-    fireEvent.change(screen.getByLabelText("执行方式"), {
-      target: { value: "worktree" },
-    });
-    expect(screen.getByText(/不包含本地未提交改动/)).toBeInTheDocument();
+    expand();
+    expect(screen.getByText("还没有工作任务。")).toBeInTheDocument();
     vi.mocked(agentApi.getSecretary).mockResolvedValue(
       overview([
         worker,
@@ -532,15 +522,8 @@ describe("AgentSecretaryTasks", () => {
         task({ id: "task-3", title: "检查测试", status: "queued" }),
       ]),
     );
-    fireEvent.submit(form);
-    await flush();
-    expect(agentApi.delegateSecretaryTask).toHaveBeenCalledWith(
-      "lc:secretary",
-      "整理文档",
-      "核对安装步骤",
-      expect.any(String),
-      "worktree",
-    );
+    await act(async () => vi.advanceTimersByTimeAsync(2_500));
+    expect(screen.queryByText("还没有工作任务。")).not.toBeInTheDocument();
     expect(screen.getByText("1 路运行")).toBeInTheDocument();
     expect(screen.getByText("1 项排队")).toBeInTheDocument();
     expect(screen.getByText("2 / 3 个隔离执行位已占用")).toBeInTheDocument();
@@ -680,38 +663,38 @@ describe("AgentSecretaryTasks", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("网络暂不可用");
   });
 
-  it("retains uncertain input and reuses the request ID when delegating again", async () => {
-    vi.mocked(agentApi.delegateSecretaryTask).mockRejectedValueOnce(
+  it("retains uncertain input and reuses the request ID when retrying a follow-up", async () => {
+    vi.mocked(agentApi.getSecretary).mockResolvedValue(overview([task()]));
+    vi.mocked(agentApi.sendSecretaryTaskMessage).mockRejectedValueOnce(
       new Error("回执未收到"),
     );
     render(
       <AgentSecretaryTasks sessionId="lc:secretary" onOpenSession={vi.fn()} />,
     );
     await flush();
-    const form = delegationForm();
+    const { form, input } = followupForm();
     fireEvent.submit(form);
     await flush();
-    expect(screen.getByLabelText("工作要求")).toHaveValue("核对安装步骤");
+    expect(input).toHaveValue("核对安装步骤");
     expect(screen.getByRole("alert")).toHaveTextContent("回执未收到");
-    vi.mocked(agentApi.getSecretary).mockResolvedValue(overview([task()]));
     fireEvent.submit(form);
     await flush();
-    expect(agentApi.delegateSecretaryTask).toHaveBeenCalledTimes(2);
-    const calls = vi.mocked(agentApi.delegateSecretaryTask).mock.calls;
+    expect(agentApi.sendSecretaryTaskMessage).toHaveBeenCalledTimes(2);
+    const calls = vi.mocked(agentApi.sendSecretaryTaskMessage).mock.calls;
     expect(calls[0]).toEqual([
       "lc:secretary",
-      "整理文档",
+      "task-1",
       "核对安装步骤",
       expect.any(String),
     ]);
     expect(calls[1][3]).toBe(calls[0][3]);
-    expect(screen.queryByLabelText("工作要求")).not.toBeInTheDocument();
-    expect(screen.getByText("整理文档")).toBeInTheDocument();
+    expect(input).toHaveValue("");
   });
 
-  it("does not apply an old poll after a new task has been confirmed", async () => {
+  it("does not apply an old poll after a follow-up has been confirmed", async () => {
     let release!: (state: AgentSecretaryState) => void;
     vi.mocked(agentApi.getSecretary)
+      .mockResolvedValueOnce(overview([task()]))
       .mockImplementationOnce(
         () =>
           new Promise((resolve) => {
@@ -722,16 +705,20 @@ describe("AgentSecretaryTasks", () => {
     render(
       <AgentSecretaryTasks sessionId="lc:secretary" onOpenSession={vi.fn()} />,
     );
-    fireEvent.submit(delegationForm());
+    await flush();
+    const { form } = followupForm();
+    await act(async () => vi.advanceTimersByTimeAsync(2_500));
+    fireEvent.submit(form);
     await flush();
     await act(async () => release(overview()));
     await flush();
     expect(screen.getByText("整理文档")).toBeInTheDocument();
   });
 
-  it("blocks duplicate submissions while preserving newer instructions", async () => {
+  it("blocks duplicate follow-ups while preserving newer input", async () => {
     let release!: (task: AgentSecretaryTask) => void;
-    vi.mocked(agentApi.delegateSecretaryTask).mockImplementation(
+    vi.mocked(agentApi.getSecretary).mockResolvedValue(overview([task()]));
+    vi.mocked(agentApi.sendSecretaryTaskMessage).mockImplementation(
       () =>
         new Promise((resolve) => {
           release = resolve;
@@ -741,16 +728,16 @@ describe("AgentSecretaryTasks", () => {
       <AgentSecretaryTasks sessionId="lc:secretary" onOpenSession={vi.fn()} />,
     );
     await flush();
-    const form = delegationForm();
+    const { form, input } = followupForm();
     fireEvent.submit(form);
     fireEvent.submit(form);
-    expect(agentApi.delegateSecretaryTask).toHaveBeenCalledTimes(1);
-    fireEvent.change(screen.getByLabelText("工作要求"), {
+    expect(agentApi.sendSecretaryTaskMessage).toHaveBeenCalledTimes(1);
+    fireEvent.change(input, {
       target: { value: "另外整理迁移步骤" },
     });
     await act(async () => release(task()));
     await flush();
-    expect(screen.getByLabelText("工作要求")).toHaveValue("另外整理迁移步骤");
+    expect(input).toHaveValue("另外整理迁移步骤");
   });
 
   it("sends a follow-up to the correct work item and clears confirmed input", async () => {
@@ -802,6 +789,59 @@ describe("AgentSecretaryTasks", () => {
       "task-1",
     );
     expect(screen.getByText("已取消")).toBeInTheDocument();
+  });
+
+  it("removes only the confirmed finished task and keeps active tasks in the list", async () => {
+    const running = task();
+    const finished = task({
+      id: "done",
+      title: "已交付的任务",
+      status: "completed",
+    });
+    vi.mocked(agentApi.getSecretary).mockResolvedValue(
+      overview([running, finished]),
+    );
+    let refresh!: (value: AgentSecretaryState) => void;
+    vi.mocked(agentApi.deleteSecretaryTask).mockImplementation(async () => {
+      vi.mocked(agentApi.getSecretary).mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            refresh = resolve;
+          }),
+      );
+    });
+    render(
+      <AgentSecretaryTasks sessionId="lc:secretary" onOpenSession={vi.fn()} />,
+    );
+    await flush();
+    expand();
+    expect(
+      screen.queryByRole("button", { name: "删除任务：整理文档" }),
+    ).not.toBeInTheDocument();
+    const remove = screen.getByRole("button", {
+      name: "删除任务：已交付的任务",
+    });
+    fireEvent.click(remove);
+    fireEvent.click(screen.getByRole("button", { name: "返回" }));
+    expect(agentApi.deleteSecretaryTask).not.toHaveBeenCalled();
+    fireEvent.click(remove);
+    fireEvent.click(screen.getByRole("button", { name: "确认删除" }));
+    await flush();
+    expect(agentApi.deleteSecretaryTask).toHaveBeenCalledWith(
+      "lc:secretary",
+      "done",
+    );
+    expect(
+      screen.queryByRole("button", { name: "已交付的任务" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "整理文档" }),
+    ).toBeInTheDocument();
+    refresh(overview([running]));
+    await flush();
+    expect(
+      screen.queryByRole("button", { name: "已交付的任务" }),
+    ).not.toBeInTheDocument();
   });
 
   it.each(["failed", "interrupted", "cancelled"] as const)(

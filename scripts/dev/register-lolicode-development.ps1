@@ -114,8 +114,10 @@ foreach ($taskRelativeFile in @($taskManifest.files) + @('development-build.json
 
 $null = New-Item -ItemType Directory -Path $taskInstallDirectory -Force
 if ($taskPreviousManifest) {
+    $taskCurrentFiles = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($taskRelativeFile in $taskManifest.files) { $null = $taskCurrentFiles.Add($taskRelativeFile) }
     foreach ($taskRelativeFile in $taskPreviousManifest.files) {
-        if ($taskManifest.files -contains $taskRelativeFile) { continue }
+        if ($taskCurrentFiles.Contains($taskRelativeFile)) { continue }
         $taskOwnedFile = [IO.Path]::GetFullPath((Join-Path $taskInstallDirectory $taskRelativeFile))
         if (-not $taskOwnedFile.StartsWith($taskInstallDirectory + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Unsafe managed file path.' }
         if (Test-Path -LiteralPath $taskOwnedFile -PathType Leaf) { Remove-Item -LiteralPath $taskOwnedFile }

@@ -274,14 +274,11 @@
   flex: 0 0 auto;
   grid-template-columns: 1fr;
   min-height: 0;
-  transition:
-    grid-template-columns 260ms var(--motion-ease),
-    opacity 180ms ease;
 }
 
 .wb-sidebar-track[data-collapsed="true"] {
-  grid-template-columns: 0fr;
-  opacity: 0;
+  grid-template-columns: 0px;
+  visibility: hidden;
   pointer-events: none;
 }
 
@@ -319,7 +316,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .wb-sidebar-track,
   :root .lolicode-workbench.wb-unified .wb-icon-button {
     transition: none;
   }

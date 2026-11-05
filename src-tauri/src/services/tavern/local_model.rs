@@ -222,6 +222,7 @@ impl LocalModelManager {
                 model_id: ALIAS.into(),
                 name: MODEL_NAME.into(),
                 channel_name: "本机运行".into(),
+                input_modalities: Some(vec!["text".into()]),
                 is_free: false,
                 context_limit: Some(CONTEXT as u64),
                 context_limits: Some(vec![CONTEXT as u64]),

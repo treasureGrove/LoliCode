@@ -1,14 +1,16 @@
-//! Desktop ownership for the in-process Rust agent.
-//! Model I/O, turns, permissions and sessions execute in the application; there
-//! is no worker executable, startup handshake, sidecar port or engine process.
+//! Desktop ownership for Harness and for LoliCode's project and channel data.
 use super::{
-    agent_host::{canonical_project, prepare_native_binding, AgentOpenProject, AgentRuntimeStatus},
+    agent_host::{
+        canonical_project_or_restore_standalone, prepare_native_binding, AgentOpenProject,
+        AgentRuntimeStatus, AgentWorkspace,
+    },
     agent_preferences as preferences,
     channel_center::{self, AgentCatalog},
+    harness_sessions::{argument, encode, role, SessionStore},
     inprocess_extensions::{InprocessExtensionStore, SkillSnapshot},
 };
 use crate::store::AppState;
-use lolicode_agent::native::{NativeEngine, NativeGateway};
+use lolicode_agent::AgentStatus;
 use serde::de::DeserializeOwned;
 use serde_json::{json, Value};
 use std::{collections::BTreeSet, path::Path, sync::Arc, time::Duration};
@@ -18,59 +20,52 @@ use tokio::sync::{Mutex, MutexGuard, OnceCell, RwLock};
 #[derive(Default)]
 pub struct InprocessAgentState {
     lifecycle: Mutex<()>,
-    engine: RwLock<Option<NativeEngine>>,
+    pub(crate) harness: super::harness_desktop::HarnessDesktop,
+    sessions: OnceCell<RwLock<SessionStore>>,
+    app_state: OnceCell<AppState>,
     binding: RwLock<Option<AgentOpenProject>>,
     extensions: OnceCell<Arc<InprocessExtensionStore>>,
     remote: OnceCell<Arc<super::remote_projects::RemoteProjects>>,
     skill_snapshot: RwLock<Option<SkillSnapshot>>,
     mcp: OnceCell<Arc<super::native_mcp::NativeMcpTools>>,
     mcp_error: RwLock<Option<String>>,
+    pub(crate) browser: super::agent_browser::BrowserTools,
+    pub(crate) harness_preview: super::harness_preview::HarnessPreview,
     secretary_github_monitor: Mutex<Option<tokio::task::JoinHandle<()>>>,
 }
 
 pub struct NativeUpdateLease<'a> {
     _guard: MutexGuard<'a, ()>,
-    engine: Option<NativeEngine>,
-}
-impl Drop for NativeUpdateLease<'_> {
-    fn drop(&mut self) {
-        if let Some(engine) = self.engine.take() {
-            tauri::async_runtime::spawn(async move {
-                let _ = engine.call("endUpdate", json!({})).await;
-            });
-        }
-    }
 }
 
 impl InprocessAgentState {
+    pub(crate) async fn lock_harness_admission(&self) -> MutexGuard<'_, ()> {
+        self.lifecycle.lock().await
+    }
+
     pub async fn ensure_started(&self, app: &tauri::AppHandle) -> Result<(), String> {
-        if self.engine.read().await.is_some() {
+        if self.sessions.get().is_some() {
             return Ok(());
         }
         let _guard = self.lifecycle.lock().await;
-        self.start_locked(app).await.map(|_| ())
+        self.start_locked(app).await
     }
 
-    async fn start_locked(&self, app: &tauri::AppHandle) -> Result<NativeEngine, String> {
-        if let Some(engine) = self.engine.read().await.clone() {
-            return Ok(engine);
+    async fn start_locked(&self, app: &tauri::AppHandle) -> Result<(), String> {
+        if self.sessions.get().is_some() {
+            return Ok(());
         }
-        let engine =
-            NativeEngine::open(crate::config::get_app_config_dir().join("agent/native")).await?;
-        engine.call("initializeMemoryDefaults", json!({})).await?;
         let state = app.state::<AppState>();
-        let remote = self.remote_projects(&state).await;
-        let mcp = self
-            .mcp
-            .get_or_init(|| async { Arc::new(super::native_mcp::NativeMcpTools::new()) })
+        let profile = crate::config::get_app_config_dir();
+        let sessions = tokio::task::spawn_blocking(move || SessionStore::load(&profile))
             .await
-            .clone();
-        engine
-            .set_application_tools(Arc::new(super::remote_agent_tools::DesktopToolHost {
-                local: super::agent_applications::DesktopApplicationTools(state.inner().clone()),
-                remote,
-                mcp: Some(mcp),
-            }))
+            .map_err(|_| "无法初始化会话目录")??;
+        let _ = self.app_state.set(state.inner().clone());
+        #[cfg(windows)]
+        self.browser.set_app(app.clone());
+        self.remote_projects(&state).await;
+        self.mcp
+            .get_or_init(|| async { Arc::new(super::native_mcp::NativeMcpTools::new()) })
             .await;
         let mut bundled = app
             .path()
@@ -86,13 +81,13 @@ impl InprocessAgentState {
         ) {
             let _ = self.extensions.set(Arc::new(store));
         }
-        *self.engine.write().await = Some(engine.clone());
+        let _ = self.sessions.set(RwLock::new(sessions));
         *self.secretary_github_monitor.lock().await =
-            Some(start_secretary_github_monitor(app.clone(), engine.clone()));
+            Some(start_secretary_github_monitor(app.clone()));
         if let Err(error) = self.sync_mcp_config().await {
             log::warn!("MCP 暂不可用：{error}");
         }
-        Ok(engine)
+        Ok(())
     }
 
     async fn sync_mcp_config(&self) -> Result<(), String> {
@@ -114,6 +109,11 @@ impl InprocessAgentState {
             *self.mcp_error.write().await = None;
         }
         result
+    }
+
+    pub(super) async fn harness_mcp(&self) -> Option<Arc<super::native_mcp::NativeMcpTools>> {
+        self.sync_mcp_config().await.ok()?;
+        self.mcp.get().cloned()
     }
 
     async fn discover_mcp(&self, project: &Path) -> Result<(), String> {
@@ -219,39 +219,27 @@ impl InprocessAgentState {
     ) -> Result<AgentCatalog, String> {
         let remote = self.remote_projects(state).await;
         let remote_requested = remote.owns(Path::new(&path));
-        let path = tokio::task::spawn_blocking(move || canonical_project(&path))
-            .await
-            .map_err(|_| "项目目录检查未完成")??;
+        let path =
+            tokio::task::spawn_blocking(move || canonical_project_or_restore_standalone(&path))
+                .await
+                .map_err(|_| "项目目录检查未完成")??;
         if remote_requested && !remote.owns(&path) {
             return Err("远程项目标识指向了其他目录，请检查应用数据；此次打开已取消".into());
         }
         let _guard = self.lifecycle.lock().await;
-        let engine = self.start_locked(app).await?;
+        self.start_locked(app).await?;
         self.validate_remote_project(state, &path).await?;
         let prepared = prepare_native_binding(state, &accounts).await?;
-        let catalog = prepared.catalog.clone();
-        engine
-            .bind_background(
-                path,
-                serde_json::to_value(&prepared.catalog).map_err(|_| "渠道目录编码失败")?,
-                NativeGateway {
-                    base_url: prepared.base_url,
-                    bearer_token: prepared.bearer_token,
-                },
-            )
-            .await?;
-        Ok(catalog)
+        Ok(prepared.catalog)
     }
 
-    async fn connected(&self) -> Result<NativeEngine, String> {
-        self.engine
-            .read()
-            .await
-            .clone()
-            .ok_or_else(|| "本体 Agent 尚未初始化，请重新打开项目".into())
+    fn sessions(&self) -> Result<&RwLock<SessionStore>, String> {
+        self.sessions
+            .get()
+            .ok_or("Agent 尚未初始化，请重新打开项目".into())
     }
 
-    async fn sync_skills(&self, engine: &NativeEngine) -> Result<(), String> {
+    async fn sync_skills(&self) -> Result<(), String> {
         let Some(store) = self.extensions.get().cloned() else {
             return Ok(());
         };
@@ -259,47 +247,24 @@ impl InprocessAgentState {
             .await
             .map_err(|_| "技能目录读取未完成")?
             .map_err(|e| e.to_string())?;
-        let payload = snapshot.configure_payload();
-        let unchanged = self
-            .skill_snapshot
-            .read()
-            .await
-            .as_ref()
-            .map(SkillSnapshot::configure_payload)
-            .as_ref()
-            == Some(&payload);
-        if unchanged {
-            *self.skill_snapshot.write().await = Some(snapshot);
-            return Ok(());
-        }
-        if engine.busy().await? {
-            return Ok(());
-        }
-        engine.call("configureSkills", payload).await?;
         *self.skill_snapshot.write().await = Some(snapshot);
         Ok(())
     }
 
-    async fn sync_optional_skills(&self, engine: &NativeEngine) -> Result<(), String> {
-        if let Err(error) = self.sync_skills(engine).await {
-            // A broken extension catalog must not disable basic coding. Clear
-            // stale instructions instead of silently using unverified skills.
-            // The extension panel still returns the original, actionable error.
-            log::warn!("技能暂不可用：{error}");
-            engine
-                .call("configureSkills", json!({"revision":0,"skills":[]}))
-                .await?;
-            *self.skill_snapshot.write().await = None;
+    pub(super) async fn workspace_skills(&self) -> Value {
+        if let Err(error) = self.sync_skills().await {
+            log::warn!("无法读取已启用的技能：{error}");
+            return json!([]);
         }
-        Ok(())
+        self.skill_snapshot
+            .read()
+            .await
+            .as_ref()
+            .and_then(|snapshot| serde_json::to_value(&snapshot.verified_skills).ok())
+            .unwrap_or_else(|| json!([]))
     }
 
-    async fn extension_call(
-        &self,
-        engine: &NativeEngine,
-        method: &str,
-        args: &Value,
-    ) -> Result<Option<Value>, String> {
+    async fn extension_call(&self, method: &str, args: &Value) -> Result<Option<Value>, String> {
         if !matches!(
             method,
             "getExtensions"
@@ -340,7 +305,7 @@ impl InprocessAgentState {
                 | "restoreBuiltinPlugin"
         ) {
             let value = store.marketplace_call(method, args).await?;
-            self.sync_skills(engine).await?;
+            self.sync_skills().await?;
             return Ok(Some(value));
         }
         match method {
@@ -401,19 +366,11 @@ impl InprocessAgentState {
             "getExtensions" => {}
             _ => return Ok(None),
         }
-        self.sync_skills(engine).await?;
+        self.sync_skills().await?;
         if let Err(error) = self.sync_mcp_config().await {
             log::warn!("MCP 配置暂不可用：{error}");
         }
-        let loaded = engine
-            .call("loadedSkills", json!({}))
-            .await?
-            .as_array()
-            .cloned()
-            .unwrap_or_default()
-            .into_iter()
-            .filter_map(|v| v.as_str().map(str::to_owned))
-            .collect::<BTreeSet<_>>();
+        let loaded = BTreeSet::new();
         let active = self.skill_snapshot.read().await;
         let mut value = store
             .catalog(active.as_ref(), &loaded)
@@ -434,20 +391,193 @@ impl InprocessAgentState {
         } else {
             None
         };
-        let engine = self.connected().await?;
-        if matches!(method, "sendMessage" | "createSession" | "enqueueMessage" | "sendQueuedMessageNow" | "openSecretary" | "delegateSecretaryTask" | "sendSecretaryTaskMessage") {
-            self.sync_optional_skills(&engine).await?;
-        }
-        let result = match self.extension_call(&engine, method, &args).await? {
+        let result = match self.extension_call(method, &args).await? {
             Some(value) => value,
-            None => engine.call(method, args).await?,
+            None => self.metadata_call(method, &args).await?,
         };
-        serde_json::from_value(result).map_err(|_| "本体 Agent 返回的数据格式不兼容".into())
+        serde_json::from_value(result).map_err(|_| "Agent 桌面数据格式不兼容".into())
+    }
+
+    async fn metadata_call(&self, method: &str, args: &Value) -> Result<Value, String> {
+        let sessions = self.sessions()?;
+        let id = || argument(args, "sessionId");
+        let state = self.app_state.get().ok_or("应用数据尚未初始化")?;
+        match method {
+            "busy" => Ok(json!(self.busy().await?)),
+            "activity" => {
+                let busy = self.busy().await?;
+                Ok(
+                    json!({"engine":"deepseek-harness","inProcess":false,"features":{"workflows":true,"automation":true,"remote":true},"busy":busy,"active":busy,"unknown":false,"source":"harness-sdk"}),
+                )
+            }
+            "capabilities" => Ok(
+                json!({"engine":"deepseek-harness","inProcess":false,"features":{"chat":true,"streaming":true,"tools":true,"permissions":true,"questions":true,"skills":true,"workflows":true,"automation":true,"remote":true,"mcp":true,"plugins":false}}),
+            ),
+            "createSession" | "openSecretary" => {
+                let project = match args["projectPath"].as_str() {
+                    Some(path) => path.to_owned(),
+                    None => self.workspace_path().await.ok_or("请先打开项目")?,
+                };
+                let navigation = preferences::load(&state.db)?;
+                let project = &navigation
+                    .projects
+                    .get(&preferences::path_key(&project))
+                    .ok_or("此会话不属于已打开的工作台项目")?
+                    .path;
+                let catalog =
+                    channel_center::agent_catalog(&state.db).map_err(|error| error.to_string())?;
+                let remote = self
+                    .remote
+                    .get()
+                    .is_some_and(|host| host.owns(Path::new(project)));
+                encode(sessions.write().await.create(
+                    project,
+                    &catalog,
+                    args,
+                    method == "openSecretary",
+                    remote,
+                )?)
+            }
+            "listSessions" => {
+                let project = match args["projectPath"].as_str() {
+                    Some(path) => Some(path.to_owned()),
+                    None => self.workspace_path().await,
+                };
+                let mut listed = sessions
+                    .read()
+                    .await
+                    .list(project.as_deref(), args["includeArchived"] == true);
+                self.harness.session_list_activity(&mut listed).await?;
+                listed.sort_by(|a, b| {
+                    b.pinned
+                        .cmp(&a.pinned)
+                        .then(b.updated_at.cmp(&a.updated_at))
+                });
+                encode(listed)
+            }
+            "getSessionMetadata" => encode(sessions.read().await.get(id()?)?),
+            "sessionRequiresBackgroundReview" => {
+                encode(sessions.read().await.requires_background_review(id()?)?)
+            }
+            "getSession" => {
+                let mut snapshot = sessions.read().await.snapshot(id()?)?;
+                super::harness_automation::apply(
+                    &crate::config::get_app_config_dir(),
+                    &mut snapshot,
+                )?;
+                encode(snapshot)
+            }
+            "getSessionExecutionRoot" => {
+                let store = sessions.read().await;
+                let project = store.get(id()?)?.project_path.clone();
+                if args["browserId"].is_string() {
+                    return Err("浏览器不属于当前会话".into());
+                }
+                if let Some(worktree) = store.legacy_worktree(id()?)? {
+                    let root = crate::config::get_app_config_dir().join("agent/native");
+                    let worktree =
+                        lolicode_agent::native::secretary_worktree_root(&root, &worktree).await?;
+                    return encode((project, worktree));
+                }
+                encode((&project, &project))
+            }
+            "getSecretary" => encode(sessions.read().await.secretary(id()?)?),
+            "getSecretaryActivity" => {
+                let secretaries = sessions.read().await.list(None, true);
+                let mut result = Vec::new();
+                for secretary in secretaries
+                    .into_iter()
+                    .filter(|session| role(session, "secretary"))
+                {
+                    let mut projection = sessions.read().await.secretary(&secretary.id)?;
+                    let status = self
+                        .harness
+                        .overlay_secretary(&mut projection)
+                        .await?
+                        .unwrap_or(AgentStatus::Idle);
+                    result.push(json!({"sessionId":secretary.id,"projectPath":secretary.project_path,"title":secretary.title,"status":status,"tasks":projection.tasks}));
+                }
+                encode(result)
+            }
+            "queryCommand" => sessions
+                .read()
+                .await
+                .query_command(id()?, argument(args, "requestId")?),
+            "renameSession" | "setSessionMetadata" | "updateSession" => {
+                let catalog =
+                    channel_center::agent_catalog(&state.db).map_err(|error| error.to_string())?;
+                encode(sessions.write().await.update(method, args, &catalog)?)
+            }
+            "deleteSession" => {
+                if self.harness.session_busy(id()?).await {
+                    return Err("请先结束此会话的任务".into());
+                }
+                sessions.write().await.delete(id()?)?;
+                Ok(Value::Null)
+            }
+            "interruptSession" => {
+                sessions.read().await.get(id()?)?;
+                Ok(Value::Null)
+            }
+            "syncSessions" => {
+                if self.harness.busy().await {
+                    return Err("请等当前会话结束后再同步".into());
+                }
+                let peer_root = Path::new(argument(args, "peerRoot")?);
+                let peer = peer_root
+                    .parent()
+                    .and_then(Path::parent)
+                    .ok_or("另一版本会话目录无效")?;
+                let local = crate::config::get_app_config_dir();
+                let mut store = sessions.write().await;
+                let report = super::harness_session_sync::exchange(
+                    &store,
+                    &self.harness,
+                    &local,
+                    peer,
+                    argument(args, "direction")?,
+                )
+                .await?;
+                *store = SessionStore::load(&local)?;
+                Ok(report)
+            }
+            "getMemory" | "editMemory" | "configureMemory" | "clearMemory" => {
+                let project = match args["projectPath"].as_str() {
+                    Some(path) => {
+                        if !preferences::load(&state.db)?
+                            .projects
+                            .contains_key(&preferences::path_key(path))
+                        {
+                            return Err("请先在工作台打开该项目".into());
+                        }
+                        Some(path.to_owned())
+                    }
+                    None => self.workspace_path().await,
+                };
+                lolicode_agent::native::memory::desktop_call(
+                    &crate::config::get_app_config_dir().join("agent/native"),
+                    method,
+                    args,
+                    project.as_deref().map(preferences::path_key).as_deref(),
+                )
+                .await
+            }
+            _ => Err(format!("Harness 桌面入口暂不支持 {method}")),
+        }
     }
 
     pub async fn status(&self, app: &tauri::AppHandle) -> Result<AgentRuntimeStatus, String> {
         self.ensure_started(app).await?;
-        self.call("status", json!({}), false).await
+        let version = super::harness_paths::HarnessPaths::resolve(app)
+            .ok()
+            .map(|paths| format!("deepseek-harness-{}", paths.version));
+        let available = version.is_some();
+        Ok(AgentRuntimeStatus {
+            available,
+            version,
+            running: available,
+            project_path: self.workspace_path().await,
+        })
     }
     pub async fn catalog(&self, state: &AppState) -> Result<AgentCatalog, String> {
         if let Some(binding) = self.binding.read().await.as_ref() {
@@ -473,35 +603,35 @@ impl InprocessAgentState {
     ) -> Result<AgentOpenProject, String> {
         let remote = self.remote_projects(state).await;
         let remote_requested = remote.owns(Path::new(&path));
-        let path = tokio::task::spawn_blocking(move || canonical_project(&path))
-            .await
-            .map_err(|_| "项目目录检查未完成")??;
+        let path =
+            tokio::task::spawn_blocking(move || canonical_project_or_restore_standalone(&path))
+                .await
+                .map_err(|_| "项目目录检查未完成")??;
         if remote_requested && !remote.owns(&path) {
             return Err("远程项目标识指向了其他目录，请检查应用数据；此次打开已取消".into());
         }
         let _guard = self.lifecycle.lock().await;
-        let engine = self.start_locked(app).await?;
+        self.start_locked(app).await?;
+        // Only the foreground binding changes. Each admitted Harness flight
+        // already owns its project path, permissions, and gateway lease.
         let remote_name = self.validate_remote_project(state, &path).await?;
         let prepared = prepare_native_binding(state, &accounts).await?;
-        let catalog = serde_json::to_value(&prepared.catalog).map_err(|_| "渠道目录编码失败")?;
-        let mut result: AgentOpenProject = serde_json::from_value(
-            engine
-                .bind(
-                    path.clone(),
-                    catalog,
-                    NativeGateway {
-                        base_url: prepared.base_url,
-                        bearer_token: prepared.bearer_token,
-                    },
-                )
+        let mut result = AgentOpenProject {
+            workspace: AgentWorkspace {
+                path: path.to_string_lossy().into_owned(),
+                name: path
+                    .file_name()
+                    .map(|part| part.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| path.to_string_lossy().into_owned()),
+                standalone: false,
+                remote: None,
+            },
+            catalog: prepared.catalog,
+            sessions: self
+                .call("listSessions", json!({"projectPath": path}), false)
                 .await?,
-        )
-        .map_err(|_| "本体项目状态格式不兼容")?;
-        if preferences::path_key(&result.workspace.path)
-            != preferences::path_key(&path.to_string_lossy())
-        {
-            return Err("返回项目与所选目录不一致".into());
-        }
+            warnings: Vec::new(),
+        };
         if let Some(remote) = remote_name {
             result.workspace.name = format!(
                 "{} · {}",
@@ -541,7 +671,10 @@ impl InprocessAgentState {
         for session in &mut result.sessions {
             preferences::decorate(&navigation, session);
         }
-        self.sync_optional_skills(&engine).await?;
+        if let Err(error) = self.sync_skills().await {
+            log::warn!("技能暂不可用：{error}");
+            result.warnings.push(error);
+        }
         *self.binding.write().await = Some(AgentOpenProject {
             workspace: result.workspace.clone(),
             catalog: result.catalog.clone(),
@@ -551,10 +684,7 @@ impl InprocessAgentState {
         Ok(result)
     }
     pub async fn busy(&self) -> Result<bool, String> {
-        match self.engine.read().await.clone() {
-            Some(engine) => engine.busy().await,
-            None => Ok(false),
-        }
+        Ok(self.harness.busy().await)
     }
     pub async fn project_metadata(
         &self,
@@ -588,23 +718,16 @@ impl InprocessAgentState {
             .as_ref()
             .is_some_and(|b| preferences::path_key(&b.workspace.path) == key)
         {
-            if let Some(engine) = self.engine.read().await.clone() {
-                engine.call("closeProject", json!({})).await?;
-            }
             self.binding.write().await.take();
         }
         preferences::save(&state.db, &navigation)
     }
     pub async fn acquire_idle_for_update(&self) -> Result<NativeUpdateLease<'_>, String> {
         let guard = self.lifecycle.lock().await;
-        let engine = self.engine.read().await.clone();
-        if let Some(engine) = &engine {
-            engine.call("beginUpdate", json!({})).await?;
+        if self.harness.busy().await {
+            return Err("还有 Harness 任务正在运行，请先结束任务".into());
         }
-        Ok(NativeUpdateLease {
-            _guard: guard,
-            engine,
-        })
+        Ok(NativeUpdateLease { _guard: guard })
     }
     pub(crate) async fn acquire_idle_for_navigation(&self) -> Result<MutexGuard<'_, ()>, String> {
         let guard = self.lifecycle.lock().await;
@@ -615,46 +738,41 @@ impl InprocessAgentState {
     }
     pub async fn close_project(&self) -> Result<(), String> {
         let _guard = self.acquire_idle_for_navigation().await?;
-        if let Some(engine) = self.engine.read().await.clone() {
-            engine.call("closeProject", json!({})).await?;
-        }
         self.binding.write().await.take();
         Ok(())
     }
     pub async fn shutdown(&self) -> Result<(), String> {
+        self.harness.shutdown().await;
         if let Some(monitor) = self.secretary_github_monitor.lock().await.take() {
             monitor.abort();
             let _ = monitor.await;
         }
-        let engine = self.engine.write().await.take();
         self.binding.write().await.take();
         *self.skill_snapshot.write().await = None;
-        let engine_result = if let Some(engine) = engine {
-            engine.shutdown().await
-        } else {
-            Ok(())
-        };
+        self.harness_preview.shutdown().await;
+        self.browser.shutdown().await;
         let mcp_result = if let Some(mcp) = self.mcp.get() {
             mcp.shutdown().await
         } else {
             Ok(())
         };
         *self.mcp_error.write().await = None;
-        engine_result.and(mcp_result)
+        mcp_result
     }
 }
 
-fn start_secretary_github_monitor(
-    app: tauri::AppHandle,
-    engine: NativeEngine,
-) -> tokio::task::JoinHandle<()> {
+fn start_secretary_github_monitor(app: tauri::AppHandle) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         let period = Duration::from_secs(60);
         let mut timer = tokio::time::interval_at(tokio::time::Instant::now() + period, period);
         timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         loop {
             timer.tick().await;
-            let Ok(activity) = engine.call("getSecretaryActivity", json!({})).await else {
+            let Ok(activity) = app
+                .state::<InprocessAgentState>()
+                .call::<Value>("getSecretaryActivity", json!({}), false)
+                .await
+            else {
                 continue;
             };
             let Some(secretaries) = activity.as_array() else {

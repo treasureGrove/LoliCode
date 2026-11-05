@@ -10,16 +10,18 @@ import {
   GitBranch,
   ListTodo,
   LoaderCircle,
-  Plus,
+  MessageCircle,
   RefreshCw,
   Send,
   Square,
+  Trash2,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { agentApi } from "@/lib/api/agent";
 import { settingsApi } from "@/lib/api/settings";
 import { agentErrorMessage } from "@/hooks/useAgentSnapshot";
 import type {
-  AgentSecretaryExecutionMode,
+  AgentSecretaryReportState,
   AgentSecretaryState,
   AgentSecretaryTask,
 } from "@/types/agent";
@@ -45,17 +47,47 @@ const statusLabels: Record<AgentSecretaryTask["status"], string> = {
   cancelled: "已取消",
   interrupted: "已中断",
 };
+const reportLabels: Record<AgentSecretaryReportState, string> = {
+  progress: "有新进展",
+  waiting: "等待后续消息",
+  ready: "交付就绪",
+  blocked: "遇到阻碍",
+  failed: "执行失败",
+  dropped: "无需处理",
+};
+
+function needsUser(task: AgentSecretaryTask) {
+  return (
+    [
+      "waiting_permission",
+      "waiting_question",
+      "failed",
+      "interrupted",
+    ].includes(task.status) ||
+    (task.status === "completed" &&
+      ["blocked", "failed"].includes(task.report?.state ?? ""))
+  );
+}
+
+function visibleReport(task: AgentSecretaryTask) {
+  if (task.status === "completed") return task.report?.state;
+  if (task.status === "running" && task.report?.state === "progress")
+    return "progress";
+  return undefined;
+}
 
 export function AgentSecretaryTasks({
   sessionId,
   active = true,
   workerTaskId,
   onOpenSession,
+  onFocusComposer,
 }: {
   sessionId: string;
   active?: boolean;
   workerTaskId?: string;
   onOpenSession: (sessionId: string) => Promise<void> | void;
+  onFocusComposer?: () => void;
 }) {
   const { t } = useTranslation();
   const label = (
@@ -67,13 +99,9 @@ export function AgentSecretaryTasks({
   const [expanded, setExpanded] = useState(false);
   const [githubOpen, setGithubOpen] = useState(false);
   const [githubVisited, setGithubVisited] = useState(false);
-  const [adding, setAdding] = useState(false);
-  const [title, setTitle] = useState("");
-  const [instructions, setInstructions] = useState("");
-  const [executionMode, setExecutionMode] =
-    useState<AgentSecretaryExecutionMode>("shared");
   const [followups, setFollowups] = useState<Record<string, string>>({});
   const [openedTask, setOpenedTask] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [readError, setReadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -83,11 +111,8 @@ export function AgentSecretaryTasks({
   scope.current = sessionId;
   const lifetime = useRef(0);
   const pending = useRef(false);
-  const titleInput = useRef<HTMLInputElement>(null);
   const tasksId = useId();
   const githubId = useId();
-  const drafts = useRef({ title, instructions, executionMode, followups });
-  drafts.current = { title, instructions, executionMode, followups };
   const stateHere = state?.sessionId === sessionId ? state : null;
   const tasks = stateHere?.tasks || [];
   const runningCount = tasks.filter((task) => task.status === "running").length;
@@ -101,23 +126,13 @@ export function AgentSecretaryTasks({
   const worktreeCount = occupied.filter(
     (task) => task.executionMode === "worktree",
   ).length;
-  const needsAttention = tasks.filter((task) =>
-    [
-      "waiting_permission",
-      "waiting_question",
-      "failed",
-      "interrupted",
-    ].includes(task.status),
-  );
+  const needsAttention = tasks.filter(needsUser);
 
   useEffect(() => {
     lifetime.current += 1;
-    setTitle("");
-    setInstructions("");
-    setExecutionMode("shared");
     setFollowups({});
     setOpenedTask(null);
-    setAdding(false);
+    setConfirmDelete(null);
     setBusy(null);
     setActionError(null);
     pending.current = false;
@@ -127,9 +142,6 @@ export function AgentSecretaryTasks({
   }, [sessionId]);
 
   useEffect(() => setOpenedTask(workerTaskId || null), [workerTaskId]);
-  useEffect(() => {
-    if (expanded && adding) titleInput.current?.focus();
-  }, [expanded, adding]);
 
   useEffect(() => {
     if (!active) return;
@@ -222,39 +234,20 @@ export function AgentSecretaryTasks({
     }
   };
 
-  const delegate = () => {
-    const name = title.trim();
-    const text = instructions.trim();
-    if (!name || !text) return;
-    const requestId = requestIdentity(
-      `${sessionId}:delegate`,
-      JSON.stringify([name, text, executionMode]),
-    );
+  const deleteTask = (taskId: string) => {
     void act(
-      "delegate",
-      () =>
-        executionMode === "worktree"
-          ? agentApi.delegateSecretaryTask(
-              sessionId,
-              name,
-              text,
-              requestId,
-              executionMode,
-            )
-          : agentApi.delegateSecretaryTask(sessionId, name, text, requestId),
+      `delete:${taskId}`,
+      () => agentApi.deleteSecretaryTask(sessionId, taskId),
       () => {
-        clearRequestIdentity(`${sessionId}:delegate`);
-        if (
-          drafts.current.title === title &&
-          drafts.current.instructions === instructions &&
-          drafts.current.executionMode === executionMode
-        ) {
-          setTitle("");
-          setInstructions("");
-          setExecutionMode("shared");
-          setAdding(false);
-        }
-        setExpanded(true);
+        readSequence.current += 1;
+        setState((old) =>
+          old?.sessionId === sessionId
+            ? { ...old, tasks: old.tasks.filter((task) => task.id !== taskId) }
+            : old,
+        );
+        setOpenedTask((old) => (old === taskId ? null : old));
+        setConfirmDelete(null);
+        clearRequestIdentity(`${sessionId}:followup:${taskId}`);
       },
     );
   };
@@ -286,6 +279,7 @@ export function AgentSecretaryTasks({
           aria-controls={tasksId}
           onClick={() => {
             setGithubOpen(false);
+            setConfirmDelete(null);
             setExpanded((value) => !value);
           }}
         >
@@ -338,6 +332,7 @@ export function AgentSecretaryTasks({
             onClick={() => {
               setGithubVisited(true);
               setExpanded(false);
+              setConfirmDelete(null);
               setGithubOpen((value) => !value);
             }}
           >
@@ -345,20 +340,16 @@ export function AgentSecretaryTasks({
             <span>GitHub</span>
           </button>
         )}
-        {!workerTaskId && (
+        {!workerTaskId && onFocusComposer && (
           <button
             type="button"
             className="wb-secretary-add"
-            aria-label={label("delegate", "分派任务")}
-            aria-expanded={expanded && adding}
-            onClick={() => {
-              setGithubOpen(false);
-              setExpanded(true);
-              setAdding((value) => !expanded || !value);
-            }}
+            disabled={!active}
+            aria-label={label("tellGoal", "告诉秘书目标")}
+            onClick={onFocusComposer}
           >
-            <Plus aria-hidden="true" />
-            <span>{label("delegate", "分派任务")}</span>
+            <MessageCircle aria-hidden="true" />
+            <span>{label("tellGoal", "告诉秘书目标")}</span>
           </button>
         )}
       </div>
@@ -397,12 +388,14 @@ export function AgentSecretaryTasks({
       )}
       {expanded && (
         <div id={tasksId} className="wb-secretary-content">
-          <p className="wb-secretary-note">
-            {label(
-              "description",
-              "把目标交给我，我来安排工作、跟进结果。你可以继续和我聊。",
-            )}
-          </p>
+          {!workerTaskId && (
+            <p className="wb-secretary-note">
+              {label(
+                "description",
+                "直接在对话里告诉我目标，我来拆解、分派和跟进工作。",
+              )}
+            </p>
+          )}
           {worktreeCount > 0 && (
             <p className="wb-secretary-lanes">
               <GitBranch aria-hidden="true" />
@@ -416,102 +409,23 @@ export function AgentSecretaryTasks({
               )}
             </p>
           )}
-          {adding && !workerTaskId && (
-            <form
-              className="wb-secretary-form"
-              onSubmit={(event) => {
-                event.preventDefault();
-                delegate();
-              }}
-            >
-              <label>
-                {label("taskTitle", "任务名称")}
-                <input
-                  ref={titleInput}
-                  value={title}
-                  maxLength={100}
-                  onChange={(event) => setTitle(event.target.value)}
-                  placeholder={label("titlePlaceholder", "例如：整理项目文档")}
-                  required
-                />
-              </label>
-              <label>
-                {label("instructions", "工作要求")}
-                <textarea
-                  value={instructions}
-                  maxLength={20000}
-                  rows={3}
-                  onChange={(event) => setInstructions(event.target.value)}
-                  placeholder={label(
-                    "instructionsPlaceholder",
-                    "描述目标、相关背景和你希望收到的结果",
-                  )}
-                  required
-                />
-              </label>
-              <label>
-                {label("executionMode", "执行方式")}
-                <select
-                  value={executionMode}
-                  onChange={(event) =>
-                    setExecutionMode(
-                      event.target.value === "worktree" ? "worktree" : "shared",
-                    )
-                  }
-                >
-                  <option value="shared">
-                    {label("sharedMode", "当前项目 · 串行")}
-                  </option>
-                  <option value="worktree">
-                    {label("worktreeMode", "独立工作树 · 并行")}
-                  </option>
-                </select>
-              </label>
-              <div className="wb-secretary-form-actions">
-                <span>
-                  {executionMode === "worktree"
-                    ? label(
-                        "worktreeNote",
-                        "从当前提交创建独立分支，可与其他任务同时运行。工作树不包含本地未提交改动。",
-                      )
-                    : label(
-                        "serialNote",
-                        "使用当前目录和本地改动。共享目录中的任务依次执行。",
-                      )}
-                </span>
-                <button
-                  type="submit"
-                  disabled={
-                    Boolean(busy) || !title.trim() || !instructions.trim()
-                  }
-                >
-                  {busy === "delegate" ? (
-                    <LoaderCircle className="animate-spin" aria-hidden="true" />
-                  ) : (
-                    <Send aria-hidden="true" />
-                  )}
-                  {label("delegate", "分派任务")}
-                </button>
-              </div>
-            </form>
-          )}
           {!tasks.length && stateHere && (
             <p className="wb-secretary-empty">
-              {label(
-                "empty",
-                "还没有工作任务。直接在下方告诉我目标，或分派一个明确的任务。",
-              )}
+              {label("empty", "还没有工作任务。")}
             </p>
           )}
           <div className="wb-secretary-task-list">
             {tasks.map((task) => {
               const opened = openedTask === task.id;
+              const canDelete = !workerTaskId && terminal.has(task.status);
               const sourceHref =
                 task.sourceUrl && safeGithubUrl(task.sourceUrl);
-              const attention = [
-                "waiting_permission",
-                "waiting_question",
-              ].includes(task.status);
+              const report = visibleReport(task);
+              const attention =
+                task.status === "waiting_permission" ||
+                task.status === "waiting_question" ||
+                report === "blocked" ||
+                report === "failed";
               return (
                 <article
                   className="wb-secretary-task"
@@ -525,7 +439,9 @@ export function AgentSecretaryTasks({
                       aria-expanded={opened}
                       onClick={() => setOpenedTask(opened ? null : task.id)}
                     >
-                      {task.status === "completed" ? (
+                      {task.status === "completed" &&
+                      !attention &&
+                      (!report || report === "ready") ? (
                         <CircleCheck aria-hidden="true" />
                       ) : task.status === "running" ? (
                         <LoaderCircle
@@ -545,10 +461,12 @@ export function AgentSecretaryTasks({
                       </small>
                     )}
                     <span className="wb-secretary-task-status">
-                      {label(
-                        `status.${task.status}`,
-                        statusLabels[task.status],
-                      )}
+                      {report
+                        ? label(`report.${report}`, reportLabels[report])
+                        : label(
+                            `status.${task.status}`,
+                            statusLabels[task.status],
+                          )}
                     </span>
                     <button
                       type="button"
@@ -594,7 +512,63 @@ export function AgentSecretaryTasks({
                         )}
                       </button>
                     )}
+                    {canDelete && (
+                      <button
+                        type="button"
+                        className="wb-icon-button"
+                        disabled={!active || Boolean(busy)}
+                        aria-label={label(
+                          "deleteNamed",
+                          "删除任务：{{title}}",
+                          {
+                            title: task.title,
+                          },
+                        )}
+                        aria-expanded={confirmDelete === task.id}
+                        title={label("deleteTask", "删除任务")}
+                        onClick={() =>
+                          setConfirmDelete((old) =>
+                            old === task.id ? null : task.id,
+                          )
+                        }
+                      >
+                        <Trash2 aria-hidden="true" />
+                      </button>
+                    )}
                   </div>
+                  {canDelete && confirmDelete === task.id && (
+                    <div className="mb-2 flex flex-wrap items-center gap-2 rounded-control bg-bg-subtle p-2">
+                      <p className="mr-auto min-w-0 break-words text-caption">
+                        {label(
+                          "deletePrompt",
+                          "从列表删除「{{title}}」？工作对话和文件会保留。",
+                          { title: task.title },
+                        )}
+                      </p>
+                      <Button
+                        type="button"
+                        variant="neutral"
+                        disabled={Boolean(busy)}
+                        onClick={() => setConfirmDelete(null)}
+                      >
+                        {label("dismissDelete", "返回")}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        disabled={!active || Boolean(busy)}
+                        onClick={() => deleteTask(task.id)}
+                      >
+                        {busy === `delete:${task.id}` && (
+                          <LoaderCircle
+                            className="animate-spin"
+                            aria-hidden="true"
+                          />
+                        )}
+                        {label("confirmDelete", "确认删除")}
+                      </Button>
+                    </div>
+                  )}
                   {opened && (
                     <div className="wb-secretary-task-detail">
                       <p>{task.instructions}</p>
@@ -631,9 +605,9 @@ export function AgentSecretaryTasks({
                           </dd>
                         </dl>
                       )}
-                      {task.summary && (
+                      {(task.report?.summary || task.summary) && (
                         <p className="wb-secretary-task-summary">
-                          {task.summary}
+                          {task.report?.summary || task.summary}
                         </p>
                       )}
                       {task.error && (
@@ -673,14 +647,11 @@ export function AgentSecretaryTasks({
                                 clearRequestIdentity(
                                   `${sessionId}:followup:${task.id}`,
                                 );
-                                if (
-                                  drafts.current.followups[task.id] ===
-                                  followups[task.id]
-                                )
-                                  setFollowups((old) => ({
-                                    ...old,
-                                    [task.id]: "",
-                                  }));
+                                setFollowups((old) =>
+                                  old[task.id] === followups[task.id]
+                                    ? { ...old, [task.id]: "" }
+                                    : old,
+                                );
                               },
                             );
                           }}

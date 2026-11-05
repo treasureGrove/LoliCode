@@ -83,10 +83,10 @@ pub(crate) fn parse_icon_url(raw: &str) -> Option<Url> {
 }
 
 /// 只放行公网单播地址
-fn is_public_ip(ip: IpAddr) -> bool {
+fn is_public_ip(ip: IpAddr, allow_fake_ip: bool) -> bool {
     match ip {
-        IpAddr::V4(v4) => is_public_ipv4(v4),
-        IpAddr::V6(v6) => is_public_ipv6(v6),
+        IpAddr::V4(v4) => is_public_ipv4(v4, allow_fake_ip),
+        IpAddr::V6(v6) => is_public_ipv6(v6, allow_fake_ip),
     }
 }
 
@@ -98,7 +98,7 @@ fn is_public_ip(ip: IpAddr) -> bool {
 /// 这次请求不带 Cookie 和认证，响应也不会回到链接发起方手里；而用户点链接时正开着
 /// 发起方的网页，那个网页用 `<img>` 就能从同一台机器、经同一个 TUN 发出同样的请求，
 /// 还带着浏览器的 Cookie（浏览器在 fake-ip 下看到的也是这个网段）。这里没有给对方新的能力。
-fn is_public_ipv4(ip: Ipv4Addr) -> bool {
+fn is_public_ipv4(ip: Ipv4Addr, allow_fake_ip: bool) -> bool {
     let [a, b, c, _] = ip.octets();
     !(a == 0 // 本网络 0.0.0.0/8
         || a == 10 // 私网
@@ -109,16 +109,17 @@ fn is_public_ipv4(ip: Ipv4Addr) -> bool {
         || (a == 192 && b == 0 && c == 0) // IETF 协议分配 192.0.0.0/24
         || (a == 192 && b == 0 && c == 2) // 文档
         || (a == 192 && b == 168) // 私网
+        || (!allow_fake_ip && a == 198 && (18..=19).contains(&b))
         || (a == 198 && b == 51 && c == 100) // 文档
         || (a == 203 && b == 0 && c == 113) // 文档
         || a >= 224) // 组播、保留、广播
 }
 
-fn is_public_ipv6(ip: Ipv6Addr) -> bool {
+fn is_public_ipv6(ip: Ipv6Addr, allow_fake_ip: bool) -> bool {
     let segments = ip.segments();
     // NAT64 众所周知前缀 64:ff9b::/96：纯 IPv6 网络下访问 IPv4 站点会解析成它，按内嵌地址判断
     if segments[..6] == [0x64, 0xff9b, 0, 0, 0, 0] {
-        return is_public_ipv4(embedded_ipv4(segments[6], segments[7]));
+        return is_public_ipv4(embedded_ipv4(segments[6], segments[7]), allow_fake_ip);
     }
     // 只认全球单播 2000::/3，回环、ULA、链路本地、组播、IPv4 映射地址都不在里面
     if segments[0] & 0xe000 != 0x2000 {
@@ -130,7 +131,7 @@ fn is_public_ipv6(ip: Ipv6Addr) -> bool {
     }
     // 6to4 2002::/16 内嵌 IPv4
     if segments[0] == 0x2002 {
-        return is_public_ipv4(embedded_ipv4(segments[1], segments[2]));
+        return is_public_ipv4(embedded_ipv4(segments[1], segments[2]), allow_fake_ip);
     }
     true
 }
@@ -300,7 +301,10 @@ fn describe_request_error(error: reqwest::Error) -> String {
 }
 
 /// 解析域名，要求每个地址都是公网地址。有一个不是就整体拒绝，不挑着用。
-async fn resolve_public(url: &Url) -> Result<(String, Vec<SocketAddr>), String> {
+async fn resolve_public(
+    url: &Url,
+    allow_fake_ip: bool,
+) -> Result<(String, Vec<SocketAddr>), String> {
     let Some(Host::Domain(domain)) = url.host() else {
         return Err("host is not a domain".to_string());
     };
@@ -312,7 +316,10 @@ async fn resolve_public(url: &Url) -> Result<(String, Vec<SocketAddr>), String> 
     if addrs.is_empty() {
         return Err("DNS returned no addresses".to_string());
     }
-    if let Some(addr) = addrs.iter().find(|addr| !is_public_ip(addr.ip())) {
+    if let Some(addr) = addrs
+        .iter()
+        .find(|addr| !is_public_ip(addr.ip(), allow_fake_ip))
+    {
         return Err(format!(
             "{domain} resolves to non-public address {}",
             addr.ip()
@@ -321,10 +328,24 @@ async fn resolve_public(url: &Url) -> Result<(String, Vec<SocketAddr>), String> 
     Ok((domain, addrs))
 }
 
+pub(crate) async fn resolve_public_web(url: &Url) -> Result<(String, Vec<SocketAddr>), String> {
+    resolve_public(url, false).await
+}
+
+#[cfg(test)]
+#[test]
+fn agent_web_blocks_proxy_fake_ip_and_embedded_ipv4() {
+    for address in ["198.18.0.1", "64:ff9b::c612:1", "2002:c612:1::"] {
+        let address = address.parse().unwrap();
+        assert!(is_public_ip(address, true));
+        assert!(!is_public_ip(address, false));
+    }
+}
+
 async fn fetch_unbounded(raw_url: &str) -> Result<String, String> {
     let mut url = parse_icon_url(raw_url).ok_or("URL is not an allowed https address")?;
     for _ in 0..=MAX_REDIRECTS {
-        let (domain, addrs) = resolve_public(&url).await?;
+        let (domain, addrs) = resolve_public(&url, true).await?;
         // 每一跳单独建客户端：把这个域名钉在刚核对过的地址上
         let client = reqwest::Client::builder()
             .no_proxy()
@@ -470,7 +491,7 @@ mod tests {
             "64:ff9b::a00:1",
         ] {
             let ip: IpAddr = ip.parse().unwrap();
-            assert!(!is_public_ip(ip), "{ip} should be rejected");
+            assert!(!is_public_ip(ip, true), "{ip} should be rejected");
         }
         for ip in [
             "8.8.8.8",
@@ -487,7 +508,7 @@ mod tests {
             "64:ff9b::808:808",
         ] {
             let ip: IpAddr = ip.parse().unwrap();
-            assert!(is_public_ip(ip), "{ip} should be accepted");
+            assert!(is_public_ip(ip, true), "{ip} should be accepted");
         }
     }
 

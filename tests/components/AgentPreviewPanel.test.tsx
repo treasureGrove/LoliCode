@@ -50,6 +50,30 @@ beforeEach(() => {
 });
 
 describe("Agent file previews", () => {
+  it("opens HTML source at the referenced line without adding it to the file path", async () => {
+    const content = "<h1>Report</h1>\n<p>Selected line</p>\n<footer>End</footer>";
+    vi.mocked(agentFilesApi.preview).mockResolvedValue(
+      file({ kind: "html", name: "result.html", content }),
+    );
+    const { container } = render(
+      <AgentPreviewPanel
+        sessionId="lc:session"
+        path="result.html"
+        line={2}
+        onClose={vi.fn()}
+      />,
+    );
+    await waitFor(() =>
+      expect(container.querySelector("mark[data-source-line='2']")).toHaveTextContent(
+        "<p>Selected line</p>",
+      ),
+    );
+    expect(container.querySelector("pre code")).toHaveTextContent("Selected line");
+    expect(container.querySelector("pre code")?.textContent).toBe(content);
+    expect(agentFilesApi.preview).toHaveBeenCalledWith("lc:session", "result.html");
+    expect(screen.queryByTitle("HTML 预览：result.html")).toBeNull();
+  });
+
   it("keeps Office chrome compact and restores an expanded reader with Escape", () => {
     render(
       <AgentPreviewPanel
@@ -308,10 +332,14 @@ describe("Agent file previews", () => {
       path: "/project/shot.png",
     });
     expect(preview).not.toHaveBeenCalled();
-    fireEvent.click(
+    fireEvent.keyDown(
       screen.getByRole("button", {
-        name: "打开所在文件夹：/project/result.html",
+        name: "打开方式：/project/result.html",
       }),
+      { key: "Enter" },
+    );
+    fireEvent.click(
+      screen.getByRole("menuitem", { name: "打开所在文件夹" }),
     );
     await waitFor(() =>
       expect(agentFilesApi.open).toHaveBeenCalledWith(
@@ -337,8 +365,12 @@ describe("Agent file previews", () => {
       screen.getByRole("button", { name: "预览文件：blocked.exe" }),
     );
     expect(agentFilesApi.open).not.toHaveBeenCalled();
+    fireEvent.keyDown(
+      screen.getByRole("button", { name: "打开方式：blocked.exe" }),
+      { key: "Enter" },
+    );
     fireEvent.click(
-      screen.getByRole("button", { name: "打开文件：blocked.exe" }),
+      screen.getByRole("menuitem", { name: "在系统应用中打开" }),
     );
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "不能打开可执行文件",

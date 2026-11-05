@@ -42,10 +42,11 @@ pub(super) async fn task_registry(
     app: &AppHandle,
     id: &str,
 ) -> Result<AgentSecretaryState, String> {
+    // Deleted list entries still prove that an inbox item was dispatched.
     let state: AgentSecretaryState = native(
         app,
         "getSecretary",
-        json!({"sessionId": id, "refresh": false}),
+        json!({"sessionId": id, "refresh": false, "includeRemoved": true}),
         false,
     )
     .await?;

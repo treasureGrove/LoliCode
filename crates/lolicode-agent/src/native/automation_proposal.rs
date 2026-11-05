@@ -1,5 +1,6 @@
 //! Pure automation drafts. The desktop owns project/model selection and saving;
 //! this module cannot create jobs, schedule work, or write application state.
+#[cfg(any(test, feature = "legacy-native-tests"))]
 use super::types::{AutomationSaveReceipt, StoredSession};
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
@@ -16,7 +17,7 @@ const ALLOWED_FIELDS: &[&str] = &[
     "automationId",
 ];
 
-pub(super) fn schema() -> Value {
+pub fn schema() -> Value {
     json!({
         "type":"function",
         "function":{
@@ -110,7 +111,7 @@ fn minutes(input: &Map<String, Value>, key: &str, maximum: u64) -> Result<u64, S
         .ok_or_else(|| format!("自动化 {key} 需要用户明确的 1–{maximum} 整数分钟；请先通过 ask_user 或对话确认，不使用默认时间。"))
 }
 
-pub(super) fn propose(input: &Value) -> Result<String, String> {
+pub fn propose(input: &Value) -> Result<String, String> {
     let object = input.as_object().ok_or("自动化提案参数必须是对象")?;
     if object
         .keys()
@@ -218,7 +219,7 @@ pub(super) fn valid_id(value: &Value) -> Option<&str> {
         .filter(|id| !id.trim().is_empty() && id.len() <= 256 && !id.chars().any(char::is_control))
 }
 
-pub(super) fn mark_saved(output: &mut Value, automation_id: &str) -> Result<String, String> {
+pub fn mark_saved(output: &mut Value, automation_id: &str) -> Result<String, String> {
     let fingerprint = proposal_identity(output)?;
     for field in ["automationId", "savedAutomationId"] {
         if output
@@ -235,6 +236,7 @@ pub(super) fn mark_saved(output: &mut Value, automation_id: &str) -> Result<Stri
 
 /// Merge only matching proposal tool results. Never append a user/tool message
 /// into an active tool-call group or overwrite a compaction source in flight.
+#[cfg(any(test, feature = "legacy-native-tests"))]
 pub(super) fn apply_saved_receipts(stored: &mut StoredSession) -> bool {
     let mut changed = false;
     for message in &mut stored.history {
@@ -271,6 +273,7 @@ pub(super) fn apply_saved_receipts(stored: &mut StoredSession) -> bool {
     changed
 }
 
+#[cfg(any(test, feature = "legacy-native-tests"))]
 pub(super) fn saved_context(receipts: &[AutomationSaveReceipt]) -> Option<String> {
     if receipts.is_empty() {
         return None;

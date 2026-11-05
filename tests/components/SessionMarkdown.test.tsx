@@ -677,6 +677,113 @@ describe("SessionMarkdown", () => {
     });
   });
 
+  describe("Agent output links", () => {
+    it("keeps complete bare and inline URLs out of the system browser by default", () => {
+      const renderWebLink = vi.fn((url: string, label: React.ReactNode) => (
+        <a href={url}>{label}</a>
+      ));
+      render(
+        <SessionMarkdown
+          content={[
+            "运行在 http://localhost:4173/app?ready=1#demo。",
+            "另一个地址 (http://127.0.0.1:8080/page)。",
+            "备选 `https://example.com/preview`。",
+            "[`http://nested.test`](https://example.com/docs)",
+            "[![缩略图](https://example.com/img.png)](https://example.com/photo)",
+            "<user@example.com>",
+            "```sh\nopen https://not-a-link.test\n```",
+          ].join("\n\n")}
+          outputLinks
+          renderWebLink={renderWebLink}
+        />,
+      );
+
+      const links = screen.getAllByRole("link");
+      expect(links.map((link) => link.getAttribute("href"))).toEqual([
+        "http://localhost:4173/app?ready=1#demo",
+        "http://127.0.0.1:8080/page",
+        "https://example.com/preview",
+        "https://example.com/docs",
+        "https://example.com/photo",
+        "mailto:user@example.com",
+      ]);
+      expect(
+        screen.getByRole("link", { name: "http://nested.test" }),
+      ).toHaveAttribute("href", "https://example.com/docs");
+      const thumbnailLink = screen.getByRole("link", { name: "缩略图" });
+      expect(thumbnailLink).toHaveAttribute(
+        "href",
+        "https://example.com/photo",
+      );
+      expect(thumbnailLink.querySelector("button, a")).toBeNull();
+      expect(renderWebLink).toHaveBeenCalledTimes(5);
+      expect(invokeMock).not.toHaveBeenCalled();
+    });
+
+    it("resolves project files without dropping document locators or nesting actions", () => {
+      const renderLocalPath = (
+        path: string,
+        label?: React.ReactNode,
+        line?: number,
+      ) => (
+        <button title={path} data-line={line}>{label || path}</button>
+      );
+      const { container } = render(
+        <SessionMarkdown
+          content={[
+            "[笔记][report]",
+            "[`别的.md`](<docs/页面.html#content>)",
+            "`src\\main.ts:23:4`",
+            "[PDF](exports/report.pdf#page=3)",
+            "[表格](file:///C:/out/report.xlsx#sheet:Sheet%20One)",
+            "[源码](file:///C:/out/example.ts#L20)",
+            "[无效行](src/index.ts:50-10)",
+            "页面在 D:/project/outputs/site.html。",
+            "说明在 (/tmp/outputs/help.txt:10)，另有 ./out/result.csv。",
+            "`array.map` [危险](javascript:alert(1)) [外链](//example.com/path)",
+            "```sh\ncat /tmp/not-a-link.md\n```",
+            "[report]: docs/report%20one.md#L2-L4",
+          ].join("\n\n")}
+          outputLinks
+          renderLocalPath={renderLocalPath}
+        />,
+      );
+
+      const files = screen
+        .getAllByRole("button")
+        .filter((file) => file.hasAttribute("title"));
+      expect(files.map((file) => file.getAttribute("title"))).toEqual([
+        "docs/report one.md",
+        "docs/页面.html",
+        "src\\main.ts",
+        "exports/report.pdf#page=3",
+        "C:/out/report.xlsx#sheet:Sheet%20One",
+        "C:/out/example.ts",
+        "src/index.ts",
+        "D:/project/outputs/site.html",
+        "/tmp/outputs/help.txt",
+        "./out/result.csv",
+      ]);
+      expect(files.map((file) => file.getAttribute("data-line"))).toEqual([
+        "2", null, "23", null, null, "20", null, null, "10", null,
+      ]);
+      expect(screen.getByRole("button", { name: "别的.md" })).toBeVisible();
+      expect(container.querySelector("button button")).toBeNull();
+      expect(screen.queryByRole("link")).toBeNull();
+      expect(screen.getByText("array.map").tagName).toBe("CODE");
+    });
+
+    it("leaves relative links and inline output targets alone in the session reader", () => {
+      const { container } = renderMarkdown(
+        "[产物](docs/report.md) `index.html` `http://localhost:4173`",
+      );
+      expect(container).toHaveTextContent("[产物](docs/report.md)");
+      expect(container.querySelectorAll("code")).toHaveLength(2);
+      expect(screen.queryByRole("link")).toBeNull();
+      expect(screen.queryByRole("button")).toBeNull();
+    });
+  });
+
   describe("oversized content", () => {
     const filler = "x".repeat(MARKDOWN_PARSE_LIMIT);
 

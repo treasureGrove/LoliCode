@@ -7,6 +7,7 @@ export interface AgentPaneResizeHandleProps {
   maxWidth: number;
   growthDirection: 1 | -1;
   onWidthChange: (width: number) => void;
+  onWidthCommit: (width: number) => void;
 }
 
 let cancelActiveDrag: (() => void) | undefined;
@@ -53,7 +54,10 @@ export function AgentPaneResizeHandle(props: AgentPaneResizeHandleProps) {
           next = props.width + step * props.growthDirection;
         else return;
         event.preventDefault();
-        props.onWidthChange(bounded(next, props.minWidth, props.maxWidth));
+        const value = bounded(next, props.minWidth, props.maxWidth);
+        if (value === props.width) return;
+        props.onWidthChange(value);
+        props.onWidthCommit(value);
       }}
       onPointerDown={(event) => {
         if (
@@ -89,21 +93,36 @@ export function AgentPaneResizeHandle(props: AgentPaneResizeHandleProps) {
           /* The window listeners still cover older WebViews. */
         }
         let stopped = false;
+        let frame: number | undefined;
+        let nextX = startX;
+        let renderedWidth = startWidth;
+        const renderWidth = () => {
+          frame = undefined;
+          const current = latest.current;
+          const width = bounded(
+            startWidth + (nextX - startX) * current.growthDirection,
+            current.minWidth,
+            current.maxWidth,
+          );
+          if (width === renderedWidth) return;
+          renderedWidth = width;
+          if (mounted.current) current.onWidthChange(width);
+        };
         const move = (next: PointerEvent) => {
           if (next.pointerId !== pointerId) return;
           next.preventDefault();
-          const current = latest.current;
-          current.onWidthChange(
-            bounded(
-              startWidth + (next.clientX - startX) * current.growthDirection,
-              current.minWidth,
-              current.maxWidth,
-            ),
-          );
+          nextX = next.clientX;
+          if (frame === undefined) frame = requestAnimationFrame(renderWidth);
         };
         const stop = () => {
           if (stopped) return;
           stopped = true;
+          if (frame !== undefined) {
+            cancelAnimationFrame(frame);
+            renderWidth();
+          }
+          if (renderedWidth !== startWidth)
+            latest.current.onWidthCommit(renderedWidth);
           window.removeEventListener("pointermove", move);
           window.removeEventListener("pointerup", finish);
           window.removeEventListener("pointercancel", finish);

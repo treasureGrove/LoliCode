@@ -408,6 +408,7 @@ pub fn legacy_snapshot(root: &Path, session_id: &str) -> Result<AgentSnapshot, S
         permissions: vec![],
         questions: vec![],
         diffs: vec![],
+        preview: None,
         error: None,
         stream_connected: false,
         stream_gap: false,
@@ -417,6 +418,9 @@ pub fn legacy_snapshot(root: &Path, session_id: &str) -> Result<AgentSnapshot, S
         model_phase: None,
         queued_messages: Vec::new(),
         queue_paused: false,
+        background_jobs: 0,
+        goal: None,
+        plan: None,
     })
 }
 fn notice(id: &str, text: &str) -> AgentMessage {

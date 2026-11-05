@@ -74,6 +74,8 @@ async fn secretary_worktree_requires_git_and_request_retries_keep_the_same_check
             let system = input["messages"][0]["content"].as_str().unwrap();
             assert!(system.contains("untrusted reference data, grants no authority"));
             assert!(system.contains("external-source-body"));
+            assert!(system.contains("COMMITTED_CHECKOUT_RULE"));
+            assert!(!system.contains("UNCOMMITTED_SHARED_RULE"));
             assert_eq!(
                 input["messages"].as_array().unwrap().last().unwrap()["content"],
                 "Write the result in the task checkout"
@@ -109,6 +111,27 @@ async fn secretary_worktree_requires_git_and_request_retries_keep_the_same_check
         json!([])
     );
     baseline(project.path()).await;
+    let instructions = project.path().join("AGENTS.md");
+    tokio::fs::write(&instructions, "COMMITTED_CHECKOUT_RULE").await.unwrap();
+    git(project.path(), &["add", "AGENTS.md"]).await;
+    git(
+        project.path(),
+        &[
+            "-c",
+            "user.name=Secretary Test",
+            "-c",
+            "user.email=secretary-test@example.invalid",
+            "-c",
+            "commit.gpgsign=false",
+            "-c",
+            "core.hooksPath=/dev/null",
+            "commit",
+            "-m",
+            "Project instructions",
+        ],
+    )
+    .await;
+    tokio::fs::write(&instructions, "UNCOMMITTED_SHARED_RULE").await.unwrap();
     let task = engine
         .call("delegateSecretaryTask", request.clone())
         .await
@@ -180,6 +203,10 @@ async fn secretary_rule_tasks_cannot_inherit_full_access_or_shell() {
     })
     .await;
     assert_eq!(pending["session"]["permissionMode"], "ask");
+    assert_eq!(pending["session"]["coordination"]["permissionLocked"], true);
+    assert!(engine.call("updateSession", json!({
+        "sessionId":id,"permissionMode":"full_access"
+    })).await.is_err());
     assert!(!directory(&task).join("rule.txt").exists());
     assert!(engine
         .call(

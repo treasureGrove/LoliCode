@@ -175,7 +175,7 @@ fn snapshot_for_uri(
     result.map_err(|error| ProxyError::ConfigError(error.to_string()))
 }
 
-fn constant_time_equal(left: &[u8], right: &[u8]) -> bool {
+pub(crate) fn constant_time_equal(left: &[u8], right: &[u8]) -> bool {
     let mut difference = left.len() ^ right.len();
     for index in 0..left.len().max(right.len()) {
         difference |= usize::from(
@@ -484,7 +484,7 @@ pub(crate) async fn handle_gemini(
     let bytes = decode_request_body(&mut parts.headers, bytes)?;
     let body: Value = serde_json::from_slice(&bytes)
         .map_err(|_| ProxyError::InvalidRequest("请求体必须是 JSON 对象".into()))?;
-    validate_capabilities(&model, &body)?;
+    validate_tools(&model, &body)?;
     if source.api_key.trim().is_empty() {
         return Err(ProxyError::AuthError("该渠道缺少 API Key".into()));
     }
@@ -511,6 +511,7 @@ pub(crate) async fn handle_gemini(
         Some(target),
     )
     .await?;
+    ctx.rectifier_config.request_media_fallback = false;
     let upstream_id = model.id.trim_start_matches("models/");
     let endpoint = format!(
         "/v1beta/models/{upstream_id}:{operation}{}",
@@ -620,7 +621,7 @@ async fn handle(state: ProxyState, request: Request, wire: Wire) -> Result<Respo
         parts.extensions.insert(GatewayRelay);
     }
     let source = resolve_source_material(source).await?;
-    validate_capabilities(&model, &body)?;
+    validate_tools(&model, &body)?;
     body["model"] = json!(model.id);
     let source_protocol = normalize_protocol(protocol(&source, &model))?;
     let is_stream = body.get("stream").and_then(Value::as_bool).unwrap_or(false);
@@ -675,7 +676,7 @@ async fn handle(state: ProxyState, request: Request, wire: Wire) -> Result<Respo
     .await
 }
 
-fn validate_capabilities(model: &ChannelModel, body: &Value) -> Result<(), ProxyError> {
+fn validate_tools(model: &ChannelModel, body: &Value) -> Result<(), ProxyError> {
     if model.supports_tools == Some(false)
         && body
             .get("tools")
@@ -683,14 +684,6 @@ fn validate_capabilities(model: &ChannelModel, body: &Value) -> Result<(), Proxy
             .is_some_and(|tools| !tools.is_empty())
     {
         return Err(ProxyError::InvalidRequest("该模型不支持工具调用".into()));
-    }
-    if model
-        .input_modalities
-        .as_ref()
-        .is_some_and(|modalities| !modalities.iter().any(|modality| modality == "image"))
-        && contains_image(body)
-    {
-        return Err(ProxyError::InvalidRequest("该模型不支持图片输入".into()));
     }
     Ok(())
 }
@@ -711,20 +704,6 @@ async fn resolve_source_material(mut source: ChannelSource) -> Result<ChannelSou
         source.auth_kind = "api_key".into();
     }
     Ok(source)
-}
-
-fn contains_image(value: &Value) -> bool {
-    match value {
-        Value::Object(object) => {
-            object
-                .get("type")
-                .and_then(Value::as_str)
-                .is_some_and(|kind| matches!(kind, "image" | "image_url" | "input_image"))
-                || object.values().any(contains_image)
-        }
-        Value::Array(values) => values.iter().any(contains_image),
-        _ => false,
-    }
 }
 
 fn decode_request_body(headers: &mut HeaderMap, bytes: Bytes) -> Result<Bytes, ProxyError> {
@@ -1841,12 +1820,10 @@ mod tests {
     }
 
     #[test]
-    fn explicit_unsupported_model_capabilities_fail_before_forwarding() {
+    fn explicit_unsupported_tool_calls_fail_before_forwarding() {
         let mut unsupported = source().models[0].clone();
         unsupported.supports_tools = Some(false);
-        assert!(
-            validate_capabilities(&unsupported, &json!({"tools":[{"type":"function"}]})).is_err()
-        );
+        assert!(validate_tools(&unsupported, &json!({"tools":[{"type":"function"}]})).is_err());
     }
 
     #[test]

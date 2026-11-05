@@ -61,6 +61,8 @@ function Layout({
 }
 const layoutValue = () =>
   JSON.parse(screen.getByTestId("layout").textContent || "{}");
+const paint = () =>
+  act(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
 
 beforeEach(() => {
   keys.forEach((key) => localStorage.removeItem(key));
@@ -122,10 +124,11 @@ describe("Agent pane layout", () => {
     expect(Number(right.getAttribute("aria-valuenow"))).toBe(before + 40);
   });
 
-  it("drags across the iframe shield, ignores other pointers and restores existing selection styles on cancel", () => {
+  it("coalesces drag updates, saves only once and restores existing selection styles on cancel", async () => {
     document.body.style.setProperty("cursor", "wait", "important");
     document.body.style.setProperty("user-select", "text");
     render(<Layout />);
+    const save = vi.spyOn(Storage.prototype, "setItem");
     const handle = screen.getByRole("separator", { name: "调整项目侧栏宽度" });
     pointer(handle, "pointerdown", 252, 7);
     expect(
@@ -134,9 +137,15 @@ describe("Agent pane layout", () => {
     expect(document.body.style.userSelect).toBe("none");
     pointer(window, "pointermove", 312, 8);
     expect(handle).toHaveAttribute("aria-valuenow", "252");
-    pointer(window, "pointermove", 312, 7);
+    for (const x of [270, 290, 312]) pointer(window, "pointermove", x, 7);
+    expect(handle).toHaveAttribute("aria-valuenow", "252");
+    await paint();
     expect(handle).toHaveAttribute("aria-valuenow", "312");
-    pointer(window, "pointercancel", 312, 7);
+    expect(save).not.toHaveBeenCalled();
+    pointer(window, "pointermove", 324, 7);
+    pointer(window, "pointercancel", 324, 7);
+    expect(handle).toHaveAttribute("aria-valuenow", "324");
+    expect(save.mock.calls).toEqual([[keys[0], "324"]]);
     expect(
       document.querySelector("[data-agent-pane-resize-shield]"),
     ).not.toBeInTheDocument();
@@ -147,12 +156,13 @@ describe("Agent pane layout", () => {
     document.body.style.removeProperty("user-select");
   });
 
-  it("handles touch drags and removes window listeners and the shield when unmounted mid-drag", () => {
+  it("handles touch drags and removes window listeners and the shield when unmounted mid-drag", async () => {
     const remove = vi.spyOn(window, "removeEventListener");
     const view = render(<Layout sidebar={false} />);
     const handle = screen.getByRole("separator", { name: "调整预览宽度" });
     pointer(handle, "pointerdown", 500, 11, "touch");
     pointer(window, "pointermove", 450, 11, "touch");
+    await paint();
     expect(handle).toHaveAttribute("aria-valuenow", "470");
     view.unmount();
     expect(

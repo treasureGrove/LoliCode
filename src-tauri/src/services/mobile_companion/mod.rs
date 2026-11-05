@@ -960,7 +960,12 @@ impl MobileCompanionState {
                     .get("title")
                     .map(|_| bounded(params, "title", 160))
                     .transpose()?;
-                let session:AgentSession=host.call("createSession",json!({"projectPath":path,"modelId":model,"title":title,"mode":"build","permissionMode":"ask","backgroundOnly":true}),true).await?;
+                let session: AgentSession = agent_dispatch::native(
+                    app,
+                    "createSession",
+                    json!({"projectPath":path,"modelId":model,"title":title,"mode":"build","permissionMode":"ask","backgroundOnly":true}),
+                    true,
+                ).await?;
                 let mut store = self.0.store.lock().await;
                 let mut next = store.clone();
                 next.rooms
@@ -1061,7 +1066,12 @@ impl MobileCompanionState {
                         self.save(&next)?;
                         *store = next;
                         drop(store);
-                        let accepted:Result<Value,String>=host.call("sendMessage",json!({"sessionId":id,"text":text,"requestId":format!("mobile:{request_id}"),"locale":"zh","backgroundOnly":true}),true).await;
+                        let accepted: Result<Value, String> = agent_dispatch::native(
+                            app,
+                            "sendMessage",
+                            json!({"sessionId":id,"text":text,"requestId":format!("mobile:{request_id}"),"locale":"zh","backgroundOnly":true}),
+                            true,
+                        ).await;
                         if let Err(error) = accepted {
                             let mut store = self.0.store.lock().await;
                             let mut next = store.clone();
@@ -1162,17 +1172,15 @@ impl MobileCompanionState {
             .iter()
             .map(|p| p.path.clone())
             .collect::<BTreeSet<_>>();
-        let host = app.state::<InprocessAgentState>();
-        host.ensure_started(app).await?;
         let mut candidates = Vec::new();
         for project in projects {
-            let values: Vec<AgentSession> = host
-                .call(
-                    "listSessions",
-                    json!({"projectPath":project.path,"includeArchived":false}),
-                    false,
-                )
-                .await?;
+            let values: Vec<AgentSession> = agent_dispatch::native(
+                app,
+                "listSessions",
+                json!({"projectPath":project.path,"includeArchived":false}),
+                false,
+            )
+            .await?;
             if candidates.len().saturating_add(values.len()) > 20_000 {
                 return Err("会话目录过大，请在电脑端归档后重试".into());
             }
@@ -1188,11 +1196,13 @@ impl MobileCompanionState {
     }
     async fn interrupt_mobile_runs(&self, app: &AppHandle, active: &BTreeMap<String, String>) {
         for (id, request) in active {
-            if let Ok(snapshot) = agent_dispatch::get_agent_session(app.clone(), id.clone()).await {
-                if session_sync::is_mobile_flight(&snapshot, request) {
-                    let _ = agent_dispatch::interrupt_agent_session(app.clone(), id.clone()).await;
-                }
-            }
+            let _: Result<Value, String> = agent_dispatch::native(
+                app,
+                "interruptSession",
+                json!({"sessionId": id, "expectedRequestId": format!("mobile:{request}")}),
+                false,
+            )
+            .await;
         }
     }
     async fn owned_snapshot(

@@ -10,6 +10,17 @@ use tokio::sync::{mpsc, watch};
 
 pub(super) const CANCELLED: &str = "任务已停止";
 pub(super) const CONTEXT_EXCEEDED: &str = "[context_length_exceeded] 模型网关明确报告上下文超限";
+const STREAM_STALLED: &str = "模型流在输出后长时间没有新内容；已收到的文字与已完成工具保留，请重试。";
+const STREAM_DISCONNECTED: &str = "模型连接中断，已收到的文字保留，请重试";
+const STREAM_UNFINISHED: &str = "模型连接未返回明确的完成状态，已收到的内容保留。";
+const STREAM_TRUNCATED: &str = "模型流在结束前中断";
+
+pub(super) fn is_unfinished_stream(error: &str) -> bool {
+    matches!(
+        error,
+        STREAM_STALLED | STREAM_DISCONNECTED | STREAM_UNFINISHED | STREAM_TRUNCATED
+    )
+}
 const LIMIT: usize = 8 * 1024 * 1024;
 const MAX_TRANSIENT_RETRIES: usize = 5;
 const MAX_RETRY_DELAY: Duration = Duration::from_secs(60);
@@ -316,7 +327,7 @@ pub(super) async fn infer_with_policy(
                     continue;
                 }
                 if image_input_error(&error) {
-                    return Err("当前渠道或模型不支持图片输入，请切换支持视觉的模型或渠道。".into());
+                    return Err(IMAGE_INPUT_UNSUPPORTED.into());
                 }
             }
         }
@@ -363,7 +374,7 @@ async fn read_completion(
             _ = tokio::time::sleep_until(deadline) => {
                 if terminal_deadline.is_some() { break; }
                 return Err(transient_stream_failure(
-                    if progressed { "模型流在输出后长时间没有新内容；已收到的文字与已完成工具保留，请重试。" } else { "模型等待首个有效输出超时；心跳不能代替回答，请重试或切换模型。" },
+                    if progressed { STREAM_STALLED } else { "模型等待首个有效输出超时；心跳不能代替回答，请重试或切换模型。" },
                     &result, &calls, &finish,
                 ));
             },
@@ -377,7 +388,7 @@ async fn read_completion(
             Err(_) if terminal_deadline.is_some() => break,
             Err(_) => {
                 return Err(transient_stream_failure(
-                    "模型连接中断，已收到的文字保留，请重试",
+                    STREAM_DISCONNECTED,
                     &result,
                     &calls,
                     &finish,
@@ -463,7 +474,7 @@ async fn read_completion(
             }
         } else {
             let value: Value = serde_json::from_str(event.trim()).map_err(|_| {
-                transient_stream_failure("模型流在结束前中断", &result, &calls, &finish)
+                transient_stream_failure(STREAM_TRUNCATED, &result, &calls, &finish)
             })?;
             consume(
                 &value,
@@ -495,7 +506,7 @@ async fn read_completion(
         }
         _ => {
             return Err(transient_stream_failure(
-                "模型连接未返回明确的完成状态，已收到的内容保留。",
+                STREAM_UNFINISHED,
                 &result,
                 &calls,
                 &finish,
@@ -807,22 +818,33 @@ fn context_error(value: &Value) -> bool {
         })
 }
 
+pub(super) const IMAGE_INPUT_UNSUPPORTED: &str =
+    "当前渠道或模型不支持图片输入，请切换支持视觉的模型或渠道。";
+pub(super) const IMAGE_INPUT_UNVERIFIED: &str =
+    "当前渠道或模型未声明支持图片输入，无法进行视觉验收。请切换到已声明支持图片输入的模型；若你已确认此渠道会接收原图，可在「模型与渠道」的对应模型行设置「图片输入」。";
+
 fn image_input_error(value: &Value) -> bool {
-    let message = ["/error/message", "/message", "/error/code", "/error/type"]
+    let message = ["/error/message", "/message", "/error/code", "/error/type", "/error"]
         .iter()
         .filter_map(|pointer| value.pointer(pointer).and_then(Value::as_str))
         .collect::<Vec<_>>()
         .join(" ")
         .to_ascii_lowercase();
-    (message.contains("image") || message.contains("vision") || message.contains("multimodal"))
-        && [
-            "unsupported",
-            "not support",
-            "does not support",
-            "not enabled",
-            "invalid content",
-            "unavailable",
-        ]
+    let mentions_images = ["image", "vision", "multimodal"]
         .iter()
-        .any(|marker| message.contains(marker))
+        .any(|word| message.contains(word));
+    let rejected = [
+        "unsupported",
+        "not support",
+        "does not support",
+        "not enabled",
+        "invalid content",
+        "unavailable",
+    ]
+    .iter()
+    .any(|marker| message.contains(marker));
+    message.contains("不支持图片输入")
+        || message.contains("only support text")
+        || message.contains("only supports text")
+        || (mentions_images && rejected)
 }

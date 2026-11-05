@@ -122,6 +122,18 @@ function sha256(filename) {
   return createHash("sha256").update(readFileSync(filename)).digest("hex");
 }
 
+const harnessPayloadFiles = [
+  "node.exe",
+  "NODE-LICENSE",
+  "runtime-manifest.json",
+  "profile.cordis.patch.yml",
+  "host-operations.cordis.patch.yml",
+  "host-operations.mjs",
+  "host-mcp.mjs",
+  "node_modules\\@deepseek-ai\\dsh\\LICENSE",
+  "node_modules\\@deepseek-ai\\dsh\\lib\\bin.js",
+];
+
 function payloadFromGeneratedScript(filename) {
   const source = readFileSync(workspaceFile(filename), "utf8");
   const bundledHookIncludes = [
@@ -245,6 +257,14 @@ function payloadFromGeneratedScript(filename) {
       /(?:^|\\)LICENSE(?:\.[^\\]+)?$/iu.test(file.destination),
     ).length >= 5,
   );
+  for (const name of harnessPayloadFiles) {
+    assert(
+      files.some(
+        (file) => file.destination === `agent\\harness-runtime\\${name}`,
+      ),
+      `Actual NSIS payload must include the bundled Harness file: ${name}`,
+    );
+  }
   for (const [name, expected] of companionLicenses) {
     const destination = `licenses\\companion\\${name}`;
     const file = files.find((file) => file.destination === destination);
@@ -315,6 +335,9 @@ test("actual NSIS payload parser requires both official companion license bytes 
               `agent\\extensions\\${name.replaceAll("/", "\\")}`,
               path.join(extensionRoot, name),
             ),
+          ),
+          ...harnessPayloadFiles.map((name) =>
+            resource(`agent\\harness-runtime\\${name}`, executable),
           ),
           ...licenses.map(([destination, source]) =>
             resource(destination, source),
@@ -392,7 +415,7 @@ const skipReason = !generatedScript
 
 test(
   "final NSIS payload extracts every real file into the install directory and passes the packaged runtime check",
-  { skip: skipReason, timeout: 240000 },
+  { skip: skipReason, timeout: 1_200_000 },
   (context) => {
     assert(existsSync(makensis), `NSIS compiler not found: ${makensis}`);
     const payload = payloadFromGeneratedScript(path.resolve(generatedScript));
@@ -401,7 +424,10 @@ test(
       assert(notice, `Actual NSIS payload must include ${name}`);
       assert.equal(
         readFileSync(notice.source, "utf8").replace(/\r\n/g, "\n"),
-        readFileSync(path.join(repositoryRoot, name), "utf8").replace(/\r\n/g, "\n"),
+        readFileSync(path.join(repositoryRoot, name), "utf8").replace(
+          /\r\n/g,
+          "\n",
+        ),
         `Actual NSIS ${name} must preserve the frozen release notice`,
       );
       if (name === "THIRD_PARTY_NOTICES.md") {
@@ -505,7 +531,12 @@ test(
         "",
       );
       writeFileSync(fixture, "\uFEFF" + lines.join("\n"));
-      run(makensis, ["/V1", fixture], {}, "Compile real payload fixture");
+      run(
+        makensis,
+        ["/V1", fixture],
+        { timeout: 600_000 },
+        "Compile real payload fixture",
+      );
       assert(
         !existsSync(destination),
         "Fresh installation destination must not exist",
@@ -514,7 +545,7 @@ test(
         run(
           installer,
           ["/S"],
-          { env: isolatedEnvironment },
+          { env: isolatedEnvironment, timeout: 300_000 },
           `${round}: actual NSIS resource extraction`,
         );
         for (const [relative, expectedHash] of expectedHashes) {
@@ -566,12 +597,13 @@ test(
       const report = JSON.parse(reports[0]);
       assert.equal(report.product, "LoliCode");
       assert.equal(report.version, payload.version);
-      assert.equal(report.engine, "rust-in-process");
+      assert.equal(report.engine, "deepseek-harness");
       assert.equal(report.passed, true);
       assert.equal(report.paidCalls, 0);
       assert.equal(report.userConfigurationRead, false);
       assert.equal(report.temporaryProjectsOnly, true);
-      assert.equal(report.nativeEngineProcessSpawned, false);
+      assert.equal(report.nativeEngineProcessSpawned, true);
+      assert.equal(report.gatewayCredentialPersisted, false);
       assert.equal(report.realReadWriteAndContinuation, true);
       assert.equal(report.sessionRestartVerified, true);
       assert(report.defaultSkillsVerified >= 5);

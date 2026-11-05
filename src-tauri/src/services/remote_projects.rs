@@ -67,6 +67,25 @@ pub struct ResolvedProject {
     pub connection: RemoteConnection,
 }
 
+#[derive(Clone, PartialEq, Eq)]
+pub(super) struct RemoteBinding {
+    connection: String,
+    fingerprint: String,
+    revision: u64,
+    root: String,
+}
+
+impl ResolvedProject {
+    pub(super) fn binding(&self) -> RemoteBinding {
+        RemoteBinding {
+            connection: self.connection.id.clone(),
+            fingerprint: self.project.target_fingerprint.clone(),
+            revision: self.connection.revision,
+            root: self.project.root.clone(),
+        }
+    }
+}
+
 fn fingerprint(target: &RemoteTarget) -> Result<String, String> {
     Ok(format!(
         "{:x}",
@@ -95,7 +114,6 @@ impl RemoteProjects {
         anchor: &Path,
         path: &str,
     ) -> Result<(String, Vec<u8>), String> {
-        use base64::{engine::general_purpose::STANDARD, Engine as _};
         let binding = self.resolve(anchor)?;
         let relative = if path.starts_with('/') {
             path.strip_prefix(&(binding.project.root.trim_end_matches('/').to_string() + "/"))
@@ -103,13 +121,51 @@ impl RemoteProjects {
         } else {
             path
         };
+        let (_stop, cancel) = watch::channel(false);
+        self.preview_bound(anchor, relative, &binding.binding(), cancel)
+            .await
+    }
+
+    pub(crate) async fn workspace_directory(
+        self: &Arc<Self>,
+        anchor: &Path,
+        path: &str,
+    ) -> Result<(String, Value), String> {
+        let path = super::remote_agent_tools::relative(path)?;
+        let binding = self.resolve(anchor)?;
+        let (_stop, cancel) = watch::channel(false);
+        let listing = self
+            .call_bound(
+                anchor,
+                "list_files",
+                json!({"path":path,"recursive":false}),
+                &binding.binding(),
+                cancel,
+            )
+            .await?;
+        Ok((path, listing))
+    }
+
+    pub(super) async fn preview_bound(
+        self: &Arc<Self>,
+        anchor: &Path,
+        relative: &str,
+        binding: &RemoteBinding,
+        cancel: watch::Receiver<bool>,
+    ) -> Result<(String, Vec<u8>), String> {
+        use base64::{engine::general_purpose::STANDARD, Engine as _};
         let relative = super::remote_agent_tools::relative(relative)?;
         if relative == "." {
             return Err("请选择远程工程内的文件".into());
         }
-        let (_stop, cancel) = watch::channel(false);
         let receipt = self
-            .call(anchor, "preview_file", json!({"path":relative}), cancel)
+            .call_bound(
+                anchor,
+                "preview_file",
+                json!({"path":relative}),
+                binding,
+                cancel,
+            )
             .await?;
         let encoded = receipt["base64"]
             .as_str()
@@ -459,12 +515,37 @@ impl RemoteProjects {
         anchor: &Path,
         operation: &str,
         args: Value,
+        cancel: watch::Receiver<bool>,
+    ) -> Result<Value, String> {
+        let resolved = self.resolve(anchor)?;
+        self.call_resolved(resolved, operation, args, cancel).await
+    }
+
+    pub(super) async fn call_bound(
+        self: &Arc<Self>,
+        anchor: &Path,
+        operation: &str,
+        args: Value,
+        binding: &RemoteBinding,
+        cancel: watch::Receiver<bool>,
+    ) -> Result<Value, String> {
+        let resolved = self.resolve(anchor)?;
+        if &resolved.binding() != binding {
+            return Err("远程连接或工作目录已变更，请重新提交工具请求".into());
+        }
+        self.call_resolved(resolved, operation, args, cancel).await
+    }
+
+    async fn call_resolved(
+        self: &Arc<Self>,
+        resolved: ResolvedProject,
+        operation: &str,
+        args: Value,
         mut cancel: watch::Receiver<bool>,
     ) -> Result<Value, String> {
         if *cancel.borrow() {
             return Err("任务已停止".into());
         }
-        let resolved = self.resolve(anchor)?;
         let (c, flight, stop) = self.begin(
             &resolved.connection.id,
             Some((

@@ -12,7 +12,7 @@ pub async fn invoke_agent_document(
     method: String,
     args: Value,
 ) -> Result<Value, String> {
-    let project = super::agent_dispatch::session_project(&app, &session_id).await?;
+    let project = super::agent_dispatch::session_file_root(&app, &session_id).await?;
     let remote = app
         .state::<crate::services::inprocess_agent::InprocessAgentState>()
         .remote_projects(&app.state::<crate::store::AppState>())

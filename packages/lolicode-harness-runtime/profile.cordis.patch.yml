@@ -1,0 +1,11 @@
+# This overlay is for the isolated LoliCode SDK runtime only.
+- id: tool-plugin-manager
+  disabled: true
+
+- id: session-telemetry-otel
+  disabled: true
+
+# The desktop supplies these names through its approved public-web bridge.
+# Leaving the global SDK definitions active shadows host registration.
+- id: tool-web
+  disabled: true

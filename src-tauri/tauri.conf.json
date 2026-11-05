@@ -7,8 +7,8 @@
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:3000",
-    "beforeDevCommand": "pnpm run prepare:agent-assets && pnpm run dev:renderer",
-    "beforeBuildCommand": "pnpm run prepare:agent-assets && pnpm run build:renderer"
+    "beforeDevCommand": "pnpm run prepare:agent-assets && pnpm run prepare:harness-runtime --bundle && pnpm run dev:renderer",
+    "beforeBuildCommand": "pnpm run prepare:agent-assets && pnpm run prepare:harness-runtime --bundle && pnpm run build:renderer"
   },
   "app": {
     "windows": [
@@ -47,6 +47,7 @@
       "../LICENSE": "LICENSE",
       "../THIRD_PARTY_NOTICES.md": "THIRD_PARTY_NOTICES.md",
       "resources/agent/extensions/": "agent/extensions/",
+      "resources/agent/harness-runtime/": "agent/harness-runtime/",
       "resources/companion-licenses/": "licenses/companion/"
     },
     "icon": [

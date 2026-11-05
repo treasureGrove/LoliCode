@@ -505,13 +505,15 @@ def project_operation(request):
             if operation == 'list_files':
                 entries = []
                 size = 0
+                truncated = False
                 recursive = boolean(args.get('recursive'))
                 for _, _, name, kind in walk_files(start, recursive):
                     size += len(name.encode('utf-8')) + 32
                     if size > MAX_OUTPUT:
+                        truncated = True
                         break
                     entries.append({'path': name, 'kind': kind})
-                return {'entries': entries, 'bounded': True, 'fileChanges': []}
+                return {'entries': entries, 'bounded': True, 'truncated': truncated, 'fileChanges': []}
             pattern = text(args['pattern'], 4096, True)
             maximum = integer(args.get('max_results'), 100, 500)
             hits = []

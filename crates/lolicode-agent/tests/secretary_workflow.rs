@@ -13,6 +13,18 @@ use tokio::{
     net::{TcpListener, TcpStream},
 };
 
+const USER_GOAL: &str = "帮我在当前项目分别创建两份说明文件，做完后统一告诉我结果。";
+const WORKER_GOALS: [(&str, &str); 2] = [
+    (
+        "创建说明 A",
+        "在项目根目录创建 a.md，内容为 ACCEPTANCE_A。完成后报告 WORKER_A_CONFIRMED。",
+    ),
+    (
+        "创建说明 B",
+        "在项目根目录创建 b.txt，内容为 ACCEPTANCE_B。完成后报告 WORKER_B_CONFIRMED。",
+    ),
+];
+
 struct ModelFixture {
     address: String,
     parent: Arc<Mutex<String>>,
@@ -82,7 +94,8 @@ impl ModelFixture {
                     let Some((session, body)) = request(&mut stream).await else {
                         return;
                     };
-                    let system = body["messages"][0]["content"].as_str().unwrap_or_default();
+                    let messages = body["messages"].as_array().unwrap();
+                    let system = messages[0]["content"].as_str().unwrap_or_default();
                     let title = system.starts_with("You generate a short session title");
                     let parent = *owner.lock().unwrap() == session;
                     let count = if title {
@@ -97,28 +110,43 @@ impl ModelFixture {
                     let (delta, finish) = if title {
                         (json!({"content":"验收工作对话"}), "stop")
                     } else if parent && count == 1 {
-                        let a = call(
-                            "acceptance-delegate-a",
-                            "delegate_task",
-                            json!({"title":"创建说明 A","instructions":"在项目根目录创建 a.txt，内容为 ACCEPTANCE_A；完成后报告 WORKER_A_CONFIRMED。"}),
+                        assert_eq!(messages.last().unwrap()["content"], USER_GOAL);
+                        let delegate = body["tools"]
+                            .as_array()
+                            .unwrap()
+                            .iter()
+                            .find(|tool| tool["function"]["name"] == "delegate_task")
+                            .expect("chief advertises delegation");
+                        let parameters = &delegate["function"]["parameters"];
+                        assert!(parameters["required"]
+                            .as_array()
+                            .unwrap()
+                            .iter()
+                            .any(|field| field == "execution_mode"));
+                        assert_eq!(
+                            parameters["properties"]["execution_mode"]["enum"],
+                            json!(["shared", "worktree"])
                         );
-                        let mut b = call(
-                            "acceptance-delegate-b",
-                            "delegate_task",
-                            json!({"title":"创建说明 B","instructions":"在项目根目录创建 b.txt，内容为 ACCEPTANCE_B；完成后报告 WORKER_B_CONFIRMED。"}),
-                        );
-                        b["index"] = json!(1);
-                        (json!({"tool_calls":[a,b]}), "tool_calls")
+                        let mut delegations = Vec::new();
+                        for (index, (title, instructions)) in WORKER_GOALS.into_iter().enumerate() {
+                            let mut delegation = call(
+                                &format!("acceptance-delegate-{index}"),
+                                "delegate_task",
+                                json!({"title": title, "instructions": instructions, "execution_mode": "shared"}),
+                            );
+                            delegation["index"] = json!(index);
+                            delegations.push(delegation);
+                        }
+                        (json!({"tool_calls":delegations}), "tool_calls")
                     } else if parent {
                         let mut result = String::from("总秘书已接收工作状态。");
                         // Report only facts which actually arrived from workers,
                         // rather than the original assignment's requested marker.
                         for marker in ["WORKER_A_CONFIRMED", "WORKER_B_CONFIRMED"] {
-                            let reported =
-                                body["messages"].as_array().unwrap().iter().any(|message| {
-                                    message["role"] == "user"
-                                        && message["content"].to_string().contains(marker)
-                                });
+                            let reported = messages.iter().any(|message| {
+                                message["role"] == "user"
+                                    && message["content"].to_string().contains(marker)
+                            });
                             if reported {
                                 result.push_str(marker);
                             }
@@ -126,8 +154,14 @@ impl ModelFixture {
                         (json!({"content":result}), "stop")
                     } else if count == 1 {
                         let a = serialized.contains("ACCEPTANCE_A");
+                        let user = messages.last().unwrap()["content"].as_str().unwrap();
+                        assert!(
+                            user.contains(&format!("Original user text (verbatim):\n{USER_GOAL}"))
+                        );
+                        let (_, instructions) = if a { WORKER_GOALS[0] } else { WORKER_GOALS[1] };
+                        assert!(user.contains(instructions));
                         (
-                            json!({"tool_calls":[call("acceptance-write", "write_file", json!({"path":if a {"a.txt"} else {"b.txt"},"content":if a {"ACCEPTANCE_A"} else {"ACCEPTANCE_B"},"expected_content":null}))]}),
+                            json!({"tool_calls":[call("acceptance-write", "write_file", json!({"path":if a {"a.md"} else {"b.txt"},"content":if a {"ACCEPTANCE_A"} else {"ACCEPTANCE_B"},"expected_content":null}))]}),
                             "tool_calls",
                         )
                     } else {
@@ -174,7 +208,7 @@ async fn natural_language_delegation_writes_files_reports_and_survives_reopen() 
     assert_eq!(parent["coordination"]["role"], "secretary");
     let id = parent["id"].as_str().unwrap();
     *transport.parent.lock().unwrap() = id.into();
-    engine.call("sendMessage", json!({"sessionId":id,"requestId":"public-acceptance-request","text":"帮我分别创建两份说明文件，做完后统一告诉我结果。","locale":"zh"})).await.unwrap();
+    engine.call("sendMessage", json!({"sessionId":id,"requestId":"public-acceptance-request","text":USER_GOAL,"locale":"zh"})).await.unwrap();
     let deadline = tokio::time::Instant::now() + Duration::from_secs(20);
     let state = loop {
         let tasks = engine
@@ -209,7 +243,7 @@ async fn natural_language_delegation_writes_files_reports_and_survives_reopen() 
         tokio::time::sleep(Duration::from_millis(20)).await;
     };
     assert_eq!(
-        tokio::fs::read_to_string(project.join("a.txt"))
+        tokio::fs::read_to_string(project.join("a.md"))
             .await
             .unwrap(),
         "ACCEPTANCE_A"
@@ -220,7 +254,18 @@ async fn natural_language_delegation_writes_files_reports_and_survives_reopen() 
             .unwrap(),
         "ACCEPTANCE_B"
     );
-    for task in state["tasks"].as_array().unwrap() {
+    let preview = engine
+        .call("getSession", json!({"sessionId":id}))
+        .await
+        .unwrap();
+    assert_eq!(preview["preview"]["kind"], "file");
+    assert_eq!(preview["preview"]["path"], "a.md");
+    assert_eq!(preview["preview"]["sessionId"], state["tasks"][0]["sessionId"]);
+    for (task, (title, instructions)) in state["tasks"].as_array().unwrap().iter().zip(WORKER_GOALS)
+    {
+        assert_eq!(task["title"], title);
+        assert_eq!(task["instructions"], instructions);
+        assert_eq!(task["executionMode"], "shared");
         let worker = engine
             .call("getSession", json!({"sessionId":task["sessionId"]}))
             .await

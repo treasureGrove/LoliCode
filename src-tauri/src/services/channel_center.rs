@@ -63,6 +63,9 @@ pub struct ChannelModel {
     pub supports_tools: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub input_modalities: Option<Vec<String>>,
+    /// A user's declaration for this channel model, separate from discovery.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image_input_override: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub protocol: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -97,6 +100,30 @@ impl ChannelModel {
 
     pub fn available(&self) -> bool {
         self.enabled != Some(false) && self.supports_tools != Some(false)
+    }
+
+    fn agent_input_modalities(&self) -> Option<Vec<String>> {
+        let Some(allow_image) = self.image_input_override else {
+            return self
+                .input_modalities
+                .as_ref()
+                .filter(|modalities| {
+                    crate::model_capabilities::image_support_from_modalities(modalities).is_some()
+                })
+                .cloned();
+        };
+        let mut modalities = self.input_modalities.clone().unwrap_or_default();
+        modalities.retain(|mode| {
+            let mode = mode.trim();
+            !mode.is_empty() && !mode.eq_ignore_ascii_case("image")
+        });
+        if modalities.is_empty() {
+            modalities.push("text".into());
+        }
+        if allow_image {
+            modalities.push("image".into());
+        }
+        Some(modalities)
     }
 }
 
@@ -177,6 +204,8 @@ pub struct AgentCatalogModel {
     pub model_id: String,
     pub name: String,
     pub channel_name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_modalities: Option<Vec<String>>,
     /// Sponsored models are identified by the validated account-bound channel.
     #[serde(default)]
     pub is_free: bool,
@@ -606,6 +635,7 @@ fn blank_model(id: String) -> ChannelModel {
         reasoning_effort_transport: None,
         supports_tools: None,
         input_modalities: None,
+        image_input_override: None,
         protocol: None,
         enabled: None,
     }
@@ -735,6 +765,7 @@ fn merge_discovered(existing: &[ChannelModel], discovered: Vec<ChannelModel>) ->
             model.input_modalities = model
                 .input_modalities
                 .or_else(|| saved.input_modalities.clone());
+            model.image_input_override = saved.image_input_override;
             model.protocol = model.protocol.or_else(|| saved.protocol.clone());
             model.enabled = if model.supports_tools == Some(false) {
                 Some(false)
@@ -960,24 +991,7 @@ fn parse_channel_catalog(raw: &Value) -> Result<Vec<ChannelModel>, AppError> {
         ]
         .into_iter()
         .find_map(|pointer| entry.pointer(pointer).and_then(Value::as_bool));
-        model.input_modalities = [
-            "/input_modalities",
-            "/inputModalities",
-            "/modalities/input",
-            "/capabilities/input",
-        ]
-        .into_iter()
-        .find_map(|pointer| {
-            entry
-                .pointer(pointer)
-                .and_then(Value::as_array)
-                .and_then(|values| {
-                    values
-                        .iter()
-                        .map(|value| value.as_str().map(str::to_string))
-                        .collect::<Option<Vec<_>>>()
-                })
-        });
+        model.input_modalities = metadata.input_modalities;
         model.protocol = catalog_protocol(entry);
         if model.supports_tools == Some(false) || declares_non_agent_task(entry) {
             model.supports_tools = Some(false);
@@ -1176,7 +1190,8 @@ pub fn merge_copilot_models(
                 } else {
                     None
                 },
-                input_modalities: None,
+                input_modalities: model.input_modalities,
+                image_input_override: None,
                 protocol,
                 enabled: None,
             }
@@ -1243,6 +1258,7 @@ pub fn native_subscription_channel(tool: &str) -> Result<ChannelSource, AppError
             reasoning_effort_transport: None,
             supports_tools: None,
             input_modalities: None,
+            image_input_override: None,
             protocol: Some(protocol.into()),
             enabled: Some(true),
         }],
@@ -1301,7 +1317,8 @@ pub fn merge_subscription_models(
             reasoning_effort_source: None,
             reasoning_effort_transport: None,
             supports_tools: None,
-            input_modalities: None,
+            input_modalities: model.metadata.input_modalities,
+            image_input_override: None,
             protocol: Some(protocol.into()),
             enabled: None,
         })
@@ -1983,6 +2000,7 @@ fn agent_catalog_from_snapshot(snapshot: &ChannelCenterSnapshot) -> AgentCatalog
                             model.name.as_deref().unwrap_or(&model.id)
                         ),
                         channel_name: source.name.clone(),
+                        input_modalities: model.agent_input_modalities(),
                         is_free: source.auth_kind == "lolicode_account",
                         context_limit: model.effective_context_limit(),
                         context_limits: model.context_limits.clone(),
@@ -4048,6 +4066,51 @@ mod tests {
         assert_eq!(merged[0].protocol.as_deref(), Some("anthropic"));
         assert_eq!(merged[0].supports_tools, Some(false));
         assert_eq!(merged[0].enabled, Some(false));
+    }
+
+    #[test]
+    fn explicit_image_input_is_saved_per_route_and_survives_catalog_refresh() {
+        let db = Database::memory().unwrap();
+        let mut draft = snapshot();
+        draft.channels.push(source("other"));
+        draft.channels[0].models[0].image_input_override = Some(true);
+        draft.channels[0].models[1].image_input_override = Some(false);
+        let fresh = parse_channel_catalog(&json!({"data":[
+            {"id":"model-a","imageInputOverride":false},
+            {"id":"model-b","modalities":{"input":["text","image","audio"]}}
+        ]}))
+        .unwrap();
+        assert_eq!(fresh[0].image_input_override, None);
+        draft.channels[0].models = merge_discovered(&draft.channels[0].models, fresh);
+        save(&db, draft).unwrap();
+        let saved = load(&db).unwrap();
+        assert_eq!(saved.channels[0].models[0].image_input_override, Some(true));
+        assert_eq!(saved.channels[0].models[0].input_modalities, None);
+        assert_eq!(
+            saved.channels[0].models[1].image_input_override,
+            Some(false)
+        );
+        assert_eq!(
+            saved.channels[0].models[1]
+                .input_modalities
+                .as_ref()
+                .unwrap(),
+            &["text", "image", "audio"]
+        );
+
+        let catalog = agent_catalog(&db).unwrap();
+        let modalities = |route: &str| {
+            catalog
+                .models
+                .iter()
+                .find(|model| model.model_id == route)
+                .unwrap()
+                .input_modalities
+                .as_deref()
+        };
+        assert_eq!(modalities("one/model-a").unwrap(), &["text", "image"]);
+        assert_eq!(modalities("one/model-b").unwrap(), &["text", "audio"]);
+        assert!(modalities("other/model-a").is_none());
     }
 
     #[test]

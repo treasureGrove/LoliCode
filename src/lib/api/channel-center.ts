@@ -29,6 +29,8 @@ export interface ChannelModel {
   reasoningEffortTransport?: "declared" | "unconfirmed" | "mixed";
   supportsTools?: boolean;
   inputModalities?: string[];
+  /** Legacy channel setting retained for stored snapshots. */
+  imageInputOverride?: boolean;
   protocol?: ChannelProtocol;
   /** Missing means selected; discovery can exclude unsupported models. */
   enabled?: boolean;

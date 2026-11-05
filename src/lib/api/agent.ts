@@ -138,7 +138,7 @@ export const agentApi = {
     modelId: string,
     mode: AgentMode,
     title?: string,
-    permissionMode: AgentPermissionMode = "full_access",
+    permissionMode?: AgentPermissionMode,
     reasoningEffort?: string,
     projectPath?: string,
     contextLimit?: number,
@@ -147,21 +147,21 @@ export const agentApi = {
       modelId,
       mode,
       title,
-      permissionMode,
+      ...(permissionMode !== undefined ? { permissionMode } : {}),
       reasoningEffort,
       ...(contextLimit !== undefined ? { contextLimit } : {}),
       ...(projectPath ? { projectPath } : {}),
     }),
   openSecretary: (
     modelId: string,
-    permissionMode: AgentPermissionMode = "full_access",
+    permissionMode?: AgentPermissionMode,
     reasoningEffort?: string,
     projectPath?: string,
     contextLimit?: number,
   ) =>
     invoke<AgentSession>("open_agent_secretary", {
       modelId,
-      permissionMode,
+      ...(permissionMode !== undefined ? { permissionMode } : {}),
       reasoningEffort,
       ...(projectPath ? { projectPath } : {}),
       ...(contextLimit !== undefined ? { contextLimit } : {}),
@@ -278,6 +278,8 @@ export const agentApi = {
       sessionId,
       taskId,
     }),
+  deleteSecretaryTask: (sessionId: string, taskId: string) =>
+    invoke<void>("delete_agent_secretary_task", { sessionId, taskId }),
   updateSession: (
     sessionId: string,
     patch: {
@@ -328,18 +330,30 @@ export const agentApi = {
     requestId: string,
     images: AgentImageAttachment[] = [],
     documents: AgentDocumentAttachment[] = [],
+    delivery?: "steer",
   ) =>
     invoke<{ status: "accepted" | "rejected"; message?: string }>(
       "enqueue_agent_message",
-      messagePayload(sessionId, text, requestId, images, documents),
+      {
+        ...messagePayload(sessionId, text, requestId, images, documents),
+        ...(delivery && { delivery }),
+      },
     ),
   removeQueuedMessage: (sessionId: string, requestId: string) =>
     invoke<AgentQueuedInput>("remove_queued_agent_message", {
       sessionId,
       requestId,
     }),
-  sendQueuedMessageNow: (sessionId: string, requestId: string) =>
-    invoke<void>("send_queued_agent_message_now", { sessionId, requestId }),
+  sendQueuedMessageNow: (
+    sessionId: string,
+    requestId: string,
+    steerOnly?: true,
+  ) =>
+    invoke<void>("send_queued_agent_message_now", {
+      sessionId,
+      requestId,
+      ...(steerOnly && { steerOnly }),
+    }),
   queryCommand: (sessionId: string, requestId: string) =>
     invoke<{
       status: "unknown" | "accepted" | "rejected" | "failed";

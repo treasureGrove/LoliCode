@@ -95,13 +95,19 @@ export const isolatedAgentHtml = (content: string) => {
 export function AgentPreviewPanel({
   sessionId,
   path,
+  line,
   onClose,
+  onNavigate,
   width,
+  visible = true,
 }: {
   sessionId: string;
   path: string;
+  line?: number;
   onClose: () => void;
+  onNavigate?: (path: string) => void;
   width?: number;
+  visible?: boolean;
 }) {
   const [preview, setPreview] = useState<AgentFilePreview | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -109,7 +115,9 @@ export function AgentPreviewPanel({
   const [revision, setRevision] = useState(0);
   const [requestedPath, setRequestedPath] = useState(path);
   const [draft, setDraft] = useState(path);
-  const [view, setView] = useState<"preview" | "source">("preview");
+  const [view, setView] = useState<"preview" | "source">(
+    line === undefined ? "preview" : "source",
+  );
   const [expanded, setExpanded] = useState(false);
   const [showPath, setShowPath] = useState(false);
   const panel = useRef<HTMLElement>(null);
@@ -120,7 +128,7 @@ export function AgentPreviewPanel({
     : requestedPath;
   const officeKind = officePath.split(".").pop()?.toLowerCase();
   useEffect(() => {
-    if (!expanded) return;
+    if (!expanded || !visible) return;
     const handleKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
@@ -145,7 +153,7 @@ export function AgentPreviewPanel({
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [expanded]);
+  }, [expanded, visible]);
   useEffect(() => {
     if (!officeDocument) {
       setExpanded(false);
@@ -160,7 +168,8 @@ export function AgentPreviewPanel({
   useEffect(() => {
     setRequestedPath(path);
     setDraft(path);
-  }, [path]);
+    if (line !== undefined) setView("source");
+  }, [path, line]);
   useEffect(() => {
     let disposed = false;
     setPreview(null);
@@ -203,7 +212,7 @@ export function AgentPreviewPanel({
   };
   return (
     <>
-      {expanded && (
+      {expanded && visible && (
         <div
           className="wb-office-preview-backdrop"
           aria-hidden="true"
@@ -212,6 +221,7 @@ export function AgentPreviewPanel({
       )}
       <aside
         ref={panel}
+        hidden={!visible}
         className={`wb-preview-panel${officeDocument ? " wb-preview-panel--office" : ""}${expanded ? " wb-preview-panel--expanded" : ""}`}
         aria-label="文件预览"
         role={expanded ? "dialog" : undefined}
@@ -322,7 +332,9 @@ export function AgentPreviewPanel({
             onSubmit={(event) => {
               event.preventDefault();
               if (draft.trim()) {
-                setRequestedPath(draft.trim());
+                const next = draft.trim();
+                setRequestedPath(next);
+                onNavigate?.(next);
                 setShowPath(false);
               }
             }}
@@ -425,6 +437,7 @@ export function AgentPreviewPanel({
               <SessionCodeBlock
                 className="wb-preview-source"
                 code={preview.content || ""}
+                sourceLine={requestedPath === path ? line : undefined}
               />
             )}
           </div>

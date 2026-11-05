@@ -17,9 +17,9 @@ LoliCode 4.0.15 的新会话使用本项目的 Rust 应用内核心，默认发�
 
 默认技能来自 [ZCode](https://github.com/zai-org/ZCode) 源码提交 `aac4755666d09fdcd70272fcf063c077a639015f`：skill-creator、docx、pdf、pptx、xlsx，按该提交的官方 defaultEnabled 清单默认启用。保留原始技能、脚本、引用资料和许可文件，并记录每个文件的 SHA-256；见 `third-party/zcode/manifest.json` 与 `third-party/zcode/NOTICE.md`。文档技能原始 frontmatter 与 LICENSE.txt 的不同许可标注原文保留并在 NOTICE 中解释。
 
-MiMo-Code、DeepSeek Harness 和 Claude Code 的公开流程作为设计参考，未随本版分发其执行引擎。保留的旧 ZCode 复用范围见 `packages/lolicode-zcode-runtime/README.md`；当前本体能力与迁移边界见 `docs/guides/lolicode-inprocess-agent.md`，没有随包提供上游官方账号、云端私有服务或不可用的 Computer Use 实现。
+桌面 Agent 随包提供官方 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) npm 发行物 `@deepseek-ai/dsh@0.2.2-rc.1` 及其锁定依赖。运行时、版本和许可打包位置见 `packages/lolicode-harness-runtime/README.md`。交互终端复用该发行物的本地终端进程服务，前端使用 `@xterm/xterm` 6.0.0 和 `@xterm/addon-fit` 0.11.0（MIT）。MiMo-Code 和 Claude Code 的公开流程仅作为设计参考。
 
-Loli 秘书的原生协调机制参考 [DeepSeek Superagent](https://github.com/deepseek-ai/dsh-superagent-prototype) 提交 `6337fc823ce20251c8de8085948165c81aaa701e`（MIT，Copyright (c) 2026 DeepSeek Harness Team）的协调者／工作者分工、来源与授权边界、任务关联和持久回报设计。当前未分发该项目的完整 TypeScript 源码或 DSH 运行时；参考许可留档于 `third-party/deepseek-superagent/`，具体适配与未实现范围见 `docs/architecture/deepseek-superagent-adaptation.md`。
+Loli 秘书的协调机制参考 [DeepSeek SuperAgent](https://github.com/deepseek-ai/dsh-superagent-prototype)（MIT，Copyright (c) 2026 DeepSeek Harness Team）的协调者／工作者分工、来源与授权边界、任务关联和任务报告。参考提交和许可留档于 `third-party/deepseek-superagent/`，适配范围见 `docs/architecture/deepseek-superagent-adaptation.md`。
 
 4.0.18 的本机记忆参考 [NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent) 的有界双存储、工具整理与上下文快照设计，核验提交为 `848fc0ad8be766b9dc10fe42bd80b5fc2d45d95c`（MIT）。存储、权限、上下文与界面由本项目独立实现，未包含 Hermes 运行时或其记忆插件；范围见 `docs/architecture/agent-memory.md`。
 

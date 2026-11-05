@@ -414,6 +414,7 @@ mod tests {
             context_window: None,
             context_windows: None,
             output_limit: None,
+            input_modalities: None,
             supported_endpoints: Vec::new(),
             supports_parallel_tool_calls: None,
             reasoning_effort: None,

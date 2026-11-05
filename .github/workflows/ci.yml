@@ -166,7 +166,7 @@ jobs:
       - name: Setup Node.js for bundled assets and relay fixtures
         uses: actions/setup-node@v6
         with:
-          node-version: "24"
+          node-version-file: .node-version
 
       - name: Install companion relay fixture dependencies
         run: npm ci --prefix packages/companion-relay --ignore-scripts --no-audit --no-fund
@@ -176,6 +176,7 @@ jobs:
         run: |
           mkdir -p dist
           node scripts/build/prepare-agent-assets.mjs
+          node scripts/build/prepare-lolicode-harness-runtime.mjs --bundle
 
       - name: Check Rust formatting
         run: cargo fmt --check --manifest-path src-tauri/Cargo.toml
@@ -248,6 +249,7 @@ jobs:
         run: |
           mkdir -p dist
           node scripts/build/prepare-agent-assets.mjs
+          node scripts/build/prepare-lolicode-harness-runtime.mjs --bundle
 
       - name: Prepare WSL2-backed test environment
         shell: pwsh

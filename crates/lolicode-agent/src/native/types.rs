@@ -86,6 +86,9 @@ pub(super) struct StoredSession {
     /// links are stored on AgentSession and never grant additional authority.
     #[serde(default)]
     pub secretary_tasks: Vec<AgentSecretaryTask>,
+    /// Removed tasks retain their worker links and delegation receipts.
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub secretary_removed_tasks: BTreeSet<String>,
     #[serde(default)]
     pub secretary_reports: Vec<SecretaryReport>,
     #[serde(default)]

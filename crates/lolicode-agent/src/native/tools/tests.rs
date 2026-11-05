@@ -34,10 +34,13 @@ fn schema_and_inspection_expose_real_tools_and_plan_mutation_boundaries() {
             "grep",
             "write_file",
             "apply_patch",
-            "run_command"
+            "run_command",
+            "manage_process"
         ]
     );
     let project = tempfile::tempdir().unwrap();
+    let start = inspect(project.path(), "manage_process", &json!({"action":"start","command":"node server.cjs","port":8124})).unwrap();
+    assert!(start.mutating && start.requires_approval && start.dangerous);
     fs::write(project.path().join("file.txt"), "old").unwrap();
     assert!(
         !inspect(project.path(), "read_file", &json!({"path":"file.txt"}))
@@ -403,6 +406,53 @@ fn malformed_tools_and_outside_paths_are_rejected_before_execution() {
 }
 
 #[tokio::test]
+async fn read_file_paginates_whole_utf8_lines_and_marks_a_clipped_single_line() {
+    let project = tempfile::tempdir().unwrap();
+    let first = "甲".repeat(24_000);
+    let second = "乙".repeat(24_000);
+    let oversized = "丙".repeat(60_000);
+    fs::write(
+        project.path().join("large.txt"),
+        format!("{first}\r\n{second}\r\n{oversized}\r\n结束"),
+    )
+    .unwrap();
+
+    for (offset, line) in [(1, first), (2, second)] {
+        let page = run(
+            project.path(),
+            "read_file",
+            json!({"path":"large.txt", "offset":offset}),
+        )
+        .await
+        .unwrap();
+        assert!(page.text.starts_with(&format!("large.txt\n{offset}: {line}\n[")));
+        assert!(page.text.contains(&format!("offset={}", offset + 1)));
+        assert!(page.text.len() <= MAX_OUTPUT);
+    }
+
+    let clipped = run(
+        project.path(),
+        "read_file",
+        json!({"path":"large.txt", "offset":3}),
+    )
+    .await
+    .unwrap();
+    assert!(clipped.text.starts_with("large.txt\n3: 丙"));
+    assert!(clipped.text.contains("单行过长，已截断"));
+    assert!(clipped.text.contains("offset=4"));
+    assert!(clipped.text.len() <= MAX_OUTPUT);
+
+    let end = run(
+        project.path(),
+        "read_file",
+        json!({"path":"large.txt", "offset":4}),
+    )
+    .await
+    .unwrap();
+    assert_eq!(end.text, "large.txt\n4: 结束\n[已到文件末尾，共 4 行。]\n");
+}
+
+#[tokio::test]
 async fn actual_file_tools_read_search_patch_and_publish_real_atomic_diffs() {
     let project = tempfile::tempdir().unwrap();
     let created = run(
@@ -434,6 +484,7 @@ async fn actual_file_tools_read_search_patch_and_publish_real_atomic_diffs() {
     .unwrap();
     assert!(read.text.contains("2: two"));
     assert!(!read.text.contains("one"));
+    assert!(read.text.contains("offset=3"));
     assert!(read.file_changes.is_empty());
     let found = run(project.path(), "search_files", json!({"pattern":"two"}))
         .await
@@ -679,9 +730,9 @@ async fn native_shell_cancellation_reaps_descendants_before_they_can_write() {
 async fn actual_shell_timeout_and_output_limit_are_enforced() {
     let project = tempfile::tempdir().unwrap();
     #[cfg(windows)]
-    let wait = "ping -n 20 127.0.0.1 >nul";
+    let wait = "echo timeout_stdout & echo timeout_stderr 1>&2 & ping -n 20 127.0.0.1 >nul";
     #[cfg(not(windows))]
-    let wait = "sleep 20";
+    let wait = "echo timeout_stdout; echo timeout_stderr >&2; sleep 20";
     let result = run(
         project.path(),
         "run_command",
@@ -689,12 +740,14 @@ async fn actual_shell_timeout_and_output_limit_are_enforced() {
     )
     .await;
     assert!(match result {
-        Err(error) => error.contains("超时"),
+        Err(error) => error.contains("1 秒后超时")
+            && error.contains("timeout_stdout") && error.contains("timeout_stderr"),
         Ok(output) => panic!("Expected timeout: {}", output.text),
     });
     #[cfg(windows)]
-    let noisy = "for /L %i in (1,1,10000) do @echo 0123456789012345678901234567890123456789";
-    #[cfg(not(windows))]let noisy="i=0; while [ $i -lt 10000 ]; do printf 0123456789012345678901234567890123456789; i=$((i+1)); done";
+    let noisy = "echo early_stdout & echo quiet_stderr 1>&2 & (for /L %i in (1,1,10000) do @echo 0123456789012345678901234567890123456789) & echo final_stdout & echo final_stderr 1>&2 & exit /b 7";
+    #[cfg(not(windows))]
+    let noisy = "echo early_stdout; echo quiet_stderr >&2; i=0; while [ $i -lt 10000 ]; do printf 0123456789012345678901234567890123456789; i=$((i+1)); done; echo final_stdout; echo final_stderr >&2; exit 7";
     let output = run(
         project.path(),
         "run_command",
@@ -702,8 +755,13 @@ async fn actual_shell_timeout_and_output_limit_are_enforced() {
     )
     .await
     .unwrap();
-    assert!(output.text.len() < MAX_OUTPUT + 200);
-    assert!(output.text.contains("输出已截断"));
+    assert!(output.text.len() <= MAX_OUTPUT);
+    assert!(output.text.starts_with("exit_code=7\n"));
+    assert!(output.text.contains("final_stdout"));
+    assert!(output.text.contains("quiet_stderr"));
+    assert!(output.text.contains("final_stderr"));
+    assert!(!output.text.contains("early_stdout"));
+    assert!(output.text.ends_with("[输出已截断]"));
     assert!(output.file_changes.is_empty());
     // Lossy decoding can expand each non-UTF8 byte to three UTF8 bytes.
     // The returned model text remains bounded after that expansion as well.

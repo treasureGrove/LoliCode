@@ -44,13 +44,13 @@ export function computeAgentPaneLayout({
   );
   // On narrow windows, keep both the chat and an open preview usable. Closing
   // the preview restores the user's sidebar visibility without changing it.
-  const showSidebar =
-    sidebarVisible &&
+  const sidebarCanOpen =
     available >=
-      chatMinimum +
-        160 +
-        (previewVisible ? previewMinimum + HANDLE_WIDTH : 0) +
-        HANDLE_WIDTH;
+    chatMinimum +
+      160 +
+      (previewVisible ? previewMinimum + HANDLE_WIDTH : 0) +
+      HANDLE_WIDTH;
+  const showSidebar = sidebarVisible && sidebarCanOpen;
   const handles = (Number(showSidebar) + Number(previewVisible)) * HANDLE_WIDTH;
   const sidebarMax = showSidebar
     ? Math.max(
@@ -77,6 +77,7 @@ export function computeAgentPaneLayout({
     ? clamp(previewPreferred, previewMinimum, previewMax)
     : 0;
   return {
+    sidebarCanOpen,
     sidebarVisible: showSidebar,
     sidebarWidth,
     previewWidth,
@@ -120,15 +121,11 @@ export function useAgentPaneLayout({
   }, []);
   const changeSidebar = useCallback((next: number) => {
     if (!Number.isFinite(next)) return;
-    const value = clamp(next, 160, 420);
-    setSidebar(value);
-    saveWidth(SIDEBAR_KEY, value);
+    setSidebar(clamp(next, 160, 420));
   }, []);
   const changePreview = useCallback((next: number) => {
     if (!Number.isFinite(next)) return;
-    const value = clamp(next, 140, 960);
-    setPreview(value);
-    saveWidth(PREVIEW_KEY, value);
+    setPreview(clamp(next, 140, 960));
   }, []);
   const layout = computeAgentPaneLayout({
     width,
@@ -144,6 +141,7 @@ export function useAgentPaneLayout({
     maxWidth: layout.sidebarMax,
     growthDirection: 1,
     onWidthChange: changeSidebar,
+    onWidthCommit: (value) => saveWidth(SIDEBAR_KEY, value),
   };
   const previewHandleProps: AgentPaneResizeHandleProps = {
     label: "调整预览宽度",
@@ -152,6 +150,7 @@ export function useAgentPaneLayout({
     maxWidth: layout.previewMax,
     growthDirection: -1,
     onWidthChange: changePreview,
+    onWidthCommit: (value) => saveWidth(PREVIEW_KEY, value),
   };
   return { ...layout, containerRef, sidebarHandleProps, previewHandleProps };
 }

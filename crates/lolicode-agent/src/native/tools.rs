@@ -11,7 +11,8 @@ use std::{
 use tokio::sync::watch;
 
 mod command;
-pub(super) use command::safe_program;
+mod managed;
+pub(super) use managed::Processes;
 mod search;
 #[cfg(test)]
 mod tests;
@@ -53,18 +54,136 @@ pub struct FileChange {
     pub after: Option<String>,
 }
 
+/// Host-owned classification shared by catalog filtering and execution gates.
+/// Individual tool calls still use the ordinary inspection and approval path.
+#[derive(Clone, Copy)]
+pub(super) enum CoreToolAccess {
+    Inspect,
+    Edit,
+    Process,
+}
+
+impl CoreToolAccess {
+    pub(super) fn allows_background(self) -> bool {
+        matches!(self, Self::Inspect | Self::Edit)
+    }
+
+    pub(super) fn allows_report(self) -> bool {
+        matches!(self, Self::Inspect)
+    }
+}
+
+struct CoreToolDefinition {
+    name: &'static str,
+    description: &'static str,
+    access: CoreToolAccess,
+    properties: fn() -> Value,
+    required: &'static [&'static str],
+}
+
+const CORE_TOOLS: &[CoreToolDefinition] = &[
+    CoreToolDefinition {
+        name: "read_file",
+        description: "Read numbered UTF-8 lines inside the project. offset is the 1-based first line. Use the returned next offset when present to continue reading.",
+        access: CoreToolAccess::Inspect,
+        properties: || json!({"path":{"type":"string"},"offset":{"type":"integer","minimum":1},"limit":{"type":"integer","minimum":1,"maximum":2000}}),
+        required: &["path"],
+    },
+    CoreToolDefinition {
+        name: "view_image",
+        description: "View a raster image inside the project and inspect its visual contents. The file is sent to the model as an image, not decoded as text. Supports PNG, JPEG, WebP, GIF, BMP and AVIF up to 5 MiB.",
+        access: CoreToolAccess::Inspect,
+        properties: || json!({"path":{"type":"string"}}),
+        required: &["path"],
+    },
+    CoreToolDefinition {
+        name: "list_files",
+        description: "List project entries. Recursive listing skips .git, node_modules and target, and is bounded.",
+        access: CoreToolAccess::Inspect,
+        properties: || json!({"path":{"type":"string"},"recursive":{"type":"boolean"}}),
+        required: &[],
+    },
+    CoreToolDefinition {
+        name: "search_files",
+        description: "Search literal, case-sensitive text in project UTF-8 files, not a regular expression. Skips dependency/build directories and binary or oversized files.",
+        access: CoreToolAccess::Inspect,
+        properties: || json!({"path":{"type":"string"},"pattern":{"type":"string","minLength":1},"max_results":{"type":"integer","minimum":1,"maximum":500}}),
+        required: &["pattern"],
+    },
+    CoreToolDefinition {
+        name: "glob",
+        description: "Find project files using a relative glob pattern (*, ?, [] and **). pattern is relative to path, which defaults to the project. Returns project-relative paths; skips Git, dependency/build directories and symlinks. Traversal and results are bounded.",
+        access: CoreToolAccess::Inspect,
+        properties: || json!({"pattern":{"type":"string","minLength":1,"maxLength":4096},"path":{"type":"string"},"max_results":{"type":"integer","minimum":1,"maximum":500}}),
+        required: &["pattern"],
+    },
+    CoreToolDefinition {
+        name: "grep",
+        description: "Search a Rust-compatible regular expression in project UTF-8 text files. Returns project-relative path:line:content. case_sensitive defaults to true. Optional include is a relative glob; patterns without a slash match filenames recursively. Skips Git, dependency/build directories, binary and oversized files. Scanning, matching lines and output are bounded; no shell runs.",
+        access: CoreToolAccess::Inspect,
+        properties: || json!({"pattern":{"type":"string","minLength":1,"maxLength":4096},"path":{"type":"string"},"include":{"type":"string","minLength":1,"maxLength":4096},"case_sensitive":{"type":"boolean"},"max_results":{"type":"integer","minimum":1,"maximum":500}}),
+        required: &["pattern"],
+    },
+    CoreToolDefinition {
+        name: "write_file",
+        description: "Atomically create or replace one UTF-8 project file. expected_content must exactly match an existing file; null means the file must not exist. Read existing files first. Parent directory must exist.",
+        access: CoreToolAccess::Edit,
+        properties: || json!({"path":{"type":"string"},"content":{"type":"string"},"expected_content":{"type":["string","null"]}}),
+        required: &["path", "content", "expected_content"],
+    },
+    CoreToolDefinition {
+        name: "apply_patch",
+        description: "Atomically replace one exact, unique, non-empty old_text occurrence in an existing UTF-8 project file. Ambiguous or stale text is rejected.",
+        access: CoreToolAccess::Edit,
+        properties: || json!({"path":{"type":"string"},"old_text":{"type":"string","minLength":1},"new_text":{"type":"string"}}),
+        required: &["path", "old_text", "new_text"],
+    },
+    CoreToolDefinition {
+        name: "run_command",
+        description: "Run a short project shell command and wait for it to exit (1–120 seconds). The session's permission mode applies. The process tree, including detached children, is reaped before return. For dev servers use manage_process with action=start and a loopback port.",
+        access: CoreToolAccess::Process,
+        properties: || json!({"command":{"type":"string","minLength":1},"workdir":{"type":"string"},"timeout_seconds":{"type":"integer","minimum":1,"maximum":120}}),
+        required: &["command"],
+    },
+    CoreToolDefinition {
+        name: "manage_process",
+        description: "Start, read logs, or stop an owned local background process. Start with command and optional workdir and port. For a browser dev server provide its IPv4 loopback port, which must become ready before this tool returns. Use the returned process_id for logs or stop.",
+        access: CoreToolAccess::Process,
+        properties: || json!({"action":{"type":"string","enum":["start","logs","stop"]},"command":{"type":"string"},"workdir":{"type":"string"},"port":{"type":"integer","minimum":1,"maximum":65535},"process_id":{"type":"string"}}),
+        required: &["action"],
+    },
+];
+
+pub(super) fn core_names() -> impl Iterator<Item = &'static str> {
+    CORE_TOOLS.iter().map(|tool| tool.name)
+}
+
+pub(super) fn core_access(name: &str) -> Option<CoreToolAccess> {
+    CORE_TOOLS
+        .iter()
+        .find(|tool| tool.name == name)
+        .map(|tool| tool.access)
+}
+
 pub fn schemas() -> Vec<Value> {
-    [
-        ("read_file", "Read UTF-8 text inside the project. offset is a 1-based line number; output is bounded.", json!({"path":{"type":"string"},"offset":{"type":"integer","minimum":1},"limit":{"type":"integer","minimum":1,"maximum":2000}}), vec!["path"]),
-        ("view_image", "View a raster image inside the project and inspect its visual contents. The file is sent to the model as an image, not decoded as text. Supports PNG, JPEG, WebP, GIF, BMP and AVIF up to 5 MiB.", json!({"path":{"type":"string"}}), vec!["path"]),
-        ("list_files", "List project entries. Recursive listing skips .git, node_modules and target, and is bounded.", json!({"path":{"type":"string"},"recursive":{"type":"boolean"}}), vec![]),
-        ("search_files", "Search literal, case-sensitive text in project UTF-8 files, not a regular expression. Skips dependency/build directories and binary or oversized files.", json!({"path":{"type":"string"},"pattern":{"type":"string","minLength":1},"max_results":{"type":"integer","minimum":1,"maximum":500}}), vec!["pattern"]),
-        ("glob", "Find project files using a relative glob pattern (*, ?, [] and **). pattern is relative to path, which defaults to the project. Returns project-relative paths; skips Git, dependency/build directories and symlinks. Traversal and results are bounded.", json!({"pattern":{"type":"string","minLength":1,"maxLength":4096},"path":{"type":"string"},"max_results":{"type":"integer","minimum":1,"maximum":500}}), vec!["pattern"]),
-        ("grep", "Search a Rust-compatible regular expression in project UTF-8 text files. Returns project-relative path:line:content. case_sensitive defaults to true. Optional include is a relative glob; patterns without a slash match filenames recursively. Skips Git, dependency/build directories, binary and oversized files. Scanning, matching lines and output are bounded; no shell runs.", json!({"pattern":{"type":"string","minLength":1,"maxLength":4096},"path":{"type":"string"},"include":{"type":"string","minLength":1,"maxLength":4096},"case_sensitive":{"type":"boolean"},"max_results":{"type":"integer","minimum":1,"maximum":500}}), vec!["pattern"]),
-        ("write_file", "Atomically create or replace one UTF-8 project file. expected_content must exactly match an existing file; null means the file must not exist. Read existing files first. Parent directory must exist.", json!({"path":{"type":"string"},"content":{"type":"string"},"expected_content":{"type":["string","null"]}}), vec!["path","content","expected_content"]),
-        ("apply_patch", "Atomically replace one exact, unique, non-empty old_text occurrence in an existing UTF-8 project file. Ambiguous or stale text is rejected.", json!({"path":{"type":"string"},"old_text":{"type":"string","minLength":1},"new_text":{"type":"string"}}), vec!["path","old_text","new_text"]),
-        ("run_command", "Run a project shell command with bounded output and a 1–120 second timeout. Only a narrow set of read-only version/Git commands can bypass approval; scripts and shell operators require one-time approval.", json!({"command":{"type":"string","minLength":1},"workdir":{"type":"string"},"timeout_seconds":{"type":"integer","minimum":1,"maximum":120}}), vec!["command"]),
-    ].into_iter().map(|(name, description, properties, required)| json!({"type":"function","function":{"name":name,"description":description,"parameters":{"type":"object","properties":properties,"required":required,"additionalProperties":false}}})).collect()
+    CORE_TOOLS
+        .iter()
+        .map(|tool| {
+            json!({
+                "type":"function",
+                "function":{
+                    "name":tool.name,
+                    "description":tool.description,
+                    "parameters":{
+                        "type":"object",
+                        "properties":(tool.properties)(),
+                        "required":tool.required,
+                        "additionalProperties":false,
+                    },
+                },
+            })
+        })
+        .collect()
 }
 
 fn args<'a>(input: &'a Value, allowed: &[&str]) -> Result<&'a Map<String, Value>, String> {
@@ -360,6 +479,9 @@ fn parse(project: &Path, name: &str, input: &Value) -> Result<(PathBuf, Call), S
 }
 
 pub fn inspect(project: &Path, name: &str, input: &Value) -> Result<ToolInspection, String> {
+    if name == "manage_process" {
+        return managed::parse(&root(project)?, input).map(|operation| operation.inspect());
+    }
     let (_, call) = parse(project, name, input)?;
     let (action, resource, mutating, approval, dangerous) = match call {
         Call::Read(path, ..) => (
@@ -423,6 +545,19 @@ pub fn inspect(project: &Path, name: &str, input: &Value) -> Result<ToolInspecti
         dangerous,
     })
 }
+
+pub(super) async fn execute_managed(
+    processes: &Processes,
+    owner: &str,
+    project: &Path,
+    input: &Value,
+    isolated: bool,
+    cancel: watch::Receiver<bool>,
+) -> Result<ToolOutput, String> {
+    let root = root(project)?;
+    let operation = managed::parse(&root, input)?;
+    processes.execute(owner, &root, operation, isolated, cancel).await
+}
 fn cancelled(cancel: &watch::Receiver<bool>) -> Result<(), String> {
     if *cancel.borrow() {
         Err(CANCELLED.into())
@@ -457,6 +592,66 @@ fn read_text(path: &Path) -> Result<String, String> {
     }
     String::from_utf8(bytes).map_err(|_| "文件不是UTF-8文本".into())
 }
+
+fn read_window(
+    path: &str,
+    content: &str,
+    offset: usize,
+    limit: usize,
+    cancel: &watch::Receiver<bool>,
+) -> Result<String, String> {
+    let total = content.lines().count();
+    cancelled(cancel)?;
+    let mut output = format!("{path}\n");
+    let eof = format!("[已到文件末尾，共 {total} 行。]\n");
+    if offset > total {
+        output.push_str(&eof);
+        return Ok(output);
+    }
+
+    let continuation = |last| {
+        format!(
+            "[已返回第 {offset}–{last} 行，共 {total} 行。继续读取请使用 offset={}。]\n",
+            last + 1
+        )
+    };
+    // Reserve enough space for the complete footer before admitting any line.
+    let footer_bytes = continuation(total).len().max(eof.len());
+    let body_bytes = MAX_OUTPUT.saturating_sub(output.len() + footer_bytes);
+    let mut last = offset - 1;
+    for (index, line) in content.lines().skip(offset - 1).take(limit).enumerate() {
+        cancelled(cancel)?;
+        let number = offset + index;
+        let prefix = format!("{number}: ");
+        let line_bytes = body_bytes.saturating_sub(prefix.len() + 1);
+        // Only clip a line that cannot fit on a page by itself. Otherwise the
+        // next page should begin with that line in full.
+        let suffix = if line.len() > line_bytes {
+            " … [单行过长，已截断]"
+        } else {
+            ""
+        };
+        let mut end = line.len().min(line_bytes.saturating_sub(suffix.len()));
+        while !line.is_char_boundary(end) {
+            end -= 1;
+        }
+        if output.len() + prefix.len() + end + suffix.len() + 1 + footer_bytes > MAX_OUTPUT {
+            break;
+        }
+        output.push_str(&prefix);
+        output.push_str(&line[..end]);
+        output.push_str(suffix);
+        output.push('\n');
+        last = number;
+    }
+    if last < total {
+        output.push_str(&continuation(last));
+    } else {
+        output.push_str(&eof);
+    }
+    Ok(output)
+}
+
 fn relative(root: &Path, path: &Path) -> String {
     path.strip_prefix(root)
         .unwrap_or(path)
@@ -682,13 +877,117 @@ fn static_lock() -> &'static Mutex<()> {
     LOCK.get_or_init(|| Mutex::new(()))
 }
 
+pub(super) struct PreparedEdit {
+    root: PathBuf,
+    path: PathBuf,
+    before: Option<String>,
+    after: String,
+    result_label: &'static str,
+}
+
+impl PreparedEdit {
+    fn from_call(root: PathBuf, call: Call) -> Result<Self, String> {
+        let (path, before, after, result_label) = match call {
+            Call::Write(path, after, expected) => {
+                let before = path.exists().then(|| read_text(&path)).transpose()?;
+                if before != expected {
+                    return Err("文件内容已变化或expected_content不匹配；请重新读取后再修改".into());
+                }
+                (path, before, after, "已写入")
+            }
+            Call::Patch(path, old, new) => {
+                let before = read_text(&path)?;
+                if before.match_indices(&old).count() != 1 {
+                    return Err("old_text必须在当前文件中恰好出现一次".into());
+                }
+                let after = before.replacen(&old, &new, 1);
+                (path, Some(before), after, "已更新")
+            }
+            _ => return Err("此工具不支持审阅编辑".into()),
+        };
+        if after.len() > MAX_FILE {
+            return Err("写入结果超过1MiB".into());
+        }
+        Ok(Self { root, path, before, after, result_label })
+    }
+
+    pub(super) fn preview(&self) -> Option<String> {
+        patch_diff(&self.root, &self.path, self.before.as_deref(), &self.after)
+            .into_iter()
+            .next()
+            .map(|diff| diff.patch)
+    }
+
+    pub(super) async fn apply(
+        self,
+        cancel: watch::Receiver<bool>,
+    ) -> Result<ToolOutput, String> {
+        tokio::task::spawn_blocking(move || self.apply_sync(&cancel))
+            .await
+            .map_err(|_| "本地工具执行线程失败")?
+    }
+
+    fn apply_sync(self, cancel: &watch::Receiver<bool>) -> Result<ToolOutput, String> {
+        cancelled(cancel)?;
+        if resolve(&self.root, &self.path.to_string_lossy(), true)? != self.path {
+            return Err("审批后目标路径已变化，请重新审阅修改".into());
+        }
+        let diffs = atomic_write(
+            &self.root,
+            &self.path,
+            self.before.as_deref(),
+            &self.after,
+            cancel,
+        )?;
+        let path = relative(&self.root, &self.path);
+        let text = format!("{} {path}", self.result_label);
+        let file_changes = if diffs.is_empty() {
+            vec![]
+        } else {
+            vec![FileChange {
+                path,
+                before: self.before,
+                after: Some(self.after),
+            }]
+        };
+        Ok(ToolOutput {
+            text: bounded(text),
+            image_data_url: None,
+            diffs,
+            file_changes,
+        })
+    }
+}
+
+pub(super) async fn prepare_edit(
+    project: &Path,
+    name: &str,
+    input: &Value,
+    inspection: &ToolInspection,
+) -> Result<PreparedEdit, String> {
+    let project = project.to_owned();
+    let name = name.to_owned();
+    let input = input.clone();
+    let resource = inspection.resources.first().cloned();
+    tokio::task::spawn_blocking(move || {
+        let (root, call) = parse(&project, &name, &input)?;
+        let edit = PreparedEdit::from_call(root, call)?;
+        if resource.as_deref() != Some(edit.path.to_string_lossy().as_ref()) {
+            return Err("目标路径已变化，请重新审阅修改".into());
+        }
+        Ok(edit)
+    })
+    .await
+    .map_err(|_| "无法准备修改预览")?
+}
+
 pub async fn execute(
     project: &Path,
     name: &str,
     input: &Value,
     cancel: watch::Receiver<bool>,
 ) -> Result<ToolOutput, String> {
-    execute_scoped(project, name, input, cancel, false).await
+    execute_scoped(project, name, input, cancel, false, None).await
 }
 
 pub(super) async fn execute_scoped(
@@ -697,11 +996,12 @@ pub(super) async fn execute_scoped(
     input: &Value,
     cancel: watch::Receiver<bool>,
     isolated: bool,
+    scratch: Option<&Path>,
 ) -> Result<ToolOutput, String> {
     cancelled(&cancel)?;
     let (root, call) = parse(project, name, input)?;
     if let Call::Command(workdir, command, seconds) = call {
-        return command::execute(&root, &workdir, &command, seconds, cancel, isolated).await;
+        return command::execute(&root, &workdir, &command, seconds, cancel, isolated, scratch).await;
     }
     if let Call::Unreal(method, params) = call {
         let result = super::unreal::request(&root, &method, &params, cancel).await?;
@@ -714,19 +1014,18 @@ pub(super) async fn execute_scoped(
     }
     tokio::task::spawn_blocking(move || {
         cancelled(&cancel)?;
-        let mut file_changes = Vec::new();
         let mut image_data_url = None;
         let (text, diffs) = match call {
             Call::Read(path, offset, limit) => {
                 let content = read_text(&path)?;
-                let text = content
-                    .lines()
-                    .skip((offset - 1) as usize)
-                    .take(limit as usize)
-                    .enumerate()
-                    .map(|(i, line)| format!("{}: {line}\n", offset + i as u64))
-                    .collect::<String>();
-                (format!("{}\n{}", relative(&root, &path), text), vec![])
+                let text = read_window(
+                    &relative(&root, &path),
+                    &content,
+                    offset as usize,
+                    limit as usize,
+                    &cancel,
+                )?;
+                (text, vec![])
             }
             Call::ViewImage(path) => {
                 let metadata = fs::metadata(&path).map_err(|_| "无法读取图片元数据")?;
@@ -801,33 +1100,8 @@ pub(super) async fn execute_scoped(
             }
             Call::Glob(path, query) => (search::glob(&root, &path, query, &cancel)?, vec![]),
             Call::Grep(path, query) => (search::grep(&root, &path, query, &cancel)?, vec![]),
-            Call::Write(path, content, expected) => {
-                let diffs = atomic_write(&root, &path, expected.as_deref(), &content, &cancel)?;
-                if !diffs.is_empty() {
-                    file_changes.push(FileChange {
-                        path: relative(&root, &path),
-                        before: expected,
-                        after: Some(content),
-                    });
-                }
-                (format!("已写入 {}", relative(&root, &path)), diffs)
-            }
-            Call::Patch(path, old, new) => {
-                let before = read_text(&path)?;
-                if before.match_indices(&old).count() != 1 {
-                    return Err("old_text必须在当前文件中恰好出现一次".into());
-                }
-                let after = before.replacen(&old, &new, 1);
-                let diffs = atomic_write(&root, &path, Some(&before), &after, &cancel)?;
-                if !diffs.is_empty() {
-                    file_changes.push(FileChange {
-                        path: relative(&root, &path),
-                        before: Some(before),
-                        after: Some(after),
-                    });
-                }
-                (format!("已更新 {}", relative(&root, &path)), diffs)
-            }
+            edit @ (Call::Write(..) | Call::Patch(..)) =>
+                return PreparedEdit::from_call(root, edit)?.apply_sync(&cancel),
             Call::Command(..) => unreachable!(),
             Call::Unreal(..) => unreachable!(),
         };
@@ -835,7 +1109,7 @@ pub(super) async fn execute_scoped(
             text: bounded(text),
             image_data_url,
             diffs,
-            file_changes,
+            file_changes: Vec::new(),
         })
     })
     .await

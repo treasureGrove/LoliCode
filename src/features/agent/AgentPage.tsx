@@ -1,7 +1,12 @@
 import {
+  lazy,
+  Suspense,
   useCallback,
   useContext,
   useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -20,6 +25,7 @@ import {
   Bug,
   Code2,
   Compass,
+  Globe,
   LoaderCircle,
   Sparkles,
   X,
@@ -60,6 +66,7 @@ import { BuildChannelBadge } from "@/app/shell/BuildChannelBadge";
 import { DevelopmentFrontendRefreshMenuItem } from "@/app/shell/DevelopmentFrontendRefreshButton";
 import { IS_DEVELOPMENT_BUILD } from "@/lib/buildChannel";
 import { agentApi } from "@/lib/api/agent";
+import { agentFilesApi } from "@/lib/api/agent-files";
 import {
   readAgentDocumentAttachments,
   readAgentImageAttachments,
@@ -87,6 +94,7 @@ import {
   clearSubmittedAgentDraft,
   dispatchAgentStop,
   endAgentSubmission,
+  readAgentDraft as readDraft,
   readAgentSubmission,
   isAgentDraftCurrent,
   restoreAgentDraft,
@@ -98,11 +106,8 @@ import {
 } from "@/lib/agentInputLedger";
 import { agentErrorMessage, useAgentSnapshot } from "@/hooks/useAgentSnapshot";
 import { useLolicodeAccount } from "@/hooks/useLolicodeAccount";
+import { useTauriEvent } from "@/hooks/useTauriEvent";
 import assistantPortrait from "@/assets/brand/lolicode-icon.png";
-import {
-  AgentReplacementAborted,
-  stopAgentBeforeReplacement,
-} from "@/lib/agentInterruptSend";
 import type {
   AgentCatalog,
   AgentDocumentAttachment,
@@ -111,16 +116,18 @@ import type {
   AgentPermissionMode,
   AgentProject,
   AgentProjectResult,
+  AgentQueuedMessage,
   AgentSession,
   AgentSnapshot,
   AgentWorkspace,
 } from "@/types/agent";
 import { AgentTranscript } from "./AgentTranscript";
 import { AgentMessageQueue } from "./AgentMessageQueue";
-import { AgentRunError } from "./AgentRunError";
+import { AgentRunError, lastAgentUserTurn } from "./AgentRunError";
 import { AgentChanges } from "./AgentChanges";
 import { AgentPermissionCard } from "./AgentPermissionCard";
 import { AgentQuestionCard } from "./AgentQuestionCard";
+import { AgentSessionModes } from "./AgentSessionModes";
 import { AgentActivityStatus } from "./AgentActivityStatus";
 import { AgentModelPicker } from "./AgentModelPicker";
 import { AgentReasoningPicker } from "./AgentReasoningPicker";
@@ -128,11 +135,40 @@ import { AgentContextPicker } from "./AgentContextPicker";
 import { AgentComposerAdd, AgentComposerOptions } from "./AgentComposerOptions";
 import { AgentFileActionsContext } from "./AgentFilePath";
 import { AgentPreviewPanel } from "./AgentPreviewPanel";
+import { AgentBrowserPreviewPanel } from "./AgentBrowserPreviewPanel";
+import {
+  AgentPreviewTabStrip,
+  type PreviewTabLabel,
+} from "./AgentPreviewTabStrip";
+import { AgentProjectFilesPanel } from "./AgentProjectFilesPanel";
+import { agentTerminalApi } from "@/lib/api/agent-terminal";
+import {
+  DOCK_DIVIDER_WIDTH,
+  DOCK_FILE_STORAGE,
+  DOCK_LAYOUT_STORAGE,
+  DOCK_PANE_MIN_WIDTH,
+  activateDockTab,
+  browserDockTab,
+  closeDockTab,
+  dockOwnerSession,
+  emptyDockLayout,
+  mergePreviewDock,
+  moveDockTab,
+  pruneDockTabs,
+  readDockFiles,
+  readDockLayouts,
+  splitPreviewDock,
+  writeDockStorage,
+  type DockAuxiliaryTab,
+  type DockLayout,
+  type DockTab,
+} from "./agentPreviewDock";
+import { useAgentBrowserTabs } from "./useAgentBrowserTabs";
 import { AgentUsagePopover } from "./AgentUsagePopover";
 import { AgentPaneResizeHandle, useAgentPaneLayout } from "./AgentPaneLayout";
 import { useAgentAutoSizeTextarea } from "./useAgentAutoSizeTextarea";
 import { WindowControlsContext } from "@/app/shell/AppPageHeader";
-import { DRAG_REGION_ATTR, DRAG_REGION_STYLE } from "@/lib/platform";
+import { DRAG_REGION_ATTR, DRAG_REGION_STYLE, isWindows } from "@/lib/platform";
 import "./lolicode-workbench.css";
 import { AgentSessionMenu } from "./AgentSessionMenu";
 import { AgentProjectMenu } from "./AgentProjectMenu";
@@ -158,23 +194,104 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 const RECENT_KEY = "lolicode.agent.recent-projects";
+const AgentTerminalPanel = lazy(() =>
+  import("./AgentTerminalPanel").then((module) => ({
+    default: module.AgentTerminalPanel,
+  })),
+);
 const WORKSPACE_ORDER_KEY = "lolicode.agent.workspace-order.v1";
+const LAST_SELECTION_KEY = "lolicode.agent.last-selection.v1";
 const EMPTY_CATALOG: AgentCatalog = {
   revision: 0,
   models: [],
   excludedSources: [],
 };
+const EMPTY_MESSAGES: AgentSnapshot["messages"] = [];
+const EMPTY_QUEUED_MESSAGES: AgentQueuedMessage[] = [];
+
+function readLastAgentSelection(): {
+  projectPath: string;
+  sessionId: string | null;
+} | null {
+  try {
+    const saved = JSON.parse(
+      localStorage.getItem(LAST_SELECTION_KEY) || "null",
+    ) as {
+      projectPath?: unknown;
+      sessionId?: unknown;
+    } | null;
+    if (
+      typeof saved?.projectPath === "string" &&
+      (saved.sessionId === null || typeof saved.sessionId === "string")
+    )
+      return { projectPath: saved.projectPath, sessionId: saved.sessionId };
+  } catch {}
+  return null;
+}
+
+type QueueEcho = {
+  projectPath: string;
+  sessionId: string;
+  item: AgentQueuedMessage & { confirming: true };
+};
+
+function observesQueuedInput(snapshot: AgentSnapshot, requestId: string) {
+  return (
+    snapshot.queuedMessages?.some((item) => item.id === requestId) ||
+    snapshot.messages.some(
+      (message) => message.role === "user" && message.id === requestId,
+    )
+  );
+}
+
+function sessionPermissionMode(value?: string): AgentPermissionMode {
+  return value === "auto" || value === "full_access" ? value : "ask";
+}
+
+function workspacePermission<T extends AgentPermissionMode | undefined>(
+  value: T,
+  workspace?: AgentWorkspace | null,
+): T | "auto" {
+  return workspace?.remote && value === "full_access" ? "auto" : value;
+}
+
 type PendingSend = {
   requestId: string;
   assistantIds: Set<string>;
   uncertain?: boolean;
+  preview?: {
+    projectPath: string;
+    message: AgentSnapshot["messages"][number];
+  };
 };
 type AgentRetryInput = {
+  sourceMessageId: string;
   requestId: string;
   text: string;
   images: AgentImageAttachment[];
   documents: AgentDocumentAttachment[];
 };
+type WorkbenchPreview = {
+  sourceSessionId: string;
+  hintKey?: string;
+  deliveryKey?: string;
+} & (
+  | { path: string; line?: number }
+  | { browserId: string; url: string; native?: boolean; toolPage: boolean }
+);
+type SessionPreview = {
+  target: WorkbenchPreview;
+  request: number;
+};
+
+function projectDockKey(path: string) {
+  const trimmed = path.replace(/[\\/]+$/, "");
+  return isWindows() ? trimmed.toLowerCase() : trimmed;
+}
+
+const compareSidebarSessions = (a: AgentSession, b: AgentSession) =>
+  Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) ||
+  b.updatedAt - a.updatedAt;
 const IMAGE_MIME_TYPES = new Set([
   "image/png",
   "image/jpeg",
@@ -278,6 +395,14 @@ const isLegacySession = (id: string) =>
   id.startsWith("ses_") || id.startsWith("zc:");
 const draftKey = (path: string, id: string) =>
   `lolicode.agent.draft:${encodeURIComponent(path)}:${encodeURIComponent(id)}`;
+const retryDraftPrefix = (key: string) => `${key}:retry:`;
+const retrySourceId = (entry: AgentSubmission | null) => {
+  if (!entry) return undefined;
+  const prefix = retryDraftPrefix(draftKey(entry.projectPath, entry.sessionId));
+  return entry.draft.key.startsWith(prefix)
+    ? entry.draft.key.slice(prefix.length)
+    : undefined;
+};
 const pendingKey = (path: string, id: string) =>
   `lolicode.agent.pending:${encodeURIComponent(path)}:${encodeURIComponent(id)}`;
 const storePending = (path: string, id: string, entry?: PendingSend) => {
@@ -306,8 +431,7 @@ const restorePending = (
         entry.phase === "uncertain" ||
         (entry.phase === "submitting" &&
           !agentSubmissionInFlight(entry.requestId));
-      if (uncertain && !entry.stopRequested && !readDraft(entry.draft.key))
-        saveAgentDraft(entry.draft.key, entry.draft.text);
+      if (uncertain && !entry.stopRequested) restoreAgentDraft(entry.draft);
       entries[session.id] = {
         requestId: entry.requestId,
         assistantIds: new Set(entry.assistantIds),
@@ -354,13 +478,6 @@ const restoreStopping = (path: string, items: AgentSession[]) =>
       })
       .map((session) => [session.id, true]),
   );
-const readDraft = (key: string) => {
-  try {
-    return sessionStorage.getItem(key) || "";
-  } catch {
-    return "";
-  }
-};
 const readRecent = (): string[] => {
   try {
     const paths: unknown = JSON.parse(localStorage.getItem(RECENT_KEY) || "[]");
@@ -553,6 +670,12 @@ export function AgentPage({
   const { t } = useTranslation();
   const windowControls = useContext(WindowControlsContext);
   const { account } = useLolicodeAccount();
+  const displayName = account?.displayName || account?.username;
+  const avatarUrl = account?.avatarUrl || undefined;
+  const userIdentity = useMemo(
+    () => (displayName || avatarUrl ? { displayName, avatarUrl } : undefined),
+    [displayName, avatarUrl],
+  );
   const secretaryRequestRef = useRef(secretaryRequest);
   secretaryRequestRef.current = secretaryRequest;
   const consumedSecretaryRequest = useRef<number | null>(null);
@@ -599,8 +722,7 @@ export function AgentPage({
   }, [activeTool, onActiveToolChange]);
   const [showArchived, setShowArchived] = useState(false);
   const [projects, setProjects] = useState<AgentProject[]>([]);
-  const [permissionMode, setPermissionMode] =
-    useState<AgentPermissionMode>("full_access");
+  const [permissionMode, setPermissionMode] = useState<AgentPermissionMode>();
   const [sessionOverrides, setSessionOverrides] = useState<
     Record<string, AgentSession>
   >({});
@@ -609,6 +731,13 @@ export function AgentPage({
   const overrideFields = useRef<Record<string, (keyof AgentSession)[]>>({});
   const [engine, setEngine] = useState<AgentEngineStatus | null>(null);
   const [initializing, setInitializing] = useState(true);
+  const hasExplicitStartupTarget = useRef(false);
+  hasExplicitStartupTarget.current = Boolean(
+    initialProjectPath ||
+      secretaryRequest?.projectPath ||
+      secretaryRequest?.sessionId ||
+      secretaryRequest?.workerSessionId,
+  );
   const [workspace, setWorkspace] = useState<AgentWorkspace | null>(null);
   const workspaceRef = useRef(workspace);
   workspaceRef.current = workspace;
@@ -619,19 +748,214 @@ export function AgentPage({
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const identity = `${workspace?.path || ""}\0${sessionId || ""}`;
+  const selection = useRef({ identity: "", revision: 0 });
+  if (selection.current.identity !== identity)
+    selection.current = { identity, revision: selection.current.revision + 1 };
+  const mounted = useRef(true);
   const [modelId, setModelId] = useState("");
   const [reasoningEffort, setReasoningEffort] = useState("");
   const [contextLimit, setContextLimit] = useState<number | null>(null);
-  const [previewPath, setPreviewPath] = useState<string | null>(null);
-  const [previewSession, setPreviewSession] = useState<string | null>(null);
-  const previewVisible =
-    Boolean(sessionId) && previewSession === sessionId && previewPath !== null;
-  const openPreview = useCallback(
-    (path: string) => {
-      setPreviewSession(sessionId);
-      setPreviewPath(path);
+  const [previews, setPreviews] = useState<Record<string, SessionPreview>>(() =>
+    Object.fromEntries(
+      Object.entries(readDockFiles()).map(([owner, target]) => [
+        owner,
+        {
+          target: { ...target, sourceSessionId: dockOwnerSession(owner)! },
+          request: 0,
+        },
+      ]),
+    ),
+  );
+  const [dockLayouts, setDockLayouts] = useState(readDockLayouts);
+  const dockResources = useRef({ dockLayouts, previews });
+  dockResources.current = { dockLayouts, previews };
+  const updateDock = useCallback(
+    (owner: string, update: (layout: DockLayout) => DockLayout) => {
+      setDockLayouts((old) => {
+        const previous = old[owner] ?? emptyDockLayout();
+        const next = update(previous);
+        return previous === next ? old : { ...old, [owner]: next };
+      });
     },
-    [sessionId],
+    [],
+  );
+  useEffect(
+    () => writeDockStorage(DOCK_LAYOUT_STORAGE, dockLayouts),
+    [dockLayouts],
+  );
+  useEffect(() => {
+    writeDockStorage(
+      DOCK_FILE_STORAGE,
+      Object.fromEntries(
+        Object.entries(previews).flatMap(([owner, { target }]) =>
+          "path" in target &&
+          target.path &&
+          target.sourceSessionId === dockOwnerSession(owner)
+            ? [[owner, { path: target.path, line: target.line }]]
+            : [],
+        ),
+      ),
+    );
+  }, [previews]);
+  const dockId = useId();
+  const dockElement = useRef<HTMLDivElement>(null);
+  const {
+    decks: browserDecks,
+    open: openBrowserTab,
+    navigate: navigateBrowserTab,
+    close: closeBrowserTab,
+    removeOwners: removeBrowserTabs,
+    onClosed: onBrowserTabClosed,
+  } = useAgentBrowserTabs();
+  const browserDeck = browserDecks[identity];
+  const currentPreview = previews[identity];
+  const savedDock = dockLayouts[identity] ?? emptyDockLayout();
+  const availableTabs = savedDock.panes.flatMap(({ tabs }) =>
+    tabs.filter(
+      (tab): tab is DockAuxiliaryTab => tab === "files" || tab === "terminal",
+    ),
+  );
+  const dock = pruneDockTabs(savedDock, [
+    ...availableTabs,
+    ...(currentPreview ? ["preview" as const] : []),
+    ...(browserDeck?.tabs.map(({ id }) => browserDockTab(id)) ?? []),
+  ]);
+  const canOpenBrowser = Boolean(sessionId && isWindows());
+  const hasPreview = dock.panes.some(({ tabs }) => tabs.length > 0);
+  const previewVisible = hasPreview && !dock.folded;
+  // Keep the current pane and recent background panes mounted, with a bound on
+  // retained document renderers. Older panes can reopen from their saved paths.
+  const retainedPreviews = Object.entries(previews)
+    .filter(([owner, { request }]) => owner !== identity && request > 0)
+    .slice(currentPreview ? -2 : -3);
+  if (currentPreview) retainedPreviews.push([identity, currentPreview]);
+  const setPreviewFolded = useCallback(
+    (folded: boolean) =>
+      updateDock(identity, (old) =>
+        old.folded === folded ? old : { ...old, folded },
+      ),
+    [identity, updateDock],
+  );
+  const openWebPreview = useCallback(
+    (url?: string, pane?: 0 | 1) => {
+      if (!sessionId) return;
+      const id = openBrowserTab(identity, sessionId, url);
+      if (id !== undefined)
+        updateDock(identity, (layout) =>
+          activateDockTab(layout, browserDockTab(id), pane),
+        );
+    },
+    [openBrowserTab, identity, sessionId, updateDock],
+  );
+  const selectDockTab = useCallback(
+    (owner: string, tab: DockTab, pane?: 0 | 1) =>
+      updateDock(owner, (layout) => activateDockTab(layout, tab, pane)),
+    [updateDock],
+  );
+  const dismissDockTab = useCallback(
+    (owner: string, tab: DockTab) =>
+      updateDock(owner, (layout) => closeDockTab(layout, tab)),
+    [updateDock],
+  );
+  const closeManualBrowser = useCallback(
+    (owner: string, id: number) => {
+      dismissDockTab(owner, browserDockTab(id));
+      closeBrowserTab(id);
+    },
+    [closeBrowserTab, dismissDockTab],
+  );
+  const closeAuxiliaryTab = useCallback(
+    (owner: string, tab: DockAuxiliaryTab) => {
+      dismissDockTab(owner, tab);
+      const ownerSession = dockOwnerSession(owner);
+      if (tab === "terminal" && ownerSession) {
+        void agentTerminalApi
+          .close(ownerSession, `${ownerSession}:terminal`)
+          .catch((cause) => toast.error(agentErrorMessage(cause)));
+      }
+    },
+    [dismissDockTab],
+  );
+  const clearDockOwners = useCallback(
+    (matches: (owner: string) => boolean) => {
+      const current = dockResources.current;
+      removeBrowserTabs(matches);
+      for (const [owner, layout] of Object.entries(current.dockLayouts)) {
+        if (
+          matches(owner) &&
+          layout.panes.some(({ tabs }) => tabs.includes("terminal"))
+        )
+          closeAuxiliaryTab(owner, "terminal");
+      }
+      for (const [owner, { target }] of Object.entries(current.previews)) {
+        if (matches(owner) && "browserId" in target) {
+          void agentFilesApi
+            .closeBrowser(target.sourceSessionId, target.browserId)
+            .catch((cause) => toast.error(agentErrorMessage(cause)));
+        }
+      }
+      setDockLayouts((old) =>
+        Object.fromEntries(
+          Object.entries(old).filter(([owner]) => !matches(owner)),
+        ),
+      );
+      setPreviews((old) =>
+        Object.fromEntries(
+          Object.entries(old).filter(([owner]) => !matches(owner)),
+        ),
+      );
+    },
+    [closeAuxiliaryTab, removeBrowserTabs],
+  );
+  const openPreview = useCallback(
+    (path: string, line?: number) => {
+      if (!sessionId) return;
+      selectDockTab(identity, "preview");
+      setPreviews((old) => ({
+        ...old,
+        [identity]: {
+          target: { sourceSessionId: sessionId, path, line },
+          request: (old[identity]?.request ?? 0) + 1,
+        },
+      }));
+    },
+    [selectDockTab, identity, sessionId],
+  );
+  const navigatePreview = useCallback((owner: string, path: string) => {
+    setPreviews((old) => {
+      const current = old[owner];
+      if (
+        !current ||
+        !("path" in current.target) ||
+        current.target.path === path
+      )
+        return old;
+      return {
+        ...old,
+        [owner]: {
+          ...current,
+          target: { ...current.target, path, line: undefined },
+        },
+      };
+    });
+  }, []);
+  const fileActions = useMemo(
+    () => ({
+      sessionId: sessionId || undefined,
+      projectPath: workspace?.path,
+      remote: Boolean(workspace?.remote),
+      onPreview: openPreview,
+      onOpenWeb: canOpenBrowser ? openWebPreview : undefined,
+    }),
+    [
+      sessionId,
+      workspace?.path,
+      workspace?.remote,
+      openPreview,
+      openWebPreview,
+      canOpenBrowser,
+    ],
   );
   const [busy, setBusy] = useState<string | null>(null);
   const [busySessionId, setBusySessionId] = useState<string | null>(null);
@@ -671,22 +995,14 @@ export function AgentPage({
   >({});
   const [pending, setPending] = useState<Record<string, PendingSend>>({});
   const [queueBusyId, setQueueBusyId] = useState<string | null>(null);
+  const [queueEchoes, setQueueEchoes] = useState<QueueEcho[]>([]);
   const [stopping, setStopping] = useState<Record<string, boolean>>({});
-  const [replacementSession, setReplacementSession] = useState<string | null>(
-    null,
-  );
-  const replacement = useRef<{ sessionId: string } | null>(null);
-  const selection = useRef({ identity: "", revision: 0 });
-  const identity = `${workspace?.path || ""}\0${sessionId || ""}`;
-  if (selection.current.identity !== identity)
-    selection.current = { identity, revision: selection.current.revision + 1 };
   const [statuses, setStatuses] = useState<Record<string, string>>({});
   const [pendingTitles, setPendingTitles] = useState<Record<string, boolean>>(
     {},
   );
   const removedSessions = useRef(new Set<string>());
   const [refresh, setRefresh] = useState(0);
-  const mounted = useRef(true);
   const generation = useRef(0);
   const mutation = useRef(false);
   const receiptQueries = useRef(new Map<string, number>());
@@ -704,6 +1020,7 @@ export function AgentPage({
   const statusRef = useRef(statuses);
   statusRef.current = statuses;
   const scrollRef = useRef<HTMLDivElement>(null);
+  const chatContentRef = useRef<HTMLDivElement>(null);
   const composerInputRef = useRef<HTMLTextAreaElement | null>(null);
   useEffect(() => {
     if (activeTool) {
@@ -741,23 +1058,63 @@ export function AgentPage({
   const queueAttachmentRestoreAttempts = useRef(new Set<string>());
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const atBottom = useRef(true);
-  useEffect(() => setPreviewPath(null), [sessionId]);
-
-  useEffect(() => {
-    const toggleSidebar = (event: KeyboardEvent) => {
-      if (
-        (event.ctrlKey || event.metaKey) &&
-        event.key === "\\" &&
-        !event.repeat
-      ) {
-        event.preventDefault();
-        setSidebarCollapsed((collapsed) => !collapsed);
-      }
-    };
-    window.addEventListener("keydown", toggleSidebar);
-    return () => window.removeEventListener("keydown", toggleSidebar);
+  const readingSession = useRef<string | null>(null);
+  const readingPositions = useRef(new Map<string, number>());
+  const followedScrollTop = useRef(0);
+  const smoothChatTarget = useRef<number | null>(null);
+  const followAfterCommit = useRef<string | null>(null);
+  const pinChatTail = () => {
+    readingPositions.current.delete(identity);
+    atBottom.current = true;
+    setShowScrollToBottom(false);
+    const scroll = scrollRef.current;
+    if (scroll) scroll.dataset.followTail = "true";
+  };
+  const followSubmittedChat = () => {
+    pinChatTail();
+    followAfterCommit.current = identity;
+  };
+  const jumpToChatTail = useCallback((scroll: HTMLDivElement) => {
+    smoothChatTarget.current = null;
+    scroll.scrollTop = scroll.scrollHeight;
+    followedScrollTop.current = scroll.scrollTop;
   }, []);
-
+  const updateChatReadingPosition = useCallback(() => {
+    const scroll = scrollRef.current;
+    if (!scroll || readingSession.current !== identity) return;
+    const floor = Math.max(0, scroll.scrollHeight - scroll.clientHeight);
+    const top = scroll.scrollTop;
+    const reachedTail = top >= floor - 2;
+    if (smoothChatTarget.current !== null) {
+      if (reachedTail) {
+        smoothChatTarget.current = null;
+        followedScrollTop.current = top;
+      }
+      return;
+    }
+    // A browser scroll event can arrive after the content or viewport resized.
+    // The old floor still means follow unless the reader actually moved up.
+    if (
+      atBottom.current &&
+      !reachedTail &&
+      top >= Math.min(followedScrollTop.current, floor) - 1
+    )
+      return;
+    atBottom.current = reachedTail;
+    scroll.dataset.followTail = String(reachedTail);
+    if (reachedTail) {
+      followedScrollTop.current = top;
+      readingPositions.current.delete(identity);
+    } else readingPositions.current.set(identity, top);
+    setShowScrollToBottom(!reachedTail);
+  }, [identity]);
+  const stopSmoothChatScroll = () => {
+    const scroll = scrollRef.current;
+    if (!scroll || smoothChatTarget.current === null) return;
+    smoothChatTarget.current = null;
+    followedScrollTop.current = scroll.scrollTop;
+    scroll.scrollTo({ top: scroll.scrollTop, behavior: "instant" });
+  };
   const bindCatalog = (next: AgentCatalog) => {
     setCatalog(next);
     setModelId((current) =>
@@ -806,32 +1163,75 @@ export function AgentPage({
       const knownProjects = await agentApi.listProjects();
       if (!mounted.current || generation.current !== requestGeneration) return;
       setProjects(preserveWorkspaceOrder(knownProjects));
+      const saved = readLastAgentSelection();
+      const savedProject = knownProjects.find(
+        (project) => project.path === saved?.projectPath,
+      );
+      let restored: AgentProjectResult | undefined;
       if (status.running && status.projectPath) {
         const [nextCatalog, nextSessions] = await Promise.all([
           agentApi.getCatalog(),
           agentApi.listSessions(),
         ]);
-        if (!mounted.current || generation.current !== requestGeneration)
-          return;
         const selectedProject = knownProjects.find(
           (project) => project.path === status.projectPath,
         );
-        setWorkspace({
-          path: status.projectPath,
-          name: selectedProject?.name || nameOf(status.projectPath),
-          standalone: selectedProject?.standalone,
-        });
-        bindCatalog(nextCatalog);
-        setSessions(nextSessions);
-        discoverSessionActivity(nextSessions);
-        setPending(restorePending(status.projectPath, nextSessions));
-        setStopping(restoreStopping(status.projectPath, nextSessions));
-        setSessionId(
-          nextSessions.find((item) => item.coordination?.role !== "worker")
-            ?.id || null,
-        );
-        if (!selectedProject?.standalone) rememberProject(status.projectPath);
+        restored = {
+          workspace: {
+            path: status.projectPath,
+            name: selectedProject?.name || nameOf(status.projectPath),
+            standalone: selectedProject?.standalone,
+            remote: selectedProject?.remote,
+          },
+          catalog: nextCatalog,
+          sessions: nextSessions,
+        };
+      } else if (
+        status.available &&
+        savedProject &&
+        !hasExplicitStartupTarget.current
+      ) {
+        restored = await agentApi.openProject(savedProject.path);
+        if (hasExplicitStartupTarget.current) return;
       }
+      if (
+        !restored ||
+        !mounted.current ||
+        generation.current !== requestGeneration
+      )
+        return;
+      const {
+        workspace: restoredWorkspace,
+        catalog: restoredCatalog,
+        sessions: restoredSessions,
+      } = restored;
+      const savedSession =
+        saved?.projectPath === restoredWorkspace.path
+          ? restoredSessions.find(
+              (session) => session.id === saved.sessionId && !session.archived,
+            )
+          : undefined;
+      restored.warnings?.forEach((warning) => toast.warning(warning));
+      setWorkspace(restoredWorkspace);
+      setEngine({
+        ...status,
+        running: true,
+        projectPath: restoredWorkspace.path,
+      });
+      bindCatalog(restoredCatalog);
+      setSessions(restoredSessions);
+      discoverSessionActivity(restoredSessions);
+      setPending(restorePending(restoredWorkspace.path, restoredSessions));
+      setStopping(restoreStopping(restoredWorkspace.path, restoredSessions));
+      setSessionId(
+        savedSession?.id ||
+          restoredSessions.find(
+            (item) => !item.archived && item.coordination?.role !== "worker",
+          )?.id ||
+          null,
+      );
+      if (!restoredWorkspace.standalone)
+        rememberProject(restoredWorkspace.path);
     } catch (cause) {
       if (mounted.current && generation.current === requestGeneration)
         setError(agentErrorMessage(cause));
@@ -848,6 +1248,16 @@ export function AgentPage({
       generation.current += 1;
     };
   }, [initialize]);
+  const selectedProjectPath = workspace?.path;
+  useEffect(() => {
+    if (initializing || !selectedProjectPath) return;
+    try {
+      localStorage.setItem(
+        LAST_SELECTION_KEY,
+        JSON.stringify({ projectPath: selectedProjectPath, sessionId }),
+      );
+    } catch {}
+  }, [initializing, selectedProjectPath, sessionId]);
   useEffect(() => {
     let disposed = false;
     let unlisten: (() => void) | undefined;
@@ -916,16 +1326,7 @@ export function AgentPage({
       const id = next.session.id;
       if (removedSessions.current.has(id)) return;
       const queueEntry = readAgentQueueSubmission(next.session.projectPath, id);
-      if (
-        queueEntry &&
-        (next.queuedMessages?.some(
-          (item) => item.id === queueEntry.requestId,
-        ) ||
-          next.messages.some(
-            (message) =>
-              message.role === "user" && message.id === queueEntry.requestId,
-          ))
-      ) {
+      if (queueEntry && observesQueuedInput(next, queueEntry.requestId)) {
         try {
           acceptQueuedDraft(queueEntry);
         } catch (cause) {
@@ -947,9 +1348,17 @@ export function AgentPage({
           return confirmed[field] === next.session[field];
         });
       if (matchesConfirmed) {
-        setSessions((old) =>
-          old.map((session) => (session.id === id ? next.session : session)),
-        );
+        setSessions((old) => {
+          const index = old.findIndex((session) => session.id === id);
+          if (
+            index < 0 ||
+            JSON.stringify(old[index]) === JSON.stringify(next.session)
+          )
+            return old;
+          const sessions = [...old];
+          sessions[index] = next.session;
+          return sessions;
+        });
         if (confirmed) {
           delete overrideFields.current[id];
           const current = { ...overridesRef.current };
@@ -990,7 +1399,6 @@ export function AgentPage({
         );
       if (
         submitted &&
-        replacement.current?.sessionId !== id &&
         (isLegacySession(id) || id.startsWith("lc:")) &&
         (isLegacySession(id) ||
           (!acknowledged && !submitted.observed) ||
@@ -1031,8 +1439,7 @@ export function AgentPage({
                   current.requestId,
                 );
                 storePending(next.session.projectPath, id);
-                if (!readDraft(current.draft.key))
-                  saveAgentDraft(current.draft.key, current.draft.text);
+                restoreAgentDraft(current.draft);
                 const queued = { ...pendingRef.current };
                 delete queued[id];
                 pendingRef.current = queued;
@@ -1062,10 +1469,15 @@ export function AgentPage({
                     : {}),
                 },
               );
+              const previousPending = pendingRef.current[id];
               const queued = {
                 requestId: current.requestId,
                 assistantIds: new Set(current.assistantIds),
                 uncertain: !accepted,
+                preview:
+                  previousPending?.requestId === current.requestId
+                    ? previousPending.preview
+                    : undefined,
               };
               pendingRef.current = { ...pendingRef.current, [id]: queued };
               setPending(pendingRef.current);
@@ -1073,8 +1485,10 @@ export function AgentPage({
               if (!accepted) {
                 // Unknown is not evidence of cancellation or rejection. Keep the
                 // original identity and let a user retry the exact same input.
-                if (!current.stopRequested && !readDraft(current.draft.key)) {
-                  saveAgentDraft(current.draft.key, current.draft.text);
+                if (
+                  !current.stopRequested &&
+                  restoreAgentDraft(current.draft)
+                ) {
                   setDrafts((old) => ({
                     ...old,
                     [current.draft.key]: current.draft.text,
@@ -1228,47 +1642,252 @@ export function AgentPage({
     refresh,
     onSnapshot,
   });
-  const documentViewsSeen = useRef<{
-    session: string | null;
-    initialized: boolean;
-    ids: Set<string>;
-  }>({ session: null, initialized: false, ids: new Set() });
-  useEffect(() => {
-    if (!sessionId || snapshot?.session.id !== sessionId) return;
-    const previous = documentViewsSeen.current;
-    const sameSession = previous.session === sessionId;
-    const seen = sameSession ? previous.ids : new Set<string>();
-    let reveal: string | null = null;
-    for (const message of snapshot.messages) {
-      for (const part of message.parts) {
+  const durableMessages = snapshot?.messages || EMPTY_MESSAGES;
+  const pendingSend = sessionId ? pending[sessionId] : undefined;
+  const outgoingPreview = pendingSend?.uncertain
+    ? undefined
+    : pendingSend?.preview;
+  const outgoingMessage =
+    snapshot &&
+    outgoingPreview &&
+    outgoingPreview.projectPath === workspace?.path
+      ? outgoingPreview.message
+      : undefined;
+  const transcriptMessages = useMemo(() => {
+    const containsUser = (id: string) =>
+      durableMessages.some(
+        (message) => message.role === "user" && message.id === id,
+      );
+    const pendingMessages =
+      outgoingMessage && !containsUser(outgoingMessage.id)
+        ? [outgoingMessage]
+        : [];
+    if (snapshot) {
+      const steering = new Map<string, AgentQueuedMessage>();
+      if (activeStatus(snapshot.status)) {
+        for (const item of snapshot.queuedMessages ?? [])
+          if (item.delivery === "steer") steering.set(item.id, item);
+      }
+      for (const echo of queueEchoes) {
         if (
-          part.type !== "tool" ||
-          part.state !== "completed" ||
-          !["open_document", "show_in_viewer"].includes(part.name)
-        )
-          continue;
-        if (seen.has(part.id)) continue;
-        seen.add(part.id);
-        if (!sameSession || !previous.initialized) continue;
-        if (!part.input || typeof part.input !== "object") continue;
-        const input = part.input as Record<string, unknown>;
-        if (typeof input.path !== "string") continue;
-        reveal =
-          input.path +
-          (typeof input.locator === "string"
-            ? `#${encodeURIComponent(input.locator)}`
-            : "");
+          echo.item.delivery === "steer" &&
+          echo.projectPath === snapshot.session.projectPath &&
+          echo.sessionId === snapshot.session.id &&
+          !observesQueuedInput(snapshot, echo.item.id)
+        ) {
+          steering.set(echo.item.id, echo.item);
+        }
+      }
+      for (const item of steering.values()) {
+        if (!containsUser(item.id))
+          pendingMessages.push({
+            id: item.id,
+            role: "user",
+            createdAt: item.createdAt ?? 0,
+            parts: item.text ? [{ type: "text", text: item.text }] : [],
+          });
       }
     }
-    documentViewsSeen.current = {
-      session: sessionId,
-      initialized: true,
-      ids: seen,
-    };
-    if (reveal) openPreview(reveal);
-  }, [sessionId, snapshot, openPreview]);
+    return pendingMessages.length
+      ? [...durableMessages, ...pendingMessages]
+      : durableMessages;
+  }, [durableMessages, outgoingMessage, queueEchoes, snapshot]);
+  const latestSnapshot = useRef(snapshot);
+  latestSnapshot.current = snapshot;
+  const displayedQueue = useMemo(() => {
+    const messages = snapshot?.queuedMessages ?? EMPTY_QUEUED_MESSAGES;
+    const nativeItems =
+      snapshot &&
+      activeStatus(snapshot.status) &&
+      messages.some((item) => item.delivery === "steer")
+        ? messages.filter((item) => item.delivery !== "steer")
+        : messages;
+    if (!snapshot || !queueEchoes.length) return nativeItems;
+    const pendingItems = queueEchoes
+      .filter(
+        (echo) =>
+          echo.item.delivery !== "steer" &&
+          echo.projectPath === snapshot.session.projectPath &&
+          echo.sessionId === snapshot.session.id &&
+          !observesQueuedInput(snapshot, echo.item.id),
+      )
+      .map((echo) => echo.item);
+    return pendingItems.length
+      ? [...nativeItems, ...pendingItems]
+      : nativeItems;
+  }, [queueEchoes, snapshot]);
   useEffect(() => {
-    for (const message of snapshot?.messages || []) {
+    if (!snapshot || !queueEchoes.length) return;
+    setQueueEchoes((current) => {
+      if (!current.length) return current;
+      const remaining = current.filter(
+        (echo) =>
+          echo.projectPath !== snapshot.session.projectPath ||
+          echo.sessionId !== snapshot.session.id ||
+          !observesQueuedInput(snapshot, echo.item.id),
+      );
+      return remaining.length === current.length ? current : remaining;
+    });
+  }, [queueEchoes.length, snapshot]);
+  const uncertainRetrySource =
+    sessionId && workspace && pending[sessionId]?.uncertain
+      ? retrySourceId(readAgentSubmission(workspace.path, sessionId))
+      : undefined;
+  const observedPreviews = useRef(
+    new Map<
+      string,
+      {
+        latestKey?: string;
+        closedBrowserKey?: string;
+        newestAt: number;
+        seen: Set<string>;
+      }
+    >(),
+  );
+  const dismissedPreviews = useRef(new Map<string, Set<string>>());
+  const closedBrowserPreviews = useRef(new Set<string>());
+  useTauriEvent<{ sessionId: string; browserId: string }>(
+    "agent-browser-preview-closed",
+    ({ sessionId, browserId }) => {
+      const closedTab = onBrowserTabClosed(sessionId, browserId);
+      if (closedTab) {
+        dismissDockTab(closedTab.owner, browserDockTab(closedTab.id));
+        return;
+      }
+      const key = JSON.stringify([sessionId, browserId]);
+      closedBrowserPreviews.current.add(key);
+      const matches = (target: WorkbenchPreview) =>
+        "browserId" in target &&
+        target.sourceSessionId === sessionId &&
+        target.browserId === browserId;
+      for (const [owner, { target }] of Object.entries(previews)) {
+        if (!matches(target)) continue;
+        const observed = observedPreviews.current.get(owner);
+        if (observed) observed.closedBrowserKey = target.hintKey;
+        dismissDockTab(owner, "preview");
+      }
+      setPreviews((old) => {
+        const remaining = Object.entries(old).filter(
+          ([, { target }]) => !matches(target),
+        );
+        return remaining.length === Object.keys(old).length
+          ? old
+          : Object.fromEntries(remaining);
+      });
+    },
+  );
+  const closePreview = useCallback(
+    (owner: string, target: WorkbenchPreview) => {
+      dismissDockTab(owner, "preview");
+      if (target.deliveryKey) {
+        const dismissed = dismissedPreviews.current.get(owner) ?? new Set();
+        dismissed.add(target.deliveryKey);
+        dismissedPreviews.current.set(owner, dismissed);
+      }
+      setPreviews((old) => {
+        const next = { ...old };
+        delete next[owner];
+        return next;
+      });
+      if ("browserId" in target) {
+        void agentFilesApi
+          .closeBrowser(target.sourceSessionId, target.browserId)
+          .catch((cause) => toast.error(agentErrorMessage(cause)));
+      }
+    },
+    [dismissDockTab],
+  );
+  const sessionPreviewTarget = previews[identity]?.target;
+  useEffect(() => {
+    if (
+      !sessionId ||
+      snapshot?.session.id !== sessionId ||
+      snapshot.session.projectPath !== workspace?.path
+    )
+      return;
+    const hint = snapshot.preview;
+    const key = hint ? JSON.stringify([hint.sessionId, hint.id]) : undefined;
+    const observed = observedPreviews.current.get(identity);
+    if (!observed) {
+      // Establish the first baseline without reopening historical previews.
+      observedPreviews.current.set(identity, {
+        latestKey: key,
+        newestAt: hint?.createdAt ?? 0,
+        seen: new Set(key ? [key] : []),
+      });
+      return;
+    }
+    if (key === observed.latestKey) return;
+    const wasShowingBrowser = Boolean(
+      observed.latestKey &&
+        (observed.closedBrowserKey === observed.latestKey ||
+          (sessionPreviewTarget &&
+            "browserId" in sessionPreviewTarget &&
+            sessionPreviewTarget.hintKey === observed.latestKey)),
+    );
+    observed.latestKey = key;
+    if (hint && key) {
+      const deliveryKey = JSON.stringify([
+        hint.sessionId,
+        hint.kind === "browser" ? (hint.deliveryId ?? hint.id) : hint.id,
+      ]);
+      const fresh =
+        !observed.seen.has(key) && hint.createdAt >= observed.newestAt;
+      const browserClosed =
+        hint.kind === "browser" &&
+        closedBrowserPreviews.current.has(
+          JSON.stringify([hint.sessionId, hint.browserId]),
+        );
+      observed.seen.add(key);
+      observed.newestAt = Math.max(observed.newestAt, hint.createdAt);
+      // Once a browser closes, an older file may again be the latest preview.
+      if (
+        !browserClosed &&
+        !dismissedPreviews.current.get(identity)?.has(deliveryKey) &&
+        (fresh || (wasShowingBrowser && hint.kind === "file"))
+      ) {
+        const target =
+          hint.kind === "browser"
+            ? {
+                browserId: hint.browserId,
+                url: hint.url,
+                native: hint.native,
+                toolPage: hint.deliveryId === undefined,
+              }
+            : {
+                path:
+                  hint.path +
+                  (hint.locator === undefined
+                    ? ""
+                    : `#${encodeURIComponent(hint.locator)}`),
+              };
+        updateDock(identity, (layout) =>
+          activateDockTab(layout, "preview", layout.focused, false),
+        );
+        setPreviews((old) => ({
+          ...old,
+          [identity]: {
+            target: {
+              ...target,
+              sourceSessionId: hint.sessionId,
+              hintKey: key,
+              deliveryKey,
+            },
+            request: (old[identity]?.request ?? 0) + 1,
+          },
+        }));
+      }
+    }
+  }, [
+    identity,
+    sessionId,
+    snapshot,
+    workspace?.path,
+    sessionPreviewTarget,
+    updateDock,
+  ]);
+  useEffect(() => {
+    for (const message of transcriptMessages) {
       if (message.role !== "user") continue;
       if (
         !sentImageAttachments[message.id] &&
@@ -1301,7 +1920,7 @@ export function AgentPage({
           .catch(() => {});
       }
     }
-  }, [sentDocumentAttachments, sentImageAttachments, snapshot?.messages]);
+  }, [sentDocumentAttachments, sentImageAttachments, transcriptMessages]);
   useEffect(() => {
     const id = sessionId;
     const unresolved = id ? pending[id] : undefined;
@@ -1309,6 +1928,7 @@ export function AgentPage({
     if (
       !id ||
       !unresolved?.uncertain ||
+      uncertainRetrySource ||
       pendingImageRestoreAttempts.current.has(restoreKey)
     )
       return;
@@ -1326,7 +1946,7 @@ export function AgentPage({
         setComposerImagesBySession(next);
       })
       .catch(() => {});
-  }, [pending, sessionId]);
+  }, [pending, sessionId, uncertainRetrySource]);
   useEffect(() => {
     const id = sessionId;
     const unresolved = id ? pending[id] : undefined;
@@ -1334,6 +1954,7 @@ export function AgentPage({
     if (
       !id ||
       !unresolved?.uncertain ||
+      uncertainRetrySource ||
       pendingDocumentRestoreAttempts.current.has(restoreKey)
     )
       return;
@@ -1351,7 +1972,7 @@ export function AgentPage({
         setComposerDocumentsBySession(next);
       })
       .catch(() => {});
-  }, [pending, sessionId]);
+  }, [pending, sessionId, uncertainRetrySource]);
 
   // Observe task and title jobs independently when another conversation is selected.
   const backgroundIds = Object.keys({
@@ -1394,15 +2015,68 @@ export function AgentPage({
       if (timer) clearTimeout(timer);
     };
   }, [backgroundIds, onSnapshot]);
+  const chatReady = Boolean(snapshot);
+  useLayoutEffect(() => {
+    const scroll = scrollRef.current;
+    if (!chatReady || !scroll) {
+      readingSession.current = null;
+      return;
+    }
+    readingSession.current = identity;
+    const position = readingPositions.current.get(identity);
+    atBottom.current = position === undefined;
+    scroll.dataset.followTail = String(atBottom.current);
+    setShowScrollToBottom(!atBottom.current);
+    smoothChatTarget.current = null;
+    if (position === undefined) jumpToChatTail(scroll);
+    else scroll.scrollTop = position;
+  }, [chatReady, identity, jumpToChatTail]);
+  useLayoutEffect(() => {
+    const requested = followAfterCommit.current;
+    if (requested === null) return;
+    followAfterCommit.current = null;
+    const scroll = scrollRef.current;
+    if (requested === identity && scroll && readingSession.current === identity)
+      jumpToChatTail(scroll);
+  });
   useEffect(() => {
     const scroll = scrollRef.current;
-    if (scroll && atBottom.current)
-      scroll.scrollTop = snapshot?.messages.length ? scroll.scrollHeight : 0;
-  }, [snapshot]);
+    const content = chatContentRef.current;
+    if (!chatReady || !scroll || !content) return;
+    const settleSmoothScroll = () => {
+      if (smoothChatTarget.current === null) return;
+      followedScrollTop.current = smoothChatTarget.current;
+      smoothChatTarget.current = null;
+      updateChatReadingPosition();
+    };
+    scroll.addEventListener("scrollend", settleSmoothScroll);
+    const observer =
+      typeof ResizeObserver === "undefined"
+        ? undefined
+        : new ResizeObserver(() => {
+            const floor = Math.max(
+              0,
+              scroll.scrollHeight - scroll.clientHeight,
+            );
+            if (
+              readingSession.current === identity &&
+              atBottom.current &&
+              floor !== smoothChatTarget.current
+            )
+              jumpToChatTail(scroll);
+          });
+    observer?.observe(scroll);
+    observer?.observe(content);
+    return () => {
+      scroll.removeEventListener("scrollend", settleSmoothScroll);
+      observer?.disconnect();
+    };
+  }, [chatReady, identity, jumpToChatTail, updateChatReadingPosition]);
   useEffect(() => {
-    atBottom.current = true;
-    setShowScrollToBottom(false);
-  }, [sessionId]);
+    const scroll = scrollRef.current;
+    if (typeof ResizeObserver === "undefined" && scroll && atBottom.current)
+      jumpToChatTail(scroll);
+  }, [snapshot, transcriptMessages, jumpToChatTail]);
 
   const working =
     Object.values(statuses).some(activeStatus) ||
@@ -1414,6 +2088,13 @@ export function AgentPage({
     sessions.find((session) => session.id === sessionId);
   const readOnlySession = Boolean(sessionId && isLegacySession(sessionId));
   const isSecretaryWorker = selectedSession?.coordination?.role === "worker";
+  const workerPermissionLocked =
+    isSecretaryWorker && selectedSession?.coordination?.permissionLocked;
+  const selectedPermissionMode = workspacePermission(
+    sessionPermissionMode(selectedSession?.permissionMode),
+    workspace,
+  );
+  const planning = snapshot?.plan?.active || selectedSession?.mode === "plan";
   const configurationReadOnly = readOnlySession || isSecretaryWorker;
   const isSecretary = selectedSession?.coordination?.role === "secretary";
   const secretarySessionId = isSecretary
@@ -1936,7 +2617,7 @@ export function AgentPage({
         selectedModel.id,
         "build",
         undefined,
-        permissionMode,
+        workspacePermission(permissionMode, target),
         reasoningEffort || undefined,
       ];
       if (target.standalone) sessionArgs[5] = target.path;
@@ -2088,13 +2769,12 @@ export function AgentPage({
         );
       const session = await agentApi.openSecretary(
         selectedModel.id,
-        sourceSession?.permissionMode
-          ? ["ask", "auto", "full_access"].includes(
-              sourceSession.permissionMode,
-            )
-            ? (sourceSession.permissionMode as AgentPermissionMode)
-            : "ask"
-          : permissionMode,
+        workspacePermission(
+          sourceSession?.permissionMode
+            ? sessionPermissionMode(sourceSession.permissionMode)
+            : permissionMode,
+          target,
+        ),
         sourceSession
           ? sourceSession.reasoningEffort || undefined
           : reasoningEffort || undefined,
@@ -2202,7 +2882,7 @@ export function AgentPage({
     setRefresh((value) => value + 1);
   };
   const startAutomationConversation = async (text: string) => {
-    if (mutation.current || replacement.current || !workspace || initializing)
+    if (mutation.current || !workspace || initializing)
       throw new Error("请等待当前配置保存后再开始自动化对话。");
     const target = workspace.path;
     if (selectedSession?.model && !boundModel)
@@ -2214,13 +2894,9 @@ export function AgentPage({
       catalog.models.find((item) => item.id === catalog.defaultModel) ||
       catalog.models[0];
     if (!model) throw new Error("请先添加一个可用模型，再通过对话构建自动化。");
-    const configuredPermission =
-      selectedSession?.permissionMode || permissionMode;
-    const selectedPermission = ["ask", "auto", "full_access"].includes(
-      configuredPermission,
-    )
-      ? (configuredPermission as AgentPermissionMode)
-      : "ask";
+    const selectedPermission = selectedSession
+      ? selectedPermissionMode
+      : (workspacePermission(permissionMode, workspace) ?? "ask");
     const sourceRevision = selection.current.revision;
     const sourceGeneration = generation.current;
     mutation.current = true;
@@ -2265,10 +2941,9 @@ export function AgentPage({
       if (mounted.current) setBusy(null);
     }
   };
-  const enqueueDraft = async () => {
+  const enqueueDraft = async (delivery?: "steer") => {
     if (
       mutation.current ||
-      replacement.current ||
       !sessionId ||
       !workspace ||
       isLegacySession(sessionId) ||
@@ -2294,6 +2969,7 @@ export function AgentPage({
     if (
       previous &&
       (previous.text !== text ||
+        previous.delivery !== delivery ||
         JSON.stringify(previous.imageIds) !==
           JSON.stringify(images.map((image) => image.id)) ||
         JSON.stringify(previous.documentIds) !==
@@ -2314,6 +2990,7 @@ export function AgentPage({
       draft: captureAgentDraft(storageKey, draft),
       imageIds: images.map((image) => image.id),
       documentIds: documents.map((document) => document.id),
+      ...(delivery && { delivery }),
     };
     try {
       saveAgentQueueSubmission(entry);
@@ -2321,40 +2998,63 @@ export function AgentPage({
       setError(agentErrorMessage(cause));
       return;
     }
+    const echo: QueueEcho = {
+      projectPath,
+      sessionId: id,
+      item: {
+        id: entry.requestId,
+        text,
+        createdAt: Date.now(),
+        ...(delivery && { delivery }),
+        attachments: [...images, ...documents].map(
+          ({ fileName, mime, bytes }) => ({ fileName, mime, bytes }),
+        ),
+        confirming: true,
+      },
+    };
+    if (delivery === "steer") {
+      followSubmittedChat();
+      if (images.length)
+        setSentImageAttachments((old) => ({
+          ...old,
+          [entry.requestId]: images,
+        }));
+      if (documents.length)
+        setSentDocumentAttachments((old) => ({
+          ...old,
+          [entry.requestId]: documents,
+        }));
+    }
+    setQueueEchoes((current) => [...current, echo]);
+    const discardEcho = () => {
+      if (mounted.current)
+        setQueueEchoes((current) => current.filter((item) => item !== echo));
+    };
     mutation.current = true;
-    setBusy("enqueue");
+    setBusy(delivery === "steer" ? "steer" : "enqueue");
     setBusySessionId(id);
     setError(null);
     try {
+      const queued = agentApi.enqueueMessage(
+        id,
+        text,
+        entry.requestId,
+        images,
+        documents,
+        ...(delivery ? ([delivery] as const) : ([] as const)),
+      );
       // Native queue owns the durable payload; this cache also restores an
       // uncertain enqueue's attachments without copying blobs into localStorage.
-      await Promise.all([
+      void Promise.all([
         saveAgentImageAttachments(entry.requestId, images),
         saveAgentDocumentAttachments(entry.requestId, documents),
       ]).catch(() => {});
-      let receipt: Awaited<ReturnType<typeof agentApi.enqueueMessage>>;
-      if (snapshot.session.coordination?.role === "worker") {
-        await sendSecretaryWorkerMessage(
-          snapshot.session,
-          text,
-          entry.requestId,
-          images,
-          documents,
-        );
-        receipt = { status: "accepted" };
-      } else {
-        receipt = await agentApi.enqueueMessage(
-          id,
-          text,
-          entry.requestId,
-          images,
-          documents,
-        );
-      }
+      const receipt = await queued;
       if (receipt.status === "rejected") {
+        discardEcho();
         clearAgentQueueSubmission(projectPath, id, entry.requestId);
         if (mounted.current && selectedId.current === id)
-          setError(receipt.message || "消息未能加入队列，草稿和附件已保留。");
+          setError(receipt.message || "消息未被接收，草稿和附件已保留。");
         return;
       }
       if (receipt.status !== "accepted")
@@ -2368,21 +3068,18 @@ export function AgentPage({
           next.session.id === id &&
           next.session.projectPath === projectPath
         ) {
-          admitted = Boolean(
-            next.queuedMessages?.some((item) => item.id === entry.requestId) ||
-              next.messages.some(
-                (message) =>
-                  message.role === "user" && message.id === entry.requestId,
-              ),
-          );
+          admitted = observesQueuedInput(next, entry.requestId);
           onSnapshot(next);
         }
       } catch {
         /* Retry retains this exact request identity and payload. */
       }
       if (admitted) acceptQueuedDraft(entry);
-      else if (mounted.current && selectedId.current === id)
-        setError(agentErrorMessage(cause));
+      else {
+        discardEcho();
+        if (mounted.current && selectedId.current === id)
+          setError(agentErrorMessage(cause));
+      }
     } finally {
       mutation.current = false;
       if (mounted.current) {
@@ -2398,7 +3095,6 @@ export function AgentPage({
   ) => {
     if (
       mutation.current ||
-      replacement.current ||
       !sessionId ||
       !workspace ||
       isLegacySession(sessionId) ||
@@ -2448,9 +3144,12 @@ export function AgentPage({
     setBusy(`queue-${action}`);
     setBusySessionId(id);
     setError(null);
+    if (action === "now") followSubmittedChat();
     try {
       if (action === "now") {
-        await agentApi.sendQueuedMessageNow(id, requestId);
+        if (canSteerQueuedMessage)
+          await agentApi.sendQueuedMessageNow(id, requestId, true);
+        else await agentApi.sendQueuedMessageNow(id, requestId);
       } else {
         const input = await agentApi.removeQueuedMessage(id, requestId);
         if (action === "recall") {
@@ -2543,7 +3242,7 @@ export function AgentPage({
         snapshot.queuedMessages?.length ||
         queueRecovery)
     )
-      void enqueueDraft();
+      void enqueueDraft(queueRecovery?.delivery);
     else void send();
   };
   const send = async (retry?: AgentRetryInput) => {
@@ -2554,13 +3253,8 @@ export function AgentPage({
       retry?.documents ??
       (sessionId ? composerDocumentsRef.current[sessionId] || [] : []);
     const text = retry?.text.trim() ?? draft.trim();
-    const retryingSamePending = Boolean(
-      retry &&
-        pendingRef.current[sessionId || ""]?.requestId === retry.requestId,
-    );
     if (
       mutation.current ||
-      replacement.current ||
       (retryLoading && !retry) ||
       !sessionId ||
       isLegacySession(sessionId) ||
@@ -2569,8 +3263,7 @@ export function AgentPage({
       !snapshot ||
       (pendingRef.current[sessionId] &&
         !pendingRef.current[sessionId].uncertain &&
-        !activeStatus(snapshot.status) &&
-        !retryingSamePending) ||
+        !activeStatus(snapshot.status)) ||
       stoppingRef.current[sessionId] ||
       agentStopInFlight(sessionId)
     )
@@ -2586,7 +3279,7 @@ export function AgentPage({
     }
     const sourceDraft = retry
       ? {
-          key: `${storageKey}:retry:${retry.requestId}`,
+          key: `${retryDraftPrefix(storageKey)}${retry.sourceMessageId}`,
           revision: crypto.randomUUID(),
           text: "",
         }
@@ -2599,240 +3292,201 @@ export function AgentPage({
       selection.current.revision === targetRevision &&
       selectedId.current === id &&
       workspaceRef.current?.path === projectPath;
-    let sourceSnapshot = snapshot;
-    const interrupting = activeStatus(sourceSnapshot.status);
-    const claim = interrupting ? { sessionId: id } : null;
-    if (claim) {
-      replacement.current = claim;
-      setReplacementSession(id);
+    const sourceSnapshot = snapshot;
+    if (activeStatus(sourceSnapshot.status)) return;
+    if (!stillCurrent()) return;
+    if (mutation.current) {
+      setError("配置正在保存，尚未发送新消息，请稍后重试。");
+      return;
     }
-    try {
-      if (interrupting) {
-        stoppingRef.current = { ...stoppingRef.current, [id]: true };
-        setStopping(stoppingRef.current);
-        setError(null);
-        try {
-          sourceSnapshot = await stopAgentBeforeReplacement({
-            sessionId: id,
-            projectPath,
-            isCurrent: stillCurrent,
-            onSnapshot,
-          });
-          if (!stillCurrent()) return;
-          storePending(projectPath, id);
-          const queued = { ...pendingRef.current };
-          delete queued[id];
-          pendingRef.current = queued;
-          setPending(queued);
-          const stopped = { ...stoppingRef.current };
-          delete stopped[id];
-          stoppingRef.current = stopped;
-          setStopping(stopped);
-          setRefresh((old) => old + 1);
-        } catch (cause) {
-          if (!(cause instanceof AgentReplacementAborted) && stillCurrent())
-            setError(agentErrorMessage(cause));
-          if (!agentStopInFlight(id)) {
-            const stopped = { ...stoppingRef.current };
-            delete stopped[id];
-            stoppingRef.current = stopped;
-            if (mounted.current) setStopping(stopped);
-          }
-          return;
-        }
-      }
-      if (!stillCurrent()) return;
-      if (mutation.current) {
-        setError("配置正在保存，尚未发送新消息，请稍后重试。");
-        return;
-      }
-      // Historical plan sessions remain readable. A new user send deliberately
-      // moves an idle session to build before recording or dispatching input.
-      if (
-        (interrupting ? sourceSnapshot.session : selectedSession)?.coordination
-          ?.role !== "worker" &&
-        (interrupting ? sourceSnapshot.session : selectedSession)?.mode ===
-          "plan"
-      ) {
-        mutation.current = true;
-        setBusy("config");
-        setError(null);
-        try {
-          const result = await agentApi.updateSession(id, { mode: "build" });
-          if (result.id !== id)
-            throw new Error("返回的会话与当前选择不一致，请重新读取。");
-          if (!stillCurrent()) return;
-          confirmSession(result, ["mode"]);
-        } catch (cause) {
-          if (mounted.current && selectedId.current === id)
-            setError(agentErrorMessage(cause));
-          return;
-        } finally {
-          mutation.current = false;
-          if (mounted.current) setBusy(null);
-        }
-      }
-      if (!stillCurrent()) return;
-      const previous = readAgentSubmission(projectPath, id);
-      if (
-        previous &&
-        (previous.text !== text ||
-          previous.stopRequested ||
-          (retry && previous.requestId !== retry.requestId))
-      ) {
-        setError(
-          "上次发送的接收状态尚未确认，请先停止该次任务，再发送新的内容。",
-        );
-        return;
-      }
-      const requestId =
-        retry?.requestId ||
-        previous?.requestId ||
-        `msg_${crypto.randomUUID().replace(/-/g, "")}`;
-      const submission: AgentSubmission = {
-        version: 1,
-        projectPath,
-        sessionId: id,
-        requestId,
-        text,
-        draft: sourceDraft,
-        assistantIds:
-          previous?.assistantIds ||
-          sourceSnapshot.messages
-            .filter((message) => message.role === "assistant")
-            .map((message) => message.id),
-        phase: "submitting",
-        observed: previous?.observed || false,
-        stopRequested: false,
-      };
-      try {
-        saveAgentSubmission(submission);
-      } catch (cause) {
-        setError(agentErrorMessage(cause));
-        return;
-      }
-      const queued = {
-        requestId,
-        assistantIds: new Set(submission.assistantIds),
-      };
-      beginAgentSubmission(requestId);
-      pendingRef.current = { ...pendingRef.current, [id]: queued };
-      storePending(projectPath, id, queued);
-      setPending(pendingRef.current);
+    // Historical plan sessions remain readable. A new user send deliberately
+    // moves an idle session to build before recording or dispatching input.
+    if (
+      selectedSession?.coordination?.role !== "worker" &&
+      selectedSession?.mode === "plan"
+    ) {
       mutation.current = true;
-      setBusy("send");
-      setBusySessionId(id);
+      setBusy("config");
       setError(null);
-      const accepted = () => {
+      try {
+        const result = await agentApi.updateSession(id, { mode: "build" });
+        if (result.id !== id)
+          throw new Error("返回的会话与当前选择不一致，请重新读取。");
+        if (!stillCurrent()) return;
+        confirmSession(result, ["mode"]);
+      } catch (cause) {
+        if (mounted.current && selectedId.current === id)
+          setError(agentErrorMessage(cause));
+        return;
+      } finally {
+        mutation.current = false;
+        if (mounted.current) setBusy(null);
+      }
+    }
+    if (!stillCurrent()) return;
+    const previous = readAgentSubmission(projectPath, id);
+    if (
+      previous &&
+      (previous.text !== text ||
+        previous.stopRequested ||
+        previous.draft.key !== sourceDraft.key ||
+        (retry && previous.requestId !== retry.requestId))
+    ) {
+      setError(
+        "上次发送的接收状态尚未确认，请先停止该次任务，再发送新的内容。",
+      );
+      return;
+    }
+    const requestId =
+      retry?.requestId ||
+      previous?.requestId ||
+      `msg_${crypto.randomUUID().replace(/-/g, "")}`;
+    const submission: AgentSubmission = {
+      version: 1,
+      projectPath,
+      sessionId: id,
+      requestId,
+      text,
+      draft: sourceDraft,
+      assistantIds:
+        previous?.assistantIds ||
+        sourceSnapshot.messages
+          .filter((message) => message.role === "assistant")
+          .map((message) => message.id),
+      phase: "submitting",
+      observed: previous?.observed || false,
+      stopRequested: false,
+    };
+    try {
+      saveAgentSubmission(submission);
+    } catch (cause) {
+      setError(agentErrorMessage(cause));
+      return;
+    }
+    const queued: PendingSend = {
+      requestId,
+      assistantIds: new Set(submission.assistantIds),
+      preview: {
+        projectPath,
+        message: {
+          id: requestId,
+          role: "user",
+          createdAt: Date.now(),
+          parts: text ? [{ type: "text", text }] : [],
+        },
+      },
+    };
+    followSubmittedChat();
+    beginAgentSubmission(requestId);
+    pendingRef.current = { ...pendingRef.current, [id]: queued };
+    storePending(projectPath, id, queued);
+    setPending(pendingRef.current);
+    mutation.current = true;
+    setBusy("send");
+    setBusySessionId(id);
+    setError(null);
+    if (outgoingImages.length)
+      setSentImageAttachments((old) => ({
+        ...old,
+        [requestId]: outgoingImages,
+      }));
+    if (outgoingDocuments.length)
+      setSentDocumentAttachments((old) => ({
+        ...old,
+        [requestId]: outgoingDocuments,
+      }));
+    const accepted = () => {
+      try {
+        updateAgentSubmission(projectPath, id, requestId, {
+          phase: "accepted",
+        });
+      } catch (cause) {
+        // The native ACK is still valid if browser persistence became
+        // unavailable afterwards. Retain the original identity for recovery.
+        if (mounted.current && selectedId.current === id)
+          setError(agentErrorMessage(cause));
+      }
+      const cleared = !retry && clearSubmittedAgentDraft(submission.draft);
+      if (!mounted.current) return;
+      if (cleared)
+        setDrafts((old) =>
+          old[storageKey] !== undefined &&
+          old[storageKey] !== submission.draft.text
+            ? old
+            : { ...old, [storageKey]: "" },
+        );
+      if (!retry) {
+        if (outgoingImages.length) clearSentComposerImages(id, outgoingImages);
+        if (outgoingDocuments.length)
+          clearSentComposerDocuments(id, outgoingDocuments);
+      }
+      setRefresh((old) => old + 1);
+    };
+    if (outgoingImages.length)
+      void saveAgentImageAttachments(requestId, outgoingImages).catch(() => {});
+    if (outgoingDocuments.length)
+      void saveAgentDocumentAttachments(requestId, outgoingDocuments).catch(
+        () => {},
+      );
+    try {
+      if (sourceSnapshot.session.coordination?.role === "worker")
+        await sendSecretaryWorkerMessage(
+          sourceSnapshot.session,
+          text,
+          requestId,
+          outgoingImages,
+          outgoingDocuments,
+        );
+      else
+        await agentApi.sendMessage(
+          id,
+          text,
+          requestId,
+          outgoingImages,
+          outgoingDocuments,
+        );
+      accepted();
+    } catch (cause) {
+      if (readAgentSubmission(projectPath, id)?.observed) accepted();
+      else {
         try {
           updateAgentSubmission(projectPath, id, requestId, {
-            phase: "accepted",
+            phase: "uncertain",
           });
-        } catch (cause) {
-          // The native ACK is still valid if browser persistence became
-          // unavailable afterwards. Retain the original identity for recovery.
-          if (mounted.current && selectedId.current === id)
-            setError(agentErrorMessage(cause));
+        } catch {
+          /* The original pre-dispatch receipt remains recoverable. */
         }
-        const cleared = clearSubmittedAgentDraft(submission.draft);
-        if (!mounted.current) return;
-        if (cleared)
-          setDrafts((old) =>
-            old[storageKey] !== undefined &&
-            old[storageKey] !== submission.draft.text
-              ? old
-              : { ...old, [storageKey]: "" },
-          );
-        if (outgoingImages.length) {
-          setSentImageAttachments((old) => ({
-            ...old,
-            [requestId]: outgoingImages,
-          }));
-          clearSentComposerImages(id, outgoingImages);
-        }
-        if (outgoingDocuments.length) {
-          setSentDocumentAttachments((old) => ({
-            ...old,
-            [requestId]: outgoingDocuments,
-          }));
-          clearSentComposerDocuments(id, outgoingDocuments);
-        }
-        setRefresh((old) => old + 1);
-      };
-      try {
-        if (outgoingImages.length)
-          await saveAgentImageAttachments(requestId, outgoingImages).catch(
-            () => {},
-          );
-        if (outgoingDocuments.length)
-          await saveAgentDocumentAttachments(
-            requestId,
-            outgoingDocuments,
-          ).catch(() => {});
-        if (sourceSnapshot.session.coordination?.role === "worker")
-          await sendSecretaryWorkerMessage(
-            sourceSnapshot.session,
-            text,
-            requestId,
-            outgoingImages,
-            outgoingDocuments,
-          );
-        else
-          await agentApi.sendMessage(
-            id,
-            text,
-            requestId,
-            outgoingImages,
-            outgoingDocuments,
-          );
-        accepted();
-      } catch (cause) {
-        if (readAgentSubmission(projectPath, id)?.observed) accepted();
-        else {
-          try {
-            updateAgentSubmission(projectPath, id, requestId, {
-              phase: "uncertain",
-            });
-          } catch {
-            /* The original pre-dispatch receipt remains recoverable. */
-          }
-          const uncertain = { ...queued, uncertain: true };
-          storePending(projectPath, id, uncertain);
-          if (mounted.current) {
-            pendingRef.current = { ...pendingRef.current, [id]: uncertain };
-            setPending(pendingRef.current);
-            if (selectedId.current === id) setError(agentErrorMessage(cause));
-          }
-        }
-      } finally {
-        // A Stop may have reached an idle actor before this delayed prompt was
-        // admitted. Honour the saved stop intent after both success and an
-        // uncertain transport result; the first Stop ACK is not settlement.
-        if (readAgentSubmission(projectPath, id)?.stopRequested) {
-          try {
-            updateAgentSubmission(projectPath, id, requestId, {
-              stopAcknowledged: false,
-            });
-            await dispatchAgentStop(id, agentApi.interruptSession, true);
-            updateAgentSubmission(projectPath, id, requestId, {
-              stopAcknowledged: true,
-            });
-          } catch (cause) {
-            if (mounted.current && selectedId.current === id)
-              setError(agentErrorMessage(cause));
-          }
-        }
-        endAgentSubmission(requestId);
-        mutation.current = false;
+        const uncertain = { ...queued, uncertain: true };
+        storePending(projectPath, id, uncertain);
         if (mounted.current) {
-          setBusy(null);
-          setBusySessionId(null);
+          pendingRef.current = { ...pendingRef.current, [id]: uncertain };
+          setPending(pendingRef.current);
+          if (selectedId.current === id) setError(agentErrorMessage(cause));
         }
       }
     } finally {
-      if (claim && replacement.current === claim) {
-        replacement.current = null;
-        if (mounted.current) setReplacementSession(null);
+      // A Stop may have reached an idle actor before this delayed prompt was
+      // admitted. Honour the saved stop intent after both success and an
+      // uncertain transport result; the first Stop ACK is not settlement.
+      if (readAgentSubmission(projectPath, id)?.stopRequested) {
+        try {
+          updateAgentSubmission(projectPath, id, requestId, {
+            stopAcknowledged: false,
+          });
+          await dispatchAgentStop(id, agentApi.interruptSession, true);
+          updateAgentSubmission(projectPath, id, requestId, {
+            stopAcknowledged: true,
+          });
+        } catch (cause) {
+          if (mounted.current && selectedId.current === id)
+            setError(agentErrorMessage(cause));
+        }
+      }
+      endAgentSubmission(requestId);
+      mutation.current = false;
+      if (mounted.current) {
+        setBusy(null);
+        setBusySessionId(null);
       }
     }
   };
@@ -2866,25 +3520,50 @@ export function AgentPage({
     draft,
   ]);
   const retryLastMessage = async () => {
-    if (!snapshot || snapshot.status !== "error" || !sessionId) return;
+    if (!snapshot || snapshot.status !== "error" || !sessionId || !workspace)
+      return;
     const message = [...snapshot.messages]
       .reverse()
       .find((item) => item.role === "user");
     if (!message) return;
+    const previous = readAgentSubmission(workspace.path, sessionId);
+    if (previous && retrySourceId(previous) !== message.id) return;
+    const targetRevision = selection.current.revision;
     const text = message.parts
       .filter((part) => part.type === "text")
       .map((part) => (part.type === "text" ? part.text : ""))
       .join("");
     setRetryLoading(true);
     try {
+      const [retryImages, retryDocuments] = previous
+        ? await Promise.all([
+            readAgentImageAttachments(previous.requestId),
+            readAgentDocumentAttachments(previous.requestId),
+          ])
+        : [];
       const [images, documents] = await Promise.all([
-        sentImageAttachments[message.id] ||
+        retryImages ||
+          sentImageAttachments[message.id] ||
           readAgentImageAttachments(message.id).then((value) => value || []),
-        sentDocumentAttachments[message.id] ||
+        retryDocuments ||
+          sentDocumentAttachments[message.id] ||
           readAgentDocumentAttachments(message.id).then((value) => value || []),
       ]);
+      const current = latestSnapshot.current;
+      if (
+        !mounted.current ||
+        selection.current.revision !== targetRevision ||
+        current?.session.id !== sessionId ||
+        current.status !== "error" ||
+        lastAgentUserTurn(current.messages) !== message.id
+      )
+        return;
       await send({
-        requestId: message.id,
+        sourceMessageId: message.id,
+        // A settled native receipt deduplicates the old message ID. Only an
+        // unresolved submission for this explicit retry keeps its attempt ID.
+        requestId:
+          previous?.requestId || `msg_${crypto.randomUUID().replace(/-/g, "")}`,
         text,
         images,
         documents,
@@ -3041,7 +3720,8 @@ export function AgentPage({
     reasoningEffort?: string;
     contextLimit?: number | null;
   }) => {
-    if (isSecretaryWorker) return;
+    if (isSecretaryWorker && (!patch.permissionMode || workerPermissionLocked))
+      return;
     if (!sessionId) {
       if (patch.modelId) {
         setModelId(patch.modelId);
@@ -3121,6 +3801,8 @@ export function AgentPage({
       } else if (result) confirmSession(result, fields);
       if (remove && workspace) {
         removedSessions.current.add(id);
+        const owner = `${workspace.path}\0${id}`;
+        clearDockOwners((key) => key === owner);
         storePending(workspace.path, id);
         setPendingTitles((old) => {
           const copy = { ...old };
@@ -3250,8 +3932,14 @@ export function AgentPage({
     setBusy("project-meta");
     setError(null);
     try {
-      if (remove) await agentApi.removeProject(project.path);
-      else await agentApi.setProjectMetadata(project.path, !project.pinned);
+      if (remove) {
+        await agentApi.removeProject(project.path);
+        if (!mounted.current) return;
+        const key = projectDockKey(project.path);
+        clearDockOwners(
+          (owner) => projectDockKey(owner.split("\0", 1)[0]) === key,
+        );
+      } else await agentApi.setProjectMetadata(project.path, !project.pinned);
       const next = await agentApi.listProjects();
       if (mounted.current) setProjects(preserveWorkspaceOrder(next));
     } catch (cause) {
@@ -3262,6 +3950,7 @@ export function AgentPage({
     }
   };
   const runningHere = snapshot && activeStatus(snapshot.status);
+  const canSteerQueuedMessage = Boolean(runningHere) && !snapshot?.queuePaused;
   const queuedHere = Boolean(
     sessionId && pending[sessionId] && !pending[sessionId].uncertain,
   );
@@ -3270,7 +3959,7 @@ export function AgentPage({
     (busy === "stop" && busySessionId === sessionId) ||
     Boolean(sessionId && stopping[sessionId]);
   const sendingHere = busy === "send" && busySessionId === sessionId;
-  const replacingHere = replacementSession === sessionId;
+  const steeringHere = busy === "steer" && busySessionId === sessionId;
   const enqueuingHere = busy === "enqueue" && busySessionId === sessionId;
   const queueMode = Boolean(
     runningHere || snapshot?.queuedMessages?.length || queueRecovery,
@@ -3280,51 +3969,45 @@ export function AgentPage({
     readOnlySession ||
     retryLoading ||
     Boolean(busy) ||
-    Boolean(replacementSession) ||
     !snapshot ||
     (!draft.trim() && !composerImages.length && !composerDocuments.length) ||
     (queuedHere && !runningHere) ||
     stoppingHere;
-  const visibleWorkspaceSessions = sessions
-    .filter(
-      (session) =>
-        session.coordination?.role !== "worker" &&
-        Boolean(session.archived) === showArchived &&
-        (!sessionSearch.trim() ||
-          session.title
-            .toLocaleLowerCase()
-            .includes(sessionSearch.toLocaleLowerCase())),
-    )
-    .sort(
-      (a, b) =>
-        Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) ||
-        b.updatedAt - a.updatedAt,
-    );
+  const sessionQuery = sessionSearch.toLocaleLowerCase();
+  const visibleWorkspaceSessions = useMemo(
+    () =>
+      sessions
+        .filter(
+          (session) =>
+            session.coordination?.role !== "worker" &&
+            Boolean(session.archived) === showArchived &&
+            (!sessionQuery.trim() ||
+              session.title.toLocaleLowerCase().includes(sessionQuery)),
+        )
+        .sort(compareSidebarSessions),
+    [sessions, showArchived, sessionQuery],
+  );
   const workspaceExpanded = workspace
     ? (expandedWorkspaces[workspace.path] ?? true)
     : false;
-  const sidebarProjects: AgentProject[] = projects.length
-    ? [...projects]
-    : recent.map((path) => ({
-        path,
-        name: nameOf(path),
-        pinned: false,
-        lastOpenedAt: 0,
-      }));
-  if (
-    workspace &&
-    !sidebarProjects.some((item) => item.path === workspace.path)
-  )
-    sidebarProjects.push({
-      ...workspace,
-      pinned: false,
-      lastOpenedAt: 0,
-    });
-  sidebarProjects.sort(
-    (a, b) =>
-      Number(Boolean(b.standalone)) - Number(Boolean(a.standalone)) ||
-      Number(b.pinned) - Number(a.pinned),
-  );
+  const sidebarProjects = useMemo(() => {
+    const items: AgentProject[] = projects.length
+      ? [...projects]
+      : recent.map((path) => ({
+          path,
+          name: nameOf(path),
+          pinned: false,
+          lastOpenedAt: 0,
+        }));
+    if (workspace && !items.some((item) => item.path === workspace.path)) {
+      items.push({ ...workspace, pinned: false, lastOpenedAt: 0 });
+    }
+    return items.sort(
+      (a, b) =>
+        Number(Boolean(b.standalone)) - Number(Boolean(a.standalone)) ||
+        Number(b.pinned) - Number(a.pinned),
+    );
+  }, [projects, recent, workspace]);
 
   const navigateWorkspace = (action: () => void) => {
     const proceed = () => {
@@ -3334,7 +4017,7 @@ export function AgentPage({
     if (activeTool && onWorkspaceNavigate) onWorkspaceNavigate(proceed);
     else proceed();
   };
-  const collapseSidebar = () => {
+  const collapseSidebar = useCallback(() => {
     const focused = document.activeElement;
     const restoreKeyboardFocus =
       focused instanceof HTMLElement &&
@@ -3354,13 +4037,41 @@ export function AgentPage({
         });
         target?.focus();
       });
-  };
-  const toggleSidebar = () => {
+  }, [paneLayout.containerRef]);
+  const toggleSidebar = useCallback(() => {
     if (!paneLayout.sidebarVisible) {
-      setPreviewPath(null);
+      if (previewVisible && !paneLayout.sidebarCanOpen) setPreviewFolded(true);
       setSidebarCollapsed(false);
     } else collapseSidebar();
-  };
+  }, [
+    collapseSidebar,
+    paneLayout.sidebarCanOpen,
+    paneLayout.sidebarVisible,
+    previewVisible,
+    setPreviewFolded,
+  ]);
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.isComposing || event.repeat) return;
+      if ((event.ctrlKey || event.metaKey) && event.key === "\\") {
+        event.preventDefault();
+        toggleSidebar();
+      }
+      if (
+        canOpenBrowser &&
+        event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        !event.shiftKey &&
+        event.key.toLowerCase() === "t"
+      ) {
+        event.preventDefault();
+        openWebPreview();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [canOpenBrowser, openWebPreview, toggleSidebar]);
   const sidebarToggle = !paneLayout.sidebarVisible ? (
     <button
       type="button"
@@ -3537,25 +4248,20 @@ export function AgentPage({
           const taskListId = `workspace-tasks-${encodeURIComponent(
             project.path,
           )}`;
-          const matchingTasks = (
-            isCurrentWorkspace
-              ? visibleWorkspaceSessions
-              : workspaceSessions[project.path] || []
-          )
-            .filter((session) => session.coordination?.role !== "worker")
-            .filter(
-              (session) =>
-                isCurrentWorkspace ||
-                !sessionSearch.trim() ||
-                session.title
-                  .toLocaleLowerCase()
-                  .includes(sessionSearch.toLocaleLowerCase()),
-            )
-            .sort(
-              (a, b) =>
-                Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) ||
-                b.updatedAt - a.updatedAt,
-            );
+          const matchingTasks = isCurrentWorkspace
+            ? visibleWorkspaceSessions
+            : expanded
+              ? (workspaceSessions[project.path] || [])
+                  .filter(
+                    (session) =>
+                      session.coordination?.role !== "worker" &&
+                      (!sessionQuery.trim() ||
+                        session.title
+                          .toLocaleLowerCase()
+                          .includes(sessionQuery)),
+                  )
+                  .sort(compareSidebarSessions)
+              : [];
           return (
             <div className="wb-workspace-group" key={project.path}>
               <div
@@ -3770,6 +4476,56 @@ export function AgentPage({
     </>
   );
 
+  const tabId = (tab: DockTab) => `${dockId}-${tab.replace(":", "-")}`;
+  const previewTabs = new Map<DockTab, PreviewTabLabel>(
+    (browserDeck?.tabs ?? []).map((tab) => [
+      browserDockTab(tab.id),
+      {
+        id: tabId(browserDockTab(tab.id)),
+        title: tab.title || tab.url || "新标签页",
+        select: () => selectDockTab(identity, browserDockTab(tab.id)),
+        close: () => closeManualBrowser(identity, tab.id),
+      },
+    ]),
+  );
+  if (currentPreview) {
+    const { target } = currentPreview;
+    previewTabs.set("preview", {
+      id: tabId("preview"),
+      title:
+        "path" in target
+          ? target.path.split(/[\\/]/).at(-1) || "文件预览"
+          : "运行页面预览",
+      select: () => selectDockTab(identity, "preview"),
+      close: () => closePreview(identity, target),
+    });
+  }
+  for (const tab of availableTabs) {
+    previewTabs.set(tab, {
+      id: tabId(tab),
+      title: tab === "files" ? "项目目录" : "交互终端",
+      select: () => selectDockTab(identity, tab),
+      close: () => closeAuxiliaryTab(identity, tab),
+    });
+  }
+  const splitSpace = paneLayout.previewWidth - DOCK_DIVIDER_WIDTH;
+  const canSplit = splitSpace >= DOCK_PANE_MIN_WIDTH * 2;
+  const showingSplit = dock.panes.length === 2 && canSplit;
+  const visibleDock = showingSplit ? dock : mergePreviewDock(dock);
+  const splitWidth = Math.max(
+    DOCK_PANE_MIN_WIDTH,
+    Math.min(
+      splitSpace - DOCK_PANE_MIN_WIDTH,
+      Math.round(splitSpace * dock.ratio),
+    ),
+  );
+  const dockColumn = (index: number) => (index === 0 ? 1 : 3);
+  const panelColumn = (owner: string, tab: DockTab) => {
+    if (!previewVisible || owner !== identity) return;
+    const index = visibleDock.panes.findIndex(({ active }) => active === tab);
+    if (index !== -1) return dockColumn(index);
+  };
+
   return (
     <div
       ref={paneLayout.containerRef}
@@ -3916,6 +4672,18 @@ export function AgentPage({
               onOpenAbout={onOpenAbout}
               onCheckUpdate={onCheckUpdate}
             />
+            {canOpenBrowser && !browserDeck && (
+              <button
+                type="button"
+                className="wb-icon-button wb-pane-toggle"
+                aria-label="新建浏览器标签"
+                title="新建浏览器标签（Ctrl+T）"
+                onClick={() => openWebPreview()}
+                style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+              >
+                <Globe aria-hidden="true" />
+              </button>
+            )}
             {workspace && sessionId && (
               <button
                 type="button"
@@ -3923,9 +4691,10 @@ export function AgentPage({
                 aria-label={previewVisible ? "收起文件预览" : "预览项目文件"}
                 aria-expanded={previewVisible}
                 title={previewVisible ? "收起文件预览" : "展开文件预览"}
-                onClick={() =>
-                  previewVisible ? setPreviewPath(null) : openPreview("")
-                }
+                onClick={() => {
+                  if (hasPreview) setPreviewFolded(previewVisible);
+                  else openPreview("");
+                }}
                 style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
               >
                 {previewVisible ? (
@@ -3951,6 +4720,11 @@ export function AgentPage({
               }
               active={!activeTool}
               onOpenSession={openSecretarySession}
+              onFocusComposer={
+                isSecretary
+                  ? () => composerInputRef.current?.focus()
+                  : undefined
+              }
             />
           )}
           {initializing && (
@@ -4073,7 +4847,15 @@ export function AgentPage({
                   <select
                     id="agent-new-permission"
                     className="wb-empty-select"
-                    value={permissionMode}
+                    value={
+                      workspacePermission(permissionMode, workspace) ??
+                      (workspace.remote ? "ask" : "full_access")
+                    }
+                    title={
+                      workspace.remote
+                        ? "远程写入和命令始终逐次确认。"
+                        : "完整权限会在会话允许的范围内直接执行工具，无需手动批准。Agent 仍可向你提问。"
+                    }
                     disabled={Boolean(busy)}
                     onChange={(event) => {
                       setPermissionMode(
@@ -4083,7 +4865,9 @@ export function AgentPage({
                   >
                     <option value="ask">逐次确认</option>
                     <option value="auto">Auto Mode</option>
-                    <option value="full_access">完整权限</option>
+                    {!workspace.remote && (
+                      <option value="full_access">完整权限</option>
+                    )}
                   </select>
                 </div>
                 <button
@@ -4125,44 +4909,40 @@ export function AgentPage({
                   正在恢复连接，已有内容会保留。
                 </p>
               )}
-              <AgentFileActionsContext.Provider
-                value={{
-                  sessionId: sessionId || undefined,
-                  projectPath: workspace?.path,
-                  onPreview: openPreview,
-                }}
-              >
+              <AgentFileActionsContext.Provider value={fileActions}>
                 <div
                   ref={scrollRef}
-                  onScroll={() => {
-                    const el = scrollRef.current;
-                    if (el) {
-                      atBottom.current =
-                        el.scrollTop + el.clientHeight >= el.scrollHeight - 40;
-                      setShowScrollToBottom(!atBottom.current);
-                    }
+                  onScroll={updateChatReadingPosition}
+                  onWheel={stopSmoothChatScroll}
+                  onTouchStart={stopSmoothChatScroll}
+                  onPointerDown={stopSmoothChatScroll}
+                  onKeyDown={(event) => {
+                    if (
+                      [
+                        "ArrowUp",
+                        "ArrowDown",
+                        "PageUp",
+                        "PageDown",
+                        "Home",
+                        "End",
+                        " ",
+                      ].includes(event.key)
+                    )
+                      stopSmoothChatScroll();
                   }}
                   className="wb-chat"
                 >
-                  <div className="wb-chat-content">
+                  <div ref={chatContentRef} className="wb-chat-content">
                     <AgentTranscript
-                      messages={snapshot?.messages || []}
-                      userIdentity={
-                        account
-                          ? {
-                              displayName:
-                                account.displayName || account.username,
-                              avatarUrl: account.avatarUrl || undefined,
-                            }
-                          : undefined
-                      }
+                      messages={transcriptMessages}
+                      userIdentity={userIdentity}
                       sessionId={snapshot?.session.id}
                       projectPath={workspace.path}
                       status={snapshot?.status}
                       imageAttachmentsByMessage={sentImageAttachments}
                       documentAttachmentsByMessage={sentDocumentAttachments}
                     />
-                    {snapshot && !snapshot.messages.length && (
+                    {snapshot && !transcriptMessages.length && (
                       <div className="wb-empty">
                         <div className="wb-empty-content">
                           <WelcomeMark compact />
@@ -4279,6 +5059,7 @@ export function AgentPage({
                           <AgentQuestionCard
                             key={request.id}
                             question={request}
+                            projectPath={workspace?.path}
                             onReply={(answer) =>
                               refreshAfter(() =>
                                 agentApi.replyQuestion(
@@ -4308,10 +5089,13 @@ export function AgentPage({
                             runningHere ||
                             stoppingHere ||
                             sendingHere ||
-                            replacingHere,
+                            steeringHere,
                         )}
                         currentTurnId={
-                          sessionId ? pending[sessionId]?.requestId : undefined
+                          uncertainRetrySource ??
+                          (sessionId
+                            ? pending[sessionId]?.requestId
+                            : undefined)
                         }
                         onRetry={readOnlySession ? undefined : retryLastMessage}
                         retrying={retryLoading || sendingHere}
@@ -4322,6 +5106,47 @@ export function AgentPage({
                 <AgentChanges key={sessionId} diffs={snapshot?.diffs || []} />
               </AgentFileActionsContext.Provider>
               <div className="wb-composer-area">
+                {sessionId && snapshot && !configurationReadOnly && (
+                  <AgentSessionModes
+                    key={sessionId}
+                    goal={snapshot.goal}
+                    plan={snapshot.plan}
+                    disabled={Boolean(busy) || stoppingHere || uncertainHere}
+                    onGoalDraft={(editing) => {
+                      if (!key) return;
+                      const prefix = editing ? "/goal edit " : "/goal ";
+                      if (!draft.trimStart().startsWith("/goal "))
+                        writeDraft(key, prefix + draft);
+                      composerInputRef.current?.focus();
+                    }}
+                    onCommand={(command) =>
+                      refreshAfter(() =>
+                        agentApi.sendMessage(
+                          sessionId,
+                          command,
+                          `mode_${crypto.randomUUID().replace(/-/g, "")}`,
+                        ),
+                      )
+                    }
+                  />
+                )}
+                {snapshot &&
+                  snapshot.session.id === sessionId &&
+                  !readOnlySession &&
+                  !isSecretaryWorker &&
+                  !activeStatus(snapshot.status) &&
+                  Boolean(snapshot.backgroundJobs) && (
+                    <div className="wb-queue-recovery" role="status">
+                      <span>{snapshot.backgroundJobs} 个后台作业仍在运行</span>
+                      <button
+                        type="button"
+                        disabled={stoppingHere}
+                        onClick={() => void stop()}
+                      >
+                        停止后台作业
+                      </button>
+                    </div>
+                  )}
                 {queueRecall && (
                   <div className="wb-queue-recovery" role="status">
                     <span>
@@ -4342,8 +5167,9 @@ export function AgentPage({
                   </div>
                 )}
                 <AgentMessageQueue
-                  items={snapshot?.queuedMessages || []}
+                  items={displayedQueue}
                   paused={snapshot?.queuePaused}
+                  canSteer={canSteerQueuedMessage}
                   busyId={
                     busy === "queue-now" && busySessionId === sessionId
                       ? queueBusyId
@@ -4352,7 +5178,6 @@ export function AgentPage({
                   disabled={
                     readOnlySession ||
                     Boolean(busy) ||
-                    Boolean(replacementSession) ||
                     stoppingHere ||
                     uncertainHere
                   }
@@ -4367,16 +5192,21 @@ export function AgentPage({
                     onClick={() => {
                       const scroll = scrollRef.current;
                       if (!scroll) return;
-                      atBottom.current = true;
-                      setShowScrollToBottom(false);
+                      pinChatTail();
+                      const reduced = window.matchMedia(
+                        "(prefers-reduced-motion: reduce)",
+                      ).matches;
+                      smoothChatTarget.current = reduced
+                        ? null
+                        : Math.max(
+                            0,
+                            scroll.scrollHeight - scroll.clientHeight,
+                          );
                       scroll.scrollTo({
                         top: scroll.scrollHeight,
-                        behavior: window.matchMedia(
-                          "(prefers-reduced-motion: reduce)",
-                        ).matches
-                          ? "instant"
-                          : "smooth",
+                        behavior: reduced ? "instant" : "smooth",
                       });
+                      if (reduced) followedScrollTop.current = scroll.scrollTop;
                     }}
                   >
                     <ArrowDown aria-hidden="true" />
@@ -4468,7 +5298,7 @@ export function AgentPage({
                     id="agent-message"
                     rows={1}
                     placeholder="描述任务，或继续追问…"
-                    title="Enter 发送 · Shift + Enter 换行；执行中 Enter 加入队列，Ctrl/⌘ + Enter 打断并发送"
+                    title="Enter 发送 · Shift + Enter 换行；执行中 Enter 加入队列，Ctrl/⌘ + Enter 插入当前任务"
                     value={draft}
                     disabled={readOnlySession || recallingHere}
                     onChange={(event) => writeDraft(key, event.target.value)}
@@ -4493,7 +5323,8 @@ export function AgentPage({
                       ) {
                         event.preventDefault();
                         if (!sendDisabled) {
-                          if (event.ctrlKey || event.metaKey) void send();
+                          if ((event.ctrlKey || event.metaKey) && runningHere)
+                            void enqueueDraft("steer");
                           else submitComposer();
                         }
                       }
@@ -4563,14 +5394,25 @@ export function AgentPage({
                       />
                     </div>
                     <AgentComposerOptions
-                      permissionMode={selectedSession?.permissionMode || "ask"}
+                      permissionMode={planning ? "ask" : selectedPermissionMode}
+                      planning={planning}
                     >
+                      {planning && (
+                        <p className="wb-secretary-config-note">
+                          当前计划模式只读。执行权限设置在执行模式下生效。
+                        </p>
+                      )}
                       {isSecretaryWorker && (
                         <p className="wb-secretary-config-note">
-                          {t("agentSecretary.workerSettings", {
-                            defaultValue:
-                              "工作对话沿用创建时的模型与权限；新任务设置请在秘书主对话中调整。",
-                          })}
+                          {workerPermissionLocked
+                            ? t("agentSecretary.workerPermissionLocked", {
+                                defaultValue:
+                                  "该任务沿用派工会话或后台规则的权限。",
+                              })
+                            : t("agentSecretary.workerSettings", {
+                                defaultValue:
+                                  "工作对话沿用分派时的模型。这里更改的权限只对当前工作对话生效。",
+                              })}
                         </p>
                       )}
                       <div className="wb-composer-options-field">
@@ -4612,10 +5454,17 @@ export function AgentPage({
                         <label htmlFor="agent-permission-mode">执行权限</label>
                         <select
                           id="agent-permission-mode"
-                          title="逐次确认：改动和命令先询问；Auto Mode：常规编辑和安全命令自动允许；完整权限：工具无需逐次确认。配置从下一次请求或工具检查生效。"
-                          value={selectedSession?.permissionMode || "ask"}
+                          title={
+                            planning
+                              ? "当前计划模式只读。执行权限设置在执行模式下生效。"
+                              : workspace?.remote
+                                ? "远程写入和命令始终逐次确认。"
+                                : "逐次确认会在改动和运行命令前询问。Auto Mode 允许工作区内的常规操作。完整权限会在会话允许的范围内直接执行工具，无需手动批准。Agent 仍可向你提问。当前运行和已排队消息沿用原权限，新设置从下一次独立运行生效。"
+                          }
+                          value={selectedPermissionMode}
                           disabled={
-                            configurationReadOnly ||
+                            readOnlySession ||
+                            workerPermissionLocked ||
                             Boolean(busy) ||
                             !snapshot ||
                             uncertainHere
@@ -4630,15 +5479,9 @@ export function AgentPage({
                         >
                           <option value="ask">逐次确认</option>
                           <option value="auto">Auto Mode</option>
-                          <option value="full_access">完整权限</option>
-                          {selectedSession?.permissionMode &&
-                            !["ask", "auto", "full_access"].includes(
-                              selectedSession.permissionMode,
-                            ) && (
-                              <option value={selectedSession.permissionMode}>
-                                自定义权限
-                              </option>
-                            )}
+                          {!workspace?.remote && (
+                            <option value="full_access">完整权限</option>
+                          )}
                         </select>
                       </div>
                     </AgentComposerOptions>
@@ -4670,21 +5513,21 @@ export function AgentPage({
                     {runningHere && (
                       <button
                         type="button"
-                        className="wb-interrupt-send"
+                        className="wb-steer-send"
                         disabled={sendDisabled}
-                        aria-label={replacingHere ? "正在打断…" : "打断并发送"}
-                        title="停止当前任务，确认收尾后发送新消息 · Ctrl/⌘ + Enter"
-                        onClick={() => void send()}
+                        aria-label={steeringHere ? "正在插入…" : "插入当前任务"}
+                        title="当前步骤结束后插入消息 · Ctrl/⌘ + Enter"
+                        onClick={() => void enqueueDraft("steer")}
                       >
                         <ArrowUpRight size={16} aria-hidden="true" />
                         <span>
-                          {replacingHere ? "正在打断…" : "打断并发送"}
+                          {steeringHere ? "正在插入…" : "插入当前任务"}
                         </span>
                       </button>
                     )}
                     <button
                       type="submit"
-                      className={`wb-primary wb-send-button${sendingHere || replacingHere || enqueuingHere ? " wb-send-pending" : ""}`}
+                      className={`wb-primary wb-send-button${sendingHere || steeringHere || enqueuingHere ? " wb-send-pending" : ""}`}
                       disabled={sendDisabled}
                       title={
                         queueMode
@@ -4692,7 +5535,7 @@ export function AgentPage({
                           : "Enter 发送 · Shift + Enter 换行"
                       }
                     >
-                      {sendingHere || replacingHere || enqueuingHere ? (
+                      {sendingHere || steeringHere || enqueuingHere ? (
                         <LoaderCircle
                           className="wb-send-spinner"
                           size={20}
@@ -4706,8 +5549,8 @@ export function AgentPage({
                       <span>
                         {enqueuingHere
                           ? "正在入队…"
-                          : replacingHere
-                            ? "等待停止…"
+                          : steeringHere
+                            ? "正在插入…"
                             : sendingHere
                               ? "正在发送…"
                               : queueMode
@@ -4722,18 +5565,252 @@ export function AgentPage({
           )}
         </MotionSurface>
       </main>
-      {sessionId && previewSession === sessionId && previewPath !== null && (
+      {previewVisible && (
         <AgentPaneResizeHandle {...paneLayout.previewHandleProps} />
       )}
-      {sessionId && previewSession === sessionId && previewPath !== null && (
-        <AgentPreviewPanel
-          key={`${sessionId}:${previewPath}`}
-          sessionId={sessionId}
-          path={previewPath}
-          width={paneLayout.previewWidth}
-          onClose={() => setPreviewPath(null)}
-        />
-      )}
+      <div
+        ref={dockElement}
+        className="wb-preview-dock"
+        hidden={!previewVisible}
+        style={{
+          width: paneLayout.previewWidth,
+          gridTemplateColumns: showingSplit
+            ? `minmax(0, var(--wb-dock-drag-width, ${splitWidth}px)) ${DOCK_DIVIDER_WIDTH}px minmax(0, 1fr)`
+            : undefined,
+        }}
+      >
+        {hasPreview &&
+          visibleDock.panes.map(({ tabs, active }, index) => {
+            const pane = index === 1 ? 1 : 0;
+            const column = dockColumn(index);
+            // A narrow window combines the presentation without changing the saved split.
+            const openIn = showingSplit ? pane : undefined;
+            return (
+              <AgentPreviewTabStrip
+                key={index}
+                column={column}
+                label={
+                  showingSplit
+                    ? index === 0
+                      ? "左侧分屏标签"
+                      : "右侧分屏标签"
+                    : undefined
+                }
+                tabs={tabs.map((tab) => previewTabs.get(tab)!)}
+                activeId={active ? tabId(active) : undefined}
+                onOpenBrowser={
+                  canOpenBrowser
+                    ? () => openWebPreview(undefined, openIn)
+                    : undefined
+                }
+                onOpenFiles={() => selectDockTab(identity, "files", openIn)}
+                onOpenTerminal={() =>
+                  selectDockTab(identity, "terminal", openIn)
+                }
+                onSplit={
+                  dock.panes.length === 1 && canSplit
+                    ? () => updateDock(identity, () => splitPreviewDock(dock))
+                    : undefined
+                }
+                onMerge={
+                  dock.panes.length === 2
+                    ? () => updateDock(identity, mergePreviewDock)
+                    : undefined
+                }
+                onMoveActive={
+                  showingSplit && active
+                    ? () =>
+                        updateDock(identity, (old) =>
+                          moveDockTab(old, active, pane === 0 ? 1 : 0),
+                        )
+                    : undefined
+                }
+              />
+            );
+          })}
+        {showingSplit && (
+          <div className="wb-preview-split-divider">
+            <AgentPaneResizeHandle
+              label="调整右栏分屏宽度"
+              width={splitWidth}
+              minWidth={DOCK_PANE_MIN_WIDTH}
+              maxWidth={splitSpace - DOCK_PANE_MIN_WIDTH}
+              growthDirection={1}
+              onWidthChange={(width) => {
+                const style = dockElement.current?.style;
+                if (width === splitWidth)
+                  style?.removeProperty("--wb-dock-drag-width");
+                else style?.setProperty("--wb-dock-drag-width", `${width}px`);
+              }}
+              onWidthCommit={(width) => {
+                dockElement.current?.style.removeProperty(
+                  "--wb-dock-drag-width",
+                );
+                updateDock(identity, (old) => ({
+                  ...old,
+                  ratio: Math.min(0.9, Math.max(0.1, width / splitSpace)),
+                }));
+              }}
+            />
+          </div>
+        )}
+        {showingSplit &&
+          visibleDock.panes.map(
+            ({ tabs }, index) =>
+              !tabs.length && (
+                <div
+                  key={index}
+                  className="wb-dock-guide"
+                  style={{ gridColumn: dockColumn(index), gridRow: 2 }}
+                >
+                  <p>打开一个工具</p>
+                  {canOpenBrowser && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        openWebPreview(undefined, index === 1 ? 1 : 0)
+                      }
+                    >
+                      浏览器
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      selectDockTab(identity, "files", index === 1 ? 1 : 0)
+                    }
+                  >
+                    项目目录
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      selectDockTab(identity, "terminal", index === 1 ? 1 : 0)
+                    }
+                  >
+                    交互终端
+                  </button>
+                </div>
+              ),
+          )}
+        {retainedPreviews.map(([owner, { target, request }]) => {
+          const column = panelColumn(owner, "preview");
+          const visible = column !== undefined;
+          const label = owner === identity ? tabId("preview") : undefined;
+          const props = {
+            sessionId: target.sourceSessionId,
+            visible,
+            onClose: () => closePreview(owner, target),
+          };
+          return (
+            <div
+              key={`${owner}:${request}`}
+              className="wb-preview-dock-pane"
+              id={label ? label + "-panel" : undefined}
+              role={label ? "tabpanel" : undefined}
+              aria-labelledby={label}
+              hidden={!visible}
+              style={{ gridColumn: column, gridRow: 2 }}
+            >
+              {"browserId" in target ? (
+                <AgentBrowserPreviewPanel
+                  {...props}
+                  browserId={target.browserId}
+                  url={target.url}
+                  native={target.native}
+                  toolPage={target.toolPage}
+                  slot={column === 3 ? 1 : 0}
+                />
+              ) : (
+                <AgentPreviewPanel
+                  {...props}
+                  path={target.path}
+                  line={target.line}
+                  onNavigate={(path) => navigatePreview(owner, path)}
+                />
+              )}
+            </div>
+          );
+        })}
+        {Object.entries(browserDecks).flatMap(([owner, deck]) =>
+          deck.tabs.map((tab) => {
+            const kind = browserDockTab(tab.id);
+            const column = panelColumn(owner, kind);
+            const visible = column !== undefined;
+            const label = owner === identity ? tabId(kind) : undefined;
+            return (
+              <div
+                key={tab.id}
+                className="wb-preview-dock-pane"
+                id={label ? label + "-panel" : undefined}
+                role={label ? "tabpanel" : undefined}
+                aria-labelledby={label}
+                hidden={!visible}
+                style={{ gridColumn: column, gridRow: 2 }}
+              >
+                <AgentBrowserPreviewPanel
+                  sessionId={tab.sessionId}
+                  browserId={tab.browserId}
+                  url={tab.url}
+                  native={Boolean(tab.browserId)}
+                  toolPage
+                  slot={column === 3 ? 1 : 0}
+                  visible={visible}
+                  opening={tab.loading}
+                  openingError={tab.error}
+                  restoreTitle={tab.restoring ? tab.title : undefined}
+                  onRestore={
+                    tab.restoring && tab.url
+                      ? () => {
+                          void navigateBrowserTab(tab.id, tab.url!);
+                        }
+                      : undefined
+                  }
+                  onAddress={(url) => navigateBrowserTab(tab.id, url)}
+                  onClose={() => closeManualBrowser(owner, tab.id)}
+                />
+              </div>
+            );
+          }),
+        )}
+        {sessionId &&
+          workspace &&
+          availableTabs.map((tab) => {
+            const column = panelColumn(identity, tab);
+            const visible = column !== undefined;
+            const label = tabId(tab);
+            const props = {
+              sessionId,
+              projectPath: workspace.path,
+              visible,
+              onClose: () => closeAuxiliaryTab(identity, tab),
+            };
+            return (
+              <div
+                key={`${identity}:${tab}`}
+                className="wb-preview-dock-pane"
+                id={label + "-panel"}
+                role="tabpanel"
+                aria-labelledby={label}
+                hidden={!visible}
+                style={{ gridColumn: column, gridRow: 2 }}
+              >
+                {tab === "files" ? (
+                  <AgentProjectFilesPanel {...props} onOpenFile={openPreview} />
+                ) : (
+                  <Suspense
+                    fallback={<p className="wb-dock-guide">正在加载终端…</p>}
+                  >
+                    <AgentTerminalPanel
+                      {...props}
+                      terminalId={`${sessionId}:terminal`}
+                    />
+                  </Suspense>
+                )}
+              </div>
+            );
+          })}
+      </div>
       <FullScreenPanelNavigationContext.Provider value={sidebarToggle}>
         <FullScreenPanelHostContext.Provider value="agent-content-area">
           <AgentToolDraftsContext.Provider value={toolDrafts.current}>
@@ -4780,7 +5857,7 @@ export function AgentPage({
                       "",
                     "build",
                     undefined,
-                    permissionMode,
+                    workspacePermission(permissionMode, workspace),
                   )
                   .then((session) => {
                     if (

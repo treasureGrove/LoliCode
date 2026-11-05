@@ -11,6 +11,7 @@
 mod codex_link;
 mod grok_link;
 mod icon_fetch;
+pub(crate) use icon_fetch::{parse_icon_url as parse_public_https_url, resolve_public_web};
 mod mcp;
 mod parser;
 mod prompt;

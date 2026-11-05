@@ -275,6 +275,8 @@ pub struct CopilotModel {
     pub context_windows: Option<Vec<u64>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub output_limit: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_modalities: Option<Vec<String>>,
     /// Upstream protocols supported by this exact model ID.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub supported_endpoints: Vec<String>,
@@ -333,6 +335,7 @@ impl From<CopilotModelsResponseItem> for CopilotModel {
             context_window: metadata.context_limit,
             context_windows: metadata.context_limits,
             output_limit: metadata.output_limit,
+            input_modalities: metadata.input_modalities,
             supported_endpoints: item.supported_endpoints,
             supports_parallel_tool_calls: extract_copilot_parallel_tool_calls(
                 item.capabilities.as_ref(),
@@ -2177,6 +2180,7 @@ mod tests {
                 },
                 "supports": {
                     "parallel_tool_calls": true,
+                    "vision": true,
                     "reasoning_effort": ["none", "low", "turbo", "max", 7]
                 }
             }
@@ -2186,6 +2190,10 @@ mod tests {
         let model = CopilotModel::from(item);
         assert_eq!(model.context_window, Some(922_000));
         assert_eq!(model.supports_parallel_tool_calls, Some(true));
+        assert_eq!(
+            model.input_modalities,
+            Some(vec!["text".into(), "image".into()])
+        );
         assert_eq!(
             model.reasoning_effort,
             Some(vec![
@@ -2234,6 +2242,7 @@ mod tests {
             context_window: Some(922_000),
             context_windows: None,
             output_limit: None,
+            input_modalities: None,
             supported_endpoints: vec!["/responses".to_string()],
             supports_parallel_tool_calls: Some(true),
             reasoning_effort: Some(vec![
@@ -2578,6 +2587,7 @@ mod tests {
                         context_window: None,
                         context_windows: None,
                         output_limit: None,
+                        input_modalities: None,
                         supported_endpoints: Vec::new(),
                         supports_parallel_tool_calls: None,
                         reasoning_effort: None,
@@ -2590,6 +2600,7 @@ mod tests {
                         context_window: None,
                         context_windows: None,
                         output_limit: None,
+                        input_modalities: None,
                         supported_endpoints: Vec::new(),
                         supports_parallel_tool_calls: None,
                         reasoning_effort: None,
@@ -2602,6 +2613,7 @@ mod tests {
                         context_window: Some(128_000),
                         context_windows: None,
                         output_limit: None,
+                        input_modalities: None,
                         supported_endpoints: vec![
                             "/v1/chat/completions".to_string(),
                             "/responses".to_string(),
@@ -2687,6 +2699,7 @@ mod tests {
             context_window: Some(1_000_000),
             context_windows: None,
             output_limit: None,
+            input_modalities: None,
             supported_endpoints: endpoints
                 .iter()
                 .map(|endpoint| endpoint.to_string())

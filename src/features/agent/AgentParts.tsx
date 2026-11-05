@@ -17,6 +17,7 @@ import { SessionMarkdown } from "@/features/sessions/reader/SessionMarkdown";
 import { SessionCodeBlock } from "@/features/sessions/reader/SessionCodeBlock";
 import { cn } from "@/lib/utils";
 import { AgentFilePath } from "./AgentFilePath";
+import { AgentWebLink } from "./AgentWebLink";
 import { AgentImage } from "./AgentImage";
 import { AgentAttachmentImage } from "./AgentAttachmentImage";
 import { AgentDisclosure, type AgentDisclosureState } from "./AgentDisclosure";
@@ -38,6 +39,7 @@ const TOOL_NAMES: Record<string, string> = {
   search_files: "搜索代码",
   tool_search: "查找可用工具",
   deferred_tool_call: "调用已加载工具",
+  open_preview: "打开文件预览",
   open_document: "打开文档",
   show_in_viewer: "定位文档",
   read_document: "读取文档",
@@ -72,6 +74,10 @@ const TOOL_NAMES: Record<string, string> = {
   tavern_preview_context: "预览角色与世界书",
   unreal_editor_command: "操作虚幻编辑器",
 };
+
+const renderWebLink = (url: string, label: React.ReactNode) => (
+  <AgentWebLink url={url} label={label} />
+);
 
 function toolTarget(part: Extract<AgentPart, { type: "tool" }>) {
   if (!part.input || typeof part.input !== "object") return "";
@@ -118,6 +124,14 @@ export const AgentToolPart = memo(function AgentToolPart({
   const cancelled = part.state === "error" && isAgentCancellation(part.error);
   const label = TOOL_NAMES[part.name] || part.name;
   const target = toolTarget(part);
+  const plan =
+    part.name === "exit_plan_mode" &&
+    part.input &&
+    typeof part.input === "object" &&
+    "plan" in part.input &&
+    typeof part.input.plan === "string"
+      ? part.input.plan
+      : null;
   const filePath =
     part.input && typeof part.input === "object"
       ? ["filePath", "file_path", "path"]
@@ -199,6 +213,13 @@ export const AgentToolPart = memo(function AgentToolPart({
     >
       {() => (
         <>
+          {plan && (
+            <AgentTextPart
+              text={plan}
+              projectPath={projectPath}
+              sessionId={sessionId}
+            />
+          )}
           {part.error && (
             <p
               role={cancelled ? "status" : "alert"}
@@ -244,18 +265,21 @@ export const AgentTextPart = memo(function AgentTextPart({
 }) {
   const renderLocalImage = useCallback(
     (path: string, alt: string) => (
-      <AgentImage
-        sessionId={sessionId}
-        path={path}
-        alt={alt}
-        projectPath={projectPath}
-      />
+      <>
+        <AgentFilePath path={path} />
+        <AgentImage
+          sessionId={sessionId}
+          path={path}
+          alt={alt}
+          projectPath={projectPath}
+        />
+      </>
     ),
     [sessionId, projectPath],
   );
   const renderLocalPath = useCallback(
-    (path: string, label?: React.ReactNode) => (
-      <AgentFilePath path={path} label={label} />
+    (path: string, label?: React.ReactNode, line?: number) => (
+      <AgentFilePath path={path} label={label} line={line} />
     ),
     [],
   );
@@ -266,6 +290,8 @@ export const AgentTextPart = memo(function AgentTextPart({
       variant={variant}
       renderLocalImage={renderLocalImage}
       renderLocalPath={renderLocalPath}
+      renderWebLink={renderWebLink}
+      outputLinks
       previewLocalImageLinks
       autoLoadRemoteImages
       allowEmbeddedImages

@@ -312,6 +312,56 @@ async fn session_tool_scope_reads_the_persisted_boundary_without_mutation_or_inf
 }
 
 #[tokio::test]
+async fn browser_preview_requires_a_successful_receipt_in_the_same_session() {
+    use crate::dto::{AgentMessage, AgentPart};
+
+    let fake = Fake::start(|_| panic!("preview scope must never start inference")).await;
+    let (data, _project, engine, owner) = setup(&fake).await;
+    let other = engine.call("createSession", json!({})).await.unwrap();
+    let other = other["id"].as_str().unwrap();
+    engine.shutdown().await.unwrap();
+
+    let mut owner_state = persistence::load(data.path())
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|state| state.snapshot.session.id == owner)
+        .unwrap();
+    let receipt = |name: &str, state: &str, id: &str| AgentPart::Tool {
+        id: format!("call-{id}"),
+        name: name.into(),
+        state: state.into(),
+        input: Value::Null,
+        output: Some(json!({"browser_id": id}).to_string()),
+        error: None,
+    };
+    owner_state.snapshot.messages.push(AgentMessage {
+        id: "browser-receipt-message".into(),
+        role: "assistant".into(),
+        created_at: 1,
+        completed_at: Some(2),
+        parts: vec![
+            receipt("browser_open", "completed", "browser-owner"),
+            receipt("browser_open", "error", "browser-failed"),
+            receipt("read_file", "completed", "browser-unrelated"),
+        ],
+    });
+    persistence::save(data.path(), &owner_state).await.unwrap();
+    let engine = NativeEngine::open(data.path().into()).await.unwrap();
+    let root = |session, browser| {
+        engine.call(
+            "getSessionExecutionRoot",
+            json!({"sessionId": session, "browserId": browser}),
+        )
+    };
+    assert!(root(owner.as_str(), "browser-owner").await.is_ok());
+    assert!(root(other, "browser-owner").await.is_err());
+    assert!(root(owner.as_str(), "browser-failed").await.is_err());
+    assert!(root(owner.as_str(), "browser-unrelated").await.is_err());
+    engine.shutdown().await.unwrap();
+}
+
+#[tokio::test]
 async fn discovery_loads_real_schema_then_direct_and_wrapped_calls_share_execution() {
     for wrapped in [false, true] {
         let fake = Fake::start(move |input| match last_tool(input) {

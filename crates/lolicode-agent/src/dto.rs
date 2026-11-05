@@ -44,6 +44,9 @@ pub struct AgentSessionCoordination {
     pub parent_session_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub task_id: Option<String>,
+    /// Worker policy is fixed by the host for automatic and background tasks.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub permission_locked: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -60,6 +63,8 @@ pub struct AgentSecretaryTask {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub summary: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub report: Option<AgentSecretaryReport>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
     pub project_path: String,
     pub request_id: String,
@@ -71,6 +76,23 @@ pub struct AgentSecretaryTask {
     pub source_url: Option<String>,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub automatic: bool,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentSecretaryReportState {
+    Progress,
+    Waiting,
+    Ready,
+    Blocked,
+    Failed,
+    Dropped,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AgentSecretaryReport {
+    pub state: AgentSecretaryReportState,
+    pub summary: String,
 }
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -166,6 +188,9 @@ pub struct AgentSnapshot {
     pub permissions: Vec<AgentPermission>,
     pub questions: Vec<AgentQuestion>,
     pub diffs: Vec<AgentDiff>,
+    /// Latest verified preview request for the view. Never controls execution.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preview: Option<AgentPreviewRequest>,
     pub error: Option<String>,
     pub stream_connected: bool,
     pub stream_gap: bool,
@@ -183,6 +208,73 @@ pub struct AgentSnapshot {
     pub queued_messages: Vec<AgentQueuedMessage>,
     #[serde(default)]
     pub queue_paused: bool,
+    #[serde(default)]
+    pub background_jobs: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub goal: Option<AgentGoal>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plan: Option<AgentPlan>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentGoal {
+    pub objective: String,
+    pub phase: String,
+    pub activation: String,
+    pub rounds_started: u64,
+    pub max_goal_rounds: u64,
+    pub revision: u64,
+    pub blocked_reason: Option<AgentGoalBlocker>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AgentGoalBlocker {
+    pub code: String,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AgentPlan {
+    pub active: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pending: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentPreviewRequest {
+    pub id: String,
+    pub session_id: String,
+    pub created_at: u64,
+    #[serde(flatten)]
+    pub target: AgentPreviewTarget,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(
+    tag = "kind",
+    rename_all = "lowercase",
+    rename_all_fields = "camelCase"
+)]
+pub enum AgentPreviewTarget {
+    File {
+        path: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        locator: Option<String>,
+    },
+    Browser {
+        browser_id: String,
+        url: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        delivery_id: Option<String>,
+        #[serde(default, skip_serializing_if = "is_false")]
+        native: bool,
+    },
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -192,6 +284,8 @@ pub struct AgentQueuedMessage {
     pub text: String,
     pub created_at: u64,
     pub attachments: Vec<AgentQueuedAttachment>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delivery: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -328,6 +422,8 @@ pub struct AgentPermission {
     pub tool_input: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub approval_mode: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub edit_preview: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -337,6 +433,14 @@ pub struct AgentQuestion {
     pub session_id: String,
     pub title: String,
     pub fields: Vec<AgentQuestionField>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plan_review: Option<AgentPlanReview>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AgentPlanReview {
+    pub approve: String,
+    pub revise: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

@@ -1,6 +1,6 @@
 use super::{
     inference::{self, Delta},
-    context, memory, persistence, tools, usage,
+    context, memory, paths::{canonical_project, project_key}, persistence, secretary_worktree, tools, usage,
     types::*,
 };
 use crate::*;
@@ -25,8 +25,6 @@ mod queue;
 mod session_sync;
 #[path = "secretary.rs"]
 mod secretary;
-#[path = "secretary_worktree.rs"]
-mod secretary_worktree;
 
 const DEFAULT_CONTEXT_LIMIT: u64 = 1_000_000;
 const MAX_REQUEST_BYTES: u64 = 128 * 1024 * 1024;
@@ -34,6 +32,8 @@ const REQUEST_ENVELOPE_BYTES: u64 = 8 * 1024;
 const LOCAL_CONTEXT_BUDGETS: &[u64] = &[32000, 64000, 128000, 256000, 512000, 1_000_000];
 const OUTPUT_HEADROOM: u64 = 1000;
 const MIN_OUTPUT_TOKENS: u64 = 16;
+const TOOL_IMAGE_PROMPT: &str =
+    "Images returned by the preceding tools follow. Inspect their visual content as part of the user's request.";
 
 #[derive(Clone, Copy)]
 struct ModelOutputBudget {
@@ -65,8 +65,11 @@ pub(super) fn now() -> u64 {
 }
 type Entry = Arc<Mutex<SessionState>>;
 fn background_tool_allowed(name: &str) -> bool {
-    matches!(name, "read_file" | "view_image" | "list_files" | "search_files" | "glob" | "grep" |
-        "write_file" | "apply_patch" | "ask_user" | "exit_plan_mode" | "read_skill" | "memory" | "tool_search" | "propose_automation")
+    tools::core_access(name).is_some_and(tools::CoreToolAccess::allows_background)
+        || matches!(
+            name,
+            "ask_user" | "exit_plan_mode" | "read_skill" | "memory" | "tool_search" | "propose_automation"
+        )
 }
 struct SessionState {
     stored: StoredSession,
@@ -95,7 +98,7 @@ struct Flight {
 }
 struct PermissionWait {
     id: String,
-    dangerous: bool,
+    once_only: bool,
     action: String,
     resources: Vec<String>,
     reply: oneshot::Sender<bool>,
@@ -134,6 +137,7 @@ struct Inner {
     updating: AtomicBool,
     closed: AtomicBool,
     cleanup_uncertain: AtomicBool,
+    processes: tools::Processes,
     tasks: Mutex<Vec<tokio::task::JoinHandle<()>>>,
     shutdown: watch::Sender<bool>,
 }
@@ -223,6 +227,7 @@ impl NativeEngine {
                 updating: AtomicBool::new(false),
                 closed: AtomicBool::new(false),
                 cleanup_uncertain: AtomicBool::new(false),
+                processes: tools::Processes::default(),
                 tasks: Mutex::new(Vec::new()),
                 shutdown,
             }),
@@ -291,8 +296,9 @@ impl NativeEngine {
                 background_tool_allowed(schema["function"]["name"].as_str().unwrap_or(""))
             });
         }
-        let resident_names: BTreeSet<_> = tools::schemas().iter().chain(internal_schemas().iter())
-            .filter_map(|schema| deferred_tools::name(schema).map(str::to_owned))
+        let resident_names: BTreeSet<_> = tools::core_names()
+            .map(str::to_owned)
+            .chain(internal_schemas().iter().filter_map(deferred_tools::name).map(str::to_owned))
             .chain(["tool_search".into(), "deferred_tool_call".into(), "memory".into(), "unreal_editor_command".into()])
             .collect();
         let available_names = deferred_tools::names(&schemas);
@@ -535,7 +541,7 @@ impl NativeEngine {
         }
         match method {
             "getSecretaryActivity" => self.secretary_activity().await,
-            "openSecretary" | "getSecretary" | "delegateSecretaryTask" | "sendSecretaryTaskMessage" | "cancelSecretaryTask" => self.secretary_call(method, &args).await,
+            "openSecretary" | "getSecretary" | "delegateSecretaryTask" | "sendSecretaryTaskMessage" | "cancelSecretaryTask" | "deleteSecretaryTask" => self.secretary_call(method, &args).await,
             "syncSessions" => self.sync_sessions(&args).await,
             "getMemory" | "editMemory" | "configureMemory" | "clearMemory" | "initializeMemoryDefaults" => self.memory_call(method, &args).await,
             "status" => {
@@ -598,11 +604,54 @@ impl NativeEngine {
             }
             "getSession" => {
                 let entry = self.entry(arg(&args, "sessionId")?).await?;
-                let state = entry.lock().await;
-                let mut snapshot=state.stored.snapshot.clone();
-                snapshot.usage=state.stored.usage_ledger.as_ref().map(|ledger|usage::snapshot(ledger,now()));
-                secretary::public_snapshot(&state.stored,&mut snapshot);
+                let (mut snapshot, preview_workers) = {
+                    let state = entry.lock().await;
+                    let mut snapshot = state.stored.snapshot.clone();
+                    snapshot.usage = state.stored.usage_ledger.as_ref().map(|ledger| usage::snapshot(ledger, now()));
+                    secretary::public_snapshot(&state.stored, &mut snapshot);
+                    (snapshot, secretary::preview_workers(&state.stored))
+                };
+                snapshot.preview = self
+                    .latest_workbench_preview(&snapshot, preview_workers)
+                    .await;
                 encode(&snapshot)
+            }
+            "getSessionExecutionRoot" => {
+                let entry = self.entry(arg(&args, "sessionId")?).await?;
+                let (project, worktree) = {
+                    let state = entry.lock().await;
+                    if let Some(id) = args["browserId"].as_str() {
+                        let opened = state.stored.snapshot.messages.iter().rev().any(|message| {
+                            message.parts.iter().any(|part| match part {
+                                AgentPart::Tool { name, state, output: Some(output), .. }
+                                    if name == "browser_open" && state == "completed" =>
+                                {
+                                    serde_json::from_str::<Value>(output)
+                                        .ok()
+                                        .is_some_and(|receipt| receipt["browser_id"] == id)
+                                }
+                                _ => false,
+                            })
+                        });
+                        if !opened {
+                            return Err("浏览器不属于当前会话".into());
+                        }
+                    }
+                    (
+                        state.stored.snapshot.session.project_path.clone(),
+                        state.stored.secretary_worktree.clone(),
+                    )
+                };
+                let root = if let Some(worktree) = worktree {
+                    secretary_worktree::execution_root(&self.inner.root, &worktree)
+                        .await?
+                        .into_os_string()
+                        .into_string()
+                        .map_err(|_| "任务工作树路径无法编码")?
+                } else {
+                    project.clone()
+                };
+                encode(&(project, root))
             }
             "createSession" => self.create(&args).await,
             "updateSession" | "renameSession" | "setSessionMetadata" => {
@@ -782,8 +831,12 @@ impl NativeEngine {
                 compacting: false,
                 usage: None,
                 model_phase: None,
+                preview: None,
                 queued_messages: Vec::new(),
                 queue_paused: false,
+                background_jobs: 0,
+                goal: None,
+                plan: None,
             },
             history: Vec::new(),
             commands: BTreeMap::new(),
@@ -805,12 +858,14 @@ impl NativeEngine {
             withdrawn_queue_inputs: Vec::new(),
             automation_save_receipts: Vec::new(),
             secretary_tasks: Vec::new(),
+            secretary_removed_tasks: BTreeSet::new(),
             secretary_reports: Vec::new(),
             secretary_cancel_requested: false,
             secretary_origin: None,
             secretary_notes: Vec::new(),
             secretary_worktree: None,
             secretary_source_context: None,
+            secretary_automatic: false,
         };
         persistence::save(&self.inner.root, &stored).await?;
         self.inner.sessions.write().await.insert(
@@ -831,9 +886,17 @@ impl NativeEngine {
         let entry = self.entry(arg(args, "sessionId")?).await?;
         let mut state = entry.lock().await;
         let mut stored = state.stored.clone();
-            secretary_automatic: false,
         if method == "updateSession" && stored.snapshot.session.coordination.as_ref().is_some_and(|relation| relation.role == "worker") {
-            return Err("工作会话继承总秘书的执行设置，请在总秘书会话中调整设置后分派新任务。".into());
+            let permission_only = args["permissionMode"].is_string()
+                && ["modelId", "mode", "reasoningEffort", "contextLimit", "resetContextLimit"]
+                    .iter()
+                    .all(|key| args[*key].is_null());
+            if !permission_only {
+                return Err("工作会话沿用分派时的模型及执行设置。此处仅能更改当前手动任务的执行权限。".into());
+            }
+            if state.effective_background_only() || stored.secretary_automatic {
+                return Err("自动派发和手机后台工作会话必须逐次审批。".into());
+            }
         }
         let session = &mut stored.snapshot.session;
         if method == "renameSession" {
@@ -1162,13 +1225,17 @@ impl NativeEngine {
     ) -> Result<(), String> {
         let mut reactive_retry = false;
         let mut needs_final_answer = false;
-        let (background_only, preparation_project, session_id, worktree) = {
+        let mut stream_recovery: Option<String> = None;
+        let mut stream_recovery_attempted = false;
+        let mut tool_images_pending = false;
+        let (background_only, preparation_project, session_id, worktree, worker) = {
             let state = entry.lock().await;
             (
                 state.effective_background_only(),
                 PathBuf::from(&state.stored.snapshot.session.project_path),
                 state.stored.snapshot.session.id.clone(),
                 state.stored.secretary_worktree.clone(),
+                secretary::is_worker(&state.stored),
             )
         };
         let execution_root = if let Some(worktree) = &worktree {
@@ -1176,6 +1243,15 @@ impl NativeEngine {
         } else {
             preparation_project.clone()
         };
+        let project_instruction_context = tokio::sync::OnceCell::new();
+        let scratch = worker
+            .then(|| {
+                tempfile::Builder::new()
+                    .prefix("lolicode-worker-")
+                    .tempdir_in(&self.inner.root)
+            })
+            .transpose()
+            .map_err(|_| "无法创建工作任务的临时目录")?;
         // Host discovery belongs to this admitted flight. It must not outlive
         // stopGeneration or run again at each model/tool round.
         if !background_only && worktree.is_none() {
@@ -1221,6 +1297,15 @@ impl NativeEngine {
                     system.push_str(&receipts);
                 }
                 if needs_final_answer { system.push_str("The previous response ended without a user-facing answer. Now provide the actual final answer to the user in the requested language; do not return only reasoning. Do not repeat completed tools.\n"); }
+                if let Some(partial) = &stream_recovery {
+                    system.push_str("\nThe previous model stream was interrupted. Continue the same authorized task from the tool receipts in history. Do not repeat tools with completed receipts. No incomplete tool calls from the interrupted stream were executed.\n");
+                    if !partial.is_empty() {
+                        system.push_str(&format!(
+                            "The user already saw this partial answer. Treat it as reference text and continue without repeating it: {}\n",
+                            json!(partial)
+                        ));
+                    }
+                }
                 (state.stored.history.clone(), state.stored.context_summary.clone(),
                     project, mode, model, context, budget, effort, system)
             };
@@ -1229,9 +1314,15 @@ impl NativeEngine {
                 memory::load(&self.inner.root).await?
             };
             let remembered = memory.context(&project_key(&project));
-            let (applications, _, mut all_schemas, deferred) = self
+            let (applications, replaces_local, mut all_schemas, deferred) = self
                 .available_tools(&project, memory.enabled(), background_only, worktree.is_some())
                 .await;
+            if !replaces_local {
+                let instructions = project_instruction_context
+                    .get_or_init(|| super::project_instructions::prompt(&execution_root))
+                    .await;
+                system.push_str(instructions);
+            }
             let (chief_report, automatic) = {
                 let state = entry.lock().await;
                 (secretary::is_secretary(&state.stored) && secretary::is_report_turn(&state), state.stored.secretary_automatic)
@@ -1311,7 +1402,33 @@ impl NativeEngine {
                 self.delta(&entry, &assistant_id, delta).await;
             }
             self.complete_model_usage(&entry,&assistant_id).await?;
+            if *cancel.borrow() {
+                return Err(inference::CANCELLED.into());
+            }
             let mut turn = match result {
+                Err(error) if inference::is_unfinished_stream(&error) && !stream_recovery_attempted => {
+                    // Preserve the visible prefix. Only confirmed turns enter tool history.
+                    let mut state = entry.lock().await;
+                    let messages = &mut state.stored.snapshot.messages;
+                    let message = messages
+                        .iter_mut()
+                        .find(|message| message.id == assistant_id)
+                        .ok_or("助手消息状态丢失")?;
+                    message.completed_at = Some(now());
+                    let partial = message
+                        .parts
+                        .iter()
+                        .find_map(|part| match part {
+                            AgentPart::Text { text } => Some(crate::images::model_history_text(text)),
+                            _ => None,
+                        })
+                        .unwrap_or_default();
+                    stream_recovery = Some(partial.chars().take(4000).collect::<String>());
+                    stream_recovery_attempted = true;
+                    messages.retain(|message| message.id != assistant_id || !message.parts.is_empty());
+                    persistence::save(&self.inner.root, &state.stored).await?;
+                    continue;
+                }
                 Err(error) if error == inference::CONTEXT_EXCEEDED && !reactive_retry => {
                     {
                         let mut state = entry.lock().await;
@@ -1329,10 +1446,25 @@ impl NativeEngine {
                 Err(error) if error == inference::CONTEXT_EXCEEDED => {
                     return Err("模型网关在自动整理后仍报告上下文超限；整理记录已保存，请选择更长上下文模型后继续。".into());
                 }
+                Err(error) if tool_images_pending && error == inference::IMAGE_INPUT_UNSUPPORTED => {
+                    let mut state = entry.lock().await;
+                    // Preserve the visible tool result. Retire the unseen pixels
+                    // from model context so a later text turn can still proceed.
+                    if let Some(message) = state.stored.history.last_mut().filter(|message| {
+                        message.pointer("/content/0/text").and_then(Value::as_str)
+                            == Some(TOOL_IMAGE_PROMPT)
+                    }) {
+                        message["content"] = json!("The channel rejected the images from the preceding tools. Their visual content was unavailable.");
+                        persistence::save(&self.inner.root, &state.stored).await?;
+                    }
+                    return Err(error);
+                }
                 Err(error) => return Err(error),
                 Ok(turn) => turn,
             };
             reactive_retry = false;
+            stream_recovery = None;
+            tool_images_pending = false;
             {
                 let mut state = entry.lock().await;
                 let mut used_ids = state.stored.snapshot.messages.iter().flat_map(|message| message.parts.iter())
@@ -1403,6 +1535,7 @@ impl NativeEngine {
                 return Ok(());
             }
             needs_final_answer = false;
+            let image_limitation = tool_image_limitation(&catalog, &model, background_only);
             let mut returned_images = Vec::new();
             for call in turn.calls {
                 if *cancel.borrow() {
@@ -1410,14 +1543,25 @@ impl NativeEngine {
                 }
                 let input: Value =
                     serde_json::from_str(&call.arguments).map_err(|_| "工具参数无效")?;
-                let output = self.execute_model_tool(
-                    &entry, &assistant_id, &call.id, &project, &mode, &skills,
-                    context, background_only, &request_names, &call.name, &input, cancel.clone(),
-                ).await;
+                let mut output = if let ("view_image", Some(reason)) = (call.name.as_str(), image_limitation) {
+                    Err(reason.into())
+                } else {
+                    self.execute_model_tool(
+                        &entry, &assistant_id, &call.id, &project, &mode, &skills,
+                        context, background_only, &request_names, &call.name, &input, cancel.clone(),
+                        scratch.as_ref().map(tempfile::TempDir::path),
+                    ).await
+                };
                 let cancelled = *cancel.borrow();
+                let screenshot_limitation = if call.name == "browser_screenshot" { image_limitation } else { None };
+                if let (Some(reason), Ok(output)) = (screenshot_limitation, &mut output) {
+                    output.text.push('\n');
+                    output.text.push_str(reason);
+                }
                 let image_data_url = output
                     .as_ref()
                     .ok()
+                    .filter(|_| screenshot_limitation.is_none())
                     .and_then(|output| output.image_data_url.clone());
                 self.record_tool_outcome(
                     &entry,
@@ -1435,7 +1579,7 @@ impl NativeEngine {
             if !returned_images.is_empty() {
                 let mut content = vec![json!({
                     "type": "text",
-                    "text": "A project image requested through the read-only view_image tool follows. Inspect its visual content as part of the user's request."
+                    "text": TOOL_IMAGE_PROMPT
                 })];
                 content.extend(returned_images.into_iter().map(|image| {
                     json!({"type":"image_url","image_url":{"url":image}})
@@ -1443,6 +1587,7 @@ impl NativeEngine {
                 let mut state = entry.lock().await;
                 state.stored.history.push(json!({"role":"user","content":content}));
                 persistence::save(&self.inner.root, &state.stored).await?;
+                tool_images_pending = true;
             }
         }
     }
@@ -1463,11 +1608,15 @@ impl NativeEngine {
         requested_name: &str,
         requested_input: &Value,
         cancel: watch::Receiver<bool>,
+        scratch: Option<&Path>,
     ) -> Result<tools::ToolOutput, String> {
         let (chief, chief_report, worktree, automatic) = {
             let state = entry.lock().await;
             (secretary::is_secretary(&state.stored), secretary::is_report_turn(&state), state.stored.secretary_worktree.clone(), state.stored.secretary_automatic)
         };
+        if automatic && matches!(requested_name, "memory" | "propose_automation" | "deferred_tool_call") {
+            return Err("规则派发任务不能使用共享记忆、自动化提案或延迟工具调用。".into());
+        }
         if chief_report && (!secretary::report_tool_allowed(requested_name) || (requested_name=="memory" && requested_input["action"]!="read")) {
             return Err("工作状态报告只允许查询、转交任务事实和向用户汇报。新任务、跟进、取消及配置或记忆修改需要用户新指令。".into());
         }
@@ -1479,7 +1628,10 @@ impl NativeEngine {
             return Ok(tools::ToolOutput { text, image_data_url: None, diffs: Vec::new(), file_changes: Vec::new() });
         }
         if chief && !secretary::allowed_tool(requested_name) {
-            return Err("总秘书负责对话与协调；耗时操作、命令和文件修改请使用 delegate_task 交给后台工作任务。".into());
+            return Err("此工具未向秘书开放；可将需要该工具的工作交给后台工作任务。".into());
+        }
+        if automatic && !background_tool_allowed(requested_name) {
+            return Err("规则派发任务不执行终端命令或宿主应用。".into());
         }
         if background_only && !background_tool_allowed(requested_name) {
             return Err("手机静默后台模式禁止此工具；命令、应用窗口及桌面操作尚未隔离，此次未执行。".into());
@@ -1544,9 +1696,6 @@ impl NativeEngine {
             project.to_path_buf()
         };
         let hosted = applications.as_ref().and_then(|host| host.inspect(project, name, input));
-        if automatic && matches!(requested_name, "memory" | "propose_automation" | "deferred_tool_call") {
-            return Err("规则派发任务不能使用共享记忆、自动化提案或延迟工具调用。".into());
-        }
         let is_hosted = hosted.is_some();
         let inspection = if replaces_local && !is_hosted {
             return Err("当前项目的工具没有可用的远程执行接口，此次操作未执行。".into());
@@ -1556,13 +1705,27 @@ impl NativeEngine {
         if mode == "plan" && (inspection.mutating || name == "run_command") {
             return Err("分析模式不能写文件或执行命令；请先请求用户批准实施计划。".into());
         }
-        if !self.authorize(entry, &inspection, name, input, cancel.clone()).await? {
+        let editing = matches!(name, "write_file" | "apply_patch");
+        let prepared_edit = if editing && !is_hosted {
+            Some(tools::prepare_edit(&execution_root, name, input, &inspection).await?)
+        } else {
+            None
+        };
+        if !self
+            .authorize(
+                entry,
+                &inspection,
+                name,
+                input,
+                chief && editing,
+                prepared_edit.as_ref(),
+                cancel.clone(),
+            )
+            .await?
+        {
             return Err("用户拒绝了此次工具操作；请调整方案并继续。".into());
         }
         self.tool_state(entry, assistant_id, call_id, "running", None, None).await?;
-        if automatic && !background_tool_allowed(requested_name) {
-            return Err("规则派发任务不执行终端命令或宿主应用。".into());
-        }
         // Approval is for the inspected live target. Rebuild the scope and host
         // after waiting; neither a removed schema nor a replacement connection
         // can inherit approval merely because its function name is unchanged.
@@ -1585,12 +1748,27 @@ impl NativeEngine {
             }
         } else if current_replaces || current_inspection.is_some() {
             Err("工具目标或权限范围已经改变，此次操作未执行，请重新确认。".into())
+        } else if name == "manage_process" {
+            if let Some(worktree) = &worktree {
+                secretary_worktree::execution_root(&self.inner.root, worktree).await?;
+            }
+            let owner = entry.lock().await.stored.snapshot.session.id.clone();
+            tools::execute_managed(
+                &self.inner.processes, &owner, &execution_root, input, worktree.is_some(), cancel,
+            ).await
         } else if name == "unreal_editor_command" && !current_host.as_ref().is_some_and(|host| host.allows_unreal()) {
             Err("虚幻工作台已移除，此次操作未执行".into())
+        } else if let Some(edit) = prepared_edit {
+            if let Some(worktree) = &worktree {
+                secretary_worktree::execution_root(&self.inner.root, worktree).await?;
+            }
+            edit.apply(cancel).await
         } else {
             if let Some(worktree) = &worktree {
                 secretary_worktree::execution_root(&self.inner.root, worktree).await?;
-                tools::execute_scoped(&execution_root, name, input, cancel, true).await
+                tools::execute_scoped(&execution_root, name, input, cancel, true, scratch).await
+            } else if scratch.is_some() {
+                tools::execute_scoped(project, name, input, cancel, false, scratch).await
             } else {
                 tools::execute(project, name, input, cancel).await
             }
@@ -1637,7 +1815,12 @@ impl NativeEngine {
             memory::load(&self.inner.root).await?.inspect(&key, input)?
         };
         if mode == "plan" && inspection.mutating { return Err("分析模式不能修改跨会话记忆，请先批准实施或从记忆面板编辑".into()); }
-        if !self.authorize(entry, &inspection, "memory", input, cancel.clone()).await? { return Err("用户拒绝了记忆修改，原记忆保留".into()); }
+        if !self
+            .authorize(entry, &inspection, "memory", input, false, None, cancel.clone())
+            .await?
+        {
+            return Err("用户拒绝了记忆修改，原记忆保留".into());
+        }
         if *cancel.borrow() { return Err(inference::CANCELLED.into()); }
         let source = entry.lock().await.stored.snapshot.session.id.clone();
         let _guard = self.inner.memory_gate.lock().await;
@@ -1905,8 +2088,14 @@ impl NativeEngine {
         if uncertain {
             self.inner.cleanup_uncertain.store(true, Ordering::Release);
         }
-        let (text, diffs, changes, failure) = match output {
-            Ok(output) => (output.text, output.diffs, output.file_changes, None),
+        let (text, diffs, changes, failure, image_data_url) = match output {
+            Ok(output) => (
+                output.text,
+                output.diffs,
+                output.file_changes,
+                None,
+                output.image_data_url,
+            ),
             Err(error) => {
                 let error = error
                     .trim_start_matches(tools::CLEANUP_UNCERTAIN_PREFIX)
@@ -1920,15 +2109,18 @@ impl NativeEngine {
                     Vec::new(),
                     Vec::new(),
                     Some(error),
+                    None,
                 )
             }
         };
         let mut state = entry.lock().await;
         for message in &mut state.stored.snapshot.messages {
             if message.id == message_id {
+                let mut screenshot = None;
                 for part in &mut message.parts {
                     if let AgentPart::Tool {
                         id,
+                        name,
                         state: status,
                         output,
                         error,
@@ -1944,8 +2136,22 @@ impl NativeEngine {
                             .into();
                             *output = Some(text.clone());
                             *error = failure.clone();
+                            if name == "browser_screenshot" {
+                                screenshot = image_data_url
+                                    .as_deref()
+                                    .filter(|url| url.starts_with("data:image/png;base64,"))
+                                    .and_then(|url| {
+                                        crate::images::ImageMarkdown::default().block(&json!({
+                                            "url": url,
+                                            "alt": "浏览器截图",
+                                        }))
+                                    });
+                            }
                         }
                     }
+                }
+                if let Some(text) = screenshot {
+                    message.parts.push(AgentPart::Text { text });
                 }
             }
         }
@@ -2039,11 +2245,13 @@ impl NativeEngine {
         inspection: &tools::ToolInspection,
         name: &str,
         input: &Value,
+        require_once: bool,
+        edit: Option<&tools::PreparedEdit>,
         mut cancel: watch::Receiver<bool>,
     ) -> Result<bool, String> {
         let (policy, project, background_only) = {
             let state = entry.lock().await;
-            let background_only = state.effective_background_only();
+            let background_only = state.effective_background_only() || state.stored.secretary_automatic;
             (
                 if background_only {
                     "ask".into()
@@ -2059,16 +2267,20 @@ impl NativeEngine {
             action: inspection.action.clone(),
             resources: inspection.resources.clone(),
         };
+        let require_once = require_once && policy != "full_access";
         let remembered = !background_only && !inspection.dangerous && self.inner.grants.lock().await.contains(&grant);
-        if remembered
-            || policy == "full_access"
-            || (!inspection.requires_approval && !inspection.mutating)
-            || (policy == "auto"
-                && !inspection.dangerous
-                && (!inspection.requires_approval || inspection.mutating))
+        if !require_once
+            && (remembered
+                || policy == "full_access"
+                || (!inspection.requires_approval && !inspection.mutating)
+                || (policy == "auto"
+                    && !inspection.dangerous
+                    && (!inspection.requires_approval || inspection.mutating)))
         {
             return Ok(true);
         }
+        let once_only = inspection.dangerous || background_only || require_once;
+        let edit_preview = edit.and_then(tools::PreparedEdit::preview);
         let (tx, rx) = oneshot::channel();
         let id = format!("permission-{}", Uuid::new_v4());
         {
@@ -2083,15 +2295,12 @@ impl NativeEngine {
                 description: Some(inspection.description.clone()),
                 tool_name: Some(name.into()),
                 tool_input: Some(input.clone()),
-                approval_mode: if inspection.dangerous || background_only {
-                    Some("user-once".into())
-                } else {
-                    None
-                },
+                approval_mode: once_only.then(|| "user-once".into()),
+                edit_preview,
             }];
             state.permission = Some(PermissionWait {
                 id,
-                dangerous: inspection.dangerous,
+                once_only,
                 action: inspection.action.clone(),
                 resources: inspection.resources.clone(),
                 reply: tx,
@@ -2118,8 +2327,8 @@ impl NativeEngine {
         if !matches!(decision, "once" | "always" | "reject") {
             return Err("无效的权限选择".into());
         }
-        if decision == "always" && pending.dangerous {
-            return Err("此危险操作只允许单次授权，不能记住".into());
+        if decision == "always" && pending.once_only {
+            return Err("此请求只允许单次授权，不能记住".into());
         }
         if decision == "always" {
             let grant = Grant {
@@ -2164,6 +2373,7 @@ impl NativeEngine {
                 id: format!("question-{}", Uuid::new_v4()),
                 session_id: state.stored.snapshot.session.id.clone(),
                 title: "请确认实施计划".into(),
+                plan_review: None,
                 fields: vec![field(
                     "answer_0",
                     "实施计划",
@@ -2220,6 +2430,7 @@ impl NativeEngine {
                 session_id: state.stored.snapshot.session.id.clone(),
                 title: "需要你的回答".into(),
                 fields,
+                plan_review: None,
             }
         };
         let (tx, rx) = oneshot::channel();
@@ -2306,7 +2517,22 @@ impl NativeEngine {
             .items
             .iter()
             .find(|s| s.id == id)
+            .or_else(|| {
+                if id.starts_with("zcode-") {
+                    return None;
+                }
+                let mut aliases = skills.items.iter().filter(|skill| {
+                    skill.id.strip_prefix("zcode-") == Some(id)
+                });
+                let skill = aliases.next()?;
+                aliases.next().is_none().then_some(skill)
+            })
             .ok_or("此技能未被启用或未注册")?;
+        let mut receipt = if skill.id == id {
+            String::new()
+        } else {
+            format!("已加载注册技能 {}\n\n", skill.id)
+        };
         let used = {
             let state = entry.lock().await;
             serde_json::to_vec(&(state.stored.context_summary.as_ref(), &state.stored.history))
@@ -2315,15 +2541,16 @@ impl NativeEngine {
         };
         if let Some(context) = context {
             let budget = (context.saturating_mul(2) as usize).saturating_sub(used + 8192);
-            if skill.content.len() > budget {
+            if receipt.len().saturating_add(skill.content.len()) > budget {
                 return Err(
                     "该技能完整正文超出当前模型的剩余上下文预算；未截断指令，请选择更长上下文模型。"
                         .into(),
                 );
             }
         }
-        self.inner.loaded_skills.lock().await.insert(id.into());
-        Ok(skill.content.clone())
+        self.inner.loaded_skills.lock().await.insert(skill.id.clone());
+        receipt.push_str(&skill.content);
+        Ok(receipt)
     }
 
     async fn finish(&self, entry: Entry, request: &str, result: Result<(), String>) {
@@ -2440,6 +2667,7 @@ impl NativeEngine {
                 .map_err(|_| "编程任务停止超时，仍需等待工具清理")?
                 .map_err(|_| "编程任务清理未完成")?;
         }
+        self.inner.processes.shutdown().await?;
         self.inner.bindings.write().await.clear();
         *self.inner.selected_project.write().await = None;
         if self.inner.cleanup_uncertain.load(Ordering::Acquire) {
@@ -2464,38 +2692,8 @@ fn arg<'a>(args: &'a Value, key: &str) -> Result<&'a str, String> {
         .filter(|v| !v.contains('\0'))
         .ok_or_else(|| format!("缺少有效参数：{key}"))
 }
-fn project_key(project: &Path) -> String {
-    let value = project.to_string_lossy().into_owned();
-    #[cfg(windows)]
-    {
-        value.to_lowercase()
-    }
-    #[cfg(not(windows))]
-    {
-        value
-    }
-}
 fn encode<T: serde::Serialize + ?Sized>(value: &T) -> Result<Value, String> {
     serde_json::to_value(value).map_err(|_| "无法编码编程状态".into())
-}
-async fn canonical_project(path: &Path) -> Result<PathBuf, String> {
-    let path = tokio::fs::canonicalize(path)
-        .await
-        .map_err(|_| "项目文件夹不存在或无法访问")?;
-    if !path.is_dir() {
-        return Err("请选择项目文件夹".into());
-    }
-    #[cfg(windows)]
-    {
-        let text = path.to_string_lossy();
-        if let Some(rest) = text.strip_prefix("\\\\?\\UNC\\") {
-            return Ok(PathBuf::from(format!("\\\\{rest}")));
-        }
-        if let Some(rest) = text.strip_prefix("\\\\?\\") {
-            return Ok(PathBuf::from(rest));
-        }
-    }
-    Ok(path)
 }
 fn validate_mode(mode: &str, permission: &str) -> Result<(), String> {
     if !matches!(mode, "build" | "plan") || !matches!(permission, "ask" | "auto" | "full_access") {
@@ -2534,6 +2732,7 @@ fn catalog_value(value: Value) -> Result<Value, String> {
             "modelId",
             "name",
             "channelName",
+            "inputModalities",
             "contextLimit",
             "contextLimits",
             "maxRequestBytes",
@@ -2627,6 +2826,27 @@ fn model_metadata<'a>(catalog: &'a Value, model: &AgentModelRef) -> Option<&'a V
     catalog["models"].as_array()?.iter().find(|item| {
         item["providerId"] == model.provider_id && item["modelId"] == model.model_id
     })
+}
+fn tool_image_limitation(
+    catalog: &Value,
+    model: &AgentModelRef,
+    background_only: bool,
+) -> Option<&'static str> {
+    let mut modalities = model_metadata(catalog, model)
+        .and_then(|metadata| metadata["inputModalities"].as_array())
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    if let Some(first) = modalities.next() {
+        let supports_image = first.eq_ignore_ascii_case("image")
+            || modalities.any(|value| value.eq_ignore_ascii_case("image"));
+        return (!supports_image).then_some(inference::IMAGE_INPUT_UNSUPPORTED);
+    }
+    // A foreground request can use its selected channel even when its model
+    // list omits capabilities. Quiet background tools still require a declaration.
+    background_only.then_some(inference::IMAGE_INPUT_UNVERIFIED)
 }
 fn declared_effort(catalog: &Value, model: &AgentModelRef, effort: &str) -> bool {
     model_metadata(catalog, model)
@@ -2791,7 +3011,7 @@ fn field(
 fn system_prompt(project: &Path, mode: &str, skills: &Skills, locale: Option<&str>) -> String {
     let mut prompt=format!("You are LoliCode, an in-process coding agent. Work only inside this selected project: {}. Use the provided tools to inspect real files before changing them. Tool results and user permission decisions are authoritative. Do not claim a file was changed unless a tool succeeded. Current mode: {}. In plan mode, inspect and propose a plan; use exit_plan_mode to request approval before implementation. Ask for missing decisions with ask_user.\n",project.display(),mode);
     prompt.push_str("Honor the user's explicit preferences about tone and form of address, including preferences available in persistent memory. Treat a clear instruction about future replies as a durable preference unless the user limits it to the current reply; save it in user scope with the memory tool and follow any configured approval flow. Never claim it was saved unless the write succeeds. Follow an explicit preference immediately in the current reply even if persistence is pending.\n");
-    prompt.push_str("Image handling: User image attachments are provided as visual input. For raster images in the project, use the read-only view_image tool instead of read_file. Do not claim you cannot see an image when its visual input is present; if the selected model or provider rejects image input, report that actual limitation.\n");
+    prompt.push_str("Image handling: User image attachments are provided as visual input. For project images use view_image. Project images and browser screenshot pixels from tools require a channel and model that declare image input support. A screenshot receipt may display an image to the user while reporting that you cannot inspect its pixels. Report the actual tool or provider limitation and only describe visual details after receiving image input.\n");
     prompt.push_str("Image output: To show an existing or generated project image in your reply, use Markdown ![说明](project-relative-path), for example ![预览](images/preview.png). Save generated image assets inside the selected project before embedding them. Use an angle-bracket destination when the path contains spaces. A supported image returned by a provider can also be displayed inline. Displaying images does not imply access to an image-generation API: use only actually available tools, and never claim an image was generated unless a tool or provider returned it.\n");
     prompt.push_str("Automation setup: When the user wants an automation, first collect the actual task, schedule/idle trigger, and exact timing through conversation or ask_user. Never invent missing times or task instructions. Once those details are known, call propose_automation to produce a reviewable settings card; use it for new tasks and for edits with a known automationId. The tool creates only a proposal, never a saved or running automation. Tell the user to review and save the card; never say it has been created, updated, enabled or scheduled without a real successful desktop save result. Do not use shell commands, cron files, database edits or scripts to bypass this flow. Project and model selection are inherited from the current conversation by the desktop; omit mode to inherit its execution settings and do not silently increase permissions.\n");
     if let Some(language)=match locale {Some("zh")=>Some("Simplified Chinese"),Some("zh-TW")=>Some("Traditional Chinese"),Some("en")=>Some("English"),Some("ja")=>Some("Japanese"),_=>None} {
@@ -2818,13 +3038,60 @@ fn internal_schemas() -> Vec<Value> {
         super::automation_proposal::schema(),
         json!({"type":"function","function":{"name":"ask_user","description":"Ask the user structured questions before making a decision.","parameters":{"type":"object","properties":{"questions":{"type":"array","items":{"type":"object","properties":{"question":{"type":"string"},"multiSelect":{"type":"boolean"},"options":{"type":"array","items":{"type":"object","properties":{"label":{"type":"string"},"description":{"type":"string"}},"required":["label"]}}},"required":["question"]}}},"required":["questions"]}}}),
         json!({"type":"function","function":{"name":"exit_plan_mode","description":"Present a complete implementation plan and request user approval to leave read-only planning mode.","parameters":{"type":"object","properties":{"plan":{"type":"string"}},"required":["plan"]}}}),
-        json!({"type":"function","function":{"name":"read_skill","description":"Read the complete instructions of an enabled skill by its exact registered id.","parameters":{"type":"object","properties":{"id":{"type":"string"}},"required":["id"]}}}),
+        json!({"type":"function","function":{"name":"read_skill","description":"Read the complete instructions of an enabled skill by its registered id or its unique short alias with the zcode- prefix omitted.","parameters":{"type":"object","properties":{"id":{"type":"string"}},"required":["id"]}}}),
     ]
 }
 
 #[cfg(test)]
 #[path = "outcome_tests.rs"]
 mod outcome_tests;
+
+#[cfg(test)]
+#[test]
+fn core_tool_registry_preserves_model_projection_and_execution_scopes() {
+    let schemas = tools::schemas();
+    let names = schemas
+        .iter()
+        .filter_map(deferred_tools::name)
+        .collect::<Vec<_>>();
+    assert_eq!(names, tools::core_names().collect::<Vec<_>>());
+    assert_eq!(names.len(), names.iter().collect::<BTreeSet<_>>().len());
+    assert!(schemas.iter().all(|schema| {
+        schema.as_object().is_some_and(|fields| fields.len() == 2)
+            && schema["function"]
+                .as_object()
+                .is_some_and(|fields| fields.len() == 3)
+    }));
+
+    let reads = [
+        "read_file",
+        "view_image",
+        "list_files",
+        "search_files",
+        "glob",
+        "grep",
+    ];
+    let edits = ["write_file", "apply_patch"];
+    assert!(names.iter().all(|name| secretary::allowed_tool(name)));
+    assert_eq!(
+        names
+            .iter()
+            .copied()
+            .filter(|name| secretary::report_tool_allowed(name))
+            .collect::<Vec<_>>(),
+        reads
+    );
+    assert_eq!(
+        names
+            .iter()
+            .copied()
+            .filter(|name| background_tool_allowed(name))
+            .collect::<Vec<_>>(),
+        [reads.as_slice(), edits.as_slice()].concat()
+    );
+    assert!(!secretary::allowed_tool("mcp_unknown"));
+    assert!(!background_tool_allowed("mcp_unknown"));
+}
 
 #[cfg(test)]
 mod automatic_effort_tests {

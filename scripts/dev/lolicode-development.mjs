@@ -496,8 +496,9 @@ export function stageDevelopmentApp(env) {
     const previous = JSON.parse(readFileSync(previousManifest, "utf8"));
     if (previous.identifier !== DEVELOPMENT_ID)
       throw new Error("Unexpected development package ownership.");
+    const currentFiles = new Set(manifest.files);
     for (const relative of previous.files.filter(
-      (file) => !manifest.files.includes(file),
+      (file) => !currentFiles.has(file),
     )) {
       const stale = path.resolve(packageDirectory, relative);
       if (!stale.startsWith(packageDirectory + path.sep))

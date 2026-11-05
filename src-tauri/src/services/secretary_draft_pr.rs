@@ -141,6 +141,7 @@ impl TaskGit {
     ) -> Result<Self, String> {
         let id = task_id
             .strip_prefix("task-")
+            .or_else(|| task_id.strip_prefix("harness-"))
             .and_then(|value| uuid::Uuid::parse_str(value).ok())
             .ok_or("任务编号无效")?
             .simple()

@@ -1,7 +1,7 @@
-//! Project scoped automations for the in-process agent.
+//! Project scoped automations for the desktop agent.
 //!
 //! Jobs are stored in the application database and dispatched as independent
-//! native sessions. The scheduler only runs while the desktop app is open.
+//! Harness sessions. The scheduler only runs while the desktop app is open.
 
 use super::{
     agent_preferences::{self as preferences, AgentProject},
@@ -69,13 +69,7 @@ impl AutomationRuntime for DesktopAutomationRuntime {
         params: Value,
         mutate: bool,
     ) -> BoxFuture<'a, Result<Value, String>> {
-        Box::pin(async move {
-            let carrier = self.0.state::<InprocessAgentState>();
-            if matches!(method, "busy" | "getSession" | "recordAutomationSave") {
-                carrier.ensure_started(&self.0).await?;
-            }
-            carrier.call(method, params, mutate).await
-        })
+        Box::pin(async move { agent_dispatch::native(&self.0, method, params, mutate).await })
     }
 }
 

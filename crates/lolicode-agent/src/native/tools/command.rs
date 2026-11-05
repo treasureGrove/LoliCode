@@ -1,13 +1,5 @@
 use super::{cancelled, ToolOutput, MAX_OUTPUT};
-use std::{
-    path::Path,
-    process::Stdio,
-    sync::{
-        atomic::{AtomicUsize, Ordering},
-        Arc,
-    },
-    time::Duration,
-};
+use std::{collections::VecDeque, path::Path, process::Stdio, sync::Arc, time::Duration};
 use tokio::{
     io::AsyncReadExt,
     process::{Child, Command},
@@ -90,24 +82,70 @@ pub(super) fn safe_command(command: &str) -> bool {
     }
 }
 
+#[derive(Default)]
+struct OutputTail {
+    text: String,
+    truncated: bool,
+}
+
 async fn capture(
     mut reader: impl tokio::io::AsyncRead + Unpin,
-    budget: Arc<AtomicUsize>,
-) -> String {
-    let mut collected = Vec::new();
+    live: Option<Arc<std::sync::Mutex<Vec<u8>>>>,
+) -> OutputTail {
+    let mut collected = VecDeque::new();
+    let mut truncated = false;
     let mut buffer = [0u8; 4096];
     while let Ok(count) = reader.read(&mut buffer).await {
         if count == 0 {
             break;
         }
-        let before = budget.fetch_add(count, Ordering::Relaxed);
-        let take = MAX_OUTPUT.saturating_sub(before).min(count);
-        collected.extend_from_slice(&buffer[..take]);
+        if let Some(live) = &live {
+            let mut log = live.lock().unwrap_or_else(|error| error.into_inner());
+            let excess = (log.len() + count).saturating_sub(MAX_OUTPUT);
+            if excess > 0 {
+                log.drain(..excess);
+            }
+            log.extend_from_slice(&buffer[..count]);
+        }
+        let excess = (collected.len() + count).saturating_sub(MAX_OUTPUT);
+        if excess > 0 {
+            collected.drain(..excess);
+            truncated = true;
+        }
+        collected.extend(buffer[..count].iter().copied());
     }
-    String::from_utf8_lossy(&collected).into_owned()
+    OutputTail {
+        text: String::from_utf8_lossy(collected.make_contiguous()).into_owned(),
+        truncated,
+    }
 }
 
-struct Running {
+fn utf8_tail(text: &str, budget: usize) -> &str {
+    let mut start = text.len().saturating_sub(budget);
+    while !text.is_char_boundary(start) {
+        start += 1;
+    }
+    &text[start..]
+}
+
+fn render_output(mut prefix: String, [stdout, stderr]: [OutputTail; 2]) -> String {
+    const TRUNCATION: &str = "\n[输出已截断]";
+    let truncated = stdout.truncated
+        || stderr.truncated
+        || prefix.len() + stdout.text.len() + stderr.text.len() > MAX_OUTPUT;
+    let suffix = if truncated { TRUNCATION } else { "" };
+    let budget = MAX_OUTPUT - prefix.len() - suffix.len();
+    // Reserve room for both streams and let a noisy stream use any spare room.
+    let stdout_budget = (budget / 2).max(budget.saturating_sub(stderr.text.len()));
+    let stdout = utf8_tail(&stdout.text, stdout_budget);
+    let stderr = utf8_tail(&stderr.text, budget - stdout.len());
+    prefix.push_str(stdout);
+    prefix.push_str(stderr);
+    prefix.push_str(suffix);
+    prefix
+}
+
+pub(super) struct Running {
     child: Option<Child>,
     #[cfg(windows)]
     job: Option<job::Job>,
@@ -171,44 +209,18 @@ fn kill_group(pid: u32) {
     }
 }
 
-pub(in crate::native) fn safe_program(project: &Path, name: &str) -> Result<std::path::PathBuf, String> {
-    // A bare tool in a project directory or a PATH-relative entry is not an
-    // automatically trusted system program (Windows also searches cwd first).
-    for directory in std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default()) {
-        if !directory.is_absolute() {
-            continue;
-        }
-        let names = if cfg!(windows) {
-            vec![format!("{name}.exe")]
-        } else {
-            vec![name.into()]
-        };
-        for entry in names {
-            let candidate = directory.join(entry);
-            if let Ok(path) = std::fs::canonicalize(&candidate) {
-                if path.is_file() && !path.starts_with(project) {
-                    return Ok(path);
-                }
-            }
-        }
-    }
-    Err("未找到项目目录外的可信命令程序；请使用明确的已安装工具".into())
-}
-
-pub(super) async fn execute(
+pub(super) async fn spawn(
     project: &Path,
     workdir: &Path,
     input: &str,
-    seconds: u64,
-    mut cancel: watch::Receiver<bool>,
     isolated: bool,
-) -> Result<ToolOutput, String> {
-    cancelled(&cancel)?;
+    scratch: Option<&Path>,
+) -> Result<Running, String> {
     let safe = safe_command(input);
     let mut command = if safe {
         let mut words = input.split_whitespace();
         let program = words.next().ok_or("命令为空")?;
-        let mut command = Command::new(safe_program(project, program)?);
+        let mut command = Command::new(crate::native::paths::safe_program(project, program)?);
         if program == "git" {
             command.args([
                 "-c",
@@ -252,7 +264,16 @@ pub(super) async fn execute(
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
+        .env_remove("LOLICODE_BRAVE_SEARCH_API_KEY")
         .kill_on_drop(true);
+    if let Some(scratch) = scratch {
+        let scratch = shell_directory(scratch);
+        command
+            .env("LOLICODE_AGENT_SCRATCH", &scratch)
+            .env("TMPDIR", &scratch)
+            .env("TMP", &scratch)
+            .env("TEMP", &scratch);
+    }
     if safe {
         for key in [
             "NODE_OPTIONS",
@@ -311,11 +332,33 @@ pub(super) async fn execute(
             }
         }
     }
-    let budget = Arc::new(AtomicUsize::new(0));
+    Ok(running)
+}
+
+pub(super) async fn execute(
+    project: &Path,
+    workdir: &Path,
+    input: &str,
+    seconds: u64,
+    cancel: watch::Receiver<bool>,
+    isolated: bool,
+    scratch: Option<&Path>,
+) -> Result<ToolOutput, String> {
+    cancelled(&cancel)?;
+    let running = spawn(project, workdir, input, isolated, scratch).await?;
+    monitor(running, seconds, cancel, None).await
+}
+
+pub(super) async fn monitor(
+    mut running: Running,
+    seconds: u64,
+    mut cancel: watch::Receiver<bool>,
+    live: Option<Arc<std::sync::Mutex<Vec<u8>>>>,
+) -> Result<ToolOutput, String> {
     let child = running.child.as_mut().unwrap();
     let stdout = child.stdout.take().ok_or("命令输出通道不可用")?;
     let stderr = child.stderr.take().ok_or("命令错误通道不可用")?;
-    struct Readers(Vec<JoinHandle<String>>);
+    struct Readers([JoinHandle<OutputTail>; 2]);
     impl Drop for Readers {
         fn drop(&mut self) {
             for task in &self.0 {
@@ -323,9 +366,9 @@ pub(super) async fn execute(
             }
         }
     }
-    let mut readers = Readers(vec![
-        tokio::spawn(capture(stdout, budget.clone())),
-        tokio::spawn(capture(stderr, budget.clone())),
+    let mut readers = Readers([
+        tokio::spawn(capture(stdout, live.clone())),
+        tokio::spawn(capture(stderr, live)),
     ]);
     enum End {
         Exited(std::io::Result<std::process::ExitStatus>),
@@ -337,14 +380,14 @@ pub(super) async fn execute(
         _=async{loop{if *cancel.borrow(){break;}if cancel.changed().await.is_err(){std::future::pending::<()>().await;}}}=>End::Cancelled,
         _=tokio::time::sleep(Duration::from_secs(seconds))=>End::TimedOut,
     };
-    match end {
+    let (status, timed_out) = match end {
         End::Cancelled => {
             running.stop().await?;
             return Err(super::CANCELLED.into());
         }
         End::TimedOut => {
             running.stop().await?;
-            return Err("命令超时，所属进程已回收".into());
+            (None, true)
         }
         End::Exited(status) => {
             let status = status.map_err(|_| super::cleanup_failure("无法读取命令退出状态"))?;
@@ -359,31 +402,40 @@ pub(super) async fn execute(
                     kill_group(pid);
                 }
             }
-            let mut output = String::new();
-            for task in &mut readers.0 {
-                match tokio::time::timeout(Duration::from_secs(2), task).await {
-                    Ok(Ok(text)) => output.push_str(&text),
-                    _ => return Err("命令退出后输出通道未关闭".into()),
-                }
-            }
-            if budget.load(Ordering::Relaxed) > MAX_OUTPUT {
-                output.push_str("\n[输出已截断]");
-            }
-            Ok(ToolOutput {
-                text: super::bounded(format!(
-                    "exit_code={}\n{}",
-                    status
-                        .code()
-                        .map(|code| code.to_string())
-                        .unwrap_or_else(|| "signal".into()),
-                    output
-                )),
-                image_data_url: None,
-                diffs: vec![],
-                file_changes: vec![],
-            })
+            (status.code(), false)
         }
+    };
+    let mut streams: [OutputTail; 2] = Default::default();
+    for (stream, task) in streams.iter_mut().zip(&mut readers.0) {
+        *stream = match tokio::time::timeout(Duration::from_secs(2), task).await {
+            Ok(Ok(output)) => output,
+            _ if timed_out => OutputTail {
+                text: "\n[一个输出通道未能完成回收]".into(),
+                truncated: false,
+            },
+            _ => return Err("命令退出后输出通道未关闭".into()),
+        };
     }
+    if timed_out {
+        return Err(render_output(
+            format!("命令在 {seconds} 秒后超时，所属进程已回收\n"),
+            streams,
+        ));
+    }
+    Ok(ToolOutput {
+        text: render_output(
+            format!(
+                "exit_code={}\n",
+                status
+                    .map(|code| code.to_string())
+                    .unwrap_or_else(|| "signal".into()),
+            ),
+            streams,
+        ),
+        image_data_url: None,
+        diffs: vec![],
+        file_changes: vec![],
+    })
 }
 
 pub(super) fn shell_directory(path: &Path) -> std::path::PathBuf {

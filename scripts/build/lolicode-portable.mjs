@@ -53,6 +53,11 @@ cpSync(
   path.join(stage, "agent/extensions"),
   { recursive: true },
 );
+cpSync(
+  path.join(work, "src-tauri/resources/agent/harness-runtime"),
+  path.join(stage, "agent/harness-runtime"),
+  { recursive: true },
+);
 for (const name of ["LICENSE", "THIRD_PARTY_NOTICES.md"])
   copyFileSync(path.join(work, name), path.join(stage, name));
 cpSync(
@@ -158,9 +163,30 @@ assert(
   !packaged.some(
     (file) =>
       /\.(gguf|key|env)$/i.test(file.name) ||
-      /(?:node|llama-server)\.exe$/i.test(file.name),
+      /(?:^|\/)llama-server\.exe$/i.test(file.name) ||
+      (/(?:^|\/)node\.exe$/i.test(file.name) &&
+        file.name !== "agent/harness-runtime/node.exe"),
   ),
 );
+const harnessRoot = "agent/harness-runtime";
+const harnessManifest = JSON.parse(
+  readFileSync(path.join(extracted, harnessRoot, "runtime-manifest.json")),
+);
+assert.equal(harnessManifest.platform, "win32");
+assert.equal(harnessManifest.arch, "x64");
+for (const [name, sha256] of [
+  ["node.exe", harnessManifest.nodeSha256],
+  ["node_modules/@deepseek-ai/dsh/lib/bin.js", harnessManifest.entrySha256],
+]) {
+  assert.match(sha256, /^[a-f0-9]{64}$/u);
+  assert.equal(
+    packaged.find((file) => file.name === `${harnessRoot}/${name}`)?.sha256,
+    sha256,
+  );
+}
+for (const name of ["NODE-LICENSE", "node_modules/@deepseek-ai/dsh/LICENSE"]) {
+  assert(packaged.some((file) => file.name === `${harnessRoot}/${name}`));
+}
 const stdout = run(
   path.join(extracted, "LoliCode.exe"),
   ["--check-agent-runtime"],
@@ -171,10 +197,13 @@ const report = JSON.parse(
 );
 assert.equal(report.version, buildVersion);
 assert.equal(report.passed, true);
+assert.equal(report.engine, "deepseek-harness");
 assert.equal(report.paidCalls, 0);
 assert.equal(report.userConfigurationRead, false);
 assert.equal(report.temporaryProjectsOnly, true);
-assert.equal(report.nativeEngineProcessSpawned, false);
+assert.equal(report.nativeEngineProcessSpawned, true);
+assert.equal(report.sessionRestartVerified, true);
+assert.equal(report.gatewayCredentialPersisted, false);
 writeFileSync(
   path.join(artifacts, "portable-runtime-check.json"),
   JSON.stringify(report, null, 2) + "\n",

@@ -937,6 +937,7 @@ impl Engine {
             permissions,
             questions,
             diffs,
+            preview: None,
             error: error.or(diff_error),
             stream_connected: connected,
             stream_gap: running && (!connected || gap),
@@ -946,6 +947,9 @@ impl Engine {
             model_phase: None,
             queued_messages: Vec::new(),
             queue_paused: false,
+            background_jobs: 0,
+            goal: None,
+            plan: None,
         };
         let mut value = serde_json::to_value(&snapshot).map_err(|_| "会话内容编码失败")?;
         self.redact_value(&mut value);

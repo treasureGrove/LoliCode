@@ -7,12 +7,13 @@ import { agentErrorMessage } from "@/hooks/useAgentSnapshot";
 const NATIVE_DANGEROUS_COMMAND_SUMMARY =
   "Dangerous command requires your approval for this execution";
 
-function permissionPreview(input: unknown) {
+function permissionPreview(request: AgentPermission) {
+  const input = request.toolInput;
   if (!input || typeof input !== "object" || Array.isArray(input)) return [];
   const values = input as Record<string, unknown>;
   const fields: { label: string; value: string }[] = [];
   const seen = new Set<string>();
-  for (const [key, label] of [
+  const displayFields = [
     ["command", "将执行的命令"],
     ["filePath", "涉及路径"],
     ["file_path", "涉及路径"],
@@ -20,15 +21,38 @@ function permissionPreview(input: unknown) {
     ["cwd", "工作目录"],
     ["workdir", "工作目录"],
     ["workingDirectory", "工作目录"],
-  ]) {
+  ];
+  if (!request.editPreview) {
+    if (request.toolName === "write_file") {
+      displayFields.push(
+        ["expected_content", "预期原文"],
+        ["content", "拟写入内容"],
+      );
+    } else if (request.toolName === "apply_patch") {
+      displayFields.push(["old_text", "待替换文本"], ["new_text", "替换为"]);
+    }
+  }
+  for (const [key, label] of displayFields) {
     const value = Object.prototype.hasOwnProperty.call(values, key)
       ? values[key]
       : undefined;
-    if (typeof value !== "string" || !value.trim()) continue;
+    if (typeof value !== "string") {
+      if (key === "expected_content" && value === null) {
+        fields.push({ label, value: "新文件" });
+      }
+      continue;
+    }
+    const editText = [
+      "expected_content",
+      "content",
+      "old_text",
+      "new_text",
+    ].includes(key);
+    if (!editText && !value.trim()) continue;
     const identity = `${label}\0${value}`;
     if (seen.has(identity)) continue;
     seen.add(identity);
-    fields.push({ label, value });
+    fields.push({ label, value: value || "（空文本）" });
   }
   return fields;
 }
@@ -52,7 +76,7 @@ function PermissionForm({ request, onReply }: PermissionProps) {
   const [resolved, setResolved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const pending = useRef(false);
-  const preview = permissionPreview(request.toolInput);
+  const preview = permissionPreview(request);
   const description =
     request.description === NATIVE_DANGEROUS_COMMAND_SUMMARY
       ? "这条命令需要你确认后才能执行。"
@@ -101,6 +125,18 @@ function PermissionForm({ request, onReply }: PermissionProps) {
               </pre>
             </div>
           ))}
+        </div>
+      )}
+      {request.editPreview && (
+        <div className="mt-3">
+          <p className="mb-1 text-caption text-fg-3">待应用的差异</p>
+          <pre
+            aria-label="待应用的差异"
+            className="max-h-60 overflow-auto whitespace-pre rounded border p-2 text-caption"
+            tabIndex={0}
+          >
+            <code>{request.editPreview}</code>
+          </pre>
         </div>
       )}
       {request.resources.length > 0 && (

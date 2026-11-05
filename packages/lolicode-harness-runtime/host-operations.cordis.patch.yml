@@ -1,0 +1,10 @@
+# Replace only the SDK transport row. The official SDK app still owns startup.
+- id: sdk-jsonrpc-server
+  disabled: true
+
+- insert:
+    - id: lolicode-host-operations
+      name: ./host-operations.mjs
+      inject: [sdkAppStartup, loader]
+      config:
+        maxTokensAsSuccess: !!js "process.env.DSH_MAX_TOKENS_AS_SUCCESS === undefined ? true : JSON.parse(process.env.DSH_MAX_TOKENS_AS_SUCCESS)"

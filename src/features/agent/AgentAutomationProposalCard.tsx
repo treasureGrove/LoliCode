@@ -88,7 +88,7 @@ export function AgentAutomationProposalCard({
   const [permission, setPermission] = useState(
     typeof initialRequest?.input.mode === "string"
       ? initialRequest.input.mode
-      : proposal.input.mode || "inherit",
+      : proposal.input.mode || (proposal.automationId ? "existing" : "build"),
   );
   const save = async () => {
     if (saving.current || (saved && confirmed) || !sessionId || !projectPath)
@@ -133,14 +133,7 @@ export function AgentAutomationProposalCard({
           if (!existing)
             throw new Error("要修改的自动化已不存在或不属于当前项目。");
         }
-        const mode =
-          proposal.input.mode ||
-          existing?.mode ||
-          (current.session.permissionMode === "full_access"
-            ? "yolo"
-            : current.session.permissionMode === "auto"
-              ? "guarded"
-              : "build");
+        const mode = proposal.input.mode || existing?.mode || "build";
         setPermission(mode);
         const input = {
           idleAfterMinutes: existing?.idleAfterMinutes ?? 10,
@@ -233,7 +226,7 @@ export function AgentAutomationProposalCard({
     }
   };
   const permissions: Record<string, string> = {
-    inherit: "沿用当前会话设置",
+    existing: "保留现有自动化权限",
     build: "操作前询问",
     guarded: "自动 · 风险操作询问",
     yolo: "完全访问",

@@ -53,11 +53,47 @@ fn registered_activity(
 pub async fn get_agent_secretary_activity(
     app: AppHandle,
 ) -> Result<Vec<AgentSecretaryActivity>, String> {
-    // This RPC reads native sessions directly. It never enumerates legacy
-    // history or refreshes a task registry, flushes reports or dispatches work.
+    // Read only the registered secretary summaries and their current task views.
     let activity = native(&app, "getSecretaryActivity", json!({}), false).await?;
     let preferences = agent_preferences::load(&app.state::<AppState>().db)?;
-    Ok(registered_activity(activity, &preferences))
+    let mut activity = registered_activity(activity, &preferences);
+    for secretary in &mut activity {
+        if let Ok(snapshot) = native::<lolicode_agent::AgentSnapshot>(
+            &app,
+            "getSession",
+            json!({"sessionId":secretary.session_id}),
+            false,
+        )
+        .await
+        {
+            secretary.status = snapshot.status;
+        }
+        if let Ok(state) = native::<AgentSecretaryState>(
+            &app,
+            "getSecretary",
+            json!({"sessionId":secretary.session_id,"refresh":false}),
+            false,
+        )
+        .await
+        {
+            secretary.tasks = state
+                .tasks
+                .into_iter()
+                .filter(|task| {
+                    task.parent_session_id == secretary.session_id
+                        && path_key(&task.project_path) == path_key(&secretary.project_path)
+                })
+                .map(|task| AgentSecretaryTaskActivity {
+                    id: task.id,
+                    session_id: task.session_id,
+                    title: task.title,
+                    status: task.status,
+                    updated_at: task.updated_at,
+                })
+                .collect();
+        }
+    }
+    Ok(activity)
 }
 
 pub(super) fn verify_task(
@@ -84,7 +120,7 @@ pub(super) fn verify_task(
 pub async fn open_agent_secretary(
     app: AppHandle,
     model_id: String,
-    permission_mode: String,
+    permission_mode: Option<String>,
     reasoning_effort: Option<String>,
     project_path: Option<String>,
     context_limit: Option<u64>,
@@ -193,6 +229,22 @@ pub async fn cancel_agent_secretary_task(
     .await?;
     verify_task(&app, &session_id, &project, Some(&task_id), &task)?;
     Ok(task)
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub async fn delete_agent_secretary_task(
+    app: AppHandle,
+    session_id: String,
+    task_id: String,
+) -> Result<(), String> {
+    session_project(&app, &session_id).await?;
+    native(
+        &app,
+        "deleteSecretaryTask",
+        json!({"sessionId": session_id, "taskId": task_id}),
+        true,
+    )
+    .await
 }
 
 #[cfg(test)]

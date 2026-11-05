@@ -299,6 +299,20 @@ describe("ChannelCenterPanel", () => {
       128000, 1000000,
     ]);
   });
+
+  it("leaves image support to the upstream model even when a saved channel has legacy image settings", async () => {
+    saved = structuredClone(populated);
+    saved.channels[0].models[0].imageInputOverride = false;
+    saved.channels[0].models[1].inputModalities = ["text", " IMAGE "];
+    render(<ChannelCenterPanel />);
+    await ready();
+    const list = within(modelList());
+    expect(list.queryByRole("combobox", { name: /图片输入/ })).toBeNull();
+    expect(list.queryByText(/图片输入/)).toBeNull();
+    expect(channelCenterApi.save).not.toHaveBeenCalled();
+    expect(channelCenterApi.discover).not.toHaveBeenCalled();
+    expect(channelCenterApi.apply).not.toHaveBeenCalled();
+  });
   it("refreshes a Copilot channel into real context tiers and keeps the saved long tier across another refresh", async () => {
     const channel: ChannelSource = {
       id: "copilot-fixture",
@@ -635,6 +649,8 @@ describe("ChannelCenterPanel", () => {
 
   it("autosaves complete edits to an existing source without fetching an incomplete address", async () => {
     saved = structuredClone(populated);
+    saved.channels[0].models[0].inputModalities = ["text", "image"];
+    saved.channels[0].models[0].imageInputOverride = true;
     render(<ChannelCenterPanel />);
     await ready();
     fireEvent.click(screen.getByRole("button", { name: "修改" }));
@@ -666,7 +682,14 @@ describe("ChannelCenterPanel", () => {
       { timeout: 2000 },
     );
     expect(saved.channels[0].apiKey).toBe("new-private-fixture-key");
-    expect(saved.channels[0].models).toEqual(populated.channels[0].models);
+    expect(saved.channels[0].models).toEqual([
+      {
+        ...populated.channels[0].models[0],
+        inputModalities: ["text", "image"],
+        imageInputOverride: true,
+      },
+      ...populated.channels[0].models.slice(1),
+    ]);
     expect(screen.getByText(/地址或密钥已变更/)).toBeInTheDocument();
     expect(
       screen.queryByText("new-private-fixture-key"),

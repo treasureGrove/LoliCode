@@ -670,7 +670,7 @@ describe("native workflow / automation / remote entry", () => {
       catalog.defaultModel,
       "build",
       "工作流 · review-code",
-      "full_access",
+      "ask",
       undefined,
       project,
     );

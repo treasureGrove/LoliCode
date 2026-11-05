@@ -1,0 +1,92 @@
+.agent-workspace-panel {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.agent-workspace-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 34px;
+  padding: 0 8px;
+  border-bottom: 1px solid hsl(var(--border));
+  font-size: 12px;
+}
+
+.agent-workspace-toolbar > span {
+  flex: 1;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.agent-workspace-toolbar button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 4px;
+}
+
+.agent-workspace-toolbar button:hover,
+.agent-workspace-entry:not(:disabled):hover {
+  background: hsl(var(--accent));
+}
+
+.agent-workspace-tree-scroll {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+}
+
+.agent-workspace-tree {
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.agent-workspace-entry {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  height: 28px;
+  padding-inline-end: 8px;
+  text-align: start;
+  font-size: 12px;
+}
+
+.agent-workspace-entry svg {
+  flex: none;
+}
+
+.agent-workspace-entry span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.agent-workspace-entry:disabled,
+.agent-workspace-note {
+  color: hsl(var(--muted-foreground));
+}
+
+.agent-workspace-note {
+  padding: 8px 12px;
+  font-size: 12px;
+}
+
+.agent-workspace-xterm {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  background: #14161b;
+  padding: 6px;
+}

@@ -20,18 +20,62 @@ export interface AgentSubmission {
   stopAcknowledged?: boolean;
 }
 const PREFIX = "lolicode.agent.input:";
-const revisionKey = (key: string) => `${key}:revision`;
+const draftRecordKey = (key: string) => `lolicode.agent.draft-record:${key}`;
+const legacyRevisionKey = (key: string) => `${key}:revision`;
 const submissionKey = (project: string, id: string) =>
   `${PREFIX}${encodeURIComponent(project)}:${encodeURIComponent(id)}`;
 const submissionsInFlight = new Set<string>();
 const stopsInFlight = new Map<string, Promise<void>>();
 
+function decodeDraft(raw: string | null, key: string): AgentDraftToken | null {
+  try {
+    const token = JSON.parse(raw || "null") as Partial<AgentDraftToken> | null;
+    if (
+      token?.key === key &&
+      typeof token.text === "string" &&
+      typeof token.revision === "string"
+    )
+      return { key, text: token.text, revision: token.revision };
+  } catch {}
+  return null;
+}
+
+function readDraftToken(key: string): AgentDraftToken | null {
+  try {
+    const raw = localStorage.getItem(draftRecordKey(key));
+    if (raw !== null) return decodeDraft(raw, key);
+  } catch {}
+  try {
+    const token = decodeDraft(
+      sessionStorage.getItem(legacyRevisionKey(key)),
+      key,
+    );
+    return token?.text === (sessionStorage.getItem(key) || "") ? token : null;
+  } catch {
+    return null;
+  }
+}
+
+export function readAgentDraft(key: string): string {
+  const token = readDraftToken(key);
+  if (token) return token.text;
+  try {
+    return sessionStorage.getItem(key) || "";
+  } catch {
+    return "";
+  }
+}
+
+function removeLegacyDraft(key: string) {
+  sessionStorage.removeItem(key);
+  sessionStorage.removeItem(legacyRevisionKey(key));
+}
+
 export function saveAgentDraft(key: string, text: string): AgentDraftToken {
   const token = { key, text, revision: crypto.randomUUID() };
   try {
-    sessionStorage.setItem(revisionKey(key), JSON.stringify(token));
-    if (text) sessionStorage.setItem(key, text);
-    else sessionStorage.removeItem(key);
+    localStorage.setItem(draftRecordKey(key), JSON.stringify(token));
+    removeLegacyDraft(key);
   } catch {
     /* Keep the editor's in-memory draft if browser storage is unavailable. */
   }
@@ -39,66 +83,37 @@ export function saveAgentDraft(key: string, text: string): AgentDraftToken {
 }
 
 export function captureAgentDraft(key: string, text: string): AgentDraftToken {
-  try {
-    const token = JSON.parse(
-      sessionStorage.getItem(revisionKey(key)) || "null",
-    ) as AgentDraftToken | null;
-    if (
-      token?.key === key &&
-      token.text === text &&
-      typeof token.revision === "string" &&
-      sessionStorage.getItem(key) === text
-    )
-      return token;
-  } catch {
-    /* Upgrade an old plain-text draft below. */
-  }
+  const token = readDraftToken(key);
+  if (token?.text === text) return token;
   return saveAgentDraft(key, text);
 }
 
 export function clearSubmittedAgentDraft(token: AgentDraftToken): boolean {
+  if (!isAgentDraftCurrent(token)) return false;
   try {
-    const current = JSON.parse(
-      sessionStorage.getItem(revisionKey(token.key)) || "null",
-    ) as AgentDraftToken | null;
-    if (
-      current?.revision !== token.revision ||
-      sessionStorage.getItem(token.key) !== token.text
-    )
-      return false;
-    sessionStorage.removeItem(token.key);
-    sessionStorage.removeItem(revisionKey(token.key));
+    removeLegacyDraft(token.key);
+    localStorage.removeItem(draftRecordKey(token.key));
     return true;
   } catch {
     return false;
   }
 }
 
-/** Includes an empty editor, whose text key is deliberately absent. */
 export function isAgentDraftCurrent(token: AgentDraftToken): boolean {
-  try {
-    const current = JSON.parse(
-      sessionStorage.getItem(revisionKey(token.key)) || "null",
-    ) as AgentDraftToken | null;
-    return (
-      current?.revision === token.revision &&
-      (sessionStorage.getItem(token.key) || "") === token.text
-    );
-  } catch {
-    return false;
-  }
+  const current = readDraftToken(token.key);
+  return current?.revision === token.revision && current.text === token.text;
 }
 
 /** Recover an unconfirmed input after reload without replacing a newer draft. */
 export function restoreAgentDraft(token: AgentDraftToken): boolean {
   try {
     if (
-      sessionStorage.getItem(revisionKey(token.key)) !== null ||
+      localStorage.getItem(draftRecordKey(token.key)) !== null ||
+      sessionStorage.getItem(legacyRevisionKey(token.key)) !== null ||
       sessionStorage.getItem(token.key) !== null
     )
       return false;
-    sessionStorage.setItem(revisionKey(token.key), JSON.stringify(token));
-    if (token.text) sessionStorage.setItem(token.key, token.text);
+    localStorage.setItem(draftRecordKey(token.key), JSON.stringify(token));
     return true;
   } catch {
     return false;

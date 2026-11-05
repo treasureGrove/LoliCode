@@ -53,6 +53,13 @@ pub(crate) async fn native<T: DeserializeOwned>(
 ) -> Result<T, String> {
     let carrier = app.state::<InprocessAgentState>();
     carrier.ensure_started(app).await?;
+    if let Some(result) = carrier
+        .harness
+        .dispatch(app, &carrier, method, &args)
+        .await?
+    {
+        return serde_json::from_value(result).map_err(|_| "Harness 返回的数据格式不兼容".into());
+    }
     carrier.call(method, args, mutation).await
 }
 fn old_root() -> std::path::PathBuf {
@@ -97,6 +104,29 @@ pub(crate) async fn session_project(app: &AppHandle, session_id: &str) -> Result
         .await?
         .session
         .project_path)
+}
+
+pub(crate) async fn session_file_root(app: &AppHandle, session_id: &str) -> Result<String, String> {
+    Ok(session_execution_scope(app, session_id).await?.1)
+}
+
+pub(crate) async fn session_execution_scope(
+    app: &AppHandle,
+    session_id: &str,
+) -> Result<(String, String), String> {
+    if legacy_id(session_id)? {
+        let project = session_project(app, session_id).await?;
+        return Ok((project.clone(), project));
+    }
+    let (project, root): (String, String) = native(
+        app,
+        "getSessionExecutionRoot",
+        json!({"sessionId":session_id}),
+        false,
+    )
+    .await?;
+    check_project(app, &project)?;
+    Ok((project, root))
 }
 
 #[tauri::command]
@@ -253,7 +283,7 @@ pub async fn create_agent_session(
     if let Some(path) = &project_path {
         check_project(&app, path)?;
     }
-    let mut session: AgentSession = native(&app, "createSession", json!({"projectPath":project_path,"modelId":model_id,"mode":mode,"title":title,"permissionMode":permission_mode.unwrap_or_else(|| "full_access".into()),"reasoningEffort":reasoning_effort,"contextLimit":context_limit}), true).await?;
+    let mut session: AgentSession = native(&app, "createSession", json!({"projectPath":project_path,"modelId":model_id,"mode":mode,"title":title,"permissionMode":permission_mode,"reasoningEffort":reasoning_effort,"contextLimit":context_limit}), true).await?;
     decorate(&app, &mut session)?;
     Ok(session)
 }
@@ -375,25 +405,55 @@ pub async fn send_agent_message(
     locale: Option<String>,
     attachments: Option<Vec<AgentAttachmentInput>>,
 ) -> Result<(), String> {
-    dispatch_agent_message(app, session_id, text, request_id, locale, attachments, "sendMessage").await
+    dispatch_agent_message(
+        app,
+        session_id,
+        text,
+        request_id,
+        locale,
+        attachments,
+        "sendMessage",
+    )
+    .await
 }
 
 #[tauri::command(rename_all = "camelCase")]
 pub async fn enqueue_agent_message(
-    app: AppHandle, session_id: String, text: String, request_id: String,
-    locale: Option<String>, attachments: Option<Vec<AgentAttachmentInput>>,
+    app: AppHandle,
+    session_id: String,
+    text: String,
+    request_id: String,
+    locale: Option<String>,
+    attachments: Option<Vec<AgentAttachmentInput>>,
+    delivery: Option<String>,
 ) -> Result<Value, String> {
     // Explicit validation/admission failures have a known outcome. Only an
     // interrupted IPC leaves the renderer uncertain and requires reconciliation.
-    Ok(match dispatch_agent_message(app, session_id, text, request_id, locale, attachments, "enqueueMessage").await {
+    let result = async {
+        let mut args =
+            validated_message_payload(session_id, text, request_id, locale, attachments).await?;
+        match delivery.as_deref() {
+            Some("steer") => args["delivery"] = json!("steer"),
+            None => {}
+            Some(_) => return Err("无效的消息发送方式".into()),
+        }
+        native::<()>(&app, "enqueueMessage", args, true).await
+    }
+    .await;
+    Ok(match result {
         Ok(()) => json!({"status":"accepted"}),
         Err(message) => json!({"status":"rejected","message":message}),
     })
 }
 
 async fn dispatch_agent_message(
-    app: AppHandle, session_id: String, text: String, request_id: String,
-    locale: Option<String>, attachments: Option<Vec<AgentAttachmentInput>>, method: &str,
+    app: AppHandle,
+    session_id: String,
+    text: String,
+    request_id: String,
+    locale: Option<String>,
+    attachments: Option<Vec<AgentAttachmentInput>>,
+    method: &str,
 ) -> Result<(), String> {
     let args = validated_message_payload(session_id, text, request_id, locale, attachments).await?;
     native(&app, method, args, true).await
@@ -539,18 +599,33 @@ pub(crate) async fn validated_message_payload(
 
 #[tauri::command(rename_all = "camelCase")]
 pub async fn remove_queued_agent_message(
-    app: AppHandle, session_id: String, request_id: String,
+    app: AppHandle,
+    session_id: String,
+    request_id: String,
 ) -> Result<Value, String> {
-    if legacy_id(&session_id)? { return historical_read_only(); }
-    native(&app, "removeQueuedMessage", json!({"sessionId":session_id,"requestId":request_id}), true).await
+    if legacy_id(&session_id)? {
+        return historical_read_only();
+    }
+    native(
+        &app,
+        "removeQueuedMessage",
+        json!({"sessionId":session_id,"requestId":request_id}),
+        true,
+    )
+    .await
 }
 
 #[tauri::command(rename_all = "camelCase")]
 pub async fn send_queued_agent_message_now(
-    app: AppHandle, session_id: String, request_id: String,
+    app: AppHandle,
+    session_id: String,
+    request_id: String,
+    steer_only: Option<bool>,
 ) -> Result<(), String> {
-    if legacy_id(&session_id)? { return historical_read_only(); }
-    native(&app, "sendQueuedMessageNow", json!({"sessionId":session_id,"requestId":request_id}), true).await
+    if legacy_id(&session_id)? {
+        return historical_read_only();
+    }
+    native(&app, "sendQueuedMessageNow", json!({"sessionId":session_id,"requestId":request_id,"steerOnly":steer_only.unwrap_or(false)}), true).await
 }
 
 #[derive(Debug, Deserialize)]
@@ -706,7 +781,9 @@ fn command_receipt(value: &Value, session_id: &str, request_id: &str) -> Value {
         return json!({"status":"unknown"});
     }
     let status = match result["status"].as_str() {
-        Some("accepted" | "duplicate" | "completed" | "cancelled" | "queued" | "withdrawn") => "accepted",
+        Some("accepted" | "duplicate" | "completed" | "cancelled" | "queued" | "withdrawn") => {
+            "accepted"
+        }
         Some("rejected") => "rejected",
         Some("failed") => "failed",
         _ => "unknown",

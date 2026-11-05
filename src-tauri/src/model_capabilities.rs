@@ -51,12 +51,96 @@ pub(crate) fn image_input_capability_from_modalities(
     model: &str,
     modalities: Option<&[String]>,
 ) -> ImageInputCapability {
-    let declared_support = modalities.map(|items| {
-        items
+    resolve_image_input_capability(
+        model,
+        modalities.and_then(image_support_from_modalities),
+        true,
+    )
+}
+
+pub(crate) fn image_support_from_modalities(modalities: &[String]) -> Option<bool> {
+    if modalities.is_empty() || modalities.iter().any(|item| modality_name(item).is_none()) {
+        return None;
+    }
+    Some(
+        modalities
             .iter()
-            .any(|item| item.trim().eq_ignore_ascii_case("image"))
-    });
-    resolve_image_input_capability(model, declared_support, true)
+            .any(|item| item.trim().eq_ignore_ascii_case("image")),
+    )
+}
+
+/// Read image support from the model's own directory entry. A direct explicit
+/// setting wins over a modality list. A nested support flag fills missing data.
+pub(crate) fn declared_input_modalities(entry: &Value) -> Option<Vec<String>> {
+    declared_input_modalities_from(
+        entry,
+        &[
+            "/input_modalities",
+            "/inputModalities",
+            "/modalities/input",
+            "/capabilities/input",
+            "/architecture/input_modalities",
+            "/model_info/input_modalities",
+            "/input",
+        ],
+    )
+}
+
+fn declared_input_modalities_from(entry: &Value, pointers: &[&str]) -> Option<Vec<String>> {
+    let explicit = ["supportsImage", "supports_image", "vision"]
+        .iter()
+        .find_map(|key| entry.get(key).and_then(Value::as_bool));
+    let modalities = pointers
+        .iter()
+        .find_map(|pointer| parse_modalities(entry.pointer(pointer)?));
+    if explicit.is_none() && modalities.is_some() {
+        return modalities;
+    }
+    let supports_vision = explicit.or_else(|| {
+        [
+            "/supports_vision",
+            "/supportsVision",
+            "/capabilities/supports/vision",
+            "/capabilities/supports/image_input",
+            "/model_info/supports_vision",
+        ]
+        .iter()
+        .find_map(|pointer| entry.pointer(pointer).and_then(Value::as_bool))
+    })?;
+    let mut modalities = modalities.unwrap_or_default();
+    if !supports_vision {
+        modalities.retain(|item| item != "image");
+    }
+    if modalities.is_empty() {
+        modalities.push("text".into());
+    }
+    if supports_vision && !modalities.iter().any(|item| item == "image") {
+        modalities.push("image".into());
+    }
+    Some(modalities)
+}
+
+fn modality_name(value: &str) -> Option<&str> {
+    let value = value.trim();
+    (!value.is_empty()
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-')))
+    .then_some(value)
+}
+
+fn parse_modalities(value: &Value) -> Option<Vec<String>> {
+    let mut modalities = Vec::<String>::new();
+    for item in value.as_array()? {
+        let name = modality_name(item.as_str()?)?;
+        if !modalities
+            .iter()
+            .any(|item| item.eq_ignore_ascii_case(name))
+        {
+            modalities.push(name.to_ascii_lowercase());
+        }
+    }
+    (!modalities.is_empty()).then_some(modalities)
 }
 
 /// Models that CC Switch is willing to advertise to clients as text-only.
@@ -140,33 +224,19 @@ fn declared_model_image_support_in_value(value: &Value, model: &str) -> Option<b
 }
 
 fn explicit_image_support(entry: &Value) -> Option<bool> {
-    if let Some(value) = entry
-        .get("supportsImage")
-        .or_else(|| entry.get("supports_image"))
-        .or_else(|| entry.get("vision"))
-        .and_then(Value::as_bool)
-    {
-        return Some(value);
-    }
-
-    [
-        entry.get("input"),
-        entry.pointer("/modalities/input"),
-        entry.get("input_modalities"),
-        entry.get("inputModalities"),
-    ]
-    .into_iter()
-    .flatten()
-    .find_map(input_modalities_support_image)
-}
-
-fn input_modalities_support_image(value: &Value) -> Option<bool> {
-    let modalities = value.as_array()?;
-    Some(modalities.iter().any(|item| {
-        item.as_str()
-            .map(str::trim)
-            .is_some_and(|item| item.eq_ignore_ascii_case("image"))
-    }))
+    declared_input_modalities_from(
+        entry,
+        &[
+            "/input",
+            "/modalities/input",
+            "/input_modalities",
+            "/inputModalities",
+            "/capabilities/input",
+            "/architecture/input_modalities",
+            "/model_info/input_modalities",
+        ],
+    )
+    .and_then(|modalities| image_support_from_modalities(&modalities))
 }
 
 fn model_entry_matches(entry: &Value, key: Option<&str>, model: &str) -> bool {
@@ -269,12 +339,48 @@ mod tests {
     }
 
     #[test]
+    fn model_directories_accept_normalized_modalities_and_vision_flags() {
+        for entry in [
+            json!({"architecture":{"input_modalities":[" TEXT ", "Image", "IMAGE"]}}),
+            json!({"capabilities":{"supports":{"vision":true}}}),
+            json!({"inputModalities":[],"model_info":{"supports_vision":true}}),
+            json!({"input_modalities":["text", null], "input":["text", "image"]}),
+            json!({"supportsImage":true, "input_modalities":["text"]}),
+        ] {
+            assert_eq!(
+                declared_input_modalities(&entry),
+                Some(vec!["text".into(), "image".into()]),
+                "{entry}"
+            );
+        }
+
+        for entry in [
+            json!({"model_info":{"supports_vision":false}}),
+            json!({"input_modalities":["text"], "model_info":{"supports_vision":true}}),
+            json!({"supportsImage":false, "input_modalities":["text", "image"]}),
+        ] {
+            assert_eq!(declared_input_modalities(&entry), Some(vec!["text".into()]));
+        }
+
+        for entry in [
+            json!({"inputModalities": []}),
+            json!({"input_modalities": [false, "text"]}),
+            json!({"input": [" "]}),
+            json!({"supports_vision":"true"}),
+            json!({"output_modalities":["image"]}),
+        ] {
+            assert_eq!(declared_input_modalities(&entry), None, "{entry}");
+        }
+    }
+
+    #[test]
     fn provider_settings_support_multiple_capability_shapes() {
         let settings = json!({
             "modelCatalog": {
                 "models": [
                     { "model": "vision", "modalities": { "input": ["text", "image"] } },
-                    { "model": "text", "inputModalities": ["text"] }
+                    { "model": "text", "inputModalities": ["text"] },
+                    { "model": "legacy-vision", "input": ["text", "image"], "input_modalities": ["text"] }
                 ]
             }
         });
@@ -286,6 +392,10 @@ mod tests {
         assert_eq!(
             image_input_capability_from_settings(&settings, "text", true),
             ImageInputCapability::Unsupported
+        );
+        assert_eq!(
+            image_input_capability_from_settings(&settings, "legacy-vision", true),
+            ImageInputCapability::Supported
         );
     }
 }

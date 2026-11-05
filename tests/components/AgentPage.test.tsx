@@ -11,13 +11,18 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AgentPage } from "@/features/agent/AgentPage";
 import { agentApi } from "@/lib/api/agent";
+import { agentFilesApi } from "@/lib/api/agent-files";
 import { settingsApi } from "@/lib/api";
 import { agentMemoryApi } from "@/lib/api/agent-memory";
 import { usageApi } from "@/lib/api/usage";
+import { settingsApi as desktopSettingsApi } from "@/lib/api/settings";
+import * as platform from "@/lib/platform";
 import { toast } from "@/lib/toast";
+import * as agentImageStore from "@/lib/agentImageStore";
 import { saveAgentQueueSubmission } from "@/lib/agentQueueLedger";
 import {
   captureAgentDraft,
+  readAgentDraft,
   readAgentSubmission,
   saveAgentSubmission,
 } from "@/lib/agentInputLedger";
@@ -266,10 +271,13 @@ beforeEach(() => {
   for (const key of Object.keys(localStorage))
     if (
       key.startsWith("lolicode.agent.input:") ||
+      key.startsWith("lolicode.agent.draft-record:") ||
+      key.startsWith("lolicode.agent.rightDock") ||
       key.startsWith("lolicode.agent.queue-")
     )
       localStorage.removeItem(key);
   localStorage.removeItem("lolicode.agent.recent-projects");
+  localStorage.removeItem("lolicode.agent.last-selection.v1");
   snapshot = emptySnapshot();
   vi.mocked(agentApi.getStatus).mockReset().mockResolvedValue({
     available: true,
@@ -535,44 +543,25 @@ describe("AgentPage", () => {
     expect(snapshot.session.mode).toBe("plan");
     expect(screen.getByRole("button", { name: "模型" })).toBeDisabled();
     expect(
-      within(openComposerOptions()).getByText(/工作对话沿用创建时的模型与权限/),
+      within(openComposerOptions()).getByText(/工作对话沿用分派时的模型/),
     ).toBeInTheDocument();
-    expect(composerPermissionSelect()).toBeDisabled();
+    expect(composerPermissionSelect()).toBeEnabled();
   });
 
-  it("queues a running worker follow-up through its secretary using the worker's original request identity", async () => {
+  it("queues a running worker follow-up in that worker's own queue", async () => {
     await openWorkerConversation("build", "running");
-    vi.mocked(agentApi.sendSecretaryTaskMessage).mockImplementation(
-      async (_parent, taskId, text, requestId) => {
-        snapshot.queuedMessages = [{ id: requestId, text, attachments: [] }];
-        return {
-          id: taskId,
-          parentSessionId: "lc:secretary",
-          sessionId: "lc:worker",
-          title: "分析任务",
-          instructions: "分析入口",
-          status: "running",
-          projectPath: project,
-          requestId: "worker-request",
-          createdAt: 1,
-          updatedAt: 4,
-        };
-      },
-    );
     fill("完成后继续核对文档");
     fireEvent.click(screen.getByRole("button", { name: "加入队列" }));
     await flush();
-    expect(agentApi.enqueueMessage).not.toHaveBeenCalled();
-    expect(agentApi.sendSecretaryTaskMessage).toHaveBeenCalledWith(
-      "lc:secretary",
-      "task-1",
+    expect(agentApi.sendSecretaryTaskMessage).not.toHaveBeenCalled();
+    expect(agentApi.enqueueMessage).toHaveBeenCalledWith(
+      "lc:worker",
       "完成后继续核对文档",
       expect.any(String),
       [],
       [],
     );
-    const requestId = vi.mocked(agentApi.sendSecretaryTaskMessage).mock
-      .calls[0][3];
+    const requestId = vi.mocked(agentApi.enqueueMessage).mock.calls[0][2];
     expect(snapshot.queuedMessages?.[0].id).toBe(requestId);
     expect(
       screen.getByRole("region", { name: "待发送消息" }),
@@ -602,6 +591,97 @@ describe("AgentPage", () => {
     expect(calls).toHaveLength(2);
     expect(calls[1][3]).toBe(calls[0][3]);
     expect(agentApi.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("retries a failed worker turn with a new ID and reuses it after a lost receipt", async () => {
+    const messageId = "failed-worker-turn";
+    const text = "重新检查附件";
+    let retryId: string | undefined;
+    const images = [
+      {
+        id: "original-image",
+        fileName: "preview.png",
+        mime: "image/png",
+        bytes: 4,
+        dataUrl: "data:image/png;base64,dGVzdA==",
+      },
+    ];
+    const documents = [
+      {
+        id: "original-document",
+        fileName: "notes.md",
+        mime: "text/markdown",
+        bytes: 4,
+        localPath: "D:/fixture/project/notes.md",
+      },
+    ];
+    const readImages = vi
+      .spyOn(agentImageStore, "readAgentImageAttachments")
+      .mockImplementation(async (id) =>
+        id === messageId || id === retryId ? images : undefined,
+      );
+    const readDocuments = vi
+      .spyOn(agentImageStore, "readAgentDocumentAttachments")
+      .mockImplementation(async (id) =>
+        id === messageId || id === retryId ? documents : undefined,
+      );
+    try {
+      await openWorkerConversation("build", "error");
+      snapshot.error = "MCP 项目目录不可用";
+      snapshot.messages = [
+        {
+          id: messageId,
+          role: "user",
+          createdAt: 1,
+          parts: [{ type: "text", text }],
+        },
+      ];
+      vi.mocked(agentApi.sendSecretaryTaskMessage)
+        .mockImplementationOnce(async (_parent, _task, _text, requestId) => {
+          retryId = requestId;
+          throw new Error("工作回执未收到");
+        })
+        .mockImplementationOnce(acceptWorkerMessage);
+      await tick();
+      fill("保留另一条草稿");
+      fireEvent.click(screen.getByRole("button", { name: "重试" }));
+      await flush();
+      const [first] = vi.mocked(agentApi.sendSecretaryTaskMessage).mock.calls;
+      expect(first).toEqual([
+        "lc:secretary",
+        "task-1",
+        text,
+        expect.any(String),
+        images,
+        documents,
+      ]);
+      expect(first[3]).not.toBe(messageId);
+      expect(readAgentSubmission(project, "lc:worker")).toMatchObject({
+        requestId: first[3],
+        phase: "uncertain",
+      });
+      expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
+        "保留另一条草稿",
+      );
+      expect(
+        screen.queryByRole("button", { name: "移除图片：preview.png" }),
+      ).not.toBeInTheDocument();
+      await tick(1000);
+      expect(agentApi.queryCommand).toHaveBeenCalledWith("lc:worker", first[3]);
+      fireEvent.click(screen.getByRole("button", { name: "重试" }));
+      await flush();
+      expect(agentApi.sendSecretaryTaskMessage).toHaveBeenCalledTimes(2);
+      expect(
+        vi.mocked(agentApi.sendSecretaryTaskMessage).mock.calls[1],
+      ).toEqual(first);
+      expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
+        "保留另一条草稿",
+      );
+      expect(agentApi.sendMessage).not.toHaveBeenCalled();
+    } finally {
+      readImages.mockRestore();
+      readDocuments.mockRestore();
+    }
   });
 
   it("preserves recalled image and document payloads when a worker continuation is queued", async () => {
@@ -645,14 +725,10 @@ describe("AgentPage", () => {
       "lc:worker",
       "worker-attachment-queue",
     );
-    vi.mocked(agentApi.sendSecretaryTaskMessage).mockImplementation(
-      acceptWorkerMessage,
-    );
     fireEvent.click(screen.getByRole("button", { name: "加入队列" }));
     await flush();
-    expect(agentApi.sendSecretaryTaskMessage).toHaveBeenCalledWith(
-      "lc:secretary",
-      "task-1",
+    expect(agentApi.enqueueMessage).toHaveBeenCalledWith(
+      "lc:worker",
       "核对这两个附件",
       expect.any(String),
       [
@@ -668,7 +744,7 @@ describe("AgentPage", () => {
         }),
       ],
     );
-    expect(agentApi.enqueueMessage).not.toHaveBeenCalled();
+    expect(agentApi.sendSecretaryTaskMessage).not.toHaveBeenCalled();
   });
 
   it("prioritizes an existing worker queue entry without inventing a new follow-up request", async () => {
@@ -679,12 +755,13 @@ describe("AgentPage", () => {
     await tick(1000);
     fill("仍在编辑的任务要求");
     fireEvent.click(
-      screen.getByRole("button", { name: "立即发送第 1 条消息" }),
+      screen.getByRole("button", { name: "插入当前任务第 1 条消息" }),
     );
     await flush();
     expect(agentApi.sendQueuedMessageNow).toHaveBeenCalledWith(
       "lc:worker",
       "worker-priority-queue",
+      true,
     );
     expect(agentApi.sendSecretaryTaskMessage).not.toHaveBeenCalled();
     expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
@@ -760,7 +837,7 @@ describe("AgentPage", () => {
       screen.getByRole("heading", { name: "Loli 秘书" }),
     ).toBeInTheDocument();
     expect(
-      sessionStorage.getItem(
+      readAgentDraft(
         `lolicode.agent.draft:${encodeURIComponent(project)}:${encodeURIComponent(session.id)}`,
       ),
     ).toBe("留给原会话的草稿");
@@ -962,6 +1039,29 @@ describe("AgentPage", () => {
     expect(button).toHaveAttribute("aria-pressed", "true");
   });
 
+  it("focuses the secretary chat and sends the goal without a manual task form", async () => {
+    render(<AgentPage />);
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: "打开 Loli 秘书" }));
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: "告诉秘书目标" }));
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveFocus();
+    expect(screen.queryByLabelText("任务名称")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("执行方式")).not.toBeInTheDocument();
+    const goal = "整理项目文档，再核对安装步骤";
+    fill(goal);
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+    await flush();
+    expect(agentApi.sendMessage).toHaveBeenCalledWith(
+      "lc:secretary",
+      goal,
+      expect.any(String),
+      [],
+      [],
+    );
+    expect(agentApi.delegateSecretaryTask).not.toHaveBeenCalled();
+  });
+
   it("does not increase an unfamiliar current permission mode when opening the secretary", async () => {
     snapshot.session.permissionMode = "custom";
     render(<AgentPage />);
@@ -1013,7 +1113,7 @@ describe("AgentPage", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("opens a worker requiring attention and returns to the secretary without losing its draft", async () => {
+  it.each([false, true])("opens a worker requiring attention and returns to the secretary without losing its draft (permissions locked: %s)", async (permissionLocked) => {
     const secretary: AgentSession = {
       ...session,
       id: "lc:secretary",
@@ -1024,12 +1124,18 @@ describe("AgentPage", () => {
       ...session,
       id: "lc:worker",
       title: "后台分析任务",
+      permissionMode: "ask",
       coordination: {
         role: "worker",
         parentSessionId: secretary.id,
         taskId: "task-1",
+        permissionLocked,
       },
     };
+    vi.mocked(agentApi.updateSession).mockImplementationOnce(async (_, patch) => {
+      worker.permissionMode = patch.permissionMode;
+      return structuredClone(worker);
+    });
     vi.mocked(agentApi.listSessions).mockResolvedValue([
       secretary,
       worker,
@@ -1065,6 +1171,19 @@ describe("AgentPage", () => {
     expect(
       screen.getByRole("heading", { name: "后台分析任务" }),
     ).toBeInTheDocument();
+    const permission = within(openComposerOptions()).getByLabelText("执行权限");
+    if (permissionLocked) {
+      expect(permission).toBeDisabled();
+      expect(agentApi.updateSession).not.toHaveBeenCalled();
+    } else {
+      expect(permission).toBeEnabled();
+      fireEvent.change(permission, { target: { value: "full_access" } });
+      await flush();
+      expect(agentApi.updateSession).toHaveBeenCalledWith(worker.id, {
+        permissionMode: "full_access",
+      });
+      expect(permission).toHaveValue("full_access");
+    }
     fireEvent.click(screen.getByRole("button", { name: "返回秘书" }));
     await flush();
     expect(
@@ -1116,7 +1235,7 @@ describe("AgentPage", () => {
     expect(agentApi.openStandalone).toHaveBeenCalledTimes(1);
     expect(agentApi.openSecretary).toHaveBeenCalledWith(
       catalog.models[0].id,
-      "full_access",
+      undefined,
       undefined,
       standalone,
       undefined,
@@ -1136,6 +1255,643 @@ describe("AgentPage", () => {
       screen.queryByRole("button", { name: "同步会话" }),
     ).not.toBeInTheDocument();
   });
+  it("reveals only fresh preview hints and reloads the same path for a new hint", async () => {
+    const preview = vi.spyOn(agentFilesApi, "preview").mockResolvedValue({
+      kind: "html",
+      name: "index.html",
+      path: "index.html",
+      mimeType: "text/html",
+      content: "<p>preview</p>",
+      sizeBytes: 14,
+      truncated: false,
+    });
+    try {
+      snapshot.status = "running";
+      snapshot.preview = {
+        kind: "file",
+        id: "historical-preview",
+        sessionId: session.id,
+        path: "old.html",
+        createdAt: 3,
+      };
+      render(<AgentPage />);
+      await flush();
+      expect(preview).not.toHaveBeenCalled();
+      expect(
+        screen.queryByRole("complementary", { name: "文件预览" }),
+      ).not.toBeInTheDocument();
+
+      snapshot.messages.push({
+        id: "unverified-preview",
+        role: "assistant",
+        createdAt: 4,
+        parts: [
+          {
+            type: "tool",
+            id: "unverified-preview-tool",
+            name: "open_preview",
+            state: "completed",
+            input: { path: "unverified.html" },
+          },
+        ],
+      });
+      await tick();
+      expect(preview).not.toHaveBeenCalled();
+
+      for (const createdAt of [5, 6]) {
+        snapshot.preview = {
+          kind: "file",
+          id: `preview-${createdAt}`,
+          sessionId: session.id,
+          path: "index.html",
+          createdAt,
+        };
+        await tick();
+        expect(
+          screen.getByRole("complementary", { name: "文件预览" }),
+        ).toBeVisible();
+      }
+      fireEvent.click(screen.getByRole("button", { name: "关闭预览" }));
+      await tick();
+      snapshot.preview = {
+        kind: "file",
+        id: "older-unseen-preview",
+        sessionId: session.id,
+        path: "stale.html",
+        createdAt: 4,
+      };
+      await tick();
+      expect(
+        screen.queryByRole("complementary", { name: "文件预览" }),
+      ).not.toBeInTheDocument();
+      expect(preview.mock.calls).toEqual([
+        [session.id, "index.html"],
+        [session.id, "index.html"],
+      ]);
+    } finally {
+      preview.mockRestore();
+    }
+  });
+  it("opens a native browser tool without polling and removes it on the matching close event", async () => {
+    const frame = vi.spyOn(agentFilesApi, "browserFrame");
+    const sync = vi.spyOn(agentFilesApi, "syncBrowserWebview").mockResolvedValue();
+    snapshot.status = "running";
+    const page = render(<AgentPage />);
+    try {
+      await flush();
+      snapshot.preview = {
+        kind: "browser",
+        id: "tool-browser-preview",
+        sessionId: session.id,
+        browserId: "browser-tool-1",
+        url: "https://example.test/page",
+        native: true,
+        createdAt: 3,
+      };
+      await tick();
+      const panel = screen.getByRole("complementary", { name: "运行页面预览" });
+      expect(
+        panel.querySelector("[data-preview-carrier='native']"),
+      ).toBeInTheDocument();
+      expect(
+        within(panel).getByRole("button", { name: "重新加载网页" }),
+      ).toBeEnabled();
+      await tick(1600);
+      expect(frame).not.toHaveBeenCalled();
+      act(() =>
+        emitTauriEvent("agent-browser-preview-closed", {
+          sessionId: "another-session",
+          browserId: "browser-tool-1",
+        }),
+      );
+      expect(panel).toBeVisible();
+      act(() =>
+        emitTauriEvent("agent-browser-preview-closed", {
+          sessionId: session.id,
+          browserId: "browser-tool-1",
+        }),
+      );
+      expect(panel).not.toBeInTheDocument();
+      snapshot.preview = {
+        ...snapshot.preview,
+        id: "delayed-browser-tool-hint",
+      };
+      await tick();
+      expect(
+        screen.queryByRole("complementary", { name: "运行页面预览" }),
+      ).not.toBeInTheDocument();
+    } finally {
+      page.unmount();
+      await flush();
+      frame.mockRestore();
+      sync.mockRestore();
+    }
+  });
+  it("keeps the live browser mounted while folded and removes it only on close", async () => {
+    const png = "data:image/png;base64,iVBORw0KGgo=";
+    const frame = vi.spyOn(agentFilesApi, "browserFrame").mockResolvedValue(png);
+    const close = vi.spyOn(agentFilesApi, "closeBrowser").mockResolvedValue();
+    try {
+      snapshot.status = "running";
+      render(<AgentPage />);
+      await flush();
+      snapshot.preview = {
+        kind: "browser",
+        id: "browser-open-hint",
+        sessionId: session.id,
+        browserId: "browser-live",
+        url: "http://127.0.0.1:8124/",
+        deliveryId: "source-file-hint",
+        createdAt: 3,
+      };
+      await tick();
+      const panel = screen.getByRole("complementary", {
+        name: "运行页面预览",
+      });
+      expect(
+        within(panel).getByRole("img", { name: "本机开发页面画面" }),
+      ).toHaveAttribute("src", png);
+      expect(panel.querySelector("iframe")).toBeNull();
+      expect(frame).toHaveBeenLastCalledWith(session.id, "browser-live");
+      delete snapshot.preview;
+      await tick(1600);
+      expect(frame.mock.calls.length).toBeGreaterThan(1);
+      expect(panel).toBeVisible();
+      fireEvent.click(screen.getByRole("button", { name: "收起文件预览" }));
+      expect(panel).toBeInTheDocument();
+      expect(panel).not.toBeVisible();
+      const foldedCalls = frame.mock.calls.length;
+      await tick(1600);
+      expect(frame).toHaveBeenCalledTimes(foldedCalls);
+      fireEvent.click(screen.getByRole("button", { name: "预览项目文件" }));
+      await flush();
+      expect(
+        screen.getByRole("complementary", { name: "运行页面预览" }),
+      ).toBe(panel);
+      expect(frame).toHaveBeenCalledTimes(foldedCalls + 1);
+      fireEvent.click(
+        within(panel).getByRole("button", { name: "关闭页面预览" }),
+      );
+      expect(close).toHaveBeenCalledWith(session.id, "browser-live");
+      snapshot.preview = {
+        kind: "file",
+        id: "source-file-hint",
+        sessionId: session.id,
+        path: "index.html",
+        createdAt: 3,
+      };
+      const calls = frame.mock.calls.length;
+      await tick(1600);
+      expect(frame).toHaveBeenCalledTimes(calls);
+      expect(panel).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("complementary", { name: "文件预览" }),
+      ).not.toBeInTheDocument();
+    } finally {
+      frame.mockRestore();
+      close.mockRestore();
+    }
+  });
+  it("loads a worker's live browser in the secretary and falls back to its file after closing", async () => {
+    const frame = vi.spyOn(agentFilesApi, "browserFrame");
+    const sync = vi.spyOn(agentFilesApi, "syncBrowserWebview").mockResolvedValue();
+    const realRect = HTMLElement.prototype.getBoundingClientRect;
+    const bounds = { x: 100, y: 80, width: 300, height: 260 };
+    const rect = vi
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockImplementation(function (this: HTMLElement) {
+        if (!this.classList.contains("wb-browser-preview-stage"))
+          return realRect.call(this);
+        return new DOMRect(bounds.x, bounds.y, bounds.width, bounds.height);
+      });
+    const file = vi.spyOn(agentFilesApi, "preview").mockResolvedValue({
+      kind: "html",
+      name: "index.html",
+      path: "index.html",
+      mimeType: "text/html",
+      content: "<p>worker preview</p>",
+      sizeBytes: 21,
+      truncated: false,
+    });
+    vi.mocked(agentApi.getSession).mockImplementation(async (id) =>
+      id === session.id ? emptySnapshot() : structuredClone(snapshot),
+    );
+    const page = render(<AgentPage />);
+    try {
+      await flush();
+      fireEvent.click(screen.getByRole("button", { name: "打开 Loli 秘书" }));
+      await flush();
+      expect(
+        screen.getByRole("heading", { name: "Loli 秘书" }),
+      ).toBeInTheDocument();
+      const workerFile = {
+        kind: "file",
+        id: "worker-file",
+        sessionId: "lc:worker",
+        path: "index.html",
+        createdAt: 3,
+      } as const;
+      snapshot.preview = workerFile;
+      await tick(5000);
+      expect(file).toHaveBeenCalledWith("lc:worker", "index.html");
+      snapshot.preview = {
+        kind: "browser",
+        id: "worker-browser",
+        sessionId: "lc:worker",
+        browserId: "browser-worker",
+        url: "http://127.0.0.1:8124/",
+        native: true,
+        createdAt: 4,
+      };
+      await tick(5000);
+      await tick(32);
+      expect(sync).toHaveBeenCalledWith(
+        "lc:worker",
+        "browser-worker",
+        bounds,
+        false,
+        expect.objectContaining({ slot: 0, revision: expect.any(Number) }),
+      );
+      expect(frame).not.toHaveBeenCalled();
+      expect(
+        screen.getByRole("complementary", { name: "运行页面预览" }),
+      ).toBeVisible();
+      act(() =>
+        emitTauriEvent("agent-browser-preview-closed", {
+          sessionId: "lc:worker",
+          browserId: "browser-worker",
+        }),
+      );
+      snapshot.preview = workerFile;
+      await tick(5000);
+      expect(
+        screen.queryByRole("complementary", { name: "运行页面预览" }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("complementary", { name: "文件预览" }),
+      ).toBeVisible();
+      expect(file.mock.calls).toEqual([
+        ["lc:worker", "index.html"],
+        ["lc:worker", "index.html"],
+      ]);
+      const panel = screen.getByRole("complementary", { name: "文件预览" });
+      fireEvent.click(screen.getByRole("button", { name: session.title }));
+      await flush();
+      snapshot.preview = {
+        ...workerFile,
+        id: "unselected-worker-file",
+        createdAt: 5,
+      };
+      await tick(5000);
+      expect(
+        screen.queryByRole("complementary", { name: "文件预览" }),
+      ).not.toBeInTheDocument();
+      expect(panel).toBeInTheDocument();
+      expect(panel).not.toBeVisible();
+      fireEvent.click(screen.getByRole("button", { name: "打开 Loli 秘书" }));
+      await flush();
+      expect(
+        screen.getByRole("complementary", { name: "文件预览" }),
+      ).not.toBe(panel);
+      expect(file).toHaveBeenCalledTimes(3);
+    } finally {
+      page.unmount();
+      await flush();
+      frame.mockRestore();
+      file.mockRestore();
+      rect.mockRestore();
+      sync.mockRestore();
+    }
+  });
+  it("retains independent browser tabs, including a delayed open, alongside the file preview", async () => {
+    const url = "http://127.0.0.1:8124/delivery";
+    const slowUrl = "https://example.com/slow";
+    snapshot.messages = [
+      {
+        id: "output",
+        role: "assistant",
+        createdAt: 3,
+        parts: [
+          {
+            type: "text",
+            text: `[交付文件](docs/report.md) · [较早点击的链接](${slowUrl}) · ${url}`,
+          },
+        ],
+      },
+    ];
+    const windows = vi.spyOn(platform, "isWindows").mockReturnValue(true);
+    const file = vi.spyOn(agentFilesApi, "preview").mockResolvedValue({
+      path: "docs/report.md",
+      name: "report.md",
+      kind: "text",
+      content: "Fixture report",
+      mimeType: "text/plain",
+      sizeBytes: 14,
+      truncated: false,
+    });
+    const browserReceipt = {
+      kind: "browser",
+      id: "output-browser",
+      sessionId: session.id,
+      browserId: "output-browser",
+      url,
+      createdAt: 4,
+      native: true,
+    } as const;
+    let completeSlow!: (
+      page: Awaited<ReturnType<typeof agentFilesApi.openBrowser>>,
+    ) => void;
+    const open = vi
+      .spyOn(agentFilesApi, "openBrowser")
+      .mockImplementationOnce(
+        () => new Promise((resolve) => { completeSlow = resolve; }),
+      )
+      .mockResolvedValue(browserReceipt);
+    const close = vi.spyOn(agentFilesApi, "closeBrowser").mockResolvedValue();
+    const sync = vi.spyOn(agentFilesApi, "syncBrowserWebview").mockResolvedValue();
+    const external = vi.spyOn(desktopSettingsApi, "openExternal").mockResolvedValue();
+    const page = render(<AgentPage />);
+    try {
+      await flush();
+      fireEvent.click(
+        screen.getByRole("button", { name: "预览文件：docs/report.md" }),
+      );
+      await flush();
+      expect(file).toHaveBeenCalledWith(session.id, "docs/report.md");
+
+      fireEvent.keyDown(
+        screen.getByRole("button", { name: `打开方式：${url}` }),
+        { key: "Enter" },
+      );
+      fireEvent.click(
+        screen.getByRole("menuitem", { name: "在系统浏览器中打开" }),
+      );
+      expect(external).toHaveBeenCalledWith(url);
+      expect(open).not.toHaveBeenCalled();
+
+      fireEvent.click(screen.getByRole("link", { name: "较早点击的链接" }));
+      fireEvent.click(screen.getByRole("link", { name: url }));
+      await flush();
+      expect(open).toHaveBeenCalledWith(session.id, url);
+      const browser = screen.getByRole("complementary", {
+        name: "运行页面预览",
+      });
+      completeSlow({
+        ...browserReceipt,
+        id: "late-browser",
+        browserId: "late-browser",
+        url: slowUrl,
+      });
+      await flush();
+      expect(close).not.toHaveBeenCalled();
+      expect(
+        within(browser).getByRole("textbox", { name: "网页地址" }),
+      ).toHaveValue(url);
+      const tabs = screen.getByRole("tablist", { name: "右侧栏标签" });
+      const later = within(tabs).getByRole("tab", { name: url });
+      const earlier = within(tabs).getByRole("tab", { name: slowUrl });
+      expect(later).toHaveAttribute("aria-selected", "true");
+      fireEvent.keyDown(later, { key: "ArrowLeft" });
+      expect(earlier).toHaveFocus();
+      expect(later).toHaveAttribute("aria-selected", "true");
+
+      fireEvent.click(within(tabs).getByRole("tab", { name: "report.md" }));
+      expect(screen.getByRole("complementary", { name: "文件预览" })).toBeVisible();
+      expect(browser).not.toBeVisible();
+      fireEvent.click(later);
+      expect(browser).toBeVisible();
+      fireEvent.click(screen.getByRole("button", { name: "收起文件预览" }));
+      expect(browser).not.toBeVisible();
+      expect(close).not.toHaveBeenCalledWith(session.id, "output-browser");
+      fireEvent.click(screen.getByRole("button", { name: "预览项目文件" }));
+      expect(browser).toBeVisible();
+      fireEvent.click(
+        within(browser).getByRole("button", { name: "关闭页面预览" }),
+      );
+      expect(close).toHaveBeenCalledWith(session.id, "output-browser");
+      expect(screen.getByRole("textbox", { name: "网页地址" })).toHaveValue(slowUrl);
+      expect(close).not.toHaveBeenCalledWith(session.id, "late-browser");
+      fireEvent(earlier, new MouseEvent("auxclick", { button: 1, bubbles: true }));
+      expect(close).toHaveBeenCalledWith(session.id, "late-browser");
+      expect(screen.getByRole("complementary", { name: "文件预览" })).toBeVisible();
+    } finally {
+      page.unmount();
+      await flush();
+      windows.mockRestore();
+      file.mockRestore();
+      open.mockRestore();
+      close.mockRestore();
+      sync.mockRestore();
+      external.mockRestore();
+    }
+  });
+
+  it("restores split tabs and their active selection without navigating a saved browser", async () => {
+    const url = "https://example.test/restorable";
+    snapshot.messages = [{
+      id: "dock-output",
+      role: "assistant",
+      createdAt: 3,
+      parts: [{ type: "text", text: "[交付文件](docs/report.md)" }],
+    }];
+    const windows = vi.spyOn(platform, "isWindows").mockReturnValue(true);
+    const width = vi.spyOn(window, "innerWidth", "get").mockReturnValue(1280);
+    const preview = vi.spyOn(agentFilesApi, "preview").mockResolvedValue({
+      path: "docs/report.md", name: "report.md", kind: "text", content: "saved document",
+      mimeType: "text/plain", sizeBytes: 14, truncated: false,
+    });
+    const open = vi.spyOn(agentFilesApi, "openBrowser").mockResolvedValue({
+      kind: "browser", id: "dock-browser", sessionId: session.id,
+      browserId: "dock-browser", url, createdAt: 4, native: true,
+    });
+    const close = vi.spyOn(agentFilesApi, "closeBrowser").mockResolvedValue();
+    const sync = vi.spyOn(agentFilesApi, "syncBrowserWebview").mockResolvedValue();
+    const left = () => screen.getByRole("tablist", { name: "左侧分屏标签" });
+    const right = () => screen.getByRole("tablist", { name: "右侧分屏标签" });
+    let page = render(<AgentPage />);
+    try {
+      await flush();
+      fireEvent.click(screen.getByRole("button", { name: "预览文件：docs/report.md" }));
+      fireEvent.click(screen.getByRole("button", { name: "分屏" }));
+      const rightHeader = right().parentElement!;
+      fireEvent.click(within(rightHeader).getByRole("button", { name: "新建浏览器标签" }));
+      const address = screen.getByRole("textbox", { name: "网页地址" });
+      fireEvent.change(address, { target: { value: url } });
+      fireEvent.click(screen.getByRole("button", { name: "前往网页地址" }));
+      await flush();
+      expect(open).toHaveBeenCalledWith(session.id, url);
+      expect(within(left()).getByRole("tab", { name: "report.md" })).toHaveAttribute("aria-selected", "true");
+      expect(within(right()).getByRole("tab", { name: url })).toHaveAttribute("aria-selected", "true");
+      expect(screen.getByRole("complementary", { name: "文件预览" })).toBeVisible();
+      expect(screen.getByRole("complementary", { name: "运行页面预览" })).toBeVisible();
+      fireEvent.keyDown(screen.getByRole("separator", { name: "调整右栏分屏宽度" }), { key: "ArrowLeft" });
+      const splitWidth = screen.getByRole("separator", { name: "调整右栏分屏宽度" }).getAttribute("aria-valuenow");
+      page.unmount();
+      await flush();
+      open.mockClear();
+
+      page = render(<AgentPage />);
+      await flush();
+      expect(within(left()).getByRole("tab", { name: "report.md" })).toBeVisible();
+      expect(within(right()).getByRole("tab", { name: url })).toBeVisible();
+      expect(screen.getByRole("separator", { name: "调整右栏分屏宽度" })).toHaveAttribute("aria-valuenow", splitWidth);
+      expect(screen.getByRole("textbox", { name: "网页地址" })).toHaveValue(url);
+      expect(open).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByRole("button", { name: "恢复页面" }));
+      await flush();
+      expect(open).toHaveBeenCalledOnce();
+      expect(open).toHaveBeenCalledWith(session.id, url);
+    } finally {
+      page.unmount();
+      await flush();
+      windows.mockRestore();
+      width.mockRestore();
+      preview.mockRestore();
+      open.mockRestore();
+      close.mockRestore();
+      sync.mockRestore();
+    }
+  });
+
+  it("opens a blank browser from Ctrl+T and navigates in the same native tab", async () => {
+    const windows = vi.spyOn(platform, "isWindows").mockReturnValue(true);
+    const open = vi.spyOn(agentFilesApi, "openBrowser").mockResolvedValue({
+      kind: "browser",
+      id: "blank-result",
+      sessionId: session.id,
+      browserId: "blank-result",
+      url: "https://example.test/",
+      createdAt: 4,
+      native: true,
+    });
+    const navigate = vi.spyOn(agentFilesApi, "navigateBrowser").mockResolvedValue();
+    const close = vi.spyOn(agentFilesApi, "closeBrowser").mockResolvedValue();
+    const sync = vi.spyOn(agentFilesApi, "syncBrowserWebview").mockResolvedValue();
+    const frame = vi.spyOn(agentFilesApi, "browserFrame");
+    const page = render(<AgentPage />);
+    try {
+      await flush();
+      fireEvent.keyDown(window, { key: "t", ctrlKey: true });
+      const address = screen.getByRole("textbox", { name: "网页地址" });
+      const go = screen.getByRole("button", { name: "前往网页地址" });
+      expect(address).toHaveFocus();
+      expect(open).not.toHaveBeenCalled();
+      fireEvent.change(address, { target: { value: "file:///private.txt" } });
+      fireEvent.click(go);
+      expect(screen.getByRole("alert")).toHaveTextContent("HTTP 或 HTTPS");
+      expect(open).not.toHaveBeenCalled();
+      fireEvent.change(address, { target: { value: "example.test" } });
+      fireEvent.click(go);
+      await flush();
+      expect(open).toHaveBeenCalledWith(session.id, "https://example.test/");
+      expect(screen.getByRole("textbox", { name: "网页地址" })).toBe(address);
+      expect(address).toHaveValue("https://example.test/");
+      fireEvent.change(address, { target: { value: "http://localhost:8124/settings" } });
+      fireEvent.click(go);
+      await flush();
+      expect(navigate).toHaveBeenCalledWith(session.id, "blank-result", {
+        url: "http://localhost:8124/settings",
+      });
+      expect(open).toHaveBeenCalledTimes(1);
+      expect(frame).not.toHaveBeenCalled();
+      expect(close).not.toHaveBeenCalled();
+    } finally {
+      page.unmount();
+      await flush();
+      windows.mockRestore();
+      open.mockRestore();
+      navigate.mockRestore();
+      close.mockRestore();
+      sync.mockRestore();
+      frame.mockRestore();
+    }
+  });
+
+  it("keeps a separate right preview and folded state for each conversation", async () => {
+    const other = { ...session, id: "other-preview", title: "另一会话", updatedAt: 1 };
+    vi.mocked(agentApi.listSessions).mockResolvedValue([session, other]);
+    vi.mocked(agentApi.getSession).mockImplementation(async (id) => ({
+      ...structuredClone(snapshot),
+      session: id === other.id ? other : session,
+    }));
+    const preview = vi.spyOn(agentFilesApi, "preview").mockImplementation(
+      async (_id, path) => ({
+        path,
+        name: path,
+        kind: "text",
+        content: path,
+        mimeType: "text/plain",
+        sizeBytes: 1,
+        truncated: false,
+      }),
+    );
+    const openFile = async (path: string) => {
+      fireEvent.click(screen.getByRole("button", { name: "预览项目文件" }));
+      const panel = screen.getByRole("complementary", { name: "文件预览" });
+      fireEvent.change(within(panel).getByLabelText("预览文件路径"), {
+        target: { value: path },
+      });
+      fireEvent.click(within(panel).getByRole("button", { name: "预览" }));
+      await flush();
+    };
+    try {
+      render(<AgentPage />);
+      await flush();
+      await openFile("first.txt");
+      fireEvent.click(screen.getByRole("button", { name: "收起文件预览" }));
+      fireEvent.click(screen.getByRole("button", { name: other.title }));
+      await flush();
+      await openFile("second.txt");
+      expect(preview).toHaveBeenLastCalledWith(other.id, "second.txt");
+
+      fireEvent.click(screen.getByRole("button", { name: session.title }));
+      await flush();
+      expect(screen.queryByRole("complementary", { name: "文件预览" })).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "预览项目文件" }));
+      expect(screen.getByRole("textbox", { name: "预览文件路径" })).toHaveValue("first.txt");
+      fireEvent.click(screen.getByRole("button", { name: "关闭预览" }));
+
+      fireEvent.click(screen.getByRole("button", { name: other.title }));
+      await flush();
+      expect(screen.getByRole("textbox", { name: "预览文件路径" })).toHaveValue("second.txt");
+    } finally {
+      preview.mockRestore();
+    }
+  });
+
+  it("opens a preview that arrived while a previously viewed conversation was in the background", async () => {
+    const other = { ...session, id: "other-background", title: "背景预览对话", updatedAt: 1 };
+    vi.mocked(agentApi.listSessions).mockResolvedValue([session, other]);
+    vi.mocked(agentApi.getSession).mockImplementation(async (id) =>
+      id === other.id ? { ...emptySnapshot(), session: other } : structuredClone(snapshot),
+    );
+    const preview = vi.spyOn(agentFilesApi, "preview").mockResolvedValue({
+      path: "result.html",
+      name: "result.html",
+      kind: "html",
+      content: "<p>result</p>",
+      mimeType: "text/html",
+      sizeBytes: 13,
+      truncated: false,
+    });
+    try {
+      render(<AgentPage />);
+      await flush();
+      fireEvent.click(screen.getByRole("button", { name: other.title }));
+      await flush();
+      snapshot.preview = {
+        kind: "file", id: "background-result", sessionId: session.id,
+        path: "result.html", createdAt: 3,
+      };
+      fireEvent.click(screen.getByRole("button", { name: session.title }));
+      await flush();
+      expect(screen.getByRole("complementary", { name: "文件预览" })).toBeVisible();
+      expect(preview).toHaveBeenLastCalledWith(session.id, "result.html");
+    } finally {
+      preview.mockRestore();
+    }
+  });
+
   it("keeps session status and file preview in the titlebar while preserving the composer", async () => {
     const view = render(<AgentPage />);
     await flush();
@@ -1170,9 +1926,12 @@ describe("AgentPage", () => {
       within(header).getByRole("button", { name: "预览项目文件" }),
     );
     await flush();
-    expect(
-      screen.getByRole("complementary", { name: "文件预览" }),
-    ).toBeVisible();
+    const panel = screen.getByRole("complementary", { name: "文件预览" });
+    expect(panel).toBeVisible();
+    fireEvent.change(
+      within(panel).getByRole("textbox", { name: "预览文件路径" }),
+      { target: { value: "saved-preview-path.html" } },
+    );
     expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
       "打开文件预览时保留的草稿",
     );
@@ -1184,14 +1943,23 @@ describe("AgentPage", () => {
     expect(
       screen.queryByRole("complementary", { name: "文件预览" }),
     ).not.toBeInTheDocument();
+    expect(panel).toBeInTheDocument();
+    expect(panel).not.toBeVisible();
     fireEvent.click(
       within(header).getByRole("button", { name: "预览项目文件" }),
     );
     await flush();
+    expect(screen.getByRole("complementary", { name: "文件预览" })).toBe(
+      panel,
+    );
+    expect(
+      within(panel).getByRole("textbox", { name: "预览文件路径" }),
+    ).toHaveValue("saved-preview-path.html");
     fireEvent.click(screen.getByRole("button", { name: "关闭预览" }));
     expect(
       screen.queryByRole("complementary", { name: "文件预览" }),
     ).not.toBeInTheDocument();
+    expect(panel).not.toBeInTheDocument();
     expect(agentApi.sendMessage).not.toHaveBeenCalled();
   });
 
@@ -1296,6 +2064,7 @@ describe("AgentPage", () => {
       ).toBeVisible();
       fireEvent.click(screen.getByRole("button", { name: "预览项目文件" }));
       await flush();
+      const preview = screen.getByRole("complementary", { name: "文件预览" });
       expect(
         screen.queryByRole("complementary", { name: "项目会话" }),
       ).not.toBeInTheDocument();
@@ -1307,6 +2076,11 @@ describe("AgentPage", () => {
       expect(
         screen.queryByRole("complementary", { name: "文件预览" }),
       ).not.toBeInTheDocument();
+      expect(preview).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "预览项目文件" }));
+      expect(screen.getByRole("complementary", { name: "文件预览" })).toBe(
+        preview,
+      );
     } finally {
       vi.unstubAllGlobals();
     }
@@ -1407,6 +2181,26 @@ describe("AgentPage", () => {
       permissionMode: "ask",
     });
     expect(agentApi.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("lets the user replace an old Harness permission placeholder", async () => {
+    snapshot.session.permissionMode = "harness_workspace";
+    render(<AgentPage />);
+    await flush();
+    expect(screen.getByRole("button", { name: "对话设置" })).toHaveTextContent(
+      "逐次确认",
+    );
+    const select = composerPermissionSelect();
+    expect(select).toBeEnabled();
+    expect(select).toHaveValue("ask");
+    expect(within(select).getAllByRole("option")).toHaveLength(3);
+
+    fireEvent.change(select, { target: { value: "auto" } });
+    await flush();
+    expect(agentApi.updateSession).toHaveBeenCalledWith(session.id, {
+      permissionMode: "auto",
+    });
+    expect(composerPermissionSelect()).toHaveValue("auto");
   });
 
   it("dismisses nested settings one level at a time and restores keyboard focus", async () => {
@@ -1859,8 +2653,65 @@ describe("AgentPage", () => {
     expect(agentApi.sendMessage).not.toHaveBeenCalled();
   });
 
-  it("presents queued question requests one at a time", async () => {
+  it("releases previews of a removed project and retains the other project's dock", async () => {
+    const owner = `${project}\0${session.id}`;
+    const other = "D:/fixture/other\0lc:other";
+    const layoutKey = "lolicode.agent.rightDock.v1";
+    const browserKey = "lolicode.agent.rightDockBrowser.v1";
+    const fileKey = "lolicode.agent.rightDockFiles.v1";
+    const saved = { panes: [{ tabs: ["browser:1"], active: "browser:1" }], focused: 0, folded: true, ratio: 0.5 };
+    localStorage.setItem(layoutKey, JSON.stringify({ [other]: saved }));
+    localStorage.setItem(browserKey, JSON.stringify({ [other]: [{ id: 1, url: "https://other.test/" }] }));
+    const url = "https://removed.test/";
+    snapshot.messages = [{
+      id: "removed-output", role: "assistant", createdAt: 3,
+      parts: [{ type: "text", text: `[文件](docs/report.md) [网页](${url})` }],
+    }];
+    vi.mocked(agentApi.removeProject).mockReset().mockResolvedValue();
+    const windows = vi.spyOn(platform, "isWindows").mockReturnValue(true);
+    const open = vi.spyOn(agentFilesApi, "openBrowser").mockResolvedValue({
+      kind: "browser", id: "removed-browser", sessionId: session.id,
+      browserId: "removed-browser", url, createdAt: 4, native: true,
+    });
+    const preview = vi.spyOn(agentFilesApi, "preview").mockResolvedValue({
+      path: "docs/report.md", name: "report.md", kind: "text", content: "report",
+      mimeType: "text/plain", sizeBytes: 6, truncated: false,
+    });
+    const close = vi.spyOn(agentFilesApi, "closeBrowser").mockResolvedValue();
+    const sync = vi.spyOn(agentFilesApi, "syncBrowserWebview").mockResolvedValue();
+    const page = render(<AgentPage />);
+    try {
+      await flush();
+      fireEvent.click(screen.getByRole("button", { name: "预览文件：docs/report.md" }));
+      fireEvent.click(screen.getByRole("link", { name: "网页" }));
+      await flush();
+      expect(JSON.parse(localStorage.getItem(fileKey)!)[owner]).toEqual({ path: "docs/report.md" });
+      expect(JSON.parse(localStorage.getItem(browserKey)!)[owner]).toHaveLength(1);
+
+      fireEvent.keyDown(screen.getByRole("button", { name: "管理项目：project" }), { key: "Enter" });
+      fireEvent.click(screen.getByRole("menuitem", { name: "移出项目列表" }));
+      await flush();
+      expect(agentApi.removeProject).toHaveBeenCalledWith(project);
+      expect(close).toHaveBeenCalledWith(session.id, "removed-browser");
+      expect(JSON.parse(localStorage.getItem(browserKey)!)).toEqual({
+        [other]: [{ id: 1, url: "https://other.test/" }],
+      });
+      expect(JSON.parse(localStorage.getItem(layoutKey)!)).toEqual({ [other]: saved });
+      expect(JSON.parse(localStorage.getItem(fileKey)!)).toEqual({});
+    } finally {
+      page.unmount();
+      await flush();
+      windows.mockRestore();
+      open.mockRestore();
+      preview.mockRestore();
+      close.mockRestore();
+      sync.mockRestore();
+    }
+  });
+
+  it("keeps genuine question requests answerable with full permissions", async () => {
     snapshot.status = "waiting_question";
+    snapshot.session.permissionMode = "full_access";
     snapshot.questions = [
       {
         id: "first-question",
@@ -1930,7 +2781,7 @@ describe("AgentPage", () => {
       catalog.defaultModel,
       "build",
       undefined,
-      "full_access",
+      undefined,
       undefined,
       path,
     );
@@ -2032,6 +2883,8 @@ describe("AgentPage", () => {
           scrollHeight: { configurable: true, value: 1600 },
           clientHeight: { configurable: true, value: 400 },
         });
+        chat.scrollTop = 1200;
+        fireEvent.scroll(chat);
         chat.scrollTop = 0;
         fireEvent.scroll(chat);
         fireEvent.click(screen.getByRole("button", { name: "回到最新" }));
@@ -2051,6 +2904,103 @@ describe("AgentPage", () => {
     },
   );
 
+  it("restores each conversation's reading position and follows the tail on send", async () => {
+    const other = { ...session, id: "other-scroll", title: "阅读另一会话", updatedAt: 1 };
+    vi.mocked(agentApi.listSessions).mockResolvedValue([session, other]);
+    vi.mocked(agentApi.getSession).mockImplementation(async (id) => ({
+      ...structuredClone(snapshot), session: id === other.id ? other : session,
+    }));
+    const height = vi.spyOn(Element.prototype, "scrollHeight", "get").mockReturnValue(1600);
+    const viewport = vi.spyOn(Element.prototype, "clientHeight", "get").mockReturnValue(400);
+    try {
+      const view = render(<AgentPage />);
+      await flush();
+      const chat = () => view.container.querySelector<HTMLDivElement>(".wb-chat")!;
+      chat().scrollTop = 170;
+      fireEvent.scroll(chat());
+      fireEvent.click(screen.getByRole("button", { name: other.title }));
+      await flush();
+      expect(chat().scrollTop).toBe(1600);
+      chat().scrollTop = 310;
+      fireEvent.scroll(chat());
+
+      fireEvent.click(screen.getByRole("button", { name: session.title }));
+      await flush();
+      expect(chat().scrollTop).toBe(170);
+      fill("发送后跟随最新消息");
+      fireEvent.click(screen.getByRole("button", { name: "发送" }));
+      expect(chat().scrollTop).toBe(1600);
+      await flush();
+
+      fireEvent.click(screen.getByRole("button", { name: other.title }));
+      await flush();
+      expect(chat().scrollTop).toBe(310);
+    } finally {
+      height.mockRestore();
+      viewport.mockRestore();
+    }
+  });
+
+  it("follows the committed send and keeps following after a delayed scroll event at the old floor", async () => {
+    let resizeChat: (() => void) | undefined;
+    let acknowledge!: () => void;
+    vi.stubGlobal("ResizeObserver", class {
+      constructor(private callback: () => void) {}
+      observe(target: Element) {
+        if (target.matches(".wb-chat-content")) resizeChat = this.callback;
+      }
+      unobserve() {}
+      disconnect() {}
+    });
+    vi.mocked(agentApi.sendMessage).mockReturnValueOnce(new Promise<void>((resolve) => {
+      acknowledge = resolve;
+    }));
+    try {
+      const view = render(<AgentPage />);
+      await flush();
+      const chat = view.container.querySelector<HTMLDivElement>(".wb-chat")!;
+      let replyGrowth = 0;
+      let position = 0;
+      Object.defineProperties(chat, {
+        scrollHeight: {
+          configurable: true,
+          get: () => (chat.querySelector(".wb-message-user") ? 1350 : 1000) + replyGrowth,
+        },
+        clientHeight: { configurable: true, value: 300 },
+        scrollTop: {
+          configurable: true,
+          get: () => position,
+          set: (value: number) => { position = Math.min(value, chat.scrollHeight - 300); },
+        },
+      });
+      chat.scrollTop = 700;
+      fireEvent.scroll(chat);
+      chat.scrollTop = 100;
+      fireEvent.scroll(chat);
+      expect(screen.getByRole("button", { name: "回到最新" })).toBeVisible();
+      fill("发完直接定位新气泡");
+      fireEvent.click(screen.getByRole("button", { name: "发送" }));
+      expect(chat.scrollTop).toBe(1050);
+
+      replyGrowth = 200;
+      fireEvent.scroll(chat);
+      expect(screen.queryByRole("button", { name: "回到最新" })).toBeNull();
+      expect(resizeChat).toBeDefined();
+      act(() => resizeChat?.());
+      expect(chat.scrollTop).toBe(1250);
+
+      chat.scrollTop = 900;
+      fireEvent.scroll(chat);
+      replyGrowth = 300;
+      act(() => resizeChat?.());
+      expect(chat.scrollTop).toBe(900);
+      await act(async () => acknowledge());
+      await flush();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("adds a task starter to the current draft without submitting or discarding existing text", async () => {
     render(<AgentPage />);
     await flush();
@@ -2063,7 +3013,7 @@ describe("AgentPage", () => {
     expect(input).toHaveFocus();
     expect(agentApi.sendMessage).not.toHaveBeenCalled();
     expect(
-      sessionStorage.getItem(
+      readAgentDraft(
         `lolicode.agent.draft:${encodeURIComponent(project)}:${session.id}`,
       ),
     ).toContain("保留这段需求");
@@ -2096,10 +3046,69 @@ describe("AgentPage", () => {
         ),
       ).toBeVisible();
       expect(
-        screen.getByRole("button", { name: "立即发送第 1 条消息" }),
+        screen.getByRole("button", { name: "插入当前任务第 1 条消息" }),
       ).toBeEnabled();
     },
   );
+  it("shows a queued draft immediately and hands it off by ID without waiting on the attachment cache", async () => {
+    snapshot.status = "running";
+    let finishCache!: () => void;
+    let finishEnqueue!: (result: { status: "accepted" }) => void;
+    const backup = vi
+      .spyOn(agentImageStore, "saveAgentImageAttachments")
+      .mockReturnValueOnce(new Promise((resolve) => (finishCache = resolve)));
+    vi.mocked(agentApi.enqueueMessage).mockReturnValueOnce(
+      new Promise((resolve) => (finishEnqueue = resolve)),
+    );
+    try {
+      render(<AgentPage />);
+      await flush();
+      fill("立刻显示的排队消息");
+      fireEvent.click(screen.getByRole("button", { name: "加入队列" }));
+
+      const queue = () =>
+        within(screen.getByRole("region", { name: "待发送消息" }));
+      expect(queue().getByText("立刻显示的排队消息")).toBeVisible();
+      expect(
+        queue().getByRole("button", { name: "正在加入队列的第 1 条消息" }),
+      ).toBeDisabled();
+      expect(agentApi.enqueueMessage).toHaveBeenCalledOnce();
+      expect(backup).toHaveBeenCalledOnce();
+
+      const requestId = vi.mocked(agentApi.enqueueMessage).mock.calls[0][2];
+      snapshot.queuedMessages = [{ id: requestId, text: "立刻显示的排队消息" }];
+      await tick();
+      expect(queue().getAllByText("立刻显示的排队消息")).toHaveLength(1);
+      expect(
+        queue().getByRole("button", { name: "插入当前任务第 1 条消息" }),
+      ).toBeDisabled();
+      await act(async () => finishEnqueue({ status: "accepted" }));
+      expect(
+        queue().getByRole("button", { name: "插入当前任务第 1 条消息" }),
+      ).toBeEnabled();
+
+      snapshot.queuedMessages = [];
+      snapshot.messages = [
+        {
+          id: requestId,
+          role: "user",
+          createdAt: 3,
+          parts: [{ type: "text", text: "立刻显示的排队消息" }],
+        },
+      ];
+      await tick();
+      expect(
+        screen.queryByRole("region", { name: "待发送消息" }),
+      ).not.toBeInTheDocument();
+      expect(screen.getAllByText("立刻显示的排队消息")).toHaveLength(1);
+    } finally {
+      await act(async () => {
+        finishCache();
+        finishEnqueue({ status: "accepted" });
+      });
+      backup.mockRestore();
+    }
+  });
   it("preserves newer edits when an enqueue acknowledgement arrives late", async () => {
     snapshot.status = "running";
     let finish!: () => void;
@@ -2161,6 +3170,9 @@ describe("AgentPage", () => {
       "超出队列容量的草稿",
     );
     expect(screen.getByText("队列已满")).toBeVisible();
+    expect(
+      screen.queryByRole("region", { name: "待发送消息" }),
+    ).not.toBeInTheDocument();
     fill("修改后重新排队");
     fireEvent.click(screen.getByRole("button", { name: "加入队列" }));
     await flush();
@@ -2335,7 +3347,7 @@ describe("AgentPage", () => {
       "不能丢的撤回消息",
     );
   });
-  it("sends the selected queued item now without consuming the current draft", async () => {
+  it("steers the selected queued item without consuming the current draft", async () => {
     snapshot.status = "running";
     snapshot.queuedMessages = [
       { id: "queue-first", text: "稍后任务", attachments: [] },
@@ -2345,12 +3357,13 @@ describe("AgentPage", () => {
     await flush();
     fill("继续写的草稿");
     fireEvent.click(
-      screen.getByRole("button", { name: "立即发送第 2 条消息" }),
+      screen.getByRole("button", { name: "插入当前任务第 2 条消息" }),
     );
     await flush();
     expect(agentApi.sendQueuedMessageNow).toHaveBeenCalledWith(
       session.id,
       "queue-priority",
+      true,
     );
     expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
       "继续写的草稿",
@@ -2379,238 +3392,79 @@ describe("AgentPage", () => {
       "保留编辑内容",
     );
   });
-  it("interrupts once, waits for actual tool settlement, and sends only the captured draft while preserving newer edits", async () => {
-    snapshot.status = "running";
-    snapshot.messages = [
-      {
-        id: "old-user",
-        role: "user",
-        createdAt: 3,
-        parts: [{ type: "text", text: "旧任务" }],
-      },
-      {
-        id: "old-assistant",
-        role: "assistant",
-        createdAt: 4,
-        parts: [
-          { type: "text", text: "原任务的部分结果" },
-          {
-            type: "tool",
-            id: "old-tool",
-            name: "shell",
-            state: "running",
-            input: { command: "owned fixture" },
-          },
-        ],
-      },
-    ];
-    render(<AgentPage />);
-    await flush();
-    const input = screen.getByLabelText("发送给 Agent 的消息");
-    expect(input).toHaveAttribute("rows", "1");
-    fill("现在改为检查文件");
-    fireEvent.click(screen.getByRole("button", { name: "打断并发送" }));
-    fireEvent.submit(input.closest("form")!);
-    await flush();
-    expect(agentApi.interruptSession).toHaveBeenCalledOnce();
-    expect(agentApi.sendMessage).not.toHaveBeenCalled();
-    expect(input).toBeEnabled();
-    fill("等待时新写的下一条草稿");
-    snapshot.status = "idle";
-    await tick(250);
-    expect(agentApi.sendMessage).not.toHaveBeenCalled();
-    snapshot.messages[1].completedAt = 5;
-    snapshot.messages[1].parts[1] = {
-      type: "tool",
-      id: "old-tool",
-      name: "shell",
-      state: "error",
-      input: { command: "owned fixture" },
-      error: "任务已停止",
-    };
-    await tick(250);
-    expect(agentApi.sendMessage).toHaveBeenCalledOnce();
-    expect(agentApi.sendMessage).toHaveBeenCalledWith(
-      session.id,
-      "现在改为检查文件",
-      expect.any(String),
-      [],
-      [],
-    );
-    expect(vi.mocked(agentApi.sendMessage).mock.calls[0][2]).not.toBe(
-      "old-user",
-    );
-    expect(input).toHaveValue("等待时新写的下一条草稿");
-    expect(screen.getByText("原任务的部分结果")).toBeInTheDocument();
-  });
+  it.each([{ ctrlKey: true }, { metaKey: true }])(
+    "inserts the composer input immediately without stopping or replacing the current task (%o)",
+    async (shortcut) => {
+      snapshot.status = "running";
+      snapshot.messages = [{
+        id: "active-answer", role: "assistant", createdAt: 3,
+        parts: [{ type: "text", text: "原任务正在输出" }],
+      }];
+      let acknowledge!: (receipt: { status: "accepted" }) => void;
+      vi.mocked(agentApi.enqueueMessage).mockReturnValueOnce(
+        new Promise((resolve) => { acknowledge = resolve; }),
+      );
+      render(<AgentPage />);
+      await flush();
+      fill("插入这条当前任务指令");
+      const input = screen.getByLabelText("发送给 Agent 的消息");
+      fireEvent.keyDown(input, { key: "Enter", ...shortcut });
+      const row = screen.getByRole("article", { name: "你的消息" });
+      expect(row).toHaveTextContent("插入这条当前任务指令");
+      expect(screen.getByText("原任务正在输出")).toBeInTheDocument();
+      expect(screen.queryByRole("region", { name: "待发送消息" })).toBeNull();
+      expect(agentApi.interruptSession).not.toHaveBeenCalled();
+      expect(agentApi.sendMessage).not.toHaveBeenCalled();
+      expect(agentApi.enqueueMessage).toHaveBeenCalledOnce();
+      const requestId = vi.mocked(agentApi.enqueueMessage).mock.calls[0][2];
+      expect(agentApi.enqueueMessage).toHaveBeenCalledWith(
+        session.id, "插入这条当前任务指令", requestId, [], [], "steer",
+      );
+      fill("另一条未发送的草稿");
+      await act(async () => acknowledge({ status: "accepted" }));
+      snapshot.messages.push({
+        id: requestId, role: "user", createdAt: 4,
+        parts: [{ type: "text", text: "插入这条当前任务指令" }],
+      });
+      await tick();
+      expect(screen.getByRole("article", { name: "你的消息" })).toBe(row);
+      expect(input).toHaveValue("另一条未发送的草稿");
+    },
+  );
 
-  it("keeps the replacement draft and original results when Stop fails, then allows an explicit retry", async () => {
+  it("keeps a direct steering draft when the current turn ends before admission", async () => {
     snapshot.status = "running";
-    snapshot.messages = [
-      {
-        id: "partial",
-        role: "assistant",
-        createdAt: 3,
-        parts: [{ type: "text", text: "已完成的旧步骤" }],
-      },
-    ];
-    vi.mocked(agentApi.interruptSession).mockRejectedValueOnce(
-      new Error("无法确认停止"),
-    );
-    render(<AgentPage />);
-    await flush();
-    fill("改做新的任务");
-    fireEvent.click(screen.getByRole("button", { name: "打断并发送" }));
-    await flush();
-    expect(agentApi.sendMessage).not.toHaveBeenCalled();
-    expect(screen.getByText("无法确认停止")).toBeInTheDocument();
-    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
-      "改做新的任务",
-    );
-    expect(screen.getByText("已完成的旧步骤")).toBeInTheDocument();
-    vi.mocked(agentApi.interruptSession).mockImplementation(async () => {
-      snapshot.status = "idle";
-    });
-    fireEvent.click(screen.getByRole("button", { name: "打断并发送" }));
-    await flush();
-    expect(agentApi.interruptSession).toHaveBeenCalledTimes(2);
-    expect(agentApi.sendMessage).toHaveBeenCalledOnce();
-  });
-
-  it("never sends a replacement after cancellation times out or an unknown input is admitted later", async () => {
-    snapshot.session.id = "lc:unknown-replacement";
-    snapshot.status = "running";
-    vi.mocked(agentApi.listSessions).mockResolvedValue([snapshot.session]);
-    const key = `lolicode.agent.draft:${encodeURIComponent(project)}:${encodeURIComponent(snapshot.session.id)}`;
-    saveAgentSubmission({
-      version: 1,
-      projectPath: project,
-      sessionId: snapshot.session.id,
-      requestId: "unconfirmed-original",
-      text: "原输入",
-      draft: captureAgentDraft(key, "原输入"),
-      assistantIds: [],
-      phase: "uncertain",
-      observed: false,
-      stopRequested: false,
+    vi.mocked(agentApi.enqueueMessage).mockResolvedValueOnce({
+      status: "rejected", message: "当前任务已经结束，草稿已保留。",
     });
     render(<AgentPage />);
     await flush();
-    fill("保留这个新草稿");
-    fireEvent.click(screen.getByRole("button", { name: "打断并发送" }));
+    fill("保留这条补充说明");
+    fireEvent.click(screen.getByRole("button", { name: "插入当前任务" }));
     await flush();
-    await tick(30_000);
-    expect(screen.getByText(/停止确认超时/)).toBeInTheDocument();
+    expect(screen.queryByRole("article", { name: "你的消息" })).toBeNull();
+    expect(screen.getByText("当前任务已经结束，草稿已保留。")).toBeVisible();
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue("保留这条补充说明");
+    expect(agentApi.interruptSession).not.toHaveBeenCalled();
     expect(agentApi.sendMessage).not.toHaveBeenCalled();
-    expect(readAgentSubmission(project, snapshot.session.id)?.requestId).toBe(
-      "unconfirmed-original",
-    );
-    snapshot.status = "idle";
-    snapshot.messages = [
-      {
-        id: "unconfirmed-original",
-        role: "user",
-        createdAt: 3,
-        parts: [{ type: "text", text: "原输入" }],
-      },
-    ];
-    vi.mocked(agentApi.queryCommand).mockResolvedValue({ status: "accepted" });
-    await tick(6000);
-    expect(agentApi.interruptSession).toHaveBeenCalledTimes(2);
-    expect(agentApi.sendMessage).not.toHaveBeenCalled();
-    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
-      "保留这个新草稿",
-    );
   });
 
-  it("abandons a replacement when switching away and back before a late Stop ACK", async () => {
-    const second = { ...session, id: "second", title: "另一段任务" };
+  it("retries an unknown steering result with the original request and delivery", async () => {
     snapshot.status = "running";
-    vi.mocked(agentApi.listSessions).mockResolvedValue([session, second]);
-    vi.mocked(agentApi.getSession).mockImplementation(async (id) =>
-      id === session.id
-        ? structuredClone(snapshot)
-        : { ...emptySnapshot(), session: second },
-    );
-    let finishStop!: () => void;
-    vi.mocked(agentApi.interruptSession).mockReturnValueOnce(
-      new Promise((resolve) => {
-        finishStop = resolve;
-        pendingStopCleanups.add(resolve);
-      }),
-    );
+    vi.mocked(agentApi.enqueueMessage).mockRejectedValueOnce(new Error("回执暂未确认"));
     render(<AgentPage />);
     await flush();
-    fill("原会话未发送的草稿");
-    fireEvent.click(screen.getByRole("button", { name: "打断并发送" }));
+    fill("重试同一条插入消息");
+    fireEvent.click(screen.getByRole("button", { name: "插入当前任务" }));
     await flush();
-    fireEvent.click(screen.getByRole("button", { name: /^另一段任务/ }));
+    expect(screen.getByText("回执暂未确认")).toBeVisible();
+    expect(screen.queryByRole("article", { name: "你的消息" })).toBeNull();
+    fireEvent.keyDown(screen.getByLabelText("发送给 Agent 的消息"), { key: "Enter" });
     await flush();
-    fill("另一会话草稿");
-    fireEvent.click(screen.getByRole("button", { name: /^修复测试/ }));
-    await flush();
-    await tick(100);
-    await act(async () => finishStop());
-    snapshot.status = "idle";
-    await tick(1500);
-    expect(agentApi.sendMessage).not.toHaveBeenCalled();
-    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
-      "原会话未发送的草稿",
-    );
-    fireEvent.click(screen.getByRole("button", { name: /^另一段任务/ }));
-    await flush();
-    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
-      "另一会话草稿",
-    );
-  });
-
-  it("abandons a replacement when the project changes during cancellation", async () => {
-    snapshot.status = "running";
-    const otherProject = "D:/fixture/other";
-    const otherSession = {
-      ...session,
-      id: "other-project-session",
-      projectPath: otherProject,
-      title: "其他项目任务",
-    };
-    vi.mocked(agentApi.openProject).mockResolvedValue({
-      workspace: { path: otherProject, name: "other" },
-      catalog,
-      sessions: [otherSession],
-    });
-    vi.mocked(agentApi.getSession).mockImplementation(async (id) =>
-      id === session.id
-        ? structuredClone(snapshot)
-        : { ...emptySnapshot(), session: otherSession },
-    );
-    let finishStop!: () => void;
-    vi.mocked(agentApi.interruptSession).mockReturnValueOnce(
-      new Promise((resolve) => {
-        finishStop = resolve;
-        pendingStopCleanups.add(resolve);
-      }),
-    );
-    render(<AgentPage />);
-    await flush();
-    fill("原项目草稿");
-    fireEvent.click(screen.getByRole("button", { name: "打断并发送" }));
-    await flush();
-    await expectFolderEnabled();
-    await openFolder();
-    await flush();
-    fill("新项目草稿");
-    await tick(100);
-    await act(async () => finishStop());
-    await tick(1000);
-    expect(agentApi.sendMessage).not.toHaveBeenCalled();
-    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
-      "新项目草稿",
-    );
-    expect(
-      sessionStorage.getItem(
-        `lolicode.agent.draft:${encodeURIComponent(project)}:${encodeURIComponent(session.id)}`,
-      ),
-    ).toBe("原项目草稿");
+    const calls = vi.mocked(agentApi.enqueueMessage).mock.calls;
+    expect(calls).toHaveLength(2);
+    expect(calls[1]).toEqual(calls[0]);
+    expect(calls[1][5]).toBe("steer");
   });
 
   it("converts an idle historical plan session only after a user send and waits for acknowledgement", async () => {
@@ -3008,7 +3862,7 @@ describe("AgentPage", () => {
     });
     expect(composerPermissionSelect()).toHaveAttribute(
       "title",
-      expect.stringContaining("常规编辑和安全命令自动允许"),
+      expect.stringContaining("允许工作区内的常规操作"),
     );
     expect(
       screen.queryByText(/常规编辑与已识别的安全命令自动允许/),
@@ -3038,7 +3892,7 @@ describe("AgentPage", () => {
     expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
       "保留待发送的要求",
     );
-    expect(screen.getByRole("button", { name: "打断并发送" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "插入当前任务" })).toBeEnabled();
     expect(agentApi.sendMessage).not.toHaveBeenCalled();
   });
 
@@ -3197,7 +4051,7 @@ describe("AgentPage", () => {
       catalog.models[0].id,
       "build",
       undefined,
-      "full_access",
+      undefined,
       "high",
     );
   });
@@ -3223,7 +4077,7 @@ describe("AgentPage", () => {
       catalog.models[0].id,
       "build",
       undefined,
-      "full_access",
+      undefined,
       undefined,
       undefined,
       1000000,
@@ -3252,12 +4106,12 @@ describe("AgentPage", () => {
       catalog.models[1].id,
       "build",
       undefined,
-      "full_access",
+      undefined,
       undefined,
     );
   });
 
-  it("defaults a new task to full access and creates it without a permission confirmation", async () => {
+  it("displays full permissions for a new local task and leaves the default to the host", async () => {
     vi.mocked(agentApi.listSessions).mockResolvedValue([]);
     render(<AgentPage />);
     await flush();
@@ -3270,30 +4124,77 @@ describe("AgentPage", () => {
       catalog.defaultModel,
       "build",
       undefined,
-      "full_access",
+      undefined,
       undefined,
     );
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("honors an explicit ask selection for a new task", async () => {
+  it.each(["ask", "auto"] as const)(
+    "honors an explicit %s selection for a new local task",
+    async (mode) => {
+      vi.mocked(agentApi.listSessions).mockResolvedValue([]);
+      render(<AgentPage />);
+      await flush();
+      const select = composerPermissionSelect();
+      expect(select).toHaveValue("full_access");
+      fireEvent.change(select, { target: { value: mode } });
+      expect(select).toHaveValue(mode);
+      fireEvent.click(sessionCreationButton());
+      await flush();
+      expect(agentApi.createSession).toHaveBeenCalledWith(
+        catalog.defaultModel,
+        "build",
+        undefined,
+        mode,
+        undefined,
+      );
+      expect(agentApi.updateSession).not.toHaveBeenCalled();
+    },
+  );
+
+  it("keeps a restored remote workspace on its review default", async () => {
     vi.mocked(agentApi.listSessions).mockResolvedValue([]);
+    vi.mocked(agentApi.listProjects).mockResolvedValue([
+      {
+        path: project,
+        name: "remote",
+        pinned: false,
+        lastOpenedAt: 2,
+        remote: { connectionName: "fixture", root: "/project", kind: "ssh" },
+      },
+    ]);
     render(<AgentPage />);
     await flush();
-    expect(composerPermissionSelect()).toHaveValue("full_access");
-    fireEvent.change(composerPermissionSelect(), {
-      target: { value: "ask" },
-    });
-    expect(composerPermissionSelect()).toHaveValue("ask");
+    const select = composerPermissionSelect();
+    expect(select).toHaveValue("ask");
+    expect(
+      within(select).queryByRole("option", { name: "完整权限" }),
+    ).not.toBeInTheDocument();
     fireEvent.click(sessionCreationButton());
     await flush();
     expect(agentApi.createSession).toHaveBeenCalledWith(
       catalog.defaultModel,
       "build",
       undefined,
-      "ask",
+      undefined,
       undefined,
     );
+  });
+
+  it("does not advertise full permissions while a historical plan is read-only", async () => {
+    snapshot.session.mode = "plan";
+    snapshot.session.permissionMode = "full_access";
+    render(<AgentPage />);
+    await flush();
+    expect(screen.getByRole("button", { name: "对话设置" })).toHaveTextContent(
+      "计划模式",
+    );
+    const select = composerPermissionSelect();
+    expect(select).toHaveValue("full_access");
+    expect(
+      screen.getByText("当前计划模式只读。执行权限设置在执行模式下生效。"),
+    ).toBeVisible();
     expect(agentApi.updateSession).not.toHaveBeenCalled();
   });
 
@@ -3313,7 +4214,7 @@ describe("AgentPage", () => {
     expect(agentApi.createSession).not.toHaveBeenCalled();
   });
 
-  it("keeps the new-task full-access default separate from an existing task's permission changes", async () => {
+  it("keeps the local default separate from an existing task's permission changes", async () => {
     snapshot.session.permissionMode = "ask";
     render(<AgentPage />);
     await flush();
@@ -3331,12 +4232,12 @@ describe("AgentPage", () => {
       catalog.defaultModel,
       "build",
       undefined,
-      "full_access",
+      undefined,
       undefined,
     );
   });
 
-  it("creates a full-access task directly when composing a workflow from an empty workspace", async () => {
+  it("creates a task with the default approval mode when composing a workflow", async () => {
     vi.mocked(agentApi.listSessions).mockResolvedValue([]);
     snapshot.session.id = "lc:new";
     render(<AgentPage toolRequest={{ tool: "workflows", id: 1 }} />);
@@ -3347,7 +4248,7 @@ describe("AgentPage", () => {
       catalog.defaultModel,
       "build",
       undefined,
-      "full_access",
+      undefined,
     );
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveProperty(
@@ -3375,7 +4276,7 @@ describe("AgentPage", () => {
   });
 
   it.each(["running", "waiting_permission", "waiting_question"] as const)(
-    "changes model and permissions during %s while a replacement waits for cancellation",
+    "changes model and permissions during %s while still allowing steering",
     async (status) => {
       snapshot.status = status;
       render(<AgentPage />);
@@ -3404,18 +4305,16 @@ describe("AgentPage", () => {
       const input = screen.getByLabelText("发送给 Agent 的消息");
       expect(input).toHaveValue("任务结束后再发送的草稿");
       expect(input).toBeEnabled();
-      expect(screen.getByRole("button", { name: "打断并发送" })).toBeEnabled();
+      expect(screen.getByRole("button", { name: "插入当前任务" })).toBeEnabled();
       fireEvent.keyDown(input, { key: "Enter", ctrlKey: true });
       fireEvent.submit(input.closest("form")!);
       await flush();
       expect(agentApi.sendMessage).not.toHaveBeenCalled();
-      expect(agentApi.interruptSession).toHaveBeenCalledOnce();
+      expect(agentApi.interruptSession).not.toHaveBeenCalled();
+      expect(agentApi.enqueueMessage).toHaveBeenCalledOnce();
       expect(
         screen.queryByText(/模型与思考档位从下一次模型请求生效/),
       ).not.toBeInTheDocument();
-      snapshot.status = "idle";
-      await tick(250);
-      expect(agentApi.sendMessage).toHaveBeenCalledOnce();
     },
   );
 
@@ -3437,6 +4336,78 @@ describe("AgentPage", () => {
     await flush();
     expect(agentApi.interruptSession).toHaveBeenCalledOnce();
     await act(async () => finish({ ...session, model: catalog.models[1] }));
+  });
+
+  it("restores the last selected conversation when the desktop host restarts", async () => {
+    const selected = {
+      ...session,
+      id: "selected-earlier",
+      title: "上次打开的会话",
+    };
+    vi.mocked(agentApi.listSessions).mockResolvedValue([session, selected]);
+    vi.mocked(agentApi.getSession).mockImplementation(async (id) => ({
+      ...emptySnapshot(),
+      session: id === selected.id ? selected : session,
+    }));
+    const original = render(<AgentPage />);
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: /^上次打开的会话/ }));
+    await flush();
+    expect(agentApi.getSession).toHaveBeenLastCalledWith(selected.id);
+    fill("桌面重启前未提交的草稿");
+    original.unmount();
+    sessionStorage.clear();
+
+    vi.mocked(agentApi.getStatus).mockResolvedValue({
+      available: true,
+      running: true,
+    });
+    vi.mocked(agentApi.openProject).mockResolvedValue({
+      workspace: { path: project, name: "project" },
+      catalog,
+      sessions: [session, selected],
+    });
+    vi.mocked(agentApi.getSession).mockClear();
+    render(<AgentPage />);
+    await flush();
+    expect(agentApi.openProject).toHaveBeenCalledOnce();
+    expect(agentApi.openProject).toHaveBeenCalledWith(project);
+    expect(agentApi.getSession).toHaveBeenCalledWith(selected.id);
+    expect(agentApi.getSession).not.toHaveBeenCalledWith(session.id);
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
+      "桌面重启前未提交的草稿",
+    );
+  });
+
+  it("ignores saved workspace paths that the native project list does not recognize", async () => {
+    localStorage.setItem(
+      "lolicode.agent.last-selection.v1",
+      JSON.stringify({
+        projectPath: "D:/fixture/not-in-the-workbench",
+        sessionId: session.id,
+      }),
+    );
+    vi.mocked(agentApi.getStatus).mockResolvedValue({
+      available: true,
+      running: true,
+    });
+    render(<AgentPage />);
+    await flush();
+    expect(agentApi.openProject).not.toHaveBeenCalled();
+    expect(agentApi.getSession).not.toHaveBeenCalled();
+  });
+
+  it("falls back to an unarchived conversation when the saved selection was archived", async () => {
+    const archived = { ...session, id: "archived-selection", archived: true };
+    localStorage.setItem(
+      "lolicode.agent.last-selection.v1",
+      JSON.stringify({ projectPath: project, sessionId: archived.id }),
+    );
+    vi.mocked(agentApi.listSessions).mockResolvedValue([archived, session]);
+    render(<AgentPage />);
+    await flush();
+    expect(agentApi.getSession).toHaveBeenCalledWith(session.id);
+    expect(agentApi.getSession).not.toHaveBeenCalledWith(archived.id);
   });
 
   it("switches projects while a previous task continues and preserves its isolated draft", async () => {
@@ -3473,7 +4444,7 @@ describe("AgentPage", () => {
     expect(agentApi.getSession).toHaveBeenCalledWith(session.id);
     expect(agentApi.interruptSession).not.toHaveBeenCalled();
     expect(
-      sessionStorage.getItem(
+      readAgentDraft(
         `lolicode.agent.draft:${encodeURIComponent(project)}:${encodeURIComponent(session.id)}`,
       ),
     ).toBe("原项目后续输入");
@@ -3903,7 +4874,7 @@ describe("AgentPage", () => {
       catalog.models[1].id,
       "build",
       undefined,
-      "full_access",
+      undefined,
       undefined,
     );
     expect(agentApi.openProject).not.toHaveBeenCalled();
@@ -4013,7 +4984,7 @@ describe("AgentPage", () => {
       "lolicode/new-channel/new-model",
       "build",
       undefined,
-      "full_access",
+      undefined,
       undefined,
     );
   });
@@ -4121,6 +5092,60 @@ describe("AgentPage", () => {
     expect(screen.getByRole("button", { name: "发送" })).toBeEnabled();
   });
 
+  it("shows a message with its image immediately, then replaces it in place when Harness publishes it", async () => {
+    let acknowledge!: () => void;
+    let finishBackup!: () => void;
+    vi.mocked(agentApi.sendMessage).mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        acknowledge = resolve;
+      }),
+    );
+    const backup = vi.spyOn(agentImageStore, "saveAgentImageAttachments");
+    backup.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        finishBackup = resolve;
+      }),
+    );
+    try {
+      const view = render(<AgentPage />);
+      await flush();
+      fireEvent.change(view.container.querySelector('input[type="file"]')!, {
+        target: {
+          files: [new File(["test"], "preview.png", { type: "image/png" })],
+        },
+      });
+      await tick(100);
+      expect(
+        screen.getByRole("button", { name: "移除图片：preview.png" }),
+      ).toBeVisible();
+      fill("现在显示这条消息");
+      fireEvent.click(screen.getByRole("button", { name: "发送" }));
+
+      const row = screen.getByRole("article", { name: "你的消息" });
+      expect(row).toHaveTextContent("现在显示这条消息");
+      expect(within(row).getByRole("img", { name: "preview.png" })).toBeVisible();
+      expect(screen.queryByText("今天想完成什么？")).not.toBeInTheDocument();
+      expect(agentApi.sendMessage).toHaveBeenCalledOnce();
+      const requestId = vi.mocked(agentApi.sendMessage).mock.calls[0][2];
+      await act(async () => acknowledge());
+      await flush();
+      expect(screen.getByRole("article", { name: "你的消息" })).toBe(row);
+
+      snapshot.status = "running";
+      snapshot.messages = [{
+        id: requestId,
+        role: "user",
+        createdAt: 2,
+        parts: [{ type: "text", text: "现在显示这条消息" }],
+      }];
+      await tick();
+      expect(screen.getByRole("article", { name: "你的消息" })).toBe(row);
+    } finally {
+      finishBackup();
+      backup.mockRestore();
+    }
+  });
+
   it("persists the submission before IPC and reuses its request id after an uncertain transport failure", async () => {
     vi.mocked(agentApi.sendMessage).mockImplementationOnce(
       async (id, text, requestId) => {
@@ -4141,9 +5166,15 @@ describe("AgentPage", () => {
     fill("需要可靠接收的任务");
     fireEvent.click(screen.getByRole("button", { name: "发送" }));
     await flush();
+    expect(
+      screen.queryByRole("article", { name: "你的消息" }),
+    ).not.toBeInTheDocument();
     const requestId = vi.mocked(agentApi.sendMessage).mock.calls[0][2];
     view.unmount();
-    sessionStorage.clear(); // A renderer/app reload loses its old JS draft store.
+    sessionStorage.clear();
+    localStorage.removeItem(
+      `lolicode.agent.draft-record:lolicode.agent.draft:${encodeURIComponent(project)}:${session.id}`,
+    ); // Recover the draft from the submission when its own record is missing.
     render(<AgentPage />);
     await flush();
     expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
@@ -4174,6 +5205,7 @@ describe("AgentPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "发送" }));
     await flush();
     first.unmount();
+    sessionStorage.clear();
     const second = render(<AgentPage />);
     await flush();
     fill("下一条尚未提交的 B");
@@ -4182,6 +5214,7 @@ describe("AgentPage", () => {
     });
     await flush();
     second.unmount();
+    sessionStorage.clear();
     render(<AgentPage />);
     await flush();
     expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
@@ -4349,6 +5382,22 @@ describe("AgentPage", () => {
     fill("保留给用户手动继续的草稿");
     expect(screen.getByRole("button", { name: "发送" })).toBeEnabled();
     expect(agentApi.sendMessage).toHaveBeenCalledOnce();
+    const [original] = vi.mocked(agentApi.sendMessage).mock.calls;
+    fireEvent.click(screen.getByRole("button", { name: "重试" }));
+    await flush();
+    const calls = vi.mocked(agentApi.sendMessage).mock.calls;
+    expect(calls).toHaveLength(2);
+    expect(calls[1]).toEqual([
+      session.id,
+      original[1],
+      expect.any(String),
+      [],
+      [],
+    ]);
+    expect(calls[1][2]).not.toBe(original[2]);
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
+      "保留给用户手动继续的草稿",
+    );
     expect(agentApi.updateSession).not.toHaveBeenCalled();
     expect(agentApi.deleteSession).not.toHaveBeenCalled();
   });

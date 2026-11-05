@@ -43,7 +43,7 @@ mod store;
 
 /// Isolated, opt-in check in the same executable; does not initialize the desktop.
 pub fn check_builtin_agent_runtime() -> i32 {
-    services::inprocess_diagnostics::run()
+    services::harness_diagnostics::run()
 }
 
 mod tray;
@@ -1362,6 +1362,7 @@ pub fn run() {
             // 将同一个实例注入到全局状态，避免重复创建导致的不一致
             app.manage(app_state);
             app.manage(services::inprocess_agent::InprocessAgentState::default());
+            app.manage(services::agent_terminal::AgentTerminals::default());
             app.manage(services::mobile_companion::MobileCompanionState::new(app.state::<AppState>().db.clone()));
             app.manage(services::lolicode_account::LolicodeAccountState::default());
 
@@ -1954,6 +1955,7 @@ pub fn run() {
             commands::delegate_agent_secretary_task,
             commands::send_agent_secretary_task_message,
             commands::cancel_agent_secretary_task,
+            commands::delete_agent_secretary_task,
             commands::get_agent_secretary_github,
             commands::bind_agent_secretary_github,
             commands::refresh_agent_secretary_github,
@@ -2048,6 +2050,17 @@ pub fn run() {
             commands::configure_agent_memory,
             commands::clear_agent_memory,
             commands::preview_agent_file,
+            commands::list_agent_workspace_directory,
+            commands::agent_terminal::start_agent_terminal,
+            commands::agent_terminal::get_agent_terminal,
+            commands::agent_terminal::write_agent_terminal,
+            commands::agent_terminal::resize_agent_terminal,
+            commands::agent_terminal::close_agent_terminal,
+            commands::open_agent_browser_preview,
+            commands::preview_agent_browser_frame,
+            commands::sync_agent_browser_preview_webview,
+            commands::navigate_agent_browser_preview,
+            commands::close_agent_browser_preview,
             commands::invoke_agent_document,
             commands::connect_agent_mcp,
             commands::open_agent_path,

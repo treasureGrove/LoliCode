@@ -145,6 +145,7 @@ mod tests {
             tool_name: None,
             tool_input: None,
             approval_mode: None,
+            edit_preview: None,
         };
         assert!(!approve_automatically(
             &request,

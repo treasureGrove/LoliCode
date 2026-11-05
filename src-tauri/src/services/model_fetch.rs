@@ -33,6 +33,8 @@ pub struct FetchedModelMetadata {
     pub output_limit: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reasoning_efforts: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_modalities: Option<Vec<String>>,
 }
 
 fn declared_efforts(values: &[serde_json::Value]) -> Option<Vec<String>> {
@@ -265,6 +267,7 @@ pub fn declared_model_metadata(entry: &serde_json::Value) -> FetchedModelMetadat
             "/limit/output",
         ]),
         reasoning_efforts,
+        input_modalities: crate::model_capabilities::declared_input_modalities(entry),
     }
 }
 
@@ -647,6 +650,27 @@ fn ends_with_version_segment(url: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn model_directory_metadata_carries_declared_image_support() {
+        let entry = serde_json::json!({
+            "id": "managed-vision",
+            "capabilities": {"supports": {"vision": true}}
+        });
+        let model = FetchedModel {
+            id: "managed-vision".into(),
+            owned_by: None,
+            metadata: declared_model_metadata(&entry),
+        };
+        assert_eq!(
+            serde_json::to_value(model).unwrap()["inputModalities"],
+            serde_json::json!(["text", "image"])
+        );
+        assert_eq!(
+            declared_model_metadata(&serde_json::json!({"id": "another-model"})).input_modalities,
+            None
+        );
+    }
 
     #[test]
     fn copilot_billing_tiers_keep_prompt_choices_separate_from_total_and_output_limits() {

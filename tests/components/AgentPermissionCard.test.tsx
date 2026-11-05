@@ -16,6 +16,38 @@ const permission = (
 });
 
 describe("AgentPermissionCard native previews", () => {
+  it("shows the native edit diff before one-time approval", async () => {
+    const reply = vi.fn().mockResolvedValue(undefined);
+    render(
+      <AgentPermissionCard
+        request={permission({
+          action: "edit",
+          toolName: "apply_patch",
+          toolInput: {
+            path: "readme.md",
+            old_text: "before",
+            new_text: "after",
+          },
+          editPreview:
+            "--- a/readme.md\n+++ b/readme.md\n@@ -1 +1 @@\n-before\n+after\n",
+        })}
+        onReply={reply}
+      />,
+    );
+    expect(screen.getByLabelText("待应用的差异")).toHaveTextContent(
+      "-before +after",
+    );
+    expect(screen.queryByLabelText("待替换文本")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "此项目记住授权" }),
+    ).toBeDisabled();
+    expect(reply).not.toHaveBeenCalled();
+    await act(async () =>
+      fireEvent.click(screen.getByRole("button", { name: "允许一次" })),
+    );
+    expect(reply).toHaveBeenCalledWith("once");
+  });
+
   it("does not allow another decision after the backend acknowledges it", async () => {
     const reply = vi.fn().mockResolvedValue(undefined);
     render(<AgentPermissionCard request={permission()} onReply={reply} />);

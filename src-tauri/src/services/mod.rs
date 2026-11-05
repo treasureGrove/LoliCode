@@ -1,12 +1,19 @@
 #[cfg(any(test, feature = "test-hooks"))]
 pub mod agent;
 pub mod agent_automation;
+mod agent_browser;
+#[cfg(target_os = "windows")]
+mod agent_preview_guest;
+mod agent_preview_navigation;
+pub(crate) use agent_preview_navigation::PreviewNavigation;
 pub mod agent_extensions;
 pub mod agent_history;
 pub mod agent_host;
 #[cfg(any(test, feature = "test-hooks"))]
 pub mod agent_policy;
 pub mod agent_preferences;
+pub(crate) mod agent_terminal;
+mod agent_web;
 pub mod agent_workflows;
 pub mod backup_storage;
 pub mod balance;
@@ -22,10 +29,26 @@ pub mod discovery;
 pub mod env_checker;
 pub mod env_manager;
 pub mod external_agent_config;
+mod harness_automation;
+mod harness_desktop;
+pub(crate) mod harness_diagnostics;
+mod harness_events;
+mod harness_gateway;
+mod harness_mcp;
+mod harness_migration;
+mod harness_paths;
+mod harness_preview;
+pub(crate) use harness_preview::{PreviewBounds, PreviewPresentation};
+mod harness_questions;
+mod harness_remote;
+mod harness_runtime;
+mod harness_secretary;
+mod harness_session_sync;
+mod harness_sessions;
+mod harness_snapshot;
 pub mod inprocess_agent;
 #[cfg(test)]
 mod inprocess_binding_tests;
-pub mod inprocess_diagnostics;
 pub mod inprocess_extensions;
 mod litellm_capabilities;
 pub mod local_agent_tools;
@@ -48,8 +71,8 @@ pub mod remote_transport;
 pub mod s3;
 pub mod s3_auto_sync;
 pub mod s3_sync;
-pub mod secretary_github;
 pub mod secretary_draft_pr;
+pub mod secretary_github;
 pub mod session_usage;
 pub mod session_usage_codex;
 pub mod session_usage_desktop;

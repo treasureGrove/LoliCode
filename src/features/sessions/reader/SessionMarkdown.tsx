@@ -1,4 +1,4 @@
-import { markdownLanguage } from "@codemirror/lang-markdown";
+import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { invoke } from "@tauri-apps/api/core";
 import { ArrowUpRight } from "lucide-react";
 import {
@@ -51,7 +51,15 @@ export interface SessionMarkdownProps {
   /** 本地图片（`![](/abs/path.png)`）的渲染；不传时显示为路径 chip */
   renderLocalImage?: (path: string, alt: string) => ReactNode;
   /** Agent workspace actions; ordinary readers keep their existing PathChip. */
-  renderLocalPath?: (path: string, label?: ReactNode) => ReactNode;
+  renderLocalPath?: (
+    path: string,
+    label?: ReactNode,
+    line?: number,
+  ) => ReactNode;
+  /** Agent HTTP(S) links can open in the workbench and expose other actions. */
+  renderWebLink?: (url: string, label: ReactNode) => ReactNode;
+  /** Recognize workspace files and unformatted URLs in Agent output. */
+  outputLinks?: boolean;
   /** Agent output image links may also display their generated preview. */
   previewLocalImageLinks?: boolean;
   className?: string;
@@ -101,12 +109,86 @@ const LITERAL_LINK_OPTIONS: TraversalOptions = {
 // 缓存最近一次解析结果即可覆盖这种访问模式。
 let lastParse: {
   content: string;
+  outputLinks: boolean;
   tree: ReturnType<typeof markdownLanguage.parser.parse>;
 } | null = null;
 
-const parseMarkdown = (content: string) => {
-  if (lastParse?.content !== content) {
-    lastParse = { content, tree: markdownLanguage.parser.parse(content) };
+const safeWebUrl = (value: string) => {
+  if (!/^https?:\/\//i.test(value)) return null;
+  try {
+    const url = new URL(value);
+    return url.username || url.password ? null : url.href;
+  } catch {
+    return null;
+  }
+};
+
+const trimBareTarget = (candidate: string) => {
+  let value = candidate.replace(/[.,;:!?*]+$/, "");
+  for (const [open, close] of [
+    ["(", ")"],
+    ["[", "]"],
+  ]) {
+    let extra = value.split(close).length - value.split(open).length;
+    while (extra > 0 && value.endsWith(close)) {
+      value = value.slice(0, -1);
+      extra--;
+    }
+  }
+  return value;
+};
+
+// GFM stops at a bare port and does not recognize a bare localhost address.
+// Let the Markdown parser handle code blocks and explicit links as usual.
+const PLAIN_OUTPUT_TARGET =
+  /(?:(https?:\/\/)[^\s<>"'`\\，。！？、；：】）》」』”’…]+|(?:file:\/\/\/|[a-z]:[\\/]|\/(?!\/)|\.{1,2}[\\/])[^\s<>"'`|，。！？、；：】）》」』”’…]+)/iy;
+
+const outputMarkdownParser = markdown({
+  base: markdownLanguage,
+  extensions: {
+    defineNodes: ["OutputFilePath"],
+    parseInline: [
+      {
+        name: "OutputTarget",
+        before: "Autolink",
+        parse(context, _next, start) {
+          if (context.hasOpenLink) return -1;
+          const offset = start - context.offset;
+          PLAIN_OUTPUT_TARGET.lastIndex = offset;
+          const match = PLAIN_OUTPUT_TARGET.exec(context.text);
+          if (!match) return -1;
+          const value = trimBareTarget(match[0]);
+          const previous = context.text[offset - 1];
+          if (match[1]) {
+            if (/[\w+./:@-]/.test(previous ?? "") || !safeWebUrl(value))
+              return -1;
+            return context.addElement(
+              context.elt("URL", start, start + value.length),
+            );
+          }
+
+          if (previous && !/[\s([{*"'“‘：，。！？、；]/u.test(previous))
+            return -1;
+          const file = projectPathTarget(value, true);
+          if (
+            !file ||
+            (!FILE_EXTENSION.test(file.path) &&
+              !OFFICE_FILE.test(file.path.split("#")[0]))
+          )
+            return -1;
+          return context.addElement(
+            context.elt("OutputFilePath", start, start + value.length),
+          );
+        },
+      },
+    ],
+  },
+}).language.parser;
+
+const parseMarkdown = (content: string, outputLinks = false) => {
+  if (lastParse?.content !== content || lastParse.outputLinks !== outputLinks) {
+    const parser = outputLinks ? outputMarkdownParser : markdownLanguage.parser;
+    lastParse = { content, outputLinks, tree: parser.parse(content) };
   }
   return lastParse.tree;
 };
@@ -157,13 +239,108 @@ const localPathTarget = (value: string) => {
   return null;
 };
 
+const FILE_EXTENSION = /(?:^|[\\/])[^\\/]+\.[\p{L}\p{N}_+-]{1,16}$/u;
+const PROJECT_FILENAME =
+  /(?:^|[\\/])(?:Dockerfile|Makefile|README|LICENSE|\.env|\.gitignore)$/i;
+const OFFICE_FILE = /\.(?:docx|xlsx|pptx|pdf)$/i;
+const SOURCE_LINE_FRAGMENT = /#L(\d+)(?:-L(\d+))?$/i;
+const SOURCE_LINE_SUFFIX = /:(\d+)(?:-(\d+)|:\d+)?$/;
+const INLINE_FILE_EXTENSION =
+  /\.(?:html?|css|[cm]?js|jsx|ts|tsx|jsonl?|mdx?|txt|[ct]sv|ya?ml|toml|ini|xml|svg|png|jpe?g|gif|bmp|webp|avif|ico|pdf|docx?|xlsx?|pptx?|zip|7z|tar|gz|py|rb|rs|go|java|kt|swift|c|cc|cpp|h|hpp|cs|sql|sh|ps1|cmd|bat|log|vue|svelte)$/i;
+
+function sourceLine(match: RegExpExecArray | null): number | undefined {
+  if (!match) return;
+  const first = Number(match[1]);
+  const last = match[2] === undefined ? first : Number(match[2]);
+  if (
+    Number.isSafeInteger(first) &&
+    Number.isSafeInteger(last) &&
+    first > 0 &&
+    last >= first
+  )
+    return first;
+}
+
+const projectPathTarget = (
+  value: string,
+  inlineCode = false,
+): { path: string; line?: number } | null => {
+  let path = stripAngleBrackets(value);
+  if (/^file:\/\//i.test(path)) {
+    try {
+      const url = new URL(path);
+      const fragment = SOURCE_LINE_FRAGMENT.exec(url.hash);
+      const suffix = !url.hash ? SOURCE_LINE_SUFFIX.exec(url.pathname) : null;
+      if (suffix) url.pathname = url.pathname.slice(0, suffix.index);
+      const localPath = fileUrlToPath(url.href);
+      if (!localPath) return null;
+      return {
+        path:
+          OFFICE_FILE.test(localPath) && !fragment
+            ? localPath + url.hash
+            : localPath,
+        line: sourceLine(fragment ?? suffix),
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  const lineFragment = SOURCE_LINE_FRAGMENT.exec(path);
+  if (lineFragment) path = path.slice(0, lineFragment.index);
+  const fragment = /#([^\\/]*)$/.exec(path);
+  let officeLocator = "";
+  if (fragment) {
+    const base = path.slice(0, fragment.index);
+    if (OFFICE_FILE.test(base)) {
+      officeLocator = fragment[0];
+      path = base;
+    } else if (!inlineCode && FILE_EXTENSION.test(base)) {
+      path = base;
+    }
+  }
+  const suffix =
+    !lineFragment && !fragment ? SOURCE_LINE_SUFFIX.exec(path) : null;
+  if (suffix) path = path.slice(0, suffix.index);
+  const line = sourceLine(lineFragment ?? suffix);
+
+  if (!inlineCode) {
+    try {
+      path = decodeURIComponent(path);
+    } catch {
+      // A raw percent sign can be part of a workspace filename.
+    }
+  }
+
+  if (/[\u0000-\u001f<>|"*?]/.test(path)) return null;
+  if (localPathTarget(path)) return { path: path + officeLocator, line };
+  if (/^(?:[a-z][a-z\d+.-]*:|[\\/]|#)/i.test(path)) return null;
+  const hasDirectory = /[\\/]/.test(path);
+  const hasFilename =
+    inlineCode && !hasDirectory
+      ? INLINE_FILE_EXTENSION.test(path)
+      : FILE_EXTENSION.test(path);
+  return hasFilename ||
+    PROJECT_FILENAME.test(path) ||
+    (!inlineCode && hasDirectory)
+    ? { path: path + officeLocator, line }
+    : null;
+};
+
 type LinkTarget =
   | { kind: "external"; url: string }
-  | { kind: "path"; path: string };
+  | { kind: "path"; path: string; line?: number };
 
-const resolveLinkTargetValue = (value: string): LinkTarget | null => {
+const resolveLinkTargetValue = (
+  value: string,
+  outputLinks = false,
+): LinkTarget | null => {
   const url = safeExternalUrl(value);
   if (url) return { kind: "external", url };
+  if (outputLinks) {
+    const file = projectPathTarget(value);
+    return file ? { kind: "path", ...file } : null;
+  }
   const path = localPathTarget(value);
   return path ? { kind: "path", path } : null;
 };
@@ -212,6 +389,8 @@ interface RenderContext {
   searchQuery?: string;
   linkReferences: LinkReferences;
   projectDir?: string;
+  outputLinks?: boolean;
+  linkLabel?: boolean;
 }
 
 const EMPTY_CONTEXT: RenderContext = { linkReferences: EMPTY_LINK_REFERENCES };
@@ -247,7 +426,11 @@ const getReferenceLabel = (node: MarkdownNode, source: string) => {
   );
 };
 
-const collectLinkReferences = (root: MarkdownNode, source: string) => {
+const collectLinkReferences = (
+  root: MarkdownNode,
+  source: string,
+  outputLinks = false,
+) => {
   const references = new Map<string, string>();
 
   const visit = (node: MarkdownNode) => {
@@ -261,7 +444,7 @@ const collectLinkReferences = (root: MarkdownNode, source: string) => {
         const target = source.slice(urlNode.from, urlNode.to);
         if (
           !references.has(label) &&
-          (resolveLinkTargetValue(target) ||
+          (resolveLinkTargetValue(target, outputLinks) ||
             resolveImageTargetValue(target) ||
             relativeImagePath(target))
         ) {
@@ -292,9 +475,10 @@ const resolveLinkTarget = (
   node: MarkdownNode,
   source: string,
   linkReferences: LinkReferences,
+  outputLinks = false,
 ) => {
   const target = getTargetSource(node, source, linkReferences);
-  return target ? resolveLinkTargetValue(target) : null;
+  return target ? resolveLinkTargetValue(target, outputLinks) : null;
 };
 
 const resolveImageTarget = (
@@ -612,7 +796,12 @@ interface MarkdownActions {
   revealPath?: (path: string) => void;
   autoLoadRemoteImages: boolean;
   renderLocalImage?: (path: string, alt: string) => ReactNode;
-  renderLocalPath?: (path: string, label?: ReactNode) => ReactNode;
+  renderLocalPath?: (
+    path: string,
+    label?: ReactNode,
+    line?: number,
+  ) => ReactNode;
+  renderWebLink?: (url: string, label: ReactNode) => ReactNode;
   previewLocalImageLinks?: boolean;
   embeddedImages?: ReadonlyMap<string, string>;
 }
@@ -643,8 +832,10 @@ interface ExternalLinkProps {
  * `open_external`（系统浏览器）打开。
  */
 const ExternalLink = ({ url, children }: ExternalLinkProps) => {
-  const { openLink } = useContext(MarkdownActionsContext);
+  const { openLink, renderWebLink } = useContext(MarkdownActionsContext);
   const isWeb = /^https?:/i.test(url);
+  if (renderWebLink && safeWebUrl(url))
+    return <>{renderWebLink(url, children)}</>;
 
   const handleClick = (event: MouseEvent<HTMLAnchorElement>) => {
     event.preventDefault();
@@ -673,9 +864,12 @@ const ExternalLink = ({ url, children }: ExternalLinkProps) => {
 
 const MarkdownPathChip = (props: {
   path: string;
+  line?: number;
   projectDir?: string;
   label?: ReactNode;
   searchQuery?: string;
+  imageAlt?: string;
+  previewImage?: boolean;
 }) => {
   const {
     revealPath,
@@ -685,6 +879,7 @@ const MarkdownPathChip = (props: {
   } = useContext(MarkdownActionsContext);
   if (
     previewLocalImageLinks &&
+    props.previewImage !== false &&
     renderLocalImage &&
     /\.(?:png|jpe?g|gif|webp|bmp|avif|svg)$/i.test(props.path)
   ) {
@@ -692,13 +887,14 @@ const MarkdownPathChip = (props: {
       <>
         {renderLocalImage(
           props.path,
-          typeof props.label === "string" ? props.label : "",
+          props.imageAlt ??
+            (typeof props.label === "string" ? props.label : ""),
         )}
       </>
     );
   }
   return renderLocalPath ? (
-    <>{renderLocalPath(props.path, props.label)}</>
+    <>{renderLocalPath(props.path, props.label, props.line)}</>
   ) : (
     <PathChip {...props} onReveal={revealPath} />
   );
@@ -983,19 +1179,41 @@ const renderInlineCode = (
   node: MarkdownNode,
   source: string,
   ctx: RenderContext,
-) => (
-  <code className={SESSION_INLINE_CODE_CLASS}>
-    {renderText(getInlineCodeText(node, source), ctx.searchQuery)}
-  </code>
-);
+) => {
+  const value = getInlineCodeText(node, source);
+  const label = renderText(value, ctx.searchQuery);
+  const target = ctx.outputLinks && !ctx.linkLabel ? value.trim() : "";
+  const file = target ? projectPathTarget(target, true) : null;
+  return (
+    <code className={SESSION_INLINE_CODE_CLASS}>
+      {safeWebUrl(target) ? (
+        <ExternalLink url={target}>{label}</ExternalLink>
+      ) : file ? (
+        <MarkdownPathChip {...file} label={label} previewImage={false} />
+      ) : (
+        label
+      )}
+    </code>
+  );
+};
 
 const renderLink = (node: MarkdownNode, source: string, ctx: RenderContext) => {
-  const target = resolveLinkTarget(node, source, ctx.linkReferences);
+  const target = resolveLinkTarget(
+    node,
+    source,
+    ctx.linkReferences,
+    ctx.outputLinks,
+  );
   const range = getLinkLabelRange(node);
 
   // 解析不出目标（引用未定义、相对路径、非白名单协议）时按 CommonMark
   // 原样输出，方括号和目标一起保留；lezer 对任何 `[...]` 都会产出 Link 节点，
   // 不这样处理的话 `[0]`、`[Tool: shell]` 这类普通文本会丢掉方括号。
+  if (ctx.linkLabel) {
+    return (
+      <>{renderChildren(node, source, ctx, range ?? LITERAL_LINK_OPTIONS)}</>
+    );
+  }
   if (!target || !range) {
     const relative = relativeImagePath(
       getTargetSource(node, source, ctx.linkReferences) ?? "",
@@ -1012,25 +1230,31 @@ const renderLink = (node: MarkdownNode, source: string, ctx: RenderContext) => {
     return <>{renderChildren(node, source, ctx, LITERAL_LINK_OPTIONS)}</>;
   }
 
+  const label =
+    node.name === "Autolink"
+      ? renderText(source.slice(range.from, range.to), ctx.searchQuery)
+      : renderChildren(
+          node,
+          source,
+          ctx.outputLinks
+            ? { ...ctx, outputLinks: false, linkLabel: true }
+            : ctx,
+          range,
+        );
   if (target.kind === "path") {
     return (
       <MarkdownPathChip
         path={target.path}
+        line={target.line}
         projectDir={ctx.projectDir}
         searchQuery={ctx.searchQuery}
-        label={
-          node.name === "Autolink"
-            ? undefined
-            : renderChildren(node, source, ctx, range)
+        label={node.name === "Autolink" ? undefined : label}
+        imageAlt={
+          ctx.outputLinks ? getLinkLabelSource(node, source) : undefined
         }
       />
     );
   }
-
-  const label =
-    node.name === "Autolink"
-      ? renderText(source.slice(range.from, range.to), ctx.searchQuery)
-      : renderChildren(node, source, ctx, range);
 
   return <ExternalLink url={target.url}>{label}</ExternalLink>;
 };
@@ -1240,14 +1464,26 @@ const renderNode = (
     case "URL": {
       const label = source.slice(node.from, node.to);
       const href = safeExternalUrl(label);
-      return href ? (
+      return href && !ctx.linkLabel ? (
         <ExternalLink url={href}>{renderText(label, searchQuery)}</ExternalLink>
       ) : (
         renderText(label, searchQuery)
       );
     }
+    case "OutputFilePath": {
+      const value = source.slice(node.from, node.to);
+      const label = renderText(value, searchQuery);
+      const file = ctx.linkLabel ? null : projectPathTarget(value, true);
+      return file ? (
+        <MarkdownPathChip {...file} label={label} previewImage={false} />
+      ) : (
+        label
+      );
+    }
     case "Image":
-      return renderImage(node, source, ctx);
+      return ctx.linkLabel
+        ? renderText(getLinkLabelSource(node, source), searchQuery)
+        : renderImage(node, source, ctx);
     case "HardBreak":
       return <br />;
     case "Escape":
@@ -1273,11 +1509,18 @@ const MarkdownTree = memo(function MarkdownTree({
   content,
   searchQuery,
   projectDir,
-}: Pick<SessionMarkdownProps, "content" | "searchQuery" | "projectDir">) {
-  const tree = useMemo(() => parseMarkdown(content), [content]);
+  outputLinks,
+}: Pick<
+  SessionMarkdownProps,
+  "content" | "searchQuery" | "projectDir" | "outputLinks"
+>) {
+  const tree = useMemo(
+    () => parseMarkdown(content, outputLinks),
+    [content, outputLinks],
+  );
   const linkReferences = useMemo(
-    () => collectLinkReferences(tree.topNode, content),
-    [content, tree],
+    () => collectLinkReferences(tree.topNode, content, outputLinks),
+    [content, outputLinks, tree],
   );
   const rendered = useMemo(
     () =>
@@ -1285,8 +1528,9 @@ const MarkdownTree = memo(function MarkdownTree({
         searchQuery,
         linkReferences,
         projectDir,
+        outputLinks,
       }),
-    [content, linkReferences, projectDir, searchQuery, tree],
+    [content, linkReferences, projectDir, searchQuery, outputLinks, tree],
   );
   return <>{rendered}</>;
 });
@@ -1302,6 +1546,8 @@ export const SessionMarkdown = memo(function SessionMarkdown({
   allowEmbeddedImages = false,
   renderLocalImage,
   renderLocalPath,
+  renderWebLink,
+  outputLinks = false,
   previewLocalImageLinks = false,
   className,
 }: SessionMarkdownProps) {
@@ -1319,6 +1565,7 @@ export const SessionMarkdown = memo(function SessionMarkdown({
       autoLoadRemoteImages,
       renderLocalImage,
       renderLocalPath,
+      renderWebLink,
       previewLocalImageLinks,
       embeddedImages: prepared.images,
     }),
@@ -1328,6 +1575,7 @@ export const SessionMarkdown = memo(function SessionMarkdown({
       onRevealPath,
       renderLocalImage,
       renderLocalPath,
+      renderWebLink,
       previewLocalImageLinks,
       prepared.images,
     ],
@@ -1367,6 +1615,7 @@ export const SessionMarkdown = memo(function SessionMarkdown({
           content={prepared.content}
           searchQuery={searchQuery}
           projectDir={projectDir}
+          outputLinks={outputLinks}
         />
       </div>
     </MarkdownActionsContext.Provider>

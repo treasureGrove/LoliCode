@@ -31,6 +31,20 @@ pnpm dev
 
 此命令直接运行仓库中的开发进程。桌面入口适合检查完整构建行为；`pnpm dev` 适合修改代码时实时调试。
 
+### DeepSeek Harness 迁移验证
+
+`Agent-migration` 使用固定的上游运行包验证渠道和会话接入。准备需要 Node.js 24.9 或更新版本。以下测试使用本机模拟模型和临时项目目录。
+
+```powershell
+pnpm prepare:harness-runtime --bundle
+node --test packages/lolicode-harness-runtime/tests/sdk-smoke.test.mjs
+cargo test --manifest-path src-tauri/Cargo.toml --locked --lib deepseek_harness_routes_an_image_through_the_saved_channel -- --ignored
+```
+
+第一项测试运行官方 SDK 的图片和审批往返，第二项测试从已保存的渠道经过真实 LoliCode 网关发出图片请求，并重启 Harness 续聊。直接运行 npm SDK 测试前可用 `pnpm prepare:harness-runtime` 准备源目录依赖。 [运行包说明](../../packages/lolicode-harness-runtime/README.md)
+
+Windows 桌面验收可运行 `node scripts/tests/harness-desktop-acceptance.mjs`。脚本以独立开发版、临时配置和本机模拟模型运行常规桌面接口。普通会话、总秘书、远程工作区和后台自动化共用内置 Harness。SSH 和 WSL 的文件、命令与预览由桌面通过当前远程连接处理。总秘书子任务交付 HTML 后，桌面在右栏打开经校验的实时静态站点。旧 Rust 会话从原目录只读续接，手动派工和补充指令由 Harness 执行。
+
 已有开发构建需要修复入口时运行 `pnpm dev:register`；移除开发版注册使用 `pnpm dev:unregister`，保留开发数据。CI 或仅需产物时使用 `pnpm build:dev --no-register`，完整可运行目录输出到 `src-tauri/target/development/app`。
 
 ## 身份与数据
@@ -48,7 +62,7 @@ pnpm dev
 
 同步包含本体会话的完整聊天上下文、文件变更记录和已暂停的消息队列。相同内容会去重；同编号内容不同会保留副本，不覆盖任一版已有的内容，也不传播删除操作。正在执行任务、生成标题或压缩上下文的会话会跳过，可等任务结束后再次同步。两版都继续过的同一会话会保留各自的分叉，不能自动拼接成一段对话。
 
-渠道、登录和应用设置仍分别管理。旧引擎历史和依赖 SSH / WSL 连接的远程会话不在此次同步范围内；独立任务保留来源工作目录，以便继续访问原来的文件。同步结果会显示新增、副本、重复和跳过的数量。
+渠道、登录和应用设置分别管理。同步交换普通本地会话的历史归档，同编号的目标记录保留。远程、独立、秘书或仍有排队消息的会话会在结果中列为跳过。
 
 ## 正式验收与远端标识
 

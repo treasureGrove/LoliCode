@@ -1,4 +1,4 @@
-//! User-invoked project previews. No asset-protocol or arbitrary URL access.
+//! Project file previews and user-initiated browser previews.
 use base64::{engine::general_purpose::STANDARD, Engine};
 use serde::Serialize;
 use std::{
@@ -59,7 +59,7 @@ pub struct AgentFilePreview {
     remote: bool,
 }
 
-fn resolve(project: &Path, value: &str) -> Result<(PathBuf, PathBuf), String> {
+pub(crate) fn resolve(project: &Path, value: &str) -> Result<(PathBuf, PathBuf), String> {
     if value.trim().is_empty() || value.contains(['\0', '\n', '\r']) || value.starts_with('~') {
         return Err("请选择当前项目内的文件或文件夹".into());
     }
@@ -125,10 +125,31 @@ fn opened_path(file: &File) -> Result<PathBuf, String> {
     Ok(PathBuf::from(std::ffi::OsStr::from_bytes(&bytes[..len])))
 }
 
-fn read_preview(project: &Path, value: &str) -> Result<AgentFilePreview, String> {
+pub(crate) fn read_preview(project: &Path, value: &str) -> Result<AgentFilePreview, String> {
     let (root, path) = resolve(project, value)?;
-    let mut file = File::open(&path).map_err(|_| "文件无法读取")?;
-    if !opened_path(&file)?.starts_with(&root) {
+    let (relative, bytes, size) = read_checked_file(&root, &path)?;
+    preview_bytes(
+        &relative.to_string_lossy().replace('\\', "/"),
+        bytes,
+        size,
+        false,
+    )
+}
+
+pub(crate) fn read_canonical_scoped_file(
+    root: &Path,
+    value: &str,
+) -> Result<(PathBuf, Vec<u8>, u64), String> {
+    let (resolved_root, path) = resolve(root, value)?;
+    if root != resolved_root {
+        return Err("文件读取范围已变化，请重新选择".into());
+    }
+    read_checked_file(root, &path)
+}
+
+fn read_checked_file(root: &Path, path: &Path) -> Result<(PathBuf, Vec<u8>, u64), String> {
+    let mut file = File::open(path).map_err(|_| "文件无法读取")?;
+    if !opened_path(&file)?.starts_with(root) {
         return Err("文件读取范围已变化，请重新选择".into());
     }
     let metadata = file.metadata().map_err(|_| "无法读取文件信息")?;
@@ -147,11 +168,10 @@ fn read_preview(project: &Path, value: &str) -> Result<AgentFilePreview, String>
         return Err("文件超过预览大小限制".into());
     }
     let relative = path
-        .strip_prefix(&root)
-        .unwrap_or(&path)
-        .to_string_lossy()
-        .replace('\\', "/");
-    preview_bytes(&relative, bytes, metadata.len(), false)
+        .strip_prefix(root)
+        .map_err(|_| "文件读取范围已变化，请重新选择")?
+        .to_owned();
+    Ok((relative, bytes, metadata.len()))
 }
 
 pub(crate) fn preview_bytes(
@@ -219,7 +239,7 @@ pub async fn preview_agent_file(
     session_id: String,
     path: String,
 ) -> Result<AgentFilePreview, String> {
-    let project = super::agent_dispatch::session_project(&app, &session_id).await?;
+    let project = super::agent_dispatch::session_file_root(&app, &session_id).await?;
     let remote = app
         .state::<crate::services::inprocess_agent::InprocessAgentState>()
         .remote_projects(&app.state::<crate::store::AppState>())
@@ -232,6 +252,253 @@ pub async fn preview_agent_file(
     tokio::task::spawn_blocking(move || read_preview(Path::new(&project), &path))
         .await
         .map_err(|_| "文件预览未完成，请重试".to_string())?
+}
+
+const MAX_DIRECTORY_ENTRIES: usize = 2_000;
+
+#[derive(Serialize)]
+pub(crate) struct WorkspaceFileEntry {
+    name: String,
+    path: String,
+    kind: &'static str,
+}
+
+#[derive(Serialize)]
+pub(crate) struct WorkspaceDirectory {
+    entries: Vec<WorkspaceFileEntry>,
+    truncated: bool,
+}
+
+fn directory_entry(base: &str, name: &str, kind: &'static str) -> Option<WorkspaceFileEntry> {
+    if name.is_empty() || matches!(name, "." | "..") || name.contains(['/', '\\', '\0', '\r', '\n'])
+    {
+        return None;
+    }
+    Some(WorkspaceFileEntry {
+        path: if base == "." {
+            name.into()
+        } else {
+            format!("{base}/{name}")
+        },
+        name: name.into(),
+        kind,
+    })
+}
+
+fn read_workspace_directory(root: &Path, path: &str) -> Result<WorkspaceDirectory, String> {
+    let (root, target) = resolve(root, path)?;
+    let base = target
+        .strip_prefix(root)
+        .map_err(|_| "目录位于当前工作区之外")?;
+    let base = if base.as_os_str().is_empty() {
+        ".".into()
+    } else {
+        base.to_string_lossy().replace('\\', "/")
+    };
+    let mut entries = Vec::new();
+    let mut listed = std::fs::read_dir(&target).map_err(|_| "无法读取工作区目录")?;
+    for item in listed.by_ref().take(MAX_DIRECTORY_ENTRIES) {
+        let item = item.map_err(|_| "无法读取工作区目录项")?;
+        let kind = match item.file_type() {
+            Ok(value) if value.is_dir() => "directory",
+            Ok(value) if value.is_file() => "file",
+            _ => "other",
+        };
+        if let Some(entry) = item
+            .file_name()
+            .to_str()
+            .and_then(|name| directory_entry(&base, name, kind))
+        {
+            entries.push(entry);
+        }
+    }
+    Ok(WorkspaceDirectory {
+        entries,
+        truncated: listed.next().is_some(),
+    })
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub(crate) async fn list_agent_workspace_directory(
+    app: AppHandle,
+    session_id: String,
+    path: String,
+) -> Result<WorkspaceDirectory, String> {
+    let root = super::agent_dispatch::session_file_root(&app, &session_id).await?;
+    let remote = app
+        .state::<crate::services::inprocess_agent::InprocessAgentState>()
+        .remote_projects(&app.state::<crate::store::AppState>())
+        .await;
+    if remote.owns(Path::new(&root)) {
+        let (base, listing) = remote.workspace_directory(Path::new(&root), &path).await?;
+        let values = listing["entries"].as_array().ok_or("远程目录响应无效")?;
+        let entries = values
+            .iter()
+            .take(MAX_DIRECTORY_ENTRIES)
+            .filter_map(|entry| {
+                let kind = match entry["kind"].as_str() {
+                    Some("directory") => "directory",
+                    Some("file") => "file",
+                    _ => "other",
+                };
+                directory_entry(&base, entry["path"].as_str()?, kind)
+            })
+            .collect();
+        return Ok(WorkspaceDirectory {
+            entries,
+            truncated: values.len() > MAX_DIRECTORY_ENTRIES || listing["truncated"] == true,
+        });
+    }
+    tokio::task::spawn_blocking(move || read_workspace_directory(Path::new(&root), &path))
+        .await
+        .map_err(|_| "未能读取工作区目录".to_owned())?
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub(crate) async fn open_agent_browser_preview(
+    app: AppHandle,
+    session_id: String,
+    url: String,
+) -> Result<lolicode_agent::AgentPreviewRequest, String> {
+    #[cfg(windows)]
+    {
+        let (project, _) =
+            super::agent_dispatch::session_execution_scope(&app, &session_id).await?;
+        app.state::<crate::services::inprocess_agent::InprocessAgentState>()
+            .harness_preview
+            .open_link(session_id, project, &url)
+            .await
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (app, session_id, url);
+        Err("当前平台请使用系统浏览器打开网页".into())
+    }
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub async fn preview_agent_browser_frame(
+    app: AppHandle,
+    session_id: String,
+    browser_id: String,
+) -> Result<String, String> {
+    let agent = app.state::<crate::services::inprocess_agent::InprocessAgentState>();
+    if let Some(scope) = agent
+        .harness_preview
+        .frame_scope(&session_id, &browser_id)
+        .await?
+    {
+        super::agent_dispatch::check_project(&app, &scope.project)?;
+        if scope.native {
+            return Err("已交付的网页在右栏实时打开".into());
+        }
+        let frame = agent
+            .browser
+            .preview_frame(&scope.working_directory, &browser_id)
+            .await;
+        if frame.is_err() {
+            agent.harness_preview.forget(&browser_id).await;
+        }
+        return frame;
+    }
+    let (project, root): (String, String) = agent
+        .call(
+            "getSessionExecutionRoot",
+            serde_json::json!({"sessionId": session_id, "browserId": browser_id}),
+            false,
+        )
+        .await?;
+    super::agent_dispatch::check_project(&app, &project)?;
+    agent
+        .browser
+        .preview_frame(Path::new(&root), &browser_id)
+        .await
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub(crate) async fn sync_agent_browser_preview_webview(
+    app: AppHandle,
+    session_id: String,
+    browser_id: String,
+    bounds: Option<crate::services::PreviewBounds>,
+    reload: bool,
+    presentation: crate::services::PreviewPresentation,
+) -> Result<(), String> {
+    if presentation.slot > 1 || presentation.revision == 0 {
+        return Err("网页预览位置无效".into());
+    }
+    #[cfg(windows)]
+    {
+        let agent = app.state::<crate::services::inprocess_agent::InprocessAgentState>();
+        let scope = agent
+            .harness_preview
+            .frame_scope(&session_id, &browser_id)
+            .await?
+            .filter(|scope| scope.native)
+            .ok_or("此会话的页面预览已关闭")?;
+        if bounds.is_some() {
+            super::agent_dispatch::check_project(&app, &scope.project)?;
+        }
+        agent
+            .harness_preview
+            .sync_webview(
+                &app,
+                &agent.browser,
+                &session_id,
+                &browser_id,
+                bounds,
+                reload,
+                presentation,
+            )
+            .await
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (app, session_id, browser_id, bounds, reload, presentation);
+        Err("当前平台不支持实时页面预览".into())
+    }
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub(crate) async fn navigate_agent_browser_preview(
+    app: AppHandle,
+    session_id: String,
+    browser_id: String,
+    action: crate::services::PreviewNavigation,
+) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        let agent = app.state::<crate::services::inprocess_agent::InprocessAgentState>();
+        let scope = agent
+            .harness_preview
+            .frame_scope(&session_id, &browser_id)
+            .await?
+            .filter(|scope| scope.native)
+            .ok_or("此会话的页面预览已关闭")?;
+        super::agent_dispatch::check_project(&app, &scope.project)?;
+        agent
+            .harness_preview
+            .navigate(&app, &session_id, &browser_id, action)
+            .await
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (app, session_id, browser_id, action);
+        Err("当前平台不支持实时页面预览".into())
+    }
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub async fn close_agent_browser_preview(
+    app: AppHandle,
+    session_id: String,
+    browser_id: String,
+) -> Result<(), String> {
+    let agent = app.state::<crate::services::inprocess_agent::InprocessAgentState>();
+    agent
+        .harness_preview
+        .close(&agent.browser, &session_id, &browser_id)
+        .await
 }
 
 fn text_editor(path: &Path) -> Result<(), String> {
@@ -285,7 +552,7 @@ pub async fn open_agent_path(
     if !matches!(action.as_str(), "file" | "directory") {
         return Err("无法识别文件操作".into());
     }
-    let project = super::agent_dispatch::session_project(&app, &session_id).await?;
+    let project = super::agent_dispatch::session_file_root(&app, &session_id).await?;
     let remote = app
         .state::<crate::services::inprocess_agent::InprocessAgentState>()
         .remote_projects(&app.state::<crate::store::AppState>())

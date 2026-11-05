@@ -80,6 +80,7 @@ export interface AgentSession {
     role: "secretary" | "worker";
     parentSessionId?: string;
     taskId?: string;
+    permissionLocked?: boolean;
   };
 }
 
@@ -94,6 +95,13 @@ export type AgentSecretaryTaskStatus =
   | "interrupted";
 
 export type AgentSecretaryExecutionMode = "shared" | "worktree";
+export type AgentSecretaryReportState =
+  | "progress"
+  | "waiting"
+  | "ready"
+  | "blocked"
+  | "failed"
+  | "dropped";
 
 export interface AgentSecretaryTask {
   id: string;
@@ -105,6 +113,7 @@ export interface AgentSecretaryTask {
   createdAt: number;
   updatedAt: number;
   summary?: string | null;
+  report?: { state: AgentSecretaryReportState; summary: string };
   error?: string | null;
   projectPath: string;
   requestId: string;
@@ -273,6 +282,7 @@ export interface AgentPermission {
   toolName?: string | null;
   toolInput?: unknown | null;
   approvalMode?: "user-once";
+  editPreview?: string;
 }
 
 export type AgentAnswerValue = string | number | boolean | string[];
@@ -311,6 +321,7 @@ export interface AgentQuestion {
   sessionId: string;
   title: string;
   fields: AgentQuestionField[];
+  planReview?: { approve: string; revise: string };
 }
 
 export interface AgentDiff {
@@ -344,6 +355,7 @@ export interface AgentUsage {
 }
 
 export interface AgentQueuedMessage {
+  delivery?: "steer";
   id: string;
   text: string;
   createdAt?: number;
@@ -363,6 +375,21 @@ export interface AgentQueuedInput {
   }[];
 }
 
+export type AgentPreviewHint = {
+  id: string;
+  sessionId: string;
+  createdAt: number;
+} & (
+  | { kind: "file"; path: string; locator?: string }
+  | {
+      kind: "browser";
+      browserId: string;
+      url: string;
+      deliveryId?: string;
+      native?: boolean;
+    }
+);
+
 export interface AgentSnapshot {
   session: AgentSession;
   status: AgentStatus;
@@ -370,6 +397,19 @@ export interface AgentSnapshot {
   permissions: AgentPermission[];
   questions: AgentQuestion[];
   diffs: AgentDiff[];
+  backgroundJobs?: number;
+  goal?: {
+    objective: string;
+    phase: "active" | "paused" | "blocked" | "complete";
+    activation: "armed" | "disarmed";
+    roundsStarted: number;
+    maxGoalRounds: number;
+    revision: number;
+    blockedReason?: { code: string; message: string } | null;
+  };
+  plan?: { active: boolean; pending?: boolean };
+  /** Host-verified reveal from this conversation or one of its workers. */
+  preview?: AgentPreviewHint | null;
   error?: string | null;
   streamConnected?: boolean;
   streamGap?: boolean;

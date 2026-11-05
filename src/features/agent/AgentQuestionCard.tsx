@@ -11,6 +11,7 @@ import type {
   AgentAnswerValue,
 } from "@/types/agent";
 import { agentErrorMessage } from "@/hooks/useAgentSnapshot";
+import { AgentTextPart } from "./AgentParts";
 import "./agent-question.css";
 
 const validValue = (value: unknown): value is AgentAnswerValue =>
@@ -100,16 +101,117 @@ function validateAnswer(field: AgentQuestionField, rawValue: unknown) {
 
 interface QuestionProps {
   question: AgentQuestion;
+  projectPath?: string;
   onReply: (answer: AgentQuestionAnswer) => Promise<void>;
   onReject: () => Promise<void>;
 }
 
 export function AgentQuestionCard(props: QuestionProps) {
+  const Form = props.question.planReview ? PlanReviewCard : QuestionForm;
   return (
-    <QuestionForm
+    <Form
       key={JSON.stringify([props.question.sessionId, props.question.id])}
       {...props}
     />
+  );
+}
+
+function PlanReviewCard({
+  question,
+  projectPath = "",
+  onReply,
+  onReject,
+}: QuestionProps) {
+  const [feedback, setFeedback] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const pending = useRef(false);
+  const feedbackId = useId();
+  const field = question.fields[0];
+  const review = question.planReview!;
+  const submit = async (action: "approve" | "revise" | "dismiss") => {
+    if (pending.current) return;
+    pending.current = true;
+    setBusy(true);
+    setError(null);
+    try {
+      const note = feedback.trim();
+      if (action === "dismiss") await onReject();
+      else
+        await onReply({
+          [field.key]:
+            action === "approve"
+              ? review.approve
+              : note
+                ? [review.revise, note]
+                : review.revise,
+        });
+    } catch (cause) {
+      pending.current = false;
+      setBusy(false);
+      setError(agentErrorMessage(cause));
+    }
+  };
+  return (
+    <section
+      aria-label="审批实施计划"
+      aria-busy={busy}
+      className="agent-question-card"
+    >
+      <header className="agent-question-header">
+        <p className="agent-question-eyebrow">计划审批</p>
+        <h3 className="agent-question-heading">审核实施计划</h3>
+      </header>
+      <div className="agent-question-body">
+        <AgentTextPart
+          text={field.description ?? ""}
+          projectPath={projectPath}
+          sessionId={question.sessionId}
+        />
+        <Label htmlFor={feedbackId}>修改意见（选填）</Label>
+        <textarea
+          id={feedbackId}
+          className={`${fieldClass} agent-question-input`}
+          rows={2}
+          maxLength={4096}
+          value={feedback}
+          disabled={busy}
+          onChange={(event) => setFeedback(event.target.value)}
+        />
+      </div>
+      <footer className="agent-question-footer">
+        <Button
+          type="button"
+          variant="quiet"
+          disabled={busy}
+          onClick={() => void submit("dismiss")}
+        >
+          关闭并自行回复
+        </Button>
+        <div className="agent-question-actions">
+          <Button
+            type="button"
+            variant="quiet"
+            disabled={busy}
+            onClick={() => void submit("revise")}
+          >
+            继续规划
+          </Button>
+          <Button
+            type="button"
+            disabled={busy}
+            onClick={() => void submit("approve")}
+          >
+            批准计划并执行
+          </Button>
+        </div>
+      </footer>
+      {error && (
+        <p role="alert" className="text-caption text-danger-text">
+          {error}
+        </p>
+      )}
+    </section>
   );
 }
 

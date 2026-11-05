@@ -262,6 +262,11 @@ describe("generated agent image previews", () => {
         sessionId: "zc:fixture",
         path,
       });
+      fireEvent.click(
+        screen.getByRole("button", { name: `预览文件：${path}` }),
+      );
+      expect(preview).toHaveBeenCalledWith(path);
+      preview.mockClear();
       fireEvent.click(image);
       expect(await screen.findByRole("dialog")).toBeVisible();
       expect(preview).not.toHaveBeenCalled();

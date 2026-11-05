@@ -1,6 +1,6 @@
 //! Host-owned Git checkout for one secretary worker. The user's project
 //! remains the session identity, while files and commands use this checkout.
-use super::{canonical_project, project_key, tools};
+use super::paths::{canonical_project, project_key, safe_program};
 use crate::AgentSecretaryWorktree;
 use std::{
     path::{Path, PathBuf},
@@ -64,7 +64,7 @@ async fn git(
     String::from_utf8(output.stdout).map_err(|_| "无法读取 Git 的 UTF-8 输出".into())
 }
 
-pub(super) async fn create(
+pub async fn create(
     private_root: &Path,
     project: &Path,
     task_id: Uuid,
@@ -72,8 +72,8 @@ pub(super) async fn create(
     let source = fs::canonicalize(project)
         .await
         .map_err(|_| "无法访问任务所属项目目录")?;
-    let program = tools::safe_program(&source, "git")
-        .map_err(|_| "独立工作树需要安装 Git 并将其加入 PATH")?;
+    let program =
+        safe_program(&source, "git").map_err(|_| "独立工作树需要安装 Git 并将其加入 PATH")?;
     let top = git(&program, project, &["rev-parse", "--show-toplevel"], 5)
         .await
         .map_err(|_| "独立工作树需要本地 Git 仓库，请打开仓库根目录")?;
@@ -137,7 +137,7 @@ pub(super) async fn create(
     Ok(worktree)
 }
 
-pub(super) async fn execution_root(
+pub async fn execution_root(
     private_root: &Path,
     worktree: &AgentSecretaryWorktree,
 ) -> Result<PathBuf, String> {

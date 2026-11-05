@@ -10,6 +10,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import type { AgentQueuedMessage } from "@/types/agent";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,17 +21,12 @@ import {
 } from "@/components/ui/dropdown-menu";
 import "./agent-message-queue.css";
 
-export interface AgentQueuedMessage {
-  id: string;
-  text: string;
-  attachments?: { fileName: string; mime: string; bytes: number }[];
-}
-
 export interface AgentMessageQueueProps {
-  items: AgentQueuedMessage[];
+  items: (AgentQueuedMessage & { confirming?: boolean })[];
   busyId?: string | null;
   disabled?: boolean;
   paused?: boolean;
+  canSteer?: boolean;
   onSendNow: (id: string) => void;
   onRecall: (id: string) => void;
   onRemove: (id: string) => void;
@@ -42,13 +38,14 @@ export function AgentMessageQueue({
   busyId,
   disabled = false,
   paused = false,
+  canSteer = false,
   onSendNow,
   onRecall,
   onRemove,
 }: AgentMessageQueueProps) {
   const hintId = useId();
   if (!items.length) return null;
-  const actionsDisabled = disabled || busyId != null;
+  const action = canSteer ? "插入当前任务" : "立即发送";
   return (
     <section
       className="wb-message-queue"
@@ -72,6 +69,8 @@ export function AgentMessageQueue({
         {items.map((item, index) => {
           const ordinal = index + 1;
           const sending = busyId === item.id;
+          const confirming = item.confirming;
+          const actionsDisabled = disabled || busyId != null || confirming;
           const attachments = item.attachments || [];
           const attachmentNames = attachments
             .map((attachment) => attachment.fileName)
@@ -80,7 +79,7 @@ export function AgentMessageQueue({
             <li
               key={item.id}
               className="wb-message-queue-item"
-              aria-busy={sending || undefined}
+              aria-busy={sending || confirming || undefined}
             >
               <ListEnd
                 className="wb-message-queue-icon"
@@ -115,11 +114,17 @@ export function AgentMessageQueue({
                   size="compact"
                   className="wb-message-queue-send"
                   disabled={actionsDisabled}
-                  aria-label={`${sending ? "正在发送" : "立即发送"}第 ${ordinal} 条消息`}
-                  title="立即发送这条消息"
+                  aria-label={`${confirming ? "正在加入队列的" : sending ? "正在发送" : action}第 ${ordinal} 条消息`}
+                  title={
+                    confirming
+                      ? "等待队列确认"
+                      : canSteer
+                        ? "在当前任务的下一步加入这条消息"
+                        : "立即发送这条消息"
+                  }
                   onClick={() => onSendNow(item.id)}
                 >
-                  {sending ? (
+                  {sending || confirming ? (
                     <Loader2
                       size={13}
                       className="motion-safe:animate-spin"
@@ -128,7 +133,7 @@ export function AgentMessageQueue({
                   ) : (
                     <CornerDownRight size={15} aria-hidden="true" />
                   )}
-                  {sending ? "发送中" : "立即发送"}
+                  {confirming ? "正在加入队列" : sending ? "发送中" : action}
                 </Button>
                 <Button
                   type="button"

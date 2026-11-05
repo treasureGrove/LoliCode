@@ -35,6 +35,14 @@ v1.0.2 及后续安装包使用 `src-tauri/nsis/installer.nsi` 自定义模板�
 
 发版前执行 `node --test scripts/tests/lolicode-nsis-overwrite-upgrade.test.mjs`。此测试通过本机已安装的 Tauri CLI 和真实 NSIS 编译器打包隔离程序，实际验证旧 publisher 项缺失、中文/空格路径、重复覆盖、应用内更新、旧程序名缺失、数据保留、禁止降级策略与异常目录拒绝；使用唯一测试注册项，不操作真实用户安装。升级 Tauri CLI 时同步复核自定义模板和上游差异。
 
+Harness 迁移可用下面的命令复现真实覆盖安装。在管理员 PowerShell 中运行，提前关闭正在运行的 LoliCode，并传入已发布的 v1.0.6 NSIS 安装器和本地 4.1.7 测试安装器。脚本创建临时标准 Windows 用户，从旧版桌面保存模拟渠道并生成会话，再让候选安装器原地覆盖，检查新桌面续聊发出的请求仍使用原来的渠道凭据和会话历史。
+
+```powershell
+node scripts/tests/lolicode-overwrite-upgrade-acceptance.mjs "<published-v1.0.6-setup.exe>" "<local-4.1.7-setup.exe>"
+```
+
+只传旧版安装器可以先验证基线。4.1.7 是这次本地覆盖测试用的 Tauri 版本覆盖值，验收报告保留在脚本输出的路径。此过程使用本机模拟模型，不写入正式发布渠道。
+
 v1.0.2 已交付该修复，并真实验证远端正式 v1.0.1 与本机 4.0.11 程序副本覆盖升级；已发布的 v1.0.1 文件保持不变，不覆盖同版本历史附件。
 
 本项目使用 Tauri v2 Windows x64 NSIS 更新。更新客户端下载完整 NSIS 安装器 `.exe`；对应 `.exe.sig` 为 Tauri 签名。`latest.json` 的 `platforms.windows-x86_64.signature` 必须嵌入 `.sig` 的内容，而不是文件路径或 URL。[Tauri 官方 updater 文档](https://v2.tauri.app/plugin/updater/)
@@ -90,7 +98,7 @@ https://tools.treasuregrove.art/lolicode/releases/<version>/<installer>.exe
 ## 每次发布
 
 1. 选取严格递增的 SemVer，同步配置和版本文件，完成测试并构建正式 NSIS 安装器。改变 `+build` 元数据不算版本递增。构建负责人提供 `.exe` 和匹配的 `.exe.sig`，不要用便携主程序代替安装器。
-2. 先验证安装器包含正确的应用、默认技能及许可证。4.0.15 起默认 Agent 链接进主程序，不应再附带 Node / OpenCode / ZCode 引擎。提取实际主程序运行 `--check-agent-runtime`，核对资源及本体工具往返。该资源校验与本工具的更新包验签分别进行；本工具不运行安装器，也不声称覆盖安装后的功能。
+2. 验证安装器包含正确的应用、默认技能及许可证。迁移到 DeepSeek Harness 的构建将固定版本的 Harness、Node.js、锁定依赖和许可证放在 `agent/harness-runtime`。安装版与便携版都从该目录启动 Agent。提取实际主程序运行 `--check-agent-runtime`，验证包内运行时、模型网关、读写工具和会话恢复。安装器签名验证与这项资源自检分别运行。
 3. 用以下命令准备一个新版本目录。所有参数都明确指向本轮产物和公钥；`--notes-file` 仅接受 Markdown 文件。
 
 ```powershell

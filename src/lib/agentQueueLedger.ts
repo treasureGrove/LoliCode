@@ -10,6 +10,7 @@ export interface AgentQueueSubmission {
   draft: AgentDraftToken;
   imageIds: string[];
   documentIds: string[];
+  delivery?: "steer";
 }
 
 const submissionKey = (project: string, id: string) =>
@@ -40,7 +41,8 @@ function decode(
     !identity(value.draft.revision) ||
     typeof value.draft.text !== "string" ||
     !ids(value.imageIds) ||
-    !ids(value.documentIds)
+    !ids(value.documentIds) ||
+    (value.delivery !== undefined && value.delivery !== "steer")
   )
     return null;
   // Project only metadata so an accidentally attached image/document body is
@@ -58,6 +60,7 @@ function decode(
     },
     imageIds: [...value.imageIds],
     documentIds: [...value.documentIds],
+    ...(value.delivery === "steer" && { delivery: value.delivery }),
   };
 }
 

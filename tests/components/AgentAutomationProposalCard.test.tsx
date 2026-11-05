@@ -134,17 +134,14 @@ describe("automation proposal transcript integration", () => {
     expect(agentApi.automation).not.toHaveBeenCalled();
   });
 
-  it.each([
-    { permissionMode: "ask", mode: "build" },
-    { permissionMode: "auto", mode: "guarded" },
-    { permissionMode: "full_access", mode: "yolo" },
-  ] as const)(
-    "saves the current project's proposal using the session model and $permissionMode permissions",
-    async ({ permissionMode, mode }) => {
+  it.each(["ask", "auto", "full_access"] as const)(
+    "defaults background proposals to review when the session has %s permissions",
+    async (permissionMode) => {
       vi.mocked(agentApi.getSession).mockResolvedValue(
         snapshot(permissionMode),
       );
       render(transcript());
+      expect(screen.getByText("操作前询问")).toBeVisible();
       fireEvent.click(screen.getByRole("button", { name: "保存自动化" }));
       expect(await screen.findByText("已保存自动化")).toBeVisible();
       expect(agentApi.getSession).toHaveBeenCalledOnce();
@@ -155,7 +152,7 @@ describe("automation proposal transcript integration", () => {
           workspacePath: projectPath,
           clientRequestId: `proposal:${sessionId}:proposal-1`,
           recurring: true,
-          mode,
+          mode: "build",
           modelSelection: {
             providerId: "owned-channel",
             modelId: "source/model",
@@ -262,7 +259,9 @@ describe("automation proposal saves", () => {
 
   it("restores an unconfirmed save across remounts with its original clientRequestId and payload", async () => {
     vi.mocked(agentApi.automation).mockRejectedValueOnce(new Error("连接中断"));
-    const view = render(card());
+    const view = render(
+      card({ ...proposal, input: { ...proposal.input, mode: "guarded" } }),
+    );
     fireEvent.click(screen.getByRole("button", { name: "保存自动化" }));
     await screen.findByRole("alert");
     const first = vi.mocked(agentApi.automation).mock.calls[0];

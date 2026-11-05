@@ -1,4 +1,11 @@
-import { memo, useCallback, type ReactNode } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  type ReactNode,
+} from "react";
 import { useTranslation } from "react-i18next";
 
 import { copyText } from "@/lib/clipboard";
@@ -24,7 +31,20 @@ export interface SessionCodeBlockProps {
   searchQuery?: string;
   /** 自定义复制行为；不传时写入剪贴板并弹 toast */
   onCopy?: (code: string) => void;
+  sourceLine?: number;
   className?: string;
+}
+
+function sourceLineBounds(code: string, line: number) {
+  if (!Number.isSafeInteger(line) || line < 1) return;
+  let start = 0;
+  for (let current = 1; current < line; current++) {
+    const next = code.indexOf("\n", start);
+    if (next === -1) return;
+    start = next + 1;
+  }
+  const end = code.indexOf("\n", start);
+  return { start, end: end === -1 ? code.length : end };
 }
 
 /**
@@ -36,10 +56,20 @@ export const SessionCodeBlock = memo(function SessionCodeBlock({
   language,
   searchQuery,
   onCopy,
+  sourceLine,
   className,
 }: SessionCodeBlockProps) {
   const { t } = useTranslation();
   const label = language?.trim() || "text";
+  const anchor = useRef<HTMLElement>(null);
+  const bounds = useMemo(
+    () =>
+      sourceLine === undefined ? undefined : sourceLineBounds(code, sourceLine),
+    [code, sourceLine],
+  );
+  useEffect(() => {
+    anchor.current?.scrollIntoView?.({ block: "center", inline: "nearest" });
+  }, [bounds]);
 
   const handleCopy = useCallback(async () => {
     if (onCopy) {
@@ -57,7 +87,22 @@ export const SessionCodeBlock = memo(function SessionCodeBlock({
   }, [code, onCopy, t]);
 
   let body: ReactNode = code;
-  if (searchQuery) body = highlightText(code, searchQuery);
+  if (bounds) {
+    body = (
+      <>
+        {code.slice(0, bounds.start)}
+        <mark
+          key={sourceLine}
+          ref={anchor}
+          className="wb-preview-source-line"
+          data-source-line={sourceLine}
+        >
+          {code.slice(bounds.start, bounds.end)}
+        </mark>
+        {code.slice(bounds.end)}
+      </>
+    );
+  } else if (searchQuery) body = highlightText(code, searchQuery);
 
   return (
     <div

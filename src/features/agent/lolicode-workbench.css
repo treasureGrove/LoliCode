@@ -673,6 +673,9 @@
   padding: 20px clamp(20px, 4vw, 52px);
   scrollbar-color: var(--wb-border) transparent;
 }
+.wb-chat[data-follow-tail="true"] {
+  overflow-anchor: none;
+}
 .wb-chat-content {
   max-width: 840px;
   margin: 0 auto;
@@ -712,22 +715,34 @@
   text-align: left;
   color: var(--wb-accent);
 }
-.wb-file-path-actions {
-  display: inline-flex;
+.wb-output-link > a {
+  color: var(--wb-accent);
+  text-underline-offset: 3px;
+}
+.wb-output-link > a:hover,
+.wb-file-path-label:hover {
+  text-decoration: underline;
+}
+.wb-output-open-with {
+  display: inline-grid;
   flex-shrink: 0;
-  gap: 3px;
-  opacity: 0;
-}
-.wb-file-path:hover .wb-file-path-actions,
-.wb-file-path:focus-within .wb-file-path-actions {
-  opacity: 1;
-}
-.wb-file-path-actions button {
-  padding: 3px;
+  place-items: center;
+  min-width: 20px;
+  min-height: 20px;
   border-radius: 4px;
+  color: var(--wb-muted);
+  vertical-align: middle;
 }
-.wb-file-path-actions button:hover {
+.wb-output-open-with:hover,
+.wb-output-open-with[data-state="open"] {
   background: var(--wb-hover);
+  color: var(--wb-accent);
+}
+.wb-output-open-with:focus-visible,
+.wb-output-link > a:focus-visible,
+.wb-file-path-label:focus-visible {
+  outline: 2px solid var(--wb-accent);
+  outline-offset: 1px;
 }
 .wb-usage-footer {
   max-width: 840px;
@@ -2436,7 +2451,7 @@
 .wb-send-spinner {
   animation: wb-spin 900ms linear infinite;
 }
-.wb-interrupt-send {
+.wb-steer-send {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -2447,7 +2462,7 @@
   color: var(--wb-muted);
   font-size: 11px !important;
 }
-.wb-interrupt-send:hover:not(:disabled) {
+.wb-steer-send:hover:not(:disabled) {
   background: var(--wb-hover);
   color: var(--wb-text);
 }
@@ -2474,6 +2489,35 @@
 .wb-queue-recovery button {
   flex-shrink: 0;
   color: var(--wb-accent);
+}
+.wb-agent-modes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 12px;
+  margin-bottom: 4px;
+}
+.wb-agent-goal-summary {
+  display: grid;
+  flex: 1 1 180px;
+  min-width: 0;
+  font-size: 12px;
+}
+.wb-agent-goal-summary > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wb-agent-goal-summary > small {
+  color: var(--wb-muted);
+  overflow-wrap: anywhere;
+}
+.wb-agent-mode-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
 }
 .wb-composer-meta {
   display: flex;
@@ -2919,8 +2963,7 @@
 }
 @media (hover: none) {
   .wb-companion-hide,
-  .wb-session-menu,
-  .wb-file-path-actions {
+  .wb-session-menu {
     opacity: 1;
   }
 }

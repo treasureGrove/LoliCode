@@ -15,6 +15,29 @@ use tokio::sync::Notify;
 fn idle() -> watch::Receiver<bool> {
     watch::channel(false).1
 }
+
+#[tokio::test]
+async fn automatic_mcp_preparation_is_optional_but_explicit_discovery_reports_an_invalid_root() {
+    let manager = NativeMcpTools::new();
+    let temp = tempfile::tempdir().unwrap();
+    let missing = temp.path().join("missing-project");
+    manager
+        .configure(
+            1,
+            json!({"servers":{"fixture":{"type":"remote","url":"http://127.0.0.1:1/mcp"}}}),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(manager.prepare(&missing, idle()).await.unwrap(), "");
+    assert!(manager.schemas_for_project(&missing).is_empty());
+    assert_eq!(
+        manager.discover(&missing, idle()).await.unwrap_err(),
+        "MCP 项目目录不可用"
+    );
+    assert!(!missing.exists());
+}
+
 #[derive(Default)]
 struct Observed {
     calls: AtomicUsize,

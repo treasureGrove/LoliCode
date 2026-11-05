@@ -1,8 +1,13 @@
+#[cfg(any(test, feature = "legacy-native-tests"))]
 use super::types::{Grant, StoredSession};
+#[cfg(any(test, feature = "legacy-native-tests"))]
 use crate::{AgentPart, AgentStatus};
 use serde::Serialize;
+#[cfg(any(test, feature = "legacy-native-tests"))]
 use serde_json::json;
-use std::path::{Path, PathBuf};
+use std::path::Path;
+#[cfg(any(test, feature = "legacy-native-tests"))]
+use std::path::PathBuf;
 use tokio::io::AsyncWriteExt;
 use uuid::Uuid;
 
@@ -41,6 +46,7 @@ pub(super) async fn atomic<T: Serialize + ?Sized>(path: &Path, value: &T) -> Res
     Ok(result?)
 }
 
+#[cfg(any(test, feature = "legacy-native-tests"))]
 pub(super) fn session_path(root: &Path, id: &str) -> Result<PathBuf, String> {
     let raw = id.strip_prefix("lc:").ok_or("无法识别本地会话")?;
     let uuid = Uuid::parse_str(raw).map_err(|_| "本地会话标识无效")?;
@@ -50,10 +56,12 @@ pub(super) fn session_path(root: &Path, id: &str) -> Result<PathBuf, String> {
     Ok(root.join("sessions").join(format!("{raw}.json")))
 }
 
+#[cfg(any(test, feature = "legacy-native-tests"))]
 pub(super) async fn save(root: &Path, value: &StoredSession) -> Result<(), String> {
     atomic(&session_path(root, &value.snapshot.session.id)?, value).await
 }
 
+#[cfg(any(test, feature = "legacy-native-tests"))]
 pub(super) async fn load(root: &Path) -> Result<Vec<StoredSession>, String> {
     let directory = root.join("sessions");
     tokio::fs::create_dir_all(&directory)
@@ -89,6 +97,12 @@ pub(super) async fn load(root: &Path) -> Result<Vec<StoredSession>, String> {
             serde_json::from_slice(&bytes).map_err(|_| "本地会话记录损坏，原文件已保留")?;
         if stored.format != 1 || session_path(root, &stored.snapshot.session.id)? != entry.path() {
             return Err("本地会话记录格式无效，原文件已保留".into());
+        }
+        if let Some(relation) = stored.snapshot.session.coordination.as_mut() {
+            if relation.role == "worker" {
+                relation.permission_locked = (stored.background_only || stored.secretary_automatic)
+                    .then_some(true);
+            }
         }
         // Title requests are ephemeral and are never resumed after a restart.
         let title_interrupted = stored.snapshot.title_pending;
@@ -142,6 +156,7 @@ pub(super) async fn load(root: &Path) -> Result<Vec<StoredSession>, String> {
     Ok(sessions)
 }
 
+#[cfg(any(test, feature = "legacy-native-tests"))]
 pub(super) fn repair_history(stored: &mut StoredSession) {
     let mut repaired = Vec::new();
     for index in 0..stored.history.len() {
@@ -171,6 +186,7 @@ pub(super) fn repair_history(stored: &mut StoredSession) {
     stored.history = repaired;
 }
 
+#[cfg(any(test, feature = "legacy-native-tests"))]
 pub(super) async fn load_grants(root: &Path) -> Result<Vec<Grant>, String> {
     match tokio::fs::read(root.join("project-grants.json")).await {
         Ok(bytes) => {

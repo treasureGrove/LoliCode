@@ -17,14 +17,14 @@ doctest = false
 
 [features]
 default = []
-test-hooks = ["tauri/test"]
+test-hooks = ["tauri/test", "lolicode-agent/legacy-runtime"]
 
 [build-dependencies]
 sha2 = "0.10"
 tauri-build = { version = "2.4.0", features = [] }
 
 [dependencies]
-lolicode-agent = { path = "../crates/lolicode-agent" }
+lolicode-agent = { path = "../crates/lolicode-agent", default-features = false }
 serde_json = { version = "1.0", features = ["preserve_order"] }
 serde = { version = "1.0", features = ["derive"] }
 log = "0.4"
@@ -39,6 +39,7 @@ tauri-plugin-store = "2"
 tauri-plugin-deep-link = "2"
 tauri-plugin-window-state = "2"
 dirs = "5.0"
+dom_query = "0.25.1"
 toml = "0.8"
 toml_edit = "0.22"
 reqwest = { version = "0.12", features = ["rustls-tls", "json", "stream", "socks"] }
@@ -109,13 +110,20 @@ gtk = "0.18"
 libc = "0.2"
 
 [target.'cfg(target_os = "windows")'.dependencies]
+raw-window-handle = "0.6.2"
+webview2-com = "0.38.2"
 winreg = "0.52"
+windows-core = "0.61"
+wry = { version = "0.54.3", default-features = false }
 windows-sys = { version = "0.61", features = [
     "Win32_Foundation",
     "Win32_Globalization",
+    "Win32_Security",
     "Win32_Storage_FileSystem",
+    "Win32_System_JobObjects",
     "Win32_System_Threading",
     "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
 ] }
 
 [target.'cfg(all(target_os = "windows", target_arch = "aarch64"))'.dependencies]
@@ -141,6 +149,7 @@ strip = "symbols"
 opt-level = 3
 
 [dev-dependencies]
+lolicode-agent = { path = "../crates/lolicode-agent", default-features = false, features = ["legacy-runtime", "legacy-native-tests"] }
 serial_test = "3"
 tempfile = "3"
 
