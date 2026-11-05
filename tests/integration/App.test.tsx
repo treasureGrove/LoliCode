@@ -112,21 +112,33 @@ vi.mock("@/features/channels/ChannelCenterPanel", async () => {
     ),
   };
 });
-vi.mock("@/features/settings/SettingsPage", () => ({
-  SettingsPage: ({
-    section,
-    onImportSuccess,
-  }: {
-    section: string;
-    onImportSuccess: () => Promise<void>;
-  }) => (
-    <div data-testid="settings-page" data-section={section}>
-      <button onClick={() => void onImportSuccess()}>
-        config-import-completed
-      </button>
-    </div>
-  ),
-}));
+vi.mock("@/features/settings/SettingsPage", async () => {
+  const { ChannelCenterPanel } = await import(
+    "@/features/channels/ChannelCenterPanel"
+  );
+  return {
+    SettingsPage: ({
+      section,
+      onImportSuccess,
+      onChannelNavigationBlockedChange,
+    }: {
+      section: string;
+      onImportSuccess: () => Promise<void>;
+      onChannelNavigationBlockedChange: (busy: boolean) => void;
+    }) => (
+      <div data-testid="settings-page" data-section={section}>
+        {section === "models" && (
+          <ChannelCenterPanel
+            onNavigationBlockedChange={onChannelNavigationBlockedChange}
+          />
+        )}
+        <button onClick={() => void onImportSuccess()}>
+          config-import-completed
+        </button>
+      </div>
+    ),
+  };
+});
 vi.mock("@/features/usage/SimpleUsagePage", () => ({
   SimpleUsagePage: () => <div data-testid="usage-page" />,
 }));
@@ -176,7 +188,7 @@ describe("LoliCode product shell with retained native compatibility", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "manage-channels" }));
     await screen.findByTestId("channel-center");
-    fireEvent.click(screen.getByRole("button", { name: "编程工作台" }));
+    fireEvent.click(screen.getByRole("button", { name: /^(返回|nav\.back)$/ }));
     expect(await screen.findByTestId("agent-workspace")).not.toHaveAttribute(
       "data-secretary-request",
     );
@@ -313,6 +325,27 @@ describe("LoliCode product shell with retained native compatibility", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "编程工作台" }));
     expect(await screen.findByTestId("agent-workspace")).toBeInTheDocument();
+  });
+
+  it("keeps unsaved channel edits when escaping model settings", async () => {
+    renderApp();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "manage-channels" }),
+    );
+    const draft = await screen.findByLabelText("channel-draft");
+    fireEvent.input(draft, { target: { value: "draft route" } });
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(
+      await screen.findByText("common.unsavedLeaveMessage"),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "common.unsavedLeaveCancel" }),
+    );
+    expect(draft).toHaveValue("draft route");
+    expect(screen.getByTestId("settings-page")).toHaveAttribute(
+      "data-section",
+      "models",
+    );
   });
 
   it("returns to the previous product page when closing settings with Escape", async () => {

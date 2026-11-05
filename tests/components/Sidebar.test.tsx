@@ -83,25 +83,25 @@ beforeEach(() => {
 });
 
 describe("unified workspace navigation", () => {
-  it("shows model and chat tabs with accessible destination names", () => {
+  it("shows Agent and character chat tabs with accessible destination names", () => {
     const values = props({ view: "agent" });
     mount(values);
     const navigation = screen.getByRole("navigation");
     expect(navigation).toHaveAttribute("data-collapsed", "false");
     for (const name of [
       /^编程工作台/,
-      /^渠道与模型/,
+      /^角色对话/,
       /^(更多|common\.more)(?: ·|$)/,
     ]) {
       const button = within(navigation).getByRole("button", { name });
       expect(button).toHaveAccessibleName();
     }
-    expect(
-      screen.getByRole("button", { name: /^渠道与模型/ }),
-    ).toHaveTextContent("模型");
+    expect(screen.getByRole("button", { name: "角色对话" })).toHaveTextContent(
+      "对话",
+    );
     expect(
       screen.getByRole("button", { name: "编程工作台" }),
-    ).toHaveTextContent("对话");
+    ).toHaveTextContent("代理");
     expect(screen.getByRole("button", { name: "自动化" })).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "插件市场" }),
@@ -112,14 +112,11 @@ describe("unified workspace navigation", () => {
     );
   });
 
-  it("opens the core destinations while retaining channel status and today's usage", async () => {
+  it("opens Agent, character chat, and the More destinations", async () => {
     const values = props({ view: "channels" });
     mount(values);
-    const channels = screen.getByRole("button", { name: /^渠道与模型/ });
-    expect(channels).toHaveAttribute("aria-current", "page");
-    expect(channels).toHaveAccessibleName(/nav.authNeedsReauth/);
     for (const [name, page] of [
-      [/^渠道与模型/, "channels"],
+      [/^角色对话/, "tavern"],
       [/^编程工作台/, "agent"],
     ] as const) {
       fireEvent.click(screen.getByRole("button", { name }));
@@ -137,6 +134,44 @@ describe("unified workspace navigation", () => {
       expect(values.onSelectPage).toHaveBeenLastCalledWith(page);
     }
     expect(values.onSelectApp).not.toHaveBeenCalled();
+  });
+
+  it("keeps character shortcuts usable when the chat sidebar is compact", async () => {
+    server.use(
+      http.post("http://tauri.local/get_tavern_snapshot", () =>
+        HttpResponse.json({
+          characters: [{ id: "friend", name: "小梨", hasAvatar: false }],
+          stories: [],
+        }),
+      ),
+    );
+    const onSelect = vi.fn();
+    mount(
+      props({
+        view: "tavern",
+        selectedTavernCharacterId: "friend",
+        onSelectTavernCharacter: onSelect,
+      }),
+    );
+    const friend = await screen.findByRole("button", { name: "小梨" });
+    expect(friend).toHaveAttribute("aria-current", "page");
+    fireEvent.click(screen.getByRole("button", { name: "收起侧栏" }));
+    expect(screen.getByRole("navigation")).toHaveAttribute(
+      "data-tavern-compact",
+      "true",
+    );
+    expect(
+      screen.getByRole("button", { name: "展开侧栏" }),
+    ).toBeInTheDocument();
+    fireEvent.click(friend);
+    expect(onSelect).toHaveBeenCalledWith("friend");
+    expect(screen.getByRole("button", { name: "角色对话" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(
+      screen.queryByRole("button", { name: "自动化" }),
+    ).not.toBeInTheDocument();
   });
 
   it("opens automation and plugins directly while retaining chat as their parent destination", async () => {
@@ -270,7 +305,10 @@ describe("unified workspace navigation", () => {
     expect(values.onSelectPage).not.toHaveBeenCalled();
   });
 
-  it.each(["applications", ...BUILTIN_APP_IDS] as const)(
+  it.each([
+    "applications",
+    ...BUILTIN_APP_IDS.filter((id) => id !== "tavern"),
+  ] as const)(
     "selects Applications for the %s page without exposing built-in shortcuts",
     async (view) => {
       const values = props({ view });
@@ -334,14 +372,14 @@ describe("unified workspace navigation", () => {
     },
   );
 
-  it("keeps the channel destination stable across legacy client views", () => {
+  it("keeps the Agent destination stable across legacy client views", () => {
     const values = props();
     const { rerender } = mount(values);
-    const channels = screen.getByRole("button", { name: /^渠道与模型/ });
+    const agent = screen.getByRole("button", { name: "编程工作台" });
     rerender(<Sidebar {...values} activeApp="openclaw" view="workspace" />);
-    expect(screen.getByRole("button", { name: /^渠道与模型/ })).toBe(channels);
-    fireEvent.click(channels);
-    expect(values.onSelectPage).toHaveBeenCalledWith("channels");
+    expect(screen.getByRole("button", { name: "编程工作台" })).toBe(agent);
+    fireEvent.click(agent);
+    expect(values.onSelectPage).toHaveBeenCalledWith("agent");
     expect(values.onSelectApp).not.toHaveBeenCalled();
   });
 
@@ -355,7 +393,7 @@ describe("unified workspace navigation", () => {
     expect(chat).toHaveFocus();
     expect(chat).toHaveAttribute("aria-current", "page");
     expect(
-      screen.getByRole("button", { name: /^渠道与模型/ }),
+      screen.getByRole("button", { name: "角色对话" }),
     ).not.toHaveAttribute("aria-current");
     expect(values.onSelectPage).not.toHaveBeenCalled();
   });
@@ -363,11 +401,11 @@ describe("unified workspace navigation", () => {
   it("keeps named controls reachable with the keyboard", async () => {
     const values = props({ view: "channels" });
     mount(values);
-    const channels = screen.getByRole("button", { name: /^渠道与模型/ });
-    channels.focus();
+    const chat = screen.getByRole("button", { name: "角色对话" });
+    chat.focus();
     const user = userEvent.setup();
     await user.keyboard("{Enter}");
-    expect(values.onSelectPage).toHaveBeenCalledWith("channels");
+    expect(values.onSelectPage).toHaveBeenCalledWith("tavern");
     moreButton().focus();
     await user.keyboard("{Enter}");
     expect(screen.getByRole("menu")).toBeVisible();
@@ -385,12 +423,17 @@ describe("compact settings navigation", () => {
       (section) => section !== "routing",
     )) {
       const item = screen.getByRole("button", {
-        name: new RegExp(`^settings.sections.${section}`),
+        name:
+          section === "models"
+            ? /^渠道与模型/
+            : new RegExp(`^settings.sections.${section}`),
       });
       if (section === "network")
         expect(item).toHaveAttribute("aria-current", "page");
       if (section === "about")
         expect(item).toHaveAccessibleName(/nav.settingsHasUpdate/);
+      if (section === "models")
+        expect(item).toHaveAccessibleName(/nav.authNeedsReauth/);
       fireEvent.click(item);
       expect(values.onSelectSettingsSection).toHaveBeenLastCalledWith(section);
     }

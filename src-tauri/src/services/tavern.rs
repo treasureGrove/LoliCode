@@ -221,7 +221,31 @@ pub fn import_character(state: &AppState, path: &str) -> Result<TavernCharacter,
         .and_then(|value| value.to_str())
         .unwrap_or_default()
         .to_ascii_lowercase();
-    let (raw_data, source_format, avatar_bytes) = if extension == "json" {
+    let (raw_data, source_format, avatar_bytes) = if extension == "md" {
+        if bytes.len() > MAX_CARD_JSON_BYTES {
+            return Err("人格 Markdown 超过 8 MB".into());
+        }
+        let content = String::from_utf8(bytes).map_err(|_| "人格 Markdown 不是 UTF-8 文本")?;
+        let name = content
+            .lines()
+            .filter_map(|line| line.strip_prefix("# "))
+            .map(str::trim)
+            .find(|name| !name.is_empty())
+            .or_else(|| path.file_stem().and_then(|name| name.to_str()))
+            .unwrap_or("新智能体");
+        let description = content
+            .lines()
+            .map(str::trim)
+            .find(|line| !line.is_empty())
+            .unwrap_or("")
+            .trim_start_matches('#')
+            .trim();
+        (
+            json!({"name": name, "description": description, "system_prompt": content}),
+            "markdown".to_string(),
+            None,
+        )
+    } else if extension == "json" {
         if bytes.len() > MAX_CARD_JSON_BYTES {
             return Err("角色卡 JSON 超过 8 MB".into());
         }
@@ -236,7 +260,7 @@ pub fn import_character(state: &AppState, path: &str) -> Result<TavernCharacter,
         let format = card_format(&value);
         (value, format, Some(bytes.as_slice()))
     } else {
-        return Err("目前支持 SillyTavern PNG 角色卡和 JSON 角色卡".into());
+        return Err("支持 Markdown 人格文件、SillyTavern PNG 和 JSON 角色卡".into());
     };
 
     let data = raw_data
@@ -1000,6 +1024,24 @@ fn write_avatar(relative: &str, bytes: &[u8]) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn imports_markdown_persona_without_an_avatar() {
+        let state = AppState::new(std::sync::Arc::new(
+            crate::database::Database::memory().unwrap(),
+        ));
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("persona.md");
+        let content = "# 工坊搭档\n\n和用户用中文交流。\n";
+        std::fs::write(&path, content).unwrap();
+
+        let character = import_character(&state, path.to_str().unwrap()).unwrap();
+        assert_eq!(character.name, "工坊搭档");
+        assert_eq!(character.system_prompt, content);
+        assert_eq!(character.source_format, "markdown");
+        assert!(!character.has_avatar);
+        assert_eq!(snapshot(&state).unwrap().characters[0].id, character.id);
+    }
 
     #[tokio::test]
     async fn response_reader_bounds_chunks_and_hides_provider_error_bodies() {

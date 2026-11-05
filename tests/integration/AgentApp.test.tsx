@@ -91,9 +91,13 @@ describe("LoliCode desktop entry", () => {
     ).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "添加模型渠道" }));
     expect(await screen.findByTestId("channel-center")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "渠道与模型" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: /^渠道与模型/ })).toHaveAttribute(
       "aria-current",
       "page",
+    );
+    expect(document.getElementById("content-area")).toHaveAttribute(
+      "data-view",
+      "settings",
     );
     expect(
       screen.queryByRole("button", { name: "授权中心" }),
@@ -194,9 +198,11 @@ describe("LoliCode desktop entry", () => {
       "data-tools-open",
       "true",
     );
-    expect(screen.getByRole("button", { name: "渠道与模型" })).toHaveAttribute(
-      "aria-current",
-      "page",
+    expect(document.getElementById("content-area")).toHaveAttribute(
+      "data-view",
+      "apps",
     );
+    fireEvent.click(screen.getByRole("button", { name: /^(返回|nav\.back)$/ }));
+    expect(await screen.findByTestId("agent-workspace")).toBeInTheDocument();
   });
 });

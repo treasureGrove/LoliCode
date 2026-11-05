@@ -1,7 +1,6 @@
 import {
-  useEffect,
   useCallback,
-  useMemo,
+  useEffect,
   useRef,
   useState,
   type KeyboardEvent,
@@ -12,12 +11,10 @@ import { useTranslation } from "react-i18next";
 import {
   BookHeart,
   BookOpenText,
-  ChevronDown,
-  ChevronRight,
   CircleAlert,
   Clock3,
   LoaderCircle,
-  MessageCircle,
+  MoreHorizontal,
   Plus,
   Send,
   Sparkles,
@@ -26,6 +23,18 @@ import {
 } from "lucide-react";
 import { AppPageHeader } from "@/app/shell/AppPageHeader";
 import { Button } from "@/components/ui/button";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { toast } from "@/lib/toast";
 import {
   tavernApi,
@@ -34,7 +43,6 @@ import {
   type TavernSnapshot,
 } from "@/lib/api/tavern";
 import { TavernPresetGallery } from "./TavernPresetGallery";
-import { TavernLocalModelPanel } from "./TavernLocalModelPanel";
 import companion from "@/assets/atelier/companion.png";
 import { cn } from "@/lib/utils";
 
@@ -63,14 +71,29 @@ function upsertStory(
   );
 }
 
-export function TavernPage({ onOpenChannels }: { onOpenChannels: () => void }) {
+export function TavernPage({
+  characterId: controlledCharacterId,
+  onCharacterChange,
+  onOpenChannels,
+}: {
+  characterId?: string | null;
+  onCharacterChange?: (id: string | null) => void;
+  onOpenChannels: () => void;
+}) {
   const { t, i18n } = useTranslation();
   const queryClient = useQueryClient();
-  const refreshCatalog = useCallback(
-    () => queryClient.invalidateQueries({ queryKey: CATALOG_QUERY_KEY }),
-    [queryClient],
+  const [localCharacterId, setLocalCharacterId] = useState<string | null>(null);
+  const characterId =
+    controlledCharacterId === undefined
+      ? localCharacterId
+      : controlledCharacterId;
+  const selectCharacter = useCallback(
+    (id: string | null) => {
+      if (controlledCharacterId === undefined) setLocalCharacterId(id);
+      onCharacterChange?.(id);
+    },
+    [controlledCharacterId, onCharacterChange],
   );
-  const [characterId, setCharacterId] = useState<string | null>(null);
   const [storyId, setStoryId] = useState<string | null>(null);
   const [modelId, setModelId] = useState("");
   const [draft, setDraft] = useState("");
@@ -79,6 +102,7 @@ export function TavernPage({ onOpenChannels }: { onOpenChannels: () => void }) {
   const [showContext, setShowContext] = useState(false);
   const [showPresets, setShowPresets] = useState(false);
   const messageEndRef = useRef<HTMLDivElement>(null);
+  const storyActionInFlight = useRef(false);
 
   const snapshot = useQuery({
     queryKey: TAVERN_QUERY_KEY,
@@ -93,15 +117,20 @@ export function TavernPage({ onOpenChannels }: { onOpenChannels: () => void }) {
 
   const characters = snapshot.data?.characters ?? [];
   const stories = snapshot.data?.stories ?? [];
-  const selectedCharacter = characters.find((item) => item.id === characterId);
-  const selectedStory = stories.find((item) => item.id === storyId);
-  const selectedStoryCharacter = selectedStory
-    ? characters.find((item) => item.id === selectedStory.characterId)
-    : undefined;
-  const visibleStories = useMemo(
-    () => stories.filter((story) => story.characterId === characterId),
-    [stories, characterId],
-  );
+  const selectedCharacter =
+    characters.find((item) => item.id === characterId) ?? characters[0];
+  const selectedCharacterId = selectedCharacter?.id ?? null;
+  const activeCharacterId = useRef(selectedCharacterId);
+  activeCharacterId.current = selectedCharacterId;
+  const characterStories = stories
+    .filter((story) => story.characterId === selectedCharacterId)
+    .sort((left, right) => right.updatedAt - left.updatedAt);
+  const selectedStory =
+    characterStories.find((story) => story.id === storyId) ??
+    characterStories[0];
+  const selectedStoryId = selectedStory?.id;
+  const activeStoryId = useRef(selectedStoryId);
+  activeStoryId.current = selectedStoryId;
   const avatar = useQuery({
     queryKey: ["tavern", "avatar", selectedCharacter?.id],
     queryFn: () => tavernApi.getAvatar(selectedCharacter!.id),
@@ -110,31 +139,25 @@ export function TavernPage({ onOpenChannels }: { onOpenChannels: () => void }) {
     retry: false,
   });
   const context = useQuery({
-    queryKey: ["tavern", "context", storyId],
-    queryFn: () => tavernApi.previewContext(storyId!),
-    enabled: showContext && Boolean(storyId),
+    queryKey: ["tavern", "context", selectedStoryId],
+    queryFn: () => tavernApi.previewContext(selectedStoryId!),
+    enabled: showContext && Boolean(selectedStoryId),
     staleTime: 10_000,
   });
 
   useEffect(() => {
-    if (!characterId && characters.length > 0) {
-      setCharacterId(characters[0].id);
-    } else if (
-      characterId &&
-      !characters.some((item) => item.id === characterId)
-    ) {
-      setCharacterId(characters[0]?.id ?? null);
-      setStoryId(null);
+    if (snapshot.isSuccess && characterId !== selectedCharacterId) {
+      selectCharacter(selectedCharacterId);
     }
-  }, [characters, characterId]);
+  }, [characterId, selectedCharacterId, selectCharacter, snapshot.isSuccess]);
 
   useEffect(() => {
-    if (!storyId) return;
-    const story = stories.find((item) => item.id === storyId);
-    if (!story) setStoryId(null);
-    else if (story.characterId !== characterId)
-      setCharacterId(story.characterId);
-  }, [stories, storyId, characterId]);
+    if (storyId && selectedStoryId !== storyId) setStoryId(null);
+  }, [storyId, selectedStoryId]);
+
+  useEffect(() => {
+    setDraft("");
+  }, [selectedCharacterId, selectedStoryId]);
 
   useEffect(() => {
     const models = catalog.data?.models ?? [];
@@ -160,13 +183,13 @@ export function TavernPage({ onOpenChannels }: { onOpenChannels: () => void }) {
         multiple: false,
         title: t("tavern.importTitle"),
         filters: [
-          { name: t("tavern.characterCard"), extensions: ["png", "json"] },
+          { name: "智能体人格与角色卡", extensions: ["md", "png", "json"] },
         ],
       });
       if (typeof path !== "string") return;
       const imported = await tavernApi.importCharacter(path);
       await queryClient.invalidateQueries({ queryKey: TAVERN_QUERY_KEY });
-      setCharacterId(imported.id);
+      selectCharacter(imported.id);
       setStoryId(null);
       toast.success(t("tavern.importSuccess", { name: imported.name }));
     } catch (error) {
@@ -177,9 +200,16 @@ export function TavernPage({ onOpenChannels }: { onOpenChannels: () => void }) {
   };
 
   const createStory = async () => {
-    if (!selectedCharacter) return;
+    if (
+      !selectedCharacterId ||
+      sending ||
+      selectedStory?.isGenerating ||
+      storyActionInFlight.current
+    )
+      return;
+    storyActionInFlight.current = true;
     try {
-      const story = await tavernApi.createStory(selectedCharacter.id);
+      const story = await tavernApi.createStory(selectedCharacterId);
       queryClient.setQueryData(
         TAVERN_QUERY_KEY,
         (current: typeof snapshot.data) =>
@@ -187,14 +217,29 @@ export function TavernPage({ onOpenChannels }: { onOpenChannels: () => void }) {
             ? { ...current, stories: upsertStory(current.stories, story) }
             : current,
       );
-      setStoryId(story.id);
-      setShowContext(false);
+      if (activeCharacterId.current === selectedCharacterId) {
+        setStoryId(story.id);
+        setDraft("");
+        setShowContext(false);
+      }
     } catch (error) {
       toast.error(t("tavern.storyCreateFailed"), {
         description: errorText(error),
       });
+    } finally {
+      storyActionInFlight.current = false;
     }
   };
+
+  useEffect(() => {
+    const onAdd = (event: Event) => {
+      if ((event as CustomEvent<"preset" | "card">).detail === "preset")
+        setShowPresets(true);
+      else void importCharacter();
+    };
+    window.addEventListener("lolicode:tavern-add", onAdd);
+    return () => window.removeEventListener("lolicode:tavern-add", onAdd);
+  });
 
   const startPreset = async (presetId: string) => {
     if (sending || selectedStory?.isGenerating)
@@ -222,23 +267,31 @@ export function TavernPage({ onOpenChannels }: { onOpenChannels: () => void }) {
       characters: current?.characters ?? [character],
       stories: upsertStory(current?.stories ?? [], story),
     }));
-    setCharacterId(character.id);
+    selectCharacter(character.id);
     setStoryId(story.id);
     setShowContext(false);
     setDraft("");
   };
 
   const deleteStory = async () => {
-    if (!selectedStory || selectedStory.isGenerating) return;
+    if (
+      !selectedStory ||
+      sending ||
+      selectedStory.isGenerating ||
+      storyActionInFlight.current
+    )
+      return;
+    storyActionInFlight.current = true;
     try {
       await tavernApi.deleteStory(selectedStory.id);
       await queryClient.invalidateQueries({ queryKey: TAVERN_QUERY_KEY });
-      setStoryId(null);
       toast.success(t("tavern.storyDeleted"));
     } catch (error) {
       toast.error(t("tavern.storyDeleteFailed"), {
         description: errorText(error),
       });
+    } finally {
+      storyActionInFlight.current = false;
     }
   };
 
@@ -265,7 +318,7 @@ export function TavernPage({ onOpenChannels }: { onOpenChannels: () => void }) {
         refetchType: "active",
       });
     } catch (error) {
-      setDraft(text);
+      if (activeStoryId.current === selectedStory.id) setDraft(text);
       await queryClient.invalidateQueries({ queryKey: TAVERN_QUERY_KEY });
       toast.error(t("tavern.generationFailed"), {
         description: errorText(error),
@@ -288,249 +341,69 @@ export function TavernPage({ onOpenChannels }: { onOpenChannels: () => void }) {
 
   const locale = i18n.resolvedLanguage ?? i18n.language;
   const modelOptions = catalog.data?.models ?? [];
-  const storyCharacter = selectedCharacter ?? selectedStoryCharacter;
+  const storyCharacter = selectedCharacter;
   const avatarUrl =
     selectedCharacter?.id === "builtin:sillyloli"
       ? companion
       : avatar.data?.dataUrl;
+  const addCharacterMenu = (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          aria-label="添加"
+          title="添加"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-fg-2 hover:bg-subtle"
+        >
+          <Plus className="h-5 w-5" aria-hidden="true" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent side="top" align="start">
+        <DropdownMenuItem onSelect={() => setShowPresets(true)}>
+          {t("tavern.presets.title")}
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          disabled={importing}
+          onSelect={() => void importCharacter()}
+        >
+          {t("tavern.importCard")}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <AppPageHeader
-        icon={<BookHeart className="h-5 w-5" />}
-        title={t("tavern.title")}
-        subtitle={t("tavern.subtitle")}
+        title={
+          storyCharacter?.name ??
+          (i18n.language.startsWith("zh") ? "选择好友" : "Choose a friend")
+        }
+        subtitle={
+          sending || selectedStory?.isGenerating
+            ? i18n.language.startsWith("zh")
+              ? "对方正在输入..."
+              : "Typing..."
+            : selectedStory?.title
+        }
         actions={
           <div className="flex items-center gap-2">
-            <Button onClick={() => setShowPresets(true)}>
-              <BookHeart className="h-4 w-4" />
-              {t("tavern.presets.title")}
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => void importCharacter()}
-              disabled={importing}
+            {selectedCharacter && !selectedStory && addCharacterMenu}
+            <button
+              type="button"
+              aria-label="打开对话菜单"
+              title="对话菜单"
+              onClick={() => setShowContext(true)}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-fg-2 hover:bg-subtle hover:text-fg-1"
             >
-              {importing ? (
-                <LoaderCircle className="h-4 w-4 animate-spin" />
-              ) : (
-                <Upload className="h-4 w-4" />
-              )}
-              {t("tavern.importCard")}
-            </Button>
+              <MoreHorizontal className="h-5 w-5" aria-hidden="true" />
+            </button>
           </div>
         }
       />
 
-      <TavernLocalModelPanel onChange={refreshCatalog} />
-      <div className="flex min-h-0 flex-1 gap-4 p-4 lg:p-5">
-        <aside className="flex w-[280px] shrink-0 flex-col overflow-hidden rounded-2xl border border-border bg-surface/90 shadow-v7-sm max-lg:w-[230px] max-sm:hidden">
-          <div className="flex items-center justify-between border-b border-border px-4 py-3">
-            <div>
-              <h2 className="text-sm font-semibold">
-                {t("tavern.characterLibrary")}
-              </h2>
-              <p className="mt-0.5 text-xs text-fg-3">
-                {t("tavern.characterCount", { count: characters.length })}
-              </p>
-            </div>
-            <Button
-              variant="quiet"
-              size="icon-compact"
-              aria-label={t("tavern.importCard")}
-              title={t("tavern.importCard")}
-              onClick={() => void importCharacter()}
-              disabled={importing}
-            >
-              <Plus className="h-4 w-4" />
-            </Button>
-          </div>
-
-          <div className="min-h-0 flex-1 overflow-y-auto p-2">
-            {characters.length === 0 ? (
-              <div className="px-3 py-6 text-center text-sm text-fg-3">
-                <BookHeart className="mx-auto mb-2 h-6 w-6 opacity-65" />
-                {t("tavern.noCharacters")}
-              </div>
-            ) : (
-              <div className="space-y-1">
-                {characters.map((character) => (
-                  <button
-                    key={character.id}
-                    type="button"
-                    onClick={() => {
-                      setCharacterId(character.id);
-                      setStoryId(null);
-                    }}
-                    className={cn(
-                      "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-subtle",
-                      character.id === characterId &&
-                        "bg-action/10 text-action-text",
-                    )}
-                  >
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border bg-subtle text-fg-2">
-                      {character.id === "builtin:sillyloli" ||
-                      (character.hasAvatar &&
-                        character.id === selectedCharacter?.id &&
-                        avatarUrl) ? (
-                        <img
-                          src={
-                            character.id === "builtin:sillyloli"
-                              ? companion
-                              : avatarUrl
-                          }
-                          alt=""
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        <span className="font-serif text-lg">
-                          {character.name.slice(0, 1)}
-                        </span>
-                      )}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium">
-                        {character.name}
-                      </span>
-                      <span className="block truncate text-xs text-fg-3">
-                        {character.sourceFormat === "builtin"
-                          ? t("tavern.presets.builtin")
-                          : character.sourceFormat}
-                      </span>
-                    </span>
-                    {character.id === characterId && (
-                      <ChevronRight className="h-4 w-4 shrink-0 opacity-70" />
-                    )}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {selectedCharacter && (
-              <div className="mt-5 border-t border-border pt-3">
-                <div className="mb-2 flex items-center justify-between px-2">
-                  <h3 className="text-xs font-semibold uppercase tracking-wide text-fg-3">
-                    {t("tavern.stories")}
-                  </h3>
-                  <Button
-                    variant="quiet"
-                    size="icon-compact"
-                    aria-label={t("tavern.newStory")}
-                    title={t("tavern.newStory")}
-                    onClick={() => void createStory()}
-                  >
-                    <Plus className="h-4 w-4" />
-                  </Button>
-                </div>
-                {visibleStories.length === 0 ? (
-                  <p className="px-2 py-2 text-xs text-fg-3">
-                    {t("tavern.noStories")}
-                  </p>
-                ) : (
-                  <div className="space-y-1">
-                    {visibleStories.map((story) => (
-                      <button
-                        key={story.id}
-                        type="button"
-                        onClick={() => setStoryId(story.id)}
-                        className={cn(
-                          "flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm hover:bg-subtle",
-                          story.id === storyId && "bg-subtle font-medium",
-                        )}
-                      >
-                        <MessageCircle className="h-3.5 w-3.5 shrink-0 text-fg-3" />
-                        <span className="min-w-0 flex-1 truncate">
-                          {story.title}
-                        </span>
-                        {story.isGenerating && (
-                          <LoaderCircle className="h-3.5 w-3.5 animate-spin text-action-text" />
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-          <div className="border-t border-border px-4 py-3 text-[11px] leading-5 text-fg-3">
-            {t("tavern.supportedFormats")}
-          </div>
-        </aside>
-
-        <section className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border bg-surface/90 shadow-v7-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
-            <div className="min-w-0">
-              <h2 className="truncate text-base font-semibold">
-                {selectedStory?.title ??
-                  storyCharacter?.name ??
-                  t("tavern.chooseCharacter")}
-              </h2>
-              {storyCharacter && (
-                <p className="truncate text-xs text-fg-3">
-                  {selectedStory
-                    ? storyCharacter.name
-                    : storyCharacter.sourceFormat === "builtin"
-                      ? t("tavern.presets.builtin")
-                      : storyCharacter.sourceFormat}
-                  {storyCharacter.creator ? ` · ${storyCharacter.creator}` : ""}
-                </p>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              {selectedStory && (
-                <>
-                  <Button
-                    variant={showContext ? "secondary" : "outline"}
-                    size="sm"
-                    onClick={() => setShowContext((value) => !value)}
-                  >
-                    <BookOpenText className="h-4 w-4" />
-                    {t("tavern.contextPreview")}
-                    {showContext ? (
-                      <ChevronDown className="h-3.5 w-3.5" />
-                    ) : (
-                      <ChevronRight className="h-3.5 w-3.5" />
-                    )}
-                  </Button>
-                  <Button
-                    variant="quiet"
-                    size="icon-compact"
-                    aria-label={t("tavern.deleteStory")}
-                    title={t("tavern.deleteStory")}
-                    disabled={selectedStory.isGenerating}
-                    onClick={() => void deleteStory()}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </>
-              )}
-              {selectedStory && (
-                <label className="sr-only" htmlFor="tavern-model">
-                  {t("tavern.model")}
-                </label>
-              )}
-              <select
-                id="tavern-model"
-                value={modelId}
-                onChange={(event) => setModelId(event.target.value)}
-                disabled={modelOptions.length === 0 || sending}
-                className="h-8 max-w-[250px] rounded-lg border border-border bg-surface px-2 text-xs text-fg-1 outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
-                aria-label={t("tavern.model")}
-                title={t("tavern.model")}
-              >
-                {modelOptions.length === 0 ? (
-                  <option value="">{t("tavern.noModels")}</option>
-                ) : (
-                  modelOptions.map((model) => (
-                    <option key={model.id} value={model.id}>
-                      {model.channelName} · {model.name}
-                    </option>
-                  ))
-                )}
-              </select>
-            </div>
-          </div>
-
+      <div className="flex min-h-0 flex-1">
+        <section className="flex min-w-0 flex-1 flex-col overflow-hidden bg-surface">
           {catalog.error && (
             <div className="mx-4 mt-3 flex items-center gap-2 rounded-xl border border-warning/30 bg-warning/5 px-3 py-2 text-xs text-fg-2">
               <CircleAlert className="h-4 w-4 shrink-0 text-warning" />
@@ -545,62 +418,19 @@ export function TavernPage({ onOpenChannels }: { onOpenChannels: () => void }) {
             </div>
           )}
 
-          {showContext && selectedStory && (
-            <div className="mx-4 mt-3 max-h-48 overflow-y-auto rounded-xl border border-border bg-subtle/60 p-3 text-xs">
-              {context.isLoading ? (
-                <div className="flex items-center gap-2 text-fg-3">
-                  <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
-                  {t("tavern.loadingContext")}
-                </div>
-              ) : context.error ? (
-                <p className="text-danger">{errorText(context.error)}</p>
-              ) : context.data ? (
-                <div className="space-y-2">
-                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-fg-3">
-                    <span>
-                      {t("tavern.worldInfoIncluded", {
-                        count: context.data.includedEntries.length,
-                        chars: context.data.worldInfoChars,
-                      })}
-                    </span>
-                    <span>
-                      {t("tavern.worldInfoExcluded", {
-                        count: context.data.excludedEntries.length,
-                      })}
-                    </span>
-                  </div>
-                  {context.data.includedEntries.length > 0 && (
-                    <p className="text-fg-2">
-                      {t("tavern.includedEntries", {
-                        entries: context.data.includedEntries.join("、"),
-                      })}
-                    </p>
-                  )}
-                  {context.data.excludedEntries.length > 0 && (
-                    <p className="text-fg-3">
-                      {t("tavern.excludedEntries", {
-                        entries: context.data.excludedEntries.join("、"),
-                      })}
-                    </p>
-                  )}
-                  <details>
-                    <summary className="cursor-pointer select-none font-medium text-action-text">
-                      {t("tavern.promptDetails")}
-                    </summary>
-                    <pre className="mt-2 whitespace-pre-wrap break-words font-sans leading-5 text-fg-2">
-                      {context.data.preHistory}
-                      {context.data.postHistory
-                        ? `\n\n${context.data.postHistory}`
-                        : ""}
-                    </pre>
-                  </details>
-                </div>
-              ) : null}
-            </div>
-          )}
-
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 lg:px-8">
-            {!selectedStory ? (
+            {snapshot.isPending ? (
+              <div
+                role="status"
+                className="flex h-full items-center justify-center gap-2 text-sm text-fg-3"
+              >
+                <LoaderCircle
+                  className="h-4 w-4 animate-spin"
+                  aria-hidden="true"
+                />
+                {t("common.loading")}
+              </div>
+            ) : !selectedStory ? (
               <div className="flex h-full min-h-[300px] flex-col items-center justify-center text-center">
                 <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-border bg-subtle text-action-text">
                   {avatarUrl ? (
@@ -622,7 +452,11 @@ export function TavernPage({ onOpenChannels }: { onOpenChannels: () => void }) {
                     : t("tavern.emptyLibraryHint")}
                 </p>
                 {selectedCharacter ? (
-                  <Button className="mt-5" onClick={() => void createStory()}>
+                  <Button
+                    className="mt-5"
+                    onClick={() => void createStory()}
+                    disabled={sending}
+                  >
                     <Plus className="h-4 w-4" />
                     {t("tavern.newStory")}
                   </Button>
@@ -664,9 +498,7 @@ export function TavernPage({ onOpenChannels }: { onOpenChannels: () => void }) {
                           "bg-action/10 text-action-text",
                       )}
                     >
-                      {message.role === "assistant" &&
-                      selectedStoryCharacter?.id === selectedCharacter?.id &&
-                      avatarUrl ? (
+                      {message.role === "assistant" && avatarUrl ? (
                         <img
                           src={avatarUrl}
                           alt=""
@@ -718,9 +550,9 @@ export function TavernPage({ onOpenChannels }: { onOpenChannels: () => void }) {
             )}
           </div>
 
-          <div className="border-t border-border bg-surface/80 p-3 lg:p-4">
+          <div className="shrink-0 bg-surface px-5 pb-4 pt-3 lg:px-10">
             {selectedStory ? (
-              <div className="mx-auto max-w-3xl rounded-2xl border border-border bg-app shadow-v7-sm focus-within:border-border-strong">
+              <div className="mx-auto max-w-[840px] rounded-xl border border-border bg-app shadow-sm transition-shadow focus-within:border-border-strong focus-within:ring-[3px] focus-within:ring-action/10">
                 <textarea
                   value={draft}
                   onChange={(event) => setDraft(event.target.value)}
@@ -730,16 +562,34 @@ export function TavernPage({ onOpenChannels }: { onOpenChannels: () => void }) {
                   })}
                   aria-label={t("tavern.messageInput")}
                   disabled={sending || modelOptions.length === 0}
-                  className="block max-h-48 min-h-[76px] w-full resize-y bg-transparent px-4 py-3 text-sm leading-6 text-fg-1 outline-none placeholder:text-fg-3 disabled:opacity-60"
+                  className="block max-h-[210px] min-h-[78px] w-full resize-y border-0 bg-transparent px-[15px] pb-2 pt-[14px] text-sm leading-6 text-fg-1 outline-none placeholder:text-fg-3 disabled:opacity-60"
                 />
-                <div className="flex items-center justify-between gap-3 px-3 pb-2.5">
-                  <p className="min-w-0 truncate text-[11px] text-fg-3">
-                    {selectedStory.messages.length > 0
-                      ? t("tavern.messageCount", {
-                          count: selectedStory.messages.length,
-                        })
-                      : t("tavern.contextUsesSharedModel")}
-                  </p>
+                <div className="flex flex-wrap items-center gap-2 px-2 pb-2">
+                  {addCharacterMenu}
+                  <select
+                    id="tavern-model"
+                    value={modelId}
+                    onChange={(event) => setModelId(event.target.value)}
+                    disabled={modelOptions.length === 0 || sending}
+                    aria-label={t("tavern.model")}
+                    className="h-8 max-w-[230px] min-w-0 rounded-lg border-0 bg-transparent px-2 text-xs text-fg-2 outline-none hover:bg-subtle disabled:opacity-60"
+                  >
+                    {modelOptions.length === 0 ? (
+                      <option value="">{t("tavern.noModels")}</option>
+                    ) : (
+                      modelOptions.map((model) => (
+                        <option key={model.id} value={model.id}>
+                          {model.channelName} · {model.name}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                  {catalog.isSuccess && modelOptions.length === 0 && (
+                    <Button size="sm" variant="quiet" onClick={onOpenChannels}>
+                      {t("tavern.configureModels")}
+                    </Button>
+                  )}
+                  <span className="min-w-0 flex-1" />
                   <Button
                     size="sm"
                     disabled={!draft.trim() || sending || !modelId}
@@ -763,12 +613,136 @@ export function TavernPage({ onOpenChannels }: { onOpenChannels: () => void }) {
                     : t("tavern.selectStoryHint")}
               </p>
             )}
-            <p className="mt-2 text-center text-[10px] text-fg-3">
-              {t("tavern.enterHint")}
-            </p>
           </div>
         </section>
       </div>
+      <Sheet open={showContext} onOpenChange={setShowContext}>
+        <SheetContent
+          closeLabel="关闭对话菜单"
+          width={420}
+          dismissOnOutsideClick
+        >
+          <div className="border-b border-border px-5 py-5">
+            <SheetTitle>对话菜单</SheetTitle>
+            <SheetDescription className="sr-only">
+              {t("tavern.stories")} · {t("tavern.contextPreview")}
+            </SheetDescription>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto p-5">
+            {selectedCharacter && (
+              <section
+                className="mb-5 border-b border-border pb-4"
+                aria-label={t("tavern.stories")}
+              >
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <h3 className="text-sm font-semibold">
+                    {t("tavern.stories")}
+                  </h3>
+                  <Button
+                    size="sm"
+                    variant="quiet"
+                    onClick={() => void createStory()}
+                    disabled={sending || selectedStory?.isGenerating}
+                  >
+                    <Plus className="h-4 w-4" />
+                    {t("tavern.newStory")}
+                  </Button>
+                </div>
+                {characterStories.length === 0 && (
+                  <p className="text-sm text-fg-3">{t("tavern.noStories")}</p>
+                )}
+                {characterStories.map((story) => (
+                  <button
+                    key={story.id}
+                    type="button"
+                    aria-current={
+                      story.id === selectedStoryId ? "true" : undefined
+                    }
+                    className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm hover:bg-subtle aria-[current=true]:bg-subtle"
+                    onClick={() => {
+                      setStoryId(story.id);
+                      setDraft("");
+                      setShowContext(false);
+                    }}
+                  >
+                    <span className="min-w-0 flex-1 truncate">
+                      {story.title}
+                    </span>
+                    {story.isGenerating && (
+                      <LoaderCircle
+                        className="h-4 w-4 animate-spin text-action-text"
+                        aria-hidden="true"
+                      />
+                    )}
+                  </button>
+                ))}
+                {selectedStory && (
+                  <Button
+                    size="sm"
+                    variant="quiet"
+                    className="mt-2"
+                    disabled={sending || selectedStory.isGenerating}
+                    onClick={() => void deleteStory()}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    {t("tavern.deleteStory")}
+                  </Button>
+                )}
+              </section>
+            )}
+            <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold">
+              <BookOpenText className="h-4 w-4" aria-hidden="true" />
+              {t("tavern.contextPreview")}
+            </h3>
+            {!selectedStory ? (
+              <p className="text-sm text-fg-3">请先选择好友</p>
+            ) : context.isLoading ? (
+              <p className="text-sm text-fg-3">{t("tavern.loadingContext")}</p>
+            ) : context.error ? (
+              <p className="text-sm text-danger">{errorText(context.error)}</p>
+            ) : context.data ? (
+              <div className="space-y-3 text-sm text-fg-2">
+                <p>
+                  {t("tavern.worldInfoIncluded", {
+                    count: context.data.includedEntries.length,
+                    chars: context.data.worldInfoChars,
+                  })}
+                </p>
+                <p>
+                  {t("tavern.worldInfoExcluded", {
+                    count: context.data.excludedEntries.length,
+                  })}
+                </p>
+                {context.data.includedEntries.length > 0 && (
+                  <p>
+                    {t("tavern.includedEntries", {
+                      entries: context.data.includedEntries.join("、"),
+                    })}
+                  </p>
+                )}
+                {context.data.excludedEntries.length > 0 && (
+                  <p>
+                    {t("tavern.excludedEntries", {
+                      entries: context.data.excludedEntries.join("、"),
+                    })}
+                  </p>
+                )}
+                <details className="rounded-lg border border-border bg-subtle/60 p-3">
+                  <summary className="cursor-pointer font-medium">
+                    {t("tavern.promptDetails")}
+                  </summary>
+                  <pre className="mt-3 whitespace-pre-wrap break-words font-sans text-xs leading-5">
+                    {context.data.preHistory}
+                    {context.data.postHistory
+                      ? `\n\n${context.data.postHistory}`
+                      : ""}
+                  </pre>
+                </details>
+              </div>
+            ) : null}
+          </div>
+        </SheetContent>
+      </Sheet>
       <TavernPresetGallery
         open={showPresets}
         onOpenChange={setShowPresets}

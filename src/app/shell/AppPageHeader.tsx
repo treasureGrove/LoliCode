@@ -1,10 +1,13 @@
 import { createContext, useContext, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
+import { ArrowLeft } from "lucide-react";
 import { DRAG_REGION_ATTR, DRAG_REGION_STYLE } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { BuildChannelBadge } from "./BuildChannelBadge";
 
 /** Linux window controls follow the actions on every page. */
 export const WindowControlsContext = createContext<ReactNode>(null);
+export const PageBackContext = createContext<(() => void) | null>(null);
 const NO_DRAG = { WebkitAppRegion: "no-drag" } as React.CSSProperties;
 
 interface AppPageHeaderProps {
@@ -33,6 +36,8 @@ export function AppPageHeader({
   className,
 }: AppPageHeaderProps) {
   const windowControls = useContext(WindowControlsContext);
+  const onBack = useContext(PageBackContext);
+  const { t } = useTranslation();
   const contextualTitle = variant === "client" && subtitle;
   return (
     <header
@@ -42,6 +47,18 @@ export function AppPageHeader({
       style={DRAG_REGION_STYLE as React.CSSProperties}
     >
       <div {...DRAG_REGION_ATTR} className="tai-shell-heading">
+        {onBack && !leading && (
+          <button
+            type="button"
+            aria-label={t("nav.back")}
+            title={t("nav.back")}
+            onClick={onBack}
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-fg-2 hover:bg-subtle hover:text-fg-1"
+            style={NO_DRAG}
+          >
+            <ArrowLeft className="h-5 w-5" aria-hidden="true" />
+          </button>
+        )}
         {leading && (
           <span className="flex shrink-0 items-center" style={NO_DRAG}>
             {leading}

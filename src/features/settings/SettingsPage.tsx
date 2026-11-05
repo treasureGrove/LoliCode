@@ -31,6 +31,9 @@ import { settingsApi, type AppId } from "@/lib/api";
 import { useSettingsQuery } from "@/lib/query";
 import type { SettingsSection } from "@/lib/navigation";
 import { AppPageHeader } from "@/app/shell/AppPageHeader";
+import { ChannelCenterPanel } from "@/features/channels/ChannelCenterPanel";
+import { TavernLocalModelPanel } from "@/features/tavern/TavernLocalModelPanel";
+import { useQueryClient } from "@tanstack/react-query";
 import { MotionSurface } from "@/components/motion/MotionSurface";
 import { DirectoryInput } from "@/features/settings/DirectorySettings";
 import { ImportExportSection } from "@/features/settings/ImportExportSection";
@@ -58,6 +61,7 @@ const SECTION_ICON: Record<
   ComponentType<{ className?: string; strokeWidth?: number | string }>
 > = {
   general: SlidersHorizontal,
+  models: SlidersHorizontal,
   appConfig: Folder,
   routing: Route,
   network: Globe,
@@ -74,10 +78,11 @@ interface SettingsPageProps {
   onOpenApps: () => void;
   /** 本地路由 →「正在使用路由的应用」的「前往」 */
   onOpenApp: (app: AppId) => void;
+  onChannelNavigationBlockedChange?: (blocked: boolean) => void;
 }
 
 /**
- * 设置（v7）：侧栏换成设置目录，这里只渲染当前分组。设置里只放偏好，功能页都在侧栏。
+ * 设置按侧栏目录渲染当前分组，渠道与模型共用渠道中心。
  * 开关类即时保存；路径类改完点本节的「保存」。
  */
 export function SettingsPage({
@@ -86,8 +91,10 @@ export function SettingsPage({
   onImportSuccess,
   onOpenApps,
   onOpenApp,
+  onChannelNavigationBlockedChange,
 }: SettingsPageProps) {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
   const {
     settings,
     isLoading,
@@ -369,6 +376,21 @@ export function SettingsPage({
   const renderSection = () => {
     if (!settings) return null;
     switch (section) {
+      case "models":
+        return (
+          <>
+            <ChannelCenterPanel
+              onNavigationBlockedChange={onChannelNavigationBlockedChange}
+            />
+            <TavernLocalModelPanel
+              onChange={() =>
+                queryClient.invalidateQueries({
+                  queryKey: ["tavern", "catalog"],
+                })
+              }
+            />
+          </>
+        );
       case "general":
         return (
           <GeneralSection
@@ -532,7 +554,11 @@ export function SettingsPage({
     <>
       <AppPageHeader
         icon={<SectionIcon className="h-5 w-5" strokeWidth={1.5} />}
-        title={t(`settings.sections.${section}`)}
+        title={
+          section === "models"
+            ? t("channelCenter.navigation", { defaultValue: "渠道与模型" })
+            : t(`settings.sections.${section}`)
+        }
         subtitle={t("nav.settings")}
       />
       <div
@@ -551,7 +577,11 @@ export function SettingsPage({
           <MotionSurface motionKey={section}>
             <SettingsBody>
               <p className="tai-settings-intro">
-                {t(`settings.sectionDescriptions.${section}`)}
+                {section === "models"
+                  ? t("channelCenter.subtitle", {
+                      defaultValue: "添加一次，配置到你的 AI 工具",
+                    })
+                  : t(`settings.sectionDescriptions.${section}`)}
               </p>
               {renderSection()}
             </SettingsBody>

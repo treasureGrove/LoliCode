@@ -469,6 +469,7 @@ pub(super) async fn recover_orphans(
                         let task=AgentSecretaryTask{id:task_id.clone(),parent_session_id:parent_id.clone(),session_id:session.id.clone(),title:session.title.clone(),
                             instructions:input.map(|input|input.text.clone()).unwrap_or_else(||"恢复的工作会话。原任务的登记未完成，请核对项目状态并明确任务后继续。".into()),
                             status:"interrupted".into(),created_at:session.created_at,updated_at:now(),summary:worker_summary(&saved, "interrupted"),error:Some("应用在登记工作任务时中断，未自动执行或重放".into()),
+                            report: None,
                             project_path:session.project_path.clone(),request_id:input.map(|input|input.request_id.clone()).unwrap_or_else(||format!("recovered:{}",session.id)),
                             execution_mode: if saved.secretary_worktree.is_some() { AgentSecretaryExecutionMode::Worktree } else { AgentSecretaryExecutionMode::Shared },
                             worktree: saved.secretary_worktree.clone(),

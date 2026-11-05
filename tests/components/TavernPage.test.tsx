@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -180,23 +180,45 @@ beforeEach(() => {
         stored.stories.push(story);
         return story;
       }
+      if (command === "delete_tavern_story") {
+        const { storyId } = args as { storyId: string };
+        stored.stories = stored.stories.filter((story) => story.id !== storyId);
+        return;
+      }
+      if (command === "preview_tavern_context")
+        return {
+          preHistory: "",
+          postHistory: "",
+          includedEntries: [],
+          excludedEntries: [],
+          worldInfoChars: 0,
+        };
       throw new Error(`Unexpected command: ${command}`);
     });
 });
-function mount() {
+function mount(onOpenChannels = vi.fn()) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   render(
     <QueryClientProvider client={client}>
-      <TavernPage onOpenChannels={vi.fn()} />
+      <TavernPage onOpenChannels={onOpenChannels} />
     </QueryClientProvider>,
   );
   return client;
 }
+async function showGallery(user: ReturnType<typeof userEvent.setup>) {
+  const trigger = await screen.findByRole("button", {
+    name: /^(从预设人物开始|添加)$/,
+  });
+  await user.click(trigger);
+  if (trigger.getAttribute("aria-label") === "添加") {
+    await user.click(await screen.findByRole("menuitem", { name: "预设人物" }));
+  }
+  return screen.findByRole("dialog");
+}
 async function openGallery(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(await screen.findByRole("button", { name: "预设人物" }));
-  const dialog = await screen.findByRole("dialog");
+  const dialog = await showGallery(user);
   await within(dialog).findByRole("button", { name: "与sillyLoli开始故事" });
   return dialog;
 }
@@ -206,17 +228,21 @@ const calls = (command: string) =>
 describe("Tavern bundled character flow", () => {
   it("refreshes an empty model catalog after local setup and chats with the selected local model", async () => {
     const user = userEvent.setup();
-    mount();
+    const openChannels = vi.fn();
+    const client = mount(openChannels);
     const gallery = await openGallery(user);
     await user.click(
       within(gallery).getByRole("button", { name: "与sillyLoli开始故事" }),
     );
     const input = await screen.findByRole("textbox", { name: "故事消息" });
     expect(input).toBeDisabled();
-    await user.click(screen.getByRole("button", { name: "展开本地模型设置" }));
-    await user.click(screen.getByRole("button", { name: "一键配置并启用" }));
+    await user.click(screen.getByRole("button", { name: "配置模型" }));
+    expect(openChannels).toHaveBeenCalledOnce();
+    localEnabled = true;
+    await act(() =>
+      client.invalidateQueries({ queryKey: ["tavern", "catalog"] }),
+    );
     await waitFor(() => expect(input).toBeEnabled());
-    await user.click(screen.getByRole("button", { name: "收起本地模型设置" }));
     await user.type(input, "陪我聊一会儿。");
     await user.click(screen.getByRole("button", { name: "发送" }));
     expect(await screen.findByText("来啦，坐下来聊一会儿吧。")).toBeVisible();
@@ -263,9 +289,7 @@ describe("Tavern bundled character flow", () => {
     await waitFor(() =>
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
     );
-    expect(
-      await screen.findByRole("heading", { name: "与sillyLoli的新故事" }),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("与sillyLoli的新故事")).toBeInTheDocument();
     expect(screen.getByText(character.firstMes)).toBeVisible();
     expect(stored.characters).toHaveLength(1);
     expect(stored.stories).toHaveLength(1);
@@ -306,7 +330,7 @@ describe("Tavern bundled character flow", () => {
     await user.click(
       within(dialog).getByRole("button", { name: "与sillyLoli开始故事" }),
     );
-    await screen.findByRole("heading", { name: "与sillyLoli的新故事" });
+    await screen.findByText("与sillyLoli的新故事");
     expect(screen.getByText(edited.firstMes)).toBeVisible();
     expect(stored.characters).toHaveLength(2);
     expect(
@@ -333,7 +357,7 @@ describe("Tavern bundled character flow", () => {
     await user.click(
       within(dialog).getByRole("button", { name: "与sillyLoli开始故事" }),
     );
-    await screen.findByRole("heading", { name: "与sillyLoli的新故事" });
+    await screen.findByText("与sillyLoli的新故事");
     expect(stored.characters).toHaveLength(1);
     expect(stored.stories).toHaveLength(1);
   });
@@ -342,8 +366,7 @@ describe("Tavern bundled character flow", () => {
     const user = userEvent.setup();
     failPresets = true;
     mount();
-    await user.click(await screen.findByRole("button", { name: "预设人物" }));
-    const dialog = await screen.findByRole("dialog");
+    const dialog = await showGallery(user);
     expect(await within(dialog).findByRole("alert")).toHaveTextContent(
       "预设人物暂时无法读取",
     );
@@ -385,9 +408,7 @@ describe("Tavern bundled character flow", () => {
       },
     ];
     mount();
-    await user.click(
-      await screen.findByRole("button", { name: "生成中的故事" }),
-    );
+    await screen.findByText("对方正在输入...");
     const dialog = await openGallery(user);
     expect(
       within(dialog).getByRole("button", { name: "与sillyLoli开始故事" }),
@@ -396,5 +417,44 @@ describe("Tavern bundled character flow", () => {
       "当前故事正在生成",
     );
     expect(calls("add_tavern_preset")).toHaveLength(0);
+  });
+
+  it("opens the latest story and keeps older stories selectable and deletable", async () => {
+    const user = userEvent.setup();
+    stored.characters = [character];
+    stored.stories = [
+      { id: "old", title: "早期故事", updatedAt: 1 },
+      { id: "latest", title: "最近故事", updatedAt: 2 },
+    ].map((story) => ({
+      ...story,
+      characterId: character.id,
+      createdAt: 1,
+      isGenerating: false,
+      messages: [],
+    }));
+    mount();
+    expect(await screen.findByText("最近故事")).toBeVisible();
+    expect(calls("create_tavern_story")).toHaveLength(0);
+
+    const showStories = async () => {
+      await user.click(screen.getByRole("button", { name: "打开对话菜单" }));
+      return screen.findByRole("dialog");
+    };
+    const history = await showStories();
+    await user.click(within(history).getByRole("button", { name: "早期故事" }));
+    expect(await screen.findByText("早期故事")).toBeVisible();
+    const oldStory = await showStories();
+    await user.click(
+      within(oldStory).getByRole("button", { name: "删除这个故事" }),
+    );
+    await waitFor(() =>
+      expect(stored.stories.map(({ id }) => id)).toEqual(["latest"]),
+    );
+    await user.click(
+      within(oldStory).getByRole("button", { name: "开始新故事" }),
+    );
+    expect(await screen.findByText("与sillyLoli的新故事")).toBeVisible();
+    expect(stored.stories.map(({ id }) => id)).toContain("latest");
+    expect(calls("create_tavern_story")).toHaveLength(1);
   });
 });

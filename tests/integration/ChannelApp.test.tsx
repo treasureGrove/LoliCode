@@ -35,10 +35,13 @@ describe("simple application shell", () => {
       </QueryClientProvider>,
     );
     expect(await screen.findByTestId("channel-center")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "渠道与模型" })).toHaveAttribute(
-      "aria-current",
-      "page",
+    expect(document.getElementById("content-area")).toHaveAttribute(
+      "data-view",
+      "channels",
     );
+    expect(
+      screen.getByRole("heading", { name: "渠道与模型" }),
+    ).toBeInTheDocument();
     for (const name of [
       "MCP",
       "Skills",

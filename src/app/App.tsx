@@ -22,6 +22,7 @@ import { MotionSurface } from "@/components/motion/MotionSurface";
 import { SettingsPage } from "@/features/settings/SettingsPage";
 import {
   AppPageHeader,
+  PageBackContext,
   WindowControlsContext,
 } from "@/app/shell/AppPageHeader";
 import { Sidebar, type SidebarProps } from "@/app/shell/Sidebar";
@@ -84,7 +85,8 @@ function App() {
     useState<SettingsSection>("general");
   const [appConfigScrollTarget, setAppConfigScrollTarget] = useState<AppId>();
   // 进设置前停留的页面：设置目录里的「← 返回」回到这里
-  const settingsReturnViewRef = useRef<View>("channels");
+  const settingsReturnViewRef = useRef<View>("agent");
+  const pageReturnViewRef = useRef<View>("agent");
   const allowanceReturnViewRef = useRef<View>("agent");
   const [channelNavigationBusy, setChannelNavigationBusy] = useState(false);
   const [agentInitialProjectPath, setAgentInitialProjectPath] =
@@ -108,6 +110,9 @@ function App() {
     initialTab?: AgentToolTab;
   }>();
   const [activeAgentTool, setActiveAgentTool] = useState<AgentTool | null>(
+    null,
+  );
+  const [tavernCharacterId, setTavernCharacterId] = useState<string | null>(
     null,
   );
 
@@ -395,6 +400,7 @@ function App() {
   };
 
   const exitSettings = () => {
+    if (managementBusyRef.current || confirmLeave(exitSettings)) return;
     setCurrentView(settingsReturnViewRef.current);
   };
 
@@ -407,23 +413,35 @@ function App() {
     setCurrentView(productViewOf("providers"));
   };
 
-  const openPage = (page: GlobalPage | "settings") => {
+  const openPage = (page: View, returning = false) => {
     if (page === "settings") {
       openSettings("general");
       return;
     }
     if (managementBusyRef.current) return;
-    if (confirmLeave(() => openPage(page))) return;
+    if (confirmLeave(() => openPage(page, returning))) return;
     setSecretaryRequest(undefined);
-    if (page === "allowance" && currentViewRef.current !== "allowance") {
-      allowanceReturnViewRef.current = currentViewRef.current;
+    const destination = productViewOf(page);
+    const origin = currentViewRef.current;
+    if (destination !== origin) {
+      if (destination === "allowance") allowanceReturnViewRef.current = origin;
+      pageReturnViewRef.current = returning
+        ? "agent"
+        : origin === "settings"
+          ? settingsReturnViewRef.current
+          : origin;
     }
     setActiveAgentTool(null);
     setAgentToolRequest((previous) => ({
       tool: null,
       id: (previous?.id ?? 0) + 1,
     }));
-    setCurrentView(productViewOf(page));
+    setCurrentView(destination);
+  };
+
+  const backToPreviousPage = () => {
+    const previous = pageReturnViewRef.current;
+    openPage(previous === currentViewRef.current ? "agent" : previous, true);
   };
 
   const exitAllowance = () => {
@@ -501,6 +519,8 @@ function App() {
 
   const openSettingsRef = useRef(openSettings);
   openSettingsRef.current = openSettings;
+  const exitSettingsRef = useRef(exitSettings);
+  exitSettingsRef.current = exitSettings;
   const exitAllowanceRef = useRef(exitAllowance);
   exitAllowanceRef.current = exitAllowance;
 
@@ -521,7 +541,7 @@ function App() {
       const view = currentViewRef.current;
       if (view === "settings") {
         event.preventDefault();
-        setCurrentView(settingsReturnViewRef.current);
+        exitSettingsRef.current();
       } else if (view === "allowance") {
         event.preventDefault();
         exitAllowanceRef.current();
@@ -564,6 +584,8 @@ function App() {
       {...slots}
       onOpenAgentTool={openAgentTool}
       activeAgentTool={currentView === "agent" ? activeAgentTool : null}
+      selectedTavernCharacterId={tavernCharacterId}
+      onSelectTavernCharacter={setTavernCharacterId}
       activeApp={activeApp}
       view={currentView}
       visibleApps={visibleApps}
@@ -571,10 +593,7 @@ function App() {
       onSelectApp={selectApp}
       onSelectPage={openPageFromNav}
       onOpenUpdates={() => openSettings("about")}
-      onSelectSettingsSection={(section) => {
-        setAppConfigScrollTarget(undefined);
-        setSettingsSection(section);
-      }}
+      onSelectSettingsSection={openSettings}
       onExitSettings={exitSettings}
       appsUpdateAvailable={checkToolUpdatesOnStartup && toolUpdatesAvailable}
     />
@@ -621,7 +640,7 @@ function App() {
                 onInitialProjectConsumed={() =>
                   setAgentInitialProjectPath(undefined)
                 }
-                onOpenChannels={() => openPage("channels")}
+                onOpenChannels={() => openSettings("models")}
                 onOpenAbout={() => openSettings("about")}
                 onCheckUpdate={() => {
                   void checkUpdate()
@@ -674,14 +693,20 @@ function App() {
       case "allowance":
         return <LolicodeAllowancePage onBack={exitAllowance} />;
       case "tavern":
-        return <TavernPage onOpenChannels={() => openPage("channels")} />;
+        return (
+          <TavernPage
+            characterId={tavernCharacterId}
+            onCharacterChange={setTavernCharacterId}
+            onOpenChannels={() => openSettings("models")}
+          />
+        );
       case "rankings":
       case "free-ai":
         return <DiscoveryPage key={productView} kind={productView} />;
       case "unreal":
         return (
           <UnrealPage
-            onOpenChannels={() => openPage("channels")}
+            onOpenChannels={() => openSettings("models")}
             onOpenAgentProject={openUnrealProjectInAgent}
           />
         );
@@ -697,8 +722,9 @@ function App() {
           section={settingsSection}
           appConfigScrollTarget={appConfigScrollTarget}
           onImportSuccess={handleImportSuccess}
-          onOpenApps={() => setCurrentView("apps")}
+          onOpenApps={() => openPage("apps")}
           onOpenApp={selectApp}
+          onChannelNavigationBlockedChange={setChannelNavigationBusy}
         />
       );
     }
@@ -709,56 +735,66 @@ function App() {
     <WindowControlsContext.Provider
       value={useAppWindowControls ? <WindowControls /> : null}
     >
-      <LayoutGroup id="desktop-navigation">
-        <div className="tai-shell lolicode-refreshed-shell flex h-screen overflow-hidden bg-app text-fg-1 selection:bg-action/25">
-          {currentView !== "agent" && renderSidebar()}
-          <main
-            ref={mainScrollRef}
-            id="content-area"
-            data-view={currentView}
-            className="tai-main relative isolate flex min-w-0 flex-1 flex-col overflow-hidden bg-app"
-          >
-            {showEnvBanner && envConflicts.length > 0 && (
-              <EnvWarningBanner
-                conflicts={envConflicts}
-                onDismiss={() => {
-                  setShowEnvBanner(false);
-                  sessionStorage.setItem("env_banner_dismissed", "true");
-                }}
-                onDeleted={async () => {
-                  try {
-                    const allConflicts = await checkAllEnvConflicts();
-                    const flatConflicts = Object.values(allConflicts).flat();
-                    setEnvConflicts(flatConflicts);
-                    if (flatConflicts.length === 0) {
-                      setShowEnvBanner(false);
-                    }
-                  } catch (error) {
-                    console.error(
-                      "[App] Failed to re-check conflicts after deletion:",
-                      error,
-                    );
-                  }
-                }}
-              />
-            )}
-            <MotionSurface
-              motionKey={`${currentView}:${activeApp}:${currentView === "settings" ? settingsSection : ""}`}
-              targetSelector={
-                currentView === "agent" ? ".wb-chat-surface" : undefined
-              }
-              className="tai-page flex min-h-0 flex-1 flex-col"
+      <PageBackContext.Provider
+        value={
+          currentView === "agent" ||
+          currentView === "settings" ||
+          currentView === "tavern"
+            ? null
+            : backToPreviousPage
+        }
+      >
+        <LayoutGroup id="desktop-navigation">
+          <div className="tai-shell lolicode-refreshed-shell flex h-screen overflow-hidden bg-app text-fg-1 selection:bg-action/25">
+            {currentView !== "agent" && renderSidebar()}
+            <main
+              ref={mainScrollRef}
+              id="content-area"
+              data-view={currentView}
+              className="tai-main relative isolate flex min-w-0 flex-1 flex-col overflow-hidden bg-app"
             >
-              {/* Navigation owns business-page identity; motion does not remount it. */}
-              <Fragment
-                key={currentView === "settings" ? "settings" : currentView}
+              {showEnvBanner && envConflicts.length > 0 && (
+                <EnvWarningBanner
+                  conflicts={envConflicts}
+                  onDismiss={() => {
+                    setShowEnvBanner(false);
+                    sessionStorage.setItem("env_banner_dismissed", "true");
+                  }}
+                  onDeleted={async () => {
+                    try {
+                      const allConflicts = await checkAllEnvConflicts();
+                      const flatConflicts = Object.values(allConflicts).flat();
+                      setEnvConflicts(flatConflicts);
+                      if (flatConflicts.length === 0) {
+                        setShowEnvBanner(false);
+                      }
+                    } catch (error) {
+                      console.error(
+                        "[App] Failed to re-check conflicts after deletion:",
+                        error,
+                      );
+                    }
+                  }}
+                />
+              )}
+              <MotionSurface
+                motionKey={`${currentView}:${activeApp}:${currentView === "settings" ? settingsSection : ""}`}
+                targetSelector={
+                  currentView === "agent" ? ".wb-chat-surface" : undefined
+                }
+                className="tai-page flex min-h-0 flex-1 flex-col"
               >
-                {renderContent()}
-              </Fragment>
-            </MotionSurface>
-          </main>
-        </div>
-      </LayoutGroup>
+                {/* Navigation owns business-page identity; motion does not remount it. */}
+                <Fragment
+                  key={currentView === "settings" ? "settings" : currentView}
+                >
+                  {renderContent()}
+                </Fragment>
+              </MotionSurface>
+            </main>
+          </div>
+        </LayoutGroup>
+      </PageBackContext.Provider>
       <AgentCompanion onOpenSecretary={openSecretaryFromCompanion} />
 
       <ConfirmDialog
