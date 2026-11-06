@@ -86,6 +86,8 @@ export interface AgentSessionSyncResult {
 }
 
 export const agentApi = {
+  readSessionMarkdown: (sessionId: string) =>
+    invoke<string>("read_agent_session_markdown", { sessionId }),
   syncSessions: (direction: AgentSessionSyncDirection = "both") =>
     invoke<AgentSessionSyncResult>("sync_agent_sessions", { direction }),
   getNativeActivity: () =>

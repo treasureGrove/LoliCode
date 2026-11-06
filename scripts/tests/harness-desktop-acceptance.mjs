@@ -1,9 +1,9 @@
 // Runs a hidden Windows development build with a disposable profile and model.
 // Run from a non-elevated shell so WebView2 honors the fixture debugging port.
-// Usage: node scripts/tests/harness-desktop-acceptance.mjs [--permissions | --output-links | --compact | --dock-tools | --background-jobs | --native-modes | --switching | --titles]
+// Usage: node scripts/tests/harness-desktop-acceptance.mjs [--permissions | --output-links | --compact | --dock-tools | --background-jobs | --native-modes | --switching | --session-export | --titles]
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { createWriteStream } from "node:fs";
 import {
@@ -12,6 +12,7 @@ import {
   mkdtemp,
   readdir,
   readFile,
+  stat,
   writeFile,
 } from "node:fs/promises";
 import { createServer } from "node:http";
@@ -36,6 +37,7 @@ const nativeModesOnly = process.argv.includes("--native-modes");
 const switchingOnly = process.argv.includes("--switching");
 const switchingReducedMotion = switchingOnly && process.env.LOLICODE_HARNESS_DESKTOP_REDUCED_MOTION === "1";
 const switchingProfileScale = switchingOnly && process.env.LOLICODE_HARNESS_DESKTOP_PROFILE_SCALE === "1";
+const sessionExportOnly = process.argv.includes("--session-export");
 const titlesOnly = process.argv.includes("--titles");
 const titles = {
   firstPrompt: "请整理故障排查顺序，并列出需要复核的检查项。",
@@ -54,6 +56,25 @@ const titles = {
 let titleRequests = 0;
 let titleConversationTurns = 0;
 let heldTitleReply;
+const sessionExport = {
+  title: "完整 Markdown 验收",
+  emptyTitle: "空会话 Markdown 验收",
+  legacyTitle: "旧会话 Markdown 验收",
+  legacyId: "lc:" + randomUUID(),
+  legacyHistory: "HARNESS_EXPORT_LEGACY_HISTORY",
+  legacyPrompt: "HARNESS_EXPORT_LEGACY_PROMPT",
+  legacyAnswer: "HARNESS_EXPORT_LEGACY_ANSWER",
+  workerTitle: "Markdown 导出子任务",
+  workerPrompt: "HARNESS_EXPORT_WORKER_PROMPT",
+  workerAnswer: "HARNESS_EXPORT_WORKER_ANSWER",
+  activePrompt: "HARNESS_EXPORT_ACTIVE_PROMPT",
+  activeAnswer: "HARNESS_EXPORT_ACTIVE_ANSWER",
+  turnPrefix: "HARNESS_EXPORT_TURN_",
+  answerPrefix: "HARNESS_EXPORT_ANSWER_",
+  turns: 22,
+};
+let sessionExportRequests = 0;
+let releaseSessionExportReply;
 const occupyProxyPort = process.env.LOLICODE_HARNESS_DESKTOP_OCCUPY_PROXY === "1";
 const nativeModes = {
   plan: "DESKTOP_NATIVE_PLAN: implement the revised fixture plan.",
@@ -411,7 +432,7 @@ const modelServer = createServer(async (request, response) => {
       response.end(JSON.stringify({ object: "list", data: [{ id: model, object: "model" }] }));
       return;
     }
-    assert.equal(request.method, "POST");
+    assert.equal(request.method, "POST", `Unexpected fixture model request ${request.method} ${request.url}`);
     assert.equal(request.url, "/v1/chat/completions");
     assert.equal(request.headers.authorization, `Bearer ${fixtureKey}`);
     const body = JSON.parse(await readBody(request));
@@ -431,6 +452,7 @@ const modelServer = createServer(async (request, response) => {
     if (allMessages.includes("Create a concise title for an AI coding-assistant session from the supplied human messages.")) {
       assert.equal(body.tools?.length ?? 0, 0);
       assert.ok(userMessages.includes("Generate the session title from this JSON array of human messages:"));
+      if (sessionExportOnly) sessionExportRequests++;
       if (titlesOnly) {
         const number = ++titleRequests;
         assert.ok(number <= 2, "A manual title must not trigger another title request");
@@ -462,6 +484,34 @@ const modelServer = createServer(async (request, response) => {
       ][titleConversationTurns++] ?? [];
       assert.ok(expected && userMessages.includes(expected), "The title fixture model received an unexpected conversation turn");
       await reply(response, { content: answer }, "stop");
+      return;
+    }
+    if (sessionExportOnly) {
+      sessionExportRequests++;
+      const { turnPrefix, answerPrefix, legacyPrompt, legacyHistory, legacyAnswer,
+        workerPrompt, workerAnswer, activePrompt, activeAnswer } = sessionExport;
+      const lastPrompt = body.messages.filter((message) => message.role === "user")
+        .map((message) => JSON.stringify(message.content))
+        .findLast((content) => [turnPrefix, legacyPrompt, workerPrompt, activePrompt]
+          .some((marker) => content?.includes(marker)));
+      const turn = lastPrompt?.match(/HARNESS_EXPORT_TURN_(\d{2})\b/);
+      if (turn) {
+        await reply(response, { content: answerPrefix + turn[1] }, "stop");
+      } else if (lastPrompt?.includes(workerPrompt)) {
+        await reply(response, { content: workerAnswer }, "stop");
+      } else if (lastPrompt?.includes(legacyPrompt)) {
+        assert.ok(allMessages.includes(legacyHistory), "The migration did not restore the legacy transcript to the model");
+        await reply(response, { content: legacyAnswer }, "stop");
+      } else if (lastPrompt?.includes(activePrompt)) {
+        await reply(response, { content: activeAnswer }, "stop", () => new Promise((resolve) => {
+          releaseSessionExportReply = () => {
+            releaseSessionExportReply = undefined;
+            resolve();
+          };
+        }));
+      } else {
+        throw new Error("Unexpected model request in the session export fixture");
+      }
       return;
     }
     if (nativeModesOnly) {
@@ -1092,6 +1142,24 @@ async function verifyNativePreview({ url, click, count = 1, requireVisible = fal
   }
 }
 
+async function sessionExportJournal() {
+  const root = path.join(profile, "agent/harness-desktop");
+  const files = [];
+  async function visit(directory) {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      const file = path.join(directory, entry.name);
+      if (entry.isDirectory()) await visit(file);
+      else if (entry.isFile() && /\.jsonl(?:\.zstd)?$/i.test(entry.name)) files.push(file);
+    }
+  }
+  await visit(root);
+  return Promise.all(files.sort().map(async (file) => [
+    path.relative(root, file),
+    createHash("sha256").update(await readFile(file)).digest("hex"),
+    (await stat(file)).mtimeMs,
+  ]));
+}
+
 const vitePlugin = {
   name: "lolicode-harness-desktop-acceptance",
   enforce: "pre",
@@ -1103,6 +1171,27 @@ const vitePlugin = {
         .endsWith("/src/lib/api/lolicode-account.ts")
     )
       return accountModule;
+  },
+  transform(source, id) {
+    if (!sessionExportOnly) return;
+    const file = id.split("?")[0].replaceAll("\\", "/");
+    if (!file.endsWith("/src/lib/clipboard.ts") && !file.endsWith("/src/lib/api/agent.ts"))
+      return;
+    const nativeImport = 'import { invoke } from "@tauri-apps/api/core";';
+    assert.ok(source.includes(nativeImport), "Cannot safely observe the session export IPC");
+    return source.replace(nativeImport, [
+      'import { invoke as nativeInvoke } from "@tauri-apps/api/core";',
+      "function invoke(command: string, args?: Record<string, unknown>, options?: Parameters<typeof nativeInvoke>[2]) {",
+      '  if (command === "copy_text_to_clipboard") {',
+      "    (globalThis.__fixtureSessionExportClipboard ??= []).push(args?.text);",
+      "    return Promise.resolve(true);",
+      "  }",
+      '  if (command === "read_agent_session_markdown") {',
+      "    (globalThis.__fixtureSessionExportReads ??= []).push(args?.sessionId);",
+      "  }",
+      "  return nativeInvoke(command, args, options);",
+      "}",
+    ].join("\n"));
   },
   transformIndexHtml() {
     return [
@@ -1147,6 +1236,27 @@ const vitePlugin = {
           }
           response.writeHead(204).end();
         }
+      } else if (sessionExportOnly && request.url === `${namespace}/session-export.mjs`) {
+        response.setHeader("Content-Type", "text/javascript");
+        response.end(await readFile(new URL("./harness-desktop-session-export.mjs", import.meta.url)));
+      } else if (sessionExportOnly && request.url === `${namespace}/session-export-proof`) {
+        try {
+          response.setHeader("Content-Type", "application/json");
+          response.end(JSON.stringify({
+            requests: sessionExportRequests,
+            held: Boolean(releaseSessionExportReply),
+            journal: await sessionExportJournal(),
+          }));
+        } catch (error) {
+          response.writeHead(500).end(String(error));
+        }
+      } else if (sessionExportOnly && request.url === `${namespace}/session-export-release` && request.method === "POST") {
+        if (!releaseSessionExportReply) {
+          response.writeHead(409).end();
+          return;
+        }
+        releaseSessionExportReply();
+        response.writeHead(204).end();
       } else if (request.url === `${namespace}/config`) {
         response.setHeader("Content-Type", "application/json");
         response.end(JSON.stringify(fixture));
@@ -1308,6 +1418,31 @@ async function seedLegacyWorker() {
   return originals;
 }
 
+async function seedSessionExportLegacy() {
+  const sessions = path.join(profile, "agent/native/sessions");
+  await mkdir(sessions, { recursive: true });
+  const { legacyId, legacyTitle, legacyHistory } = sessionExport;
+  const contents = JSON.stringify({
+    format: 1,
+    snapshot: {
+      session: {
+        id: legacyId, title: legacyTitle, projectPath: project, mode: "build", permissionMode: "ask",
+        model: { providerId: "lolicode", modelId: "harness-desktop-fixture/" + model },
+        createdAt: 1, updatedAt: 2,
+      },
+      status: "idle",
+      messages: [{ id: "legacy-export-message", role: "assistant",
+        parts: [{ type: "text", text: legacyHistory }], createdAt: 2, completedAt: 2 }],
+      permissions: [], questions: [], diffs: [], error: null, streamConnected: false, streamGap: false,
+    },
+    history: [],
+    commands: {},
+  });
+  const file = path.join(sessions, legacyId.slice(3) + ".json");
+  await writeFile(file, contents, { flag: "wx" });
+  return { file, contents };
+}
+
 async function seedSwitchingHistory() {
   const metadataDirectory = path.join(profile, "agent/harness-sessions");
   await mkdir(metadataDirectory, { recursive: true });
@@ -1445,6 +1580,7 @@ try {
     backgroundJobs,
     nativeModes,
     titles: titlesOnly ? titles : undefined,
+    sessionExport: sessionExportOnly ? sessionExport : undefined,
     switching: switchingOnly ? await seedSwitchingHistory() : undefined,
     workerFollowup,
     workerQueue,
@@ -1469,7 +1605,7 @@ try {
     }),
   );
   console.log(`Isolated desktop acceptance reports: ${reportPath}`);
-  if (!permissionsOnly && !outputLinksOnly && !compactOnly && !backgroundJobsOnly && !dockToolsOnly && !nativeModesOnly && !switchingOnly && !titlesOnly) {
+  if (!permissionsOnly && !outputLinksOnly && !compactOnly && !backgroundJobsOnly && !dockToolsOnly && !nativeModesOnly && !switchingOnly && !sessionExportOnly && !titlesOnly) {
     const first = await launch(env, "initial");
     assert.equal(first.sendScrollFollow, true);
     assert.ok(observed.image && observed.approved && observed.rejected);
@@ -1511,6 +1647,18 @@ try {
     assert.equal(restart.sessionId, dock.sessionId);
     assert.ok(restart.savedDock && restart.explicitBrowserRestore && restart.terminalRestartRequiresStart &&
       restart.parallelBrowsers && restart.staleBrowserShowIgnored);
+  } else if (sessionExportOnly) {
+    const legacy = await seedSessionExportLegacy();
+    const warm = await launch(env, "session-export");
+    assert.equal(warm.sessionExport, true);
+    assert.equal(warm.cold, false);
+    fixture.sessionExportState = warm.sessionExportState;
+    const requests = sessionExportRequests;
+    const cold = await launch(env, "session-export-restart");
+    assert.equal(cold.sessionExport, true);
+    assert.equal(cold.cold, true);
+    assert.equal(sessionExportRequests, requests, "Cold export must not call the model");
+    assert.equal(await readFile(legacy.file, "utf8"), legacy.contents, "The original legacy snapshot was modified");
   } else if (titlesOnly) {
     const warm = await launch(env, "titles");
     assert.ok(warm.generatedTitle && warm.followupWhileTitlePending && warm.manualTitleRetained && warm.manualTitleWonRace);

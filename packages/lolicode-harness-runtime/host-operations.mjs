@@ -6,10 +6,13 @@ import { JsonRpcLineTransport } from "@deepseek-ai/dsh-sdk-protocol";
 import { installHostMcp } from "./host-mcp.mjs";
 import { installHostRemote } from "./host-remote.mjs";
 import { installSecretaryReport, reportToolName } from "./host-secretary-report.mjs";
+import {
+  formatBoundedSessionMarkdown, logCold, logMissing, materializedSessionPath, sessionMarkdownError,
+} from "./host-session-markdown.mjs";
 
 export { Config };
 export const name = "lolicode-host-operations";
-export const inject = ["agents", "sessions", "workingDirectory", "systemPrompt", "subagents", "attachments", "tools", "permissionPresets", "skills", "approval"];
+export const inject = ["agents", "sessions", "sessionPersistence", "sessionQuery", "workingDirectory", "systemPrompt", "subagents", "attachments", "tools", "permissionPresets", "skills", "approval"];
 
 const legacySource = "lolicode-legacy-context";
 const maximumContextBytes = 32 * 1024;
@@ -137,6 +140,9 @@ class LoliCodeSdkServer extends HarnessSdkJsonRpcServer {
   }
 
   async handleRequest(method, params) {
+    if (method === "lolicode/session/read-markdown") {
+      return this.#readSessionMarkdown(params);
+    }
     if (method === "lolicode/session/configure-workspace") {
       const id = readSessionId(params, "workspace");
       const result = configureWorkspace(this.#ctx, this.#ownedRoot(id), params.workspace);
@@ -285,6 +291,31 @@ class LoliCodeSdkServer extends HarnessSdkJsonRpcServer {
       if (current === root) return child;
     }
     return undefined;
+  }
+
+  async #readSessionMarkdown(params) {
+    const root = this.#ownedRoot(readSessionId(params, "childSessionId"));
+    const { childSessionId } = params;
+    let sessionId = root.session.id;
+    if (childSessionId !== undefined) {
+      if (!validSessionId(childSessionId) || childSessionId === sessionId) {
+        throw new Error("Invalid LoliCode worker session");
+      }
+      if (!this.#ctx.agents.get(childSessionId)) throw new Error(logCold);
+      const worker = this.#ownedWorker(root, childSessionId);
+      if (!worker) throw new Error("Worker is not owned by this LoliCode session");
+      sessionId = worker.session.id;
+    }
+    try {
+      const { events } = await this.#ctx.sessionQuery.readSession(sessionId);
+      const sourcePath = await materializedSessionPath(this.#ctx.sessionPersistence, sessionId);
+      // In this JSONL profile a pending root can contain initialization
+      // events before it has a native journal. Keep legacy history available.
+      if (!sourcePath) throw new Error(logMissing);
+      return formatBoundedSessionMarkdown(events, sourcePath);
+    } catch (error) {
+      throw new Error(sessionMarkdownError(error));
+    }
   }
 
   #detachWorkerInputs(agent, identities) {

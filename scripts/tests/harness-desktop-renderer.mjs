@@ -184,6 +184,10 @@ async function verifyDockTools(fixture) {
   const restarted = fixture.phase === "dock-tools-restart";
   const sessionId = restarted ? fixture.dockSessionId : sessionStorage.getItem(dockKey);
   if (!sessionId) {
+    // A reused test binary also reuses its WebView2 storage. Start this fixture
+    // with a fresh dock so tabs from earlier profiles do not occupy its budget.
+    localStorage.removeItem("lolicode.agent.rightDock.v1");
+    localStorage.removeItem("lolicode.agent.rightDockBrowser.v1");
     await configureFixtureChannel(fixture);
     await invoke("set_builtin_app_enabled", { app: "tavern", enabled: true });
     const [preset] = await invoke("get_tavern_presets");
@@ -964,11 +968,24 @@ async function keyboardSteering({ sessionId, keyboardSessionId }, fixture) {
     return scroll && scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight <= 2;
   };
   await submit(keyboard.scrollPrimer);
-  await waitFor(async () => {
-    const state = await invoke("get_agent_session", { sessionId: keyboardSessionId });
-    return state.status === "idle" && chat().includes("Historical paragraph 65") &&
-      chatViewport().scrollHeight - chatViewport().clientHeight > 96;
-  }, "a scrollable workbench conversation");
+  let scrollState;
+  try {
+    await waitFor(async () => {
+      const state = await invoke("get_agent_session", { sessionId: keyboardSessionId });
+      const scroll = chatViewport();
+      scrollState = {
+        status: state.status,
+        title: document.querySelector(".wb-titlebar h1")?.textContent,
+        tailRendered: chat().includes("Historical paragraph 65"),
+        height: scroll?.clientHeight,
+        scrollHeight: scroll?.scrollHeight,
+      };
+      return scrollState.status === "idle" && scrollState.tailRendered &&
+        scrollState.scrollHeight - scrollState.height > 96;
+    }, "a scrollable workbench conversation");
+  } catch (error) {
+    throw new Error(`${error.message} (${JSON.stringify(scrollState)})`);
+  }
   const readOlderMessages = async () => {
     chatViewport().scrollTop = 0;
     await waitFor(() => document.querySelector(".wb-scroll-latest") && !atChatTail(),
@@ -978,6 +995,12 @@ async function keyboardSteering({ sessionId, keyboardSessionId }, fixture) {
   await submit(keyboard.start);
   await waitFor(() => chat().includes(keyboard.start) && atChatTail(),
     "send follows its new bubble to the actual WebView bottom");
+  const progress = await waitFor(() => document.querySelector("button.wb-task-progress"),
+    "the running task's progress shortcut");
+  await readOlderMessages();
+  progress.click();
+  await waitFor(() => atChatTail() && document.activeElement?.id === progress.getAttribute("aria-controls"),
+    "the progress shortcut returns to the current task and focuses its status");
   const prefix = keyboard.first.slice(0, Math.floor(keyboard.first.length / 2));
   await waitFor(() => chat().includes(prefix), "the first chunk of the in-flight response");
   const switchWorkspace = async (path) => {
@@ -1273,6 +1296,10 @@ async function run(fixture) {
   if (fixture.phase === "background-jobs") return verifyBackgroundJobs(fixture);
   if (fixture.phase === "native-modes" || fixture.phase === "native-modes-restart")
     return verifyNativeModes(fixture);
+  if (fixture.phase === "session-export" || fixture.phase === "session-export-restart") {
+    const { verifySessionExport } = await import("./session-export.mjs");
+    return verifySessionExport(fixture, { check, configureFixtureChannel, invoke, waitFor });
+  }
   if (fixture.phase === "switching") {
     const { verifySwitching } = await import("./switching.mjs");
     return verifySwitching(fixture, { configureFixtureChannel, invoke });
@@ -1484,23 +1511,39 @@ async function run(fixture) {
         permissionMode: "auto",
       });
       check(configuredChief.permissionMode === "auto", "The secretary did not keep the selected approval mode");
+      localStorage.setItem("cc-switch-last-view", "agent");
+      localStorage.setItem("lolicode.agent.last-selection.v1", JSON.stringify({
+        projectPath: previous.session.projectPath,
+        sessionId,
+      }));
       sessionStorage.setItem(chiefKey, chief.id);
       return { reload: true };
     }
-    await waitFor(
-      () =>
-        document.querySelector("#agent-message") &&
-        document.querySelector("main")?.innerText.includes("Loli 秘书"),
-      "the normal secretary composer",
-    );
     const secretaryButton = await waitFor(() => {
       const button = document.querySelector("button.wb-nav-secretary");
       return button && !button.disabled && button;
     }, "the secretary navigation button");
-    if (secretaryButton.getAttribute("aria-pressed") !== "true") secretaryButton.click();
+    secretaryButton.click();
     await waitFor(
-      () => document.querySelector('button.wb-nav-secretary[aria-pressed="true"]') && document.querySelector("#agent-message"),
-      "the old secretary selected in the real workbench",
+      async () => secretaryButton.getAttribute("aria-pressed") === "true" &&
+        (await invoke("get_agent_status")).projectPath?.endsWith("standalone-workspace"),
+      "the global secretary in its independent workspace",
+    );
+    const projectButton = await waitFor(() => Array.from(
+      document.querySelectorAll("button.wb-workspace-project"),
+    ).find((button) => !button.disabled && windowsPath(button.title) === windowsPath(fixture.project)),
+    "the original project's sidebar entry");
+    projectButton.click();
+    const { session: oldChief } = await invoke("get_agent_session", { sessionId: chiefId });
+    const oldChiefButton = await waitFor(() => Array.from(
+      document.querySelectorAll(".wb-current-workspace-sessions button.wb-session-row"),
+    ).find((button) => !button.disabled && button.querySelector("span")?.textContent === oldChief.title),
+    "the migrated secretary in the original project's session list");
+    oldChiefButton.click();
+    await waitFor(
+      () => oldChiefButton.getAttribute("aria-pressed") === "true" &&
+        secretaryButton.getAttribute("aria-pressed") === "false" && document.querySelector("#agent-message"),
+      "the migrated secretary selected in the real workbench",
     );
     await invoke("send_agent_message", {
       sessionId: chiefId,

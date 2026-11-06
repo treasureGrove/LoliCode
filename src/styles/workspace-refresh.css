@@ -617,7 +617,7 @@
   height: 32px;
   min-height: 32px;
   padding: 0 12px;
-  border: 0;
+  border: 1px solid transparent;
   border-radius: 7px;
   background: var(--action-bg);
   color: var(--action-fg);
@@ -666,6 +666,22 @@
   color: var(--text-2);
   background: transparent;
   font-size: var(--workspace-caption);
+}
+
+:root
+  .lolicode-workbench.wb-unified
+  .wb-composer-toolbar
+  > .wb-send-button[data-composer-action="stop"]:not(:disabled) {
+  border-color: var(--wb-border);
+  background: var(--bg-subtle);
+  color: var(--text-1);
+}
+
+:root
+  .lolicode-workbench.wb-unified
+  .wb-composer-toolbar
+  > .wb-send-button[data-composer-action="stop"]:hover:not(:disabled) {
+  background: var(--action-soft);
 }
 
 :root
@@ -881,18 +897,6 @@
   text-overflow: ellipsis;
   overflow: hidden;
 }
-:root .lolicode-workbench.wb-unified .wb-titlebar > .wb-status {
-  flex: 0 1 auto;
-  max-width: 150px;
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  font-size: var(--workspace-caption);
-}
-:root .lolicode-workbench.wb-unified .wb-titlebar > .wb-status::before,
-:root .lolicode-workbench.wb-unified .wb-titlebar > .wb-status svg {
-  flex-shrink: 0;
-}
 :root .lolicode-workbench.wb-unified .wb-composer-area:focus-within {
   border-top-color: color-mix(
     in srgb,
@@ -955,10 +959,6 @@
     font-size: 0;
     gap: 0;
   }
-  :root .lolicode-workbench.wb-unified .wb-titlebar > .wb-status {
-    max-width: 105px;
-    font-size: 11px;
-  }
 }
 @media (max-height: 650px) {
   :root .lolicode-workbench.wb-unified .wb-composer textarea {
@@ -972,16 +972,6 @@
 @container (max-width: 540px) {
   :root .lolicode-workbench.wb-unified .wb-titlebar {
     gap: 4px;
-  }
-  :root
-    .lolicode-workbench.wb-unified
-    .wb-titlebar
-    > .wb-status:not([data-phase="idle"]) {
-    flex: 0 0 14px;
-    width: 14px;
-    max-width: 14px;
-    font-size: 0;
-    gap: 0;
   }
   :root .lolicode-workbench.wb-unified .wb-composer-options-trigger {
     padding-inline: 5px;

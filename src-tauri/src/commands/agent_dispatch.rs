@@ -397,6 +397,22 @@ pub async fn get_agent_session(
     Ok(snapshot)
 }
 #[tauri::command(rename_all = "camelCase")]
+pub async fn read_agent_session_markdown(
+    app: AppHandle,
+    session_id: String,
+) -> Result<String, String> {
+    if legacy_id(&session_id)? {
+        return Err("旧引擎迁移会话的完整历史不在原生 Harness 日志中，无法复制完整历史".into());
+    }
+    let carrier = app.state::<InprocessAgentState>();
+    carrier.ensure_started(&app).await?;
+    carrier
+        .harness
+        .read_session_markdown(&app, &carrier, &session_id)
+        .await
+}
+
+#[tauri::command(rename_all = "camelCase")]
 pub async fn send_agent_message(
     app: AppHandle,
     session_id: String,

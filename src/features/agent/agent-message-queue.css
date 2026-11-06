@@ -92,6 +92,10 @@
   gap: 5px;
   padding-inline: 7px;
 }
+.wb-message-queue-actions
+  .wb-message-queue-send[data-queue-guide]:not(:disabled) {
+  color: var(--wb-accent, var(--action-text));
+}
 .wb-message-queue-actions .wb-message-queue-delete:hover:not(:disabled) {
   color: var(--danger-text);
 }

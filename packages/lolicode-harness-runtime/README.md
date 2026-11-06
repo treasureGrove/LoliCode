@@ -81,6 +81,14 @@ flows listed in the SuperAgent adaptation record.
 
 ### Acceptance
 
+The session menu can copy a complete native session as Markdown using the
+official `formatSessionMarkdown` export. The host reads a live owned session
+through `sessionQuery`, or a cold log through a credential-free JSONL reader.
+It does not resume the Agent or render only the currently visible messages.
+See [the integration boundary and limitations](../../docs/architecture/harness-session-markdown.md).
+Run `--session-export` for the Windows menu, full history, child session,
+read-only and restart cases. ZIP export remains a separate capability gap.
+
 Run the runtime preparation and SDK tests against the updated package. On
 Windows, use the isolated desktop acceptance runner to verify the normal flow
 and its `--background-jobs`, `--native-modes`, and `--dock-tools` cases. These

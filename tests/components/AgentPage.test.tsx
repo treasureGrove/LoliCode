@@ -555,7 +555,7 @@ describe("AgentPage", () => {
   it("queues a running worker follow-up in that worker's own queue", async () => {
     await openWorkerConversation("build", "running");
     fill("完成后继续核对文档");
-    fireEvent.click(screen.getByRole("button", { name: "加入队列" }));
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
     await flush();
     expect(agentApi.sendSecretaryTaskMessage).not.toHaveBeenCalled();
     expect(agentApi.enqueueMessage).toHaveBeenCalledWith(
@@ -729,7 +729,7 @@ describe("AgentPage", () => {
       "lc:worker",
       "worker-attachment-queue",
     );
-    fireEvent.click(screen.getByRole("button", { name: "加入队列" }));
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
     await flush();
     expect(agentApi.enqueueMessage).toHaveBeenCalledWith(
       "lc:worker",
@@ -759,7 +759,7 @@ describe("AgentPage", () => {
     await tick(1000);
     fill("仍在编辑的任务要求");
     fireEvent.click(
-      screen.getByRole("button", { name: "插入当前任务第 1 条消息" }),
+      screen.getByRole("button", { name: "引导第 1 条消息" }),
     );
     await flush();
     expect(agentApi.sendQueuedMessageNow).toHaveBeenCalledWith(
@@ -3120,7 +3120,7 @@ describe("AgentPage", () => {
         ),
       ).toBeVisible();
       expect(
-        screen.getByRole("button", { name: "插入当前任务第 1 条消息" }),
+        screen.getByRole("button", { name: "引导第 1 条消息" }),
       ).toBeEnabled();
     },
   );
@@ -3138,7 +3138,7 @@ describe("AgentPage", () => {
       render(<AgentPage />);
       await flush();
       fill("立刻显示的排队消息");
-      fireEvent.click(screen.getByRole("button", { name: "加入队列" }));
+      fireEvent.click(screen.getByRole("button", { name: "发送" }));
 
       const queue = () =>
         within(screen.getByRole("region", { name: "待发送消息" }));
@@ -3154,11 +3154,11 @@ describe("AgentPage", () => {
       await tick();
       expect(queue().getAllByText("立刻显示的排队消息")).toHaveLength(1);
       expect(
-        queue().getByRole("button", { name: "插入当前任务第 1 条消息" }),
+        queue().getByRole("button", { name: "引导第 1 条消息" }),
       ).toBeDisabled();
       await act(async () => finishEnqueue({ status: "accepted" }));
       expect(
-        queue().getByRole("button", { name: "插入当前任务第 1 条消息" }),
+        queue().getByRole("button", { name: "引导第 1 条消息" }),
       ).toBeEnabled();
 
       snapshot.queuedMessages = [];
@@ -3198,7 +3198,7 @@ describe("AgentPage", () => {
     render(<AgentPage />);
     await flush();
     fill("捕获的队列消息");
-    fireEvent.click(screen.getByRole("button", { name: "加入队列" }));
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
     await flush();
     fill("新写的草稿");
     await act(async () => finish());
@@ -3217,13 +3217,13 @@ describe("AgentPage", () => {
     render(<AgentPage />);
     await flush();
     fill("保留消息并重试");
-    fireEvent.click(screen.getByRole("button", { name: "加入队列" }));
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
     await flush();
     expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
       "保留消息并重试",
     );
     const first = vi.mocked(agentApi.enqueueMessage).mock.calls[0];
-    fireEvent.click(screen.getByRole("button", { name: "加入队列" }));
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
     await flush();
     expect(vi.mocked(agentApi.enqueueMessage).mock.calls[1]).toEqual(first);
     expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue("");
@@ -3238,7 +3238,7 @@ describe("AgentPage", () => {
     render(<AgentPage />);
     await flush();
     fill("超出队列容量的草稿");
-    fireEvent.click(screen.getByRole("button", { name: "加入队列" }));
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
     await flush();
     expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
       "超出队列容量的草稿",
@@ -3248,7 +3248,7 @@ describe("AgentPage", () => {
       screen.queryByRole("region", { name: "待发送消息" }),
     ).not.toBeInTheDocument();
     fill("修改后重新排队");
-    fireEvent.click(screen.getByRole("button", { name: "加入队列" }));
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
     await flush();
     expect(agentApi.enqueueMessage).toHaveBeenCalledTimes(2);
     expect(screen.getByText("修改后重新排队")).toBeVisible();
@@ -3276,7 +3276,7 @@ describe("AgentPage", () => {
     expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
       "重新打开后的待确认草稿",
     );
-    fireEvent.click(screen.getByRole("button", { name: "加入队列" }));
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
     await flush();
     expect(agentApi.enqueueMessage).toHaveBeenCalledWith(
       session.id,
@@ -3298,7 +3298,7 @@ describe("AgentPage", () => {
     render(<AgentPage />);
     await flush();
     fill("原生已接收入队");
-    fireEvent.click(screen.getByRole("button", { name: "加入队列" }));
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
     await flush();
     expect(screen.getByText("原生已接收入队")).toBeVisible();
     expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue("");
@@ -3427,11 +3427,14 @@ describe("AgentPage", () => {
       { id: "queue-first", text: "稍后任务", attachments: [] },
       { id: "queue-priority", text: "优先任务", attachments: [] },
     ];
+    vi.mocked(agentApi.sendQueuedMessageNow).mockImplementationOnce(async () => {
+      snapshot.queuedMessages![1].delivery = "steer";
+    });
     render(<AgentPage />);
     await flush();
     fill("继续写的草稿");
     fireEvent.click(
-      screen.getByRole("button", { name: "插入当前任务第 2 条消息" }),
+      screen.getByRole("button", { name: "引导第 2 条消息" }),
     );
     await flush();
     expect(agentApi.sendQueuedMessageNow).toHaveBeenCalledWith(
@@ -3439,11 +3442,46 @@ describe("AgentPage", () => {
       "queue-priority",
       true,
     );
-    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
-      "继续写的草稿",
+    const input = screen.getByLabelText("发送给 Agent 的消息");
+    expect(input).toHaveValue("继续写的草稿");
+    expect(input).toHaveFocus();
+    await tick();
+    expect(screen.getByRole("article", { name: "你的消息" })).toHaveTextContent(
+      "优先任务",
+    );
+    const queue = within(screen.getByRole("region", { name: "待发送消息" }));
+    expect(queue.getByText("稍后任务")).toBeInTheDocument();
+    expect(queue.queryByText("优先任务")).not.toBeInTheDocument();
+    fireEvent.keyDown(input, { key: "Enter" });
+    await flush();
+    expect(agentApi.enqueueMessage).toHaveBeenCalledWith(
+      session.id, "继续写的草稿", expect.any(String), [], [],
     );
     expect(agentApi.interruptSession).not.toHaveBeenCalled();
     expect(agentApi.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("keeps one primary button for stopping or submitting a follow-up", async () => {
+    snapshot.status = "running";
+    const view = render(<AgentPage />);
+    await flush();
+    const primary = screen.getByRole("button", { name: "停止" });
+    const input = screen.getByLabelText("发送给 Agent 的消息");
+    const toolbar = view.container.querySelector(".wb-composer-toolbar");
+    expect(toolbar?.querySelectorAll("[data-composer-action]")).toHaveLength(1);
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(agentApi.interruptSession).not.toHaveBeenCalled();
+    fill("按顺序发送的补充");
+    expect(screen.getByRole("button", { name: "发送" })).toBe(primary);
+    expect(screen.queryByRole("button", { name: "停止" })).not.toBeInTheDocument();
+    expect(primary).toHaveAttribute("title", expect.stringContaining("排队"));
+    fireEvent.click(primary);
+    await flush();
+    expect(agentApi.enqueueMessage).toHaveBeenCalledWith(
+      session.id, "按顺序发送的补充", expect.any(String), [], [],
+    );
+    expect(screen.getByRole("button", { name: "停止" })).toBe(primary);
+    expect(input).toHaveFocus();
   });
   it("deletes only the selected queued item while preserving the editor", async () => {
     snapshot.status = "running";
@@ -3514,7 +3552,10 @@ describe("AgentPage", () => {
     render(<AgentPage />);
     await flush();
     fill("保留这条补充说明");
-    fireEvent.click(screen.getByRole("button", { name: "插入当前任务" }));
+    fireEvent.keyDown(screen.getByLabelText("发送给 Agent 的消息"), {
+      key: "Enter",
+      ctrlKey: true,
+    });
     await flush();
     expect(screen.queryByRole("article", { name: "你的消息" })).toBeNull();
     expect(screen.getByText("当前任务已经结束，草稿已保留。")).toBeVisible();
@@ -3529,7 +3570,10 @@ describe("AgentPage", () => {
     render(<AgentPage />);
     await flush();
     fill("重试同一条插入消息");
-    fireEvent.click(screen.getByRole("button", { name: "插入当前任务" }));
+    fireEvent.keyDown(screen.getByLabelText("发送给 Agent 的消息"), {
+      key: "Enter",
+      ctrlKey: true,
+    });
     await flush();
     expect(screen.getByText("回执暂未确认")).toBeVisible();
     expect(screen.queryByRole("article", { name: "你的消息" })).toBeNull();
@@ -3864,6 +3908,7 @@ describe("AgentPage", () => {
     fill("可能晚到的输入");
     fireEvent.click(screen.getByRole("button", { name: "发送" }));
     await flush();
+    fill("");
     fireEvent.click(screen.getByRole("button", { name: "停止" }));
     await flush();
     await tick();
@@ -3872,7 +3917,9 @@ describe("AgentPage", () => {
     );
     expect(ledger).toBeTruthy();
     fill("另一条任务");
-    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+    fireEvent.keyDown(screen.getByLabelText("发送给 Agent 的消息"), {
+      key: "Enter",
+    });
     await flush();
     expect(agentApi.sendMessage).toHaveBeenCalledOnce();
     expect(screen.getByRole("button", { name: "停止" })).toBeEnabled();
@@ -3966,7 +4013,7 @@ describe("AgentPage", () => {
     expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
       "保留待发送的要求",
     );
-    expect(screen.getByRole("button", { name: "插入当前任务" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "发送" })).toBeEnabled();
     expect(agentApi.sendMessage).not.toHaveBeenCalled();
   });
 
@@ -4430,7 +4477,7 @@ describe("AgentPage", () => {
       const input = screen.getByLabelText("发送给 Agent 的消息");
       expect(input).toHaveValue("任务结束后再发送的草稿");
       expect(input).toBeEnabled();
-      expect(screen.getByRole("button", { name: "插入当前任务" })).toBeEnabled();
+      expect(screen.getByRole("button", { name: "发送" })).toBeEnabled();
       fireEvent.keyDown(input, { key: "Enter", ctrlKey: true });
       fireEvent.submit(input.closest("form")!);
       await flush();
@@ -5158,21 +5205,37 @@ describe("AgentPage", () => {
   });
 
   it("keeps an acknowledged input pending while the backend snapshot is still idle", async () => {
-    render(<AgentPage />);
+    let acknowledge!: () => void;
+    vi.mocked(agentApi.sendMessage).mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        acknowledge = resolve;
+      }),
+    );
+    const view = render(<AgentPage />);
     await flush();
     fill();
     const send = screen.getByRole("button", { name: "发送" });
-    fireEvent.click(send);
-    fireEvent.click(send);
+    fireEvent.click(send, { detail: 1 });
+    fireEvent.click(send, { detail: 2 });
+    expect(agentApi.interruptSession).not.toHaveBeenCalled();
+    const chat = within(view.container.querySelector(".wb-chat-content")!);
+    const progress = chat.getByText("正在准备任务…");
+    expect(chat.getByText("修复这个项目的测试")).toBeInTheDocument();
+    expect(chat.queryByText("正在思考…")).not.toBeInTheDocument();
+    const shortcut = screen.getByRole("button", { name: "任务进度" });
+    expect(shortcut).toHaveAttribute("aria-controls", progress.id);
+    fireEvent.click(shortcut);
+    expect(progress).toHaveFocus();
+    await act(async () => acknowledge());
     await flush();
     expect(agentApi.sendMessage).toHaveBeenCalledTimes(1);
     const requestId = vi.mocked(agentApi.sendMessage).mock.calls[0][2];
     expect(requestId).toMatch(/^msg_/);
-    expect(screen.getByText("已发送，等待开始…")).toBeInTheDocument();
+    expect(screen.getByText("正在准备任务…")).toBeInTheDocument();
     expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue("");
     await expectFolderEnabled();
     await tick();
-    expect(screen.getByText("已发送，等待开始…")).toBeInTheDocument();
+    expect(screen.getByText("正在准备任务…")).toBeInTheDocument();
     snapshot.messages = [
       {
         id: requestId,
@@ -5182,14 +5245,21 @@ describe("AgentPage", () => {
       },
     ];
     await tick();
-    expect(screen.getByText("已发送，等待开始…")).toBeInTheDocument();
+    expect(screen.getByText("正在准备任务…")).toBeInTheDocument();
     snapshot.status = "running";
+    snapshot.modelPhase = "waiting";
+    await tick();
+    expect(chat.getByText("正在等待模型响应…")).toBeInTheDocument();
+    snapshot.modelPhase = "streaming";
     snapshot.messages.push({
       id: "msg_assistant",
       role: "assistant",
       createdAt: 4,
-      parts: [{ type: "text", text: "开始检查测试" }],
+      parts: [{ type: "reasoning", text: "先确定检查顺序" }],
     });
+    await tick();
+    expect(chat.getByText("正在思考…")).toBeInTheDocument();
+    snapshot.messages[1].parts.push({ type: "text", text: "开始检查测试" });
     await tick();
     expect(screen.getByText("正在回复…")).toBeInTheDocument();
     expect(screen.getByText("开始检查测试")).toBeInTheDocument();
@@ -5198,6 +5268,12 @@ describe("AgentPage", () => {
     ];
     await tick();
     expect(screen.getByText("开始检查测试，找到了原因")).toBeInTheDocument();
+    snapshot.status = "idle";
+    snapshot.modelPhase = undefined;
+    snapshot.messages[1].completedAt = 5;
+    await tick();
+    expect(chat.queryByText("正在回复…")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "任务进度" })).not.toBeInTheDocument();
   });
 
   it("preserves the draft when the input queue rejects the request", async () => {
@@ -5213,7 +5289,7 @@ describe("AgentPage", () => {
     expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
       "修复这个项目的测试",
     );
-    expect(screen.queryByText("已发送，等待开始…")).not.toBeInTheDocument();
+    expect(screen.queryByText("正在准备任务…")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "发送" })).toBeEnabled();
   });
 
@@ -5471,8 +5547,8 @@ describe("AgentPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "发送" }));
     await flush();
     await tick();
-    expect(screen.getByText("已发送，等待开始…")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "发送" })).toBeDisabled();
+    expect(screen.getByText("正在准备任务…")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "停止" })).toBeEnabled();
   });
 
   it("settles an acknowledged latest turn that fails before any running or assistant snapshot", async () => {
@@ -5502,7 +5578,7 @@ describe("AgentPage", () => {
     expect(screen.getByText(reason)).toBeVisible();
     expect(screen.getByText("本轮运行失败")).toBeVisible();
     expect(screen.getByText("执行遇到问题")).toBeInTheDocument();
-    expect(screen.queryByText("已发送，等待开始…")).not.toBeInTheDocument();
+    expect(screen.queryByText("正在准备任务…")).not.toBeInTheDocument();
     expect(readAgentSubmission(project, session.id)).toBeNull();
     fill("保留给用户手动继续的草稿");
     expect(screen.getByRole("button", { name: "发送" })).toBeEnabled();
@@ -5557,10 +5633,13 @@ describe("AgentPage", () => {
         caseName === "missing failure reason" ? "  " : "其他轮次的错误";
       await tick();
 
-      expect(screen.getByText("已发送，等待开始…")).toBeInTheDocument();
+      expect(screen.getByText("正在准备任务…")).toBeInTheDocument();
       expect(screen.queryByText("本轮运行失败")).not.toBeInTheDocument();
       fill("新草稿");
-      expect(screen.getByRole("button", { name: "发送" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "停止" })).toBeEnabled();
+      fireEvent.keyDown(screen.getByLabelText("发送给 Agent 的消息"), {
+        key: "Enter",
+      });
       expect(agentApi.sendMessage).toHaveBeenCalledOnce();
     },
   );
@@ -5651,7 +5730,9 @@ describe("AgentPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "发送" }));
     await flush();
     fill("不同的新任务");
-    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+    fireEvent.keyDown(screen.getByLabelText("发送给 Agent 的消息"), {
+      key: "Enter",
+    });
     await flush();
     expect(agentApi.sendMessage).toHaveBeenCalledOnce();
     expect(screen.getByText(/上次发送的接收状态尚未确认/)).toBeInTheDocument();
@@ -5688,7 +5769,7 @@ describe("AgentPage", () => {
       },
     ];
     await tick();
-    expect(screen.getByText("已发送，等待开始…")).toBeInTheDocument();
+    expect(screen.getByText("正在准备任务…")).toBeInTheDocument();
   });
 
   it("requests a stop once and waits for an authoritative idle snapshot", async () => {
@@ -5742,7 +5823,7 @@ describe("AgentPage", () => {
     render(<AgentPage />);
     await flush();
     expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue("");
-    expect(screen.getByText("已发送，等待开始…")).toBeInTheDocument();
+    expect(screen.getByText("正在准备任务…")).toBeInTheDocument();
     expect(agentApi.sendMessage).toHaveBeenCalledTimes(1);
     expect(agentApi.closeProject).not.toHaveBeenCalled();
     expect(agentApi.interruptSession).not.toHaveBeenCalled();
@@ -5767,7 +5848,7 @@ describe("AgentPage", () => {
     expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
       "尚未被后台接受的任务",
     );
-    expect(screen.queryByText("已发送，等待开始…")).not.toBeInTheDocument();
+    expect(screen.queryByText("正在准备任务…")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "发送" })).toBeEnabled();
   });
 

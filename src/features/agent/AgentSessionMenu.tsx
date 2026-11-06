@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import {
   Archive,
   ArchiveRestore,
+  Copy,
   MoreHorizontal,
   Pencil,
   Pin,
@@ -24,6 +25,7 @@ import {
 } from "@/components/ui/dialog";
 import { agentErrorMessage } from "@/hooks/useAgentSnapshot";
 import type { AgentSession } from "@/types/agent";
+import { useAgentSessionMarkdownCopy } from "./useAgentSessionMarkdownCopy";
 
 export function AgentSessionMenu({
   session,
@@ -47,6 +49,7 @@ export function AgentSessionMenu({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const pending = useRef(false);
+  const { copying, copy } = useAgentSessionMarkdownCopy();
   const run = async (operation: () => Promise<void>) => {
     if (pending.current) return;
     pending.current = true;
@@ -69,12 +72,21 @@ export function AgentSessionMenu({
           <button
             className="wb-icon-button wb-session-menu"
             disabled={disabled || busy}
+            aria-busy={copying}
             aria-label={`管理会话：${session.title}`}
           >
             <MoreHorizontal />
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
+          <DropdownMenuItem
+            disabled={copying}
+            onSelect={() => void copy(session.id)}
+          >
+            <Copy size={14} />
+            {copying ? "正在准备会话…" : "复制会话为 Markdown"}
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
           <DropdownMenuItem
             onSelect={() => {
               setTitle(session.title);

@@ -655,11 +655,46 @@
 .wb-status {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  align-self: flex-start;
+  gap: 8px;
+  max-width: 100%;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--wb-hover);
+  color: var(--wb-text);
+  font-size: 13px;
 }
-.wb-status svg {
-  width: 12px;
-  height: 12px;
+.wb-status svg,
+.wb-task-progress svg {
+  flex: 0 0 14px;
+  width: 14px;
+  height: 14px;
+  color: var(--wb-accent);
+}
+.wb-status:focus-visible {
+  outline: 2px solid var(--wb-accent);
+  outline-offset: 2px;
+}
+.wb-titlebar .wb-task-progress {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 5px;
+  min-height: 30px;
+  padding: 0 7px;
+  border-radius: 7px;
+  background: var(--wb-hover);
+  color: var(--wb-text);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.wb-titlebar .wb-task-progress:hover {
+  background: var(--wb-accent-soft);
+}
+@media (prefers-reduced-motion: reduce) {
+  .wb-status svg {
+    animation: none;
+  }
 }
 .wb-notice {
   margin: 10px 20px 0;
@@ -1148,14 +1183,6 @@
 .wb-primary svg {
   width: 15px;
   height: 15px;
-}
-.wb-stop-button {
-  background: var(--wb-lavender-soft);
-  color: var(--wb-text);
-  border-color: var(--wb-border);
-}
-.wb-stop-button:not(:disabled):hover {
-  background: var(--wb-hover);
 }
 .wb-composer-area {
   flex-shrink: 0;
@@ -2020,21 +2047,6 @@
 }
 .wb-send-spinner {
   animation: wb-spin 900ms linear infinite;
-}
-.wb-steer-send {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
-  min-height: 32px;
-  padding: 5px 8px;
-  border-radius: 9px;
-  color: var(--wb-muted);
-  font-size: 11px !important;
-}
-.wb-steer-send:hover:not(:disabled) {
-  background: var(--wb-hover);
-  color: var(--wb-text);
 }
 .wb-queue-recovery {
   display: flex;

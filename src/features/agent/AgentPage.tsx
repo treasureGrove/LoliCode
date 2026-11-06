@@ -52,7 +52,7 @@ import {
   ScrollText,
   RefreshCw,
   Info,
-  ListPlus,
+  ListChecks,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Notice } from "@/components/ui/notice";
@@ -1080,6 +1080,7 @@ export function AgentPage({
   const pendingImageRestoreAttempts = useRef(new Set<string>());
   const pendingDocumentRestoreAttempts = useRef(new Set<string>());
   const queueAttachmentRestoreAttempts = useRef(new Set<string>());
+  const taskProgressId = useId();
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const atBottom = useRef(true);
   const readingSession = useRef<string | null>(null);
@@ -1824,10 +1825,11 @@ export function AgentPage({
       return remaining.length === current.length ? current : remaining;
     });
   }, [queueEchoes.length, snapshot]);
-  const uncertainRetrySource =
+  const uncertainSubmission =
     sessionId && workspace && pending[sessionId]?.uncertain
-      ? retrySourceId(readAgentSubmission(workspace.path, sessionId))
-      : undefined;
+      ? readAgentSubmission(workspace.path, sessionId)
+      : null;
+  const uncertainRetrySource = retrySourceId(uncertainSubmission);
   const observedPreviews = useRef(
     new Map<
       string,
@@ -2192,7 +2194,8 @@ export function AgentPage({
     Object.keys(stopping).length > 0;
   const listedSession = sessions.find((session) => session.id === sessionId);
   const selectedOverride = sessionId ? sessionOverrides[sessionId] : undefined;
-  const selectedSession = selectedOverride || snapshot?.session || listedSession;
+  const selectedSession =
+    selectedOverride || snapshot?.session || listedSession;
   const selectedTitle =
     (listedSession && withCommittedTitle(listedSession).title) ||
     selectedOverride?.title ||
@@ -3009,7 +3012,8 @@ export function AgentPage({
       next.session.id !== id ||
       (id === secretarySessionId
         ? link?.role !== "secretary"
-        : link?.role !== "worker" || link.parentSessionId !== secretarySessionId)
+        : link?.role !== "worker" ||
+          link.parentSessionId !== secretarySessionId)
     )
       throw new Error(
         t("agentSecretary.openMismatch", {
@@ -3290,9 +3294,11 @@ export function AgentPage({
     if (action === "now") followSubmittedChat();
     try {
       if (action === "now") {
-        if (canSteerQueuedMessage)
+        if (canSteerQueuedMessage) {
           await agentApi.sendQueuedMessageNow(id, requestId, true);
-        else await agentApi.sendQueuedMessageNow(id, requestId);
+          if (mounted.current && selectedId.current === id)
+            composerInputRef.current?.focus({ preventScroll: true });
+        } else await agentApi.sendQueuedMessageNow(id, requestId);
       } else {
         const input = await agentApi.removeQueuedMessage(id, requestId);
         if (action === "recall") {
@@ -3379,13 +3385,7 @@ export function AgentPage({
     }
   };
   const submitComposer = () => {
-    if (
-      snapshot &&
-      (activeStatus(snapshot.status) ||
-        snapshot.queuedMessages?.length ||
-        queueRecovery)
-    )
-      void enqueueDraft(queueRecovery?.delivery);
+    if (queueMode) void enqueueDraft(queueRecovery?.delivery);
     else void send();
   };
   const send = async (retry?: AgentRetryInput) => {
@@ -4076,6 +4076,8 @@ export function AgentPage({
   const stoppingHere =
     (busy === "stop" && busySessionId === sessionId) ||
     Boolean(sessionId && stopping[sessionId]);
+  const showTaskProgress =
+    queuedHere || stoppingHere || runningHere || snapshot?.status === "error";
   const sendingHere = busy === "send" && busySessionId === sessionId;
   const steeringHere = busy === "steer" && busySessionId === sessionId;
   const enqueuingHere = busy === "enqueue" && busySessionId === sessionId;
@@ -4091,6 +4093,17 @@ export function AgentPage({
     (!draft.trim() && !composerImages.length && !composerDocuments.length) ||
     (queuedHere && !runningHere) ||
     stoppingHere;
+  const canRetryUncertain =
+    !queueMode &&
+    uncertainSubmission &&
+    !uncertainSubmission.stopRequested &&
+    uncertainSubmission.text === draft.trim() &&
+    uncertainSubmission.draft.key === key;
+  const stopPrimary =
+    !readOnlySession &&
+    (runningHere || queuedHere || uncertainHere || stoppingHere) &&
+    (sendDisabled || (uncertainHere && !canRetryUncertain));
+  const submittingHere = sendingHere || steeringHere || enqueuingHere;
   const sessionQuery = sessionSearch.toLocaleLowerCase();
   const visibleWorkspaceSessions = useMemo(
     () =>
@@ -4211,8 +4224,7 @@ export function AgentPage({
   const collapseSidebar = useCallback(() => {
     const focused = document.activeElement;
     const focusedInSidebar =
-      focused instanceof HTMLElement &&
-      Boolean(focused.closest(".wb-sidebar"));
+      focused instanceof HTMLElement && Boolean(focused.closest(".wb-sidebar"));
     if (onSidebarCompactChange) {
       restoreCompactSidebarFocus.current = focusedInSidebar;
       onSidebarCompactChange(true);
@@ -4278,18 +4290,19 @@ export function AgentPage({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [canOpenBrowser, isActive, openWebPreview, toggleSidebar]);
-  const sidebarToggle = !sharedPaneLayout && !paneLayout.sidebarVisible ? (
-    <button
-      type="button"
-      className="wb-icon-button wb-pane-toggle wb-sidebar-expand"
-      title={"Ctrl + \\"}
-      aria-label="展开项目侧栏"
-      onClick={toggleSidebar}
-      style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
-    >
-      <PanelLeftOpen />
-    </button>
-  ) : null;
+  const sidebarToggle =
+    !sharedPaneLayout && !paneLayout.sidebarVisible ? (
+      <button
+        type="button"
+        className="wb-icon-button wb-pane-toggle wb-sidebar-expand"
+        title={"Ctrl + \\"}
+        aria-label="展开项目侧栏"
+        onClick={toggleSidebar}
+        style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+      >
+        <PanelLeftOpen />
+      </button>
+    ) : null;
   const sidebarActions = (
     <nav className="wb-nav" aria-label="工作台操作">
       <div className="wb-create-task">
@@ -4356,7 +4369,7 @@ export function AgentPage({
         aria-label={t("agentSecretary.open", {
           defaultValue: "打开 Loli 秘书",
         })}
-        aria-pressed={Boolean(secretarySessionId)}
+        aria-pressed={Boolean(secretarySessionId && workspace?.standalone)}
         disabled={
           initializing ||
           Boolean(busy) ||
@@ -4830,10 +4843,7 @@ export function AgentPage({
               data-workspace-entry
               {...DRAG_REGION_ATTR}
             >
-              <h1
-                title={selectedTitle}
-                {...DRAG_REGION_ATTR}
-              >
+              <h1 title={selectedTitle} {...DRAG_REGION_ATTR}>
                 {selectedTitle}
               </h1>
             </div>
@@ -4886,14 +4896,26 @@ export function AgentPage({
                 <Folder aria-hidden="true" />
               </button>
             )}
-            {workspace && sessionId && (
-              <AgentActivityStatus
-                hideIdle
-                snapshot={snapshot}
-                queued={queuedHere}
-                stopping={stoppingHere}
-                loading={snapshotLoading}
-              />
+            {workspace && sessionId && showTaskProgress && (
+              <button
+                type="button"
+                className="wb-task-progress"
+                aria-controls={taskProgressId}
+                title="查看当前任务进度"
+                onClick={() => {
+                  const scroll = scrollRef.current;
+                  if (!scroll) return;
+                  pinChatTail();
+                  jumpToChatTail(scroll);
+                  document.getElementById(taskProgressId)?.focus({
+                    preventScroll: true,
+                  });
+                }}
+                style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+              >
+                <ListChecks aria-hidden="true" />
+                任务进度
+              </button>
             )}
             <AgentHelpMenu
               onOpenAbout={onOpenAbout}
@@ -4952,7 +4974,9 @@ export function AgentPage({
               active={isActive && !activeTool}
               onOpenSession={openSecretarySession}
               projectChoices={
-                isSecretary && workspace?.standalone ? sidebarProjects : undefined
+                isSecretary && workspace?.standalone
+                  ? sidebarProjects
+                  : undefined
               }
               onFocusComposer={
                 isSecretary
@@ -5183,6 +5207,14 @@ export function AgentPage({
                       documentAttachmentsByMessage={sentDocumentAttachments}
                       onLoadEarlier={preserveEarlierHistory}
                     />
+                    {showTaskProgress && (
+                      <AgentActivityStatus
+                        id={taskProgressId}
+                        snapshot={snapshot}
+                        submitting={queuedHere}
+                        stopping={stoppingHere}
+                      />
+                    )}
                     {snapshot && !transcriptMessages.length && (
                       <div className="wb-empty">
                         <div className="wb-empty-content">
@@ -5483,7 +5515,9 @@ export function AgentPage({
                   }}
                   onSubmit={(event) => {
                     event.preventDefault();
-                    if (!sendDisabled) submitComposer();
+                    if (sendDisabled) return;
+                    submitComposer();
+                    composerInputRef.current?.focus({ preventScroll: true });
                   }}
                 >
                   {(composerImages.length > 0 ||
@@ -5540,7 +5574,7 @@ export function AgentPage({
                     id="agent-message"
                     rows={1}
                     placeholder="描述任务，或继续追问…"
-                    title="Enter 发送 · Shift + Enter 换行；执行中 Enter 加入队列，Ctrl/⌘ + Enter 插入当前任务"
+                    title="Enter 发送 · Shift + Enter 换行；任务运行时默认排队，Ctrl/⌘ + Enter 引导当前任务"
                     value={draft}
                     disabled={readOnlySession || recallingHere}
                     onChange={(event) => writeDraft(key, event.target.value)}
@@ -5729,67 +5763,54 @@ export function AgentPage({
                         snapshot?.compacting
                       }
                     />
-                    {!readOnlySession &&
-                      (runningHere ||
-                        queuedHere ||
-                        uncertainHere ||
-                        stoppingHere) && (
-                        <button
-                          type="button"
-                          className="wb-primary wb-stop-button"
-                          disabled={stoppingHere}
-                          onClick={() => void stop()}
-                        >
-                          <Square />
-                          {stoppingHere ? "停止中…" : "停止"}
-                        </button>
-                      )}
-                    {runningHere && (
-                      <button
-                        type="button"
-                        className="wb-steer-send"
-                        disabled={sendDisabled}
-                        aria-label={steeringHere ? "正在插入…" : "插入当前任务"}
-                        title="当前步骤结束后插入消息 · Ctrl/⌘ + Enter"
-                        onClick={() => void enqueueDraft("steer")}
-                      >
-                        <ArrowUpRight size={16} aria-hidden="true" />
-                        <span>
-                          {steeringHere ? "正在插入…" : "插入当前任务"}
-                        </span>
-                      </button>
-                    )}
                     <button
-                      type="submit"
-                      className={`wb-primary wb-send-button${sendingHere || steeringHere || enqueuingHere ? " wb-send-pending" : ""}`}
-                      disabled={sendDisabled}
+                      type={stopPrimary ? "button" : "submit"}
+                      data-composer-action={stopPrimary ? "stop" : "send"}
+                      className={`wb-primary wb-send-button${!stopPrimary && submittingHere ? " wb-send-pending" : ""}`}
+                      disabled={stopPrimary ? stoppingHere : sendDisabled}
                       title={
-                        queueMode
-                          ? "加入待发送队列，当前回复结束后依次发送"
-                          : "Enter 发送 · Shift + Enter 换行"
+                        stopPrimary
+                          ? "停止当前任务，保留排队消息"
+                          : queueMode
+                            ? snapshot?.queuePaused
+                              ? "发送消息 · 当前队列已暂停"
+                              : "发送并排队 · 当前任务结束后依次发送"
+                            : "Enter 发送 · Shift + Enter 换行"
                       }
+                      onClick={
+                        stopPrimary
+                          ? (event) => {
+                              if (event.detail < 2) void stop();
+                            }
+                          : undefined
+                      }
+                      onKeyDown={(event) => {
+                        if (
+                          event.repeat &&
+                          (event.key === "Enter" || event.key === " ")
+                        )
+                          event.preventDefault();
+                      }}
                     >
-                      {sendingHere || steeringHere || enqueuingHere ? (
+                      {stopPrimary ? (
+                        <Square size={16} aria-hidden="true" />
+                      ) : submittingHere ? (
                         <LoaderCircle
                           className="wb-send-spinner"
                           size={20}
                           aria-hidden="true"
                         />
-                      ) : queueMode ? (
-                        <ListPlus size={20} aria-hidden="true" />
                       ) : (
                         <ArrowUp size={20} aria-hidden="true" />
                       )}
                       <span>
-                        {enqueuingHere
-                          ? "正在入队…"
-                          : steeringHere
-                            ? "正在插入…"
-                            : sendingHere
-                              ? "正在发送…"
-                              : queueMode
-                                ? "加入队列"
-                                : "发送"}
+                        {stopPrimary
+                          ? stoppingHere
+                            ? "停止中…"
+                            : "停止"
+                          : submittingHere
+                            ? "正在发送…"
+                            : "发送"}
                       </span>
                     </button>
                   </div>

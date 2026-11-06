@@ -45,7 +45,7 @@ export function AgentMessageQueue({
 }: AgentMessageQueueProps) {
   const hintId = useId();
   if (!items.length) return null;
-  const action = canSteer ? "插入当前任务" : "立即发送";
+  const action = canSteer ? "引导" : "立即发送";
   return (
     <section
       className="wb-message-queue"
@@ -113,8 +113,9 @@ export function AgentMessageQueue({
                   variant="quiet"
                   size="compact"
                   className="wb-message-queue-send"
+                  data-queue-guide={canSteer || undefined}
                   disabled={actionsDisabled}
-                  aria-label={`${confirming ? "正在加入队列的" : sending ? "正在发送" : action}第 ${ordinal} 条消息`}
+                  aria-label={`${confirming ? "正在加入队列的" : sending ? (canSteer ? "正在引导" : "正在发送") : action}第 ${ordinal} 条消息`}
                   title={
                     confirming
                       ? "等待队列确认"
@@ -133,7 +134,13 @@ export function AgentMessageQueue({
                   ) : (
                     <CornerDownRight size={15} aria-hidden="true" />
                   )}
-                  {confirming ? "正在加入队列" : sending ? "发送中" : action}
+                  {confirming
+                    ? "正在加入队列"
+                    : sending
+                      ? canSteer
+                        ? "引导中"
+                        : "发送中"
+                      : action}
                 </Button>
                 <Button
                   type="button"

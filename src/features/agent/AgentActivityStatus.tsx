@@ -8,13 +8,21 @@ import type { AgentMessage, AgentSnapshot } from "@/types/agent";
 
 interface Props {
   snapshot: AgentSnapshot | null;
-  queued: boolean;
+  submitting: boolean;
   stopping: boolean;
-  loading: boolean;
-  hideIdle?: boolean;
+  id?: string;
 }
 
-function runningPhase(messages: AgentMessage[]) {
+const waitingForModel = {
+  phase: "waiting_model",
+  label: "正在等待模型响应…",
+};
+
+function runningPhase(
+  messages: AgentMessage[],
+  modelPhase: AgentSnapshot["modelPhase"],
+) {
+  if (modelPhase === "waiting") return waitingForModel;
   const currentTurn: AgentMessage[] = [];
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
@@ -41,26 +49,28 @@ function runningPhase(messages: AgentMessage[]) {
         return { phase: "replying", label: "正在回复…" };
     }
   }
-  return { phase: "running", label: "正在执行…" };
+  // Harness can open the response stream before any model output arrives.
+  return modelPhase === "streaming"
+    ? waitingForModel
+    : { phase: "running", label: "正在执行…" };
 }
 
 export function AgentActivityStatus({
   snapshot,
-  queued,
+  submitting,
   stopping,
-  loading,
-  hideIdle = false,
+  id,
 }: Props) {
-  let phase = "idle";
-  let label = "准备就绪";
+  let phase: string;
+  let label: string;
   let busy = false;
   if (stopping) {
     phase = "stopping";
     label = "正在停止…";
     busy = true;
-  } else if (queued) {
-    phase = "queued";
-    label = "已发送，等待开始…";
+  } else if (submitting) {
+    phase = "preparing";
+    label = "正在准备任务…";
     busy = true;
   } else if (snapshot?.status === "waiting_permission") {
     phase = "permission";
@@ -75,20 +85,14 @@ export function AgentActivityStatus({
     if (snapshot.compacting) {
       phase = "compacting";
       label = "正在整理上下文…";
-    } else if (snapshot.modelPhase === "waiting") {
-      phase = "waiting_model";
-      label = "正在等待模型响应…";
     } else if (snapshot.modelPhase === "finishing") {
       phase = "finishing";
       label = "正在收尾统计…";
-    } else ({ phase, label } = runningPhase(snapshot.messages));
+    } else {
+      ({ phase, label } = runningPhase(snapshot.messages, snapshot.modelPhase));
+    }
     busy = true;
-  } else if (loading && !snapshot) {
-    phase = "loading";
-    label = "正在加载会话…";
-    busy = true;
-  }
-  if (hideIdle && phase === "idle") return null;
+  } else return null;
   const Icon = busy
     ? Loader2
     : phase === "question"
@@ -100,12 +104,13 @@ export function AgentActivityStatus({
           : null;
   return (
     <span
+      id={id}
       role="status"
+      tabIndex={id ? -1 : undefined}
       aria-live="polite"
       aria-atomic="true"
       className="wb-status"
       data-phase={phase}
-      title={label}
     >
       {Icon && (
         <Icon

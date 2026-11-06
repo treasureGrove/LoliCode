@@ -10,7 +10,10 @@ use super::{
     harness_plugins::PluginSelection,
     harness_preview::HarnessPreview,
     harness_questions::{answer_for_question, question_from_params},
-    harness_runtime::{HarnessClient, HarnessEvent, HarnessHostRequest, HarnessRuntime},
+    harness_runtime::{
+        read_cold_session_markdown, HarnessClient, HarnessEvent, HarnessHostRequest,
+        HarnessRuntime, MARKDOWN_MISSING,
+    },
     harness_secretary::{HarnessSecretary, SecretaryCommand, SecretarySidebar, WorkerAction},
     harness_sessions::activity,
     harness_snapshot::{is_live_message, HarnessSnapshotProjection},
@@ -27,7 +30,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap},
+    collections::{BTreeMap, BTreeSet, HashMap, VecDeque},
     path::{Path, PathBuf},
     sync::{Arc, Mutex as StdMutex, OnceLock},
     time::Duration,
@@ -40,6 +43,7 @@ const INTERRUPTED: &str = "上次 Harness 会话中断，已保留已确认的�
 const MAX_RECEIPTS: usize = 4096;
 const SNAPSHOT_EVENT: &str = "agent-session-update";
 const AUTOMATIC_TITLE_GRACE: Duration = Duration::from_secs(6);
+const LEGACY_MARKDOWN: &str = "旧引擎迁移会话的完整历史不在原生 Harness 日志中，无法复制完整历史";
 
 #[derive(Clone, Default)]
 pub(crate) struct HarnessDesktop(Arc<Mutex<DesktopState>>);
@@ -116,6 +120,10 @@ enum Control {
     ModeCommand {
         args: Value,
         reply: oneshot::Sender<Result<(), String>>,
+    },
+    ReadMarkdown {
+        child: Option<String>,
+        reply: oneshot::Sender<Result<Option<String>, String>>,
     },
     WorkerEnqueue {
         session: String,
@@ -266,6 +274,85 @@ impl HarnessDesktop {
         let mut snapshot = load_record(&file, id)?.snapshot;
         clear_waits(&mut snapshot);
         Ok(Some(snapshot))
+    }
+
+    pub(crate) async fn read_session_markdown(
+        &self,
+        app: &AppHandle,
+        carrier: &InprocessAgentState,
+        id: &str,
+    ) -> Result<String, String> {
+        let profile = config::get_app_config_dir();
+        let selected_root = private_root(&profile, id).ok_or("无效的 Harness 会话编号")?;
+        let id_for_paths = id.to_owned();
+        let (owner, owner_root) = tokio::task::spawn_blocking(move || {
+            let migration = HarnessMigration::new(&profile)?;
+            if migration.receipt(&id_for_paths)?.is_some()
+                || migration.find_legacy(&id_for_paths)?.is_some()
+            {
+                return Err(LEGACY_MARKDOWN.into());
+            }
+            let profile = canonical_project(&profile.to_string_lossy())?;
+            let owner = read_worker_owner(&selected_root, &id_for_paths).unwrap_or(id_for_paths);
+            let owner_root = private_root(&profile, &owner).ok_or("无效的 Harness 会话归属")?;
+            let owner_root = existing_markdown_directory(&owner_root)?;
+            Ok::<_, String>((owner, owner_root))
+        })
+        .await
+        .map_err(|_| "无法验证 Harness 会话归属")??;
+        let metadata: AgentSession = carrier
+            .call("getSessionMetadata", json!({"sessionId": &owner}), false)
+            .await?;
+        crate::commands::agent_dispatch::check_project(app, &metadata.project_path)?;
+        let owner_root = owner_root.ok_or(MARKDOWN_MISSING)?;
+        let record_file = owner_root.join("desktop.json");
+        let flight = self
+            .0
+            .lock()
+            .await
+            .flights
+            .get(&owner)
+            .map(|flight| (flight.record.clone(), flight.controls.clone()));
+        let sdk_id = id.strip_prefix("lc:").ok_or("无效的 Harness 会话编号")?;
+        if let Some((record, controls)) = flight {
+            let project = markdown_session(&*record.lock().await, &owner, id)?
+                .project_path
+                .clone();
+            crate::commands::agent_dispatch::check_project(app, &project)?;
+            let child = (owner != id).then(|| sdk_id.to_owned());
+            let response = tokio::time::timeout(
+                Duration::from_secs(55),
+                forward_live_control(&controls, |reply| Control::ReadMarkdown { child, reply }),
+            )
+            .await
+            .map_err(|_| "读取完整会话日志超时，请重试")?;
+            match response {
+                Some(Ok(Some(markdown))) => return Ok(markdown),
+                Some(Err(error)) => return Err(error),
+                // The runtime can exit while the read is in flight. A nonresident
+                // child or finished root can still have a committed stored log.
+                Some(Ok(None)) | None => {}
+            }
+        } else {
+            let id = id.to_owned();
+            let project = tokio::task::spawn_blocking(move || {
+                if !record_file.is_file() {
+                    return Err(MARKDOWN_MISSING.into());
+                }
+                let record = load_record(&record_file, &owner)?;
+                Ok::<_, String>(markdown_session(&record, &owner, &id)?.project_path.clone())
+            })
+            .await
+            .map_err(|_| "无法读取 Harness 会话")??;
+            crate::commands::agent_dispatch::check_project(app, &project)?;
+        }
+        let sessions = tokio::task::spawn_blocking(move || {
+            existing_markdown_directory(&owner_root.join("home/sessions"))?
+                .ok_or_else(|| MARKDOWN_MISSING.to_owned())
+        })
+        .await
+        .map_err(|_| "无法读取 Harness 日志目录")??;
+        read_cold_session_markdown(&HarnessPaths::resolve(app)?, &sessions, sdk_id).await
     }
 
     pub(super) async fn session_list_activity(
@@ -503,12 +590,18 @@ impl HarnessDesktop {
                 Value::Null
             };
             let command = SecretaryCommand::parse(method, args, content)?;
-            if let SecretaryCommand::Delegate { project_path: Some(path), .. } = &command {
+            if let SecretaryCommand::Delegate {
+                project_path: Some(path),
+                ..
+            } = &command
+            {
                 crate::commands::agent_dispatch::check_project(app, path)?;
                 let secretary: lolicode_agent::AgentSession = carrier
                     .call("getSessionMetadata", json!({"sessionId":id}), false)
                     .await?;
-                let remote = carrier.remote_projects(&app.state::<crate::store::AppState>()).await;
+                let remote = carrier
+                    .remote_projects(&app.state::<crate::store::AppState>())
+                    .await;
                 if !super::agent_host::is_standalone_workspace(Path::new(&secretary.project_path))
                     || remote.owns(Path::new(path))
                     || super::agent_host::canonical_project(path)?.as_path() != Path::new(path)
@@ -1396,6 +1489,59 @@ fn save_worker_owner(profile: &Path, owner: &str, child: &str) -> Result<(), Str
         .map_err(|_| "无法保存 Harness 子任务归属".into())
 }
 
+fn existing_markdown_directory(path: &Path) -> Result<Option<PathBuf>, String> {
+    match std::fs::symlink_metadata(path) {
+        Ok(_) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(_) => return Err("无法读取 Harness 日志目录".into()),
+    }
+    let canonical =
+        canonical_project(&path.to_string_lossy()).map_err(|_| "Harness 日志目录无效")?;
+    if canonical != path {
+        return Err("Harness 日志目录超出会话数据范围".into());
+    }
+    Ok(Some(canonical))
+}
+
+fn markdown_session<'a>(
+    record: &'a SessionRecord,
+    owner: &str,
+    id: &str,
+) -> Result<&'a AgentSession, String> {
+    if record.snapshot.session.id != owner {
+        return Err("Harness 会话编号与记录不符".into());
+    }
+    let session = if owner == id {
+        &record.snapshot.session
+    } else {
+        let child = record.secretary.child(id).ok_or("此子任务不属于当前秘书")?;
+        let task_id = child
+            .session
+            .coordination
+            .as_ref()
+            .filter(|link| {
+                link.role == "worker" && link.parent_session_id.as_deref() == Some(owner)
+            })
+            .and_then(|link| link.task_id.as_deref())
+            .ok_or("此子任务不属于当前秘书")?;
+        record
+            .secretary
+            .task(task_id)
+            .filter(|task| task.session_id == id && task.parent_session_id == owner)
+            .ok_or("此子任务不属于当前秘书")?;
+        // Legacy Rust workers retain their original task IDs on migration,
+        // even when a copied legacy history file is no longer present.
+        if task_id.starts_with("task-") {
+            return Err(LEGACY_MARKDOWN.into());
+        }
+        &child.session
+    };
+    if !record.root_created {
+        return Err(MARKDOWN_MISSING.into());
+    }
+    Ok(session)
+}
+
 fn view_snapshot(record: &SessionRecord, id: &str, owner: &str) -> Result<AgentSnapshot, String> {
     if owner == id {
         Ok(record.snapshot.clone())
@@ -1562,6 +1708,9 @@ fn load_record(file: &Path, id: &str) -> Result<SessionRecord, String> {
             record.snapshot.queued_messages.push(row);
             record.snapshot.queue_paused = true;
         }
+    }
+    for row in &mut record.snapshot.queued_messages {
+        row.delivery = None;
     }
     // Child inbox IDs from an earlier process cannot address the new actor.
     record.snapshot.background_jobs = 0;
@@ -2158,6 +2307,18 @@ async fn edit_queue(
         return Err("该消息已暂停，请在本轮结束后发送".into());
     }
     if action != "remove" {
+        {
+            let mut saved = turn.record.lock().await;
+            if let Some(row) = saved
+                .snapshot
+                .queued_messages
+                .iter_mut()
+                .find(|row| row.id == id)
+            {
+                row.delivery = Some("steer".into());
+            }
+        }
+        notify_snapshot_changed(turn.app, turn.id);
         return Ok(Value::Null);
     }
     let mut saved = turn.record.lock().await;
@@ -2384,6 +2545,17 @@ async fn edit_worker_queue(
         }
     }
     if action != "remove" {
+        if running {
+            let mut saved = turn.record.lock().await;
+            if let Some(input) = saved.worker_queues.get_mut(session).and_then(|queue| {
+                queue
+                    .inputs
+                    .iter_mut()
+                    .find(|input| input.message.id == request)
+            }) {
+                input.message.delivery = Some("steer".into());
+            }
+        }
         return Ok(Value::Null);
     }
     let mut saved = turn.record.lock().await;
@@ -2427,6 +2599,7 @@ async fn stop_worker_and_park(
                 .is_some_and(|ids| ids.iter().any(|id| id.as_str() == Some(rpc_id.as_str())))
             {
                 input.sdk_id = None;
+                input.message.delivery = None;
             }
         }
         save_record(&turn.root.join("desktop.json"), &saved)?;
@@ -2444,6 +2617,24 @@ async fn send_control(
         .await
         .map_err(|_| "Harness 本轮已结束")?;
     result.await.map_err(|_| "Harness 本轮已结束")?
+}
+
+fn reply_live_markdown(
+    client: &HarnessClient,
+    sdk_id: &str,
+    child: Option<String>,
+    reply: oneshot::Sender<Result<Option<String>, String>>,
+) {
+    // The read does not own the turn. Keep draining events and responding to
+    // model requests while the runtime prepares the detached observation.
+    let client = client.clone();
+    let sdk_id = sdk_id.to_owned();
+    tokio::spawn(async move {
+        let result = client
+            .read_session_markdown(&sdk_id, child.as_deref())
+            .await;
+        let _ = reply.send(result);
+    });
 }
 
 async fn send_secretary_control(
@@ -2859,60 +3050,67 @@ async fn run_turn(mut turn: Turn<'_>) -> Result<ReceiptStatus, String> {
         }
         bridge.configure(&client, sdk_id).await?;
         let mcp = Some(bridge);
-        let early_worker_action = match turn.inbox.try_recv() {
-            Ok(Control::Stop {
-                expected_request,
-                reply,
-            }) => {
-                let _ = reply.send(Ok(()));
-                if expected_request
-                    .as_deref()
-                    .is_none_or(|request| request == turn.request_id)
-                {
+        let mut early_controls = VecDeque::new();
+        // Check every control already waiting for startup so that a Stop can
+        // cancel admission even when an earlier enqueue is waiting for the SDK.
+        for _ in 0..turn.inbox.len() {
+            let Ok(control) = turn.inbox.try_recv() else {
+                break;
+            };
+            match control {
+                Control::Stop {
+                    expected_request,
+                    reply,
+                } => {
+                    let _ = reply.send(Ok(()));
+                    if expected_request
+                        .as_deref()
+                        .is_some_and(|request| request != turn.request_id)
+                    {
+                        continue;
+                    }
                     return Ok(ReceiptStatus::Cancelled);
                 }
-                None
+                Control::Shutdown => return Ok(ReceiptStatus::Cancelled),
+                Control::Approval { reply, .. } => {
+                    let _ = reply.send(Err("本轮尚未请求审批".into()));
+                }
+                Control::Question { reply, .. } => {
+                    let _ = reply.send(Err("本轮尚未发出提问".into()));
+                }
+                Control::StopWorker { reply, .. } => {
+                    let _ = reply.send(Err("子任务尚未启动".into()));
+                }
+                Control::Enqueue { args, reply }
+                    if !turn.compact && args["delivery"] != "steer" =>
+                {
+                    early_controls.push_back(Control::Enqueue { args, reply });
+                }
+                Control::Enqueue { reply, .. } => {
+                    let _ = reply.send(Err("会话正在启动，请稍后再加入队列".into()));
+                }
+                Control::ModeCommand { reply, .. } => {
+                    let _ = reply.send(Err("会话正在启动，请稍后再运行命令".into()));
+                }
+                Control::ReadMarkdown { child, reply } => {
+                    reply_live_markdown(&client, sdk_id, child, reply);
+                }
+                Control::WorkerEnqueue { reply, .. } => {
+                    let _ = reply.send(Err("子任务正在启动，请稍后再加入队列".into()));
+                }
+                Control::QueuedAction { reply, .. } => {
+                    let _ = reply.send(Err("会话正在启动，请稍后再调整队列".into()));
+                }
+                Control::WorkerQueuedAction { reply, .. } => {
+                    let _ = reply.send(Err("子任务正在启动，请稍后再调整队列".into()));
+                }
+                Control::SecretaryAction { reply, .. } if turn.compact => {
+                    let _ = reply.send(Err("请等 /compact 执行完成后再派工".into()));
+                }
+                action @ Control::SecretaryAction { .. } => early_controls.push_back(action),
             }
-            Ok(Control::Shutdown) => return Ok(ReceiptStatus::Cancelled),
-            Ok(Control::Approval { reply, .. }) => {
-                let _ = reply.send(Err("本轮尚未请求审批".into()));
-                None
-            }
-            Ok(Control::Question { reply, .. }) => {
-                let _ = reply.send(Err("本轮尚未发出提问".into()));
-                None
-            }
-            Ok(Control::StopWorker { reply, .. }) => {
-                let _ = reply.send(Err("子任务尚未启动".into()));
-                None
-            }
-            Ok(Control::Enqueue { reply, .. }) => {
-                let _ = reply.send(Err("会话正在启动，请稍后再加入队列".into()));
-                None
-            }
-            Ok(Control::ModeCommand { reply, .. }) => {
-                let _ = reply.send(Err("会话正在启动，请稍后再运行命令".into()));
-                None
-            }
-            Ok(Control::WorkerEnqueue { reply, .. }) => {
-                let _ = reply.send(Err("子任务正在启动，请稍后再加入队列".into()));
-                None
-            }
-            Ok(Control::QueuedAction { reply, .. }) => {
-                let _ = reply.send(Err("会话正在启动，请稍后再调整队列".into()));
-                None
-            }
-            Ok(Control::WorkerQueuedAction { reply, .. }) => {
-                let _ = reply.send(Err("子任务正在启动，请稍后再调整队列".into()));
-                None
-            }
-            Ok(action @ Control::SecretaryAction { .. }) => Some(action),
-            Err(_) => None,
-        };
+        }
         if turn.compact {
-            if let Some(Control::SecretaryAction { reply, .. }) = early_worker_action {
-                let _ = reply.send(Err("请等 /compact 执行完成后再派工".into()));
-            }
             return run_compaction(&mut turn, &client, &mut events, sdk_id).await;
         }
         let worker = turn.worker.take();
@@ -2953,7 +3151,7 @@ async fn run_turn(mut turn: Turn<'_>) -> Result<ReceiptStatus, String> {
             sdk_id,
             &message_id,
             worker.as_ref().map(|worker| worker.child.as_str()),
-            early_worker_action,
+            early_controls,
             command_id.as_deref(),
             mcp.as_ref(),
         )
@@ -3059,6 +3257,9 @@ async fn run_compaction(
                         return Ok(ReceiptStatus::Cancelled);
                     }
                     Some(Control::Shutdown) | None => return Ok(ReceiptStatus::Cancelled),
+                    Some(Control::ReadMarkdown { child, reply }) => {
+                        reply_live_markdown(client, sdk_id, child, reply);
+                    }
                     Some(Control::StopWorker { reply, .. } | Control::Approval { reply, .. }
                         | Control::Enqueue { reply, .. } | Control::WorkerEnqueue { reply, .. }
                         | Control::ModeCommand { reply, .. } | Control::Question { reply, .. }) => {
@@ -3381,10 +3582,21 @@ async fn observe_turn(
     sdk_id: &str,
     message_id: &str,
     worker_id: Option<&str>,
-    mut early_worker_action: Option<Control>,
+    mut early_controls: VecDeque<Control>,
     command_id: Option<&str>,
     mcp: Option<&HarnessMcp>,
 ) -> Result<ReceiptStatus, String> {
+    // Controls can also arrive while the SDK is admitting the primary prompt.
+    // Process them before a fast first turn can settle, with cancellation first.
+    for _ in 0..turn.inbox.len() {
+        match turn.inbox.try_recv() {
+            Ok(control @ (Control::Stop { .. } | Control::Shutdown)) => {
+                early_controls.push_front(control);
+            }
+            Ok(control) => early_controls.push_back(control),
+            Err(_) => break,
+        }
+    }
     let mut projection = HarnessSnapshotProjection::default();
     let mut outcome = HarnessEvents::new(sdk_id);
     if let Some(worker) = worker_id {
@@ -3444,7 +3656,7 @@ async fn observe_turn(
                 if let Some(Ok(key)) = completed { host_tools.active.remove(&key); }
             }
             control = async {
-                match early_worker_action.take() {
+                match early_controls.pop_front() {
                     Some(control) => Some(control),
                     None => turn.inbox.recv().await,
                 }
@@ -3464,6 +3676,10 @@ async fn observe_turn(
                     let _ = reply.send(result);
                 }
                 Some(Control::Enqueue { args, reply }) => {
+                    if stop_requested {
+                        let _ = reply.send(Err("当前任务正在停止，草稿已保留。".into()));
+                        continue;
+                    }
                     let resumed = primary_settled && wait.is_none();
                     let request = request_id(&args)?.to_owned();
                     if resumed && args["delivery"] == "steer" {
@@ -3477,6 +3693,9 @@ async fn observe_turn(
                         wait_settlements = outcome.job_settlements();
                     }
                     let _ = reply.send(result);
+                }
+                Some(Control::ReadMarkdown { child, reply }) => {
+                    reply_live_markdown(client, sdk_id, child, reply);
                 }
                 Some(Control::ModeCommand { args, reply }) => {
                     let result = accept_mode_command(turn, client, sdk_id, args).await.map(|accepted| {
@@ -3564,7 +3783,7 @@ async fn observe_turn(
                     return Ok(ReceiptStatus::Cancelled);
                 }
             },
-            finished = async { wait.as_mut().expect("foreground wait").await }, if wait.is_some() => {
+            finished = async { wait.as_mut().expect("foreground wait").await }, if wait.is_some() && early_controls.is_empty() => {
                 wait = None;
                 while let Ok(event) = events.try_recv() {
                     let change = SnapshotChange::from_event(&event, turn.id, sdk_id);
@@ -4432,5 +4651,73 @@ mod sidebar_tests {
         let latest = load_sidebar(profile.path(), &id).unwrap().unwrap();
         assert_eq!(latest.updated_at, 3);
         assert_eq!(latest.status, AgentStatus::Idle);
+    }
+}
+
+#[cfg(test)]
+mod markdown_tests {
+    use super::*;
+
+    #[test]
+    fn markdown_copy_requires_the_selected_native_session_and_visible_child() {
+        let owner_uuid = "4291e52e-54ba-4e45-8284-e30708f367bd";
+        let child_uuid = "85acc8e9-589d-4724-a4dd-1ba0d171fcde";
+        let owner = format!("lc:{owner_uuid}");
+        let child = format!("lc:{child_uuid}");
+        let task = format!("harness-{child_uuid}");
+        let mut record: SessionRecord = serde_json::from_value(json!({
+            "snapshot": {
+                "session": {
+                    "id": owner, "title": "Root", "projectPath": "fixture", "mode": "build",
+                    "model": null, "createdAt": 1, "updatedAt": 2
+                },
+                "status": "idle", "messages": [], "permissions": [], "questions": [],
+                "diffs": [], "streamConnected": false, "streamGap": false
+            },
+            "rootCreated": false, "receipts": {}
+        }))
+        .unwrap();
+        assert_eq!(
+            markdown_session(&record, &owner, &owner).unwrap_err(),
+            MARKDOWN_MISSING
+        );
+        record.root_created = true;
+        assert_eq!(markdown_session(&record, &owner, &owner).unwrap().id, owner);
+        assert!(markdown_session(&record, &child, &owner).is_err());
+        assert!(markdown_session(&record, &owner, &child).is_err());
+        record.secretary.apply(
+            &record.snapshot,
+            owner_uuid,
+            &json!({"method":"subagent.started","params":{
+                "parentSessionId": owner_uuid, "childSessionId": child_uuid
+            }}),
+            &HarnessEvents::new(owner_uuid),
+        );
+        assert_eq!(markdown_session(&record, &owner, &child).unwrap().id, child);
+
+        let mut legacy = serde_json::to_value(&record).unwrap();
+        let worker = &mut legacy["secretary"]["workers"][child_uuid];
+        worker["task"]["id"] = json!("task-legacy");
+        worker["snapshot"]["session"]["coordination"]["taskId"] = json!("task-legacy");
+        let legacy = serde_json::from_value(legacy).unwrap();
+        assert_eq!(
+            markdown_session(&legacy, &owner, &child).unwrap_err(),
+            LEGACY_MARKDOWN
+        );
+
+        record.secretary.settle_interrupted();
+        record.secretary.delete(&task).unwrap();
+        assert!(markdown_session(&record, &owner, &child).is_err());
+    }
+
+    #[test]
+    fn markdown_storage_is_only_read_from_a_verified_existing_directory() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = canonical_project(&temp.path().to_string_lossy()).unwrap();
+        let sessions = root.join("sessions");
+        assert_eq!(existing_markdown_directory(&sessions).unwrap(), None);
+        std::fs::write(&sessions, b"not a directory").unwrap();
+        assert!(existing_markdown_directory(&sessions).is_err());
+        assert_eq!(existing_markdown_directory(&root).unwrap(), Some(root));
     }
 }

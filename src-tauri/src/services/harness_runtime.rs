@@ -2,6 +2,7 @@
 use super::{
     agent_browser::ProcessTree,
     harness_gateway::{HarnessGateway, PROVIDER, TOKEN_ENV},
+    harness_paths::HarnessPaths,
 };
 use serde_json::{json, Value};
 use std::{
@@ -16,7 +17,7 @@ use std::{
     time::Duration,
 };
 use tokio::{
-    io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader},
+    io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader},
     process::Command,
     sync::{mpsc, oneshot, watch, Semaphore},
     time::timeout,
@@ -27,6 +28,11 @@ const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_FRAME: usize = 32 * 1024 * 1024;
 const EVENT_CAPACITY: usize = 256;
 const REQUEST_CAPACITY: usize = 64;
+
+const MAX_MARKDOWN: usize = 8 * 1024 * 1024;
+pub(super) const MARKDOWN_MISSING: &str = "会话尚未形成原生 Harness 日志，无法复制完整历史";
+const MARKDOWN_TOO_LARGE: &str = "完整会话 Markdown 超过 8 MiB，无法复制";
+const MARKDOWN_READ_FAILED: &str = "无法读取完整的原生 Harness 会话日志，请重试";
 
 type Reply = Result<Value, String>;
 type Requests = Mutex<HashMap<u64, oneshot::Sender<Reply>>>;
@@ -110,6 +116,27 @@ impl HarnessClient {
         rx.await.map_err(|_| "Harness 进程已断开".to_owned())?
     }
 
+    pub(super) async fn read_session_markdown(
+        &self,
+        root_id: &str,
+        child_id: Option<&str>,
+    ) -> Result<Option<String>, String> {
+        let mut params = json!({"sessionId": root_id});
+        if let Some(child) = child_id {
+            params["childSessionId"] = json!(child);
+        }
+        match self.request("lolicode/session/read-markdown", params).await {
+            Ok(Value::String(markdown)) => validate_markdown(markdown).map(Some),
+            Err(error) => match error.as_str() {
+                "LOLICODE_SESSION_LOG_COLD" | "Harness 进程已断开" => Ok(None),
+                "LOLICODE_SESSION_LOG_MISSING" => Err(MARKDOWN_MISSING.into()),
+                "LOLICODE_SESSION_MARKDOWN_TOO_LARGE" => Err(MARKDOWN_TOO_LARGE.into()),
+                _ => Err(MARKDOWN_READ_FAILED.into()),
+            },
+            Ok(_) => Err(MARKDOWN_READ_FAILED.into()),
+        }
+    }
+
     pub(super) async fn cancel(&self, session_id: &str) -> Result<(), String> {
         self.request("lolicode/session/cancel", json!({"sessionId": session_id}))
             .await
@@ -134,6 +161,67 @@ impl HarnessClient {
         let _ = timeout(SHUTDOWN_TIMEOUT, wait_stopped(&mut stopped)).await;
         Err("Harness 进程未能正常退出".into())
     }
+}
+
+fn validate_markdown(markdown: String) -> Result<String, String> {
+    if markdown.len() > MAX_MARKDOWN {
+        return Err(MARKDOWN_TOO_LARGE.into());
+    }
+    if markdown.is_empty() {
+        return Err(MARKDOWN_READ_FAILED.into());
+    }
+    Ok(markdown)
+}
+
+pub(super) async fn read_cold_session_markdown(
+    paths: &HarnessPaths,
+    sessions: &Path,
+    session_id: &str,
+) -> Result<String, String> {
+    let mut command = Command::new(&paths.node);
+    command
+        .arg(paths.package.join("host-session-markdown.mjs"))
+        .arg(sessions)
+        .arg(session_id)
+        .current_dir(&paths.package)
+        .env_clear()
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .kill_on_drop(true);
+    #[cfg(windows)]
+    {
+        command.creation_flags(0x08000000);
+        for name in ["SystemRoot", "TEMP", "TMP"] {
+            if let Some(value) = std::env::var_os(name) {
+                command.env(name, value);
+            }
+        }
+    }
+    let mut child = command.spawn().map_err(|_| MARKDOWN_READ_FAILED)?;
+    let stdout = child.stdout.take().ok_or(MARKDOWN_READ_FAILED)?;
+    timeout(RPC_TIMEOUT, async {
+        let mut bytes = Vec::new();
+        stdout
+            .take(MAX_MARKDOWN as u64 + 1)
+            .read_to_end(&mut bytes)
+            .await
+            .map_err(|_| MARKDOWN_READ_FAILED)?;
+        if bytes.len() > MAX_MARKDOWN {
+            return Err(MARKDOWN_TOO_LARGE.into());
+        }
+        let status = child.wait().await.map_err(|_| MARKDOWN_READ_FAILED)?;
+        match status.code() {
+            Some(0) => {
+                validate_markdown(String::from_utf8(bytes).map_err(|_| MARKDOWN_READ_FAILED)?)
+            }
+            Some(2) => Err(MARKDOWN_MISSING.into()),
+            Some(3) => Err(MARKDOWN_TOO_LARGE.into()),
+            _ => Err(MARKDOWN_READ_FAILED.into()),
+        }
+    })
+    .await
+    .map_err(|_| "读取完整会话日志超时，请重试")?
 }
 
 async fn wait_stopped(
@@ -518,6 +606,20 @@ async fn receive(output: &mut BufReader<impl AsyncRead + Unpin>) -> Result<Optio
 mod tests {
     use super::*;
 
+    #[test]
+    fn markdown_size_limit_counts_utf8_bytes_without_truncating() {
+        let markdown = "é".repeat(MAX_MARKDOWN / 2);
+        assert_eq!(
+            validate_markdown(markdown.clone()).unwrap().len(),
+            MAX_MARKDOWN
+        );
+        assert_eq!(
+            validate_markdown(markdown + "x").unwrap_err(),
+            MARKDOWN_TOO_LARGE
+        );
+        assert!(validate_markdown(String::new()).is_err());
+    }
+
     #[tokio::test]
     async fn a_pending_turn_does_not_block_approvals_or_a_second_rpc() {
         timeout(Duration::from_secs(5), async {
@@ -578,6 +680,39 @@ mod tests {
                 .await
                 .unwrap();
             other.await.unwrap().unwrap();
+
+            let exporting = client.clone();
+            let export = tokio::spawn(async move {
+                exporting
+                    .read_session_markdown("first", Some("worker"))
+                    .await
+            });
+            let export_frame = receive(&mut sdk_in).await.unwrap().unwrap();
+            assert_eq!(export_frame["method"], "lolicode/session/read-markdown");
+            assert_eq!(
+                export_frame["params"],
+                json!({"sessionId":"first","childSessionId":"worker"})
+            );
+            sdk_out
+                .write_all(
+                    &encode(&json!({"jsonrpc":"2.0", "id":export_frame["id"],
+                    "result":"# Worker
+
+Committed log
+"}))
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(
+                export.await.unwrap().unwrap().as_deref(),
+                Some(
+                    "# Worker
+
+Committed log
+"
+                )
+            );
             assert!(!turn.is_finished());
 
             approval

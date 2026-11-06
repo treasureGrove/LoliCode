@@ -32,12 +32,10 @@ const snapshot = (
 });
 
 describe("AgentActivityStatus", () => {
-  it("can omit idle status without hiding activity or failures", () => {
+  it("omits idle status without hiding activity or failures", () => {
     const props = {
-      queued: false,
+      submitting: false,
       stopping: false,
-      loading: false,
-      hideIdle: true,
     };
     const view = render(
       <AgentActivityStatus snapshot={snapshot("idle")} {...props} />,
@@ -52,9 +50,9 @@ describe("AgentActivityStatus", () => {
     );
     expect(screen.getByRole("status")).toHaveTextContent("执行遇到问题");
     view.rerender(
-      <AgentActivityStatus snapshot={snapshot("idle")} {...props} queued />,
+      <AgentActivityStatus snapshot={snapshot("idle")} {...props} submitting />,
     );
-    expect(screen.getByRole("status")).toHaveTextContent("已发送，等待开始…");
+    expect(screen.getByRole("status")).toHaveTextContent("正在准备任务…");
   });
   it("shows waiting for the first model token only for the current unfinished placeholder", () => {
     const value = snapshot("running", [
@@ -68,13 +66,16 @@ describe("AgentActivityStatus", () => {
       { ...message([]), id: "placeholder", createdAt: 5 },
     ]);
     value.modelPhase = "waiting";
-    const props = { queued: false, stopping: false, loading: false };
+    const props = { submitting: false, stopping: false };
     const view = render(<AgentActivityStatus snapshot={value} {...props} />);
     expect(screen.getByRole("status")).toHaveTextContent("正在等待模型响应…");
     expect(screen.getByRole("status")).toHaveAttribute(
       "data-phase",
       "waiting_model",
     );
+    value.modelPhase = "streaming";
+    view.rerender(<AgentActivityStatus snapshot={value} {...props} />);
+    expect(screen.getByRole("status")).toHaveTextContent("正在等待模型响应…");
     value.messages[value.messages.length - 1].completedAt = 6;
     value.modelPhase = undefined;
     view.rerender(<AgentActivityStatus snapshot={value} {...props} />);
@@ -85,36 +86,36 @@ describe("AgentActivityStatus", () => {
       message([{ type: "text", text: "已生成回复" }]),
     ]);
     value.modelPhase = "finishing";
-    const props = { queued: false, stopping: false, loading: false };
+    const props = { submitting: false, stopping: false };
     const view = render(<AgentActivityStatus snapshot={value} {...props} />);
     expect(screen.getByRole("status")).toHaveTextContent("正在收尾统计…");
     value.status = "idle";
     value.modelPhase = undefined;
     view.rerender(<AgentActivityStatus snapshot={value} {...props} />);
-    expect(screen.getByRole("status")).toHaveTextContent("准备就绪");
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
   it("shows context compaction only while the backend reports a running checkpoint", () => {
     const value = snapshot("running");
     value.compacting = true;
-    const props = { queued: false, stopping: false, loading: false };
+    const props = { submitting: false, stopping: false };
     const view = render(<AgentActivityStatus snapshot={value} {...props} />);
     expect(screen.getByRole("status")).toHaveTextContent("正在整理上下文…");
     view.rerender(<AgentActivityStatus snapshot={value} {...props} stopping />);
     expect(screen.getByRole("status")).toHaveTextContent("正在停止…");
     value.status = "idle";
     view.rerender(<AgentActivityStatus snapshot={value} {...props} />);
-    expect(screen.getByRole("status")).toHaveTextContent("准备就绪");
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
   it("uses actual streamed parts for thinking, replying and tool execution", () => {
     const value = snapshot("running", [
       message([{ type: "reasoning", text: "比较两个可用方向" }]),
     ]);
+    value.modelPhase = "streaming";
     const view = render(
       <AgentActivityStatus
         snapshot={value}
-        queued={false}
+        submitting={false}
         stopping={false}
-        loading={false}
       />,
     );
     expect(screen.getByRole("status")).toHaveTextContent("正在思考…");
@@ -125,9 +126,8 @@ describe("AgentActivityStatus", () => {
     view.rerender(
       <AgentActivityStatus
         snapshot={value}
-        queued={false}
+        submitting={false}
         stopping={false}
-        loading={false}
       />,
     );
     expect(screen.getByRole("status")).toHaveTextContent("正在回复…");
@@ -142,9 +142,8 @@ describe("AgentActivityStatus", () => {
     view.rerender(
       <AgentActivityStatus
         snapshot={value}
-        queued={false}
+        submitting={false}
         stopping={false}
-        loading={false}
       />,
     );
     expect(screen.getByRole("status")).toHaveTextContent("正在执行工具…");
@@ -166,9 +165,8 @@ describe("AgentActivityStatus", () => {
     const view = render(
       <AgentActivityStatus
         snapshot={value}
-        queued={false}
+        submitting={false}
         stopping={false}
-        loading={false}
       />,
     );
     expect(screen.getByRole("status")).toHaveTextContent("正在执行…");
@@ -178,9 +176,8 @@ describe("AgentActivityStatus", () => {
     view.rerender(
       <AgentActivityStatus
         snapshot={value}
-        queued={false}
+        submitting={false}
         stopping={false}
-        loading={false}
       />,
     );
     expect(screen.getByRole("status")).toHaveTextContent("正在执行…");
@@ -193,9 +190,8 @@ describe("AgentActivityStatus", () => {
     const view = render(
       <AgentActivityStatus
         snapshot={value}
-        queued={false}
+        submitting={false}
         stopping={false}
-        loading={false}
       />,
     );
     expect(screen.getByRole("status")).toHaveTextContent("等待你的回答");
@@ -206,9 +202,8 @@ describe("AgentActivityStatus", () => {
     view.rerender(
       <AgentActivityStatus
         snapshot={value}
-        queued={false}
+        submitting={false}
         stopping={false}
-        loading={false}
       />,
     );
     expect(screen.getByRole("status")).toHaveTextContent("等待你的许可");
@@ -224,32 +219,26 @@ describe("AgentActivityStatus", () => {
     const view = render(
       <AgentActivityStatus
         snapshot={value}
-        queued={true}
+        submitting={true}
         stopping={true}
-        loading={false}
       />,
     );
     expect(screen.getByRole("status")).toHaveTextContent("正在停止…");
     view.rerender(
       <AgentActivityStatus
         snapshot={value}
-        queued={true}
+        submitting={true}
         stopping={false}
-        loading={false}
       />,
     );
-    expect(screen.getByRole("status")).toHaveTextContent("已发送，等待开始…");
+    expect(screen.getByRole("status")).toHaveTextContent("正在准备任务…");
     view.rerender(
       <AgentActivityStatus
         snapshot={value}
-        queued={false}
+        submitting={false}
         stopping={false}
-        loading={false}
       />,
     );
-    expect(screen.getByRole("status")).toHaveTextContent("准备就绪");
-    expect(
-      screen.getByRole("status").querySelector(".animate-spin"),
-    ).toBeNull();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 });

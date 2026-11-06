@@ -894,7 +894,22 @@ mod tests {
             .inspect(&anchor, "tavern_list_characters", &json!({}))
             .unwrap()
             .is_err());
-        assert_eq!(host.project_schemas(&anchor).unwrap().len(), 7);
+        let schemas = host.project_schemas(&anchor).unwrap();
+        let mut expected = TOOLS.to_vec();
+        expected.push("open_preview");
+        let web_schemas = agent_web::schemas();
+        expected.extend(
+            web_schemas
+                .iter()
+                .map(|schema| schema["function"]["name"].as_str().unwrap()),
+        );
+        let mut actual: Vec<_> = schemas
+            .iter()
+            .map(|schema| schema["function"]["name"].as_str().unwrap())
+            .collect();
+        expected.sort_unstable();
+        actual.sort_unstable();
+        assert_eq!(actual, expected);
         assert!(host.project_schemas(dir.path()).is_none());
         let id = remote.resolve(&anchor).unwrap().connection.id;
         remote.disconnect(&id).unwrap();

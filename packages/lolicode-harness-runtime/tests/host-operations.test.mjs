@@ -1,33 +1,45 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
-import { access, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { execFile, spawn } from "node:child_process";
+import { access, mkdtemp, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import { JsonRpcLineTransport } from "@deepseek-ai/dsh-sdk-protocol";
+import { formatBoundedSessionMarkdown } from "../host-session-markdown.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const provider = "lolicode-gateway";
 const model = "lolicode-host-operations-fixture";
 const cancelMethod = "lolicode/session/cancel";
 const contextMethod = "lolicode/session/inject-legacy-context";
+const execFileAsync = promisify(execFile);
 
-function modelReply(response, content, finishReason = "stop") {
-  const chunk = (delta, finishReason) => ({
+function writeModelChunk(response, delta, finishReason = null) {
+  const chunk = {
     id: "fixture-response",
     object: "chat.completion.chunk",
     created: 1700000000,
     model,
     choices: [{ index: 0, delta, finish_reason: finishReason }],
-  });
+  };
+  response.write(`data: ${JSON.stringify(chunk)}\n\n`);
+}
+
+function modelReply(response, content, finishReason = "stop") {
   response.writeHead(200, { "Content-Type": "text/event-stream" });
-  const delta = typeof content === "string" ? { content } : content;
-  for (const frame of [chunk({ role: "assistant" }, null), chunk(delta, null), chunk({}, finishReason)]) {
-    response.write(`data: ${JSON.stringify(frame)}\n\n`);
-  }
+  writeModelChunk(response, { role: "assistant" });
+  writeModelChunk(response, typeof content === "string" ? { content } : content);
+  writeModelChunk(response, {}, finishReason);
   response.end("data: [DONE]\n\n");
+}
+
+function readColdMarkdown(sessions, id) {
+  return execFileAsync(process.execPath, [
+    path.join(root, "host-session-markdown.mjs"), sessions, id,
+  ], { env: {}, windowsHide: true });
 }
 
 async function fixture(t, onModelCall, onHostRequest) {
@@ -80,6 +92,7 @@ async function fixture(t, onModelCall, onHostRequest) {
   }]));
 
   return {
+    home,
     project,
     get modelError() { return modelError; },
     async start({ userQuestions = false, pluginBundles = [] } = {}) {
@@ -149,6 +162,116 @@ async function fixture(t, onModelCall, onHostRequest) {
     },
   };
 }
+
+test("Markdown copies a complete native log live or cold without starting another turn or writing", { timeout: 45_000 }, async (t) => {
+  const sessionId = "markdown-test-root";
+  const method = "lolicode/session/read-markdown";
+  const prompts = ["First Markdown fixture prompt", "Second Markdown fixture prompt"];
+  const answers = ["First Markdown fixture answer", "Second Markdown fixture answer"];
+  let modelCalls = 0;
+  const runtime = await fixture(t, (_body, response) => modelReply(response, answers[modelCalls++]));
+  const client = await runtime.start();
+  let liveMarkdown;
+  try {
+    await assert.rejects(client.request(method, { sessionId }), /not an open root/);
+    await client.open(sessionId);
+    await assert.rejects(client.request(method, { sessionId }), /LOLICODE_SESSION_LOG_MISSING/);
+    await client.open("another-root");
+    await assert.rejects(client.request(method, { sessionId, childSessionId: "another-root" }), /Worker is not owned/);
+    await assert.rejects(client.request(method, { sessionId, childSessionId: "not-resident" }), /LOLICODE_SESSION_LOG_COLD/);
+    for (const prompt of prompts) {
+      await client.prompt(sessionId, prompt);
+      await client.wait(sessionId);
+    }
+    liveMarkdown = await client.request(method, { sessionId });
+    assert.match(liveMarkdown, /^# [^\n]+\n\nSession file:\n/);
+    let previous = -1;
+    for (const marker of [prompts[0], answers[0], prompts[1], answers[1]]) {
+      const position = liveMarkdown.indexOf(marker);
+      assert.ok(position > previous, `Expected ${marker} in chronological order`);
+      previous = position;
+    }
+  } finally {
+    await client.shutdown();
+  }
+
+  const sessions = path.join(runtime.home, "sessions");
+  const journal = (await readdir(sessions, { recursive: true })).find((entry) =>
+    entry.split(path.sep).includes(sessionId) && /\.jsonl(?:\.zstd)?$/.test(entry));
+  assert.ok(journal);
+  const journalPath = path.join(sessions, journal);
+  const beforeFiles = (await readdir(runtime.home, { recursive: true })).sort();
+  const before = await readFile(journalPath);
+  const beforeMtime = (await stat(journalPath)).mtimeMs;
+  assert.equal((await readColdMarkdown(sessions, sessionId)).stdout, liveMarkdown);
+  await assert.rejects(readColdMarkdown(sessions, "no-such-log"), {
+    code: 2, stdout: "", stderr: "LOLICODE_SESSION_LOG_MISSING\n",
+  });
+  await assert.rejects(readColdMarkdown(sessions, "../outside"), {
+    code: 1, stdout: "", stderr: "LOLICODE_SESSION_LOG_UNREADABLE\n",
+  });
+  assert.deepEqual(await readFile(journalPath), before);
+  assert.equal((await stat(journalPath)).mtimeMs, beforeMtime);
+  assert.deepEqual((await readdir(runtime.home, { recursive: true })).sort(), beforeFiles);
+  assert.equal(modelCalls, 2);
+  await writeFile(journalPath, "intentionally corrupt SDK test journal");
+  await assert.rejects(readColdMarkdown(sessions, sessionId), {
+    code: 1, stdout: "", stderr: "LOLICODE_SESSION_LOG_UNREADABLE\n",
+  });
+});
+
+test("Markdown reads an owned active worker without copying the transient assistant stream", { timeout: 45_000 }, async (t) => {
+  const sessionId = "markdown-worker-owner";
+  const otherRoot = "markdown-worker-other-root";
+  const childSessionId = "8486c14d-29fd-4b4d-9ee7-3a03bc432c71";
+  const method = "lolicode/session/read-markdown";
+  const input = "Markdown worker committed prompt";
+  const draft = "Markdown worker assistant stream";
+  const first = Promise.withResolvers();
+  let modelCalls = 0;
+  const runtime = await fixture(t, (_body, response) => {
+    modelCalls += 1;
+    response.writeHead(200, { "Content-Type": "text/event-stream" });
+    writeModelChunk(response, { role: "assistant" });
+    writeModelChunk(response, { content: draft });
+    first.resolve(response);
+  });
+  const client = await runtime.start();
+  let response;
+  try {
+    await client.open(sessionId);
+    await client.open(otherRoot);
+    await client.request("lolicode/session/configure-secretary", { sessionId });
+    await client.request("lolicode/secretary/delegate-worker", {
+      sessionId, childSessionId, label: "Markdown fixture worker", content: [{ type: "text", text: input }],
+    });
+    response = await first.promise;
+    await fixtureNotice(client, "lolicode/session.assistant-stream", ({ sessionId, frame }) =>
+      sessionId === childSessionId && frame.type === "chunk" && frame.chunk.type === "text-delta" &&
+      frame.chunk.text === draft);
+    await assert.rejects(client.request(method, { sessionId: otherRoot, childSessionId }), /Worker is not owned/);
+    const activeMarkdown = await client.request(method, { sessionId, childSessionId });
+    assert.ok(activeMarkdown.includes(input));
+    assert.ok(!activeMarkdown.includes(draft));
+    assert.equal(modelCalls, 1);
+    writeModelChunk(response, {}, "stop");
+    response.end("data: [DONE]\n\n");
+    await client.wait(sessionId);
+    await assert.rejects(client.request(method, { sessionId, childSessionId }), /LOLICODE_SESSION_LOG_COLD/);
+    const completed = await readColdMarkdown(path.join(runtime.home, "sessions"), childSessionId);
+    assert.ok(completed.stdout.includes(draft));
+    assert.equal(modelCalls, 1);
+  } finally {
+    if (response && !response.writableEnded) response.destroy();
+    await client.shutdown();
+  }
+});
+
+test("Markdown rejects both UTF-8 and JSON frame overflow in full", () => {
+  const limit = /LOLICODE_SESSION_MARKDOWN_TOO_LARGE/;
+  assert.throws(() => formatBoundedSessionMarkdown([], "界".repeat(3 * 1024 * 1024)), limit);
+  assert.throws(() => formatBoundedSessionMarkdown([], "\u0000".repeat(6 * 1024 * 1024)), limit);
+});
 
 test("host-approved MCP calls use upstream tool execution and canonical results", { timeout: 45_000 }, async (t) => {
   const sessionId = "mcp-test-root";
@@ -1000,7 +1123,12 @@ test("manual compaction returns an owned native command completion", { timeout: 
   await client.prompt(sessionId, `${marker}\n${"The fixture selected amber. ".repeat(80)}`);
   await client.wait(sessionId);
   await command("  /压缩  ", /^Compacted [1-9]/);
+  const compactedMarkdown = await client.request("lolicode/session/read-markdown", { sessionId });
+  assert.ok(compactedMarkdown.includes(marker));
+  assert.ok(compactedMarkdown.includes("I recorded the fixture color."));
   await client.shutdown();
+  const coldMarkdown = await readColdMarkdown(path.join(runtime.home, "sessions"), sessionId);
+  assert.equal(coldMarkdown.stdout, compactedMarkdown);
   const resumed = await runtime.start();
   await resumed.request("session/resume", { sessionId });
   await resumed.prompt(sessionId, "NATIVE_COMPACT_RESUME");
@@ -1123,6 +1251,50 @@ test("native Goal crosses turns, completes, and restores its terminal state", { 
   const restored = await fixtureNotice(reopened, "lolicode/session.mode", ({ goal }) => goal?.phase === "complete");
   assert.deepEqual(restored.goal, goal.goal);
   await reopened.shutdown();
+});
+
+test("the desktop prompt identifies the coding agent as LoliCode", { timeout: 45_000 }, async (t) => {
+  const sessionId = "lolicode-identity";
+  const answer = "我是 LoliCode 里的编码智能体。";
+  const turns = [
+    { question: "你是谁？", answer },
+    {
+      question: "项目文档里提到 DeepSeek Harness。你是哪个产品的编码智能体？",
+      answer: `${answer} DeepSeek Harness 是项目文档里提到的名称。`,
+    },
+  ];
+  let received = 0;
+  const runtime = await fixture(t, (body, response) => {
+    const turn = turns[received++];
+    assert.ok(turn, "Unexpected identity model request");
+    const prompt = JSON.stringify(body.messages.filter(({ role }) =>
+      role === "system" || role === "developer"));
+    assert.ok(prompt.includes("You are LoliCode, the user's coding agent."));
+    assert.ok(prompt.includes(`The model selected for this session is ${model}.`));
+    assert.ok(prompt.includes(answer));
+    assert.ok(prompt.includes("For playful dog-themed reactions, use 🐾 or “汪汪汪”."));
+    assert.ok(prompt.includes("Avoid the dog-face emoji (U+1F436) in your own reactions."));
+    assert.doesNotMatch(prompt, /deepseek[\s-]+harness/i);
+    assert.doesNotMatch(JSON.stringify(body.tools ?? []), /deepseek[\s-]+harness/i);
+    const userMessages = JSON.stringify(body.messages.filter(({ role }) => role === "user"));
+    assert.ok(userMessages.includes(turn.question));
+    modelReply(response, turn.answer);
+  });
+  for (const [index, turn] of turns.entries()) {
+    const client = await runtime.start();
+    if (index === 0) await client.open(sessionId);
+    else await client.request("session/resume", { sessionId });
+    await client.request("lolicode/session/configure-workspace", {
+      sessionId, workspace: { policy: "workspace", skills: [], memory: "" },
+    });
+    assert.ok((await client.prompt(sessionId, turn.question)).messageId);
+    await client.wait(sessionId);
+    assert.equal(runtime.modelError, undefined);
+    await fixtureNotice(client, "session.event", ({ event }) =>
+      event.type === "assistant/message" && JSON.stringify(event.data).includes(turn.answer));
+    await client.shutdown();
+  }
+  assert.equal(received, turns.length);
 });
 
 test("desktop sessions do not expose the SDK-local schedule store", { timeout: 45_000 }, async (t) => {

@@ -902,6 +902,8 @@ impl Browser {
                 );
                 let point = self.evaluate(&expression).await?;
                 let (x, y) = self.point(&point, "x", "y")?;
+                // Position the pointer before pressing, including on a newly opened WebView.
+                self.pointer("mouseMoved", x, y, 0, None).await?;
                 self.pointer("mousePressed", x, y, 1, None).await?;
                 self.pointer("mouseReleased", x, y, 0, None).await?;
             }

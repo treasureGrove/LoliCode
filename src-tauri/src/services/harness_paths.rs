@@ -95,6 +95,7 @@ impl HarnessPaths {
             || !package.join("host-operations.cordis.patch.yml").is_file()
             || !package.join("host-operations.mjs").is_file()
             || !package.join("host-mcp.mjs").is_file()
+            || !package.join("host-session-markdown.mjs").is_file()
         {
             return Err("内置 Harness 文件不完整，请重新安装完整的 LoliCode 安装包".into());
         }
