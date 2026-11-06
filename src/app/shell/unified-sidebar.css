@@ -41,10 +41,6 @@
   border: 0;
 }
 
-.lolicode-unified-sidebar[data-sidebar-resizable="true"] {
-  border: 0;
-}
-
 .lolicode-unified-sidebar[data-sidebar-compact="true"] {
   flex-basis: 72px;
   width: 72px;
@@ -73,8 +69,6 @@
 
 .lolicode-unified-sidebar[data-sidebar-compact="true"]
   .lolicode-sidebar-segments {
-  --sidebar-mode-x: 0px;
-  --sidebar-mode-y: calc(100% + 3px);
   grid-template-columns: 1fr;
 }
 
@@ -166,9 +160,6 @@
 }
 
 .lolicode-sidebar-segments {
-  --sidebar-mode-x: calc(100% + 3px);
-  --sidebar-mode-y: 0px;
-  position: relative;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   flex-shrink: 0;
@@ -245,33 +236,25 @@
   color: var(--sidebar-accent);
 }
 
-.lolicode-sidebar-segments .lolicode-sidebar-nav-item {
-  z-index: 1;
+.lolicode-unified-sidebar
+  .lolicode-sidebar-segments
+  .lolicode-sidebar-nav-item {
   justify-content: center;
   min-height: 35px;
   gap: 8px;
   padding: 6px;
   border-radius: 11px;
+  transition: none;
+}
+
+.lolicode-sidebar-segments .lolicode-sidebar-nav-item:active:not(:disabled) {
+  transform: none;
 }
 
 .lolicode-sidebar-segments .lolicode-sidebar-nav-item[aria-current="page"] {
   color: var(--action-fg);
-  background: transparent;
-}
-
-.lolicode-sidebar-mode-selection {
-  position: absolute;
-  inset: 0;
-  grid-area: 1 / 1 / 2 / 2;
-  border-radius: 11px;
   background: var(--action-bg);
   box-shadow: 0 2px 5px rgb(98 50 69 / 13%);
-  pointer-events: none;
-}
-
-.lolicode-unified-sidebar[data-workspace-mode="tavern"]
-  .lolicode-sidebar-mode-selection {
-  transform: translate(var(--sidebar-mode-x), var(--sidebar-mode-y));
 }
 
 .lolicode-sidebar-status,
@@ -364,6 +347,11 @@
   min-width: 0;
   margin-top: 16px;
   overflow: hidden;
+}
+
+.lolicode-unified-sidebar
+  :is(.lolicode-sidebar-actions, .lolicode-sidebar-workspaces)[hidden] {
+  display: none;
 }
 
 .lolicode-sidebar-footer {
@@ -862,9 +850,5 @@
     .wb-session-row[aria-pressed="true"] {
     color: HighlightText;
     background: Highlight;
-  }
-
-  .lolicode-sidebar-mode-selection {
-    display: none;
   }
 }

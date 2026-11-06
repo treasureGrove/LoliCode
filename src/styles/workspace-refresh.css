@@ -300,27 +300,9 @@
     transform 200ms var(--motion-ease);
 }
 
-:root .lolicode-workbench.wb-unified .wb-workspace-sessions {
-  animation: wb-workspace-reveal 220ms var(--motion-ease);
-}
-
-@keyframes wb-workspace-reveal {
-  from {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   :root .lolicode-workbench.wb-unified .wb-icon-button {
     transition: none;
-  }
-  :root .lolicode-workbench.wb-unified .wb-workspace-sessions {
-    animation: none;
   }
   :root .wb-unified .wb-chat-message {
     animation: none;

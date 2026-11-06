@@ -9,6 +9,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type MutableRefObject,
   type ReactNode,
 } from "react";
 import { useTranslation } from "react-i18next";
@@ -539,6 +540,8 @@ export interface AgentPageProps {
   sidebarCompact?: boolean;
   onSidebarCompactChange?: (compact: boolean) => void;
   onPreviewVisibilityChange?: (visible: boolean) => void;
+  sharedPaneLayout?: ReturnType<typeof useAgentPaneLayout>;
+  sidebarToggleRef?: MutableRefObject<(() => void) | null>;
   renderSidebar?: (content: {
     actions: ReactNode;
     workspace: ReactNode;
@@ -666,6 +669,8 @@ export function AgentPage({
   sidebarCompact = false,
   onSidebarCompactChange,
   onPreviewVisibilityChange,
+  sharedPaneLayout,
+  sidebarToggleRef,
   renderSidebar,
   onWorkspaceNavigate,
   toolRequest,
@@ -2283,13 +2288,14 @@ export function AgentPage({
     },
     [textareaRef],
   );
-  const paneLayout = useAgentPaneLayout({
-    isActive,
+  const localPaneLayout = useAgentPaneLayout({
+    isActive: isActive && !sharedPaneLayout,
     sidebarVisible: !sidebarCollapsed,
     sidebarCompact,
     sidebarAutoCompact: Boolean(onSidebarCompactChange),
     previewVisible,
   });
+  const paneLayout = sharedPaneLayout ?? localPaneLayout;
   const lastSidebarWidth = useRef(paneLayout.sidebarWidth || 252);
   if (paneLayout.sidebarVisible)
     lastSidebarWidth.current = paneLayout.sidebarWidth;
@@ -4196,29 +4202,31 @@ export function AgentPage({
       setActiveTool(null);
       action();
     };
-    if (activeTool && onWorkspaceNavigate) onWorkspaceNavigate(proceed);
+    if ((activeTool || !isActive) && onWorkspaceNavigate)
+      onWorkspaceNavigate(proceed);
     else proceed();
   };
+  const restoreCompactSidebarFocus = useRef(false);
+  useLayoutEffect(() => {
+    if (!paneLayout.sidebarCompact || !restoreCompactSidebarFocus.current)
+      return;
+    restoreCompactSidebarFocus.current = false;
+    paneLayout.containerRef.current
+      ?.querySelector<HTMLButtonElement>("[data-workspace-sidebar-toggle]")
+      ?.focus({ preventScroll: true });
+  }, [paneLayout.containerRef, paneLayout.sidebarCompact]);
   const collapseSidebar = useCallback(() => {
     const focused = document.activeElement;
-    const restoreKeyboardFocus =
+    const focusedInSidebar =
       focused instanceof HTMLElement &&
-      Boolean(focused.closest(".wb-sidebar")) &&
-      focused.matches(":focus-visible");
+      Boolean(focused.closest(".wb-sidebar"));
     if (onSidebarCompactChange) {
+      restoreCompactSidebarFocus.current = focusedInSidebar;
       onSidebarCompactChange(true);
-      if (restoreKeyboardFocus)
-        requestAnimationFrame(() => {
-          paneLayout.containerRef.current
-            ?.querySelector<HTMLButtonElement>(
-              "[data-workspace-sidebar-toggle]",
-            )
-            ?.focus();
-        });
       return;
     }
     setSidebarCollapsed(true);
-    if (restoreKeyboardFocus)
+    if (focusedInSidebar && focused.matches(":focus-visible"))
       requestAnimationFrame(() => {
         const buttons =
           paneLayout.containerRef.current?.querySelectorAll<HTMLButtonElement>(
@@ -4247,6 +4255,13 @@ export function AgentPage({
     previewVisible,
     setPreviewFolded,
   ]);
+  useLayoutEffect(() => {
+    if (!sidebarToggleRef) return;
+    sidebarToggleRef.current = toggleSidebar;
+    return () => {
+      sidebarToggleRef.current = null;
+    };
+  }, [sidebarToggleRef, toggleSidebar]);
   useEffect(() => {
     if (!isActive) return;
     const onKeyDown = (event: KeyboardEvent) => {
@@ -4270,7 +4285,7 @@ export function AgentPage({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [canOpenBrowser, isActive, openWebPreview, toggleSidebar]);
-  const sidebarToggle = !paneLayout.sidebarVisible ? (
+  const sidebarToggle = !sharedPaneLayout && !paneLayout.sidebarVisible ? (
     <button
       type="button"
       className="wb-icon-button wb-pane-toggle wb-sidebar-expand"
@@ -4736,71 +4751,79 @@ export function AgentPage({
     if (index !== -1) return dockColumn(index);
   };
 
+  const sidebarContent = renderSidebar?.({
+    actions: sidebarActions,
+    workspace: sidebarWorkspace,
+    onCollapse: toggleSidebar,
+    compact: paneLayout.sidebarCompact,
+  });
+
   return (
     <div
-      ref={paneLayout.containerRef}
+      ref={sharedPaneLayout ? undefined : paneLayout.containerRef}
       className="lolicode-agent-page lolicode-workbench wb-resizable-layout wb-unified"
     >
-      <div
-        className="wb-sidebar-track"
-        data-collapsed={!paneLayout.sidebarVisible}
-        aria-hidden={!paneLayout.sidebarVisible || undefined}
-        ref={(node) => {
-          if (node) node.inert = !paneLayout.sidebarVisible;
-        }}
-      >
-        <div className="wb-sidebar-clip">
-          <aside
-            className="wb-sidebar"
-            aria-label="项目会话"
-            style={{
-              width: lastSidebarWidth.current,
-              flexBasis: lastSidebarWidth.current,
-            }}
-          >
-            {renderSidebar ? (
-              renderSidebar({
-                actions: sidebarActions,
-                workspace: sidebarWorkspace,
-                onCollapse: toggleSidebar,
-                compact: paneLayout.sidebarCompact,
-              })
-            ) : (
-              <>
-                <div
-                  className="wb-brand"
-                  {...DRAG_REGION_ATTR}
-                  style={DRAG_REGION_STYLE as React.CSSProperties}
-                >
-                  <span className="wb-brand-mark" aria-hidden="true">
-                    <Sparkles />
-                  </span>
-                  <div className="wb-brand-label">
-                    {APP_NAME} <span>工作台</span>
-                  </div>
-                  <button
-                    type="button"
-                    className="wb-icon-button wb-pane-toggle"
-                    aria-label="收起项目侧栏"
-                    title={"Ctrl + \\"}
-                    onClick={collapseSidebar}
-                    style={
-                      { WebkitAppRegion: "no-drag" } as React.CSSProperties
-                    }
+      {sharedPaneLayout ? (
+        sidebarContent
+      ) : (
+        <div
+          className="wb-sidebar-track"
+          data-collapsed={!paneLayout.sidebarVisible}
+          aria-hidden={!paneLayout.sidebarVisible || undefined}
+          ref={(node) => {
+            if (node) node.inert = !paneLayout.sidebarVisible;
+          }}
+        >
+          <div className="wb-sidebar-clip">
+            <aside
+              className="wb-sidebar"
+              aria-label="项目会话"
+              style={{
+                width: lastSidebarWidth.current,
+                flexBasis: lastSidebarWidth.current,
+              }}
+            >
+              {renderSidebar ? (
+                sidebarContent
+              ) : (
+                <>
+                  <div
+                    className="wb-brand"
+                    {...DRAG_REGION_ATTR}
+                    style={DRAG_REGION_STYLE as React.CSSProperties}
                   >
-                    <PanelLeftClose aria-hidden="true" />
-                  </button>
-                </div>
-                {sidebarActions}
-                {sidebarWorkspace}
-              </>
-            )}
-          </aside>
+                    <span className="wb-brand-mark" aria-hidden="true">
+                      <Sparkles />
+                    </span>
+                    <div className="wb-brand-label">
+                      {APP_NAME} <span>工作台</span>
+                    </div>
+                    <button
+                      type="button"
+                      className="wb-icon-button wb-pane-toggle"
+                      aria-label="收起项目侧栏"
+                      title={"Ctrl + \\"}
+                      onClick={collapseSidebar}
+                      style={
+                        { WebkitAppRegion: "no-drag" } as React.CSSProperties
+                      }
+                    >
+                      <PanelLeftClose aria-hidden="true" />
+                    </button>
+                  </div>
+                  {sidebarActions}
+                  {sidebarWorkspace}
+                </>
+              )}
+            </aside>
+          </div>
         </div>
-      </div>
-      {!paneLayout.sidebarCompact && paneLayout.sidebarVisible && (
-        <AgentPaneResizeHandle {...paneLayout.sidebarHandleProps} />
       )}
+      {!sharedPaneLayout &&
+        !paneLayout.sidebarCompact &&
+        paneLayout.sidebarVisible && (
+          <AgentPaneResizeHandle {...paneLayout.sidebarHandleProps} />
+        )}
       <main id="agent-content-area" className="wb-main">
         <div className="wb-chat-surface" data-panel-background>
           <header

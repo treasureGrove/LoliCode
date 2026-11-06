@@ -232,7 +232,6 @@ export function TavernPage({
   };
 
   useEffect(() => {
-    if (!isActive) return;
     const onAdd = (event: Event) => {
       if ((event as CustomEvent<"preset" | "card">).detail === "preset")
         setShowPresets(true);

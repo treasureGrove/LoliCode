@@ -383,7 +383,7 @@ describe("unified workspace navigation", () => {
     expect(values.onSelectApp).not.toHaveBeenCalled();
   });
 
-  it("updates animated selection without replacing the focused navigation control", () => {
+  it("updates selection without replacing the focused navigation control", () => {
     const values = props({ view: "channels" });
     const { rerender } = mount(values);
     const chat = screen.getByRole("button", { name: "编程工作台" });
@@ -398,70 +398,45 @@ describe("unified workspace navigation", () => {
     expect(values.onSelectPage).not.toHaveBeenCalled();
   });
 
-  it("hands off a moving indicator between workspace sidebars and respects reduced motion", () => {
-    const position = { current: undefined as number | undefined };
-    const preference = {
-      matches: false,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-    };
-    const finish = vi.fn();
-    const animate = vi.fn(
-      (_frames: Keyframe[], _timing: KeyframeAnimationOptions) => ({
-        effect: { getComputedTiming: () => ({ progress: 0.35 }) },
-        playState: "running",
-        cancel: vi.fn(),
-        finish,
-      }),
-    );
-    const originalAnimate = Object.getOwnPropertyDescriptor(
-      Element.prototype,
-      "animate",
-    );
-    Object.defineProperty(Element.prototype, "animate", {
-      configurable: true,
-      value: animate,
-    });
-    vi.stubGlobal("matchMedia", () => preference);
-    const switching = props({
-      view: "tavern",
+  it("keeps workspace controls and Agent directory hosts mounted between modes", () => {
+    const actions = vi.fn<(node: HTMLDivElement | null) => void>();
+    const content = vi.fn<(node: HTMLDivElement | null) => void>();
+    const values = props({
+      view: "agent",
       tavernEnabled: false,
-      workspaceModeSwitch: true,
-      workspaceModePosition: position,
+      workspaceSlots: { actions, content },
     });
-    try {
-      const tavern = mount(switching);
-      tavern.unmount();
-      expect(position.current).toBe(0.35);
+    const { rerender } = mount(values);
+    const sidebar = screen.getByRole("navigation");
+    const agent = screen.getByRole("button", { name: "编程工作台" });
+    const chat = screen.getByRole("button", { name: "角色对话" });
+    const account = screen.getByRole("button", { name: "头像与设置" });
+    const [actionsHost] = actions.mock.calls[0];
+    const [contentHost] = content.mock.calls[0];
+    expect(actionsHost).toBeVisible();
+    expect(contentHost).toBeVisible();
+    expect(agent).toHaveAttribute("aria-current", "page");
 
-      animate.mockClear();
-      const agent = mount({ ...switching, view: "agent" });
-      const [frames, timing] = animate.mock.calls[0];
-      expect(frames[0].transform).toContain("var(--sidebar-mode-x) * 0.35");
-      expect(frames[1].transform).toContain("var(--sidebar-mode-x) * 0");
-      expect(timing.id).toBe("lolicode-sidebar-mode-slide");
-      expect(
-        screen.getByRole("button", { name: "编程工作台" }),
-      ).toHaveAttribute("aria-current", "page");
-      preference.matches = true;
-      preference.addEventListener.mock.lastCall?.[1](preference);
-      expect(finish).toHaveBeenCalledTimes(2);
-      agent.unmount();
+    chat.focus();
+    rerender(<Sidebar {...values} view="tavern" />);
+    expect(screen.getByRole("navigation")).toBe(sidebar);
+    expect(screen.getByRole("button", { name: "头像与设置" })).toBe(account);
+    expect(screen.getByRole("button", { name: "角色对话" })).toBe(chat);
+    expect(chat).toHaveFocus();
+    expect(chat).toHaveAttribute("aria-current", "page");
+    expect(agent).not.toHaveAttribute("aria-current");
+    expect(actionsHost).toHaveAttribute("hidden");
+    expect(contentHost).toHaveAttribute("hidden");
+    expect(actionsHost).toBeInTheDocument();
+    expect(contentHost).toBeInTheDocument();
 
-      animate.mockClear();
-      const reduced = mount(switching);
-      expect(animate).not.toHaveBeenCalled();
-      expect(screen.getByRole("button", { name: "角色对话" })).toHaveAttribute(
-        "aria-current",
-        "page",
-      );
-      reduced.unmount();
-    } finally {
-      vi.unstubAllGlobals();
-      if (originalAnimate)
-        Object.defineProperty(Element.prototype, "animate", originalAnimate);
-      else Reflect.deleteProperty(Element.prototype, "animate");
-    }
+    rerender(<Sidebar {...values} />);
+    expect(screen.getByRole("navigation")).toBe(sidebar);
+    expect(actions).toHaveBeenCalledTimes(1);
+    expect(content).toHaveBeenCalledTimes(1);
+    expect(actionsHost).toBeVisible();
+    expect(contentHost).toBeVisible();
+    expect(agent).toHaveAttribute("aria-current", "page");
   });
 
   it("keeps named controls reachable with the keyboard", async () => {

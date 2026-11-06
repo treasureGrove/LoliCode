@@ -327,7 +327,7 @@ describe("LoliCode product shell with retained native compatibility", () => {
     expect(await screen.findByTestId("agent-workspace")).toBeInTheDocument();
   });
 
-  it("keeps unsaved channel edits when escaping model settings", async () => {
+  it("keeps unsaved channel edits when escaping model configuration", async () => {
     renderApp();
     fireEvent.click(
       await screen.findByRole("button", { name: "manage-channels" }),
@@ -342,9 +342,9 @@ describe("LoliCode product shell with retained native compatibility", () => {
       screen.getByRole("button", { name: "common.unsavedLeaveCancel" }),
     );
     expect(draft).toHaveValue("draft route");
-    expect(screen.getByTestId("settings-page")).toHaveAttribute(
-      "data-section",
-      "models",
+    expect(document.getElementById("content-area")).toHaveAttribute(
+      "data-view",
+      "channels",
     );
   });
 

@@ -20,10 +20,10 @@ export function useWorkspaceEntryMotion(
       ? surface.current?.querySelector<HTMLElement>(targetSelector)
       : surface.current;
     if (!element?.animate) return;
-    // Keep the themed surface opaque. Only the transcript, which sits on that
-    // surface, can fade in slightly as its text settles into place.
+    // The viewport keeps its opaque theme. Leave the pane's geometry intact,
+    // including native preview bounds, while the foreground comes into view.
     const frames = targetSelector
-      ? [{ translate: "0 4px" }, { translate: "none" }]
+      ? [{ opacity: 0.94 }, { opacity: 1 }]
       : [
           { translate: "0 -3px", opacity: 0.88 },
           { translate: "none", opacity: 1 },

@@ -13,15 +13,23 @@ import { setSettings } from "../msw/state";
 vi.mock("@/contexts/UpdateContext", () => ({
   useUpdate: () => ({ hasUpdate: false, updateInfo: null }),
 }));
+vi.mock("@/features/settings/SettingsPage", () => ({
+  SettingsPage: () => <div>Settings</div>,
+}));
 vi.mock("@/features/agent/AgentPage", () => ({
   AgentPage: ({
     onOpenChannels,
+    onWorkspaceNavigate,
     renderSidebar,
     toolRequest,
   }: AgentPageProps) => (
     <div data-testid="agent-workspace">
       {renderSidebar?.({
-        actions: <button>新对话</button>,
+        actions: (
+          <button onClick={() => onWorkspaceNavigate?.(() => undefined)}>
+            新对话
+          </button>
+        ),
         workspace: <div data-testid="workspace-tree">项目与对话</div>,
         onCollapse: () => undefined,
       })}
@@ -82,7 +90,8 @@ describe("LoliCode desktop entry", () => {
       screen.getByRole("button", { name: "头像与设置" }),
     ).toBeInTheDocument();
     expect(screen.getAllByRole("navigation")).toHaveLength(1);
-    expect(screen.getByTestId("workspace-tree")).toBeInTheDocument();
+    const sidebar = screen.getByRole("navigation");
+    const workspaceTree = screen.getByTestId("workspace-tree");
     expect(
       container.querySelectorAll(".lolicode-unified-sidebar"),
     ).toHaveLength(1);
@@ -95,17 +104,32 @@ describe("LoliCode desktop entry", () => {
     ).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "添加模型渠道" }));
     expect(await screen.findByTestId("channel-center")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^渠道与模型/ })).toHaveAttribute(
-      "aria-current",
-      "page",
+    expect(document.getElementById("content-area")).toHaveAttribute(
+      "data-view",
+      "channels",
     );
+    expect(screen.getByRole("navigation")).toBe(sidebar);
+    expect(screen.getByTestId("workspace-tree")).toBe(workspaceTree);
+    expect(
+      screen.queryByRole("button", { name: "授权中心" }),
+    ).not.toBeInTheDocument();
+    fireEvent.keyDown(window, { key: ",", ctrlKey: true });
     expect(document.getElementById("content-area")).toHaveAttribute(
       "data-view",
       "settings",
     );
-    expect(
-      screen.queryByRole("button", { name: "授权中心" }),
-    ).not.toBeInTheDocument();
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(document.getElementById("content-area")).toHaveAttribute(
+      "data-view",
+      "channels",
+    );
+    expect(screen.getByRole("navigation")).toBe(sidebar);
+    fireEvent.click(screen.getByRole("button", { name: "新对话" }));
+    expect(document.getElementById("content-area")).toHaveAttribute(
+      "data-view",
+      "agent",
+    );
+    expect(screen.getByRole("navigation")).toBe(sidebar);
   });
 
   it("reaches usage and applications through the unified sidebar More menu", async () => {
@@ -149,7 +173,7 @@ describe("LoliCode desktop entry", () => {
     );
   });
 
-  it("keeps both visited workspaces mounted without laying out the inactive page or refreshing sidebar usage", async () => {
+  it("keeps the navigation and viewport mounted while only the active workspace paints", async () => {
     const apps = [{ id: "tavern", enabled: true }];
     const summary = { totalCost: "0" };
     const client = new QueryClient({
@@ -170,12 +194,11 @@ describe("LoliCode desktop entry", () => {
       </QueryClientProvider>,
     );
     const agent = await screen.findByTestId("agent-workspace");
+    const navigation = screen.getByRole("navigation");
+    const viewport = agent.closest("[data-workspace-viewport]");
+    const workspaceTree = screen.getByTestId("workspace-tree");
     const usageKey = usageKeys.summary("today", undefined, undefined);
     await waitFor(() => expect(client.getQueryData(usageKey)).toEqual(summary));
-    expect(screen.getByRole("navigation")).not.toHaveAttribute(
-      "data-workspace-mode-switch",
-    );
-
     fireEvent.click(screen.getByRole("button", { name: "角色对话" }));
     const tavern = document.getElementById("main-content");
     expect(tavern).toBeInTheDocument();
@@ -183,15 +206,10 @@ describe("LoliCode desktop entry", () => {
       "data-view",
       "tavern",
     );
-    expect(agent.closest("[aria-hidden=true]")).toHaveClass(
-      "w-screen",
-      "opacity-0",
-    );
+    expect(agent.closest("[aria-hidden=true]")).toHaveClass("invisible");
+    expect(tavern?.closest("[data-workspace-viewport]")).toBe(viewport);
     expect(client.isFetching({ queryKey: usageKey })).toBe(0);
-    expect(screen.getByRole("navigation")).toHaveAttribute(
-      "data-workspace-mode-switch",
-      "true",
-    );
+    expect(screen.getByRole("navigation")).toBe(navigation);
     expect(screen.getByRole("button", { name: "角色对话" })).toHaveAttribute(
       "aria-current",
       "page",
@@ -200,13 +218,9 @@ describe("LoliCode desktop entry", () => {
     fireEvent.click(screen.getByRole("button", { name: "编程工作台" }));
     expect(screen.getByTestId("agent-workspace")).toBe(agent);
     expect(agent.closest("[aria-hidden=true]")).toBeNull();
-    expect(tavern?.closest("[aria-hidden=true]")).toHaveClass(
-      "[content-visibility:hidden]",
-    );
-    expect(screen.getByRole("navigation")).toHaveAttribute(
-      "data-workspace-mode-switch",
-      "true",
-    );
+    expect(tavern?.closest("[aria-hidden=true]")).toHaveClass("invisible");
+    expect(screen.getByRole("navigation")).toBe(navigation);
+    expect(screen.getByTestId("workspace-tree")).toBe(workspaceTree);
     expect(screen.getByRole("button", { name: "编程工作台" })).toHaveAttribute(
       "aria-current",
       "page",

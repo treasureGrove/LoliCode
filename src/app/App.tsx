@@ -4,6 +4,8 @@ import { FirstRunNoticeDialog } from "@/components/FirstRunNoticeDialog";
 import { WhatsNewNotice } from "@/components/WhatsNewDialog";
 import { AgentPage } from "@/features/agent/AgentPage";
 import { AgentCompanion } from "@/features/agent/AgentCompanion";
+import { AgentPaneResizeHandle } from "@/features/agent/AgentPaneResizeHandle";
+import { useAgentPaneLayout } from "@/features/agent/useAgentPaneLayout";
 import type { SecretaryOpenTarget } from "@/hooks/useSecretaryActivity";
 import type { AgentTool, AgentToolTab } from "@/features/agent/AgentToolPanel";
 import { LayoutGroup } from "framer-motion";
@@ -11,6 +13,7 @@ import { BuiltinApplicationsPage } from "@/features/apps/BuiltinApplicationsPage
 import { isBuiltinApp, useBuiltinApps } from "@/lib/api/builtin-apps";
 import { DiscoveryPage } from "@/features/discovery/DiscoveryPage";
 import { TavernPage } from "@/features/tavern/TavernPage";
+import { TavernLocalModelPanel } from "@/features/tavern/TavernLocalModelPanel";
 import { UnrealPage } from "@/features/unreal/UnrealPage";
 import {
   checkToolUpdatesInBackground,
@@ -26,11 +29,7 @@ import {
   PageBackContext,
   WindowControlsContext,
 } from "@/app/shell/AppPageHeader";
-import {
-  Sidebar,
-  TavernNavigationSidebar,
-  type SidebarProps,
-} from "@/app/shell/Sidebar";
+import { Sidebar } from "@/app/shell/Sidebar";
 import { WindowControls } from "@/app/shell/WindowControls";
 import { SimpleUsagePage } from "@/features/usage/SimpleUsagePage";
 import { LolicodeAllowancePage } from "@/features/usage/LolicodeAllowancePage";
@@ -63,6 +62,7 @@ import { isTextEditableTarget } from "@/utils/domUtils";
 import { useQueryClient } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { createPortal } from "react-dom";
 import {
   Fragment,
   startTransition,
@@ -90,30 +90,32 @@ const getInitialApp = (): AppId => {
 };
 
 type WorkspaceMode = "agent" | "tavern";
+const isWorkspaceMode = (view: View): view is WorkspaceMode =>
+  view === "agent" || view === "tavern";
 
 function WorkspaceModes({
   mode,
   agent,
   tavern,
+  models,
   warmTavern,
 }: {
-  mode: WorkspaceMode;
+  mode: WorkspaceMode | "channels" | null;
   agent: ReactNode;
   tavern: ReactNode;
+  models: ReactNode;
   warmTavern: boolean;
 }) {
   const queryClient = useQueryClient();
   const surface = useRef<HTMLDivElement>(null);
-  useWorkspaceEntryMotion(
-    surface,
-    mode,
-    "[data-workspace-active] [data-workspace-entry]",
-  );
+  useWorkspaceEntryMotion(surface, mode, "[data-workspace-active]");
   const [visited, setVisited] = useState(() => ({
     agent: mode === "agent",
     tavern: mode === "tavern",
   }));
-  if (!visited[mode]) setVisited({ ...visited, [mode]: true });
+  if (mode && isWorkspaceMode(mode) && !visited[mode]) {
+    setVisited({ ...visited, [mode]: true });
+  }
   useEffect(() => {
     if (mode !== "agent" || visited.tavern || !warmTavern) return;
     const prepare = () => {
@@ -135,7 +137,11 @@ function WorkspaceModes({
   return (
     <div
       ref={surface}
-      className="tai-page relative flex min-h-0 flex-1 flex-col"
+      data-workspace-viewport
+      className={cn(
+        "tai-page relative min-h-0 flex-1 overflow-hidden bg-app",
+        !mode && "hidden",
+      )}
     >
       {(["agent", "tavern"] as const).map((view) => {
         if (!visited[view]) return null;
@@ -150,21 +156,22 @@ function WorkspaceModes({
               if (node) node.inert = !active;
             }}
             className={cn(
-              "min-h-0 flex-1",
-              view === "agent" ? "overflow-hidden" : "flex flex-col",
-              !active && "pointer-events-none absolute inset-0",
-              // The Tavern rail sits outside this container. Keep Agent's
-              // original width while parked so returning can reuse its layout.
-              !active &&
-                (view === "agent"
-                  ? "w-screen opacity-0"
-                  : "invisible [content-visibility:hidden]"),
+              "absolute inset-0 flex min-h-0 flex-col overflow-hidden",
+              !active && "invisible pointer-events-none",
             )}
           >
             {pages[view]}
           </div>
         );
       })}
+      {mode === "channels" && (
+        <div
+          data-workspace-active
+          className="absolute inset-0 flex min-h-0 flex-col overflow-hidden"
+        >
+          {models}
+        </div>
+      )}
     </div>
   );
 }
@@ -179,15 +186,26 @@ function App() {
   );
 
   const [activeApp, setActiveApp] = useState<AppId>(getInitialApp);
-  const [{ currentView, previousView }, setView] = useState<{
+  const [{ currentView, workspaceDirectory }, setView] = useState<{
     currentView: View;
-    previousView?: View;
-  }>(() => ({ currentView: readStoredView() }));
+    workspaceDirectory?: WorkspaceMode;
+  }>(() => {
+    const currentView = readStoredView();
+    return {
+      currentView,
+      workspaceDirectory: isWorkspaceMode(currentView) ? currentView : undefined,
+    };
+  });
   const setCurrentView = useCallback((nextView: View) => {
     setView((view) =>
       view.currentView === nextView
         ? view
-        : { currentView: nextView, previousView: view.currentView },
+        : {
+            currentView: nextView,
+            workspaceDirectory: isWorkspaceMode(nextView)
+              ? nextView
+              : view.workspaceDirectory,
+          },
     );
   }, []);
   const [settingsSection, setSettingsSection] =
@@ -225,11 +243,26 @@ function App() {
     null,
   );
   const [workspaceSidebarCompact, setWorkspaceSidebarCompact] = useState(false);
-  const sidebarModePosition = useRef<number>();
-  const agentPreviewVisible = useRef(false);
-  const rememberAgentPreview = useCallback((visible: boolean) => {
-    agentPreviewVisible.current = visible;
-  }, []);
+  const [agentPreviewVisible, setAgentPreviewVisible] = useState(false);
+  const [sidebarActionsHost, setSidebarActionsHost] =
+    useState<HTMLDivElement | null>(null);
+  const [sidebarContentHost, setSidebarContentHost] =
+    useState<HTMLDivElement | null>(null);
+  const agentSidebarToggle = useRef<(() => void) | null>(null);
+  const workspaceMode =
+    isWorkspaceMode(currentView) || currentView === "channels"
+      ? currentView
+      : null;
+  const sidebarView =
+    currentView === "channels" ? workspaceDirectory ?? currentView : currentView;
+  const paneLayout = useAgentPaneLayout({
+    sidebarVisible: true,
+    sidebarCompact: workspaceSidebarCompact,
+    sidebarAutoCompact: true,
+    previewVisible: agentPreviewVisible,
+  });
+  const compactSidebar = paneLayout.sidebarCompact || !paneLayout.sidebarVisible;
+  const sidebarWidth = workspaceMode ? paneLayout.sidebarWidth || 72 : 248;
 
   useEffect(() => {
     storeView(currentView);
@@ -556,7 +589,10 @@ function App() {
   };
 
   const backToPreviousPage = () => {
-    const previous = pageReturnViewRef.current;
+    const previous =
+      currentViewRef.current === "channels"
+        ? workspaceDirectory ?? pageReturnViewRef.current
+        : pageReturnViewRef.current;
     openPage(previous === currentViewRef.current ? "agent" : previous, true);
   };
 
@@ -637,6 +673,8 @@ function App() {
   openSettingsRef.current = openSettings;
   const exitSettingsRef = useRef(exitSettings);
   exitSettingsRef.current = exitSettings;
+  const backToPreviousPageRef = useRef(backToPreviousPage);
+  backToPreviousPageRef.current = backToPreviousPage;
   const exitAllowanceRef = useRef(exitAllowance);
   exitAllowanceRef.current = exitAllowance;
 
@@ -658,6 +696,9 @@ function App() {
       if (view === "settings") {
         event.preventDefault();
         exitSettingsRef.current();
+      } else if (view === "channels") {
+        event.preventDefault();
+        backToPreviousPageRef.current();
       } else if (view === "allowance") {
         event.preventDefault();
         exitAllowanceRef.current();
@@ -690,77 +731,41 @@ function App() {
     }
   };
 
-  const renderSidebar = (
-    slots: Pick<
-      SidebarProps,
-      | "embedded"
-      | "workspaceActions"
-      | "workspaceContent"
-      | "onCollapse"
-      | "sidebarCompact"
-    > = {},
-    view = currentView,
+  const workspaceSlots = {
+    actions: setSidebarActionsHost,
+    content: setSidebarContentHost,
+  };
+  const toggleWorkspaceSidebar = () => {
+    if (agentSidebarToggle.current) agentSidebarToggle.current();
+    else setWorkspaceSidebarCompact(!compactSidebar);
+  };
+  const openModels = () => openPage("channels");
+  const navigateFromDirectory = (
+    destination: WorkspaceMode,
+    action: () => void,
   ) => {
-    const props: SidebarProps = {
-      ...slots,
-      workspaceModePosition:
-        view === currentView ? sidebarModePosition : undefined,
-      workspaceModeSwitch:
-        view === currentView &&
-        ((view === "agent" && previousView === "tavern") ||
-          (view === "tavern" && previousView === "agent")),
-      sidebarCompact:
-        slots.sidebarCompact ??
-        ((view === "agent" || view === "tavern") && workspaceSidebarCompact),
-      onOpenAgentTool: openAgentTool,
-      activeAgentTool: view === "agent" ? activeAgentTool : null,
-      selectedTavernCharacterId: tavernCharacterId,
-      onSelectTavernCharacter: setTavernCharacterId,
-      tavernEnabled: tavernEnabled === true,
-      activeApp,
-      view,
-      visibleApps,
-      settingsSection,
-      onSelectApp: selectApp,
-      onSelectPage: openPageFromNav,
-      onOpenUpdates: () => openSettings("about"),
-      onSelectSettingsSection: openSettings,
-      onExitSettings: exitSettings,
-      appsUpdateAvailable: checkToolUpdatesOnStartup && toolUpdatesAvailable,
+    const proceed = () => {
+      if (currentView === "channels") setCurrentView(destination);
+      action();
     };
-    return view === "tavern" ? (
-      <TavernNavigationSidebar
-        {...props}
-        onCollapse={() => setWorkspaceSidebarCompact((value) => !value)}
-        reservePreviewSpace={agentPreviewVisible.current}
-      />
-    ) : (
-      <Sidebar {...props} />
-    );
+    if (!managementBusyRef.current && !confirmLeave(proceed)) proceed();
   };
 
   const renderAgentPage = (isActive: boolean) => (
     <AgentPage
       isActive={isActive}
+      sharedPaneLayout={paneLayout}
+      sidebarToggleRef={agentSidebarToggle}
       sidebarCompact={workspaceSidebarCompact}
       onSidebarCompactChange={setWorkspaceSidebarCompact}
-      onPreviewVisibilityChange={rememberAgentPreview}
-      renderSidebar={({ actions, workspace, onCollapse, compact }) =>
-        renderSidebar(
-          {
-            embedded: true,
-            workspaceActions: actions,
-            workspaceContent: workspace,
-            onCollapse,
-            sidebarCompact: compact,
-          },
-          "agent",
-        )
-      }
-      onWorkspaceNavigate={(action) => {
-        if (managementBusyRef.current || confirmLeave(action)) return;
-        action();
-      }}
+      onPreviewVisibilityChange={setAgentPreviewVisible}
+      renderSidebar={({ actions, workspace }) => (
+        <>
+          {sidebarActionsHost && createPortal(actions, sidebarActionsHost)}
+          {sidebarContentHost && createPortal(workspace, sidebarContentHost)}
+        </>
+      )}
+      onWorkspaceNavigate={(action) => navigateFromDirectory("agent", action)}
       toolRequest={isActive ? agentToolRequest : undefined}
       onToolRequestConsumed={() => setAgentToolRequest(undefined)}
       onActiveToolChange={setActiveAgentTool}
@@ -768,7 +773,7 @@ function App() {
       secretaryRequest={secretaryRequest}
       onSecretaryRequestConsumed={() => setSecretaryRequest(undefined)}
       onInitialProjectConsumed={() => setAgentInitialProjectPath(undefined)}
-      onOpenChannels={() => openSettings("models")}
+      onOpenChannels={openModels}
       onOpenAbout={() => openSettings("about")}
       onCheckUpdate={() => {
         void checkUpdate()
@@ -822,6 +827,15 @@ function App() {
                   initialAccountManagerOpen={currentView === "auth"}
                   initialToolsOpen={currentView === "apps"}
                 />
+                {currentView === "channels" && (
+                  <TavernLocalModelPanel
+                    onChange={() =>
+                      queryClient.invalidateQueries({
+                        queryKey: ["tavern", "catalog"],
+                      })
+                    }
+                  />
+                )}
               </div>
             </div>
           </>
@@ -875,8 +889,56 @@ function App() {
         }
       >
         <LayoutGroup id="desktop-navigation">
-          <div className="tai-shell lolicode-refreshed-shell flex h-screen overflow-hidden bg-app text-fg-1 selection:bg-action/25">
-            {currentView !== "agent" && renderSidebar()}
+          <div
+            ref={paneLayout.containerRef}
+            className="tai-shell lolicode-refreshed-shell flex h-screen overflow-hidden bg-app text-fg-1 selection:bg-action/25"
+          >
+            <div className="lolicode-workbench wb-unified shrink-0">
+              <aside
+                className="wb-sidebar"
+                style={{ width: sidebarWidth, flexBasis: sidebarWidth }}
+              >
+                <Sidebar
+                  embedded
+                  workspaceSlots={workspaceSlots}
+                  sidebarCompact={Boolean(workspaceMode && compactSidebar)}
+                  onCollapse={
+                    workspaceMode ? toggleWorkspaceSidebar : undefined
+                  }
+                  onOpenAgentTool={openAgentTool}
+                  activeAgentTool={currentView === "agent" ? activeAgentTool : null}
+                  selectedTavernCharacterId={tavernCharacterId}
+                  onSelectTavernCharacter={(id) =>
+                    navigateFromDirectory("tavern", () =>
+                      setTavernCharacterId(id),
+                    )
+                  }
+                  onAddTavernCharacter={(source) =>
+                    navigateFromDirectory("tavern", () =>
+                      window.dispatchEvent(
+                        new CustomEvent("lolicode:tavern-add", { detail: source }),
+                      ),
+                    )
+                  }
+                  tavernEnabled={tavernEnabled === true}
+                  activeApp={activeApp}
+                  view={sidebarView}
+                  visibleApps={visibleApps}
+                  settingsSection={settingsSection}
+                  onSelectApp={selectApp}
+                  onSelectPage={openPageFromNav}
+                  onOpenUpdates={() => openSettings("about")}
+                  onSelectSettingsSection={openSettings}
+                  onExitSettings={exitSettings}
+                  appsUpdateAvailable={
+                    checkToolUpdatesOnStartup && toolUpdatesAvailable
+                  }
+                />
+              </aside>
+              {workspaceMode && !compactSidebar && (
+                <AgentPaneResizeHandle {...paneLayout.sidebarHandleProps} />
+              )}
+            </div>
             <main
               ref={mainScrollRef}
               id="content-area"
@@ -907,25 +969,25 @@ function App() {
                   }}
                 />
               )}
-              {currentView === "agent" || currentView === "tavern" ? (
-                <WorkspaceModes
-                  mode={currentView}
-                  agent={renderAgentPage(currentView === "agent")}
-                  warmTavern={tavernEnabled === true}
-                  tavern={
-                    tavernEnabled ? (
-                      <TavernPage
-                        isActive={currentView === "tavern"}
-                        characterId={tavernCharacterId}
-                        onCharacterChange={setTavernCharacterId}
-                        onOpenChannels={() => openSettings("models")}
-                      />
-                    ) : currentView === "tavern" ? (
-                      <BuiltinApplicationsPage onOpen={openPage} />
-                    ) : null
-                  }
-                />
-              ) : (
+              <WorkspaceModes
+                mode={workspaceMode}
+                agent={renderAgentPage(currentView === "agent")}
+                models={currentView === "channels" ? renderGlobalPage() : null}
+                warmTavern={tavernEnabled === true}
+                tavern={
+                  tavernEnabled ? (
+                    <TavernPage
+                      isActive={currentView === "tavern"}
+                      characterId={tavernCharacterId}
+                      onCharacterChange={setTavernCharacterId}
+                      onOpenChannels={openModels}
+                    />
+                  ) : currentView === "tavern" ? (
+                    <BuiltinApplicationsPage onOpen={openPage} />
+                  ) : null
+                }
+              />
+              {!workspaceMode && (
                 <MotionSurface
                   motionKey={`${currentView}:${activeApp}:${currentView === "settings" ? settingsSection : ""}`}
                   className="tai-page flex min-h-0 flex-1 flex-col"

@@ -1,11 +1,9 @@
 import {
   useId,
-  useLayoutEffect,
-  useRef,
   useState,
   type ComponentType,
-  type MutableRefObject,
   type ReactNode,
+  type RefCallback,
 } from "react";
 import { useTranslation } from "react-i18next";
 import { LayoutGroup, motion, useReducedMotion } from "framer-motion";
@@ -45,15 +43,11 @@ import { fmtUsd } from "@/features/usage/format";
 import { HoverTip } from "@/components/ui/hover-tip";
 import { DRAG_REGION_ATTR, DRAG_REGION_STYLE, isMac } from "@/lib/platform";
 import { cn } from "@/lib/utils";
-import { motionEasing, motionTokens } from "@/lib/motion";
+import { motionTokens } from "@/lib/motion";
 import { SidebarProfileMenu } from "./SidebarProfileMenu";
 import { APP_NAME } from "@/lib/branding";
 import { WorkspaceGlyph } from "./WorkspaceGlyph";
 import type { AgentTool, AgentToolTab } from "@/features/agent/AgentToolPanel";
-import {
-  AgentPaneResizeHandle,
-  useAgentPaneLayout,
-} from "@/features/agent/AgentPaneLayout";
 import { TavernSidebar } from "@/features/tavern/TavernSidebar";
 import "./unified-sidebar.css";
 
@@ -75,15 +69,17 @@ interface SidebarProps {
   embedded?: boolean;
   workspaceActions?: ReactNode;
   workspaceContent?: ReactNode;
-  workspaceModePosition?: MutableRefObject<number | undefined>;
-  workspaceModeSwitch?: boolean;
+  workspaceSlots?: {
+    actions: RefCallback<HTMLDivElement>;
+    content: RefCallback<HTMLDivElement>;
+  };
   onCollapse?: () => void;
   sidebarCompact?: boolean;
-  paneWidth?: number;
   onOpenAgentTool?: (tool: AgentTool, initialTab?: AgentToolTab) => void;
   activeAgentTool?: AgentTool | null;
   selectedTavernCharacterId?: string | null;
   onSelectTavernCharacter?: (id: string) => void;
+  onAddTavernCharacter?: (source: "preset" | "card") => void;
   tavernEnabled?: boolean;
   activeApp: AppId;
   view: View;
@@ -100,8 +96,6 @@ interface SidebarProps {
 /** The same navigation surrounds the workspace tree and other application pages. */
 export function Sidebar(props: SidebarProps) {
   const layoutId = useId();
-  const navRef = useRef<HTMLElement>(null);
-  const { view, workspaceModePosition, workspaceModeSwitch } = props;
   const { t, i18n } = useTranslation();
   const chinese = i18n.language.startsWith("zh");
   const status = useSidebarStatus();
@@ -110,90 +104,19 @@ export function Sidebar(props: SidebarProps) {
   const compact =
     props.sidebarCompact ?? (props.view === "tavern" && tavernCompact);
 
-  useLayoutEffect(() => {
-    const nav = navRef.current;
-    const reducedMotion = window.matchMedia?.(
-      "(prefers-reduced-motion: reduce)",
-    );
-    const previousPosition = workspaceModePosition?.current;
-    if (workspaceModePosition) workspaceModePosition.current = undefined;
-    if (!workspaceModeSwitch || reducedMotion?.matches || !nav?.animate) return;
-
-    const target = view === "tavern" ? 1 : 0;
-    const from = previousPosition ?? 1 - target;
-    const transform = (position: number) =>
-      `translate(calc(var(--sidebar-mode-x) * ${position}), calc(var(--sidebar-mode-y) * ${position}))`;
-    const indicator = nav
-      .querySelector(".lolicode-sidebar-mode-selection")
-      ?.animate(
-        [{ transform: transform(from) }, { transform: transform(target) }],
-        {
-          duration:
-            motionTokens.duration.page *
-            1000 *
-            Math.max(0.45, Math.abs(target - from)),
-          easing: motionEasing,
-          id: "lolicode-sidebar-mode-slide",
-        },
-      );
-    const directory = nav
-      .querySelector(
-        ".lolicode-sidebar-workspaces, .lolicode-sidebar-tavern-directory",
-      )
-      ?.animate(
-        [
-          { opacity: 0.94, transform: "translateY(2px)" },
-          { opacity: 1, transform: "none" },
-        ],
-        {
-          duration: motionTokens.duration.feedback * 1000,
-          easing: motionEasing,
-          id: "lolicode-sidebar-directory-enter",
-        },
-      );
-    const finishIfReduced = (event: MediaQueryListEvent) => {
-      if (!event.matches) return;
-      indicator?.finish();
-      directory?.finish();
-    };
-    reducedMotion?.addEventListener("change", finishIfReduced);
-    return () => {
-      // The two rails mount separately. Hand off the current visual position
-      // to the next rail before cancelling, without forcing a layout read.
-      if (indicator && workspaceModePosition) {
-        const progress = indicator.effect?.getComputedTiming().progress;
-        workspaceModePosition.current =
-          indicator.playState === "finished"
-            ? target
-            : from + (target - from) * (progress ?? 0);
-      }
-      indicator?.cancel();
-      directory?.cancel();
-      reducedMotion?.removeEventListener("change", finishIfReduced);
-    };
-  }, [view, workspaceModePosition, workspaceModeSwitch]);
-
   return (
     <LayoutGroup id={layoutId}>
       <nav
-        ref={navRef}
         data-collapsed="false"
         data-embedded={Boolean(props.embedded)}
         data-sidebar-compact={compact}
-        data-sidebar-resizable={props.paneWidth !== undefined && !compact}
         data-workspace-mode={
           props.view === "agent" || props.view === "tavern"
             ? props.view
             : undefined
         }
-        data-workspace-mode-switch={props.workspaceModeSwitch || undefined}
         aria-label={t("nav.mainLabel")}
         className="lolicode-unified-sidebar"
-        style={
-          props.paneWidth === undefined
-            ? undefined
-            : { width: props.paneWidth, flexBasis: props.paneWidth }
-        }
       >
         <a href="#main-content" className="tai-shell-skip">
           {t("nav.skipToContent")}
@@ -261,10 +184,12 @@ export function Sidebar(props: SidebarProps) {
                 compact={compact}
                 selectedId={props.selectedTavernCharacterId ?? null}
                 onSelect={(id) => props.onSelectTavernCharacter?.(id)}
-                onAdd={(source) =>
-                  window.dispatchEvent(
-                    new CustomEvent("lolicode:tavern-add", { detail: source }),
-                  )
+                onAdd={
+                  props.onAddTavernCharacter ??
+                  ((source) =>
+                    window.dispatchEvent(
+                      new CustomEvent("lolicode:tavern-add", { detail: source }),
+                    ))
                 }
               />
             )}
@@ -288,36 +213,6 @@ export function Sidebar(props: SidebarProps) {
   );
 }
 
-export function TavernNavigationSidebar({
-  reservePreviewSpace,
-  ...props
-}: SidebarProps & { reservePreviewSpace: boolean }) {
-  const [releasedPreviewSpace, setReleasedPreviewSpace] = useState(false);
-  const layout = useAgentPaneLayout({
-    sidebarVisible: true,
-    sidebarCompact: props.sidebarCompact,
-    sidebarAutoCompact: true,
-    previewVisible: reservePreviewSpace && !releasedPreviewSpace,
-  });
-  return (
-    <>
-      <Sidebar
-        {...props}
-        sidebarCompact={layout.sidebarCompact || !layout.sidebarVisible}
-        paneWidth={layout.sidebarWidth || undefined}
-        onCollapse={() => {
-          if (!layout.sidebarCanOpen) setReleasedPreviewSpace(true);
-          if (props.sidebarCompact || layout.sidebarCanOpen)
-            props.onCollapse?.();
-        }}
-      />
-      {layout.sidebarVisible && !layout.sidebarCompact && (
-        <AgentPaneResizeHandle {...layout.sidebarHandleProps} />
-      )}
-    </>
-  );
-}
-
 function MainDirectory({
   view,
   onSelectPage,
@@ -325,9 +220,11 @@ function MainDirectory({
   activeAgentTool,
   workspaceActions,
   workspaceContent,
+  workspaceSlots,
 }: SidebarProps) {
   const { i18n } = useTranslation();
   const chinese = i18n.language.startsWith("zh");
+  const agent = view === "agent";
   return (
     <>
       <div
@@ -335,12 +232,6 @@ function MainDirectory({
         aria-label={chinese ? "主要导航" : "Main navigation"}
         className="lolicode-sidebar-segments"
       >
-        {(view === "agent" || view === "tavern") && (
-          <span
-            className="lolicode-sidebar-mode-selection"
-            aria-hidden="true"
-          />
-        )}
         <NavItem
           selected={view === "agent"}
           icon={ModelsGlyph}
@@ -358,22 +249,33 @@ function MainDirectory({
           onClick={() => onSelectPage("tavern")}
         />
       </div>
-      {view === "agent" && (
-        <div className="lolicode-sidebar-actions">
-          {workspaceActions ?? (
-            <button
-              type="button"
-              className="lolicode-sidebar-new-chat"
-              onClick={() => onSelectPage("agent")}
-            >
-              <Plus aria-hidden="true" />
-              {chinese ? "开始对话" : "Start a chat"}
-            </button>
-          )}
-        </div>
-      )}
-      {view === "agent" && (
-        <div className="lolicode-sidebar-workspaces">{workspaceContent}</div>
+      {(agent || workspaceSlots) && (
+        <>
+          <div
+            ref={workspaceSlots?.actions}
+            className="lolicode-sidebar-actions"
+            hidden={!agent}
+          >
+            {!workspaceSlots &&
+              (workspaceActions ?? (
+                <button
+                  type="button"
+                  className="lolicode-sidebar-new-chat"
+                  onClick={() => onSelectPage("agent")}
+                >
+                  <Plus aria-hidden="true" />
+                  {chinese ? "开始对话" : "Start a chat"}
+                </button>
+              ))}
+          </div>
+          <div
+            ref={workspaceSlots?.content}
+            className="lolicode-sidebar-workspaces"
+            hidden={!agent}
+          >
+            {!workspaceSlots && workspaceContent}
+          </div>
+        </>
       )}
       {view === "agent" && (
         <div

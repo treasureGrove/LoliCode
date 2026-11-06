@@ -132,6 +132,7 @@ export async function verifySwitching(fixture, { configureFixtureChannel, invoke
     const opened = await invoke("open_agent_project", { path: fixture.project });
     for (const { id } of sessions)
       check(opened.sessions.some(session => session.id === id), "Seeded Harness desktop history was not listed");
+    localStorage.setItem("lolicode-theme", "dark");
     localStorage.setItem("cc-switch-last-view", "agent");
     localStorage.setItem("lolicode.agent.last-selection.v1", JSON.stringify({
       projectPath: opened.workspace.path, sessionId: sessions[0].id,
@@ -163,24 +164,19 @@ export async function verifySwitching(fixture, { configureFixtureChannel, invoke
   const tavernComposer = () => visible(tavern(), "#main-content textarea");
   const tavernReady = () => Boolean(tavernComposer()?.getClientRects().length &&
     visible(tavern(), 'button[aria-label="打开对话菜单"]'));
+  const viewport = () => document.querySelector("#content-area");
+  const workspaceCanvas = () => visible(viewport(), "[data-workspace-viewport]") ?? viewport();
   const nav = () => visible(document, "nav.lolicode-unified-sidebar");
   const modeButton = label => visible(nav(), `button[aria-label="${label}"]`);
   const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const hasAnimation = (node, name) => Boolean(
     node?.getAnimations().some(animation => animation.id === name),
   );
-  const modeMotion = () => {
-    const sidebar = nav();
-    const foreground = visible(document, "[data-workspace-active] [data-workspace-entry]");
-    const indicator = hasAnimation(sidebar?.querySelector(".lolicode-sidebar-mode-selection"), "lolicode-sidebar-mode-slide");
-    const directory = hasAnimation(
-      sidebar?.querySelector(".lolicode-sidebar-workspaces, .lolicode-sidebar-tavern-directory"), "lolicode-sidebar-directory-enter",
-    );
-    const workspace = hasAnimation(foreground, "lolicode-workspace-enter");
-    const onlyDestination = painted(foreground) && [...document.querySelectorAll("[data-workspace-entry]")]
-      .every(node => node === foreground || !painted(node));
-    return { indicator, directory, workspace, onlyDestination, reducedMotion, mode: sidebar?.dataset.workspaceMode,
-      switching: sidebar?.dataset.workspaceModeSwitch, compact: sidebar?.dataset.sidebarCompact };
+  const activePane = () => visible(viewport(), "[data-workspace-active]");
+  const workspaceEntry = () => visible(activePane(), "[data-workspace-entry]");
+  const bounds = node => {
+    const rect = node?.getBoundingClientRect();
+    return rect && [rect.x, rect.y, rect.width, rect.height].map(round).join(",");
   };
   const sessionButton = session => [...(nav()?.querySelectorAll("button.wb-session-row") ?? [])]
     .find(button => !button.disabled && button.textContent.trim() === session.title);
@@ -192,6 +188,13 @@ export async function verifySwitching(fixture, { configureFixtureChannel, invoke
 
   const [first, second, third, fourth, fifth, sixth] = sessions;
   await waitForPaint(() => sessionReady(first) && sessionButton(second), "the seeded Agent conversation");
+  const initialSidebar = nav();
+  const sidebarBounds = bounds(initialSidebar);
+  const initialCanvas = workspaceCanvas();
+  const canvasBounds = bounds(initialCanvas);
+  const canvasBackground = getComputedStyle(initialCanvas).backgroundColor;
+  const channelsTitle = () => visible(activePane(), "h1");
+  const darkBackground = /^rgb\((\d+), (\d+), (\d+)\)$/.exec(canvasBackground);
   const articles = session => transcript(session)?.querySelectorAll("article").length ?? 0;
   const initialArticles = articles(first);
   const checks = {
@@ -204,13 +207,43 @@ export async function verifySwitching(fixture, { configureFixtureChannel, invoke
     toolExpansionPreserved: true,
     firstFrameNavigation: true,
     firstFrameSessionTitle: true,
-    sidebarModeMotion: true,
+    sidebarModeHasNoAnimation: true,
+    sidebarStaysMounted: true,
+    sidebarBoundsStable: true,
+    workspaceSurfacePainted: true,
+    darkViewportApplied: document.documentElement.classList.contains("dark") &&
+      Boolean(darkBackground?.slice(1).every(channel => Number(channel) < 128)),
     workspaceModeMotion: true,
     inactiveWorkspaceNotPainted: true,
     reducedMotionPreferenceApplied: !fixture.switching.reducedMotion || reducedMotion,
     firstVisitFollowsTail: followsTail(),
     rapidSwitchKeepsLastSelection: true,
     ...(verifyPending ? { pendingTranscriptPainted: false, pendingTavernPainted: false, loadedTranscriptMotion: false } : {}),
+  };
+  const observeModeFrame = (view, selected) => {
+    const sidebar = nav();
+    const canvas = workspaceCanvas();
+    const pane = activePane();
+    const foreground = view === "channels" ? channelsTitle() : workspaceEntry();
+    const sidebarAnimations = sidebar?.getAnimations({ subtree: true }).map(animation =>
+      animation.id || animation.animationName || animation.transitionProperty || "unnamed",
+    );
+    const canvasStyle = canvas && getComputedStyle(canvas);
+    const background = canvasStyle?.backgroundColor;
+    const paneStyle = pane && getComputedStyle(pane);
+    const opacity = paneStyle && Number(paneStyle.opacity);
+    const onlyDestination = painted(foreground) && [...(canvas?.children ?? [])]
+      .every(node => node === pane || !painted(node));
+    checks.sidebarModeHasNoAnimation &&= sidebarAnimations?.length === 0;
+    checks.sidebarStaysMounted &&= sidebar === initialSidebar;
+    checks.sidebarBoundsStable &&= bounds(sidebar) === sidebarBounds;
+    checks.workspaceSurfacePainted &&= Boolean(selected && viewport()?.dataset.view === view && onlyDestination &&
+      canvas === initialCanvas && bounds(pane) === canvasBounds && canvasStyle.opacity === "1" &&
+      background === canvasBackground && opacity >= 0.94 &&
+      paneStyle.translate === "none" && paneStyle.transform === "none");
+    checks.inactiveWorkspaceNotPainted &&= onlyDestination;
+    return { view, sidebarAnimations, background, opacity, onlyDestination,
+      workspace: hasAnimation(pane, "lolicode-workspace-enter") };
   };
   const expected = new Map();
   const setInput = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value").set;
@@ -296,7 +329,7 @@ export async function verifySwitching(fixture, { configureFixtureChannel, invoke
     return originalTransaction.call(this, store, mode, ...options);
   };
   const measure = async (name, control, selection, ready, {
-    sessionId, contentReady, titleReady, onSelected, onPending, onContent,
+    sessionId, contentReady, titleReady, onFrame, onPending, onContent,
   } = {}) => {
     const button = control();
     check(button, `Missing switching control for ${name}`);
@@ -316,11 +349,12 @@ export async function verifySwitching(fixture, { configureFixtureChannel, invoke
     try {
       await waitForPaint(() => {
         frames += 1;
-        const selected = control()?.matches(selection);
+        const selected = selection();
+        const frame = onFrame?.(selected);
         if (selected && navigationFrame === null) {
           navigationFrame = frames;
           navigationMilliseconds = round(performance.now() - start);
-          animations = onSelected?.();
+          animations = frame;
           if (titleReady) checks.firstFrameSessionTitle &&= titleReady();
         }
         const hasContent = contentReady?.();
@@ -342,7 +376,7 @@ export async function verifySwitching(fixture, { configureFixtureChannel, invoke
           nativePending: read.ipcFinished === undefined,
           ageMs: round(performance.now() - read.started),
         })),
-        selected: Boolean(control()?.matches(selection)), contentReady: contentReady?.(),
+        selected: Boolean(selection()), contentReady: contentReady?.(),
         titleReady: titleReady?.(), loading: painted(agent()?.querySelector("[data-conversation-loading]")),
       };
       throw error;
@@ -406,19 +440,50 @@ export async function verifySwitching(fixture, { configureFixtureChannel, invoke
   };
   const switchSession = async (session, label, probes) => {
     sessionSwitches.push(await measure(label, () => sessionButton(session),
-      '[aria-pressed="true"]', hasContent => sessionReady(session, hasContent),
+      () => sessionButton(session)?.matches('[aria-pressed="true"]'),
+      hasContent => sessionReady(session, hasContent),
       { sessionId: session.id, contentReady: () => sessionContentReady(session),
         titleReady: () => sessionTitleReady(session), ...probes }));
     checkReadingState(session);
   };
+  const switchMode = async (view, label, control, selected, ready, probes) => {
+    modeSwitches.push(await measure(label, control, selected, ready, {
+      onFrame: selected => observeModeFrame(view, selected), ...probes,
+    }));
+  };
+  const selectedMode = label => modeButton(label)?.matches('[aria-current="page"]');
   const switchToTavern = async (label, onPending) => {
-    modeSwitches.push(await measure(label, () => modeButton("角色对话"), '[aria-current="page"]',
-      tavernReady, { onSelected: modeMotion, onPending }));
+    await switchMode("tavern", label, () => modeButton("角色对话"), () => selectedMode("角色对话"),
+      tavernReady, { onPending });
   };
   const switchToAgent = async label => {
-    modeSwitches.push(await measure(label, () => modeButton("编程工作台"), '[aria-current="page"]',
+    await switchMode("agent", label, () => modeButton("编程工作台"), () => selectedMode("编程工作台"),
       hasContent => sessionReady(first, hasContent), { contentReady: () => sessionContentReady(first),
-        titleReady: () => sessionTitleReady(first), onSelected: modeMotion }));
+        titleReady: () => sessionTitleReady(first) });
+  };
+  const verifyModelsNavigation = async () => {
+    const { queryClient } = await import("/lib/query/queryClient.ts");
+    await switchToTavern("Tavern before opening models");
+    const draft = tavernComposer().value;
+    const queryKey = ["tavern", "catalog"];
+    const catalog = await waitForPaint(() => queryClient.getQueryData(queryKey), "the Tavern model catalog");
+    await queryClient.cancelQueries({ queryKey });
+    // Exercise the ordinary empty-model action without changing any saved channel.
+    queryClient.setQueryData(queryKey, { ...catalog, models: [] });
+    const configure = () => [...tavern()?.querySelectorAll("button") ?? []]
+      .find(button => button.textContent.trim() === "配置模型");
+    try {
+      await waitForPaint(configure, "the Tavern configure models action");
+      await switchMode("channels", "Model channels from Tavern", configure,
+        () => viewport()?.dataset.view === "channels", () => painted(channelsTitle()) &&
+          channelsTitle().textContent.trim() === "渠道与模型");
+      await switchToTavern("Tavern from model channels");
+      checks.tavernDraftPreserved &&= tavernComposer().value === draft;
+    } finally {
+      queryClient.setQueryData(queryKey, catalog);
+    }
+    await switchToAgent("Agent after opening models");
+    checkReadingState(first);
   };
   const verifyPendingTavern = async () => {
     const { queryClient } = await import("/lib/query/queryClient.ts");
@@ -501,6 +566,7 @@ export async function verifySwitching(fixture, { configureFixtureChannel, invoke
       checks.pendingTranscriptPainted = coldTranscript.passed();
       await switchSession(first, "Agent after pending snapshot");
       await verifyPendingTavern();
+      await verifyModelsNavigation();
     }
   } catch (error) {
     if (!profileScale) throw error;
@@ -514,12 +580,7 @@ export async function verifySwitching(fixture, { configureFixtureChannel, invoke
     stopLayoutTrace?.();
   }
 
-  checks.sidebarModeMotion = modeSwitches.every(({ animations }) =>
-    animations?.reducedMotion ? !animations.indicator && !animations.directory
-      : animations?.indicator && animations.directory,
-  );
   checks.workspaceModeMotion = modeSwitches.every(({ animations }) => animations?.workspace === !reducedMotion);
-  checks.inactiveWorkspaceNotPainted = modeSwitches.every(({ animations }) => animations?.onlyDestination);
   checks.windowsDragUsesTauri = !profileFailure && verifyWindowsDragPath();
 
   let olderMessagesError;
