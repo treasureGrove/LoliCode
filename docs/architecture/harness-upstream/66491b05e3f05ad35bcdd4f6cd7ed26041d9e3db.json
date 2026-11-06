@@ -1,0 +1,2137 @@
+{
+  "schemaVersion": 1,
+  "kind": "harness-release-baseline",
+  "upstream": {
+    "version": "0.2.2-rc.1",
+    "commit": "66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db",
+    "tag": "dsh-v0.2.2-rc.1",
+    "release": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1",
+    "registry": "https://registry.npmjs.org/@deepseek-ai%2fdsh",
+    "integrity": "sha512-ijR9UEVYkG15Q/Q79JzvzLBzQOQfc63VLr9n6flpwHPhr5IKn2UxthnSoto/P9l7qGd7pPvI1Ra6TW7LH3oKpg=="
+  },
+  "auditedAt": "2026-11-05T18:23:40.956Z",
+  "lolicodeCommit": "a87ec6d8d",
+  "fullParity": false,
+  "scope": "Source baseline plus D-drive verification of native Markdown, browser first click and attachment batching. Full release parity remains unverified.",
+  "artifactChecks": {
+    "checkedAt": "2026-11-05T18:23:40.956Z",
+    "current": "0.2.2-rc.1",
+    "newer": [],
+    "latest": "0.2.2-rc.1",
+    "tagCommit": "66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db",
+    "integrity": "sha512-ijR9UEVYkG15Q/Q79JzvzLBzQOQfc63VLr9n6flpwHPhr5IKn2UxthnSoto/P9l7qGd7pPvI1Ra6TW7LH3oKpg==",
+    "registryMatch": true,
+    "lockMatch": true,
+    "buildPinMatch": true,
+    "superagent": {
+      "sha": "8c32a9dc5d72c033816c6a8110b37f40cf94fba4",
+      "date": "2026-10-31T12:06:31Z",
+      "url": "https://github.com/deepseek-ai/dsh-superagent-prototype/commit/8c32a9dc5d72c033816c6a8110b37f40cf94fba4"
+    }
+  },
+  "inputs": [
+    {
+      "file": "packages/lolicode-harness-runtime/package.json",
+      "sha256": "5430b168a623296b5fc546193c936765853039b4949eeb9d23c37f8717758d41"
+    },
+    {
+      "file": "packages/lolicode-harness-runtime/package-lock.json",
+      "sha256": "496558a28407ac445ac37ebdeaae4661a9600cec1d4ab7874cf643b173b7213f"
+    },
+    {
+      "file": "scripts/build/prepare-lolicode-harness-runtime.mjs",
+      "sha256": "ca3780ba1f80294c4c2afb27641a4328d88b4f20d3ecac7e1c15bee2bf77673c"
+    }
+  ],
+  "profiles": [
+    {
+      "name": "dsh-base",
+      "upstream": {
+        "package": "@deepseek-ai/dsh-base",
+        "version": "0.2.2-rc.1",
+        "source": "https://github.com/deepseek-ai/deepseek-harness/tree/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/bundle/base",
+        "localReference": "packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-base/README.zh.md"
+      },
+      "patch": {
+        "path": "packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-base/cordis.patch.yml",
+        "sha256": "b65a86e55f02d863286bb6faac8ae292c18fffca3c8aa4491b600fa4dd6b48d0",
+        "entryIds": [
+          "tool-plugin-manager",
+          "plugin-manager",
+          "timer",
+          "hmr",
+          "llm",
+          "deepseek-llm-api-extensions",
+          "session",
+          "session-log-deepseek",
+          "typert",
+          "typert-loader",
+          "typert-gateway",
+          "remote-access",
+          "session-title",
+          "session-title-llm",
+          "user-questions",
+          "agent",
+          "plugin-package-inventory-deepseek",
+          "agent-default-model",
+          "jobs",
+          "llm-retry",
+          "config-editor",
+          "settings",
+          "authorization",
+          "deepseek-account",
+          "credentials",
+          "llm-pi-ai",
+          "session-persistence-jsonl",
+          "attachment-local",
+          "session-query-sqlite",
+          "working-directory",
+          "tool-working-directory",
+          "session-projection",
+          "storage",
+          "storage-json",
+          "storage-domain",
+          "session-projection-cache",
+          "otel",
+          "session-telemetry-otel",
+          "subprocess",
+          "sandbox",
+          "sandbox-policy",
+          "bash-sandbox",
+          "pwsh-sandbox",
+          "approval",
+          "permission",
+          "shell-env",
+          "tool-bash",
+          "tool-pwsh",
+          "tool-jobs",
+          "fs-observation-policy",
+          "tool-fs",
+          "tool-fs-search",
+          "agent-instructions",
+          "skill",
+          "skill-filesystem",
+          "tool-skill",
+          "commands",
+          "command-feedback",
+          "goal",
+          "goal-round-driver",
+          "command-goal",
+          "plan-mode",
+          "token-meter",
+          "compaction-basic",
+          "command-compact",
+          "subagent",
+          "subagent-spawn-in-process",
+          "subagent-fork-in-process",
+          "tool-subagent-control",
+          "tool-subagent",
+          "tool-subagent-fork",
+          "ptc-runtime",
+          "workflow-ptc",
+          "tool-workflow",
+          "timeout-policy",
+          "spill-local",
+          "spill-policy",
+          "session-checkpoint-policy",
+          "tool-result-pruner",
+          "image-offload",
+          "tool-todo",
+          "tool-goal",
+          "repeat-tool-reminder",
+          "web",
+          "web-search-deepseek",
+          "web-deepseek-api",
+          "web-fetch-http",
+          "tool-web",
+          "mcp-resources",
+          "tools",
+          "tool-executor-native",
+          "tool-executor-ptc",
+          "system-prompt",
+          "agent-loop",
+          "fs-sandbox",
+          "llm-deepseek",
+          "llm-deepseek-account"
+        ]
+      }
+    },
+    {
+      "name": "dsh-sdk-app",
+      "upstream": {
+        "package": "@deepseek-ai/dsh-sdk-app",
+        "version": "0.2.2-rc.1",
+        "source": "https://github.com/deepseek-ai/deepseek-harness/tree/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/bundle/sdk-app",
+        "localReference": "packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-sdk-app/README.zh.md"
+      },
+      "patch": {
+        "path": "packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-sdk-app/cordis.patch.yml",
+        "sha256": "133e208048ecda173d5024fd663bf21c13f0fb78baa77dc0d0fadf6dc98db003",
+        "entryIds": [
+          "system-prompt",
+          "session-title-llm",
+          "sdk-app-startup",
+          "sdk-jsonrpc-server",
+          "hmr",
+          "tool-plugin-manager",
+          "workspace-dependencies",
+          "skill-office",
+          "connection",
+          "file-upload",
+          "workspace",
+          "schedule",
+          "time-context",
+          "tool-schedule",
+          "tool-ask-user",
+          "present",
+          "file-reference-local",
+          "deliverable-file-references"
+        ]
+      }
+    },
+    {
+      "name": "dsh-web-app",
+      "upstream": {
+        "package": "@deepseek-ai/dsh-web-app",
+        "version": "0.2.2-rc.1",
+        "source": "https://github.com/deepseek-ai/deepseek-harness/tree/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/bundle/web-app",
+        "localReference": "packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-web-app/README.zh.md"
+      },
+      "patch": {
+        "path": "packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-web-app/cordis.patch.yml",
+        "sha256": "11c444b94936f8c645f49740b692fc8545898591f78af893d2cb1b7fed4c701c",
+        "entryIds": [
+          "system-prompt",
+          "session-query-sqlite",
+          "desktop-product-telemetry",
+          "product-analytics",
+          "subagent-model-selection-settings",
+          "message-feedback",
+          "session-log-download",
+          "open-in-app",
+          "ui-file-actions",
+          "ui-context-menu",
+          "ui-open-in-app",
+          "workspace",
+          "session-reference",
+          "file-reference-local",
+          "session-stats",
+          "session-turn-outline",
+          "directory-picker",
+          "plugin-inventory",
+          "session-controller",
+          "job-controller",
+          "terminal-controller",
+          "workspace-files",
+          "schedule",
+          "ui-settings-account",
+          "account-controller",
+          "settings-controller",
+          "workspace-controller",
+          "cordis-host-runner",
+          "cordis-inspect-providers",
+          "web-startup",
+          "webserver",
+          "web-runtime",
+          "harness-dev-context",
+          "client-hmr",
+          "modules",
+          "connection",
+          "file-upload",
+          "api-remotes",
+          "cordis-client-runner",
+          "ui-theme",
+          "locale",
+          "shortcuts",
+          "ui-shortcuts",
+          "ui-layout",
+          "ui-renderer",
+          "ui-session",
+          "resources",
+          "ui-sidebar",
+          "ui-sidebar-right",
+          "office-to-pdf",
+          "ui-sidebar-documentpreview",
+          "ui-sidebar-browser",
+          "ui-sidebar-terminal",
+          "ui-sidebar-files",
+          "ui-settings",
+          "ui-settings-general",
+          "ui-settings-models",
+          "ui-plugin-manager",
+          "ui-settings-plugin-inventory",
+          "ui-conversation",
+          "ui-approval",
+          "message-quotes",
+          "ui-chat",
+          "ui-brand-official",
+          "ui-attachment",
+          "ui-file-drag",
+          "ui-tool",
+          "ui-cordis",
+          "deliverable-file-references",
+          "ui-deliverables",
+          "workspace-changes",
+          "ui-workspace",
+          "ui-workflow-run",
+          "ui-input-trigger",
+          "ui-commands",
+          "ui-skill",
+          "ui-subagent",
+          "ui-reference",
+          "ui-secret-mask",
+          "ui-jobs",
+          "ui-schedule",
+          "ui-goal",
+          "ui-message-feedback",
+          "ui-model-selection",
+          "ui-permission",
+          "ui-agent-preset",
+          "entry-customization",
+          "ui-settings-session-log",
+          "ui-settings-plugins",
+          "ui-settings-shell",
+          "ui-settings-agent-loop",
+          "ui-settings-subagent",
+          "ui-settings-web-search",
+          "ui-plan",
+          "ui-user-questions",
+          "ui-trajectory",
+          "tool-plugin-manager",
+          "tool-bash",
+          "tool-pwsh",
+          "tool-jobs",
+          "tool-fs",
+          "tool-fs-search",
+          "skill-filesystem",
+          "tool-skill",
+          "command-goal",
+          "tool-goal",
+          "plan-mode",
+          "compaction-basic",
+          "command-compact",
+          "tool-result-pruner",
+          "tool-subagent-control",
+          "tool-subagent",
+          "tool-subagent-fork",
+          "workflow-ptc",
+          "tool-workflow",
+          "agent-instructions",
+          "tool-todo",
+          "tool-web",
+          "agent-preset-registry"
+        ]
+      }
+    },
+    {
+      "name": "dsh-official-bundles",
+      "upstream": {
+        "package": "@deepseek-ai/dsh-official-bundles",
+        "version": "0.2.2-rc.1",
+        "source": "https://github.com/deepseek-ai/deepseek-harness/tree/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/util/official-bundles",
+        "localReference": "packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-official-bundles/README.zh.md"
+      },
+      "patch": null
+    }
+  ],
+  "storage": {
+    "official": "Harness native event logs and projections",
+    "host": [
+      "agent/harness-sessions/<uuid>.json",
+      "agent/harness-desktop/<uuid>/desktop.json"
+    ],
+    "legacy": "format-1 records read-only; migration and installer compatibility require independent tests"
+  },
+  "features": [
+    {
+      "id": "runtime",
+      "label": "核心执行和工具",
+      "status": "inherited-sdk",
+      "upstream": [
+        {
+          "package": "@deepseek-ai/dsh-base",
+          "version": "0.2.2-rc.1",
+          "source": "https://github.com/deepseek-ai/deepseek-harness/tree/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/bundle/base",
+          "localReference": "packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-base/README.zh.md"
+        },
+        {
+          "package": "@deepseek-ai/dsh-sdk-app",
+          "version": "0.2.2-rc.1",
+          "source": "https://github.com/deepseek-ai/deepseek-harness/tree/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/bundle/sdk-app",
+          "localReference": "packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-sdk-app/README.zh.md"
+        },
+        {
+          "package": "@deepseek-ai/dsh-sdk-protocol",
+          "version": "0.2.2-rc.1",
+          "source": "https://github.com/deepseek-ai/deepseek-harness/tree/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/sdk/protocol",
+          "localReference": "packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-sdk-protocol/README.zh.md"
+        }
+      ],
+      "lolicode": [
+        "packages/lolicode-harness-runtime/host-operations.mjs",
+        "src-tauri/src/services/harness_runtime.rs",
+        "src-tauri/src/services/harness_events.rs"
+      ],
+      "acceptance": [
+        "node --test packages/lolicode-harness-runtime/tests/*.test.mjs",
+        "node scripts/tests/harness-desktop-acceptance.mjs --permissions"
+      ],
+      "note": "官方 SDK profile；原包未改。PTC 是另行启用的上游配置，不能默认推定已验收。"
+    },
+    {
+      "id": "overlays",
+      "label": "宿主工具注册及明确差异",
+      "status": "intentional-adapter",
+      "upstream": [
+        {
+          "package": "@deepseek-ai/dsh-sdk-jsonrpc-server",
+          "version": "0.2.2-rc.1",
+          "source": "https://github.com/deepseek-ai/deepseek-harness/tree/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/sdk/server",
+          "localReference": "packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-sdk-jsonrpc-server/README.zh.md"
+        },
+        {
+          "package": "@deepseek-ai/dsh-mcp-client",
+          "version": "0.2.2-rc.1",
+          "source": "https://github.com/deepseek-ai/deepseek-harness/tree/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/mcp/mcp-client",
+          "localReference": "packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-mcp-client/README.zh.md"
+        }
+      ],
+      "lolicode": [
+        "packages/lolicode-harness-runtime/profile.cordis.patch.yml",
+        "packages/lolicode-harness-runtime/host-operations.cordis.patch.yml",
+        "packages/lolicode-harness-runtime/host-mcp.mjs"
+      ],
+      "acceptance": [
+        "node --test packages/lolicode-harness-runtime/tests/*.test.mjs"
+      ],
+      "note": "关闭模型插件管理、遥测和原生 web 工具；网页/MCP 通过宿主桥接，标准 SDK 请求委托给官方服务。"
+    },
+    {
+      "id": "model-image-permissions",
+      "label": "渠道、图片和审批",
+      "status": "equivalent-verified",
+      "upstream": [
+        {
+          "package": "@deepseek-ai/dsh-client-ui-approval",
+          "version": "0.2.2-rc.1",
+          "source": "https://github.com/deepseek-ai/deepseek-harness/tree/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/client/ui-approval",
+          "localReference": "packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-client-ui-approval/README.zh.md"
+        },
+        {
+          "package": "@deepseek-ai/dsh-client-ui-permission-presets",
+          "version": "0.2.2-rc.1",
+          "source": "https://github.com/deepseek-ai/deepseek-harness/tree/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/client/ui-permission-presets",
+          "localReference": "packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-client-ui-permission-presets/README.zh.md"
+        }
+      ],
+      "lolicode": [
+        "src-tauri/src/services/harness_gateway.rs",
+        "src-tauri/src/services/harness_questions.rs",
+        "src-tauri/src/services/harness_mcp.rs"
+      ],
+      "acceptance": [
+        "node scripts/tests/harness-desktop-acceptance.mjs --permissions",
+        "node --test packages/lolicode-harness-runtime/tests/*.test.mjs"
+      ],
+      "note": "使用保存渠道、本地路由及前端权限。完整权限/逐次确认有测试；未来换包须重验实际图片和审批。"
+    },
+    {
+      "id": "goal-plan",
+      "label": "原生目标、计划和压缩",
+      "status": "equivalent-verified",
+      "upstream": [
+        {
+          "package": "@deepseek-ai/dsh-goal",
+          "version": "0.2.2-rc.1",
+          "source": "https://github.com/deepseek-ai/deepseek-harness/tree/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/goal/goal",
+          "localReference": "packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-goal/README.zh.md"
+        },
+        {
+          "package": "@deepseek-ai/dsh-plan-mode",
+          "version": "0.2.2-rc.1",
+          "source": "https://github.com/deepseek-ai/deepseek-harness/tree/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/plan/plan-mode",
+          "localReference": "packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-plan-mode/README.zh.md"
+        },
+        {
+          "package": "@deepseek-ai/dsh-command-compact",
+          "version": "0.2.2-rc.1",
+          "source": "https://github.com/deepseek-ai/deepseek-harness/tree/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/compaction/command-compact",
+          "localReference": "packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-command-compact/README.zh.md"
+        },
+        {
+          "package": "@deepseek-ai/dsh-client-ui-goal",
+          "version": "0.2.2-rc.1",
+          "source": "https://github.com/deepseek-ai/deepseek-harness/tree/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/client/ui-goal",
+          "localReference": "packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-client-ui-goal/README.zh.md"
+        }
+      ],
+      "lolicode": [
+        "src-tauri/src/services/harness_desktop.rs",
+        "src/features/agent/AgentSessionModes.tsx"
+      ],
+      "acceptance": [
+        "node scripts/tests/harness-desktop-acceptance.mjs --native-modes",
+        "node scripts/tests/harness-desktop-acceptance.mjs --compact"
+      ],
+      "note": "无目标及已完成时隐藏常驻条；已有目标的暂停/续跑和原生计划审批保留。"
+    },
+    {
+      "id": "background-jobs",
+      "label": "跨轮后台作业",
+      "status": "equivalent-verified",
+      "upstream": [
+        {
+          "package": "@deepseek-ai/dsh-jobs-local",
+          "version": "0.2.2-rc.1",
+          "source": "https://github.com/deepseek-ai/deepseek-harness/tree/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/jobs/jobs-local",
+          "localReference": "packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-jobs-local/README.zh.md"
+        },
+        {
+          "package": "@deepseek-ai/dsh-client-ui-jobs",
+          "version": "0.2.2-rc.1",
+          "source": "https://github.com/deepseek-ai/deepseek-harness/tree/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/client/ui-jobs",
+          "localReference": "packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-client-ui-jobs/README.zh.md"
+        }
+      ],
+      "lolicode": [
+        "src-tauri/src/services/harness_desktop.rs"
+      ],
+      "acceptance": [
+        "node scripts/tests/harness-desktop-acceptance.mjs --background-jobs",
+        "node --test packages/lolicode-harness-runtime/tests/*.test.mjs"
+      ],
+      "note": "既有验收覆盖跨轮、唤醒和停止；本次无更新，未重复执行。"
+    },
+    {
+      "id": "steer-queue",
+      "label": "插入当前任务与独立队列",
+      "status": "equivalent-verified",
+      "upstream": [
+        {
+          "package": "@deepseek-ai/dsh-client-ui-conversation",
+          "version": "0.2.2-rc.1",
+          "source": "https://github.com/deepseek-ai/deepseek-harness/tree/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/client/ui-conversation",
+          "localReference": "packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-client-ui-conversation/README.zh.md"
+        }
+      ],
+      "lolicode": [
+        "packages/lolicode-harness-runtime/host-operations.mjs",
+        "src-tauri/src/services/harness_desktop.rs",
+        "src/features/agent/AgentPage.tsx"
+      ],
+      "acceptance": [
+        "node --test packages/lolicode-harness-runtime/tests/*.test.mjs",
+        "node scripts/tests/harness-desktop-acceptance.mjs"
+      ],
+      "note": "主会话和 worker 队列有独立回执、重启及快捷键验收。"
+    },
+    {
+      "id": "storage",
+      "label": "历史、持久化和旧数据迁移",
+      "status": "partial",
+      "upstream": [
+        {
+          "package": "@deepseek-ai/dsh-sdk-app",
+          "version": "0.2.2-rc.1",
+          "source": "https://github.com/deepseek-ai/deepseek-harness/tree/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/bundle/sdk-app",
+          "localReference": "packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-sdk-app/README.zh.md"
+        },
+        {
+          "package": "@deepseek-ai/dsh-sdk-protocol",
+          "version": "0.2.2-rc.1",
+          "source": "https://github.com/deepseek-ai/deepseek-harness/tree/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/sdk/protocol",
+          "localReference": "packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-sdk-protocol/README.zh.md"
+        }
+      ],
+      "lolicode": [
+        "src-tauri/src/services/harness_sessions.rs",
+        "src-tauri/src/services/harness_migration.rs",
+        "src-tauri/src/services/harness_session_sync.rs"
+      ],
+      "acceptance": [
+        "node --test packages/lolicode-harness-runtime/tests/*.test.mjs",
+        "node scripts/tests/harness-desktop-acceptance.mjs --native-modes",
+        "node scripts/tests/lolicode-overwrite-upgrade-acceptance.mjs <v1.0.6-installer> <candidate-installer>"
+      ],
+      "note": "官方日志与宿主 metadata/desktop.json 分层；旧 Rust format-1 只读迁移。新的安装包覆盖升级不能由开发版测试替代；协调会话跨版本手动同步有已知限制。"
+    },
+    {
+      "id": "switching",
+      "label": "历史加载和切换状态",
+      "status": "equivalent-verified",
+      "upstream": [
+        {
+          "package": "@deepseek-ai/dsh-client-ui-chat",
+          "version": "0.2.2-rc.1",
+          "source": "https://github.com/deepseek-ai/deepseek-harness/tree/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/client/ui-chat",
+          "localReference": "packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-client-ui-chat/README.zh.md"
+        }
+      ],
+      "lolicode": [
+        "src/hooks/useAgentSnapshot.ts",
+        "src/features/agent/AgentTranscript.tsx",
+        "src/features/tavern/TavernTranscript.tsx"
+      ],
+      "acceptance": [
+        "node scripts/tests/harness-desktop-acceptance.mjs --switching"
+      ],
+      "note": "最近窗口、早期历史加载、草稿、阅读和展开状态已验。宿主完整事件分页与上游轮次轨道仍未等效。",
+      "followUp": {
+        "historyTurns": 160,
+        "baseline": {
+          "coldMs": 80.6,
+          "snapshotReadMs": 26.6,
+          "attachmentReadTransactions": 320,
+          "report": "D:/projectGithub/lolicode-harness-validation/src-tauri/target/acceptance-logs/lolicode-harness-desktop-s2JXr8/report.ndjson"
+        },
+        "optimized": {
+          "coldMs": 81.6,
+          "snapshotReadMs": 34.3,
+          "attachmentReadTransactions": 1,
+          "report": "D:/projectGithub/lolicode-harness-validation/src-tauri/target/acceptance-logs/lolicode-harness-desktop-uTuTBA/report.ndjson"
+        },
+        "note": "Confirmed removal of per-message IndexedDB transactions and restoration of a stored document. This fixture showed no meaningful first-paint speedup. Retained warm histories were generally 34 ms."
+      }
+    },
+    {
+      "id": "remote",
+      "label": "远程工作区和工具",
+      "status": "partial",
+      "upstream": [
+        {
+          "package": "@deepseek-ai/dsh-sdk-app",
+          "version": "0.2.2-rc.1",
+          "source": "https://github.com/deepseek-ai/deepseek-harness/tree/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/bundle/sdk-app",
+          "localReference": "packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-sdk-app/README.zh.md"
+        }
+      ],
+      "lolicode": [
+        "packages/lolicode-harness-runtime/host-remote.mjs",
+        "src-tauri/src/services/harness_remote.rs"
+      ],
+      "acceptance": [
+        "node --test packages/lolicode-harness-runtime/tests/*.test.mjs",
+        "cargo test --manifest-path src-tauri/Cargo.toml --lib services::harness_remote"
+      ],
+      "note": "SDK 假端点测试不替代真实 SSH/WSL 端点验收。"
+    },
+    {
+      "id": "terminal",
+      "label": "交互终端",
+      "status": "partial",
+      "upstream": [
+        {
+          "package": "@deepseek-ai/dsh-api-terminal-controller",
+          "version": "0.2.2-rc.1",
+          "source": "https://github.com/deepseek-ai/deepseek-harness/tree/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/api/terminal-controller",
+          "localReference": "packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-api-terminal-controller/README.zh.md"
+        },
+        {
+          "package": "@deepseek-ai/dsh-client-ui-sidebar-terminal",
+          "version": "0.2.2-rc.1",
+          "source": "https://github.com/deepseek-ai/deepseek-harness/tree/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/client/ui-sidebar-terminal",
+          "localReference": "packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-client-ui-sidebar-terminal/README.zh.md"
+        }
+      ],
+      "lolicode": [
+        "packages/lolicode-harness-runtime/host-terminal.mjs",
+        "src-tauri/src/commands/agent_terminal.rs"
+      ],
+      "acceptance": [
+        "node scripts/tests/harness-desktop-acceptance.mjs --dock-tools",
+        "真实 SSH/WSL：输入输出、resize、折叠、关闭、重启策略及无本机回退"
+      ],
+      "note": "本机终端通过；远程项目目前显式拒绝，属于待接线而非已同步。"
+    },
+    {
+      "id": "browser",
+      "label": "原生浏览器和右栏分屏",
+      "status": "partial",
+      "upstream": [
+        {
+          "package": "@deepseek-ai/dsh-client-ui-sidebar",
+          "version": "0.2.2-rc.1",
+          "source": "https://github.com/deepseek-ai/deepseek-harness/tree/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/client/ui-sidebar",
+          "localReference": "packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-client-ui-sidebar/README.zh.md"
+        }
+      ],
+      "lolicode": [
+        "src/features/agent/AgentBrowserPreviewPanel.tsx",
+        "src/features/agent/AgentPreviewTabStrip.tsx",
+        "src-tauri/src/commands/agent_files.rs"
+      ],
+      "acceptance": [
+        "node scripts/tests/harness-desktop-acceptance.mjs --dock-tools",
+        "node scripts/tests/harness-desktop-acceptance.mjs --output-links",
+        "node scripts/tests/harness-desktop-acceptance.mjs --permissions"
+      ],
+      "note": "Windows 原生载体、折叠保留、关闭销毁已验；非 Windows 原生载体受当前宿主平台实现限制，浮动窗格未等效。",
+      "currentCheck": {
+        "status": "failed-acceptance",
+        "report": "C:/Users/admin/AppData/Local/Temp/lolicode-harness-desktop-Ps8Hrz/report.ndjson",
+        "priorReproduction": "C:/Users/admin/AppData/Local/Temp/lolicode-harness-desktop-VRdY47/report.ndjson",
+        "note": "Full-access open → click returns success → snapshot counter 0. Same failure recorded 2026-11-05 14:32, before this change; other prior runs passed. Cause not yet proven.",
+        "next": "Reproduce --permissions at medium integrity. After first snapshot 0, poll read-only snapshots for 2 seconds without another click to distinguish a delayed observation from lost input. Inspect initial native container/frame readiness and mouse movement.",
+        "followUp": {
+          "result": "passed",
+          "change": "Position the pointer before press and release.",
+          "report": "D:/projectGithub/lolicode-harness-validation/src-tauri/target/acceptance-logs/lolicode-harness-desktop-YF2co9/report.ndjson",
+          "permissionsRuns": 4
+        }
+      }
+    },
+    {
+      "id": "links",
+      "label": "输出文件与网址操作",
+      "status": "equivalent-verified",
+      "upstream": [
+        {
+          "package": "@deepseek-ai/dsh-client-ui-chat",
+          "version": "0.2.2-rc.1",
+          "source": "https://github.com/deepseek-ai/deepseek-harness/tree/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/client/ui-chat",
+          "localReference": "packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-client-ui-chat/README.zh.md"
+        },
+        {
+          "package": "@deepseek-ai/dsh-client-ui-file-actions",
+          "version": "0.2.2-rc.1",
+          "source": "https://github.com/deepseek-ai/deepseek-harness/tree/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/client/ui-file-actions",
+          "localReference": "packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-client-ui-file-actions/README.zh.md"
+        }
+      ],
+      "lolicode": [
+        "src/features/agent/AgentFilePath.tsx",
+        "src/features/agent/AgentWebLink.tsx",
+        "src/features/agent/AgentOpenWith.tsx"
+      ],
+      "acceptance": [
+        "node scripts/tests/harness-desktop-acceptance.mjs --output-links",
+        "pnpm exec vitest run tests/components/AgentTranscript.test.tsx"
+      ],
+      "note": "右栏/系统打开和目标会话绑定已验；不代表完整上游统一上下文菜单。"
+    },
+    {
+      "id": "quotes",
+      "label": "选区引用与草稿引用卡",
+      "status": "needs-host-ui",
+      "upstream": [
+        {
+          "package": "@deepseek-ai/dsh-message-quotes",
+          "version": "0.2.2-rc.1",
+          "source": "https://github.com/deepseek-ai/deepseek-harness/tree/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/session/message-quotes",
+          "localReference": "packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-message-quotes/README.zh.md"
+        },
+        {
+          "package": "@deepseek-ai/dsh-client-ui-conversation",
+          "version": "0.2.2-rc.1",
+          "source": "https://github.com/deepseek-ai/deepseek-harness/tree/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/client/ui-conversation",
+          "localReference": "packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-client-ui-conversation/README.zh.md"
+        }
+      ],
+      "lolicode": [
+        "src/features/agent/AgentPage.tsx",
+        "src/features/agent/AgentParts.tsx"
+      ],
+      "acceptance": [
+        "选择多行聊天文本，插入引用，切换会话、失败发送、重启，验证原始换行和引用预览"
+      ],
+      "note": "手写 Markdown 引用不等效于上游选区动作及原子引用草稿。"
+    },
+    {
+      "id": "full-export",
+      "label": "完整实时会话 Markdown 导出",
+      "status": "equivalent-verified",
+      "upstream": [
+        {
+          "package": "@deepseek-ai/dsh-session-log-export",
+          "version": "0.2.2-rc.1",
+          "source": "https://github.com/deepseek-ai/deepseek-harness/tree/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/session-query/session-log-export",
+          "localReference": "packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-session-log-export/README.zh.md"
+        }
+      ],
+      "lolicode": [
+        "src/features/agent/AgentSessionMenu.tsx",
+        "src/features/sessions/reader/SessionReader.tsx"
+      ],
+      "acceptance": [
+        "在160轮历史且仅载最近窗口时导出，核对首尾、工具详情、原日志路径及会话隔离"
+      ],
+      "note": "Native Markdown copy is wired in local main and verified with live, cold, paged and child history. Unmaterialized and legacy-migrated logs and oversized output are rejected explicitly. ZIP export remains separate.",
+      "isolatedImplementation": {
+        "status": "synced-after-follow-up",
+        "worktree": "C:/Users/admin/.codex/worktrees/lolicode-harness-export-20261106",
+        "baseCommit": "a87ec6d8d7cc6ad5e04aedcbe9f8cb2d0040e750",
+        "synced": true,
+        "files": [
+          {
+            "file": "packages/lolicode-harness-runtime/README.md",
+            "sha256": "0e84b3f243efd3e0d56b12e8e136945396e308e98e8744de9c6b942deb971756"
+          },
+          {
+            "file": "packages/lolicode-harness-runtime/host-operations.mjs",
+            "sha256": "06e83def474c6a9cb48e3512d3863430be8d6f2e3adfddd3080ebc4281a77b94"
+          },
+          {
+            "file": "packages/lolicode-harness-runtime/tests/host-operations.test.mjs",
+            "sha256": "800a68b1b408276b06699c4befee0af352565450bf952fbf1612f0410ab9ad9e"
+          },
+          {
+            "file": "scripts/tests/harness-desktop-acceptance.mjs",
+            "sha256": "89fa66a876d24c6ba14201b7fd764bc066c6937a91a8626572f0af766b799caf"
+          },
+          {
+            "file": "scripts/tests/harness-desktop-renderer.mjs",
+            "sha256": "9f04f9723ab44f2aa226de436f61f6d72aed28de859a6927ff81d390be012cda"
+          },
+          {
+            "file": "src-tauri/src/commands/agent_dispatch.rs",
+            "sha256": "678d380dcb8f63234d997e2c941bb9f8f56138ca2652d600941c0b0a080e57d4"
+          },
+          {
+            "file": "src-tauri/src/lib.rs",
+            "sha256": "c6f73bc502ca7f51377903cc6da7685fe3a2bfa8f31048f2018bee91c888afee"
+          },
+          {
+            "file": "src-tauri/src/services/harness_desktop.rs",
+            "sha256": "b341d4e4355c9e3257c415205b520e37368c29ed0e7296c0907bb86b012718f6"
+          },
+          {
+            "file": "src-tauri/src/services/harness_paths.rs",
+            "sha256": "492b844364b889137ab9f48a31120e382427711bce49e852ee4d56c4834c9234"
+          },
+          {
+            "file": "src-tauri/src/services/harness_runtime.rs",
+            "sha256": "eb447f6b597621c4ebe692ec94ffe802ad76e7b8e105f4e9686527c29373a8e8"
+          },
+          {
+            "file": "src/features/agent/AgentSessionMenu.tsx",
+            "sha256": "985e6b5c08501d60cfc40a237314f0271c5e7b79c4fe06505201de4c8e968fcb"
+          },
+          {
+            "file": "src/lib/api/agent.ts",
+            "sha256": "24c13371177b5051983939f4ddb265812dba10050c90c4bbe6cb5a1939ba9520"
+          },
+          {
+            "file": "tests/components/AgentSessionMenu.test.tsx",
+            "sha256": "0e2c733ef4f8b678f2bf79b7a87627f41248dc13801ced4c98b2add4e818b2e3"
+          },
+          {
+            "file": "docs/architecture/harness-session-markdown.md",
+            "sha256": "7f756925d6907255792145e6a7123ee19e2cd69373dd0c9dd60c0b02429114ad"
+          },
+          {
+            "file": "packages/lolicode-harness-runtime/host-session-markdown.mjs",
+            "sha256": "05a5e839bf6481c6ef6946a56a05495a33d5377e62ac9f2c3fd336ea3028ea3f"
+          },
+          {
+            "file": "scripts/tests/harness-desktop-session-export.mjs",
+            "sha256": "b377126cd89197bfd74ff93b75f9737ec45efdfb4b7bb740c3aa26aec38b1872"
+          },
+          {
+            "file": "src/features/agent/useAgentSessionMarkdownCopy.ts",
+            "sha256": "32bca1dc40d34694133447ad0fb008f813ed55a80f0b159fe1dd47bb31a86419"
+          }
+        ],
+        "passed": [
+          "TypeScript typecheck",
+          "3905 frontend tests",
+          "23 actual SDK tests including pre-compaction history and live/cold equality",
+          "strict Clippy",
+          "Rust filters markdown (9 passed) and harness_runtime::tests (2 passed)",
+          "Windows export running/cold, 22-turn pagination, child, empty/legacy errors, clipboard interception",
+          "Windows initial/restart/worker queue restart including images, approvals, history, secretary webpage delivery",
+          "Windows background-jobs",
+          "Windows native-modes and restart",
+          "Windows dock-tools and restart"
+        ],
+        "blockedBy": "Full-access native browser first click returns success but snapshot counter remains 0 instead of 1.",
+        "evidence": [
+          {
+            "phase": "session-export",
+            "result": "passed",
+            "log": "C:/Users/admin/AppData/Local/Temp/lolicode-export-native-session-export.log",
+            "report": "C:/Users/admin/AppData/Local/Temp/lolicode-harness-desktop-aujTYp/report.ndjson",
+            "phases": [
+              {
+                "phase": "session-export",
+                "result": "passed"
+              },
+              {
+                "phase": "session-export-restart",
+                "result": "passed"
+              }
+            ]
+          },
+          {
+            "phase": "full",
+            "result": "failed",
+            "log": "C:/Users/admin/AppData/Local/Temp/lolicode-export-native-full.log",
+            "report": "C:/Users/admin/AppData/Local/Temp/lolicode-harness-desktop-Ps8Hrz/report.ndjson",
+            "phases": [
+              {
+                "phase": "initial",
+                "result": "passed"
+              },
+              {
+                "phase": "restart",
+                "result": "passed"
+              },
+              {
+                "phase": "worker-queue-restart",
+                "result": "passed"
+              },
+              {
+                "phase": "browser-tool",
+                "result": "failed"
+              }
+            ]
+          },
+          {
+            "phase": "background-jobs",
+            "result": "passed",
+            "log": "C:/Users/admin/AppData/Local/Temp/lolicode-export-native-background-jobs.log",
+            "report": "C:/Users/admin/AppData/Local/Temp/lolicode-harness-desktop-70EvFg/report.ndjson",
+            "phases": [
+              {
+                "phase": "background-jobs",
+                "result": "passed"
+              }
+            ]
+          },
+          {
+            "phase": "native-modes",
+            "result": "passed",
+            "log": "C:/Users/admin/AppData/Local/Temp/lolicode-export-native-native-modes.log",
+            "report": "C:/Users/admin/AppData/Local/Temp/lolicode-harness-desktop-9ZG2fJ/report.ndjson",
+            "phases": [
+              {
+                "phase": "native-modes",
+                "result": "passed"
+              },
+              {
+                "phase": "native-modes-restart",
+                "result": "passed"
+              }
+            ]
+          },
+          {
+            "phase": "dock-tools",
+            "result": "passed",
+            "log": "C:/Users/admin/AppData/Local/Temp/lolicode-export-native-dock-tools.log",
+            "report": "C:/Users/admin/AppData/Local/Temp/lolicode-harness-desktop-jBuTKl/report.ndjson",
+            "phases": [
+              {
+                "phase": "dock-tools",
+                "result": "passed"
+              },
+              {
+                "phase": "dock-tools-restart",
+                "result": "passed"
+              }
+            ]
+          }
+        ]
+      },
+      "evidence": {
+        "phase": "session-export",
+        "report": "D:/projectGithub/lolicode-harness-validation/src-tauri/target/acceptance-logs/lolicode-harness-desktop-7BFJIV/report.ndjson",
+        "phases": [
+          "session-export",
+          "session-export-restart"
+        ]
+      }
+    },
+    {
+      "id": "display-modes",
+      "label": "过程展示偏好和仅最终回复",
+      "status": "partial",
+      "upstream": [
+        {
+          "package": "@deepseek-ai/dsh-client-ui-chat",
+          "version": "0.2.2-rc.1",
+          "source": "https://github.com/deepseek-ai/deepseek-harness/tree/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/client/ui-chat",
+          "localReference": "packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-client-ui-chat/README.zh.md"
+        }
+      ],
+      "lolicode": [
+        "src/features/agent/AgentTranscript.tsx"
+      ],
+      "acceptance": [
+        "含中间回复/最终回复/失败/取消的流式记录，切换展示偏好并重启检查"
+      ],
+      "note": "现有过程折叠保留助手文本；缺少上游多档模式、仅最终回复偏好及轮次轨道。"
+    },
+    {
+      "id": "context-menus",
+      "label": "统一右键与键盘菜单",
+      "status": "partial",
+      "upstream": [
+        {
+          "package": "@deepseek-ai/dsh-client-ui-context-menu",
+          "version": "0.2.2-rc.1",
+          "source": "https://github.com/deepseek-ai/deepseek-harness/tree/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/client/ui-context-menu",
+          "localReference": "packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-client-ui-context-menu/README.zh.md"
+        }
+      ],
+      "lolicode": [
+        "src/features/agent/AgentOpenWith.tsx",
+        "src/features/agent/AgentSessionMenu.tsx"
+      ],
+      "acceptance": [
+        "右键、Shift+F10、ContextMenu键及菜单打开后切换目标，验证上下文和焦点"
+      ],
+      "note": "已有按钮菜单，不等效于可扩展统一目标注册。"
+    },
+    {
+      "id": "file-navigator",
+      "label": "目录树与预览旁导航",
+      "status": "partial",
+      "upstream": [
+        {
+          "package": "@deepseek-ai/dsh-client-ui-sidebar-files",
+          "version": "0.2.2-rc.1",
+          "source": "https://github.com/deepseek-ai/deepseek-harness/tree/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/client/ui-sidebar-files",
+          "localReference": "packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-client-ui-sidebar-files/README.zh.md"
+        }
+      ],
+      "lolicode": [
+        "src/features/agent/AgentProjectFilesPanel.tsx",
+        "src-tauri/src/commands/agent_files.rs"
+      ],
+      "acceptance": [
+        "node scripts/tests/harness-desktop-acceptance.mjs --dock-tools",
+        "外部改文件后自动刷新；各窗格导航器宽度、目录展开和滚动恢复"
+      ],
+      "note": "独立目录标签已验；自动目录监听、紧邻预览导航器和浮动面板待接。"
+    },
+    {
+      "id": "locales",
+      "label": "官方客户端语言覆盖",
+      "status": "partial",
+      "upstream": [
+        {
+          "package": "@deepseek-ai/dsh-client-locale",
+          "version": "0.2.2-rc.1",
+          "source": "https://github.com/deepseek-ai/deepseek-harness/tree/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/client/locale",
+          "localReference": "packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-client-locale/README.zh.md"
+        }
+      ],
+      "lolicode": [
+        "src/i18n/index.ts",
+        "src/i18n/locales"
+      ],
+      "acceptance": [
+        "逐种语言切换，检查 Agent 操作、错误及重启后偏好"
+      ],
+      "note": "本产品 en/zh/zh-TW/ja，尚未覆盖全部上游语种或动态语言包。"
+    },
+    {
+      "id": "plugin-details",
+      "label": "插件富详情与第三方更新",
+      "status": "partial",
+      "upstream": [
+        {
+          "package": "@deepseek-ai/dsh-plugin-detail",
+          "version": "0.2.2-rc.1",
+          "source": "https://github.com/deepseek-ai/deepseek-harness/tree/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/util/plugin-detail",
+          "localReference": "packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-plugin-detail/README.zh.md"
+        },
+        {
+          "package": "@deepseek-ai/dsh-client-ui-plugin-manager",
+          "version": "0.2.2-rc.1",
+          "source": "https://github.com/deepseek-ai/deepseek-harness/tree/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/client/ui-plugin-manager",
+          "localReference": "packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-client-ui-plugin-manager/README.zh.md"
+        },
+        {
+          "package": "@deepseek-ai/dsh-client-ui-plugin-market",
+          "version": "0.2.2-rc.1",
+          "source": "https://github.com/deepseek-ai/deepseek-harness/tree/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/client/ui-plugin-market",
+          "localReference": "packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-client-ui-plugin-market/README.zh.md"
+        }
+      ],
+      "lolicode": [
+        "src/features/agent/AgentExtensionsPanel.tsx",
+        "src-tauri/src/services/inprocess_extensions.rs"
+      ],
+      "acceptance": [
+        "pnpm exec vitest run tests/components/AgentExtensionsPanel.test.tsx",
+        "本地插件：本地化详情、相对图片、安全边界、更新失败回滚及重启后生效"
+      ],
+      "note": "当前扩展发现/安装入口存在；官方富详情和完整插件更新语义尚未接线验收。"
+    },
+    {
+      "id": "experimental",
+      "label": "实验插件能力",
+      "status": "pending-audit",
+      "upstream": [
+        {
+          "package": "@deepseek-ai/dsh-official-bundles",
+          "version": "0.2.2-rc.1",
+          "source": "https://github.com/deepseek-ai/deepseek-harness/tree/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/util/official-bundles",
+          "localReference": "packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-official-bundles/README.zh.md"
+        }
+      ],
+      "lolicode": [
+        "packages/lolicode-harness-runtime/profile.cordis.patch.yml",
+        "src/features/agent/AgentExtensionsPanel.tsx"
+      ],
+      "acceptance": [
+        "逐项核对 OAR、推荐卡、统计、变更请求插件注册/配置/UI与实际执行"
+      ],
+      "note": "依赖包存在不代表已启用、已露出或可用；不得归为随 SDK 自动完成。"
+    },
+    {
+      "id": "public-clients",
+      "label": "官方网页、移动和桌面扩展",
+      "status": "pending-audit",
+      "upstream": [
+        {
+          "package": "@deepseek-ai/dsh-web-app",
+          "version": "0.2.2-rc.1",
+          "source": "https://github.com/deepseek-ai/deepseek-harness/tree/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/bundle/web-app",
+          "localReference": "packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-web-app/README.zh.md"
+        },
+        {
+          "package": "@deepseek-ai/dsh-client-ui-conversation",
+          "version": "0.2.2-rc.1",
+          "source": "https://github.com/deepseek-ai/deepseek-harness/tree/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/client/ui-conversation",
+          "localReference": "packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-client-ui-conversation/README.zh.md"
+        },
+        {
+          "package": "@deepseek-ai/dsh-client-ui-trajectory",
+          "version": "0.2.2-rc.1",
+          "source": "https://github.com/deepseek-ai/deepseek-harness/tree/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/client/ui-trajectory",
+          "localReference": "packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-client-ui-trajectory/README.zh.md"
+        }
+      ],
+      "lolicode": [
+        "src/app/App.tsx",
+        "src/features/agent/AgentPage.tsx"
+      ],
+      "acceptance": [
+        "分别验手机软键盘/引用/工具原始JSON/嵌套轨迹/系统平台特性"
+      ],
+      "note": "宿主为 Tauri 自有前端；官方网页和 Electron 插件没有因为 SDK pin 更新就自动移植。"
+    },
+    {
+      "id": "session-zip-export",
+      "label": "原生日志 ZIP（子会话和附件）",
+      "status": "needs-host-ui",
+      "upstream": [
+        {
+          "package": "@deepseek-ai/dsh-session-log-export",
+          "version": "0.2.2-rc.1",
+          "source": "https://github.com/deepseek-ai/deepseek-harness/tree/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/session-query/session-log-export",
+          "localReference": "packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-session-log-export/README.zh.md"
+        }
+      ],
+      "lolicode": [
+        "src/features/agent/AgentSessionMenu.tsx"
+      ],
+      "acceptance": [
+        "通过菜单或 /export 下载，核对根日志、子日志、fork 继承、generation 和附件字节；目前无入口。"
+      ],
+      "note": "Do not infer ZIP support from isolated Markdown work."
+    }
+  ],
+  "releaseItemIndex": [
+    {
+      "ordinal": 1,
+      "section": "New Features",
+      "sourceTextSha256": "9430fe3d1cf5efe322cb7bc0088d14fb00e1808b7e0fb5b5132c24dbf0fbfb46",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 2,
+      "section": "New Features",
+      "sourceTextSha256": "b9eb9df0667c8c3dda30be7f4831c1c9a7cbb95209b52a769c647cbfcc101a3f",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 3,
+      "section": "New Features",
+      "sourceTextSha256": "f6a67f085ea9635e4a75ddf44aada188497caa972e0a0048c5c1e466ea7503a3",
+      "status": "verified-with-documented-limits",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1",
+      "features": [
+        "full-export"
+      ],
+      "evidence": "D:/projectGithub/lolicode-harness-validation/src-tauri/target/acceptance-logs/lolicode-harness-desktop-7BFJIV/report.ndjson"
+    },
+    {
+      "ordinal": 4,
+      "section": "New Features",
+      "sourceTextSha256": "1657ee8e572c278fef382da03fcc3a3c1d48807f97459cc8e095d1a23843393b",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 5,
+      "section": "New Features",
+      "sourceTextSha256": "cf1745d4507ebdf52832bb0b14dfbde7cf9aab07605296600050e07c3d10b600",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 6,
+      "section": "New Features",
+      "sourceTextSha256": "baf3675613794106c05025250ae80c9b0b80736c5dd8d997a1b3faab5a4b410d",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 7,
+      "section": "New Features",
+      "sourceTextSha256": "aff6518803c32a2b8cd1d32f62594c3d2fc2bc8adbd1d36576e5ae04b0136c73",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 8,
+      "section": "New Features",
+      "sourceTextSha256": "184767d23ae2123986f9e54488107894793e106b2480e84e45531cee119c3a62",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 9,
+      "section": "New Features",
+      "sourceTextSha256": "824872f0c3fd6d0fd4e2d255afdc843d9a889060f3e068374fb640dc5ea60370",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 10,
+      "section": "New Features",
+      "sourceTextSha256": "a520df03255149398e22bc6c18969f772a76ab217f7d575aabe006e0a2ceff38",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 11,
+      "section": "New Features",
+      "sourceTextSha256": "ad29ee636c610613fead23536215e80f832571807f45c81c81d647161564189b",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 12,
+      "section": "New Features",
+      "sourceTextSha256": "62ddbe669a95838432f1de15ab3d6494ec2db1a116567ca68a7ab43de087421e",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 13,
+      "section": "New Features",
+      "sourceTextSha256": "436a8a43493abf197fb502174b012ab280b6a3e03a8c7167219e68222a15cbc6",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 14,
+      "section": "Improvements\r",
+      "sourceTextSha256": "30878ac51216ef663a6ad8b0afd374e9c58e97894b97c24b0308b0b3bf8d3310",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 15,
+      "section": "Improvements\r",
+      "sourceTextSha256": "5cb06e9bb6bc30f49f17d4f32f8b553ae3d36927e4e4221e87d60e045ee624b1",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 16,
+      "section": "Improvements\r",
+      "sourceTextSha256": "f4126fc65d33257ca4a5af2b70e4861d283ca3adeba12ef2b2005ab5c7289de6",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 17,
+      "section": "Improvements\r",
+      "sourceTextSha256": "98ef53c4cd93350641d7081fba5fdc95447ae872d5e5e1d51ce22b7b2b9d72ac",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 18,
+      "section": "Improvements\r",
+      "sourceTextSha256": "a6f67cca3ccea866af861b5419d28984d53adf18a9aade41a4fc4394e3cd795f",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 19,
+      "section": "Improvements\r",
+      "sourceTextSha256": "e11c38e7ddcc01dc735a418f7f90e12da7ca6de4201f617e0f00695328bc407f",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 20,
+      "section": "Improvements\r",
+      "sourceTextSha256": "b3c2939d3e27277cf34bf751950e02c26b4c43653630caf8ea86f1a6e226d5c2",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 21,
+      "section": "Improvements\r",
+      "sourceTextSha256": "075b4796f1c2808d98399a460182fc55ae8b9f9c49f158e5141fd87ded7c95ad",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 22,
+      "section": "Improvements\r",
+      "sourceTextSha256": "ae0aa883faab6d4e20f5cdc50671686ced60629cfe63b3ea835e9a244d6371f6",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 23,
+      "section": "Improvements\r",
+      "sourceTextSha256": "d68f505f87a46720d605075ae381baf11ad72bee72a5c0ef80347a840aff6c53",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 24,
+      "section": "Improvements\r",
+      "sourceTextSha256": "9222ef6eee097cf66aba08458c603c08283748be1a8079f07fb20afa4adc5a9d",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 25,
+      "section": "Improvements\r",
+      "sourceTextSha256": "738779d97a48d42998bb51489347c643573955215ef3292280242e1aef19a8ed",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 26,
+      "section": "Improvements\r",
+      "sourceTextSha256": "3b0421991b7de67f94d25ddab4d3848f045df2df4df26d1c51737594801536f9",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 27,
+      "section": "Improvements\r",
+      "sourceTextSha256": "64ace9897ef592f9c1118ac722666be54cff8178ce9c5ed6deeba43a8e8a257b",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 28,
+      "section": "Improvements\r",
+      "sourceTextSha256": "e236ddbabd956eb2258139da80338310f592d257d938780932efb3cb9d4751ce",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 29,
+      "section": "Improvements\r",
+      "sourceTextSha256": "d02a7d74961612cccf9405d1b6260c5d101acd2016efe93f4f74517fa4eb0947",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 30,
+      "section": "Improvements\r",
+      "sourceTextSha256": "68578b9cada1753ba091886fd2a8493a14d6d696d414c31ec8e1f6c6c68ba8cd",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 31,
+      "section": "Improvements\r",
+      "sourceTextSha256": "dfbb6501b1cf637ef86dc1a397980b51de9e9127a3ea7e45f76274aa8dbc29eb",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 32,
+      "section": "Improvements\r",
+      "sourceTextSha256": "b919871990e7995158a2915fb738ef1d460457f8ecb6dddf799d008fdc5e70d9",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 33,
+      "section": "Improvements\r",
+      "sourceTextSha256": "ff6ca1ae507ad3516743d3b6cce132cc89d2a52a58d8665921dbe195dfbd6b79",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 34,
+      "section": "Improvements\r",
+      "sourceTextSha256": "c823fdaf4d432125540589437788f98595a220c0bca17f197632094df07775d8",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 35,
+      "section": "Improvements\r",
+      "sourceTextSha256": "37e4bd0618a6a691107a68107f98ea21eef66a867a4b8633e0ffdb96c7b7f2e6",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 36,
+      "section": "Improvements\r",
+      "sourceTextSha256": "05626c14cc28083677e7f286b6f82ff40bb5849bb5da22eeef3f5ec2be4bb9d5",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 37,
+      "section": "Improvements\r",
+      "sourceTextSha256": "8a2f0fb2d47b98751f0fa4f269501af114c5fc08f21846525c8574a2440946e5",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 38,
+      "section": "Improvements\r",
+      "sourceTextSha256": "0f9adec515e61268f7050696412f9acb98932e08da564ff8576ee502e9af67b3",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 39,
+      "section": "Improvements\r",
+      "sourceTextSha256": "5b6ce64c4fcd6d122f3f6bf6a468661a48d32559ecf46b8541a67a5b6bb397d6",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 40,
+      "section": "Improvements\r",
+      "sourceTextSha256": "0f9f6283e8b5059deba2b70b9377f1324a651c6619ca09ac894509bb0afbc75e",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 41,
+      "section": "Improvements\r",
+      "sourceTextSha256": "b76932bdc9ca684163473d8ec6281282c417ef1ae69ca336ee93e9a2ab31e567",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 42,
+      "section": "Improvements\r",
+      "sourceTextSha256": "63f5caff4917f00aa0013402f2d894eb4a29daccf9abc85541b48f912d46617a",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 43,
+      "section": "Improvements\r",
+      "sourceTextSha256": "f3bf15864ef0c0f781748577305a1f14f00743a9a7617661482c1a994bcc6566",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 44,
+      "section": "Improvements\r",
+      "sourceTextSha256": "90de6db62ca5c5fd28761fea655cf25a088386eb7ed7e8b011237cfdf77e0950",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 45,
+      "section": "Bug Fixes\r",
+      "sourceTextSha256": "0fc049233de37e32a1a38c023346f162150f4e067ee267ca1c0dfad7e86f48ce",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 46,
+      "section": "Bug Fixes\r",
+      "sourceTextSha256": "0125d83f297c95bc198c79c5a9b22b1f8d47cab1f6ba8f4ca179e2f7f1eb37cd",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 47,
+      "section": "Bug Fixes\r",
+      "sourceTextSha256": "5e0b05496a7adbae74e0879027fe1badb2e4a155837e43288f11d3a786509940",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 48,
+      "section": "Bug Fixes\r",
+      "sourceTextSha256": "aa1052707330d8e1ee65d41fc985b2c77d327ae7f07d3a335c5662a9f8d13341",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 49,
+      "section": "Bug Fixes\r",
+      "sourceTextSha256": "bf0aab1cb7deae58dc670d134fcd830a1b7bd00d97c82be858dbcba4c19daacd",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 50,
+      "section": "Bug Fixes\r",
+      "sourceTextSha256": "6d0ac5729ae06d4d807a57591f64446514f3625b9e2a06fadc324a67dba06f6c",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 51,
+      "section": "Bug Fixes\r",
+      "sourceTextSha256": "a4dc44e2dbf4654c82b6fe17af981a595693c0868e4602fe05f4ee98491c9f90",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 52,
+      "section": "Bug Fixes\r",
+      "sourceTextSha256": "6cfe7642d5a85dd04bf5132309d0240f16495e2f4c1fdd6299f234e255c6e2e2",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 53,
+      "section": "Bug Fixes\r",
+      "sourceTextSha256": "7366aa52fb15fb741be35495381fab531fe5e4923a009ad733b070c4eae45b32",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 54,
+      "section": "Bug Fixes\r",
+      "sourceTextSha256": "42bbd158ae88f1f5a2951f9f21208b453394ed2bc975aa4e026dffc0d436b419",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 55,
+      "section": "Bug Fixes\r",
+      "sourceTextSha256": "71776aedbd882fafad54dc4e24b53ec390880defab5488f6af8dbed3ef9aeed0",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 56,
+      "section": "Bug Fixes\r",
+      "sourceTextSha256": "ca536642b568f9de12a4f91b88a1566dc26f9b2acb0208651582894894d00c7a",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 57,
+      "section": "Bug Fixes\r",
+      "sourceTextSha256": "d5367cd9b8f391241e7dfdb008117c1c72e9bc608392c4ef037d30449903dbe7",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 58,
+      "section": "Bug Fixes\r",
+      "sourceTextSha256": "8e6e8df25ed6bd83a71cb4d039d36887826734e6dd48d31c6907020596e4c7e3",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 59,
+      "section": "Bug Fixes\r",
+      "sourceTextSha256": "a86d80a9688f23f8bb5efee7d84f4cb452323372109886baafe5faf313c62700",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 60,
+      "section": "Bug Fixes\r",
+      "sourceTextSha256": "483c0e94ad93d20e6b45937c385468d1fb468ce07aa782086c41803a48cdb08d",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 61,
+      "section": "Bug Fixes\r",
+      "sourceTextSha256": "731299dd18f1b6b37a41b580e11b9c185d23e4cb6feece2df1b631fd4302bbc9",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 62,
+      "section": "Bug Fixes\r",
+      "sourceTextSha256": "5ef60b99847d6c7b09d50b1c4a8bca992d12785a5e1f681d347f33cd85e30421",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 63,
+      "section": "Bug Fixes\r",
+      "sourceTextSha256": "bc90083956359cd9de4bd077d1a57e9061d034f0c7f8f2f4fdc682fd1e25d667",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 64,
+      "section": "Bug Fixes\r",
+      "sourceTextSha256": "b5a2aedbb0c1810d44c027444884ade1e1e36a6e07d791f4c57658253681cbb4",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 65,
+      "section": "Bug Fixes\r",
+      "sourceTextSha256": "201d6c2ab514502868a1ee3bd9e1ca90103860b9936cfd1e5277255b88929795",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 66,
+      "section": "Bug Fixes\r",
+      "sourceTextSha256": "d9af8d34439f2a3513ab8b5d1380e3b2c337d4dc412465c20a439dd212b6ea11",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 67,
+      "section": "Bug Fixes\r",
+      "sourceTextSha256": "1a46526cca73a84447a3125109497bc5b4a6ed4fda841ed43ccff3ef6726dcad",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 68,
+      "section": "Bug Fixes\r",
+      "sourceTextSha256": "2677652e1a490a3c44c8a1f21043ddd4b3c6448c3d9aace18b6d4189528b4c22",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 69,
+      "section": "Bug Fixes\r",
+      "sourceTextSha256": "40338355b0f1dfb82c277618884f863262cf96632cf0b078c47f5f4d76e474ed",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 70,
+      "section": "Bug Fixes\r",
+      "sourceTextSha256": "b27be0aa9573633283f2c800dc8536ee7fed50d92a5706965ee2c821463d6373",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 71,
+      "section": "Bug Fixes\r",
+      "sourceTextSha256": "4ba00f31bfb628633879f4d21a78f1a11b564c1b4a57da3bc80e12572557b745",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 72,
+      "section": "Bug Fixes\r",
+      "sourceTextSha256": "11f0820f9cb50444902be20e11d635cd5ec23220678644821046a355ec51545b",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 73,
+      "section": "Bug Fixes\r",
+      "sourceTextSha256": "c92a4e1a15d4c4dae5f67649e2b73d46d7436ee91b78582cec5b832644e5ae87",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 74,
+      "section": "Bug Fixes\r",
+      "sourceTextSha256": "3e26dc42e133dc1a954c4e5675cd87d299f27493e52ceb4aa9f88c9f0f59423c",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 75,
+      "section": "Bug Fixes\r",
+      "sourceTextSha256": "c107813489657416c7e88d6f62f174876a02097c83eb4a63e5c81386bbc8d646",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 76,
+      "section": "Bug Fixes\r",
+      "sourceTextSha256": "3e789de4be6c697c1f595eb0f750f3f852b0b94f78ed00c6908b2a18a5d77c62",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 77,
+      "section": "Bug Fixes\r",
+      "sourceTextSha256": "404ef46264422c613dfc8dd66b14d29c80f5cb90cd2306dcb933dd50bf85c803",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 78,
+      "section": "Bug Fixes\r",
+      "sourceTextSha256": "202c5d8119e6889786b7d789ff042c1b8b5f534ef7f00663e9cfb13a3f5a6579",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 79,
+      "section": "Bug Fixes\r",
+      "sourceTextSha256": "97267653fd0e8660b80b731eafe2315d189aa3bd48e00b1dfb748a4f034b30dd",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 80,
+      "section": "Bug Fixes\r",
+      "sourceTextSha256": "497f389ac2edb60df738fb07bd4c015762bf2bc21b0d8c5f17abf90f6dbc385a",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 81,
+      "section": "Bug Fixes\r",
+      "sourceTextSha256": "280e001168f665e514e68ea125aae0413a062fd8b0e6e98eca1b549e8bb3abdb",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 82,
+      "section": "Bug Fixes\r",
+      "sourceTextSha256": "1d3a0dbe7a4b2895861ab32cb0cba131739a388da2554ddfd49bcc6fc3458cfb",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 83,
+      "section": "Bug Fixes\r",
+      "sourceTextSha256": "3f56c0ba510e8b564fc62515e2885e152ba3c04ad4577c07de919baceb4dc08f",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 84,
+      "section": "Bug Fixes\r",
+      "sourceTextSha256": "b316ca1e6dc9bc51c935263e451392c584df464612c2a58d8b9501a8adc6304c",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 85,
+      "section": "Bug Fixes\r",
+      "sourceTextSha256": "b32aa23f5b41ab9c18138ade71def013b313efa1301f8d4f2bad17158bd622b9",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 86,
+      "section": "Bug Fixes\r",
+      "sourceTextSha256": "3eb81dad50d4b3a531d3ca5a49f54efc16573de02e9958f8bde84e2a9bae223b",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 87,
+      "section": "Bug Fixes\r",
+      "sourceTextSha256": "8507adde331b40473599274b3076eacdf797c903fe4308e0fc1191e5ee8f136d",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 88,
+      "section": "Bug Fixes\r",
+      "sourceTextSha256": "d078e226caeda5654f2f00f2f0c1549547f048eeb482a5dfd169afc004dce909",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 89,
+      "section": "Bug Fixes\r",
+      "sourceTextSha256": "21929a6d97f408b3c2c2977cc07d7c00011fbdc3bdfc7eb898b087a61ee9e240",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 90,
+      "section": "Bug Fixes\r",
+      "sourceTextSha256": "a31bf3f23c429c137560f6ac1701259f1ae9a74117ce5d0fb0ba87014983c3c2",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 91,
+      "section": "Bug Fixes\r",
+      "sourceTextSha256": "3a17a4e3044765f3eb817502966df968bda9aea6284fa93e46373a71881c2a15",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 92,
+      "section": "Bug Fixes\r",
+      "sourceTextSha256": "604033c17be771373c9966178ad400435985780cdba829be3d22c4c18784e2e8",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 93,
+      "section": "Bug Fixes\r",
+      "sourceTextSha256": "abc3c41640a49e99a7c4e88b225f52954c12375317340f60583dd68f9ca5933b",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 94,
+      "section": "Bug Fixes\r",
+      "sourceTextSha256": "ad9c3be19e254fc310b935bac881baa9d530e04144b216f87b611d2083958453",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 95,
+      "section": "Bug Fixes\r",
+      "sourceTextSha256": "0cba3c3bdd5d02d632a54dae82bdf64e3f18af3c84d0a00eb749463228562f5c",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 96,
+      "section": "Bug Fixes\r",
+      "sourceTextSha256": "c9f6c1e791287e25496a81e89f26a4df19db184222e8b11fb4b942ce6a4aad0c",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 97,
+      "section": "Bug Fixes\r",
+      "sourceTextSha256": "58a52c498dcde7326de77ee450d356007b11fd483cfd39e470ba0a73946c9505",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 98,
+      "section": "Chores\r",
+      "sourceTextSha256": "4e5f20d10ed18000562846130ca35248dded44eec23bec04947271ab7dc7ad46",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 99,
+      "section": "Chores\r",
+      "sourceTextSha256": "a37113c395707e1badafc0d2d90fb0088edcdc6450ad8b77b9e1846bc849d53e",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 100,
+      "section": "Chores\r",
+      "sourceTextSha256": "48390cf86c7c150473846acbd22f2203bbb626643de33aa939c43801401d6262",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 101,
+      "section": "Chores\r",
+      "sourceTextSha256": "f8d29fa9c0ea85a2401ace41c5d632b5b47323f1ec483a01d3a208d49227f6e2",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 102,
+      "section": "Chores\r",
+      "sourceTextSha256": "6add61b09406e95bc20b39e65f2711aa825433f21067b4d03346cf173441d711",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 103,
+      "section": "Chores\r",
+      "sourceTextSha256": "db6e33c328aa686d63ad23ffb079db60edf411ab2f5466ef66406ad0bea432f9",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 104,
+      "section": "Chores\r",
+      "sourceTextSha256": "aed6499d7dac104a5ccd8dc201802360afbbf675a9e27b77e9feed02825994a4",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 105,
+      "section": "Chores\r",
+      "sourceTextSha256": "aac467add4ab727be46b215d546a9c79c99662621d2d8b6acd0e5603a5e93e54",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 106,
+      "section": "Chores\r",
+      "sourceTextSha256": "f93673f164e803d5df770fc4b6560200aee6e8c6c2a25495f292fac7f8eafa21",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 107,
+      "section": "Chores\r",
+      "sourceTextSha256": "08a467d80aef05e5e1119f71f0fcf0dd1c32ed6be92d07ad42382d8ea7d58db7",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 108,
+      "section": "Chores\r",
+      "sourceTextSha256": "c462561c02a11593629d96a2a981e6eb5475509be95d223f2a696a15c304f02b",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 109,
+      "section": "Chores\r",
+      "sourceTextSha256": "c39478b294b40fc70aef8f86bb5857399bf0908bdc06e3dca9e16120697603ce",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 110,
+      "section": "Chores\r",
+      "sourceTextSha256": "ca2ae475e485b7e6ca7d751fd4010d2720497e2f5a94c30e2727f76c4dd8686d",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 111,
+      "section": "Chores\r",
+      "sourceTextSha256": "aedd5415b025e3288c58d44474ee8cb490a9fd7635e29eabd4f65cc8b834844f",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 112,
+      "section": "Chores\r",
+      "sourceTextSha256": "09cbd5c250616b47d51cd33076e68de4f69539a1cd1a8db5c7383bd587ac59a8",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 113,
+      "section": "Chores\r",
+      "sourceTextSha256": "b605f9c90e3c3c1f3f1cfa934a73eeaf39363b6fe2b7e81ce6ce2f99ac271e01",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 114,
+      "section": "Chores\r",
+      "sourceTextSha256": "7ed0cb3498ac2dfab0edeec7aaa3d4e2b29cb31a84bf59ae1b40e355ac050825",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 115,
+      "section": "Chores\r",
+      "sourceTextSha256": "715d0af5ebb3e4bbeb86fcafe395b1539253d481839c972e095bb50d63f97d9e",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 116,
+      "section": "Chores\r",
+      "sourceTextSha256": "a1451eb9cfd04a50f2f7762a5a8783564a3eabddaf834bc8950d8b1027cb9647",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 117,
+      "section": "Chores\r",
+      "sourceTextSha256": "039b93c1bfe3997b81a6ee51586f7202addbb067cfb0be60c42c641c03c4b138",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 118,
+      "section": "Chores\r",
+      "sourceTextSha256": "a8b9332f016cd16372610cd4c8b5025b8ca7a47ff73f12eb58e4efdceb171180",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 119,
+      "section": "Chores\r",
+      "sourceTextSha256": "258ac3a7d391000fbfb59ace0535b32be2d35d7b95f57ab07ec3904130d2c32c",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 120,
+      "section": "Chores\r",
+      "sourceTextSha256": "061e90a2dd6d72f783fc6021608ea4019e9b9fca1da513c3081b4638498a14d0",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 121,
+      "section": "Chores\r",
+      "sourceTextSha256": "df31a7315ad9b01f0a31a265e9755c28a4c1105eb72ab2254d56efaf32929049",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 122,
+      "section": "Chores\r",
+      "sourceTextSha256": "e8ea1434a88fb574aa7abaeb0262462f37514c08e26f0fd82c4f818ee8e72963",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 123,
+      "section": "Chores\r",
+      "sourceTextSha256": "e2ff778eeed72609bf86ac3aeae25c37b66b1c1a32d8a45ab9bba933f7a6a05a",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 124,
+      "section": "Chores\r",
+      "sourceTextSha256": "9ab82a39daf98093f2fdc9d92168c6c124cc0019a0da3525980b5699423690c8",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 125,
+      "section": "Chores\r",
+      "sourceTextSha256": "73faafc9521a8e381ea65277a27ce868cd1bbd3676e9ae999d3eb8b79a5a5994",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    },
+    {
+      "ordinal": 126,
+      "section": "Chores\r",
+      "sourceTextSha256": "bbf0d92fbfe2d9d0041d8d9a0fcdf5720f9807f7096ed64b5cd3ad2f641d8970",
+      "status": "needs-individual-trace",
+      "reference": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1"
+    }
+  ],
+  "priorValidation": {
+    "rerunThisCheck": false,
+    "reason": "No eligible version change; current checked code is the prior accepted main commit.",
+    "reports": [
+      "C:/Users/admin/AppData/Local/Temp/lolicode-harness-desktop-gPUWgO/report.ndjson",
+      "C:/Users/admin/AppData/Local/Temp/lolicode-harness-desktop-aRjWxk/report.ndjson",
+      "C:/Users/admin/AppData/Local/Temp/lolicode-harness-desktop-kmIJpu/report.ndjson"
+    ],
+    "unitTests": 3901
+  },
+  "next": [
+    "Measure snapshot transfer and live transcript cost in longer active sessions.",
+    "Add context-only secretary notes, live quotes and ZIP export.",
+    "Trace the remaining 125 release items individually."
+  ],
+  "lastUpdatedAt": "2026-11-06T02:37:34.199Z",
+  "checks": [
+    {
+      "checkedAt": "2026-11-06T00:18:59.550Z",
+      "completedAt": "2026-11-06T00:54:33.336Z",
+      "version": "0.2.2-rc.1",
+      "newer": [],
+      "artifactIntegrityVerified": true,
+      "superagentHead": "8c32a9dc5d72c033816c6a8110b37f40cf94fba4",
+      "action": "Main product unchanged; Markdown implementation retained in isolation after failed browser gate.",
+      "evidence": [
+        {
+          "phase": "session-export",
+          "result": "passed",
+          "log": "C:/Users/admin/AppData/Local/Temp/lolicode-export-native-session-export.log",
+          "report": "C:/Users/admin/AppData/Local/Temp/lolicode-harness-desktop-aujTYp/report.ndjson",
+          "phases": [
+            {
+              "phase": "session-export",
+              "result": "passed"
+            },
+            {
+              "phase": "session-export-restart",
+              "result": "passed"
+            }
+          ]
+        },
+        {
+          "phase": "full",
+          "result": "failed",
+          "log": "C:/Users/admin/AppData/Local/Temp/lolicode-export-native-full.log",
+          "report": "C:/Users/admin/AppData/Local/Temp/lolicode-harness-desktop-Ps8Hrz/report.ndjson",
+          "phases": [
+            {
+              "phase": "initial",
+              "result": "passed"
+            },
+            {
+              "phase": "restart",
+              "result": "passed"
+            },
+            {
+              "phase": "worker-queue-restart",
+              "result": "passed"
+            },
+            {
+              "phase": "browser-tool",
+              "result": "failed"
+            }
+          ]
+        },
+        {
+          "phase": "background-jobs",
+          "result": "passed",
+          "log": "C:/Users/admin/AppData/Local/Temp/lolicode-export-native-background-jobs.log",
+          "report": "C:/Users/admin/AppData/Local/Temp/lolicode-harness-desktop-70EvFg/report.ndjson",
+          "phases": [
+            {
+              "phase": "background-jobs",
+              "result": "passed"
+            }
+          ]
+        },
+        {
+          "phase": "native-modes",
+          "result": "passed",
+          "log": "C:/Users/admin/AppData/Local/Temp/lolicode-export-native-native-modes.log",
+          "report": "C:/Users/admin/AppData/Local/Temp/lolicode-harness-desktop-9ZG2fJ/report.ndjson",
+          "phases": [
+            {
+              "phase": "native-modes",
+              "result": "passed"
+            },
+            {
+              "phase": "native-modes-restart",
+              "result": "passed"
+            }
+          ]
+        },
+        {
+          "phase": "dock-tools",
+          "result": "passed",
+          "log": "C:/Users/admin/AppData/Local/Temp/lolicode-export-native-dock-tools.log",
+          "report": "C:/Users/admin/AppData/Local/Temp/lolicode-harness-desktop-jBuTKl/report.ndjson",
+          "phases": [
+            {
+              "phase": "dock-tools",
+              "result": "passed"
+            },
+            {
+              "phase": "dock-tools-restart",
+              "result": "passed"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

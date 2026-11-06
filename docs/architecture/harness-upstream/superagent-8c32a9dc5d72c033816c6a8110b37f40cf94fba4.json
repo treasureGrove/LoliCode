@@ -1,0 +1,167 @@
+{
+  "schemaVersion": 1,
+  "kind": "superagent-reference-baseline",
+  "checkedAt": "2026-11-05T18:23:40.956Z",
+  "upstreamHead": "8c32a9dc5d72c033816c6a8110b37f40cf94fba4",
+  "upstreamUrl": "https://github.com/deepseek-ai/dsh-superagent-prototype/commit/8c32a9dc5d72c033816c6a8110b37f40cf94fba4",
+  "originalReference": "6337fc823ce20251c8de8085948165c81aaa701e",
+  "taskReportReference": "8c32a9dc5d72c033816c6a8110b37f40cf94fba4",
+  "fullParity": false,
+  "historyNote": "Two recorded reference commits have no common ancestor on public compare; preserve both references and compare trees if needed, never infer a fast-forward upgrade.",
+  "entries": [
+    {
+      "id": "coordinator-worker",
+      "label": "秘书与工作会话分工",
+      "status": "equivalent-verified",
+      "upstream": [
+        "https://github.com/deepseek-ai/dsh-superagent-prototype/blob/6337fc823ce20251c8de8085948165c81aaa701e/src/core/model.ts",
+        "https://github.com/deepseek-ai/dsh-superagent-prototype/blob/6337fc823ce20251c8de8085948165c81aaa701e/src/core/intake.ts",
+        "https://github.com/deepseek-ai/dsh-superagent-prototype/blob/6337fc823ce20251c8de8085948165c81aaa701e/src/executor/dsh.ts"
+      ],
+      "lolicode": [
+        "packages/lolicode-harness-runtime/host-operations.mjs",
+        "src-tauri/src/services/harness_secretary.rs",
+        "src/features/agent/AgentSecretaryTasks.tsx"
+      ],
+      "acceptance": [
+        "node --test packages/lolicode-harness-runtime/tests/host-operations.test.mjs",
+        "node scripts/tests/harness-desktop-acceptance.mjs"
+      ],
+      "note": "Harness 原生子任务与宿主协调，不是整套原型 Trigger/Ticket 引擎移植。"
+    },
+    {
+      "id": "continuation",
+      "label": "停止、跟进、队列和工作树",
+      "status": "equivalent-verified",
+      "upstream": [
+        "https://github.com/deepseek-ai/dsh-superagent-prototype/blob/6337fc823ce20251c8de8085948165c81aaa701e/src/core/tickets.ts",
+        "https://github.com/deepseek-ai/dsh-superagent-prototype/blob/6337fc823ce20251c8de8085948165c81aaa701e/src/core/assignments.ts",
+        "https://github.com/deepseek-ai/dsh-superagent-prototype/blob/6337fc823ce20251c8de8085948165c81aaa701e/src/executor/dsh.ts"
+      ],
+      "lolicode": [
+        "src-tauri/src/services/harness_desktop.rs",
+        "packages/lolicode-harness-runtime/host-operations.mjs"
+      ],
+      "acceptance": [
+        "node --test --test-name-pattern=\"manual secretary|worker queue|stopping a worker|worker-scoped\" packages/lolicode-harness-runtime/tests/host-operations.test.mjs"
+      ],
+      "note": "明确跟进续跑、独立队列、工作区权限和重启已经有验收；整体来源准入规则是宿主差异。"
+    },
+    {
+      "id": "reports",
+      "label": "任务报告和父会话事实投递",
+      "status": "partial",
+      "upstream": [
+        "https://github.com/deepseek-ai/dsh-superagent-prototype/blob/6337fc823ce20251c8de8085948165c81aaa701e/src/app/notices.ts",
+        "https://github.com/deepseek-ai/dsh-superagent-prototype/blob/6337fc823ce20251c8de8085948165c81aaa701e/src/app/outbox.ts",
+        "https://github.com/deepseek-ai/dsh-superagent-prototype/blob/6337fc823ce20251c8de8085948165c81aaa701e/src/app/delivery.ts",
+        "https://github.com/deepseek-ai/dsh-superagent-prototype/blob/6337fc823ce20251c8de8085948165c81aaa701e/src/core/replies.ts"
+      ],
+      "lolicode": [
+        "packages/lolicode-harness-runtime/host-secretary-report.mjs",
+        "src-tauri/src/services/harness_secretary.rs"
+      ],
+      "acceptance": [
+        "node scripts/tests/harness-desktop-acceptance.mjs",
+        "补测：progress 报告进入父模型上下文恰好一次、重启幂等、不得授予新的动作权限"
+      ],
+      "note": "report_task worker归属和UI就绪已验证；仅由UI不能认定父模型收到纯上下文的独立持久投递。"
+    },
+    {
+      "id": "context-only-note",
+      "label": "不唤醒任务的上下文便签",
+      "status": "needs-host-ui",
+      "upstream": [
+        "https://github.com/deepseek-ai/dsh-superagent-prototype/blob/6337fc823ce20251c8de8085948165c81aaa701e/docs/002-authorization.md",
+        "https://github.com/deepseek-ai/dsh-superagent-prototype/blob/6337fc823ce20251c8de8085948165c81aaa701e/src/core/tickets.ts"
+      ],
+      "lolicode": [
+        "packages/lolicode-harness-runtime/host-operations.mjs",
+        "src-tauri/src/services/harness_desktop.rs",
+        "docs/architecture/deepseek-superagent-adaptation.md"
+      ],
+      "acceptance": [
+        "补SDK测试：idle/ended/stopped worker 收便签不运行；事实在下次明确跟进可读；重复请求和重启不重复"
+      ],
+      "note": "本轮确认旧 send_task_note 仅在遗留 Rust runtime；当前 Harness host 未注册。普通 subagent.sendMessage 会唤醒空闲任务，不能冒充该能力。已修正文档。"
+    },
+    {
+      "id": "github",
+      "label": "GitHub来源、显式规则和审阅后回报",
+      "status": "partial",
+      "upstream": [
+        "https://github.com/deepseek-ai/dsh-superagent-prototype/blob/6337fc823ce20251c8de8085948165c81aaa701e/src/sources/github.ts",
+        "https://github.com/deepseek-ai/dsh-superagent-prototype/blob/6337fc823ce20251c8de8085948165c81aaa701e/src/sources/github-trigger.ts",
+        "https://github.com/deepseek-ai/dsh-superagent-prototype/blob/6337fc823ce20251c8de8085948165c81aaa701e/src/sources/github-channel.ts",
+        "https://github.com/deepseek-ai/dsh-superagent-prototype/blob/6337fc823ce20251c8de8085948165c81aaa701e/src/sources/github-pull.ts",
+        "https://github.com/deepseek-ai/dsh-superagent-prototype/blob/6337fc823ce20251c8de8085948165c81aaa701e/src/policy.ts"
+      ],
+      "lolicode": [
+        "src-tauri/src/commands/agent_secretary_github.rs",
+        "src-tauri/src/commands/agent_secretary_github_reply.rs",
+        "src-tauri/src/commands/agent_secretary_draft_pr.rs"
+      ],
+      "acceptance": [
+        "cargo test --manifest-path src-tauri/Cargo.toml --lib secretary_github",
+        "cargo test --manifest-path src-tauri/Cargo.toml --lib secretary_draft_pr"
+      ],
+      "note": "绑定账户、去重游标、规则和草稿发布已有适配；推断候选评估/PR状态驱动自动生命周期未等效。"
+    },
+    {
+      "id": "thread-subscription",
+      "label": "完整线程订阅及候选评估",
+      "status": "needs-host-ui",
+      "upstream": [
+        "https://github.com/deepseek-ai/dsh-superagent-prototype/blob/6337fc823ce20251c8de8085948165c81aaa701e/src/app/assessment.ts",
+        "https://github.com/deepseek-ai/dsh-superagent-prototype/blob/6337fc823ce20251c8de8085948165c81aaa701e/src/app/source-context.ts",
+        "https://github.com/deepseek-ai/dsh-superagent-prototype/blob/6337fc823ce20251c8de8085948165c81aaa701e/src/app/views/threads.ts",
+        "https://github.com/deepseek-ai/dsh-superagent-prototype/blob/6337fc823ce20251c8de8085948165c81aaa701e/src/core/intake.ts"
+      ],
+      "lolicode": [
+        "docs/architecture/deepseek-superagent-adaptation.md"
+      ],
+      "acceptance": [
+        "补测：多任务扇出、无唤醒事实路由、授权跟进恰好续跑一次、已停任务不复活、机器人来源不扩大权限"
+      ],
+      "note": "当前显式GitHub收件与来源链接是部分入口，不是完整订阅机制。"
+    },
+    {
+      "id": "feishu",
+      "label": "飞书来源",
+      "status": "needs-host-ui",
+      "upstream": [
+        "https://github.com/deepseek-ai/dsh-superagent-prototype/blob/6337fc823ce20251c8de8085948165c81aaa701e/src/sources/feishu.ts",
+        "https://github.com/deepseek-ai/dsh-superagent-prototype/blob/6337fc823ce20251c8de8085948165c81aaa701e/src/sources/feishu-trigger.ts",
+        "https://github.com/deepseek-ai/dsh-superagent-prototype/blob/6337fc823ce20251c8de8085948165c81aaa701e/src/sources/feishu-read.ts",
+        "https://github.com/deepseek-ai/dsh-superagent-prototype/blob/6337fc823ce20251c8de8085948165c81aaa701e/src/sources/feishu-channel.ts",
+        "https://github.com/deepseek-ai/dsh-superagent-prototype/blob/6337fc823ce20251c8de8085948165c81aaa701e/src/sources/feishu-image.ts"
+      ],
+      "lolicode": [
+        "docs/architecture/deepseek-superagent-adaptation.md"
+      ],
+      "acceptance": [
+        "先假bot收发/游标/去重/提及/direct/图片/重启测试，再使用已授权bot做身份与权限验收"
+      ],
+      "note": "尚无秘书飞书来源适配；真实端点验收需要外部账号，但不能因此把整个待适配工作标成平台不支持。"
+    },
+    {
+      "id": "cloud",
+      "label": "云端常驻与独立控制台",
+      "status": "blocked-platform-service",
+      "upstream": [
+        "https://github.com/deepseek-ai/dsh-superagent-prototype/blob/6337fc823ce20251c8de8085948165c81aaa701e/src/app/runtime.ts",
+        "https://github.com/deepseek-ai/dsh-superagent-prototype/blob/6337fc823ce20251c8de8085948165c81aaa701e/src/app/http.ts",
+        "https://github.com/deepseek-ai/dsh-superagent-prototype/blob/6337fc823ce20251c8de8085948165c81aaa701e/src/app/api.ts",
+        "https://github.com/deepseek-ai/dsh-superagent-prototype/blob/6337fc823ce20251c8de8085948165c81aaa701e/docs/005-panel.md",
+        "https://github.com/deepseek-ai/dsh-superagent-prototype/blob/6337fc823ce20251c8de8085948165c81aaa701e/docs/006-deployment.md"
+      ],
+      "lolicode": [
+        "docs/architecture/deepseek-superagent-adaptation.md"
+      ],
+      "acceptance": [
+        "按官方部署测试验证常驻、来源鉴权、控制台、恢复；需明确宿主及部署环境"
+      ],
+      "note": "当前是Windows桌面宿主，没有受管理云部署，不能声称等效完整研究原型。"
+    }
+  ]
+}

@@ -70,8 +70,8 @@
 
 ## 实现和验证
 
-协调逻辑位于 `crates/lolicode-agent/src/native/secretary.rs`，直接使用 `NativeEngine`。桌面命令位于 `src-tauri/src/commands/agent_secretary.rs`，任务界面位于 `src/features/agent/AgentSecretaryTasks.tsx`。
+当前生产执行使用官方 DeepSeek Harness SDK，协调适配位于 `packages/lolicode-harness-runtime/host-operations.mjs`、`host-secretary-report.mjs` 和 `src-tauri/src/services/harness_secretary.rs`、`harness_desktop.rs`。桌面命令由 `src-tauri/src/commands/agent_dispatch.rs` 路由，任务界面位于 `src/features/agent/AgentSecretaryTasks.tsx`。旧 Rust `NativeEngine` 不代表当前生产执行链。
 
 这是按当前原生架构编写的实现，参考 DeepSeek Superagent 的协调者、工作任务、GitHub 来源、上下文便签和持久投递机制。来源、差异与许可证见 [DeepSeek Superagent 原生适配记录](../architecture/deepseek-superagent-adaptation.md)。
 
-公开接口验收位于 `crates/lolicode-agent/tests/secretary_workflow.rs`，以本机确定性 SSE 响应器驱动生产执行链，实际验证任务分派、临时项目文件写入、自动汇总和重开不重复执行。该测试不调用外部模型，不代表已经验证真实模型的分派质量。
+当前公开接口回归位于 `packages/lolicode-harness-runtime/tests/host-operations.test.mjs`，隔离 Windows 桌面验收入口为 `node scripts/tests/harness-desktop-acceptance.mjs`。测试通过本机确定性模型验证原生派工、工作会话网页交付、队列、权限、重启和右栏打开，不代表已验证真实模型的分派质量。旧 `crates/lolicode-agent/tests/secretary_workflow.rs` 只验证遗留实现，不能替代 Harness 生产路径验收。

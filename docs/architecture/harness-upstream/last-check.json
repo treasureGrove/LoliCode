@@ -1,0 +1,388 @@
+{
+  "schemaVersion": 1,
+  "automationId": "deepseek-harness-lolicode",
+  "checkedAt": "2026-11-06T00:18:59.550Z",
+  "completedAt": "2026-11-06T00:54:33.336Z",
+  "localBranch": "main",
+  "localCommit": "a87ec6d8d7cc6ad5e04aedcbe9f8cb2d0040e750",
+  "containsMigration": true,
+  "version": "0.2.2-rc.1",
+  "eligibleNewerVersions": [],
+  "upstreamCommit": "66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db",
+  "superagentHead": "8c32a9dc5d72c033816c6a8110b37f40cf94fba4",
+  "artifactIntegrityVerified": true,
+  "action": "D-drive follow-up passed desktop validation and synced native Markdown copy, browser click ordering and attachment batching to local main.",
+  "productCodeChanged": true,
+  "isolatedProductCodeChanged": true,
+  "upgradeValidationPerformed": false,
+  "hostWiringValidationPerformed": true,
+  "hostWiringAccepted": true,
+  "isolatedCandidate": {
+    "status": "synced-after-follow-up",
+    "worktree": "C:/Users/admin/.codex/worktrees/lolicode-harness-export-20261106",
+    "baseCommit": "a87ec6d8d7cc6ad5e04aedcbe9f8cb2d0040e750",
+    "synced": true,
+    "files": [
+      {
+        "file": "packages/lolicode-harness-runtime/README.md",
+        "sha256": "0e84b3f243efd3e0d56b12e8e136945396e308e98e8744de9c6b942deb971756"
+      },
+      {
+        "file": "packages/lolicode-harness-runtime/host-operations.mjs",
+        "sha256": "06e83def474c6a9cb48e3512d3863430be8d6f2e3adfddd3080ebc4281a77b94"
+      },
+      {
+        "file": "packages/lolicode-harness-runtime/tests/host-operations.test.mjs",
+        "sha256": "800a68b1b408276b06699c4befee0af352565450bf952fbf1612f0410ab9ad9e"
+      },
+      {
+        "file": "scripts/tests/harness-desktop-acceptance.mjs",
+        "sha256": "89fa66a876d24c6ba14201b7fd764bc066c6937a91a8626572f0af766b799caf"
+      },
+      {
+        "file": "scripts/tests/harness-desktop-renderer.mjs",
+        "sha256": "9f04f9723ab44f2aa226de436f61f6d72aed28de859a6927ff81d390be012cda"
+      },
+      {
+        "file": "src-tauri/src/commands/agent_dispatch.rs",
+        "sha256": "678d380dcb8f63234d997e2c941bb9f8f56138ca2652d600941c0b0a080e57d4"
+      },
+      {
+        "file": "src-tauri/src/lib.rs",
+        "sha256": "c6f73bc502ca7f51377903cc6da7685fe3a2bfa8f31048f2018bee91c888afee"
+      },
+      {
+        "file": "src-tauri/src/services/harness_desktop.rs",
+        "sha256": "b341d4e4355c9e3257c415205b520e37368c29ed0e7296c0907bb86b012718f6"
+      },
+      {
+        "file": "src-tauri/src/services/harness_paths.rs",
+        "sha256": "492b844364b889137ab9f48a31120e382427711bce49e852ee4d56c4834c9234"
+      },
+      {
+        "file": "src-tauri/src/services/harness_runtime.rs",
+        "sha256": "eb447f6b597621c4ebe692ec94ffe802ad76e7b8e105f4e9686527c29373a8e8"
+      },
+      {
+        "file": "src/features/agent/AgentSessionMenu.tsx",
+        "sha256": "985e6b5c08501d60cfc40a237314f0271c5e7b79c4fe06505201de4c8e968fcb"
+      },
+      {
+        "file": "src/lib/api/agent.ts",
+        "sha256": "24c13371177b5051983939f4ddb265812dba10050c90c4bbe6cb5a1939ba9520"
+      },
+      {
+        "file": "tests/components/AgentSessionMenu.test.tsx",
+        "sha256": "0e2c733ef4f8b678f2bf79b7a87627f41248dc13801ced4c98b2add4e818b2e3"
+      },
+      {
+        "file": "docs/architecture/harness-session-markdown.md",
+        "sha256": "7f756925d6907255792145e6a7123ee19e2cd69373dd0c9dd60c0b02429114ad"
+      },
+      {
+        "file": "packages/lolicode-harness-runtime/host-session-markdown.mjs",
+        "sha256": "05a5e839bf6481c6ef6946a56a05495a33d5377e62ac9f2c3fd336ea3028ea3f"
+      },
+      {
+        "file": "scripts/tests/harness-desktop-session-export.mjs",
+        "sha256": "b377126cd89197bfd74ff93b75f9737ec45efdfb4b7bb740c3aa26aec38b1872"
+      },
+      {
+        "file": "src/features/agent/useAgentSessionMarkdownCopy.ts",
+        "sha256": "32bca1dc40d34694133447ad0fb008f813ed55a80f0b159fe1dd47bb31a86419"
+      }
+    ],
+    "passed": [
+      "TypeScript typecheck",
+      "3905 frontend tests",
+      "23 actual SDK tests including pre-compaction history and live/cold equality",
+      "strict Clippy",
+      "Rust filters markdown (9 passed) and harness_runtime::tests (2 passed)",
+      "Windows export running/cold, 22-turn pagination, child, empty/legacy errors, clipboard interception",
+      "Windows initial/restart/worker queue restart including images, approvals, history, secretary webpage delivery",
+      "Windows background-jobs",
+      "Windows native-modes and restart",
+      "Windows dock-tools and restart"
+    ],
+    "blockedBy": "Full-access native browser first click returns success but snapshot counter remains 0 instead of 1.",
+    "evidence": [
+      {
+        "phase": "session-export",
+        "result": "passed",
+        "log": "C:/Users/admin/AppData/Local/Temp/lolicode-export-native-session-export.log",
+        "report": "C:/Users/admin/AppData/Local/Temp/lolicode-harness-desktop-aujTYp/report.ndjson",
+        "phases": [
+          {
+            "phase": "session-export",
+            "result": "passed"
+          },
+          {
+            "phase": "session-export-restart",
+            "result": "passed"
+          }
+        ]
+      },
+      {
+        "phase": "full",
+        "result": "failed",
+        "log": "C:/Users/admin/AppData/Local/Temp/lolicode-export-native-full.log",
+        "report": "C:/Users/admin/AppData/Local/Temp/lolicode-harness-desktop-Ps8Hrz/report.ndjson",
+        "phases": [
+          {
+            "phase": "initial",
+            "result": "passed"
+          },
+          {
+            "phase": "restart",
+            "result": "passed"
+          },
+          {
+            "phase": "worker-queue-restart",
+            "result": "passed"
+          },
+          {
+            "phase": "browser-tool",
+            "result": "failed"
+          }
+        ]
+      },
+      {
+        "phase": "background-jobs",
+        "result": "passed",
+        "log": "C:/Users/admin/AppData/Local/Temp/lolicode-export-native-background-jobs.log",
+        "report": "C:/Users/admin/AppData/Local/Temp/lolicode-harness-desktop-70EvFg/report.ndjson",
+        "phases": [
+          {
+            "phase": "background-jobs",
+            "result": "passed"
+          }
+        ]
+      },
+      {
+        "phase": "native-modes",
+        "result": "passed",
+        "log": "C:/Users/admin/AppData/Local/Temp/lolicode-export-native-native-modes.log",
+        "report": "C:/Users/admin/AppData/Local/Temp/lolicode-harness-desktop-9ZG2fJ/report.ndjson",
+        "phases": [
+          {
+            "phase": "native-modes",
+            "result": "passed"
+          },
+          {
+            "phase": "native-modes-restart",
+            "result": "passed"
+          }
+        ]
+      },
+      {
+        "phase": "dock-tools",
+        "result": "passed",
+        "log": "C:/Users/admin/AppData/Local/Temp/lolicode-export-native-dock-tools.log",
+        "report": "C:/Users/admin/AppData/Local/Temp/lolicode-harness-desktop-jBuTKl/report.ndjson",
+        "phases": [
+          {
+            "phase": "dock-tools",
+            "result": "passed"
+          },
+          {
+            "phase": "dock-tools-restart",
+            "result": "passed"
+          }
+        ]
+      }
+    ]
+  },
+  "priorWorkingChangesPreserved": [
+    "src-tauri/src/codex_rollout_file.rs",
+    "src-tauri/src/services/session_usage_codex.rs"
+  ],
+  "auditFiles": [
+    "66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db.json",
+    "superagent-8c32a9dc5d72c033816c6a8110b37f40cf94fba4.json"
+  ],
+  "validationLogs": [
+    "C:/Users/admin/AppData/Local/Temp/lolicode-export-vitest.log",
+    "C:/Users/admin/AppData/Local/Temp/lolicode-export-sdk-full.log",
+    "C:/Users/admin/AppData/Local/Temp/lolicode-export-cargo.log",
+    "C:/Users/admin/AppData/Local/Temp/lolicode-export-runtime.log"
+  ],
+  "validationLimitation": "No new version or installer upgrade tested. Dedicated feature acceptance does not waive the failed broader browser gate.",
+  "setupNotes": [
+    "Serial preparation resolved Windows EPERM during simultaneous Cargo/resource rename.",
+    "D: shared cache validation left about 1.5 GB free. Automatic approval review rejected removal of this run's test cache (blocked by policy); no deletion occurred. Final native executable uses a fresh C: target with incremental compilation disabled.",
+    "Installed development app PID 63752 was preserved.",
+    "Do not use the temporary lolicode-export-finalize.mjs blindly; its logs need UTF-16 handling and all gates must pass first."
+  ],
+  "followUp": {
+    "completedAt": "2026-11-06T02:37:34.199Z",
+    "worktree": "D:/projectGithub/lolicode-harness-validation",
+    "baseCommit": "a87ec6d8d7cc6ad5e04aedcbe9f8cb2d0040e750",
+    "result": "synced-local-main",
+    "syncedFiles": [
+      {
+        "file": "docs/architecture/harness-session-markdown.md",
+        "sha256": "7f756925d6907255792145e6a7123ee19e2cd69373dd0c9dd60c0b02429114ad"
+      },
+      {
+        "file": "packages/lolicode-harness-runtime/README.md",
+        "sha256": "0e84b3f243efd3e0d56b12e8e136945396e308e98e8744de9c6b942deb971756"
+      },
+      {
+        "file": "packages/lolicode-harness-runtime/host-operations.mjs",
+        "sha256": "06e83def474c6a9cb48e3512d3863430be8d6f2e3adfddd3080ebc4281a77b94"
+      },
+      {
+        "file": "packages/lolicode-harness-runtime/host-session-markdown.mjs",
+        "sha256": "05a5e839bf6481c6ef6946a56a05495a33d5377e62ac9f2c3fd336ea3028ea3f"
+      },
+      {
+        "file": "packages/lolicode-harness-runtime/tests/host-operations.test.mjs",
+        "sha256": "800a68b1b408276b06699c4befee0af352565450bf952fbf1612f0410ab9ad9e"
+      },
+      {
+        "file": "scripts/tests/harness-desktop-acceptance.mjs",
+        "sha256": "c2aa645c9761a8de176d94df6fe652bbda3309772bc82079127613117d38d091"
+      },
+      {
+        "file": "scripts/tests/harness-desktop-renderer.mjs",
+        "sha256": "bfec76bbf095122a4ecf7d3cca7726f233e59c0d0355c1ae4d3d6064af6304e8"
+      },
+      {
+        "file": "scripts/tests/harness-desktop-session-export.mjs",
+        "sha256": "b377126cd89197bfd74ff93b75f9737ec45efdfb4b7bb740c3aa26aec38b1872"
+      },
+      {
+        "file": "scripts/tests/harness-desktop-switching.mjs",
+        "sha256": "38893fd13509a6c777e7babaa1cb1083d0c907d1406fb59cfdf1f11393ecc612"
+      },
+      {
+        "file": "src-tauri/src/commands/agent_dispatch.rs",
+        "sha256": "678d380dcb8f63234d997e2c941bb9f8f56138ca2652d600941c0b0a080e57d4"
+      },
+      {
+        "file": "src-tauri/src/lib.rs",
+        "sha256": "c6f73bc502ca7f51377903cc6da7685fe3a2bfa8f31048f2018bee91c888afee"
+      },
+      {
+        "file": "src-tauri/src/services/agent_browser.rs",
+        "sha256": "93e467decdde9a29033e2a41250649d091ebf927f3d6b74ae7d0afc483d7b47a"
+      },
+      {
+        "file": "src-tauri/src/services/harness_desktop.rs",
+        "sha256": "b341d4e4355c9e3257c415205b520e37368c29ed0e7296c0907bb86b012718f6"
+      },
+      {
+        "file": "src-tauri/src/services/harness_paths.rs",
+        "sha256": "492b844364b889137ab9f48a31120e382427711bce49e852ee4d56c4834c9234"
+      },
+      {
+        "file": "src-tauri/src/services/harness_runtime.rs",
+        "sha256": "eb447f6b597621c4ebe692ec94ffe802ad76e7b8e105f4e9686527c29373a8e8"
+      },
+      {
+        "file": "src/features/agent/AgentPage.tsx",
+        "sha256": "c9062d54f405cbdd9a0cc417bc3dd781886f0156408a8ed72bf1143ad4931cfa"
+      },
+      {
+        "file": "src/features/agent/AgentSessionMenu.tsx",
+        "sha256": "985e6b5c08501d60cfc40a237314f0271c5e7b79c4fe06505201de4c8e968fcb"
+      },
+      {
+        "file": "src/features/agent/useAgentSessionMarkdownCopy.ts",
+        "sha256": "32bca1dc40d34694133447ad0fb008f813ed55a80f0b159fe1dd47bb31a86419"
+      },
+      {
+        "file": "src/lib/agentImageStore.ts",
+        "sha256": "d566f86b4ef71b8132bfd33fb7a4a77c8ca3ac45ae9844b359c471d28391564d"
+      },
+      {
+        "file": "src/lib/api/agent.ts",
+        "sha256": "24c13371177b5051983939f4ddb265812dba10050c90c4bbe6cb5a1939ba9520"
+      },
+      {
+        "file": "tests/components/AgentSessionMenu.test.tsx",
+        "sha256": "0e2c733ef4f8b678f2bf79b7a87627f41248dc13801ced4c98b2add4e818b2e3"
+      }
+    ],
+    "evidence": [
+      {
+        "phase": "full",
+        "report": "D:/projectGithub/lolicode-harness-validation/src-tauri/target/acceptance-logs/lolicode-harness-desktop-YF2co9/report.ndjson",
+        "phases": [
+          "initial",
+          "restart",
+          "worker-queue-restart",
+          "browser-tool",
+          "browser-tool-cleanup"
+        ]
+      },
+      {
+        "phase": "dock-tools",
+        "report": "D:/projectGithub/lolicode-harness-validation/src-tauri/target/acceptance-logs/lolicode-harness-desktop-SOxLYM/report.ndjson",
+        "phases": [
+          "dock-tools",
+          "dock-tools-restart"
+        ]
+      },
+      {
+        "phase": "session-export",
+        "report": "D:/projectGithub/lolicode-harness-validation/src-tauri/target/acceptance-logs/lolicode-harness-desktop-7BFJIV/report.ndjson",
+        "phases": [
+          "session-export",
+          "session-export-restart"
+        ]
+      },
+      {
+        "phase": "background-jobs",
+        "report": "D:/projectGithub/lolicode-harness-validation/src-tauri/target/acceptance-logs/lolicode-harness-desktop-bDcu3j/report.ndjson",
+        "phases": [
+          "background-jobs"
+        ]
+      },
+      {
+        "phase": "native-modes",
+        "report": "D:/projectGithub/lolicode-harness-validation/src-tauri/target/acceptance-logs/lolicode-harness-desktop-gQYDiM/report.ndjson",
+        "phases": [
+          "native-modes",
+          "native-modes-restart"
+        ]
+      },
+      {
+        "phase": "switching",
+        "report": "D:/projectGithub/lolicode-harness-validation/src-tauri/target/acceptance-logs/lolicode-harness-desktop-uTuTBA/report.ndjson",
+        "phases": [
+          "switching"
+        ]
+      }
+    ],
+    "browserPermissionsRuns": [
+      1,
+      2,
+      3,
+      4
+    ],
+    "frontendTests": 181,
+    "typecheck": true,
+    "cleanedIncrementalCacheBytes": 7882757807,
+    "performance": {
+      "historyTurns": 160,
+      "baseline": {
+        "coldMs": 80.6,
+        "snapshotReadMs": 26.6,
+        "attachmentReadTransactions": 320,
+        "report": "D:/projectGithub/lolicode-harness-validation/src-tauri/target/acceptance-logs/lolicode-harness-desktop-s2JXr8/report.ndjson"
+      },
+      "optimized": {
+        "coldMs": 81.6,
+        "snapshotReadMs": 34.3,
+        "attachmentReadTransactions": 1,
+        "report": "D:/projectGithub/lolicode-harness-validation/src-tauri/target/acceptance-logs/lolicode-harness-desktop-uTuTBA/report.ndjson"
+      },
+      "note": "Confirmed removal of per-message IndexedDB transactions and restoration of a stored document. This fixture showed no meaningful first-paint speedup. Retained warm histories were generally 34 ms."
+    },
+    "fixtureCorrections": [
+      "Reset the disposable native window state after detecting a restored height of 4697 physical pixels.",
+      "Reset only prior dock records at the beginning of each fresh dock fixture, preserving the state across its restart."
+    ]
+  }
+}
