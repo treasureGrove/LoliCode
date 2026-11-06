@@ -471,6 +471,7 @@ test("manual secretary work starts one native child and follows up after restart
   const runtime = await fixture(t, (body, response) => {
     const input = JSON.stringify(body.messages);
     assert.match(input, new RegExp(initial));
+    assert.match(input, /Current working directory:.+second-project/);
     assert.doesNotMatch(input, /You are the user's LoliCode secretary/);
     if (input.includes(followup)) {
       assert.match(input, /first worker answer/);
@@ -480,13 +481,22 @@ test("manual secretary work starts one native child and follows up after restart
     }
     modelCalls.push(input);
   });
+  const target = path.join(path.dirname(runtime.project), "second-project");
+  await mkdir(target);
   let client = await runtime.start();
   await client.open(sessionId);
-  const delegate = { sessionId, childSessionId, label: title, content: [{ type: "text", text: initial }] };
+  const delegate = { sessionId, childSessionId, label: title, cwd: target, workspacePolicy: "review", content: [{ type: "text", text: initial }] };
   await assert.rejects(client.request("lolicode/secretary/delegate-worker", delegate), /configured secretary/);
   await client.request("lolicode/session/configure-secretary", { sessionId });
   assert.equal((await client.request("lolicode/secretary/delegate-worker", delegate)).childSessionId, childSessionId);
   await client.wait(sessionId);
+  assert.ok(client.notifications.some(({ method, params }) =>
+    method === "session.event" && params.sessionId === childSessionId &&
+    params.event.type === "working-directory/change" &&
+    path.normalize(params.event.data.cwd) === path.normalize(target)),
+  JSON.stringify(client.notifications.filter(({ method, params }) =>
+    ["subagent.started", "subagent.finished", "lolicode/subagent.directory"].includes(method) ||
+    params.event?.type === "working-directory/change")));
   assert.ok(client.notifications.some(({ method, params }) =>
     method === "subagent.finished" && params.childSessionId === childSessionId && params.status === "ok"));
   await client.shutdown();

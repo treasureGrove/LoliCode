@@ -503,6 +503,19 @@ impl HarnessDesktop {
                 Value::Null
             };
             let command = SecretaryCommand::parse(method, args, content)?;
+            if let SecretaryCommand::Delegate { project_path: Some(path), .. } = &command {
+                crate::commands::agent_dispatch::check_project(app, path)?;
+                let secretary: lolicode_agent::AgentSession = carrier
+                    .call("getSessionMetadata", json!({"sessionId":id}), false)
+                    .await?;
+                let remote = carrier.remote_projects(&app.state::<crate::store::AppState>()).await;
+                if !super::agent_host::is_standalone_workspace(Path::new(&secretary.project_path))
+                    || remote.owns(Path::new(path))
+                    || super::agent_host::canonical_project(path)?.as_path() != Path::new(path)
+                {
+                    return Err("跨项目派工需要总秘书和已打开的本地项目".into());
+                }
+            }
             let request = request_id(args)?;
             let fingerprint = secretary_fingerprint(args);
             loop {

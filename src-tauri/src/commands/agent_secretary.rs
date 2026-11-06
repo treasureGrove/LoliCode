@@ -11,6 +11,7 @@ use crate::{
 use lolicode_agent::{AgentSecretaryState, AgentSecretaryTask, AgentSession, AgentStatus};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::path::Path;
 use tauri::{AppHandle, Manager};
 
 /// Deliberately separate from the full task DTO: global companion polling must
@@ -20,6 +21,8 @@ use tauri::{AppHandle, Manager};
 pub struct AgentSecretaryTaskActivity {
     id: String,
     session_id: String,
+    #[serde(default)]
+    project_path: String,
     title: String,
     status: String,
     updated_at: u64,
@@ -32,6 +35,8 @@ pub struct AgentSecretaryActivity {
     project_path: String,
     title: String,
     status: AgentStatus,
+    #[serde(default)]
+    global: bool,
     tasks: Vec<AgentSecretaryTaskActivity>,
 }
 
@@ -58,6 +63,9 @@ pub async fn get_agent_secretary_activity(
     let preferences = agent_preferences::load(&app.state::<AppState>().db)?;
     let mut activity = registered_activity(activity, &preferences);
     for secretary in &mut activity {
+        secretary.global = crate::services::agent_host::is_standalone_workspace(Path::new(
+            &secretary.project_path,
+        ));
         if let Ok(snapshot) = native::<lolicode_agent::AgentSnapshot>(
             &app,
             "getSession",
@@ -81,11 +89,16 @@ pub async fn get_agent_secretary_activity(
                 .into_iter()
                 .filter(|task| {
                     task.parent_session_id == secretary.session_id
-                        && path_key(&task.project_path) == path_key(&secretary.project_path)
+                        && preferences
+                            .projects
+                            .contains_key(&path_key(&task.project_path))
+                        && (path_key(&task.project_path) == path_key(&secretary.project_path)
+                            || secretary.global)
                 })
                 .map(|task| AgentSecretaryTaskActivity {
                     id: task.id,
                     session_id: task.session_id,
+                    project_path: task.project_path,
                     title: task.title,
                     status: task.status,
                     updated_at: task.updated_at,
@@ -104,7 +117,8 @@ pub(super) fn verify_task(
     task: &AgentSecretaryTask,
 ) -> Result<(), String> {
     if task.parent_session_id != parent_session_id
-        || path_key(&task.project_path) != path_key(project_path)
+        || (path_key(&task.project_path) != path_key(project_path)
+            && !crate::services::agent_host::is_standalone_workspace(Path::new(project_path)))
         || task_id.is_some_and(|expected| task.id != expected)
     {
         return Err("返回的任务与当前秘书不一致".into());
@@ -149,8 +163,16 @@ pub async fn get_agent_secretary(
     session_id: String,
 ) -> Result<AgentSecretaryState, String> {
     let project = session_project(&app, &session_id).await?;
-    let state: AgentSecretaryState =
+    let mut state: AgentSecretaryState =
         native(&app, "getSecretary", json!({"sessionId":session_id}), false).await?;
+    if crate::services::agent_host::is_standalone_workspace(Path::new(&project)) {
+        let preferences = agent_preferences::load(&app.state::<AppState>().db)?;
+        state.tasks.retain(|task| {
+            preferences
+                .projects
+                .contains_key(&path_key(&task.project_path))
+        });
+    }
     if state.session_id != session_id {
         return Err("返回的秘书与当前选择不一致".into());
     }
@@ -169,6 +191,7 @@ pub async fn delegate_agent_secretary_task(
     request_id: String,
     locale: Option<String>,
     execution_mode: Option<String>,
+    project_path: Option<String>,
 ) -> Result<AgentSecretaryTask, String> {
     let project = session_project(&app, &session_id).await?;
     let task: AgentSecretaryTask = native(
@@ -177,11 +200,17 @@ pub async fn delegate_agent_secretary_task(
         json!({
             "sessionId":session_id,"title":title,"instructions":instructions,
             "requestId":request_id,"locale":locale,"executionMode":execution_mode,
+            "projectPath":project_path,
         }),
         true,
     )
     .await?;
     verify_task(&app, &session_id, &project, None, &task)?;
+    if let Some(path) = project_path {
+        if path_key(&task.project_path) != path_key(&path) {
+            return Err("返回的任务与选中的项目不一致".into());
+        }
+    }
     Ok(task)
 }
 

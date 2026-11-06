@@ -2640,7 +2640,11 @@ export function AgentPage({
     }));
     if (!result.workspace.standalone) rememberProject(result.workspace.path);
   };
-  const openProject = async (path?: string, preferredSessionId?: string) => {
+  const openProject = async (
+    path?: string,
+    preferredSessionId?: string,
+    relatedSession?: AgentSession,
+  ) => {
     if (mutation.current || initializing) return;
     mutation.current = true;
     setBusy("project");
@@ -2658,6 +2662,13 @@ export function AgentPage({
       const result = await agentApi.openProject(selectedPath);
       if (!mounted.current || generation.current !== requestGeneration) return;
       result.warnings?.forEach((warning) => toast.warning(warning));
+      if (relatedSession) {
+        if (result.workspace.path !== relatedSession.projectPath)
+          throw new Error("打开的工作区与工作会话不一致，请重新打开。");
+        if (!result.sessions.some(({ id }) => id === relatedSession.id)) {
+          result.sessions = [relatedSession, ...result.sessions];
+        }
+      }
       adoptProject(result, preferredSessionId);
       const knownProjects = await agentApi.listProjects();
       if (!mounted.current || generation.current !== requestGeneration) return;
@@ -2766,6 +2777,7 @@ export function AgentPage({
     try {
       let target = workspace;
       let targetCatalog = catalog;
+      let standalone: AgentProjectResult | undefined;
       let requestedSession: AgentSession | undefined;
       let parentSession: AgentSession | undefined;
       const requestedId = request?.workerSessionId || request?.sessionId;
@@ -2786,8 +2798,7 @@ export function AgentPage({
             .session;
           if (
             parentSession.id !== link.parentSessionId ||
-            parentSession.coordination?.role !== "secretary" ||
-            parentSession.projectPath !== requestedSession.projectPath
+            parentSession.coordination?.role !== "secretary"
           )
             throw new Error("工作任务的秘书关联已失效，请重新打开。");
         } else if (requestedSession.coordination?.role !== "secretary") {
@@ -2828,24 +2839,16 @@ export function AgentPage({
           projectPath: result.workspace.path,
         }));
       }
-      if (!target) {
-        const result = await agentApi.openStandalone();
+      if (!target || (!requestedPath && !target.standalone)) {
+        standalone = await agentApi.openStandalone();
         if (
           !mounted.current ||
           generation.current !== requestGeneration ||
           !requestCurrent()
         )
           return;
-        result.warnings?.forEach((warning) => toast.warning(warning));
-        adoptProject(result);
-        target = result.workspace;
-        targetCatalog = result.catalog;
-        setEngine((old) => ({
-          ...old,
-          available: true,
-          running: true,
-          projectPath: target!.path,
-        }));
+        target = standalone.workspace;
+        targetCatalog = standalone.catalog;
       }
       if (requestedSession) {
         const related = parentSession
@@ -2888,7 +2891,9 @@ export function AgentPage({
         workspacePermission(
           sourceSession?.permissionMode
             ? sessionPermissionMode(sourceSession.permissionMode)
-            : permissionMode,
+            : target.standalone
+              ? "ask"
+              : permissionMode,
           target,
         ),
         sourceSession
@@ -2920,6 +2925,16 @@ export function AgentPage({
             defaultValue: "秘书会话与当前工作区不一致，请重新打开。",
           }),
         );
+      if (standalone) {
+        standalone.warnings?.forEach((warning) => toast.warning(warning));
+        adoptProject(standalone, session.id);
+        setEngine((old) => ({
+          ...old,
+          available: true,
+          running: true,
+          projectPath: session.projectPath,
+        }));
+      }
       setShowArchived(false);
       setActiveTool(null);
       setSessions((old) => [
@@ -2989,12 +3004,22 @@ export function AgentPage({
       return;
     }
     if (!isCurrent()) return;
-    if (next.session.id !== id || next.session.projectPath !== target)
+    const link = next.session.coordination;
+    if (
+      next.session.id !== id ||
+      (id === secretarySessionId
+        ? link?.role !== "secretary"
+        : link?.role !== "worker" || link.parentSessionId !== secretarySessionId)
+    )
       throw new Error(
         t("agentSecretary.openMismatch", {
           defaultValue: "工作对话与当前工作区不一致，请重新读取。",
         }),
       );
+    if (next.session.projectPath !== target) {
+      await openProject(next.session.projectPath, id, next.session);
+      return;
+    }
     setShowArchived(false);
     setSessions((old) => [
       next.session,
@@ -4926,6 +4951,9 @@ export function AgentPage({
               }
               active={isActive && !activeTool}
               onOpenSession={openSecretarySession}
+              projectChoices={
+                isSecretary && workspace?.standalone ? sidebarProjects : undefined
+              }
               onFocusComposer={
                 isSecretary
                   ? () => composerInputRef.current?.focus()

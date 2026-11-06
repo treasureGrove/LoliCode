@@ -226,12 +226,14 @@ export interface AgentSecretaryGithubReplyReceipt {
 /** Read-only global projection for the companion; no task prompts or results. */
 export interface AgentSecretaryActivity {
   sessionId: string;
+  global?: boolean;
   projectPath: string;
   title: string;
   status: AgentStatus;
   tasks: Array<{
     id: string;
     sessionId: string;
+    projectPath?: string;
     title: string;
     status: AgentSecretaryTaskStatus;
     updatedAt: number;

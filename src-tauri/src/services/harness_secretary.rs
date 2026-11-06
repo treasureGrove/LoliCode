@@ -67,6 +67,7 @@ pub(super) enum SecretaryCommand {
         title: String,
         instructions: String,
         execution_mode: AgentSecretaryExecutionMode,
+        project_path: Option<String>,
         source_context: Option<String>,
         source_url: Option<String>,
         automatic: bool,
@@ -111,6 +112,9 @@ impl SecretaryCommand {
             serde_json::from_value(args["executionMode"].clone())
                 .map_err(|_| "执行方式必须是 shared 或 worktree")?
         };
+        let project_path = (!args["projectPath"].is_null())
+            .then(|| bounded(args, "projectPath", 32768).map(str::to_owned))
+            .transpose()?;
         let source_context = (!args["sourceContext"].is_null())
             .then(|| bounded(args, "sourceContext", 65536).map(str::to_owned))
             .transpose()?;
@@ -129,6 +133,7 @@ impl SecretaryCommand {
             title: title.into(),
             instructions,
             execution_mode,
+            project_path,
             source_context,
             source_url,
             automatic,
@@ -221,6 +226,7 @@ impl HarnessSecretary {
             title,
             instructions,
             execution_mode,
+            project_path,
             source_url,
             automatic,
             ..
@@ -243,6 +249,10 @@ impl HarnessSecretary {
         if &task.title != title
             || &task.instructions != instructions
             || task.execution_mode != *execution_mode
+            || project_path.as_ref().is_some_and(|path| {
+                super::agent_preferences::path_key(path)
+                    != super::agent_preferences::path_key(&task.project_path)
+            })
             || &task.source_url != source_url
             || task.automatic != *automatic
         {
@@ -263,12 +273,12 @@ impl HarnessSecretary {
         command: SecretaryCommand,
         legacy: Option<(AgentSnapshot, String)>,
     ) -> Result<(AgentSecretaryTask, WorkerAction), String> {
-        let project = super::agent_host::canonical_project(&parent.session.project_path)?;
         let (id, mut content) = match command {
             SecretaryCommand::Delegate {
                 title,
                 instructions,
                 execution_mode,
+                project_path,
                 source_context,
                 source_url,
                 automatic,
@@ -278,6 +288,12 @@ impl HarnessSecretary {
                 }
                 let id = Uuid::new_v4();
                 let mut worker = Worker::new(parent, "", id);
+                if let Some(path) = project_path {
+                    worker.bind_project(path);
+                    worker.snapshot.session.permission_mode = "ask".into();
+                    worker.full_access_selected = false;
+                }
+                let project = super::agent_host::canonical_project(&worker.task.project_path)?;
                 worker.started = false;
                 worker.set_title(&json!(title));
                 worker.task.instructions = instructions.clone();
@@ -359,6 +375,7 @@ impl HarnessSecretary {
         if worker.permission_locked()
             && !worker.task.automatic
             && !worker.task.id.starts_with("task-")
+            && worker.task.project_path == parent.session.project_path
         {
             worker
                 .snapshot
@@ -379,7 +396,7 @@ impl HarnessSecretary {
                 let root = worktree_storage(profile)?;
                 lolicode_agent::native::secretary_worktree_root(&root, tree).await?
             }
-            None => project,
+            None => super::agent_host::canonical_project(&worker.task.project_path)?,
         };
         if worker.task.worktree.is_some() {
             content.insert(0, json!({"type":"text","text":"This task uses an independent Git worktree. Read and edit files only in its working directory. Leave its changes and branch for review. Do not merge, push, or change the primary checkout."}));
@@ -587,10 +604,19 @@ impl HarnessSecretary {
                 if uuid.to_string() != sdk_child || sdk_child == sdk_root {
                     return;
                 }
-                let worker = self
+                let parent_scope = self
                     .workers
-                    .entry(sdk_child.into())
-                    .or_insert_with(|| Worker::new(parent, sdk_parent, uuid));
+                    .get(sdk_parent)
+                    .map(|worker| (worker.task.project_path.clone(), worker.permission_mode()));
+                let worker = self.workers.entry(sdk_child.into()).or_insert_with(|| {
+                    let mut worker = Worker::new(parent, sdk_parent, uuid);
+                    if let Some((path, permission)) = parent_scope {
+                        worker.bind_project(path);
+                        worker.snapshot.session.permission_mode = permission.into();
+                        worker.full_access_selected = permission == "full_access";
+                    }
+                    worker
+                });
                 if worker.sdk_parent.is_empty() && sdk_parent == sdk_root {
                     worker.sdk_parent = sdk_parent.into();
                 }
@@ -792,6 +818,11 @@ impl Worker {
             active_workspace_policy: None,
             projection: HarnessSnapshotProjection::default(),
         }
+    }
+
+    fn bind_project(&mut self, path: String) {
+        self.snapshot.session.project_path.clone_from(&path);
+        self.task.project_path = path;
     }
 
     fn set_title(&mut self, value: &Value) {
@@ -1044,6 +1075,48 @@ mod tests {
     ) {
         outcomes.apply(&notification).unwrap();
         secretary.apply(root, ROOT, &notification, outcomes);
+    }
+
+    #[tokio::test]
+    async fn manual_cross_project_worker_retains_its_directory_and_review_policy() {
+        let workspace = tempfile::tempdir().unwrap();
+        let project = tempfile::tempdir().unwrap();
+        let root = root_snapshot(workspace.path());
+        let target =
+            super::super::agent_host::canonical_project(&project.path().to_string_lossy()).unwrap();
+        let mut secretary = HarnessSecretary::default();
+        let command = SecretaryCommand::parse(
+            "delegateSecretaryTask",
+            &json!({"title":"Review", "instructions":"Read the project", "projectPath":target}),
+            Value::Null,
+        )
+        .unwrap();
+        let (task, start) = secretary
+            .prepare_action(workspace.path(), &root, "request-a", command, None)
+            .await
+            .unwrap();
+        assert_eq!(task.parent_session_id, root.session.id);
+        assert_eq!(start.cwd, target);
+        assert_eq!(start.workspace_policy, "review");
+        secretary.settle_action(&start.child, None);
+        let saved = serde_json::to_vec(&secretary).unwrap();
+        let mut restored: HarnessSecretary = serde_json::from_slice(&saved).unwrap();
+        let (_, followup) = restored
+            .prepare_action(
+                workspace.path(),
+                &root,
+                "request-b",
+                SecretaryCommand::Prompt {
+                    task_id: task.id,
+                    content: json!([{"type":"text", "text":"Check again"}]),
+                },
+                None,
+            )
+            .await
+            .unwrap();
+        assert!(!followup.start);
+        assert_eq!(followup.cwd, target);
+        assert_eq!(followup.workspace_policy, "review");
     }
 
     #[test]

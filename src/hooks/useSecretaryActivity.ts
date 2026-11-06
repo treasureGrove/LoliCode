@@ -91,7 +91,11 @@ export function summarizeSecretaryActivity(
           : status === "running"
             ? "thinking"
             : "idle";
-  const owner = useWorker ? selected!.owner : chief;
+  const owner = useWorker
+    ? selected!.owner
+    : phase === "idle"
+      ? sessions.find((session) => session.global)
+      : chief;
   return {
     phase,
     running,
@@ -108,7 +112,10 @@ export function summarizeSecretaryActivity(
           sessionId: owner.sessionId,
           projectPath: owner.projectPath,
           ...(useWorker && (phase !== "working" || running + queued === 1)
-            ? { workerSessionId: selected!.task.sessionId }
+            ? {
+                workerSessionId: selected!.task.sessionId,
+                projectPath: selected!.task.projectPath || owner.projectPath,
+              }
             : {}),
         }
       : undefined,

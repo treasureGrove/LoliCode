@@ -145,6 +145,53 @@ describe("AgentSecretaryTasks", () => {
     );
   });
 
+  it("dispatches different project directories through one global secretary", async () => {
+    const projects = ["A", "B"].map((name) => ({
+      name,
+      path: `D:/fixture/${name}`,
+      pinned: false,
+      lastOpenedAt: 0,
+    }));
+    vi.mocked(agentApi.delegateSecretaryTask).mockImplementation(
+      async (
+        parentSessionId,
+        title,
+        instructions,
+        requestId,
+        _mode,
+        projectPath,
+      ) =>
+        task({ parentSessionId, title, instructions, requestId, projectPath }),
+    );
+    render(
+      <AgentSecretaryTasks
+        sessionId="lc:secretary"
+        onOpenSession={vi.fn()}
+        projectChoices={projects}
+      />,
+    );
+    await flush();
+    for (const project of projects) {
+      fireEvent.click(screen.getByRole("button", { name: "交办任务" }));
+      fireEvent.change(screen.getByLabelText("执行项目"), {
+        target: { value: project.path },
+      });
+      fireEvent.change(screen.getByLabelText("任务名称"), {
+        target: { value: project.name },
+      });
+      fireEvent.change(screen.getByLabelText("工作要求"), {
+        target: { value: "核对项目文件" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "开始执行" }));
+      await flush();
+    }
+    expect(
+      vi
+        .mocked(agentApi.delegateSecretaryTask)
+        .mock.calls.map(([owner, , , , , directory]) => [owner, directory]),
+    ).toEqual(projects.map((project) => ["lc:secretary", project.path]));
+  });
+
   it("places real parents before nested conversations and keeps unresolved links usable", async () => {
     const parent = task({ id: "parent", title: "上级工作", createdAt: 3 });
     const child = task({

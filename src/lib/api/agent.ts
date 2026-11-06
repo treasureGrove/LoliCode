@@ -178,6 +178,7 @@ export const agentApi = {
     instructions: string,
     requestId: string,
     executionMode?: AgentSecretaryExecutionMode,
+    projectPath?: string,
   ) =>
     invoke<AgentSecretaryTask>("delegate_agent_secretary_task", {
       sessionId,
@@ -185,6 +186,7 @@ export const agentApi = {
       instructions,
       requestId,
       ...(executionMode ? { executionMode } : {}),
+      ...(projectPath ? { projectPath } : {}),
       locale: messageLocale(),
     }),
   getSecretaryGithub: (sessionId: string) =>

@@ -370,9 +370,10 @@ beforeEach(() => {
     });
   vi.mocked(agentApi.openSecretary)
     .mockReset()
-    .mockImplementation(async () => {
+    .mockImplementation(async (_model, _permission, _effort, projectPath) => {
       snapshot.session = {
         ...structuredClone(session),
+        projectPath: projectPath ?? project,
         id: "lc:secretary",
         title: "Loli 秘书",
         coordination: { role: "secretary" },
@@ -1015,7 +1016,7 @@ describe("AgentPage", () => {
     expect(consumed).toHaveBeenCalledTimes(1);
   });
 
-  it("places the secretary beside new conversation and inherits current conversation settings", async () => {
+  it("places the global secretary beside new conversation and uses its own workspace", async () => {
     snapshot.session.permissionMode = "ask";
     snapshot.session.reasoningEffort = "high";
     snapshot.session.contextLimit = 32000;
@@ -1028,9 +1029,9 @@ describe("AgentPage", () => {
     expect(agentApi.openSecretary).toHaveBeenCalledWith(
       catalog.models[0].id,
       "ask",
-      "high",
-      project,
-      32000,
+      undefined,
+      "D:/fixture/app/agent/standalone-workspace",
+      undefined,
     );
     expect(
       screen.getByRole("heading", { name: "Loli 秘书" }),
@@ -1041,6 +1042,30 @@ describe("AgentPage", () => {
     expect(screen.getByRole("button", { name: "交办任务" })).toBeEnabled();
     expect(screen.getByText("今天有什么交给我？")).toBeInTheDocument();
     expect(button).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("opens the same global secretary from different project workspaces", async () => {
+    const standalone = "D:/fixture/app/agent/standalone-workspace";
+    const other = "D:/fixture/other";
+    vi.mocked(agentApi.openProject).mockImplementation(async (path) => ({
+      workspace: { path, name: path === other ? "other" : "project" },
+      catalog,
+      sessions: [],
+    }));
+    const view = render(<AgentPage />);
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: "打开 Loli 秘书" }));
+    await flush();
+    const first = structuredClone(snapshot.session);
+    view.rerender(<AgentPage initialProjectPath={other} />);
+    await flush();
+    expect(agentApi.openProject).toHaveBeenCalledWith(other);
+    fireEvent.click(screen.getByRole("button", { name: "打开 Loli 秘书" }));
+    await flush();
+    expect(vi.mocked(agentApi.openSecretary).mock.calls.map((call) => call[3]))
+      .toEqual([standalone, standalone]);
+    expect(snapshot.session.id).toBe(first.id);
+    expect(screen.getByRole("heading", { name: "Loli 秘书" })).toBeInTheDocument();
   });
 
   it("still sends a goal directly through the secretary chat", async () => {
@@ -1103,7 +1128,7 @@ describe("AgentPage", () => {
       catalog.models[0].id,
       "ask",
       undefined,
-      project,
+      "D:/fixture/app/agent/standalone-workspace",
       undefined,
     );
   });
@@ -1292,7 +1317,7 @@ describe("AgentPage", () => {
     expect(agentApi.openStandalone).toHaveBeenCalledTimes(1);
     expect(agentApi.openSecretary).toHaveBeenCalledWith(
       catalog.models[0].id,
-      undefined,
+      "ask",
       undefined,
       standalone,
       undefined,

@@ -23,6 +23,7 @@ import { agentApi } from "@/lib/api/agent";
 import { settingsApi } from "@/lib/api/settings";
 import { agentErrorMessage } from "@/hooks/useAgentSnapshot";
 import type {
+  AgentProject,
   AgentSecretaryExecutionMode,
   AgentSecretaryReportState,
   AgentSecretaryState,
@@ -43,6 +44,7 @@ const terminal = new Set(["completed", "failed", "cancelled", "interrupted"]);
 const emptyDelegation = {
   title: "",
   instructions: "",
+  projectPath: "",
   executionMode: "shared" as AgentSecretaryExecutionMode,
 };
 const statusLabels: Record<AgentSecretaryTask["status"], string> = {
@@ -128,6 +130,7 @@ export function AgentSecretaryTasks({
   workerTaskId,
   canDelegate = true,
   onOpenSession,
+  projectChoices,
   onFocusComposer,
 }: {
   sessionId: string;
@@ -136,6 +139,7 @@ export function AgentSecretaryTasks({
   workerTaskId?: string;
   canDelegate?: boolean;
   onOpenSession: (sessionId: string) => Promise<void> | void;
+  projectChoices?: AgentProject[];
   onFocusComposer?: () => void;
 }) {
   const { t } = useTranslation();
@@ -349,7 +353,12 @@ export function AgentSecretaryTasks({
     const requestScope = `${sessionId}:delegate`;
     const requestId = requestIdentity(
       requestScope,
-      JSON.stringify([title, instructions, delegation.executionMode]),
+      JSON.stringify([
+        title,
+        instructions,
+        delegation.executionMode,
+        ...(delegation.projectPath ? [delegation.projectPath] : []),
+      ]),
     );
     void act(
       "delegate",
@@ -360,6 +369,7 @@ export function AgentSecretaryTasks({
           instructions,
           requestId,
           delegation.executionMode,
+          ...(delegation.projectPath ? [delegation.projectPath] : []),
         );
         if (task.parentSessionId !== sessionId || task.requestId !== requestId)
           throw new Error(
@@ -515,7 +525,7 @@ export function AgentSecretaryTasks({
             <ChevronRight aria-hidden="true" />
           )}
         </button>
-        {!workerTaskId && (
+        {!workerTaskId && !projectChoices && (
           <button
             type="button"
             className="wb-secretary-source"
@@ -605,7 +615,9 @@ export function AgentSecretaryTasks({
             <p className="wb-secretary-note">
               {label(
                 "description",
-                "直接在对话里告诉我目标，我来拆解、分派和跟进工作。",
+                projectChoices
+                  ? "在对话中讨论目标，或在交办任务时选择执行项目。"
+                  : "直接在对话里告诉我目标，我来拆解、分派和跟进工作。",
               )}
             </p>
           )}
@@ -666,6 +678,38 @@ export function AgentSecretaryTasks({
                   }}
                 />
               </label>
+              {projectChoices && (
+                <label>
+                  {label("targetProject", "执行项目")}
+                  <select
+                    value={delegation.projectPath}
+                    disabled={delegating}
+                    onChange={(event) => {
+                      const projectPath = event.target.value;
+                      setDelegation((old) => ({
+                        ...old,
+                        projectPath,
+                        executionMode: projectPath
+                          ? old.executionMode
+                          : "shared",
+                      }));
+                    }}
+                  >
+                    <option value="">
+                      {label("standaloneProject", "独立任务目录")}
+                    </option>
+                    {projectChoices
+                      .filter(
+                        (project) => !project.standalone && !project.remote,
+                      )
+                      .map((project) => (
+                        <option key={project.path} value={project.path}>
+                          {project.name} · {project.path}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+              )}
               <label>
                 {label("executionMode", "执行方式")}
                 <select
@@ -680,7 +724,12 @@ export function AgentSecretaryTasks({
                   <option value="shared">
                     {label("sharedMode", "当前项目目录")}
                   </option>
-                  <option value="worktree">
+                  <option
+                    value="worktree"
+                    disabled={Boolean(
+                      projectChoices && !delegation.projectPath,
+                    )}
+                  >
                     {label("worktreeMode", "独立 Git 工作树")}
                   </option>
                 </select>
