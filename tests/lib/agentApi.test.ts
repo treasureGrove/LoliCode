@@ -7,6 +7,19 @@ vi.mock("@tauri-apps/api/core", () => native);
 
 beforeEach(() => native.invoke.mockReset().mockResolvedValue({ id: "lc:new" }));
 
+it("reads and changes official plugins through the Harness commands", async () => {
+  const catalog = { bundles: [], pendingReload: true };
+  native.invoke.mockResolvedValue(catalog);
+  await expect(agentApi.getHarnessPlugins()).resolves.toBe(catalog);
+  await expect(agentApi.setHarnessPluginEnabled("terminal", true)).resolves.toBe(
+    catalog,
+  );
+  expect(native.invoke.mock.calls).toEqual([
+    ["get_agent_harness_plugins"],
+    ["set_agent_harness_plugin_enabled", { id: "terminal", enabled: true }],
+  ]);
+});
+
 it("saves a reviewed policy revision and publishes only the previewed PR revisions", async () => {
   const preview = {
     headRevision: "a".repeat(40),

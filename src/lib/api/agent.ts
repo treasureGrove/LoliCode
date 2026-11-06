@@ -13,6 +13,7 @@ import type {
   AgentProject,
   AgentExtensions,
   AgentExtensionConfig,
+  AgentHarnessPluginCatalog,
   AgentPluginStore,
   AgentPermissionDecision,
   AgentProjectResult,
@@ -376,6 +377,13 @@ export const agentApi = {
     invoke<void>("reject_agent_question", { sessionId, requestId }),
   closeProject: () => invoke<void>("close_agent_project"),
   getExtensions: () => invoke<AgentExtensions>("get_agent_extensions"),
+  getHarnessPlugins: () =>
+    invoke<AgentHarnessPluginCatalog>("get_agent_harness_plugins"),
+  setHarnessPluginEnabled: (id: string, enabled: boolean) =>
+    invoke<AgentHarnessPluginCatalog>("set_agent_harness_plugin_enabled", {
+      id,
+      enabled,
+    }),
   connectMcp: () => invoke<AgentExtensions>("connect_agent_mcp"),
   getPluginStore: () => invoke<AgentPluginStore>("get_agent_plugin_store"),
   addPluginMarketplace: (source: string) =>

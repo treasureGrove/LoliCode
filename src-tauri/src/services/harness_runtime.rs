@@ -7,7 +7,7 @@ use serde_json::{json, Value};
 use std::{
     collections::HashMap,
     io::Write,
-    path::Path,
+    path::{Path, PathBuf},
     process::Stdio,
     sync::{
         atomic::{AtomicU64, Ordering},
@@ -164,7 +164,7 @@ impl HarnessRuntime {
         gateway: HarnessGateway,
     ) -> Result<Self, String> {
         let (client, events) =
-            Self::launch(node, runtime_package, project, home, gateway, false).await?;
+            Self::launch(node, runtime_package, project, home, gateway, false, &[]).await?;
         Ok(Self { client, events })
     }
 
@@ -174,8 +174,18 @@ impl HarnessRuntime {
         project: &Path,
         home: &Path,
         gateway: HarnessGateway,
+        plugin_patches: &[PathBuf],
     ) -> Result<(HarnessClient, mpsc::Receiver<HarnessEvent>), String> {
-        Self::launch(node, runtime_package, project, home, gateway, true).await
+        Self::launch(
+            node,
+            runtime_package,
+            project,
+            home,
+            gateway,
+            true,
+            plugin_patches,
+        )
+        .await
     }
 
     async fn launch(
@@ -185,6 +195,7 @@ impl HarnessRuntime {
         home: &Path,
         gateway: HarnessGateway,
         live: bool,
+        plugin_patches: &[PathBuf],
     ) -> Result<(HarnessClient, mpsc::Receiver<HarnessEvent>), String> {
         let entry = runtime_package.join("node_modules/@deepseek-ai/dsh/lib/bin.js");
         let profile = runtime_package.join("profile.cordis.patch.yml");
@@ -204,10 +215,11 @@ impl HarnessRuntime {
             .write_all(&route_patch)
             .map_err(|_| "无法写入 Harness 渠道配置")?;
         let mut command = Command::new(node);
-        command
-            .arg(entry)
-            .args(["--profile", "sdk", "--patch"])
-            .arg(profile);
+        command.arg(entry).args(["--profile", "sdk"]);
+        for patch in plugin_patches {
+            command.arg("--patch").arg(patch);
+        }
+        command.arg("--patch").arg(profile);
         if live {
             command.arg("--patch").arg(host_ops);
         }

@@ -7,7 +7,10 @@ import {
   automationProposalSchedule,
   type AgentAutomationProposal,
 } from "@/lib/agentAutomation";
-import type { AutomationJob } from "./AgentAutomationSettings";
+import type {
+  AutomationJob,
+  AutomationTarget,
+} from "./AgentAutomationSettings";
 import "./agent-automation-conversation.css";
 
 type SaveRequest = {
@@ -90,6 +93,10 @@ export function AgentAutomationProposalCard({
       ? initialRequest.input.mode
       : proposal.input.mode || (proposal.automationId ? "existing" : "build"),
   );
+  const [target, setTarget] = useState<AutomationTarget["kind"]>(
+    (initialRequest?.input.target as AutomationTarget | undefined)?.kind ??
+      "new_once",
+  );
   const save = async () => {
     if (saving.current || (saved && confirmed) || !sessionId || !projectPath)
       return;
@@ -139,6 +146,14 @@ export function AgentAutomationProposalCard({
           idleAfterMinutes: existing?.idleAfterMinutes ?? 10,
           idleIntervalMinutes: existing?.idleIntervalMinutes ?? 60,
           ...proposal.input,
+          ...(existing
+            ? {}
+            : {
+                target:
+                  target === "session"
+                    ? { kind: target, sessionId }
+                    : { kind: target },
+              }),
           cronExpr:
             proposal.input.trigger === "idle"
               ? "0 * * * *"
@@ -260,7 +275,37 @@ export function AgentAutomationProposalCard({
         </div>
         <div>
           <dt>权限</dt>
-          <dd>{permissions[permission] || permission}</dd>
+          <dd>
+            {target === "session"
+              ? "逐次确认"
+              : permissions[permission] || permission}
+          </dd>
+        </div>
+        <div>
+          <dt>
+            <label htmlFor={`automation-target-${toolCallId}`}>投递目标</label>
+          </dt>
+          <dd>
+            {proposal.automationId ? (
+              "保留已有目标"
+            ) : (
+              <select
+                id={`automation-target-${toolCallId}`}
+                className="max-w-full rounded border border-border bg-transparent px-1.5 py-1"
+                value={target}
+                disabled={busy || Boolean(saved || request.current)}
+                onChange={(event) =>
+                  setTarget(event.target.value as AutomationTarget["kind"])
+                }
+              >
+                <option value="new_once">新建对话并复用</option>
+                <option value="session" disabled={!sessionId}>
+                  当前对话
+                </option>
+                <option value="new">每次新建对话</option>
+              </select>
+            )}
+          </dd>
         </div>
       </dl>
       <p className="wb-automation-proposal-hint">

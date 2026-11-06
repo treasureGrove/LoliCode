@@ -74,14 +74,14 @@ export function AgentComposerAdd({
           添加文档
         </DropdownMenuItem>
         <DropdownMenuItem
-          title="打开插件市场；安装后可将技能添加到当前会话"
+          title="打开插件管理，查看 Harness 插件、技能与 MCP 工具"
           onSelect={() => {
             openingPanel.current = true;
             onAddPlugins();
           }}
         >
           <Blocks size={20} aria-hidden="true" />
-          添加插件
+          管理插件
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

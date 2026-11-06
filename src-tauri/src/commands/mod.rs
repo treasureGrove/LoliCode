@@ -29,6 +29,7 @@ mod discovery;
 mod env;
 mod failover;
 mod global_proxy;
+pub(crate) mod harness_plugins;
 mod hermes;
 mod import_export;
 mod local_agent_tools;

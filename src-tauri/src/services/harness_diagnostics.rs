@@ -123,7 +123,8 @@ async fn do_turn(
     .await?;
     let token = gateway.token.clone();
     let (runner, mut events) =
-        HarnessRuntime::start_live(&paths.node, &paths.package, project, home, gateway).await?;
+        HarnessRuntime::start_live(&paths.node, &paths.package, project, home, gateway, &[])
+            .await?;
     let result: Result<(), String> = async {
         if restore {
             runner.request("session/resume", json!({"sessionId":session})).await?;

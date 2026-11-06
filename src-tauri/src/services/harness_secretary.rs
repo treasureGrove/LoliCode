@@ -162,10 +162,14 @@ impl HarnessSecretary {
         let mut tasks = self
             .workers
             .values()
-            .map(|worker| &worker.task)
-            .filter(|task| visible(task))
-            .cloned()
-            .map(|mut task| {
+            .filter(|worker| visible(&worker.task))
+            .map(|worker| {
+                let mut task = worker.task.clone();
+                task.direct_parent_session_id = self
+                    .workers
+                    .get(&worker.sdk_parent)
+                    .filter(|parent| visible(&parent.task))
+                    .map(|parent| parent.task.session_id.clone());
                 if settled {
                     interrupt_task(&mut task);
                 }
@@ -744,6 +748,7 @@ impl Worker {
             task: AgentSecretaryTask {
                 id: task_id.clone(),
                 parent_session_id: parent.session.id.clone(),
+                direct_parent_session_id: None,
                 session_id: child_id,
                 title,
                 instructions: String::new(),
@@ -1184,5 +1189,61 @@ mod tests {
             secretary.state(&root.session.id).tasks[0].status,
             "interrupted"
         );
+    }
+
+    #[test]
+    fn projects_nested_worker_parent_while_preserving_root_ownership() {
+        const GRANDCHILD: &str = "cfcb6980-4efd-46af-b703-58a7e6a59e1f";
+        let root = root_snapshot(Path::new("project"));
+        let root_id = &root.session.id;
+        let mut secretary = HarnessSecretary::default();
+        let mut outcomes = HarnessEvents::new(ROOT);
+        for (parent, child) in [(ROOT, CHILD), (CHILD, GRANDCHILD)] {
+            feed(
+                &mut secretary,
+                &mut outcomes,
+                &root,
+                note(
+                    "subagent.started",
+                    json!({"parentSessionId":parent,"childSessionId":child}),
+                ),
+            );
+        }
+
+        let child_id = format!("lc:{CHILD}");
+        let grandchild_id = format!("lc:{GRANDCHILD}");
+        let saved = serde_json::to_value(&secretary).unwrap();
+        assert!(saved["workers"][GRANDCHILD]["task"]
+            .get("directParentSessionId")
+            .is_none());
+        let mut restored: HarnessSecretary = serde_json::from_value(saved).unwrap();
+        let state = restored.sidebar(root_id, true).state;
+        assert_eq!(state.tasks.len(), 2);
+        assert!(state
+            .tasks
+            .iter()
+            .all(|task| task.parent_session_id == *root_id));
+        let child = state
+            .tasks
+            .iter()
+            .find(|task| task.session_id == child_id)
+            .unwrap();
+        assert_eq!(child.direct_parent_session_id, None);
+        let grandchild = state
+            .tasks
+            .iter()
+            .find(|task| task.session_id == grandchild_id)
+            .unwrap();
+        assert_eq!(
+            grandchild.direct_parent_session_id.as_deref(),
+            Some(child_id.as_str())
+        );
+
+        restored.settle_interrupted();
+        restored.delete(&child.id).unwrap();
+        let state = restored.state(root_id);
+        assert_eq!(state.tasks.len(), 1);
+        assert_eq!(state.tasks[0].session_id, grandchild_id);
+        assert_eq!(state.tasks[0].direct_parent_session_id, None);
     }
 }

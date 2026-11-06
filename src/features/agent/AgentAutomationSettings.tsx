@@ -1,8 +1,12 @@
 import { ArrowLeft, CalendarClock, FolderOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input, fieldClass } from "@/components/ui/input";
-import type { AgentCatalog } from "@/types/agent";
+import type { AgentCatalog, AgentSession } from "@/types/agent";
 import { AgentModelPicker } from "./AgentModelPicker";
+
+export type AutomationTarget =
+  | { kind: "session"; sessionId: string }
+  | { kind: "new_once" | "new" };
 
 export type AutomationJob = {
   automationId: string;
@@ -14,6 +18,10 @@ export type AutomationJob = {
   recurring?: boolean;
   locale?: string;
   nextRunAt?: number;
+  runAt?: number;
+  updatedAt?: number;
+  target?: AutomationTarget;
+  reusableSessionId?: string;
   trigger?: "schedule" | "idle";
   idleAfterMinutes?: number;
   idleIntervalMinutes?: number;
@@ -35,6 +43,8 @@ export type AutomationSettings = {
   time: string;
   weekday: string;
   minute: string;
+  runAt: string;
+  target: AutomationTarget;
   idleAfter: string;
   idleInterval: string;
   modelId: string;
@@ -58,6 +68,8 @@ export function defaultAutomationSettings(
     time: "09:00",
     weekday: "1",
     minute: "0",
+    runAt: "",
+    target: { kind: "new_once" },
     idleAfter: "10",
     idleInterval: "60",
     modelId: catalog.defaultModel || catalog.models[0]?.id || "",
@@ -76,6 +88,12 @@ export function editAutomationSettings(
       item.providerId === job.modelSelection?.providerId &&
       item.modelId === job.modelSelection?.modelId,
   );
+  const runAt = job.runAt ? new Date(job.runAt) : null;
+  const localRunAt = runAt
+    ? new Date(runAt.getTime() - runAt.getTimezoneOffset() * 60_000)
+        .toISOString()
+        .slice(0, 16)
+    : "";
   return {
     ...defaultAutomationSettings(catalog),
     job,
@@ -83,14 +101,21 @@ export function editAutomationSettings(
     prompt: job.prompt,
     trigger: job.trigger || "schedule",
     mode: job.mode || "build",
-    frequency:
-      fields[1] === "*" ? "hourly" : fields[4] === "*" ? "daily" : "weekly",
+    frequency: runAt
+      ? "once"
+      : fields[1] === "*"
+        ? "hourly"
+        : fields[4] === "*"
+          ? "daily"
+          : "weekly",
     time:
       fields[1] === "*"
         ? "09:00"
         : `${fields[1]?.padStart(2, "0")}:${fields[0]?.padStart(2, "0")}`,
     weekday: fields[4] === "*" ? "1" : fields[4],
     minute: fields[0],
+    runAt: localRunAt,
+    target: job.target ?? { kind: "new" },
     idleAfter: String(job.idleAfterMinutes ?? 10),
     idleInterval: String(job.idleIntervalMinutes ?? 60),
     modelId: model?.id || "",
@@ -106,8 +131,9 @@ export function AgentAutomationSettings({
   onChange,
   catalog,
   projectPath,
+  sessions,
   busy,
-  idleUnsupported,
+  unchanged,
   error,
   onSave,
   onCancel,
@@ -116,8 +142,9 @@ export function AgentAutomationSettings({
   onChange: (patch: Partial<AutomationSettings>) => void;
   catalog: AgentCatalog;
   projectPath: string;
+  sessions: AgentSession[];
   busy: boolean;
-  idleUnsupported?: string;
+  unchanged: boolean;
   error?: string | null;
   onSave: () => void;
   onCancel: () => void;
@@ -137,14 +164,18 @@ export function AgentAutomationSettings({
     summary =
       value.trigger === "idle"
         ? `电脑闲置 ${value.idleAfter || "…"} 分钟后运行，至少间隔 ${value.idleInterval || "…"} 分钟`
-        : automationScheduleLabel(
-            automationCron(
-              value.frequency,
-              value.time,
-              value.weekday,
-              value.minute,
-            ),
-          );
+        : value.frequency === "once"
+          ? value.runAt
+            ? `仅一次 · ${new Date(value.runAt).toLocaleString()}`
+            : "选择运行日期和时间"
+          : automationScheduleLabel(
+              automationCron(
+                value.frequency,
+                value.time,
+                value.weekday,
+                value.minute,
+              ),
+            );
   } catch {
     summary = "请选择有效的运行时间和星期";
   }
@@ -169,10 +200,10 @@ export function AgentAutomationSettings({
         </Button>
         <div>
           <h2 className="text-title font-semibold">
-            {value.job ? "编辑自动化" : "新建自动化"}
+            {value.job ? value.job.title : "手动创建任务"}
           </h2>
           <p className="mt-1 text-caption text-fg-3">
-            设置任务内容与运行计划，保存后自动执行。
+            设置要投递的指令、时间和目标对话。
           </p>
         </div>
       </div>
@@ -183,6 +214,7 @@ export function AgentAutomationSettings({
           <Input
             autoFocus
             required
+            maxLength={160}
             aria-label="自动化名称"
             placeholder="例如：每日代码检查"
             value={value.title}
@@ -217,23 +249,26 @@ export function AgentAutomationSettings({
       >
         <h3>运行计划</h3>
         <div className="wb-automation-form-grid">
-          <label>
-            触发方式
-            <select
-              aria-label="自动化触发方式"
-              className={fieldClass}
-              value={value.trigger}
-              disabled={busy}
-              onChange={(event) =>
-                onChange({
-                  trigger: event.target.value as AutomationSettings["trigger"],
-                })
-              }
-            >
-              <option value="schedule">定时运行</option>
-              <option value="idle">电脑闲置时运行</option>
-            </select>
-          </label>
+          {value.job?.trigger === "idle" && (
+            <label>
+              触发方式
+              <select
+                aria-label="自动化触发方式"
+                className={fieldClass}
+                value={value.trigger}
+                disabled={busy}
+                onChange={(event) =>
+                  onChange({
+                    trigger: event.target
+                      .value as AutomationSettings["trigger"],
+                  })
+                }
+              >
+                <option value="schedule">定时运行</option>
+                <option value="idle">电脑闲置时运行（已有任务）</option>
+              </select>
+            </label>
+          )}
           {value.trigger === "schedule" ? (
             <>
               <label>
@@ -247,12 +282,27 @@ export function AgentAutomationSettings({
                     onChange({ frequency: event.target.value })
                   }
                 >
+                  <option value="once">仅一次</option>
                   <option value="daily">每天</option>
                   <option value="weekly">每周</option>
                   <option value="hourly">每小时</option>
                 </select>
               </label>
-              {value.frequency === "hourly" ? (
+              {value.frequency === "once" ? (
+                <label>
+                  日期和时间
+                  <Input
+                    type="datetime-local"
+                    required
+                    aria-label="自动化运行日期和时间"
+                    value={value.runAt}
+                    disabled={busy}
+                    onChange={(event) =>
+                      onChange({ runAt: event.target.value })
+                    }
+                  />
+                </label>
+              ) : value.frequency === "hourly" ? (
                 <label>
                   每小时的第几分钟
                   <Input
@@ -353,11 +403,6 @@ export function AgentAutomationSettings({
             </>
           )}
         </div>
-        {idleUnsupported && (
-          <p role="status" className="text-caption text-danger-text">
-            {idleUnsupported}
-          </p>
-        )}
         <p className="text-caption text-fg-3">
           {value.trigger === "schedule"
             ? `按本地时区 ${timezone} 运行。`
@@ -365,62 +410,122 @@ export function AgentAutomationSettings({
           LoliCode 需要保持运行。
         </p>
       </section>
-      <section className="wb-automation-settings-section" aria-label="执行设置">
-        <h3>执行设置</h3>
-        <div className="wb-automation-form-grid">
-          <label>
-            模型
-            <AgentModelPicker
-              ariaLabel="自动化模型"
-              className={`${fieldClass} w-full max-w-none`}
-              models={catalog.models}
-              value={value.modelId}
-              disabled={busy}
-              unavailableLabel="请选择可用模型"
-              side="bottom"
-              onSelect={(modelId) => onChange({ modelId, reasoning: "" })}
-            />
-          </label>
-          <label>
-            思考档位
-            <select
-              aria-label="自动化思考档位"
-              className={fieldClass}
-              value={value.reasoning}
-              disabled={busy || !model}
-              onChange={(event) => onChange({ reasoning: event.target.value })}
-            >
-              <option value="">自动</option>
-              <option value="default">模型默认</option>
-              {efforts.map((effort) => (
-                <option key={effort} value={effort}>
-                  {effort}
+      <section className="wb-automation-settings-section" aria-label="执行位置">
+        <h3>执行位置</h3>
+        <label>
+          投递目标
+          <select
+            className={fieldClass}
+            value={
+              value.target.kind === "session"
+                ? `session:${value.target.sessionId}`
+                : value.target.kind
+            }
+            disabled={busy}
+            onChange={(event) => {
+              const next = event.target.value;
+              onChange({
+                target: next.startsWith("session:")
+                  ? {
+                      kind: "session",
+                      sessionId: next.slice("session:".length),
+                    }
+                  : { kind: next === "new" ? "new" : "new_once" },
+              });
+            }}
+          >
+            <option value="new_once">新建对话并复用</option>
+            <option value="new">每次新建对话</option>
+            {value.target.kind === "session" &&
+              !sessions.some(
+                (session) =>
+                  value.target.kind === "session" &&
+                  session.id === value.target.sessionId,
+              ) && (
+                <option value={`session:${value.target.sessionId}`}>
+                  已关联的对话
                 </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            执行权限
-            <select
-              aria-label="自动化权限"
-              className={fieldClass}
-              value={value.mode}
-              disabled={busy}
-              onChange={(event) => onChange({ mode: event.target.value })}
-            >
-              <option value="build">操作前询问</option>
-              <option value="guarded">自动 · 风险操作询问</option>
-              <option value="yolo">完全访问</option>
-            </select>
-          </label>
-        </div>
-        <p className="text-caption text-fg-3">
-          需要确认的操作会等待你处理；每次运行的结果可在运行记录中查看。
-        </p>
-        {value.job?.recurring === false && (
-          <p className="text-caption text-fg-3">此任务只运行一次。</p>
+              )}
+            {sessions.length > 0 && (
+              <optgroup label="已有对话">
+                {sessions.map((session) => (
+                  <option key={session.id} value={`session:${session.id}`}>
+                    {session.title}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+          </select>
+        </label>
+        {value.target.kind === "session" && (
+          <p className="text-caption text-fg-3">
+            对话空闲后可投递，沿用该对话的模型，自动化运行使用逐次确认。
+          </p>
         )}
       </section>
+      {value.target.kind !== "session" && (
+        <section
+          className="wb-automation-settings-section"
+          aria-label="执行设置"
+        >
+          <h3>执行设置</h3>
+          <div className="wb-automation-form-grid">
+            <label>
+              模型
+              <AgentModelPicker
+                ariaLabel="自动化模型"
+                className={`${fieldClass} w-full max-w-none`}
+                models={catalog.models}
+                value={value.modelId}
+                disabled={busy}
+                unavailableLabel="请选择可用模型"
+                side="bottom"
+                onSelect={(modelId) => onChange({ modelId, reasoning: "" })}
+              />
+            </label>
+            <label>
+              思考档位
+              <select
+                aria-label="自动化思考档位"
+                className={fieldClass}
+                value={value.reasoning}
+                disabled={busy || !model}
+                onChange={(event) =>
+                  onChange({ reasoning: event.target.value })
+                }
+              >
+                <option value="">自动</option>
+                <option value="default">模型默认</option>
+                {efforts.map((effort) => (
+                  <option key={effort} value={effort}>
+                    {effort}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              执行权限
+              <select
+                aria-label="自动化权限"
+                className={fieldClass}
+                value={value.mode}
+                disabled={busy}
+                onChange={(event) => onChange({ mode: event.target.value })}
+              >
+                <option value="build">操作前询问</option>
+                <option value="guarded">自动 · 风险操作询问</option>
+                <option value="yolo">完全访问</option>
+              </select>
+            </label>
+          </div>
+          <p className="text-caption text-fg-3">
+            需要确认的操作会等待你处理；每次运行的结果可在运行记录中查看。
+          </p>
+          {value.job?.recurring === false && (
+            <p className="text-caption text-fg-3">此任务只运行一次。</p>
+          )}
+        </section>
+      )}
       <div className="wb-automation-settings-footer">
         <div className="wb-automation-summary">
           <CalendarClock size={17} aria-hidden="true" />
@@ -451,10 +556,13 @@ export function AgentAutomationSettings({
             variant="default"
             disabled={
               busy ||
+              unchanged ||
               !value.title.trim() ||
               !value.prompt.trim() ||
-              !model ||
-              !!idleUnsupported ||
+              (value.target.kind !== "session" && !model) ||
+              (value.trigger === "schedule" &&
+                value.frequency === "once" &&
+                !value.runAt) ||
               (value.trigger === "schedule" &&
                 value.frequency === "weekly" &&
                 !value.weekday)

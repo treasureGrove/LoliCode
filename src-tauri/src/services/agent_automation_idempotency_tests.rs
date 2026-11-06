@@ -41,6 +41,244 @@ fn input(workspace: &str, request: &str) -> Value {
 }
 
 #[tokio::test]
+async fn automation_one_time_plan_consumes_once_and_retains_original_run_prompt() {
+    let (_root, db, workspace, _) = registered_workspaces();
+    let run_at = now_ms() + 60_000;
+    let mut payload = input(&workspace, "one-time-create");
+    payload["target"] = json!({"kind":"new_once"});
+    payload["runAt"] = json!(run_at);
+    payload["recurring"] = json!(true);
+    assert!(create_saved_job(&db, &payload).await.is_err());
+    payload["recurring"] = json!(false);
+    payload["runAt"] = json!(now_ms() - 1);
+    assert!(create_saved_job(&db, &payload).await.is_err());
+    payload["runAt"] = json!(run_at);
+    let created = create_saved_job(&db, &payload).await.unwrap();
+    assert_eq!(created["nextRunAt"], run_at);
+    let id = created["automationId"].as_str().unwrap();
+    let (claimed, run) = claim_run(&db, id, &workspace).await.unwrap().unwrap();
+    assert_eq!(claimed.run_at, Some(run_at));
+    assert_eq!(run.prompt.as_deref(), Some("Inspect the project"));
+    update_run(&db, &run.run_id, |run| {
+        run.outcome = Some("succeeded".into())
+    })
+    .await
+    .unwrap();
+    assert!(claim_run(&db, id, &workspace).await.is_err());
+    let ended = load(&db).unwrap().jobs.pop().unwrap();
+    assert_eq!(ended.lifecycle_status, "completed");
+    assert!(ended.next_run_at.is_none());
+
+    let mut edit = input(&workspace, "one-time-edit");
+    edit["expectedUpdatedAt"] = created["updatedAt"].clone();
+    edit["prompt"] = json!("New instruction");
+    assert!(update_saved_job(&db, id, &edit, workspace.clone())
+        .await
+        .is_err());
+    edit["expectedUpdatedAt"] = json!(ended.updated_at);
+    let updated = update_saved_job(&db, id, &edit, workspace.clone())
+        .await
+        .unwrap();
+    assert_eq!(updated["lifecycleStatus"], "completed");
+    assert_eq!(updated["target"], json!({"kind":"new_once"}));
+    assert_eq!(updated["runAt"], run_at);
+    assert_eq!(
+        load(&db).unwrap().runs[0].prompt.as_deref(),
+        Some("Inspect the project")
+    );
+
+    edit["clientRequestId"] = json!("one-time-reschedule");
+    edit["expectedUpdatedAt"] = updated["updatedAt"].clone();
+    edit["runAt"] = json!(run_at + 60_000);
+    let rescheduled = update_saved_job(&db, id, &edit, workspace).await.unwrap();
+    assert_eq!(rescheduled["lifecycleStatus"], "active");
+    let mut store = load(&db).unwrap();
+    let projects = preferences::load(&db).unwrap();
+    assert!(
+        claim_due(&mut store, &projects, run_at + 59_999, Ok(0), false)
+            .0
+            .is_empty()
+    );
+    assert_eq!(
+        claim_due(&mut store, &projects, run_at + 60_000, Ok(0), false)
+            .0
+            .len(),
+        1
+    );
+    assert!(
+        claim_due(&mut store, &projects, run_at + 60_001, Ok(0), false)
+            .0
+            .is_empty()
+    );
+    assert_eq!(
+        store.runs.last().unwrap().prompt.as_deref(),
+        Some("New instruction")
+    );
+}
+
+struct DeliveryFixture {
+    snapshot: std::sync::Mutex<AgentSnapshot>,
+    calls: std::sync::Mutex<Vec<(String, Value)>>,
+}
+
+impl DeliveryFixture {
+    fn new(workspace: &str) -> Self {
+        let session_id = format!("lc:{}", uuid::Uuid::new_v4());
+        Self {
+            snapshot: std::sync::Mutex::new(serde_json::from_value(json!({
+                "session": {"id":session_id,"projectPath":workspace,"title":"Fixture","mode":"build",
+                    "permissionMode":"auto","model":{"providerId":"owned","modelId":"fixture"},
+                    "createdAt":1,"updatedAt":1},
+                "status":"idle","messages":[],"permissions":[],"questions":[],"diffs":[],
+                "streamConnected":false,"streamGap":false,
+            })).unwrap()),
+            calls: std::sync::Mutex::new(Vec::new()),
+        }
+    }
+}
+
+impl AutomationRuntime for DeliveryFixture {
+    fn bind_project<'a>(&'a self, _path: &'a str) -> BoxFuture<'a, Result<AgentCatalog, String>> {
+        Box::pin(async {
+            Ok(serde_json::from_value(json!({
+                "revision":1,"models":[{"id":"owned/fixture","providerId":"owned","modelId":"fixture",
+                "name":"Fixture","channelName":"Owned"}],"defaultModel":"owned/fixture","excludedSources":[],
+            })).unwrap())
+        })
+    }
+
+    fn call<'a>(
+        &'a self,
+        method: &'a str,
+        params: Value,
+        _mutate: bool,
+    ) -> BoxFuture<'a, Result<Value, String>> {
+        Box::pin(async move {
+            self.calls.lock().unwrap().push((method.into(), params));
+            let snapshot = self.snapshot.lock().unwrap();
+            Ok(match method {
+                "createSession" => json!(snapshot.session),
+                "getSession" => json!(*snapshot),
+                "sendMessage" | "interruptSession" => Value::Null,
+                "queryCommand" => json!({"results":[]}),
+                _ => panic!("Unexpected automation call: {method}"),
+            })
+        })
+    }
+}
+
+#[tokio::test]
+async fn automation_new_once_reuses_the_persisted_native_session() {
+    let (_root, db, workspace, _) = registered_workspaces();
+    let runtime = Arc::new(DeliveryFixture::new(&workspace));
+    let mut payload = input(&workspace, "create-reusable");
+    payload["target"] = json!({"kind":"new_once"});
+    let created = create_saved_job(&db, &payload).await.unwrap();
+    let id = created["automationId"].as_str().unwrap();
+    let mut delivered = Vec::new();
+    for _ in 0..2 {
+        let (job, run) = claim_run(&db, id, &workspace).await.unwrap().unwrap();
+        delivered.push(
+            dispatch_run(runtime.clone(), db.clone(), job, run.clone())
+                .await
+                .unwrap(),
+        );
+        update_run(&db, &run.run_id, |record| {
+            record.outcome = Some("succeeded".into())
+        })
+        .await
+        .unwrap();
+    }
+    assert_eq!(delivered[0], delivered[1]);
+    assert_eq!(
+        load(&db).unwrap().jobs[0].reusable_session_id.as_deref(),
+        Some(delivered[0].as_str())
+    );
+    let calls = runtime.calls.lock().unwrap();
+    assert_eq!(
+        calls
+            .iter()
+            .filter(|(method, _)| method == "createSession")
+            .count(),
+        1
+    );
+    assert_eq!(
+        calls
+            .iter()
+            .filter(|(method, params)| method == "sendMessage"
+                && params["sessionId"] == delivered[0]
+                && params["automationIdleOnly"] == true
+                && params["backgroundOnly"] == false)
+            .count(),
+        2
+    );
+}
+
+#[tokio::test]
+async fn automation_existing_target_is_scoped_and_never_interrupts_unrelated_work() {
+    let (_root, db, workspace, other) = registered_workspaces();
+    let runtime = Arc::new(DeliveryFixture::new(&workspace));
+    let mut session = runtime.snapshot.lock().unwrap().session.clone();
+    let session_id = session.id.clone();
+    assert!(ensure_target_session(&session, &session_id, &other).is_err());
+    session.archived = true;
+    assert!(ensure_target_session(&session, &session_id, &workspace).is_err());
+    let mut payload = input(&workspace, "create-linked");
+    payload["target"] = json!({"kind":"session","sessionId":session_id});
+    payload.as_object_mut().unwrap().remove("modelSelection");
+    let created = create_saved_job(&db, &payload).await.unwrap();
+    let id = created["automationId"].as_str().unwrap();
+
+    runtime.snapshot.lock().unwrap().status = AgentStatus::Running;
+    let (job, run) = claim_run(&db, id, &workspace).await.unwrap().unwrap();
+    assert!(dispatch_run(runtime.clone(), db.clone(), job, run)
+        .await
+        .is_none());
+    assert_eq!(
+        load(&db).unwrap().runs[0].dispatch_status,
+        "failed_to_dispatch"
+    );
+    assert!(runtime
+        .calls
+        .lock()
+        .unwrap()
+        .iter()
+        .all(|(method, _)| method == "getSession"));
+
+    runtime.snapshot.lock().unwrap().status = AgentStatus::Idle;
+    let (job, run) = claim_run(&db, id, &workspace).await.unwrap().unwrap();
+    assert_eq!(
+        dispatch_run(runtime.clone(), db.clone(), job, run.clone()).await,
+        Some(session_id.clone())
+    );
+    runtime.snapshot.lock().unwrap().status = AgentStatus::Running;
+    cancel_run_runtime(runtime.clone(), db.clone(), &run.run_id, &workspace)
+        .await
+        .unwrap();
+    recover_runs_runtime(runtime.clone(), db.clone()).await;
+    let recovered = load(&db).unwrap().runs.pop().unwrap();
+    assert!(!active(&recovered));
+    assert_eq!(recovered.dispatch_status, "failed_to_dispatch");
+    let calls = runtime.calls.lock().unwrap();
+    let sends: Vec<_> = calls
+        .iter()
+        .filter(|(method, _)| method == "sendMessage")
+        .collect();
+    assert_eq!(sends.len(), 1);
+    assert_eq!(sends[0].1["backgroundOnly"], true);
+    assert_eq!(sends[0].1["automationIdleOnly"], true);
+    let interrupts: Vec<_> = calls
+        .iter()
+        .filter(|(method, _)| method == "interruptSession")
+        .collect();
+    assert_eq!(interrupts.len(), 1);
+    assert_eq!(
+        interrupts[0].1["expectedRequestId"],
+        format!("automation:{}", run.run_id)
+    );
+}
+
+#[tokio::test]
 async fn automation_save_retries_share_one_durable_job_even_when_concurrent() {
     let (_root, db, workspace, _) = registered_workspaces();
     let payload = input(&workspace, "proposal:stable-create");

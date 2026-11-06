@@ -103,9 +103,7 @@ describe("unified workspace navigation", () => {
       screen.getByRole("button", { name: "编程工作台" }),
     ).toHaveTextContent("代理");
     expect(screen.getByRole("button", { name: "自动化" })).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "插件市场" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "插件" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "编程工作台" })).toHaveAttribute(
       "aria-current",
       "page",
@@ -193,7 +191,7 @@ describe("unified workspace navigation", () => {
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "自动化" }));
     expect(onOpenAgentTool).toHaveBeenLastCalledWith("workflows", "automation");
-    await user.click(screen.getByRole("button", { name: "插件市场" }));
+    await user.click(screen.getByRole("button", { name: "插件" }));
     expect(onOpenAgentTool).toHaveBeenLastCalledWith("skills", "plugins");
     expect(values.onSelectPage).not.toHaveBeenCalled();
   });
@@ -225,11 +223,12 @@ describe("unified workspace navigation", () => {
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(
-      within(tools).getByRole("button", { name: "插件市场" }),
+      within(tools).getByRole("button", { name: "插件" }),
     ).toHaveTextContent("插件");
-    expect(
-      within(tools).getByRole("button", { name: "插件市场" }),
-    ).toHaveAttribute("title", "插件市场");
+    expect(within(tools).getByRole("button", { name: "插件" })).toHaveAttribute(
+      "title",
+      "插件",
+    );
     expect(
       screen.queryByRole("button", { name: "开始对话" }),
     ).not.toBeInTheDocument();

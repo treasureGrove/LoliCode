@@ -2023,6 +2023,8 @@ pub fn run() {
             commands::close_agent_project,
             commands::get_agent_extensions,
             commands::get_agent_plugin_store,
+            commands::harness_plugins::get_agent_harness_plugins,
+            commands::harness_plugins::set_agent_harness_plugin_enabled,
             commands::add_agent_plugin_marketplace,
             commands::update_agent_plugin_marketplace,
             commands::remove_agent_plugin_marketplace,

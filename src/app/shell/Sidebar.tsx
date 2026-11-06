@@ -294,9 +294,8 @@ function MainDirectory({
           <NavItem
             selected={view === "agent" && activeAgentTool === "skills"}
             icon={PluginsGlyph}
-            label={chinese ? "插件市场" : "Plugins"}
-            visibleLabel={chinese ? "插件" : "Plugins"}
-            title={chinese ? "插件市场" : "Plugins"}
+            label={chinese ? "插件" : "Plugins"}
+            title={chinese ? "插件" : "Plugins"}
             disabled={!onOpenAgentTool}
             onClick={() => onOpenAgentTool?.("skills", "plugins")}
           />

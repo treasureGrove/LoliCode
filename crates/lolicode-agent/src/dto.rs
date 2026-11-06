@@ -54,6 +54,9 @@ pub struct AgentSessionCoordination {
 pub struct AgentSecretaryTask {
     pub id: String,
     pub parent_session_id: String,
+    /// Immediate parent in the visible task tree, when it differs from the root owner.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub direct_parent_session_id: Option<String>,
     pub session_id: String,
     pub title: String,
     pub instructions: String,

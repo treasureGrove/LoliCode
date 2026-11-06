@@ -78,6 +78,9 @@ vi.mock("@/lib/api/agent", () => ({
     setSessionMetadata: vi.fn(),
     deleteSession: vi.fn(),
     getExtensions: vi.fn(),
+    getHarnessPlugins: vi
+      .fn()
+      .mockResolvedValue({ bundles: [], pendingReload: false }),
     getPluginStore: vi.fn(),
     getNativeActivity: vi.fn(),
     native: vi.fn(),
@@ -1035,11 +1038,12 @@ describe("AgentPage", () => {
     expect(
       screen.getByRole("region", { name: "工作任务" }),
     ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "交办任务" })).toBeEnabled();
     expect(screen.getByText("今天有什么交给我？")).toBeInTheDocument();
     expect(button).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("focuses the secretary chat and sends the goal without a manual task form", async () => {
+  it("still sends a goal directly through the secretary chat", async () => {
     render(<AgentPage />);
     await flush();
     fireEvent.click(screen.getByRole("button", { name: "打开 Loli 秘书" }));
@@ -1060,6 +1064,33 @@ describe("AgentPage", () => {
       [],
     );
     expect(agentApi.delegateSecretaryTask).not.toHaveBeenCalled();
+  });
+
+  it("keeps archived secretary work visible without allowing new assignments", async () => {
+    const archived: AgentSession = {
+      ...session,
+      id: "lc:archived-secretary",
+      title: "归档秘书",
+      archived: true,
+      coordination: { role: "secretary" },
+    };
+    vi.mocked(agentApi.listSessions).mockResolvedValue([session, archived]);
+    vi.mocked(agentApi.getSession).mockImplementation(async (id) => ({
+      ...emptySnapshot(),
+      session: id === archived.id ? archived : session,
+    }));
+    render(<AgentPage />);
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: "显示归档会话" }));
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: /^归档秘书/ }));
+    await flush();
+    expect(
+      screen.getByRole("region", { name: "工作任务" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "交办任务" }),
+    ).not.toBeInTheDocument();
   });
 
   it("does not increase an unfamiliar current permission mode when opening the secretary", async () => {
@@ -1113,7 +1144,7 @@ describe("AgentPage", () => {
     ).not.toBeInTheDocument();
   });
 
-  it.each([false, true])("opens a worker requiring attention and returns to the secretary without losing its draft (permissions locked: %s)", async (permissionLocked) => {
+  it.each([false, true])("switches between secretary and worker from the header without losing the draft (permissions locked: %s)", async (permissionLocked) => {
     const secretary: AgentSession = {
       ...session,
       id: "lc:secretary",
@@ -1165,12 +1196,38 @@ describe("AgentPage", () => {
     render(<AgentPage />);
     await flush();
     fill("给秘书保留的补充要求");
-    fireEvent.click(screen.getByRole("button", { name: /^工作任务/ }));
-    fireEvent.click(screen.getByRole("button", { name: "查看并处理" }));
+    const lineage = within(screen.getByRole("navigation", { name: "秘书会话" }));
+    expect(lineage.getByRole("button", { name: "总秘书" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(screen.getByRole("button", { name: /^工作任务/ })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    let finishOpen!: (next: AgentSnapshot) => void;
+    vi.mocked(agentApi.getSession).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishOpen = resolve;
+        }),
+    );
+    fireEvent.click(lineage.getByRole("button", { name: /^分析任务/ }));
+    fireEvent.click(lineage.getByRole("button", { name: "总秘书" }));
+    await act(async () => finishOpen({ ...emptySnapshot(), session: worker }));
+    expect(screen.getByRole("heading", { name: "Loli 秘书" })).toBeInTheDocument();
+    fireEvent.click(lineage.getByRole("button", { name: /^分析任务/ }));
     await flush();
     expect(
       screen.getByRole("heading", { name: "后台分析任务" }),
     ).toBeInTheDocument();
+    expect(lineage.getByRole("button", { name: /^分析任务/ })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(
+      screen.queryByRole("button", { name: "交办任务" }),
+    ).not.toBeInTheDocument();
     const permission = within(openComposerOptions()).getByLabelText("执行权限");
     if (permissionLocked) {
       expect(permission).toBeDisabled();
@@ -1184,7 +1241,7 @@ describe("AgentPage", () => {
       });
       expect(permission).toHaveValue("full_access");
     }
-    fireEvent.click(screen.getByRole("button", { name: "返回秘书" }));
+    fireEvent.click(lineage.getByRole("button", { name: "总秘书" }));
     await flush();
     expect(
       screen.getByRole("heading", { name: "Loli 秘书" }),
@@ -2266,7 +2323,7 @@ describe("AgentPage", () => {
       expect.objectContaining({ title: "添加文档", multiple: true }),
     );
     await openAddMenu();
-    fireEvent.click(screen.getByRole("menuitem", { name: "添加插件" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "管理插件" }));
     await flush();
     await tick(1);
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
@@ -2405,7 +2462,7 @@ describe("AgentPage", () => {
     },
   );
 
-  it("automation design kickoff creates its own conversation and sends the requirement without interrupting the source or losing its draft", async () => {
+  it("opens a new automation conversation with an unsent draft and leaves the source conversation alone", async () => {
     snapshot.status = "running";
     snapshot.session.permissionMode = "auto";
     snapshot.session.reasoningEffort = "high";
@@ -2444,10 +2501,7 @@ describe("AgentPage", () => {
       />,
     );
     await flush();
-    fireEvent.change(screen.getByLabelText("描述自动化任务"), {
-      target: { value: "每天早上9点检查代码并汇总风险" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "开始对话构建" }));
+    fireEvent.click(screen.getByRole("button", { name: "新建" }));
     await flush();
     await tick(1);
     await flush();
@@ -2462,16 +2516,9 @@ describe("AgentPage", () => {
       64000,
     );
     expect(agentApi.getSession).toHaveBeenCalledWith(designSession.id);
-    expect(agentApi.sendMessage).toHaveBeenCalledOnce();
-    expect(agentApi.sendMessage).toHaveBeenCalledWith(
-      designSession.id,
-      expect.stringContaining("每天早上9点检查代码并汇总风险"),
-      expect.any(String),
-      [],
-      [],
-    );
-    expect(vi.mocked(agentApi.sendMessage).mock.calls[0][1]).toContain(
-      "自动化配置卡",
+    expect(agentApi.sendMessage).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
+      "请帮我创建一项自动化任务。先确认要执行的工作和运行时间，再给我配置草案。",
     );
     expect(agentApi.interruptSession).not.toHaveBeenCalled();
     expect(agentApi.automation).not.toHaveBeenCalledWith(
@@ -2505,19 +2552,13 @@ describe("AgentPage", () => {
       />,
     );
     await flush();
-    fireEvent.change(screen.getByLabelText("描述自动化任务"), {
-      target: { value: "每天9点检查项目" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "开始对话构建" }));
+    fireEvent.click(screen.getByRole("button", { name: "新建" }));
     await flush();
     expect(
       screen.getByText(
         "当前会话模型不可用，请先选择可用模型，再开始自动化对话。",
       ),
     ).toBeInTheDocument();
-    expect(screen.getByLabelText("描述自动化任务")).toHaveValue(
-      "每天9点检查项目",
-    );
     expect(agentApi.createSession).not.toHaveBeenCalled();
     expect(agentApi.sendMessage).not.toHaveBeenCalled();
     expect(agentApi.interruptSession).not.toHaveBeenCalled();
@@ -3588,7 +3629,7 @@ describe("AgentPage", () => {
         screen.getByRole("menuitem", { name: "添加文档" }),
       ).toHaveAttribute("aria-disabled", "true");
       expect(
-        screen.getByRole("menuitem", { name: "添加插件" }),
+        screen.getByRole("menuitem", { name: "管理插件" }),
       ).not.toHaveAttribute("aria-disabled", "true");
       fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
       await flush();

@@ -103,7 +103,6 @@ import {
   saveAgentSubmission,
   updateAgentSubmission,
   type AgentSubmission,
-  type AgentDraftToken,
 } from "@/lib/agentInputLedger";
 import {
   AGENT_PREPARED_SESSION_LIMIT,
@@ -698,6 +697,7 @@ export function AgentPage({
   secretaryRequestRef.current = secretaryRequest;
   const consumedSecretaryRequest = useRef<number | null>(null);
   const openingSecretaryRequest = useRef<number | null>(null);
+  const secretaryNavigation = useRef(0);
   const [secretaryRequestRevision, setSecretaryRequestRevision] = useState(0);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sessionSearch, setSessionSearch] = useState("");
@@ -1006,11 +1006,6 @@ export function AgentPage({
   >({});
   const workspaceSessionLoads = useRef(new Map<string, object>());
   const [drafts, setDrafts] = useState<Record<string, string>>({});
-  const [automationKickoff, setAutomationKickoff] = useState<{
-    sessionId: string;
-    projectPath: string;
-    draft: AgentDraftToken;
-  } | null>(null);
   const [composerImagesBySession, setComposerImagesBySession] = useState<
     Record<string, AgentImageAttachment[]>
   >({});
@@ -2975,18 +2970,25 @@ export function AgentPage({
     secretaryRequestRevision,
   ]);
   const openSecretarySession = async (id: string) => {
-    if (mutation.current || !workspace) return;
+    const request = ++secretaryNavigation.current;
+    if (mutation.current || !workspace || id === selectedId.current) return;
     const target = workspace.path;
     const requestGeneration = generation.current;
     const selectionRevision = selection.current.revision;
-    const next = await agentApi.getSession(id);
-    if (
-      !mounted.current ||
-      generation.current !== requestGeneration ||
-      workspaceRef.current?.path !== target ||
-      selection.current.revision !== selectionRevision
-    )
+    const isCurrent = () =>
+      mounted.current &&
+      secretaryNavigation.current === request &&
+      generation.current === requestGeneration &&
+      workspaceRef.current?.path === target &&
+      selection.current.revision === selectionRevision;
+    let next: AgentSnapshot;
+    try {
+      next = await agentApi.getSession(id);
+    } catch (cause) {
+      if (isCurrent()) throw cause;
       return;
+    }
+    if (!isCurrent()) return;
     if (next.session.id !== id || next.session.projectPath !== target)
       throw new Error(
         t("agentSecretary.openMismatch", {
@@ -3052,11 +3054,6 @@ export function AgentPage({
       ]);
       setShowArchived(false);
       setSessionId(created.id);
-      setAutomationKickoff({
-        sessionId: created.id,
-        projectPath: target,
-        draft: token,
-      });
     } finally {
       mutation.current = false;
       if (mounted.current) setBusy(null);
@@ -3611,35 +3608,6 @@ export function AgentPage({
       }
     }
   };
-  useEffect(() => {
-    if (!automationKickoff) return;
-    const kickoff = automationKickoff;
-    if (
-      sessionId !== kickoff.sessionId ||
-      workspace?.path !== kickoff.projectPath
-    ) {
-      setAutomationKickoff(null);
-      return;
-    }
-    if (busy || snapshotLoading || !snapshot) return;
-    setAutomationKickoff(null);
-    if (
-      snapshot.session.id !== kickoff.sessionId ||
-      activeStatus(snapshot.status) ||
-      draft !== kickoff.draft.text ||
-      !isAgentDraftCurrent(kickoff.draft)
-    )
-      return;
-    void send();
-  }, [
-    automationKickoff,
-    sessionId,
-    workspace?.path,
-    snapshot,
-    snapshotLoading,
-    busy,
-    draft,
-  ]);
   const retryLastMessage = async () => {
     if (!snapshot || snapshot.status !== "error" || !sessionId || !workspace)
       return;
@@ -4949,10 +4917,14 @@ export function AgentPage({
             <AgentSecretaryTasks
               key={secretarySessionId}
               sessionId={secretarySessionId}
+              selectedSessionId={sessionId ?? undefined}
+              canDelegate={
+                isSecretary && !selectedSession?.archived && !readOnlySession
+              }
               workerTaskId={
                 !isSecretary ? selectedSession?.coordination?.taskId : undefined
               }
-              active={!activeTool}
+              active={isActive && !activeTool}
               onOpenSession={openSecretarySession}
               onFocusComposer={
                 isSecretary

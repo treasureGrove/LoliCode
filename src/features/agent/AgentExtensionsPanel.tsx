@@ -1,18 +1,10 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { open } from "@tauri-apps/plugin-dialog";
 import {
-  ArrowDownToLine,
   Blocks,
-  Check,
-  ExternalLink,
-  FilePlus2,
   FolderOpen,
   Loader2,
-  Plus,
   RefreshCw,
-  RotateCcw,
   Search,
-  Settings2,
   Sparkles,
   Trash2,
 } from "lucide-react";
@@ -24,6 +16,7 @@ import { agentErrorMessage } from "@/hooks/useAgentSnapshot";
 import type {
   AgentExtensionConfig,
   AgentExtensions,
+  AgentHarnessPluginCatalog,
   AgentPluginStore,
   AgentSkill,
 } from "@/types/agent";
@@ -62,16 +55,19 @@ const localizedPluginText = (
   }
   return fallback;
 };
-const pluginCategoryLabel = (category: string) =>
-  ({
-    "developer-tools": "开发工具",
-    productivity: "生产力",
-    utilities: "实用工具",
-    legal: "法律",
-    template: "模板",
-    finance: "财务",
-    other: "其他",
-  })[category] || category;
+const HARNESS_PLUGIN_LABELS: Record<
+  string,
+  { name: string; description: string }
+> = {
+  terminal: {
+    name: "持久终端",
+    description: "在任务执行期间复用终端进程和命令状态。",
+  },
+  ralph: {
+    name: "Ralph",
+    description: "用会话目标持续跟进任务，直到满足完成条件。",
+  },
+};
 const BUNDLED_SKILL_LABELS: Record<string, { name: string; summary: string }> =
   {
     "skill-creator": {
@@ -108,6 +104,14 @@ export function AgentExtensionsPanel({
 }) {
   const [catalog, setCatalog] = useState<AgentExtensions | null>(null);
   const [pluginStore, setPluginStore] = useState<AgentPluginStore | null>(null);
+  const [harnessPlugins, setHarnessPlugins] =
+    useState<AgentHarnessPluginCatalog | null>(null);
+  const [harnessPluginError, setHarnessPluginError] = useState<string | null>(
+    null,
+  );
+  const [legacyPluginError, setLegacyPluginError] = useState<string | null>(
+    null,
+  );
   const [tab, setTab] = useState<"skills" | "plugins" | "mcp">(
     initialTab ?? "skills",
   );
@@ -117,13 +121,6 @@ export function AgentExtensionsPanel({
   const [serverName, setServerName] = useState("");
   const [serverUrl, setServerUrl] = useState("");
   const [serverToken, setServerToken] = useState("");
-  const [marketplaceQuery, setMarketplaceQuery] = useState("");
-  const [marketplaceSegment, setMarketplaceSegment] = useState<
-    "public" | "personal"
-  >("public");
-  const [marketplaceSource, setMarketplaceSource] = useState("");
-  const [marketplaceSourcesOpen, setMarketplaceSourcesOpen] = useState(false);
-  const [installedManagementOpen, setInstalledManagementOpen] = useState(false);
   const [skillQuery, setSkillQuery] = useState("");
   const panelId = useId();
   const visibleRef = useRef(visible);
@@ -147,31 +144,28 @@ export function AgentExtensionsPanel({
     setBusy(true);
     setError(null);
     try {
-      const [next, store] = await Promise.all([
-        agentApi.getExtensions(),
-        agentApi.getPluginStore().catch(
-          (cause): AgentPluginStore => ({
-            marketplaces: [],
-            availablePlugins: [],
-            installedPlugins: [],
-            restorableBuiltins: [],
-            diagnostics: [
-              { severity: "error", message: agentErrorMessage(cause) },
-            ],
-            capability: {
-              supported: false,
-              reason: agentErrorMessage(cause),
-              customSources: false,
-              localPluginRuntime: false,
-              mcpRuntime: false,
-            },
-          }),
+      const [next, legacy, native] = await Promise.all([
+        agentApi.getExtensions().then(
+          (value) => ({ value, error: null }),
+          (cause) => ({ value: null, error: agentErrorMessage(cause) }),
+        ),
+        agentApi.getPluginStore().then(
+          (value) => ({ value, error: null }),
+          (cause) => ({ value: null, error: agentErrorMessage(cause) }),
+        ),
+        agentApi.getHarnessPlugins().then(
+          (value) => ({ value, error: null }),
+          (cause) => ({ value: null, error: agentErrorMessage(cause) }),
         ),
       ]);
       if (isCurrent(current) && loading.current === requestId) {
-        setCatalog(next);
-        setPluginStore(store);
-        setNeedsReload(Boolean(next.pendingReload));
+        setCatalog(next.value);
+        setError(next.error);
+        setPluginStore(legacy.value);
+        setLegacyPluginError(legacy.error);
+        setHarnessPlugins(native.value);
+        setHarnessPluginError(native.error);
+        setNeedsReload(Boolean(next.value?.pendingReload));
       }
     } catch (cause) {
       if (isCurrent(current) && loading.current === requestId)
@@ -189,6 +183,9 @@ export function AgentExtensionsPanel({
     if (initialTab) setTab(initialTab);
     setCatalog(null);
     setPluginStore(null);
+    setHarnessPlugins(null);
+    setHarnessPluginError(null);
+    setLegacyPluginError(null);
     setNeedsReload(false);
     void readCatalog(current);
     return () => {
@@ -236,10 +233,9 @@ export function AgentExtensionsPanel({
       if (visibleRef.current) setBusy(Boolean(loading.current));
     }
   };
-  const runStore = async (
-    operation: () => Promise<AgentPluginStore>,
-    markReload = false,
-    refreshExtensions = false,
+  const runStore = async <T,>(
+    operation: () => Promise<T>,
+    apply: (next: T, current: number) => Promise<void> | void,
   ) => {
     const current = generation.current;
     if (!isCurrent(current) || pending.current) return false;
@@ -251,22 +247,7 @@ export function AgentExtensionsPanel({
     try {
       const next = await operation();
       changed = true;
-      if (isCurrent(current)) {
-        setPluginStore(next);
-        if (refreshExtensions) {
-          try {
-            const extensions = await agentApi.getExtensions();
-            if (isCurrent(current)) {
-              setCatalog(extensions);
-              setNeedsReload(Boolean(extensions.pendingReload));
-            }
-          } catch {
-            if (isCurrent(current)) setNeedsReload(markReload);
-          }
-        } else if (markReload) {
-          setNeedsReload(true);
-        }
-      }
+      if (isCurrent(current)) await apply(next, current);
       return isCurrent(current);
     } catch (cause) {
       if (isCurrent(current)) setError(agentErrorMessage(cause));
@@ -278,42 +259,21 @@ export function AgentExtensionsPanel({
       if (visibleRef.current) setBusy(Boolean(loading.current));
     }
   };
-  const runMarketplaceStore = (operation: () => Promise<AgentPluginStore>) =>
-    runStore(operation, false, true);
+  const runLegacyStore = (operation: () => Promise<AgentPluginStore>) =>
+    runStore(operation, async (next, current) => {
+      setPluginStore(next);
+      const extensions = await agentApi.getExtensions();
+      if (isCurrent(current)) {
+        setCatalog(extensions);
+        setNeedsReload(Boolean(extensions.pendingReload));
+      }
+    });
   const pickSkill = () => {
     const current = generation.current;
     return run(async () => {
       const path = await settingsApi.pickDirectory();
       return path && isCurrent(current) ? agentApi.importSkill(path) : null;
     });
-  };
-  const pickPlugin = (directory: boolean) => {
-    const current = generation.current;
-    return run(async () => {
-      const selected = await open({
-        directory,
-        multiple: false,
-        title: directory ? "选择插件目录" : "选择 OpenCode v2 插件文件",
-        ...(!directory && {
-          filters: [{ name: "插件", extensions: ["js", "mjs", "ts"] }],
-        }),
-      });
-      return typeof selected === "string" && isCurrent(current)
-        ? agentApi.installPlugin(selected)
-        : null;
-    });
-  };
-  const pickMarketplaceDirectory = async () => {
-    try {
-      const selected = await open({
-        directory: true,
-        multiple: false,
-        title: "选择插件市场目录",
-      });
-      if (typeof selected === "string") setMarketplaceSource(selected);
-    } catch {
-      // Keep the source form as-is if the native picker is dismissed.
-    }
   };
   const updateMcp = (
     update: (servers: Record<string, unknown>) => Record<string, unknown>,
@@ -373,74 +333,7 @@ export function AgentExtensionsPanel({
       return isCurrent(current) ? agentApi.getExtensions() : null;
     }, false);
   };
-  const storeMarketplaces = pluginStore?.marketplaces ?? [];
-  const supportsCustomSources = pluginStore?.capability.customSources !== false;
-  const supportsLocalPluginRuntime =
-    pluginStore?.capability.localPluginRuntime !== false;
   const installedStorePlugins = pluginStore?.installedPlugins ?? [];
-  const installedStoreById = new Map(
-    installedStorePlugins.map((plugin) => [plugin.id, plugin]),
-  );
-  const isPublicMarketplace = (id: string) => {
-    const marketplace = storeMarketplaces.find((item) => item.id === id);
-    return Boolean(
-      marketplace?.isOfficial ||
-        id === "zcode-plugins-official" ||
-        id === "zcode-plugins",
-    );
-  };
-  const marketplaceItems = [
-    ...(pluginStore?.availablePlugins ?? []),
-    ...(pluginStore?.restorableBuiltins ?? []),
-  ].filter(
-    (item, index, all) =>
-      all.findIndex((other) => other.id === item.id) === index,
-  );
-  const visibleMarketplaceItems = marketplaceItems.filter((item) => {
-    if (item.listing?.requiresPaidPlan) return false;
-    if (
-      marketplaceSegment === "public" &&
-      !isPublicMarketplace(item.marketplace)
-    )
-      return false;
-    if (
-      marketplaceSegment === "personal" &&
-      isPublicMarketplace(item.marketplace)
-    )
-      return false;
-    const query = marketplaceQuery.trim().toLocaleLowerCase();
-    if (!query) return true;
-    const market = storeMarketplaces.find(
-      (entry) => entry.id === item.marketplace,
-    );
-    return [
-      item.listing?.displayName,
-      item.name,
-      item.description,
-      item.listing?.author,
-      item.listing?.category,
-      market?.name,
-    ].some((value) => value?.toLocaleLowerCase().includes(query));
-  });
-  const marketplaceCategories = new Map<
-    string,
-    typeof visibleMarketplaceItems
-  >();
-  for (const item of visibleMarketplaceItems) {
-    const category = pluginCategoryLabel(
-      item.listing?.category?.trim() || "other",
-    );
-    marketplaceCategories.set(category, [
-      ...(marketplaceCategories.get(category) ?? []),
-      item,
-    ]);
-  }
-  const submitMarketplaceSource = async () => {
-    const value = marketplaceSource.trim();
-    if (!value) return;
-    const added = await runStore(() => agentApi.addPluginMarketplace(value));
-    if (added) setMarketplaceSource("");
-  };
   const visibleSkills =
     catalog?.skills.filter((skill) => {
       const query = skillQuery.trim().toLocaleLowerCase();
@@ -460,7 +353,7 @@ export function AgentExtensionsPanel({
       open={visible}
       onClose={dismiss}
       title="技能与插件"
-      description="为工作台添加新能力。管理技能、浏览插件市场，或连接 MCP 工具。"
+      description="管理 Harness 插件、技能与 MCP 工具。"
       icon={Blocks}
       projectPath={projectPath}
     >
@@ -618,7 +511,7 @@ export function AgentExtensionsPanel({
                             disabled={busy || skill.source === "marketplace"}
                             title={
                               skill.source === "marketplace"
-                                ? "在插件市场统一启用或停用"
+                                ? "在插件页的兼容扩展中启用或停用"
                                 : undefined
                             }
                             onChange={(event) =>
@@ -713,7 +606,7 @@ export function AgentExtensionsPanel({
                   <p>
                     {skillQuery.trim()
                       ? "试试其他名称或关键词。"
-                      : "导入本地技能目录，或前往插件市场发现新能力。"}
+                      : "可以导入本地技能目录，或管理 Harness 插件。"}
                   </p>
                   {!skillQuery.trim() && (
                     <button
@@ -721,7 +614,7 @@ export function AgentExtensionsPanel({
                       type="button"
                       onClick={() => setTab("plugins")}
                     >
-                      浏览插件市场
+                      管理插件
                     </button>
                   )}
                 </div>
@@ -729,617 +622,188 @@ export function AgentExtensionsPanel({
             </>
           )}
           {tab === "plugins" && (
-            <section className="wb-plugin-store">
-              <div className="wb-plugin-store-heading">
-                <div>
-                  <h2>插件市场</h2>
-                  <p>
-                    已安装技能会自动同步到
-                    Agent，并可加入当前会话。若技能依赖本机
-                    CLI，需按插件说明安装并登录。
+            <>
+              <section className="wb-harness-plugins" aria-label="官方插件">
+                <div className="wb-harness-plugin-heading">
+                  <div>
+                    <h2>官方插件</h2>
+                    <p>
+                      管理 DeepSeek Harness 为本机 Agent
+                      交互会话提供的可选能力。
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="wb-mode-button"
+                    aria-label="刷新插件"
+                    title="刷新插件"
+                    disabled={busy}
+                    onClick={() => void readCatalog(generation.current)}
+                  >
+                    <RefreshCw size={14} aria-hidden="true" />
+                    刷新
+                  </button>
+                </div>
+                {harnessPluginError && (
+                  <p role="alert" className="text-caption text-danger-text">
+                    {harnessPluginError}
                   </p>
-                </div>
-                <div className="wb-plugin-store-actions">
-                  <button
-                    type="button"
-                    aria-label="刷新插件市场"
-                    title="刷新插件市场"
-                    disabled={busy}
-                    onClick={() =>
-                      void runMarketplaceStore(() =>
-                        agentApi.updatePluginMarketplace(),
-                      )
-                    }
-                  >
-                    {busy ? (
-                      <Loader2 size={16} className="animate-spin" />
-                    ) : (
-                      <RefreshCw size={16} />
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    aria-label="管理插件市场来源"
-                    title="管理插件市场来源"
-                    aria-expanded={marketplaceSourcesOpen}
-                    disabled={busy}
-                    onClick={() => setMarketplaceSourcesOpen((value) => !value)}
-                  >
-                    <Settings2 size={16} />
-                  </button>
-                  {supportsCustomSources && (
-                    <button
-                      type="button"
-                      className="wb-plugin-store-add"
-                      disabled={busy}
-                      onClick={() => setMarketplaceSourcesOpen(true)}
-                    >
-                      <Plus size={15} />
-                      添加
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {marketplaceSourcesOpen && (
-                <div className="wb-marketplace-management">
-                  {supportsCustomSources && (
-                    <form
-                      className="wb-marketplace-add-form"
-                      onSubmit={(event) => {
-                        event.preventDefault();
-                        void submitMarketplaceSource();
-                      }}
-                    >
-                      <label className="wb-marketplace-source-input">
-                        <span>添加插件市场</span>
-                        <input
-                          value={marketplaceSource}
-                          disabled={busy}
-                          onChange={(event) =>
-                            setMarketplaceSource(event.target.value)
-                          }
-                          placeholder="ZCode 官方 marketplace.json URL"
-                        />
-                      </label>
-                      <button
-                        type="submit"
-                        disabled={busy || !marketplaceSource.trim()}
-                      >
-                        {busy ? (
-                          <Loader2 size={14} className="animate-spin" />
-                        ) : (
-                          <Plus size={14} />
-                        )}
-                        添加来源
-                      </button>
-                      <button
-                        type="button"
-                        disabled={busy}
-                        title="选择本地插件市场目录"
-                        onClick={() => void pickMarketplaceDirectory()}
-                      >
-                        <FolderOpen size={14} />
-                      </button>
-                    </form>
-                  )}
-                  <div className="wb-marketplace-source-list">
-                    {storeMarketplaces.map((marketplace) => (
-                      <div
-                        className="wb-marketplace-source-row"
-                        key={marketplace.id}
-                      >
-                        <div>
-                          <strong>{marketplace.name}</strong>
-                          <span>
-                            {marketplace.pluginCount} 个插件
-                            {marketplace.isOfficial ? " · 官方" : ""}
-                          </span>
-                        </div>
-                        <button
-                          type="button"
-                          aria-label={`刷新市场 ${marketplace.name}`}
-                          title="刷新市场"
-                          disabled={busy}
-                          onClick={() =>
-                            void runStore(() =>
-                              agentApi.updatePluginMarketplace(marketplace.id),
-                            )
-                          }
-                        >
-                          <RefreshCw size={14} />
-                        </button>
-                        {!marketplace.isOfficial &&
-                          marketplace.id !== "zcode-plugins-official" && (
-                            <button
-                              type="button"
-                              aria-label={`移除市场 ${marketplace.name}`}
-                              title="移除市场来源"
-                              disabled={busy}
-                              onClick={() =>
-                                void runStore(() =>
-                                  agentApi.removePluginMarketplace(
-                                    marketplace.id,
-                                  ),
-                                )
-                              }
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          )}
-                      </div>
-                    ))}
-                    {storeMarketplaces.length === 0 && !busy && (
-                      <p className="wb-extension-hint">
-                        还没有可用的市场来源。
-                      </p>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              <label className="wb-plugin-store-search">
-                <Search size={16} aria-hidden="true" />
-                <input
-                  aria-label="搜索插件"
-                  placeholder="搜索插件"
-                  value={marketplaceQuery}
-                  onChange={(event) => setMarketplaceQuery(event.target.value)}
-                />
-              </label>
-
-              <div className="wb-plugin-installed-strip">
-                <div className="wb-plugin-store-section-title">
-                  <h3>已安装</h3>
-                  <span>
-                    {
-                      installedStorePlugins.filter(
-                        (item) => !item.listing?.requiresPaidPlan,
-                      ).length
-                    }
-                  </span>
-                  <button
-                    type="button"
-                    className="wb-plugin-installed-manage-toggle"
-                    aria-label="管理已安装插件"
-                    title="管理已安装插件"
-                    aria-expanded={installedManagementOpen}
-                    disabled={busy}
-                    onClick={() =>
-                      setInstalledManagementOpen((value) => !value)
-                    }
-                  >
-                    <Settings2 size={14} />
-                  </button>
-                </div>
-                {installedStorePlugins.filter(
-                  (item) => !item.listing?.requiresPaidPlan,
-                ).length > 0 ? (
-                  <div className="wb-plugin-installed-icons">
-                    {installedStorePlugins
-                      .filter((item) => !item.listing?.requiresPaidPlan)
-                      .map((plugin) => (
-                        <div
-                          className="wb-plugin-installed-icon"
-                          key={plugin.id}
-                          title={plugin.name}
-                        >
-                          <span>
-                            {(
-                              localizedPluginText(
-                                plugin.listing?.displayName,
-                                plugin.listing?.displayNameI18n,
-                              ) || plugin.name
-                            )
-                              .slice(0, 1)
-                              .toLocaleUpperCase()}
-                          </span>
-                          <small>
-                            {localizedPluginText(
-                              plugin.listing?.displayName,
-                              plugin.listing?.displayNameI18n,
-                            ) || plugin.name}
-                          </small>
-                        </div>
-                      ))}
-                  </div>
-                ) : (
-                  <p className="wb-extension-hint">安装的插件会显示在这里。</p>
                 )}
-                {installedManagementOpen && (
-                  <div className="wb-plugin-installed-management">
-                    {installedStorePlugins
-                      .filter((plugin) => !plugin.listing?.requiresPaidPlan)
-                      .map((plugin) => {
-                        const sourceAvailable = storeMarketplaces.some(
-                          (marketplace) =>
-                            marketplace.id === plugin.marketplace,
-                        );
-                        const title =
-                          localizedPluginText(
-                            plugin.listing?.displayName,
-                            plugin.listing?.displayNameI18n,
-                          ) || plugin.name;
-                        return (
-                          <div
-                            className="wb-plugin-installed-row"
-                            key={plugin.id}
-                          >
-                            <div>
-                              <strong>{title}</strong>
-                              <span>
-                                {sourceAvailable
-                                  ? plugin.marketplace
-                                  : "来源已移除"}
-                              </span>
-                            </div>
-                            <label className="wb-plugin-store-enable">
+                {harnessPlugins?.pendingReload && (
+                  <p role="status" className="wb-extension-hint">
+                    插件设置已保存，将在新一轮任务启动时生效。
+                  </p>
+                )}
+                {harnessPlugins?.bundles.length === 0 && (
+                  <p className="wb-extension-hint">
+                    当前版本没有可管理的官方插件。
+                  </p>
+                )}
+                <div className="wb-skills-grid">
+                  {harnessPlugins?.bundles.map((plugin) => {
+                    const display = HARNESS_PLUGIN_LABELS[plugin.id];
+                    const name = display?.name || plugin.name;
+                    return (
+                      <article className="wb-extension-card" key={plugin.id}>
+                        <div className="wb-extension-card-heading">
+                          <Blocks size={16} aria-hidden="true" />
+                          <h3>{name}</h3>
+                          <label className="wb-extension-toggle">
+                            <input
+                              type="checkbox"
+                              aria-label={`启用插件 ${name}`}
+                              checked={plugin.enabled}
+                              disabled={busy}
+                              onChange={(event) => {
+                                const enabled = event.target.checked;
+                                void runStore(
+                                  () =>
+                                    agentApi.setHarnessPluginEnabled(
+                                      plugin.id,
+                                      enabled,
+                                    ),
+                                  setHarnessPlugins,
+                                );
+                              }}
+                            />
+                            启用
+                          </label>
+                        </div>
+                        <p>{display?.description || plugin.description}</p>
+                        <div className="wb-extension-meta">
+                          <span>{plugin.version}</span>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              </section>
+              {legacyPluginError && (
+                <p role="status" className="wb-extension-hint">
+                  {legacyPluginError}
+                </p>
+              )}
+              {(installedStorePlugins.length > 0 ||
+                Boolean(catalog?.plugins.length)) && (
+                <details className="wb-harness-plugins wb-compatible-plugins">
+                  <summary>兼容扩展</summary>
+                  <p>管理已保存的 CLI 技能包与旧版本地插件配置。</p>
+                  {pluginStore?.diagnostics.map((item, index) => (
+                    <p
+                      key={`${item.pluginId || "legacy"}:${index}`}
+                      role="status"
+                    >
+                      {item.message}
+                    </p>
+                  ))}
+                  <div className="wb-skills-grid">
+                    {installedStorePlugins.map((plugin) => {
+                      const title =
+                        localizedPluginText(
+                          plugin.listing?.displayName,
+                          plugin.listing?.displayNameI18n,
+                        ) || plugin.name;
+                      return (
+                        <article className="wb-extension-card" key={plugin.id}>
+                          <div className="wb-extension-card-heading">
+                            <h3>{title}</h3>
+                            <label className="wb-extension-toggle">
                               <input
                                 type="checkbox"
-                                aria-label={`启用插件 ${title}`}
+                                aria-label={`启用兼容扩展 ${title}`}
                                 checked={plugin.enabled}
                                 disabled={busy}
-                                onChange={(event) =>
-                                  void runMarketplaceStore(async () => {
+                                onChange={(event) => {
+                                  const enabled = event.target.checked;
+                                  void runLegacyStore(async () => {
                                     await agentApi.setPluginEnabled(
                                       plugin.id,
-                                      event.target.checked,
+                                      enabled,
                                     );
                                     return agentApi.getPluginStore();
-                                  })
-                                }
+                                  });
+                                }}
                               />
                               启用
                             </label>
-                            {sourceAvailable &&
-                              plugin.updateStatus &&
-                              plugin.updateStatus !== "none" && (
-                                <button
-                                  type="button"
-                                  disabled={busy}
-                                  onClick={() =>
-                                    void runMarketplaceStore(() =>
-                                      agentApi.updateMarketplacePlugin(
-                                        plugin.id,
-                                      ),
-                                    )
-                                  }
-                                >
-                                  <RotateCcw size={13} />
-                                  更新
-                                </button>
-                              )}
+                          </div>
+                          <div className="wb-extension-meta">
+                            <span>
+                              CLI 技能包
+                              {plugin.version && ` · ${plugin.version}`}
+                            </span>
                             <button
                               type="button"
                               aria-label={`卸载 ${title}`}
-                              title="卸载插件"
                               disabled={busy}
                               onClick={() =>
-                                void runMarketplaceStore(() =>
+                                void runLegacyStore(() =>
                                   agentApi.uninstallMarketplacePlugin(
                                     plugin.id,
                                   ),
                                 )
                               }
                             >
-                              <Trash2 size={14} />
+                              <Trash2 size={13} aria-hidden="true" />
+                              卸载
                             </button>
                           </div>
-                        );
-                      })}
-                  </div>
-                )}
-              </div>
-
-              <div
-                className="wb-plugin-store-segments"
-                role="tablist"
-                aria-label="插件市场范围"
-              >
-                {(
-                  [
-                    ["public", "公开"],
-                    ["personal", "个人"],
-                  ] as const
-                )
-                  .filter(([id]) => id === "public" || supportsCustomSources)
-                  .map(([id, label]) => (
-                    <button
-                      type="button"
-                      role="tab"
-                      aria-selected={marketplaceSegment === id}
-                      key={id}
-                      onClick={() => setMarketplaceSegment(id)}
-                    >
-                      {label}
-                    </button>
-                  ))}
-              </div>
-
-              {pluginStore?.capability.supported === false && (
-                <p className="wb-extension-hint">
-                  {pluginStore.capability.reason ||
-                    "当前环境暂不支持插件市场。"}
-                </p>
-              )}
-              {pluginStore?.diagnostics
-                .filter(
-                  (item) => item.message !== pluginStore.capability.reason,
-                )
-                .map((item, index) => (
-                  <p
-                    key={`${item.pluginId || "market"}:${index}`}
-                    role="status"
-                    className="wb-extension-hint"
-                  >
-                    {item.pluginId ? `${item.pluginId}：` : ""}
-                    {item.message}
-                  </p>
-                ))}
-              {Array.from(marketplaceCategories.entries()).map(
-                ([category, items]) => (
-                  <section className="wb-plugin-store-category" key={category}>
-                    <h3>{category}</h3>
-                    <div className="wb-plugin-store-grid">
-                      {items.map((item) => {
-                        const installed = installedStoreById.get(item.id);
-                        const restorable =
-                          pluginStore?.restorableBuiltins.some(
-                            (plugin) => plugin.id === item.id,
-                          ) ?? false;
-                        const title =
-                          localizedPluginText(
-                            item.listing?.displayName,
-                            item.listing?.displayNameI18n,
-                          ) || item.name;
-                        const description =
-                          localizedPluginText(
-                            item.description,
-                            item.listing?.descriptionI18n,
-                          ) ||
-                          storeMarketplaces.find(
-                            (marketplace) =>
-                              marketplace.id === item.marketplace,
-                          )?.description;
-                        const pluginSkills = (catalog?.skills ?? []).filter(
-                          (skill) =>
-                            skill.source === "marketplace" &&
-                            skill.id.startsWith(`cli-${item.name}-`) &&
-                            skill.installed &&
-                            skill.enabled,
-                        );
-                        return (
-                          <article
-                            className="wb-plugin-store-card"
-                            key={item.id}
+                        </article>
+                      );
+                    })}
+                    {catalog?.plugins.map((plugin) => (
+                      <article className="wb-extension-card" key={plugin.id}>
+                        <div className="wb-extension-card-heading">
+                          <h3>{plugin.name}</h3>
+                          <span>旧版本地配置</span>
+                        </div>
+                        {plugin.error && (
+                          <p role="alert" className="text-danger-text">
+                            {plugin.error}
+                          </p>
+                        )}
+                        <div className="wb-extension-meta">
+                          <span>{runtimeLabel(plugin.runtimeStatus)}</span>
+                          <button
+                            type="button"
+                            aria-label={`移除配置 ${plugin.name}`}
+                            disabled={busy}
+                            onClick={() =>
+                              void run(() =>
+                                agentApi.uninstallPlugin(plugin.id),
+                              )
+                            }
                           >
-                            <div
-                              className="wb-plugin-store-card-icon"
-                              aria-hidden="true"
-                            >
-                              {item.listing?.icon?.startsWith("https://") ? (
-                                <img
-                                  src={item.listing.icon}
-                                  alt=""
-                                  loading="lazy"
-                                />
-                              ) : (
-                                <Blocks size={19} />
-                              )}
-                            </div>
-                            <div className="wb-plugin-store-card-content">
-                              <div className="wb-plugin-store-card-title">
-                                <h4 title={title}>{title}</h4>
-                                {item.version && <small>{item.version}</small>}
-                              </div>
-                              <p title={description}>
-                                {description || "暂无插件介绍。"}
-                              </p>
-                              <span className="wb-plugin-store-card-meta">
-                                {item.listing?.author ||
-                                  storeMarketplaces.find(
-                                    (marketplace) =>
-                                      marketplace.id === item.marketplace,
-                                  )?.name ||
-                                  item.marketplace}
-                                {item.componentTypes?.length
-                                  ? ` · ${item.componentTypes.join("、")}`
-                                  : ""}
-                              </span>
-                            </div>
-                            <div className="wb-plugin-store-card-actions">
-                              {installed ? (
-                                <>
-                                  <label className="wb-plugin-store-enable">
-                                    <input
-                                      type="checkbox"
-                                      aria-label={`启用插件 ${title}`}
-                                      checked={installed.enabled}
-                                      disabled={busy}
-                                      onChange={(event) =>
-                                        void runMarketplaceStore(async () => {
-                                          await agentApi.setPluginEnabled(
-                                            installed.id,
-                                            event.target.checked,
-                                          );
-                                          return agentApi.getPluginStore();
-                                        })
-                                      }
-                                    />
-                                    启用
-                                  </label>
-                                  {installed.updateStatus &&
-                                  installed.updateStatus !== "none" ? (
-                                    <button
-                                      type="button"
-                                      disabled={busy}
-                                      onClick={() =>
-                                        void runMarketplaceStore(() =>
-                                          agentApi.updateMarketplacePlugin(
-                                            installed.id,
-                                          ),
-                                        )
-                                      }
-                                    >
-                                      <RotateCcw size={13} />
-                                      更新
-                                    </button>
-                                  ) : (
-                                    <button
-                                      type="button"
-                                      className="is-installed"
-                                      disabled
-                                    >
-                                      <Check size={13} />
-                                      已安装
-                                    </button>
-                                  )}
-                                  <button
-                                    type="button"
-                                    className="wb-plugin-store-icon-action"
-                                    aria-label={`卸载 ${title}`}
-                                    title="卸载插件"
-                                    disabled={busy}
-                                    onClick={() =>
-                                      void runMarketplaceStore(() =>
-                                        agentApi.uninstallMarketplacePlugin(
-                                          installed.id,
-                                        ),
-                                      )
-                                    }
-                                  >
-                                    <Trash2 size={14} />
-                                  </button>
-                                </>
-                              ) : (
-                                <button
-                                  type="button"
-                                  disabled={busy}
-                                  onClick={() =>
-                                    void runMarketplaceStore(() =>
-                                      restorable
-                                        ? agentApi.restoreBuiltinPlugin(item.id)
-                                        : agentApi.installMarketplacePlugin(
-                                            item.marketplace,
-                                            item.name,
-                                          ),
-                                    )
-                                  }
-                                >
-                                  <ArrowDownToLine size={14} />
-                                  {restorable ? "恢复" : "安装"}
-                                </button>
-                              )}
-                              {installed?.enabled &&
-                                onUseSkill &&
-                                pluginSkills.map((skill) => (
-                                  <button
-                                    key={skill.id}
-                                    type="button"
-                                    className="wb-plugin-store-use"
-                                    disabled={
-                                      busy || skill.runtimeStatus === "failed"
-                                    }
-                                    title={
-                                      skill.runtimeStatus === "failed"
-                                        ? skill.error ||
-                                          "技能载入失败，请重新安装插件"
-                                        : `将“${skill.name}”加入当前会话草稿`
-                                    }
-                                    onClick={() => onUseSkill(skill)}
-                                  >
-                                    <Sparkles size={13} />
-                                    使用 {skill.name.split(":").at(-1)}
-                                  </button>
-                                ))}
-                              {item.listing?.homepage &&
-                                /^https:\/\//i.test(item.listing.homepage) && (
-                                  <button
-                                    type="button"
-                                    className="wb-plugin-store-icon-action"
-                                    aria-label={`打开 ${title} 的主页`}
-                                    title="插件主页"
-                                    disabled={busy}
-                                    onClick={() =>
-                                      void settingsApi.openExternal(
-                                        item.listing!.homepage!,
-                                      )
-                                    }
-                                  >
-                                    <ExternalLink size={14} />
-                                  </button>
-                                )}
-                            </div>
-                          </article>
-                        );
-                      })}
-                    </div>
-                  </section>
-                ),
+                            <Trash2 size={13} aria-hidden="true" />
+                            移除配置
+                          </button>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                </details>
               )}
-              {pluginStore && visibleMarketplaceItems.length === 0 && (
-                <p className="wb-plugin-store-empty">
-                  {marketplaceSegment === "personal" && !marketplaceQuery.trim()
-                    ? "还没有个人插件市场，点击右上角“添加”导入来源。"
-                    : "没有找到符合条件的插件。"}
-                </p>
-              )}
-              {!!catalog?.plugins.length && (
-                <section className="space-y-2">
-                  <h3 className="text-caption text-fg-3">
-                    本地 JavaScript 插件配置
-                  </h3>
-                  {catalog.plugins.map((plugin) => (
-                    <article key={plugin.id} className="wb-extension-card">
-                      <strong>{plugin.name}</strong>
-                      <p>
-                        {runtimeLabel(plugin.runtimeStatus) ||
-                          "尚未接入本体执行引擎"}
-                      </p>
-                      {plugin.error && (
-                        <p role="alert" className="text-danger-text">
-                          {plugin.error}
-                        </p>
-                      )}
-                      <p className="wb-extension-hint">
-                        此配置由旧版保留；CLI 市场的技能可由当前 Agent 使用。
-                      </p>
-                      <button
-                        className="wb-mode-button"
-                        disabled={busy}
-                        onClick={() =>
-                          void run(() => agentApi.uninstallPlugin(plugin.id))
-                        }
-                      >
-                        <Trash2 size={13} />
-                        移除配置
-                      </button>
-                    </article>
-                  ))}
-                </section>
-              )}
-
-              {supportsLocalPluginRuntime && (
-                <div className="wb-extension-actions wb-plugin-store-local-actions">
-                  <button
-                    className="wb-mode-button"
-                    disabled={busy}
-                    onClick={() => void pickPlugin(true)}
-                  >
-                    <FolderOpen size={14} />
-                    安装本地插件目录
-                  </button>
-                  <button
-                    className="wb-mode-button"
-                    disabled={busy}
-                    onClick={() => void pickPlugin(false)}
-                  >
-                    <FilePlus2 size={14} />
-                    安装插件文件
-                  </button>
-                </div>
-              )}
-            </section>
+            </>
           )}
           {tab === "mcp" && (
             <>
@@ -1363,8 +827,7 @@ export function AgentExtensionsPanel({
               ) : (
                 pluginStore?.capability.mcpRuntime === false && (
                   <p className="wb-extension-hint">
-                    MCP 配置可保留，当前应用内执行引擎尚未接入 MCP
-                    连接。可先使用插件市场中的 CLI 技能。
+                    MCP 配置可保存，当前应用内执行引擎尚未接入 MCP 连接。
                   </p>
                 )
               )}

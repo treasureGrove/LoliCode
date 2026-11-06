@@ -14,6 +14,7 @@ import type {
 vi.mock("@/lib/api/agent", () => ({
   agentApi: {
     getSecretary: vi.fn(),
+    delegateSecretaryTask: vi.fn(),
     getSecretaryGithub: vi.fn(),
     bindSecretaryGithub: vi.fn(),
     refreshSecretaryGithub: vi.fn(),
@@ -72,6 +73,19 @@ function followupForm() {
   fireEvent.change(input, { target: { value: "核对安装步骤" } });
   return { input, form: input.closest("form")! };
 }
+function delegationForm() {
+  const trigger = screen.getByRole("button", { name: "交办任务" });
+  fireEvent.click(trigger);
+  const form = screen.getByRole("form", { name: "手动交办任务" });
+  return {
+    trigger,
+    form,
+    title: within(form).getByLabelText("任务名称"),
+    instructions: within(form).getByLabelText("工作要求"),
+    executionMode: within(form).getByLabelText("执行方式"),
+    submit: within(form).getByRole("button", { name: "开始执行" }),
+  };
+}
 
 beforeEach(() => {
   i18n.addResourceBundle(
@@ -84,6 +98,7 @@ beforeEach(() => {
   vi.useFakeTimers();
   sessionStorage.clear();
   vi.mocked(agentApi.getSecretary).mockReset().mockResolvedValue(overview());
+  vi.mocked(agentApi.delegateSecretaryTask).mockReset();
   vi.mocked(agentApi.sendSecretaryTaskMessage)
     .mockReset()
     .mockResolvedValue(task());
@@ -108,6 +123,382 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 describe("AgentSecretaryTasks", () => {
+  it("shows only the chief secretary when no work conversations exist", async () => {
+    const onOpenSession = vi.fn();
+    render(
+      <AgentSecretaryTasks
+        sessionId="lc:secretary"
+        selectedSessionId="lc:secretary"
+        onOpenSession={onOpenSession}
+      />,
+    );
+    await flush();
+    const strip = within(screen.getByRole("navigation", { name: "秘书会话" }));
+    const chief = strip.getByRole("button", { name: "总秘书" });
+    expect(strip.getAllByRole("button")).toEqual([chief]);
+    expect(chief).toHaveAttribute("aria-current", "page");
+    fireEvent.click(chief);
+    expect(onOpenSession).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: /^工作任务/ })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+  });
+
+  it("places real parents before nested conversations and keeps unresolved links usable", async () => {
+    const parent = task({ id: "parent", title: "上级工作", createdAt: 3 });
+    const child = task({
+      id: "child",
+      title: "子任务",
+      sessionId: "lc:child",
+      directParentSessionId: parent.sessionId,
+      createdAt: 2,
+    });
+    const grandchild = task({
+      id: "grandchild",
+      title: "孙任务",
+      sessionId: "lc:grandchild",
+      directParentSessionId: child.sessionId,
+      createdAt: 1,
+    });
+    const orphan = task({
+      id: "orphan",
+      title: "缺少上级",
+      sessionId: "lc:orphan",
+      directParentSessionId: "lc:hidden",
+      createdAt: 4,
+    });
+    const firstCycle = task({
+      id: "cycle-a",
+      title: "循环甲",
+      sessionId: "lc:cycle-a",
+      directParentSessionId: "lc:cycle-b",
+      createdAt: 5,
+    });
+    const secondCycle = task({
+      id: "cycle-b",
+      title: "循环乙",
+      sessionId: "lc:cycle-b",
+      directParentSessionId: "lc:cycle-a",
+      createdAt: 6,
+    });
+    vi.mocked(agentApi.getSecretary).mockResolvedValue(
+      overview([grandchild, child, orphan, secondCycle, parent, firstCycle]),
+    );
+    const onOpenSession = vi.fn();
+    const view = render(
+      <AgentSecretaryTasks
+        sessionId="lc:secretary"
+        onOpenSession={onOpenSession}
+      />,
+    );
+    await flush();
+    const strip = within(screen.getByRole("navigation", { name: "秘书会话" }));
+    const parentChip = strip.getByRole("button", { name: /^上级工作/ });
+    const childChip = strip.getByRole("button", { name: /^子任务/ });
+    const grandchildChip = strip.getByRole("button", { name: /^孙任务/ });
+    const orphanChip = strip.getByRole("button", { name: /^缺少上级/ });
+    const firstCycleChip = strip.getByRole("button", { name: /^循环甲/ });
+    const secondCycleChip = strip.getByRole("button", { name: /^循环乙/ });
+    expect(strip.getAllByRole("button")).toEqual([
+      strip.getByRole("button", { name: "总秘书" }),
+      parentChip,
+      childChip,
+      grandchildChip,
+      orphanChip,
+      firstCycleChip,
+      secondCycleChip,
+    ]);
+    expect(childChip).toHaveAttribute(
+      "aria-description",
+      "上一级工作对话：上级工作",
+    );
+    expect(grandchildChip).toHaveAttribute(
+      "aria-description",
+      "上一级工作对话：子任务",
+    );
+    for (const chip of [
+      parentChip,
+      orphanChip,
+      firstCycleChip,
+      secondCycleChip,
+    ])
+      expect(chip).not.toHaveAttribute("aria-description");
+    fireEvent.click(grandchildChip);
+    await flush();
+    expect(onOpenSession).toHaveBeenLastCalledWith(grandchild.sessionId);
+    view.rerender(
+      <AgentSecretaryTasks
+        sessionId="lc:secretary"
+        selectedSessionId={grandchild.sessionId}
+        workerTaskId={grandchild.id}
+        onOpenSession={onOpenSession}
+      />,
+    );
+    expect(grandchildChip).toHaveAttribute("aria-current", "page");
+    fireEvent.click(orphanChip);
+    await flush();
+    expect(onOpenSession).toHaveBeenLastCalledWith(orphan.sessionId);
+    fireEvent.click(firstCycleChip);
+    await flush();
+    expect(onOpenSession).toHaveBeenLastCalledWith(firstCycle.sessionId);
+    expect(agentApi.getSecretary).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps real work conversation chips available and focused during rapid navigation", async () => {
+    const first = task();
+    const second = task({
+      id: "task-2",
+      sessionId: "lc:worker-2",
+      title: "核对构建",
+      status: "waiting_permission",
+    });
+    vi.mocked(agentApi.getSecretary).mockResolvedValue(
+      overview([first, second]),
+    );
+    let rejectFirst!: (error: Error) => void;
+    const onOpenSession = vi.fn().mockReturnValueOnce(
+      new Promise<void>((_, reject) => {
+        rejectFirst = reject;
+      }),
+    );
+    const view = render(
+      <AgentSecretaryTasks
+        sessionId="lc:secretary"
+        selectedSessionId="lc:secretary"
+        onOpenSession={onOpenSession}
+      />,
+    );
+    await flush();
+    const strip = within(screen.getByRole("navigation", { name: "秘书会话" }));
+    const chief = strip.getByRole("button", { name: "总秘书" });
+    const firstChip = strip.getByRole("button", {
+      name: "整理文档 · 正在工作",
+    });
+    const secondChip = strip.getByRole("button", {
+      name: "核对构建 · 需要授权",
+    });
+    expect(strip.getAllByRole("button")).toEqual([
+      chief,
+      firstChip,
+      secondChip,
+    ]);
+    expect(screen.getByRole("button", { name: /^工作任务/ })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    fireEvent.click(firstChip);
+    secondChip.focus();
+    fireEvent.click(secondChip);
+    expect(onOpenSession.mock.calls).toEqual([
+      [first.sessionId],
+      [second.sessionId],
+    ]);
+    expect(chief).toHaveAttribute("aria-current", "page");
+    view.rerender(
+      <AgentSecretaryTasks
+        sessionId="lc:secretary"
+        workerTaskId={second.id}
+        selectedSessionId={second.sessionId}
+        onOpenSession={onOpenSession}
+      />,
+    );
+    await act(async () => rejectFirst(new Error("旧选择读取失败")));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(secondChip).toHaveAttribute("aria-current", "page");
+    expect(secondChip).toHaveFocus();
+    expect(chief).not.toHaveAttribute("aria-current");
+    expect(agentApi.getSecretary).toHaveBeenCalledTimes(1);
+    fireEvent.click(chief);
+    await flush();
+    expect(onOpenSession).toHaveBeenLastCalledWith("lc:secretary");
+    expect(agentApi.getSecretary).toHaveBeenCalledTimes(1);
+
+    vi.mocked(agentApi.getSecretary).mockResolvedValue(
+      overview([first, { ...second, status: "completed" }]),
+    );
+    await act(async () => vi.advanceTimersByTimeAsync(2_500));
+    expect(strip.getByRole("button", { name: "核对构建 · 已完成" })).toBe(
+      secondChip,
+    );
+    expect(agentApi.getSecretary).toHaveBeenCalledTimes(2);
+  });
+
+  it("dispatches a named worktree task and shows it in the expanded task list", async () => {
+    vi.mocked(agentApi.delegateSecretaryTask).mockImplementationOnce(
+      async (
+        parentSessionId,
+        title,
+        instructions,
+        requestId,
+        executionMode,
+      ) => {
+        const created = task({
+          parentSessionId,
+          title,
+          instructions,
+          requestId,
+          executionMode,
+          status: "queued",
+        });
+        vi.mocked(agentApi.getSecretary).mockResolvedValue(overview([created]));
+        return created;
+      },
+    );
+    render(
+      <AgentSecretaryTasks sessionId="lc:secretary" onOpenSession={vi.fn()} />,
+    );
+    await flush();
+    const fields = delegationForm();
+    expect(fields.title).toHaveFocus();
+    expect(fields.executionMode).toHaveValue("shared");
+    expect(fields.submit).toBeDisabled();
+    fireEvent.change(fields.title, { target: { value: "  检查项目文档  " } });
+    expect(fields.submit).toBeDisabled();
+    fireEvent.change(fields.instructions, {
+      target: { value: "  核对安装步骤并回报。  " },
+    });
+    fireEvent.change(fields.executionMode, { target: { value: "worktree" } });
+    fireEvent.click(fields.submit);
+    await flush();
+    expect(agentApi.delegateSecretaryTask).toHaveBeenCalledOnce();
+    expect(agentApi.delegateSecretaryTask).toHaveBeenCalledWith(
+      "lc:secretary",
+      "检查项目文档",
+      "核对安装步骤并回报。",
+      expect.any(String),
+      "worktree",
+    );
+    expect(fields.trigger).toHaveAttribute("aria-expanded", "false");
+    expect(fields.form).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "检查项目文档" })).toBeVisible();
+    expect(screen.getByRole("button", { name: /^工作任务/ })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+  });
+
+  it("blocks duplicate dispatch and retries the same draft with the original request ID", async () => {
+    let reject!: (error: Error) => void;
+    vi.mocked(agentApi.delegateSecretaryTask)
+      .mockReturnValueOnce(
+        new Promise((_, fail) => {
+          reject = fail;
+        }),
+      )
+      .mockImplementationOnce(
+        async (parentSessionId, title, instructions, requestId) => {
+          const created = task({
+            parentSessionId,
+            title,
+            instructions,
+            requestId,
+          });
+          vi.mocked(agentApi.getSecretary).mockResolvedValue(
+            overview([created]),
+          );
+          return created;
+        },
+      );
+    render(
+      <AgentSecretaryTasks sessionId="lc:secretary" onOpenSession={vi.fn()} />,
+    );
+    await flush();
+    const fields = delegationForm();
+    fireEvent.change(fields.title, { target: { value: "检查构建" } });
+    fireEvent.change(fields.instructions, {
+      target: { value: "运行本地检查。" },
+    });
+    fireEvent.submit(fields.form);
+    fireEvent.submit(fields.form);
+    expect(agentApi.delegateSecretaryTask).toHaveBeenCalledTimes(1);
+    expect(fields.submit).toBeDisabled();
+    await act(async () => reject(new Error("派工结果未确认")));
+    expect(screen.getByRole("alert")).toHaveTextContent("派工结果未确认");
+    expect(fields.title).toHaveValue("检查构建");
+    expect(fields.instructions).toHaveValue("运行本地检查。");
+    fireEvent.click(fields.submit);
+    await flush();
+    const calls = vi.mocked(agentApi.delegateSecretaryTask).mock.calls;
+    expect(calls).toHaveLength(2);
+    expect(calls[0][4]).toBe("shared");
+    expect(calls[1]).toEqual(calls[0]);
+    expect(screen.getByRole("button", { name: "检查构建" })).toBeVisible();
+  });
+
+  it("hides manual delegation in inactive workspaces and worker conversations", async () => {
+    const onOpenSession = vi.fn();
+    const view = render(
+      <AgentSecretaryTasks
+        sessionId="lc:secretary"
+        onOpenSession={onOpenSession}
+      />,
+    );
+    await flush();
+    const fields = delegationForm();
+    fireEvent.change(fields.title, { target: { value: "保留的任务草稿" } });
+    view.rerender(
+      <AgentSecretaryTasks
+        sessionId="lc:secretary"
+        active={false}
+        onOpenSession={onOpenSession}
+      />,
+    );
+    expect(fields.trigger).toBeDisabled();
+    expect(fields.form).not.toBeInTheDocument();
+    view.rerender(
+      <AgentSecretaryTasks
+        sessionId="lc:secretary"
+        workerTaskId="task-1"
+        onOpenSession={onOpenSession}
+      />,
+    );
+    expect(fields.trigger).not.toBeInTheDocument();
+    view.rerender(
+      <AgentSecretaryTasks
+        sessionId="lc:secretary"
+        onOpenSession={onOpenSession}
+      />,
+    );
+    expect(screen.getByLabelText("任务名称")).toHaveValue("保留的任务草稿");
+    await flush();
+  });
+
+  it("keeps the task list collapsed if it was closed during dispatch", async () => {
+    let finish!: () => void;
+    vi.mocked(agentApi.delegateSecretaryTask).mockImplementationOnce(
+      (parentSessionId, title, instructions, requestId) =>
+        new Promise((resolve) => {
+          const created = task({
+            parentSessionId,
+            title,
+            instructions,
+            requestId,
+          });
+          finish = () => {
+            vi.mocked(agentApi.getSecretary).mockResolvedValue(
+              overview([created]),
+            );
+            resolve(created);
+          };
+        }),
+    );
+    render(
+      <AgentSecretaryTasks sessionId="lc:secretary" onOpenSession={vi.fn()} />,
+    );
+    await flush();
+    const fields = delegationForm();
+    fireEvent.change(fields.title, { target: { value: "整理文档" } });
+    fireEvent.change(fields.instructions, { target: { value: "核对索引" } });
+    fireEvent.click(fields.submit);
+    const tasks = screen.getByRole("button", { name: /^工作任务/ });
+    fireEvent.click(tasks);
+    await act(async () => finish());
+    expect(tasks).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(tasks);
+    expect(screen.getByRole("button", { name: "整理文档" })).toBeVisible();
+  });
+
   it("leaves automatic dispatch off until receiving and the reviewed rule are saved", async () => {
     const source: AgentSecretaryGithubState = {
       ...disconnected,
@@ -643,7 +1034,9 @@ describe("AgentSecretaryTasks", () => {
     await flush();
     expect(screen.getByText("1 项需要你")).toBeInTheDocument();
     expand();
-    expect(screen.getByText("需要授权")).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("article")).getByText("需要授权"),
+    ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "查看并处理" }));
     await flush();
     expect(onOpenSession).toHaveBeenCalledWith("lc:worker");
@@ -659,7 +1052,9 @@ describe("AgentSecretaryTasks", () => {
     await flush();
     expand();
     await act(async () => vi.advanceTimersByTimeAsync(2_500));
-    expect(screen.getByText("整理文档")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "整理文档" }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent("网络暂不可用");
   });
 
@@ -712,7 +1107,9 @@ describe("AgentSecretaryTasks", () => {
     await flush();
     await act(async () => release(overview()));
     await flush();
-    expect(screen.getByText("整理文档")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "整理文档" }),
+    ).toBeInTheDocument();
   });
 
   it("blocks duplicate follow-ups while preserving newer input", async () => {
@@ -788,7 +1185,9 @@ describe("AgentSecretaryTasks", () => {
       "lc:secretary",
       "task-1",
     );
-    expect(screen.getByText("已取消")).toBeInTheDocument();
+    expect(
+      screen.getByText("已取消", { selector: ".wb-secretary-task-status" }),
+    ).toBeInTheDocument();
   });
 
   it("removes only the confirmed finished task and keeps active tasks in the list", async () => {
@@ -939,9 +1338,7 @@ describe("AgentSecretaryTasks", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("会话读取失败");
     expect(screen.getByText("模型请求失败")).toBeInTheDocument();
     expect(
-      within(screen.getByRole("region", { name: "工作任务" })).getByText(
-        "执行失败",
-      ),
+      within(screen.getByRole("article")).getByText("执行失败"),
     ).toBeInTheDocument();
   });
 });

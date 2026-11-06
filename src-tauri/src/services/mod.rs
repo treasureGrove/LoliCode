@@ -37,6 +37,7 @@ mod harness_gateway;
 mod harness_mcp;
 mod harness_migration;
 mod harness_paths;
+pub(crate) mod harness_plugins;
 mod harness_preview;
 pub(crate) use harness_preview::{PreviewBounds, PreviewPresentation};
 mod harness_questions;

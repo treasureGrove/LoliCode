@@ -7,6 +7,7 @@ use super::{
     harness_mcp::{self, HarnessMcp, McpCall},
     harness_migration::{HarnessMigration, LegacySession, MigrationState},
     harness_paths::HarnessPaths,
+    harness_plugins::PluginSelection,
     harness_preview::HarnessPreview,
     harness_questions::{answer_for_question, question_from_params},
     harness_runtime::{HarnessClient, HarnessEvent, HarnessHostRequest, HarnessRuntime},
@@ -61,6 +62,7 @@ static SIDEBAR_CACHE: OnceLock<StdMutex<HashMap<PathBuf, SidebarEntry>>> = OnceL
 struct Flight {
     request_id: String,
     permission_selection: PermissionSelection,
+    plugins: Option<PluginSelection>,
     model: String,
     project: PathBuf,
     policy: &'static str,
@@ -93,7 +95,10 @@ impl PermissionSelection {
 }
 
 enum Control {
-    Stop(oneshot::Sender<Result<(), String>>),
+    Stop {
+        expected_request: Option<String>,
+        reply: oneshot::Sender<Result<(), String>>,
+    },
     StopWorker {
         session: String,
         reply: oneshot::Sender<Result<(), String>>,
@@ -224,6 +229,15 @@ pub(super) fn sync_snapshot(profile: &Path, id: &str) -> Result<Option<AgentSnap
 impl HarnessDesktop {
     pub(super) async fn busy(&self) -> bool {
         !self.0.lock().await.flights.is_empty()
+    }
+
+    pub(super) async fn plugin_reload_pending(&self, selection: &PluginSelection) -> bool {
+        self.0.lock().await.flights.values().any(|flight| {
+            flight
+                .plugins
+                .as_ref()
+                .is_some_and(|active| active != selection)
+        })
     }
 
     pub(super) async fn session_busy(&self, id: &str) -> bool {
@@ -376,7 +390,8 @@ impl HarnessDesktop {
             return Ok(None);
         };
         let owner = read_worker_owner(&root, id).unwrap_or_else(|| id.to_owned());
-        let mode_command = args["text"].as_str().is_some_and(native_mode_command);
+        let mode_command = args["automationIdleOnly"] != true
+            && args["text"].as_str().is_some_and(native_mode_command);
         if (is_compact_command(args) || mode_command)
             && (method == "sendSecretaryTaskMessage"
                 || owner != id && matches!(method, "sendMessage" | "enqueueMessage"))
@@ -913,7 +928,8 @@ impl HarnessDesktop {
                 Ok(Some(json!({"results":results})))
             }
             "interruptSession" => {
-                if let Some(expected) = args["expectedRequestId"].as_str() {
+                let expected_request = args["expectedRequestId"].as_str();
+                if let Some(expected) = expected_request {
                     let desktop = self.0.lock().await;
                     if owner != id
                         || desktop
@@ -926,7 +942,11 @@ impl HarnessDesktop {
                 }
                 if let Some((record, controls)) = flight {
                     if owner == id {
-                        send_control(&controls, Control::Stop).await?;
+                        send_control(&controls, |reply| Control::Stop {
+                            expected_request: expected_request.map(str::to_owned),
+                            reply,
+                        })
+                        .await?;
                     } else {
                         let session = record
                             .lock()
@@ -1011,9 +1031,14 @@ impl HarnessDesktop {
             return Err("请先结束现有任务，再用 Harness 继续此会话".into());
         }
         let request_id = request_id(args)?.to_owned();
-        let compact = secretary.is_none() && is_compact_command(args);
+        let automation_idle_only = args["automationIdleOnly"] == true;
+        if automation_idle_only && native.session.coordination.is_some() {
+            return Err("自动化只能投递到普通对话".into());
+        }
+        let interactive_command = secretary.is_none() && !automation_idle_only;
+        let compact = interactive_command && is_compact_command(args);
         let mode_command =
-            secretary.is_none() && args["text"].as_str().is_some_and(native_mode_command);
+            interactive_command && args["text"].as_str().is_some_and(native_mode_command);
         if compact
             && args["attachments"]
                 .as_array()
@@ -1078,6 +1103,12 @@ impl HarnessDesktop {
             .ok_or("请先选择模型")?;
         let paths = HarnessPaths::resolve(app)?;
         let accounts = crate::commands::agent_dispatch::accounts(app).await?;
+        let plugins = local_interactive.then(|| {
+            PluginSelection::load(&profile).unwrap_or_else(|error| {
+                log::warn!("{error}");
+                PluginSelection::default()
+            })
+        });
         let mut desktop = self.0.lock().await;
         if desktop.closing {
             return Err("Harness 正在关闭".into());
@@ -1086,6 +1117,9 @@ impl HarnessDesktop {
             let saved = active.record.lock().await;
             if check_receipt(&saved, &request_id, &fingerprint)? {
                 return secretary_response(&saved, &request_id, secretary.as_ref());
+            }
+            if automation_idle_only {
+                return Err("目标对话仍有任务在运行，请等待对话空闲后再投递".into());
             }
             if unsettled(&saved.snapshot.status) || secretary.is_some() {
                 return Err("Harness 正在处理本轮，请先等待或停止".into());
@@ -1125,6 +1159,13 @@ impl HarnessDesktop {
         let resume = args["queuedResume"] == true;
         if check_receipt(&record, &request_id, &fingerprint)? && !resume {
             return secretary_response(&record, &request_id, secretary.as_ref());
+        }
+        if automation_idle_only
+            && (record.snapshot.queue_paused
+                || !record.queue.is_empty()
+                || !record.snapshot.queued_messages.is_empty())
+        {
+            return Err("目标对话还有排队消息，请处理后再投递自动化任务".into());
         }
         if let Some(command) = &secretary {
             if let Some(task) = record.secretary.existing_delegation(&request_id, command)? {
@@ -1190,6 +1231,7 @@ impl HarnessDesktop {
             Flight {
                 request_id: request_id.clone(),
                 permission_selection,
+                plugins: plugins.clone(),
                 model: model.clone(),
                 project: project.clone(),
                 policy,
@@ -1222,11 +1264,13 @@ impl HarnessDesktop {
                 root,
                 project,
                 paths,
+                plugins,
                 model,
                 accounts,
                 content,
                 auto_title,
                 compact,
+                mode_command,
                 worker,
                 worker_queue_request,
                 state,
@@ -2600,11 +2644,13 @@ struct Turn<'a> {
     root: PathBuf,
     project: PathBuf,
     paths: HarnessPaths,
+    plugins: Option<PluginSelection>,
     model: String,
     accounts: Vec<(String, String)>,
     content: Value,
     auto_title: bool,
     compact: bool,
+    mode_command: bool,
     worker: Option<WorkerAction>,
     worker_queue_request: Option<String>,
     state: AppState,
@@ -2674,12 +2720,17 @@ async fn run_turn(mut turn: Turn<'_>) -> Result<ReceiptStatus, String> {
             );
     }
     let home = turn.root.join("home");
+    let plugin_patches = turn
+        .plugins
+        .as_ref()
+        .map_or_else(Vec::new, |plugins| plugins.patches(&turn.paths));
     let runtime = HarnessRuntime::start_live(
         &turn.paths.node,
         &turn.paths.package,
         &turn.project,
         &home,
         gateway,
+        &plugin_patches,
     );
     // Disk-backed context and local tool discovery are independent of the
     // child handshake. Complete them before applying the policy and prompting.
@@ -2796,9 +2847,18 @@ async fn run_turn(mut turn: Turn<'_>) -> Result<ReceiptStatus, String> {
         bridge.configure(&client, sdk_id).await?;
         let mcp = Some(bridge);
         let early_worker_action = match turn.inbox.try_recv() {
-            Ok(Control::Stop(reply)) => {
+            Ok(Control::Stop {
+                expected_request,
+                reply,
+            }) => {
                 let _ = reply.send(Ok(()));
-                return Ok(ReceiptStatus::Cancelled);
+                if expected_request
+                    .as_deref()
+                    .is_none_or(|request| request == turn.request_id)
+                {
+                    return Ok(ReceiptStatus::Cancelled);
+                }
+                None
             }
             Ok(Control::Shutdown) => return Ok(ReceiptStatus::Cancelled),
             Ok(Control::Approval { reply, .. }) => {
@@ -2857,10 +2917,7 @@ async fn run_turn(mut turn: Turn<'_>) -> Result<ReceiptStatus, String> {
                 save_record(&turn.root.join("desktop.json"), &saved)?;
             }
             message
-        } else if turn.content[0]["text"]
-            .as_str()
-            .is_some_and(native_mode_command)
-        {
+        } else if turn.mode_command {
             let (id, result) = query_mode_command(&client, sdk_id, &turn.content).await?;
             push_mode_result(&mut turn.record.lock().await.snapshot, &id, &result);
             command_id = Some(id);
@@ -2980,9 +3037,12 @@ async fn run_compaction(
             control = turn.inbox.recv() => {
                 const BUSY: &str = "请等 /compact 执行完成后再操作";
                 match control {
-                    Some(Control::Stop(reply)) => {
+                    Some(Control::Stop { expected_request, reply }) => {
                         // The SDK shutdown cancels native commands through its lifetime signal.
                         let _ = reply.send(Ok(()));
+                        if expected_request.as_deref().is_some_and(|request| request != turn.request_id) {
+                            continue;
+                        }
                         return Ok(ReceiptStatus::Cancelled);
                     }
                     Some(Control::Shutdown) | None => return Ok(ReceiptStatus::Cancelled),
@@ -3376,7 +3436,11 @@ async fn observe_turn(
                     None => turn.inbox.recv().await,
                 }
             } => match control {
-                Some(Control::Stop(reply)) => {
+                Some(Control::Stop { expected_request, reply }) => {
+                    if expected_request.as_deref().is_some_and(|request| request != turn.request_id || primary_settled) {
+                        let _ = reply.send(Ok(()));
+                        continue;
+                    }
                     let result = cancel_root(turn, client, sdk_id).await;
                     stop_requested |= result.is_ok();
                     let _ = reply.send(result);

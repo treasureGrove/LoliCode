@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   ArrowLeft,
@@ -6,11 +6,13 @@ import {
   ChevronDown,
   ChevronRight,
   CircleCheck,
+  CornerDownRight,
   Github,
   GitBranch,
   ListTodo,
   LoaderCircle,
   MessageCircle,
+  Plus,
   RefreshCw,
   Send,
   Square,
@@ -21,6 +23,7 @@ import { agentApi } from "@/lib/api/agent";
 import { settingsApi } from "@/lib/api/settings";
 import { agentErrorMessage } from "@/hooks/useAgentSnapshot";
 import type {
+  AgentSecretaryExecutionMode,
   AgentSecretaryReportState,
   AgentSecretaryState,
   AgentSecretaryTask,
@@ -37,6 +40,11 @@ import {
 import "./agent-secretary.css";
 
 const terminal = new Set(["completed", "failed", "cancelled", "interrupted"]);
+const emptyDelegation = {
+  title: "",
+  instructions: "",
+  executionMode: "shared" as AgentSecretaryExecutionMode,
+};
 const statusLabels: Record<AgentSecretaryTask["status"], string> = {
   queued: "等待执行",
   running: "正在工作",
@@ -76,16 +84,57 @@ function visibleReport(task: AgentSecretaryTask) {
   return undefined;
 }
 
+function orderConversations(tasks: AgentSecretaryTask[]) {
+  const sorted = [...tasks].sort(
+    (a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id),
+  );
+  const bySession = new Map(sorted.map((task) => [task.sessionId, task]));
+  const children = new Map<string, AgentSecretaryTask[]>();
+  const roots: AgentSecretaryTask[] = [];
+  for (const task of sorted) {
+    const parent = bySession.get(task.directParentSessionId ?? "");
+    if (
+      !parent ||
+      parent.sessionId === task.sessionId ||
+      parent.parentSessionId !== task.parentSessionId
+    ) {
+      roots.push(task);
+      continue;
+    }
+    const siblings = children.get(parent.sessionId);
+    if (siblings) siblings.push(task);
+    else children.set(parent.sessionId, [task]);
+  }
+  const ordered = new Map<
+    string,
+    { task: AgentSecretaryTask; parent?: AgentSecretaryTask }
+  >();
+  const append = (task: AgentSecretaryTask, parent?: AgentSecretaryTask) => {
+    if (ordered.has(task.id)) return;
+    ordered.set(task.id, { task, parent });
+    children.get(task.sessionId)?.forEach((child) => append(child, task));
+  };
+  roots.forEach((task) => append(task));
+  // Cyclic relationships have no reachable root. Keep those sessions accessible.
+  for (const task of sorted)
+    if (!ordered.has(task.id)) ordered.set(task.id, { task });
+  return Array.from(ordered.values());
+}
+
 export function AgentSecretaryTasks({
   sessionId,
+  selectedSessionId,
   active = true,
   workerTaskId,
+  canDelegate = true,
   onOpenSession,
   onFocusComposer,
 }: {
   sessionId: string;
+  selectedSessionId?: string;
   active?: boolean;
   workerTaskId?: string;
+  canDelegate?: boolean;
   onOpenSession: (sessionId: string) => Promise<void> | void;
   onFocusComposer?: () => void;
 }) {
@@ -99,6 +148,8 @@ export function AgentSecretaryTasks({
   const [expanded, setExpanded] = useState(false);
   const [githubOpen, setGithubOpen] = useState(false);
   const [githubVisited, setGithubVisited] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [delegation, setDelegation] = useState(emptyDelegation);
   const [followups, setFollowups] = useState<Record<string, string>>({});
   const [openedTask, setOpenedTask] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
@@ -111,10 +162,29 @@ export function AgentSecretaryTasks({
   scope.current = sessionId;
   const lifetime = useRef(0);
   const pending = useRef(false);
+  const navigation = useRef<{ id: string } | null>(null);
+  const delegationTrigger = useRef<HTMLButtonElement>(null);
+  const delegationTitle = useRef<HTMLInputElement>(null);
+  const selectedChip = useRef<HTMLButtonElement>(null);
   const tasksId = useId();
   const githubId = useId();
+  const delegationId = useId();
+  const delegationAllowed = canDelegate && !workerTaskId;
+  const delegationOpen = delegationAllowed && active && expanded && adding;
+  const delegating = busy === "delegate";
   const stateHere = state?.sessionId === sessionId ? state : null;
-  const tasks = stateHere?.tasks || [];
+  const loadedTasks = stateHere?.tasks;
+  const tasks = loadedTasks || [];
+  const conversations = useMemo(
+    () => orderConversations(loadedTasks ?? []),
+    [loadedTasks],
+  );
+  const currentConversationId =
+    selectedSessionId ??
+    (workerTaskId
+      ? tasks.find((task) => task.id === workerTaskId)?.sessionId
+      : sessionId);
+  const chiefSelected = currentConversationId === sessionId;
   const runningCount = tasks.filter((task) => task.status === "running").length;
   const queuedCount = tasks.filter((task) => task.status === "queued").length;
   const occupied = tasks.filter(
@@ -130,18 +200,31 @@ export function AgentSecretaryTasks({
 
   useEffect(() => {
     lifetime.current += 1;
+    setAdding(false);
+    setDelegation(emptyDelegation);
     setFollowups({});
     setOpenedTask(null);
     setConfirmDelete(null);
     setBusy(null);
     setActionError(null);
     pending.current = false;
+    navigation.current = null;
     return () => {
       lifetime.current += 1;
     };
   }, [sessionId]);
 
   useEffect(() => setOpenedTask(workerTaskId || null), [workerTaskId]);
+  useEffect(() => {
+    if (delegationOpen) delegationTitle.current?.focus();
+  }, [delegationOpen]);
+  useEffect(() => {
+    if (active)
+      selectedChip.current?.scrollIntoView?.({
+        block: "nearest",
+        inline: "nearest",
+      });
+  }, [active, currentConversationId, tasks.length]);
 
   useEffect(() => {
     if (!active) return;
@@ -234,6 +317,66 @@ export function AgentSecretaryTasks({
     }
   };
 
+  const openConversation = async (id: string) => {
+    if (
+      !active ||
+      navigation.current?.id === id ||
+      (id === currentConversationId && !navigation.current)
+    )
+      return;
+    const intent = { id };
+    const epoch = lifetime.current;
+    navigation.current = intent;
+    setActionError(null);
+    try {
+      await onOpenSession(id);
+    } catch (cause) {
+      if (
+        navigation.current === intent &&
+        scope.current === sessionId &&
+        lifetime.current === epoch
+      )
+        setActionError(agentErrorMessage(cause));
+    } finally {
+      if (navigation.current === intent) navigation.current = null;
+    }
+  };
+
+  const delegate = () => {
+    const title = delegation.title.trim();
+    const instructions = delegation.instructions.trim();
+    if (!delegationOpen || pending.current || !title || !instructions) return;
+    const requestScope = `${sessionId}:delegate`;
+    const requestId = requestIdentity(
+      requestScope,
+      JSON.stringify([title, instructions, delegation.executionMode]),
+    );
+    void act(
+      "delegate",
+      async () => {
+        const task = await agentApi.delegateSecretaryTask(
+          sessionId,
+          title,
+          instructions,
+          requestId,
+          delegation.executionMode,
+        );
+        if (task.parentSessionId !== sessionId || task.requestId !== requestId)
+          throw new Error(
+            label("wrongSession", "返回的任务与当前秘书不一致，请重新读取。"),
+          );
+        return task;
+      },
+      () => {
+        clearRequestIdentity(requestScope);
+        if (delegationTitle.current?.form?.contains(document.activeElement))
+          delegationTrigger.current?.focus({ preventScroll: true });
+        setDelegation(emptyDelegation);
+        setAdding(false);
+      },
+    );
+  };
+
   const deleteTask = (taskId: string) => {
     void act(
       `delete:${taskId}`,
@@ -254,23 +397,74 @@ export function AgentSecretaryTasks({
 
   return (
     <section className="wb-secretary" aria-label={label("tasks", "工作任务")}>
+      <nav
+        className="wb-secretary-sessions"
+        aria-label={label("sessions", "秘书会话")}
+      >
+        <button
+          ref={chiefSelected ? selectedChip : undefined}
+          type="button"
+          className="wb-secretary-session-chip"
+          aria-current={chiefSelected ? "page" : undefined}
+          disabled={!active}
+          onClick={() => void openConversation(sessionId)}
+        >
+          <img src={assistantPortrait} alt="" className="wb-secretary-avatar" />
+          <span>{label("chiefSession", "总秘书")}</span>
+        </button>
+        {conversations.map(({ task, parent }) => {
+          const selected = task.sessionId === currentConversationId;
+          const status = label(
+            `status.${task.status}`,
+            statusLabels[task.status],
+          );
+          const name = `${task.title} · ${status}`;
+          return (
+            <button
+              key={task.id}
+              ref={selected ? selectedChip : undefined}
+              type="button"
+              className="wb-secretary-session-chip"
+              data-status={task.status}
+              data-attention={needsUser(task) || undefined}
+              aria-label={name}
+              aria-description={
+                parent
+                  ? label("childOf", "上一级工作对话：{{title}}", {
+                      title: parent.title,
+                    })
+                  : undefined
+              }
+              aria-current={selected ? "page" : undefined}
+              disabled={!active}
+              title={name}
+              onClick={() => void openConversation(task.sessionId)}
+            >
+              {parent && (
+                <CornerDownRight
+                  className="wb-secretary-session-branch"
+                  size={13}
+                  aria-hidden="true"
+                />
+              )}
+              <span className="wb-secretary-session-dot" aria-hidden="true" />
+              <span className="wb-secretary-session-title">{task.title}</span>
+              <span className="wb-secretary-session-status">{status}</span>
+            </button>
+          );
+        })}
+      </nav>
       <div className="wb-secretary-bar">
-        {workerTaskId ? (
+        {workerTaskId && (
           <button
             type="button"
             className="wb-secretary-back"
             disabled={Boolean(busy)}
-            onClick={() =>
-              void act("open-parent", async () => {
-                await onOpenSession(sessionId);
-              })
-            }
+            onClick={() => void openConversation(sessionId)}
           >
             <ArrowLeft aria-hidden="true" />
             {label("back", "返回秘书")}
           </button>
-        ) : (
-          <img src={assistantPortrait} alt="" className="wb-secretary-avatar" />
         )}
         <button
           type="button"
@@ -352,6 +546,25 @@ export function AgentSecretaryTasks({
             <span>{label("tellGoal", "告诉秘书目标")}</span>
           </button>
         )}
+        {delegationAllowed && (
+          <button
+            ref={delegationTrigger}
+            type="button"
+            className="wb-secretary-add wb-secretary-delegate"
+            disabled={!active}
+            aria-expanded={delegationOpen}
+            aria-controls={delegationOpen ? delegationId : undefined}
+            onClick={() => {
+              setGithubOpen(false);
+              setConfirmDelete(null);
+              setExpanded(true);
+              setAdding(!delegationOpen);
+            }}
+          >
+            <Plus aria-hidden="true" />
+            <span>{label("delegate", "交办任务")}</span>
+          </button>
+        )}
       </div>
       {readError && (
         <div className="wb-secretary-error" role="alert">
@@ -408,6 +621,102 @@ export function AgentSecretaryTasks({
                 },
               )}
             </p>
+          )}
+          {delegationOpen && (
+            <form
+              id={delegationId}
+              className="wb-secretary-form"
+              aria-label={label("delegateForm", "手动交办任务")}
+              aria-busy={delegating}
+              onSubmit={(event) => {
+                event.preventDefault();
+                delegate();
+              }}
+            >
+              <label>
+                {label("taskTitle", "任务名称")}
+                <input
+                  ref={delegationTitle}
+                  value={delegation.title}
+                  maxLength={100}
+                  placeholder={label("titlePlaceholder", "例如：整理项目文档")}
+                  readOnly={delegating}
+                  required
+                  onChange={(event) => {
+                    const title = event.target.value;
+                    setDelegation((old) => ({ ...old, title }));
+                  }}
+                />
+              </label>
+              <label>
+                {label("instructions", "工作要求")}
+                <textarea
+                  value={delegation.instructions}
+                  rows={3}
+                  maxLength={20000}
+                  placeholder={label(
+                    "instructionsPlaceholder",
+                    "描述目标、相关背景和你希望收到的结果",
+                  )}
+                  readOnly={delegating}
+                  required
+                  onChange={(event) => {
+                    const instructions = event.target.value;
+                    setDelegation((old) => ({ ...old, instructions }));
+                  }}
+                />
+              </label>
+              <label>
+                {label("executionMode", "执行方式")}
+                <select
+                  value={delegation.executionMode}
+                  disabled={delegating}
+                  onChange={(event) => {
+                    const executionMode =
+                      event.target.value === "worktree" ? "worktree" : "shared";
+                    setDelegation((old) => ({ ...old, executionMode }));
+                  }}
+                >
+                  <option value="shared">
+                    {label("sharedMode", "当前项目目录")}
+                  </option>
+                  <option value="worktree">
+                    {label("worktreeMode", "独立 Git 工作树")}
+                  </option>
+                </select>
+              </label>
+              <div className="wb-secretary-form-actions">
+                <span>
+                  {delegation.executionMode === "worktree"
+                    ? label(
+                        "worktreeNote",
+                        "从当前提交创建独立分支，使用已提交的项目文件。",
+                      )
+                    : label(
+                        "sharedNote",
+                        "在当前项目目录中执行，可以使用本地未提交的改动。",
+                      )}
+                </span>
+                <button
+                  type="submit"
+                  disabled={
+                    Boolean(busy) ||
+                    !delegation.title.trim() ||
+                    !delegation.instructions.trim()
+                  }
+                >
+                  {delegating ? (
+                    <LoaderCircle
+                      className="motion-safe:animate-spin"
+                      aria-hidden="true"
+                    />
+                  ) : (
+                    <Send aria-hidden="true" />
+                  )}
+                  {label("delegateSubmit", "开始执行")}
+                </button>
+              </div>
+            </form>
           )}
           {!tasks.length && stateHere && (
             <p className="wb-secretary-empty">
@@ -472,11 +781,7 @@ export function AgentSecretaryTasks({
                       type="button"
                       className="wb-secretary-task-open"
                       disabled={Boolean(busy)}
-                      onClick={() =>
-                        void act(`open:${task.id}`, async () => {
-                          await onOpenSession(task.sessionId);
-                        })
-                      }
+                      onClick={() => void openConversation(task.sessionId)}
                       title={label("openTask", "打开工作对话")}
                     >
                       <span>

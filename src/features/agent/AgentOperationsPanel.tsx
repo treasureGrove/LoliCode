@@ -198,6 +198,7 @@ export function AgentOperationsPanel({
               />
             ) : (
               <AgentAutomationPanel
+                key={projectPath}
                 projectPath={projectPath}
                 catalog={catalog}
                 onBuildAutomation={

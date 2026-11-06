@@ -106,6 +106,8 @@ export type AgentSecretaryReportState =
 export interface AgentSecretaryTask {
   id: string;
   parentSessionId: string;
+  /** Immediate worker parent when present in the same secretary catalog. */
+  directParentSessionId?: string;
   sessionId: string;
   title: string;
   instructions: string;
@@ -566,6 +568,17 @@ export interface AgentPluginStore {
     localPluginRuntime?: boolean;
     mcpRuntime?: boolean;
   };
+}
+
+export interface AgentHarnessPluginCatalog {
+  bundles: {
+    id: string;
+    name: string;
+    description: string;
+    version: string;
+    enabled: boolean;
+  }[];
+  pendingReload: boolean;
 }
 
 export interface AgentExtensionConfig {

@@ -254,13 +254,13 @@ describe("LoliCode desktop entry", () => {
       "aria-current",
       "page",
     );
-    fireEvent.click(screen.getByRole("button", { name: "插件市场" }));
+    fireEvent.click(screen.getByRole("button", { name: "插件" }));
     expect(screen.getByTestId("active-agent-tool")).toHaveTextContent("skills");
     expect(screen.getByTestId("active-agent-tool")).toHaveAttribute(
       "data-initial-tab",
       "plugins",
     );
-    expect(screen.getByRole("button", { name: "插件市场" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "插件" })).toHaveAttribute(
       "aria-current",
       "page",
     );

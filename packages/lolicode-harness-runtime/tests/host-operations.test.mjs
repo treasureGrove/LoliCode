@@ -82,12 +82,15 @@ async function fixture(t, onModelCall, onHostRequest) {
   return {
     project,
     get modelError() { return modelError; },
-    async start({ userQuestions = false } = {}) {
+    async start({ userQuestions = false, pluginBundles = [] } = {}) {
       const env = Object.fromEntries(Object.entries(process.env).filter(([key]) =>
         /^(PATH|HOME|USERPROFILE|SYSTEMROOT|SYSTEMDRIVE|WINDIR|TEMP|TMP|TMPDIR)$/i.test(key)));
       const child = spawn(process.execPath, [
         path.join(root, "node_modules/@deepseek-ai/dsh/lib/bin.js"),
         "--profile", "sdk",
+        ...pluginBundles.flatMap((name) => [
+          "--patch", path.join(root, "node_modules", "@deepseek-ai", name, "cordis.patch.yml"),
+        ]),
         "--patch", path.join(root, "profile.cordis.patch.yml"),
         "--patch", path.join(root, "host-operations.cordis.patch.yml"),
         "--patch", gateway,
@@ -1110,4 +1113,110 @@ test("native Goal crosses turns, completes, and restores its terminal state", { 
   const restored = await fixtureNotice(reopened, "lolicode/session.mode", ({ goal }) => goal?.phase === "complete");
   assert.deepEqual(restored.goal, goal.goal);
   await reopened.shutdown();
+});
+
+test("desktop sessions do not expose the SDK-local schedule store", { timeout: 45_000 }, async (t) => {
+  const sessionId = "desktop-schedule-owner";
+  const runtime = await fixture(t, (body, response) => {
+    const tools = (body.tools ?? []).map(({ function: tool }) => tool?.name);
+    assert.ok(!tools.some((name) => name?.startsWith("schedule_")));
+    modelReply(response, "Desktop schedules are managed by the host.");
+  });
+  const client = await runtime.start();
+  await client.open(sessionId);
+  assert.ok((await client.prompt(sessionId, "List the available tools.")).messageId);
+  await client.wait(sessionId);
+  assert.equal(runtime.modelError, undefined);
+  await client.shutdown();
+});
+
+test("selected upstream plugin bundles run a persistent terminal and a fresh Ralph worker", { timeout: 90_000 }, async (t) => {
+  const terminalPrompt = "Run the persistent terminal fixture.";
+  const ralphPrompt = "Explicitly run a Ralph loop for the fixture.";
+  const terminalValue = "LOLICODE_PLUGIN_TERMINAL_STATE";
+  const windows = process.platform === "win32";
+  let absent;
+  let terminalId;
+  let terminalOutput;
+  let terminalClose;
+  let ralphResult;
+  let freshWorker = false;
+  const runtime = await fixture(t, (body, response) => {
+    const user = JSON.stringify(body.messages.filter((message) => message.role === "user"));
+    const tools = body.tools.map((tool) => tool.function.name);
+    const result = (id) => {
+      const content = body.messages.find((message) => message.tool_call_id === id)?.content;
+      return typeof content === "string" ? content : content && JSON.stringify(content);
+    };
+    if (user.includes("Read the available tools.")) {
+      absent = !tools.includes("terminal_open") && !tools.includes("ralph");
+    } else if (user.includes(terminalPrompt)) {
+      const opened = result("open-terminal");
+      if (!opened && tools.includes("terminal_open")) {
+        return fixtureTool(response, "open-terminal", "terminal_open", { type: "shell" });
+      }
+      if (opened && !terminalId) terminalId = /started terminal session ([^ \n]+)/.exec(opened)?.[1];
+      if (terminalId && !result("set-terminal-state")) {
+        return fixtureTool(response, "set-terminal-state", "terminal_send", {
+          sessionId: terminalId, text: `${windows ? "$" : ""}fixture='${terminalValue}'`,
+        });
+      }
+      if (terminalId && !result("read-terminal-state")) {
+        return fixtureTool(response, "read-terminal-state", "terminal_send", {
+          sessionId: terminalId, text: windows ? "Write-Output $fixture" : "printf '%s\\n' \"$fixture\"",
+        });
+      }
+      terminalOutput = result("read-terminal-state") || opened;
+      terminalClose = result("close-terminal");
+      if (terminalId && !terminalClose) {
+        return fixtureTool(response, "close-terminal", "terminal_close", { sessionId: terminalId });
+      }
+    } else if (user.includes("Ralph round:")) {
+      freshWorker ||= tools.includes("structured_output") && !user.includes(ralphPrompt);
+      if (tools.includes("structured_output") && !result("ralph-report")) {
+        return fixtureTool(response, "ralph-report", "structured_output", {
+          status: "complete", summary: "Verified fixture", evidence: ["isolated proof"],
+          nextSteps: [], blocker: "",
+        });
+      }
+    } else if (user.includes(ralphPrompt)) {
+      ralphResult = result("start-ralph");
+      if (!ralphResult && tools.includes("ralph")) {
+        return fixtureTool(response, "start-ralph", "ralph", {
+          objective: "Verify the fixture", maxRounds: 1,
+        });
+      }
+    }
+    modelReply(response, "Plugin fixture settled.");
+  });
+  const run = async (client, sessionId, text) => {
+    await client.open(sessionId);
+    await client.request("lolicode/session/configure-workspace", {
+      sessionId, workspace: { policy: "workspace", skills: [], memory: "" },
+    });
+    await client.prompt(sessionId, text);
+    await client.wait(sessionId);
+  };
+  const disabled = await runtime.start();
+  try {
+    await run(disabled, "bundles-disabled", "Read the available tools.");
+  } finally {
+    await disabled.shutdown();
+  }
+  const enabled = await runtime.start({
+    pluginBundles: ["dsh-experimental-terminal-bundle", "dsh-experimental-ralph-bundle"],
+  });
+  try {
+    await run(enabled, "bundle-terminal", terminalPrompt);
+    await run(enabled, "bundle-ralph", ralphPrompt);
+  } finally {
+    await enabled.shutdown();
+  }
+  assert.equal(runtime.modelError, undefined);
+  assert.equal(absent, true);
+  assert.ok(terminalOutput?.includes(terminalValue), terminalOutput);
+  assert.match(terminalClose, /closed terminal session/);
+  assert.equal(freshWorker, true);
+  assert.match(ralphResult, /reported completion after 1 round/);
+  assert.match(ralphResult, /isolated proof/);
 });

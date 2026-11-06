@@ -11,21 +11,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AgentExtensionsPanel } from "@/features/agent/AgentExtensionsPanel";
 import { agentApi } from "@/lib/api/agent";
 import { settingsApi } from "@/lib/api";
-import { open } from "@tauri-apps/plugin-dialog";
-import type { AgentExtensions } from "@/types/agent";
+import type { AgentExtensions, AgentHarnessPluginCatalog } from "@/types/agent";
 
 vi.mock("@/lib/api/agent", () => ({
   agentApi: {
     getExtensions: vi.fn(),
+    getHarnessPlugins: vi.fn(),
+    setHarnessPluginEnabled: vi.fn(),
     connectMcp: vi.fn(),
     getPluginStore: vi.fn(),
-    updatePluginMarketplace: vi.fn(),
-    installMarketplacePlugin: vi.fn(),
     uninstallMarketplacePlugin: vi.fn(),
     setSkillEnabled: vi.fn(),
     importSkill: vi.fn(),
     removeSkill: vi.fn(),
-    installPlugin: vi.fn(),
     setPluginEnabled: vi.fn(),
     uninstallPlugin: vi.fn(),
     getExtensionConfig: vi.fn(),
@@ -35,7 +33,6 @@ vi.mock("@/lib/api/agent", () => ({
 vi.mock("@/lib/api", () => ({
   settingsApi: { pickDirectory: vi.fn(), openExternal: vi.fn() },
 }));
-vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn() }));
 const catalog: AgentExtensions = {
   revision: 4,
   skills: [
@@ -92,6 +89,10 @@ function PanelHarness({
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(agentApi.getExtensions).mockResolvedValue(structuredClone(catalog));
+  vi.mocked(agentApi.getHarnessPlugins).mockResolvedValue({
+    bundles: [],
+    pendingReload: false,
+  });
   vi.mocked(agentApi.getPluginStore).mockResolvedValue({
     marketplaces: [],
     availablePlugins: [],
@@ -106,7 +107,6 @@ beforeEach(() => {
     skills: [{ ...catalog.skills[0], enabled: false }],
   });
   vi.mocked(agentApi.importSkill).mockResolvedValue(catalog);
-  vi.mocked(agentApi.installPlugin).mockResolvedValue(catalog);
   vi.mocked(agentApi.saveExtensionConfig).mockResolvedValue(catalog);
   vi.mocked(agentApi.getExtensionConfig).mockResolvedValue({
     revision: 4,
@@ -122,7 +122,6 @@ beforeEach(() => {
     pluginOptions: { "local-plugin": { token: "[hidden]" } },
   });
   vi.mocked(settingsApi.pickDirectory).mockResolvedValue("D:/fixture/skill");
-  vi.mocked(open).mockResolvedValue("D:/fixture/plugin.mjs");
   reload.mockResolvedValue(undefined);
 });
 afterEach(cleanup);
@@ -209,9 +208,12 @@ describe("AgentExtensionsPanel", () => {
     expect(screen.getByText("本地 MCP 进程未能启动")).toBeInTheDocument();
     expect(screen.queryByText(/已连接 ·/)).not.toBeInTheDocument();
   });
-  it("keeps verified skills usable when the optional marketplace fails to load", async () => {
+  it("keeps verified skills usable when optional plugin catalogs fail to load", async () => {
     vi.mocked(agentApi.getPluginStore).mockRejectedValue(
       new Error("CLI registry unavailable"),
+    );
+    vi.mocked(agentApi.getHarnessPlugins).mockRejectedValue(
+      new Error("Harness plugin registry unavailable"),
     );
     render(<PanelHarness />);
     await flush();
@@ -220,8 +222,11 @@ describe("AgentExtensionsPanel", () => {
     ).toBeEnabled();
     fireEvent.click(screen.getByRole("tab", { name: "插件" }));
     expect(screen.getByText("CLI registry unavailable")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Harness plugin registry unavailable",
+    );
   });
-  it("does not advertise custom stores or JS/MCP execution when the native host only supports CLI skills", async () => {
+  it("keeps saved MCP configuration separate when the runtime is unavailable", async () => {
     vi.mocked(agentApi.getPluginStore).mockResolvedValue({
       marketplaces: [],
       availablePlugins: [],
@@ -237,15 +242,6 @@ describe("AgentExtensionsPanel", () => {
     });
     render(<PanelHarness />);
     await flush();
-    fireEvent.click(screen.getByRole("tab", { name: "插件" }));
-    expect(screen.queryByRole("tab", { name: "个人" })).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "安装插件文件" }),
-    ).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "管理插件市场来源" }));
-    expect(
-      screen.queryByRole("button", { name: "添加来源" }),
-    ).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("tab", { name: "MCP 工具" }));
     expect(
       screen.getByText(/当前应用内执行引擎尚未接入 MCP 连接/),
@@ -254,7 +250,55 @@ describe("AgentExtensionsPanel", () => {
       screen.getByRole("button", { name: "保存待接入配置" }),
     ).toBeInTheDocument();
   });
-  it("installs a real CLI listing, refreshes its receipt, and enables it through the native adapter", async () => {
+  it("uses the Harness receipt to show saved enablement and pending activation", async () => {
+    const native: AgentHarnessPluginCatalog = {
+      bundles: [
+        {
+          id: "terminal",
+          name: "Persistent terminal",
+          description: "Keep one terminal for the current task.",
+          version: "0.2.2-rc.1",
+          enabled: false,
+        },
+      ],
+      pendingReload: false,
+    };
+    vi.mocked(agentApi.getHarnessPlugins).mockResolvedValue(native);
+    let finish!: (value: AgentHarnessPluginCatalog) => void;
+    vi.mocked(agentApi.setHarnessPluginEnabled).mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    render(<PanelHarness />);
+    await flush();
+    fireEvent.click(screen.getByRole("tab", { name: "插件" }));
+    const terminal = screen.getByRole("checkbox", {
+      name: "启用插件 持久终端",
+    });
+    expect(terminal).not.toBeChecked();
+    fireEvent.click(terminal);
+    expect(terminal).not.toBeChecked();
+    expect(terminal).toBeDisabled();
+    expect(agentApi.setHarnessPluginEnabled).toHaveBeenCalledWith(
+      "terminal",
+      true,
+    );
+    await act(async () =>
+      finish({
+        bundles: [{ ...native.bundles[0], enabled: true }],
+        pendingReload: true,
+      }),
+    );
+    expect(terminal).toBeChecked();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "新一轮任务启动时生效",
+    );
+    expect(
+      screen.queryByRole("button", { name: "重新载入扩展" }),
+    ).not.toBeInTheDocument();
+  });
+  it("keeps installed CLI bundles manageable without offering legacy marketplace installs", async () => {
     const available = {
       id: "cli-github",
       name: "github",
@@ -264,7 +308,7 @@ describe("AgentExtensionsPanel", () => {
       componentTypes: ["CLI 技能"],
       listing: { displayName: "GitHub CLI", category: "developer-tools" },
     };
-    const empty = {
+    const installed = {
       marketplaces: [
         {
           id: "zcode-plugins-official",
@@ -273,37 +317,44 @@ describe("AgentExtensionsPanel", () => {
           isOfficial: true,
         },
       ],
-      availablePlugins: [available],
-      installedPlugins: [],
+      availablePlugins: [
+        available,
+        {
+          ...available,
+          id: "cli-new",
+          name: "another-cli",
+          listing: { displayName: "Another CLI" },
+        },
+      ],
+      installedPlugins: [{ ...available, enabled: true }],
       restorableBuiltins: [],
       diagnostics: [],
       capability: { supported: true },
     };
-    const installed = {
-      ...empty,
-      availablePlugins: [{ ...available, installed: true }],
-      installedPlugins: [{ ...available, enabled: true }],
-    };
     vi.mocked(agentApi.getPluginStore)
-      .mockResolvedValueOnce(empty)
-      .mockResolvedValue(installed);
-    vi.mocked(agentApi.installMarketplacePlugin).mockResolvedValue(installed);
+      .mockResolvedValueOnce(installed)
+      .mockResolvedValue({
+        ...installed,
+        installedPlugins: [{ ...available, enabled: false }],
+      });
     vi.mocked(agentApi.setPluginEnabled).mockResolvedValue(catalog);
     render(<PanelHarness />);
     await flush();
     fireEvent.click(screen.getByRole("tab", { name: "插件" }));
-    fireEvent.change(screen.getByLabelText("搜索插件"), {
-      target: { value: "GitHub" },
+    expect(screen.queryByText("ZCode CLI 适配目录")).not.toBeInTheDocument();
+    expect(screen.queryByText("Another CLI")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "安装插件文件" }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText("兼容扩展", { selector: "summary" }));
+    const existing = screen.getByRole("checkbox", {
+      name: "启用兼容扩展 GitHub CLI",
     });
-    fireEvent.click(screen.getByRole("button", { name: "安装" }));
-    await flush();
-    expect(agentApi.installMarketplacePlugin).toHaveBeenCalledWith(
-      "zcode-plugins-official",
-      "github",
-    );
-    fireEvent.click(screen.getByLabelText("启用插件 GitHub CLI"));
+    expect(existing).toBeChecked();
+    fireEvent.click(existing);
     await flush();
     expect(agentApi.setPluginEnabled).toHaveBeenCalledWith("cli-github", false);
+    expect(existing).not.toBeChecked();
   });
   it("keeps return navigation available during a slow initial load and ignores its late reply", async () => {
     let finish: (value: AgentExtensions) => void = () => {};
@@ -883,7 +934,11 @@ describe("AgentExtensionsPanel", () => {
     );
     expect(screen.getByRole("button", { name: "在会话中使用" })).toBeDisabled();
   });
-  it("installs an actual native-selected plugin path and does not invent marketplace entries", async () => {
+  it("can remove an old local plugin configuration from compatibility extensions", async () => {
+    vi.mocked(agentApi.uninstallPlugin).mockResolvedValue({
+      ...catalog,
+      plugins: [],
+    });
     render(
       <AgentExtensionsPanel
         open
@@ -894,15 +949,13 @@ describe("AgentExtensionsPanel", () => {
     );
     await flush();
     fireEvent.click(screen.getByRole("tab", { name: "插件" }));
-    expect(screen.getByText("Local Plugin")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "安装插件文件" }));
+    fireEvent.click(screen.getByText("兼容扩展", { selector: "summary" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "移除配置 Local Plugin" }),
+    );
     await flush();
-    expect(open).toHaveBeenCalledWith(
-      expect.objectContaining({ directory: false, multiple: false }),
-    );
-    expect(agentApi.installPlugin).toHaveBeenCalledWith(
-      "D:/fixture/plugin.mjs",
-    );
+    expect(agentApi.uninstallPlugin).toHaveBeenCalledWith("local-plugin");
+    expect(screen.queryByText("Local Plugin")).not.toBeInTheDocument();
   });
   it("toggles a real MCP server while retaining masked credentials and plugin settings", async () => {
     render(

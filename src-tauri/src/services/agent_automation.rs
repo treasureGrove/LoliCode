@@ -99,6 +99,23 @@ struct Job {
     locale: String,
     #[serde(default)]
     last_error: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    target: Option<DeliveryTarget>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    reusable_session_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    run_at: Option<u64>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+enum DeliveryTarget {
+    Session {
+        #[serde(rename = "sessionId")]
+        session_id: String,
+    },
+    NewOnce,
+    New,
 }
 
 fn scheduled_trigger() -> String {
@@ -131,6 +148,8 @@ struct Run {
     finished_at: Option<u64>,
     #[serde(default)]
     cancel_requested: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    prompt: Option<String>,
 }
 
 #[derive(Default, Serialize, Deserialize)]
@@ -334,7 +353,12 @@ fn idle_ready(job: &Job, idle: Result<u64, &str>, agent_busy: bool) -> Result<bo
 }
 
 fn next_for_job(job: &Job, now: u64) -> Result<u64, String> {
-    if job.trigger == "idle" {
+    if let Some(run_at) = job.run_at {
+        if run_at <= now {
+            return Err("一次性计划需要设置未来的运行时间".into());
+        }
+        Ok(run_at)
+    } else if job.trigger == "idle" {
         Ok(now.saturating_add(job.idle_interval_minutes.saturating_mul(60_000)))
     } else {
         next_run_at(&job.cron_expr, now)
@@ -387,6 +411,20 @@ fn model_selection_valid(value: &Value) -> bool {
             .is_some_and(|s| !s.trim().is_empty())
 }
 
+fn delivery_target(value: &Value) -> Result<Option<DeliveryTarget>, String> {
+    let target: Option<DeliveryTarget> =
+        serde_json::from_value(value.clone()).map_err(|_| "自动化投递目标无效")?;
+    if let Some(DeliveryTarget::Session { session_id }) = &target {
+        if !session_id
+            .strip_prefix("lc:")
+            .is_some_and(|id| uuid::Uuid::parse_str(id).is_ok())
+        {
+            return Err("自动化只能投递到本体会话".into());
+        }
+    }
+    Ok(target)
+}
+
 fn validate_job(
     value: &Value,
     workspace: String,
@@ -406,8 +444,29 @@ fn validate_job(
     if !matches!(trigger, "schedule" | "idle") {
         return Err("自动化触发方式无效".into());
     }
+    let run_at = if value["runAt"].is_null() {
+        None
+    } else {
+        Some(
+            value["runAt"]
+                .as_u64()
+                .filter(|value| {
+                    i64::try_from(*value)
+                        .ok()
+                        .and_then(chrono::DateTime::from_timestamp_millis)
+                        .is_some()
+                })
+                .ok_or("一次性计划的时间无效")?,
+        )
+    };
+    let recurring = value["recurring"].as_bool().unwrap_or(true);
+    if run_at.is_some() && (trigger != "schedule" || recurring) {
+        return Err("仅一次性定时任务可以指定运行时间".into());
+    }
     let cron_expr = value["cronExpr"].as_str().unwrap_or("0 * * * *").trim();
-    cron_parts(cron_expr)?;
+    if run_at.is_none() {
+        cron_parts(cron_expr)?;
+    }
     let idle_after_minutes = value["idleAfterMinutes"].as_u64().unwrap_or(10);
     let idle_interval_minutes = value["idleIntervalMinutes"].as_u64().unwrap_or(60);
     if ["idleAfterMinutes", "idleIntervalMinutes"]
@@ -423,8 +482,11 @@ fn validate_job(
     if !matches!(mode, "build" | "guarded" | "yolo") {
         return Err("自动化权限模式无效".into());
     }
+    let target = delivery_target(&value["target"])?;
     let model_selection = value["modelSelection"].clone();
-    if !model_selection_valid(&model_selection) {
+    if !matches!(target, Some(DeliveryTarget::Session { .. }))
+        && !model_selection_valid(&model_selection)
+    {
         return Err("自动化模型选择无效".into());
     }
     let now = now_ms();
@@ -434,12 +496,14 @@ fn validate_job(
         prompt: prompt.to_string(),
         cron_expr: cron_expr.to_string(),
         workspace_path: workspace,
-        recurring: value["recurring"].as_bool().unwrap_or(true),
+        recurring,
         mode: mode.to_string(),
         model_selection,
         enabled: true,
         lifecycle_status: "active".into(),
-        next_run_at: Some(if trigger == "idle" {
+        next_run_at: Some(if let Some(run_at) = run_at {
+            run_at
+        } else if trigger == "idle" {
             now
         } else {
             next_run_at(cron_expr, now)?
@@ -456,6 +520,9 @@ fn validate_job(
             .unwrap_or("zh")
             .into(),
         last_error: None,
+        target,
+        reusable_session_id: None,
+        run_at,
     })
 }
 
@@ -492,6 +559,11 @@ fn create_run(store: &mut Store, automation_id: &str) -> Run {
         created_at: now_ms(),
         finished_at: None,
         cancel_requested: false,
+        prompt: store
+            .jobs
+            .iter()
+            .find(|job| job.automation_id == automation_id)
+            .map(|job| job.prompt.clone()),
     };
     store.runs.push(run.clone());
     while store.runs.len() > MAX_RUNS {
@@ -505,13 +577,12 @@ fn create_run(store: &mut Store, automation_id: &str) -> Run {
 }
 
 async fn claim_run(
-    app: &AppHandle,
+    db: &crate::database::Database,
     automation_id: &str,
     workspace: &str,
-) -> Result<Option<Run>, String> {
+) -> Result<Option<(Job, Run)>, String> {
     let _guard = mutation_lock().lock().await;
-    let state = app.state::<AppState>();
-    let mut store = load(&state.db)?;
+    let mut store = load(db)?;
     let job = store
         .jobs
         .iter()
@@ -526,9 +597,23 @@ async fn claim_run(
     {
         return Ok(None);
     }
+    if job.run_at.is_some() {
+        if job.lifecycle_status == "completed" {
+            return Err("此一次性任务已结束，请编辑运行时间后再运行".into());
+        }
+        let current = find_job_mut(&mut store, automation_id, workspace)?;
+        complete_schedule(current);
+        current.updated_at = now_ms().max(current.updated_at.saturating_add(1));
+    }
     let run = create_run(&mut store, automation_id);
-    save(&state.db, &store)?;
-    Ok(Some(run))
+    save(db, &store)?;
+    Ok(Some((job, run)))
+}
+
+fn complete_schedule(job: &mut Job) {
+    job.next_run_at = None;
+    job.enabled = false;
+    job.lifecycle_status = "completed".into();
 }
 
 async fn update_run(
@@ -558,6 +643,109 @@ fn catalog_model<'a>(
         .iter()
         .find(|model| model.provider_id == provider_id && model.model_id == model_id)
         .ok_or_else(|| "自动化所选模型已不可用，请编辑任务并重新选择模型".into())
+}
+
+fn session_busy(status: &AgentStatus) -> bool {
+    matches!(
+        status,
+        AgentStatus::Running | AgentStatus::WaitingPermission | AgentStatus::WaitingQuestion
+    )
+}
+
+async fn target_snapshot(
+    runtime: &dyn AutomationRuntime,
+    session_id: &str,
+    workspace: &str,
+) -> Result<AgentSnapshot, String> {
+    let snapshot: AgentSnapshot = serde_json::from_value(
+        runtime
+            .call("getSession", json!({"sessionId":session_id}), false)
+            .await?,
+    )
+    .map_err(|_| "自动化目标会话回执无效")?;
+    ensure_target_session(&snapshot.session, session_id, workspace)?;
+    Ok(snapshot)
+}
+
+fn ensure_target_session(
+    session: &AgentSession,
+    session_id: &str,
+    workspace: &str,
+) -> Result<(), String> {
+    if session.id != session_id
+        || preferences::path_key(&session.project_path) != preferences::path_key(workspace)
+        || session.archived
+        || session.coordination.is_some()
+    {
+        return Err("请选择当前工作区内未归档的普通会话".into());
+    }
+    Ok(())
+}
+
+async fn validate_selected_target(
+    app: &AppHandle,
+    input: &Value,
+    workspace: &str,
+) -> Result<(), String> {
+    if let Some(DeliveryTarget::Session { session_id }) = delivery_target(&input["target"])? {
+        let session: AgentSession = agent_dispatch::native(
+            app,
+            "getSessionMetadata",
+            json!({"sessionId":session_id}),
+            false,
+        )
+        .await?;
+        ensure_target_session(&session, &session_id, workspace)?;
+    }
+    Ok(())
+}
+
+async fn bind_run_session(
+    db: &crate::database::Database,
+    job: &Job,
+    run_id: &str,
+    session_id: &str,
+) -> Result<(), String> {
+    let _guard = mutation_lock().lock().await;
+    let mut store = load(db)?;
+    let record = store
+        .runs
+        .iter_mut()
+        .find(|run| run.run_id == run_id)
+        .ok_or("自动化运行记录不存在")?;
+    if record.cancel_requested {
+        return Err("任务已取消".into());
+    }
+    record.dispatch_status = "running".into();
+    record.session_id = Some(session_id.into());
+    if job.target == Some(DeliveryTarget::NewOnce) {
+        if let Some(current) = store.jobs.iter_mut().find(|current| {
+            current.automation_id == job.automation_id
+                && current.target == job.target
+                && current.model_selection == job.model_selection
+                && current.mode == job.mode
+        }) {
+            current
+                .reusable_session_id
+                .get_or_insert_with(|| session_id.into());
+        }
+    }
+    save(db, &store)
+}
+
+async fn interrupt_run(
+    runtime: &dyn AutomationRuntime,
+    session_id: &str,
+    run_id: &str,
+) -> Result<(), String> {
+    runtime
+        .call(
+            "interruptSession",
+            json!({"sessionId":session_id,"expectedRequestId":format!("automation:{run_id}")}),
+            false,
+        )
+        .await?;
+    Ok(())
 }
 
 async fn dispatch(app: AppHandle, job: Job, run: Run) {
@@ -600,38 +788,62 @@ async fn dispatch_run(
             return Err("工作区路径已变化，请重新打开项目".to_string());
         }
         let catalog = runtime.bind_project(&job.workspace_path).await?;
-        let model = catalog_model(&catalog, &job.model_selection)?;
-        let reasoning = job.model_selection["options"]["reasoningLevel"]
-            .as_str()
-            .filter(|level| !level.is_empty() && *level != "default")
-            .map(str::to_owned);
         let permission = match job.mode.as_str() {
             "guarded" => "auto",
             "yolo" => "full_access",
             _ => "ask",
         };
-        let session: AgentSession = serde_json::from_value(
-            runtime
-                .call(
-                    "createSession",
-                    json!({
-                        "projectPath": job.workspace_path,
-                        "modelId": model.id,
-                        "mode": "build",
-                        "permissionMode": permission,
-                        "reasoningEffort": reasoning,
-                        "title": format!("自动化 · {}", job.title),
-                    }),
-                    true,
-                )
-                .await?,
-        )
-        .map_err(|_| "自动化会话回执无效".to_string())?;
-        update_run(&db, &run.run_id, |record| {
-            record.dispatch_status = "running".into();
-            record.session_id = Some(session.id.clone());
-        })
-        .await?;
+        let explicit_target = matches!(job.target, Some(DeliveryTarget::Session { .. }));
+        let existing = match &job.target {
+            Some(DeliveryTarget::Session { session_id }) => Some(session_id.as_str()),
+            Some(DeliveryTarget::NewOnce) => job.reusable_session_id.as_deref(),
+            _ => None,
+        };
+        let session = if let Some(session_id) = existing {
+            let snapshot =
+                target_snapshot(runtime.as_ref(), session_id, &job.workspace_path).await?;
+            if session_busy(&snapshot.status)
+                || snapshot.title_pending
+                || snapshot.background_jobs > 0
+                || snapshot.queue_paused
+                || !snapshot.queued_messages.is_empty()
+            {
+                return Err("目标会话还有正在处理或排队的任务，未投递自动化".into());
+            }
+            if !explicit_target
+                && (snapshot.session.permission_mode != permission
+                    || snapshot.session.model.as_ref().is_none_or(|model| {
+                        job.model_selection["providerId"] != model.provider_id
+                            || job.model_selection["modelId"] != model.model_id
+                    }))
+            {
+                return Err("复用会话的模型或权限已更改，未投递自动化".into());
+            }
+            snapshot.session
+        } else {
+            let model = catalog_model(&catalog, &job.model_selection)?;
+            let reasoning = job.model_selection["options"]["reasoningLevel"]
+                .as_str()
+                .filter(|level| !level.is_empty() && *level != "default");
+            serde_json::from_value(
+                runtime
+                    .call(
+                        "createSession",
+                        json!({
+                            "projectPath": job.workspace_path,
+                            "modelId": model.id,
+                            "mode": "build",
+                            "permissionMode": permission,
+                            "reasoningEffort": reasoning,
+                            "title": format!("自动化 · {}", job.title),
+                        }),
+                        true,
+                    )
+                    .await?,
+            )
+            .map_err(|_| "自动化会话回执无效".to_string())?
+        };
+        bind_run_session(&db, &job, &run.run_id, &session.id).await?;
         {
             // Only durable store changes belong under the global lock. Waiting
             // for admission here used to freeze every project's management UI.
@@ -651,32 +863,45 @@ async fn dispatch_run(
                 json!({
                     "sessionId": session.id,
                     "requestId": format!("automation:{}", run.run_id),
-                    "text": job.prompt,
+                    "text": run.prompt.as_deref().unwrap_or(&job.prompt),
                     "locale": job.locale,
+                    "automationIdleOnly": true,
+                    "backgroundOnly": explicit_target,
                 }),
                 true,
             )
             .await;
+        if let Err(error) = admission {
+            let receipt = if existing.is_some() {
+                command_status(runtime.as_ref(), &session.id, &run.run_id)
+                    .await
+                    .ok()
+                    .flatten()
+            } else {
+                None
+            };
+            if !matches!(
+                receipt.as_deref(),
+                Some("accepted" | "completed" | "cancelled" | "failed")
+            ) {
+                return Err(error);
+            }
+        }
         // Stop may have reached an idle native actor while this send waited for
         // admission. Persisted intent survives that early ACK; stop it again
         // after admission, without holding up reads or unrelated mutations.
-        if admission.is_ok()
-            && load(&db)?
-                .runs
-                .iter()
-                .find(|item| item.run_id == run.run_id)
-                .is_none_or(|item| item.cancel_requested)
+        if load(&db)?
+            .runs
+            .iter()
+            .find(|item| item.run_id == run.run_id)
+            .is_none_or(|item| item.cancel_requested)
         {
-            if let Err(error) = runtime
-                .call("interruptSession", json!({"sessionId":session.id}), false)
-                .await
-            {
+            if let Err(error) = interrupt_run(runtime.as_ref(), &session.id, &run.run_id).await {
                 // Admission is proven even if interrupt fails. Keep monitoring
                 // the live session rather than inventing a terminal receipt.
                 log::warn!("自动化已接收，停止确认仍待处理：{error}");
             }
         }
-        admission?;
         update_run(&db, &run.run_id, |record| {
             record.dispatch_status = "dispatched".into();
         })
@@ -769,25 +994,24 @@ async fn monitor_run(
                 serde_json::from_value(value).map_err(|_| "自动化会话状态无效".to_string())
             });
         match snapshot {
-            Ok(snapshot)
-                if matches!(
-                    snapshot.status,
-                    AgentStatus::Running
-                        | AgentStatus::WaitingPermission
-                        | AgentStatus::WaitingQuestion
-                ) =>
-            {
-                tokio::time::sleep(Duration::from_secs(2)).await;
-            }
             Ok(snapshot) => {
-                let cancelled = load(&db)
-                    .ok()
-                    .and_then(|store| store.runs.into_iter().find(|run| run.run_id == run_id))
-                    .is_some_and(|run| run.cancel_requested);
                 let command = command_status(carrier.as_ref(), &session_id, &run_id)
                     .await
                     .ok()
                     .flatten();
+                if session_busy(&snapshot.status)
+                    && !matches!(
+                        command.as_deref(),
+                        Some("completed" | "cancelled" | "failed")
+                    )
+                {
+                    tokio::time::sleep(Duration::from_secs(2)).await;
+                    continue;
+                }
+                let cancelled = load(&db)
+                    .ok()
+                    .and_then(|store| store.runs.into_iter().find(|run| run.run_id == run_id))
+                    .is_some_and(|run| run.cancel_requested);
                 let (outcome, error) = terminal_outcome(command.as_deref(), cancelled, &snapshot);
                 let _ = update_run(&db, &run_id, |run| {
                     run.outcome = Some(outcome);
@@ -1093,15 +1317,10 @@ mod tests {
 }
 
 async fn run_now(app: &AppHandle, id: &str, workspace: &str) -> Result<Value, String> {
-    let Some(run) = claim_run(app, id, workspace).await? else {
+    let state = app.state::<AppState>();
+    let Some((job, run)) = claim_run(&state.db, id, workspace).await? else {
         return Ok(json!({"status":"duplicate"}));
     };
-    let state = app.state::<AppState>();
-    let job = load(&state.db)?
-        .jobs
-        .into_iter()
-        .find(|job| job.automation_id == id)
-        .ok_or("自动化任务不存在")?;
     let app = app.clone();
     tauri::async_runtime::spawn(async move { dispatch(app, job, run).await });
     Ok(json!({"status":"claimed"}))
@@ -1129,6 +1348,9 @@ pub async fn create_saved_job(
     if store.jobs.len() >= MAX_JOBS {
         return Err("自动化数量达到上限".into());
     }
+    if job.run_at.is_some() {
+        next_for_job(&job, now_ms())?;
+    }
     store.jobs.push(job.clone());
     if let (Some(request_id), Some(fingerprint)) = (request_id, fingerprint) {
         idempotency::remember(
@@ -1150,7 +1372,6 @@ async fn update_saved_job(
     input: &Value,
     workspace: String,
 ) -> Result<Value, String> {
-    let replacement = validate_job(input, workspace.clone(), db)?;
     let request_id = idempotency::request_id(input)?;
     let fingerprint = request_id
         .map(|_| idempotency::fingerprint(input, &workspace, "update", Some(id)))
@@ -1165,16 +1386,48 @@ async fn update_saved_job(
         }
     }
     let job = find_job_mut(&mut store, id, &workspace)?;
-    let enabled = job.enabled;
-    let created_at = job.created_at;
-    *job = replacement;
-    job.automation_id = id.into();
-    job.created_at = created_at;
-    job.enabled = enabled;
-    job.lifecycle_status = if enabled { "active" } else { "paused" }.into();
-    if !enabled {
-        job.next_run_at = None;
+    if let Some(expected) = input
+        .get("expectedUpdatedAt")
+        .filter(|value| !value.is_null())
+    {
+        if expected.as_u64() != Some(job.updated_at) {
+            return Err("自动化任务已变更，请重新读取后再保存".into());
+        }
     }
+    let mut merged = input.as_object().cloned().ok_or("自动化内容无效")?;
+    merged.entry("target").or_insert_with(|| json!(job.target));
+    merged.entry("runAt").or_insert_with(|| json!(job.run_at));
+    let mut replacement = validate_job(&Value::Object(merged), workspace.clone(), db)?;
+    let timing_changed = job.run_at != replacement.run_at
+        || job.cron_expr != replacement.cron_expr
+        || job.trigger != replacement.trigger
+        || job.recurring != replacement.recurring
+        || job.idle_after_minutes != replacement.idle_after_minutes
+        || job.idle_interval_minutes != replacement.idle_interval_minutes;
+    if replacement.run_at.is_some() && replacement.run_at != job.run_at {
+        next_for_job(&replacement, now_ms())?;
+    }
+    replacement.automation_id = id.into();
+    replacement.created_at = job.created_at;
+    replacement.updated_at = replacement.updated_at.max(job.updated_at.saturating_add(1));
+    if replacement.target == job.target
+        && replacement.model_selection == job.model_selection
+        && replacement.mode == job.mode
+    {
+        replacement.reusable_session_id = job.reusable_session_id.clone();
+    }
+    if job.run_at.is_some() && job.lifecycle_status == "completed" {
+        if job.run_at == replacement.run_at {
+            complete_schedule(&mut replacement);
+        }
+    } else if !job.enabled {
+        replacement.enabled = false;
+        replacement.lifecycle_status = "paused".into();
+        replacement.next_run_at = None;
+    } else if !timing_changed {
+        replacement.next_run_at = job.next_run_at;
+    }
+    *job = replacement;
     let result = job.clone();
     if let (Some(request_id), Some(fingerprint)) = (request_id, fingerprint) {
         idempotency::remember(
@@ -1281,6 +1534,9 @@ pub async fn invoke(app: &AppHandle, method: &str, args: Vec<Value>) -> Result<V
         }
         "create" => {
             let input = arg(&args, 0, "自动化内容")?;
+            let workspace = workspace_from_scope(Some(input))?;
+            registered_project(&state, &workspace)?;
+            validate_selected_target(app, input, &workspace).await?;
             create_saved_job(&state.db, input).await
         }
         "confirmProposal" => {
@@ -1321,6 +1577,12 @@ pub async fn invoke(app: &AppHandle, method: &str, args: Vec<Value>) -> Result<V
             let _guard = mutation_lock().lock().await;
             let mut store = load(&state.db)?;
             let job = find_job_mut(&mut store, id, &workspace)?;
+            if job.run_at.is_some() && job.lifecycle_status == "completed" {
+                if enabled {
+                    return Err("此一次性任务已结束，请编辑运行时间后再启用".into());
+                }
+                return Ok(json!(job));
+            }
             job.enabled = enabled;
             job.lifecycle_status = if enabled { "active" } else { "paused" }.into();
             job.next_run_at = if enabled {
@@ -1332,7 +1594,7 @@ pub async fn invoke(app: &AppHandle, method: &str, args: Vec<Value>) -> Result<V
             } else {
                 None
             };
-            job.updated_at = now_ms();
+            job.updated_at = now_ms().max(job.updated_at.saturating_add(1));
             let result = job.clone();
             save(&state.db, &store)?;
             Ok(json!(result))
@@ -1343,6 +1605,8 @@ pub async fn invoke(app: &AppHandle, method: &str, args: Vec<Value>) -> Result<V
                 .ok_or("自动化编号无效")?;
             let input = arg(&args, 1, "自动化内容")?;
             let workspace = workspace_from_scope(args.get(2))?;
+            registered_project(&state, &workspace)?;
+            validate_selected_target(app, input, &workspace).await?;
             update_saved_job(&state.db, id, input, workspace).await
         }
         "cancelRun" => {
@@ -1460,9 +1724,7 @@ pub async fn cancel_run_runtime(
         session
     };
     if let Some(session) = session {
-        runtime
-            .call("interruptSession", json!({"sessionId":session}), false)
-            .await?;
+        interrupt_run(runtime.as_ref(), &session, id).await?;
     }
     Ok(json!({"status":"stopping"}))
 }
@@ -1537,10 +1799,10 @@ fn claim_due(
             if store.jobs[index].recurring {
                 store.jobs[index].next_run_at = next;
             } else {
-                store.jobs[index].next_run_at = None;
-                store.jobs[index].enabled = false;
-                store.jobs[index].lifecycle_status = "completed".into();
+                complete_schedule(&mut store.jobs[index]);
             }
+            let current = &mut store.jobs[index];
+            current.updated_at = now.max(current.updated_at.saturating_add(1));
             changed = true;
             continue;
         }
@@ -1548,13 +1810,11 @@ fn claim_due(
         let run = create_run(store, &job.automation_id);
         let current = &mut store.jobs[index];
         current.last_error = None;
-        current.updated_at = now;
+        current.updated_at = now.max(current.updated_at.saturating_add(1));
         if current.recurring {
             current.next_run_at = next_for_job(current, now).ok();
         } else {
-            current.next_run_at = None;
-            current.enabled = false;
-            current.lifecycle_status = "completed".into();
+            complete_schedule(current);
         }
         due.push((job, run));
         changed = true;
@@ -1672,23 +1932,21 @@ pub async fn recover_runs_runtime(
                 }),
             None => Err("会话尚未创建".into()),
         };
-        // A recovered carrier may already own a live flight (for example,
-        // foreground startup racing the worker). Reattach monitoring instead of
-        // falsely recording failure or replaying the prompt.
-        if result.as_ref().is_ok_and(|snapshot| {
-            matches!(
-                snapshot.status,
-                AgentStatus::Running
-                    | AgentStatus::WaitingPermission
-                    | AgentStatus::WaitingQuestion
-            )
-        }) {
+        let command = match (result.as_ref(), session_id.as_deref()) {
+            (Ok(_), Some(id)) => command_status(runtime.as_ref(), id, &run_id)
+                .await
+                .ok()
+                .flatten(),
+            _ => None,
+        };
+        // A busy shared conversation is not evidence that this run was admitted.
+        if command.as_deref() == Some("accepted")
+            && result
+                .as_ref()
+                .is_ok_and(|snapshot| session_busy(&snapshot.status))
+        {
             if let Some(id) = session_id {
-                if cancel_requested
-                    && runtime
-                        .call("interruptSession", json!({"sessionId":id}), false)
-                        .await
-                        .is_err()
+                if cancel_requested && interrupt_run(runtime.as_ref(), &id, &run_id).await.is_err()
                 {
                     // Keep cancellation pending for the next recovery attempt.
                     continue;
@@ -1703,16 +1961,17 @@ pub async fn recover_runs_runtime(
         }
         let (dispatch_status, outcome, error) = match result {
             Ok(snapshot) => {
-                let command = match session_id.as_deref() {
-                    Some(id) => command_status(runtime.as_ref(), id, &run_id)
-                        .await
-                        .ok()
-                        .flatten(),
-                    None => None,
-                };
                 let (outcome, error) =
                     terminal_outcome(command.as_deref(), cancel_requested, &snapshot);
-                ("dispatched", outcome, error)
+                (
+                    if command.is_some() {
+                        "dispatched"
+                    } else {
+                        "failed_to_dispatch"
+                    },
+                    outcome,
+                    error,
+                )
             }
             Err(error) => (
                 "failed_to_dispatch",

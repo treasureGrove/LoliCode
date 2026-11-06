@@ -2,6 +2,13 @@
 - id: tool-plugin-manager
   disabled: true
 
+# Desktop owns durable schedules across short-lived SDK session processes.
+- id: schedule
+  disabled: true
+
+- id: tool-schedule
+  disabled: true
+
 - id: session-telemetry-otel
   disabled: true
 

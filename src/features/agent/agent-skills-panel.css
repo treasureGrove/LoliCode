@@ -89,6 +89,42 @@
   margin-top: auto;
   padding-top: 14px;
 }
+.wb-harness-plugins {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+.wb-harness-plugin-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.wb-harness-plugin-heading h2 {
+  color: var(--wb-text);
+  font-size: 15px;
+  font-weight: 600;
+}
+.wb-harness-plugin-heading p,
+.wb-compatible-plugins > p {
+  margin-top: 5px;
+  color: var(--wb-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.wb-compatible-plugins {
+  padding: 14px 16px;
+  border: 1px solid var(--wb-border);
+  border-radius: 12px;
+}
+.wb-compatible-plugins summary {
+  color: var(--wb-text);
+  font-size: 13px;
+  cursor: pointer;
+}
+.wb-compatible-plugins > .wb-skills-grid {
+  margin-top: 12px;
+}
 .wb-skills-empty {
   display: grid;
   justify-items: center;
