@@ -1,6 +1,6 @@
 // Runs a hidden Windows development build with a disposable profile and model.
 // Run from a non-elevated shell so WebView2 honors the fixture debugging port.
-// Usage: node scripts/tests/harness-desktop-acceptance.mjs [--permissions | --output-links | --compact | --dock-tools | --background-jobs | --native-modes | --switching]
+// Usage: node scripts/tests/harness-desktop-acceptance.mjs [--permissions | --output-links | --compact | --dock-tools | --background-jobs | --native-modes | --switching | --titles]
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -34,6 +34,26 @@ const dockToolsOnly = process.argv.includes("--dock-tools");
 const backgroundJobsOnly = process.argv.includes("--background-jobs");
 const nativeModesOnly = process.argv.includes("--native-modes");
 const switchingOnly = process.argv.includes("--switching");
+const switchingReducedMotion = switchingOnly && process.env.LOLICODE_HARNESS_DESKTOP_REDUCED_MOTION === "1";
+const switchingProfileScale = switchingOnly && process.env.LOLICODE_HARNESS_DESKTOP_PROFILE_SCALE === "1";
+const titlesOnly = process.argv.includes("--titles");
+const titles = {
+  firstPrompt: "请整理故障排查顺序，并列出需要复核的检查项。",
+  firstAnswer: "已经整理排查顺序和复核检查项。",
+  generatedTitle: "整理故障排查清单",
+  manualTitle: "手工保留的会话名称",
+  nextPrompt: "继续核对上一项结果，保留已经确认的记录。",
+  nextAnswer: "后续检查已完成，原有记录已保留。",
+  manualPrompt: "复核修改后的清单，确保记录仍然完整。",
+  manualAnswer: "清单已复核，记录完整。",
+  racePrompt: "分析构建日志并标记第一次异常。",
+  raceAnswer: "已定位构建日志中的第一次异常。",
+  raceGeneratedTitle: "分析构建异常",
+  raceManualTitle: "先手动确定的名称",
+};
+let titleRequests = 0;
+let titleConversationTurns = 0;
+let heldTitleReply;
 const occupyProxyPort = process.env.LOLICODE_HARNESS_DESKTOP_OCCUPY_PROXY === "1";
 const nativeModes = {
   plan: "DESKTOP_NATIVE_PLAN: implement the revised fixture plan.",
@@ -408,6 +428,42 @@ const modelServer = createServer(async (request, response) => {
     const hasTool = (name) =>
       body.tools?.some((tool) => tool.function.name === name);
     const secretaryPrompt = "You are the user's LoliCode secretary";
+    if (allMessages.includes("Create a concise title for an AI coding-assistant session from the supplied human messages.")) {
+      assert.equal(body.tools?.length ?? 0, 0);
+      assert.ok(userMessages.includes("Generate the session title from this JSON array of human messages:"));
+      if (titlesOnly) {
+        const number = ++titleRequests;
+        assert.ok(number <= 2, "A manual title must not trigger another title request");
+        assert.ok(userMessages.includes(number === 1 ? titles.firstPrompt : titles.racePrompt));
+        assert.ok(!userMessages.includes(titles.nextPrompt));
+        const release = Promise.withResolvers();
+        const finished = Promise.withResolvers();
+        heldTitleReply = { number, release: release.resolve, finished: finished.promise };
+        response.once("close", release.resolve);
+        try {
+          await release.promise;
+          if (!response.destroyed)
+            await reply(response, { content: number === 1 ? titles.generatedTitle : titles.raceGeneratedTitle }, "stop");
+        } finally {
+          heldTitleReply = undefined;
+          finished.resolve();
+        }
+      } else {
+        await reply(response, { content: "桌面验收会话" }, "stop");
+      }
+      return;
+    }
+    if (titlesOnly) {
+      const [expected, answer] = [
+        [titles.firstPrompt, titles.firstAnswer],
+        [titles.nextPrompt, titles.nextAnswer],
+        [titles.manualPrompt, titles.manualAnswer],
+        [titles.racePrompt, titles.raceAnswer],
+      ][titleConversationTurns++] ?? [];
+      assert.ok(expected && userMessages.includes(expected), "The title fixture model received an unexpected conversation turn");
+      await reply(response, { content: answer }, "stop");
+      return;
+    }
     if (nativeModesOnly) {
       const round = body.messages.findLast(message => JSON.stringify(message).includes("<goal_round>"));
       if (round) {
@@ -1050,6 +1106,20 @@ const vitePlugin = {
   },
   transformIndexHtml() {
     return [
+      ...(switchingReducedMotion ? [{
+        tag: "script",
+        injectTo: "head-prepend",
+        children: `{
+          const matchMedia = window.matchMedia.bind(window);
+          window.matchMedia = query => {
+            const result = matchMedia(query);
+            if (query === "(prefers-reduced-motion: reduce)") {
+              Object.defineProperty(result, "matches", { value: true });
+            }
+            return result;
+          };
+        }`,
+      }] : []),
       {
         tag: "script",
         attrs: { type: "module", src: `${namespace}/renderer.mjs` },
@@ -1065,6 +1135,18 @@ const vitePlugin = {
       } else if (switchingOnly && request.url === `${namespace}/switching.mjs`) {
         response.setHeader("Content-Type", "text/javascript");
         response.end(await readFile(new URL("./harness-desktop-switching.mjs", import.meta.url)));
+      } else if (titlesOnly && request.method === "POST" && request.url?.startsWith(`${namespace}/titles-release/`)) {
+        const number = Number(request.url.slice(request.url.lastIndexOf("/") + 1));
+        if (!Number.isInteger(number) || number < 1 || number > titleRequests) {
+          response.writeHead(409).end();
+        } else {
+          const pending = heldTitleReply;
+          if (pending?.number === number) {
+            pending.release();
+            await pending.finished;
+          }
+          response.writeHead(204).end();
+        }
       } else if (request.url === `${namespace}/config`) {
         response.setHeader("Content-Type", "application/json");
         response.end(JSON.stringify(fixture));
@@ -1231,26 +1313,35 @@ async function seedSwitchingHistory() {
   await mkdir(metadataDirectory, { recursive: true });
   const turns = 160;
   const sessions = [];
-  for (const label of ["A", "B"]) {
+  for (const [index, label] of ["A", "B", "C", "D", "E", "F"].entries()) {
     const id = randomUUID();
     const recordDirectory = path.join(profile, "agent/harness-desktop", id);
     await mkdir(recordDirectory, { recursive: true });
     const session = {
       id: `lc:${id}`, title: `切换验收会话 ${label}`, projectPath: project,
-      mode: "build", permissionMode: "full_access", createdAt: 100, updatedAt: label === "A" ? 300 : 200,
+      mode: "build", permissionMode: "full_access", createdAt: 100, updatedAt: 700 - index * 100,
       model: { providerId: "lolicode", modelId: `harness-desktop-fixture/${model}` },
     };
     const messages = [];
     const marker = turn => `SWITCHING-${label}-TURN-${String(turn).padStart(3, "0")}`;
+    // A exercises a dense visible Markdown window; E is a similarly large
+    // record whose extra bytes are in an old tool result outside that window.
+    const denseTail = switchingProfileScale && label === "A"
+      ? Array.from({ length: 54 }, (_, index) => [
+          `#### 复现步骤 ${index + 1}`,
+          "1. **打开工作区**，检查最近的变更。\n2. 对照预期值并记录结果。",
+          "```json\n{\"actual\": \"verified\", \"expected\": \"verified\", \"complete\": true}\n```",
+        ].join("\n\n")).join("\n\n")
+      : "";
     for (let turn = 1; turn <= turns; turn++) {
       const createdAt = 1000 + turn * 2;
       messages.push({
-        id: `user-${turn}`, role: "user", createdAt, completedAt: createdAt,
+        id: `user-${label}-${turn}`, role: "user", createdAt, completedAt: createdAt,
         parts: [{ type: "text", text: `读取测试工作区并记录第 ${turn} 轮的验收结果。` }],
       }, {
-        id: `assistant-${turn}`, role: "assistant", createdAt: createdAt + 1, completedAt: createdAt + 1,
+        id: `assistant-${label}-${turn}`, role: "assistant", createdAt: createdAt + 1, completedAt: createdAt + 1,
         parts: [{
-          type: "tool", id: `read-${turn}`, name: "read", state: "completed",
+          type: "tool", id: `read-${label}-${turn}`, name: "read", state: "completed",
           input: { file_path: `fixture/${label}-${turn}.txt` }, output: "Isolated switching fixture result.",
         }, {
           type: "text",
@@ -1259,6 +1350,7 @@ async function seedSwitchingHistory() {
             "已核对配置、整理结果，并保留了复现步骤。",
             "1. 读取工作区中的测试数据。\n2. 比较历史结果并记录当前状态。",
             "```json\n{\"fixture\": true, \"status\": \"verified\"}\n```",
+            ...(denseTail && turn > turns - 12 ? [denseTail] : []),
           ].join("\n\n"),
         }],
       });
@@ -1267,17 +1359,26 @@ async function seedSwitchingHistory() {
     await writeFile(path.join(metadataDirectory, `${id}.json`), JSON.stringify({
       session, fullAccessSelected: true,
     }), { flag: "wx" });
-    await writeFile(path.join(recordDirectory, "desktop.json"), JSON.stringify({
+    const record = {
       snapshot: {
         session, status: "idle", messages, permissions: [], questions: [], diffs: [],
         error: null, streamConnected: false, streamGap: false,
       },
       rootCreated: false, receipts: {},
-    }), { flag: "wx" });
-    sessions.push({ id: session.id, title: session.title, first: marker(1), last: marker(turns) });
+    };
+    if (switchingProfileScale && (label === "A" || label === "E")) {
+      const bytes = Buffer.byteLength(JSON.stringify(record));
+      messages[1].parts[0].output += "x".repeat(Math.max(0, 820_000 - bytes));
+    }
+    const serialized = JSON.stringify(record);
+    await writeFile(path.join(recordDirectory, "desktop.json"), serialized, { flag: "wx" });
+    sessions.push({ id: session.id, title: session.title, first: marker(1), last: marker(turns),
+      bytes: Buffer.byteLength(serialized) });
   }
   return {
     sessions, turns, source: "seeded-harness-desktop-snapshots",
+    profileScale: switchingProfileScale,
+    reducedMotion: switchingReducedMotion,
     baseline: process.env.LOLICODE_HARNESS_DESKTOP_SWITCHING_BASELINE === "1",
   };
 }
@@ -1343,6 +1444,7 @@ try {
     compact,
     backgroundJobs,
     nativeModes,
+    titles: titlesOnly ? titles : undefined,
     switching: switchingOnly ? await seedSwitchingHistory() : undefined,
     workerFollowup,
     workerQueue,
@@ -1367,7 +1469,7 @@ try {
     }),
   );
   console.log(`Isolated desktop acceptance reports: ${reportPath}`);
-  if (!permissionsOnly && !outputLinksOnly && !compactOnly && !backgroundJobsOnly && !dockToolsOnly && !nativeModesOnly && !switchingOnly) {
+  if (!permissionsOnly && !outputLinksOnly && !compactOnly && !backgroundJobsOnly && !dockToolsOnly && !nativeModesOnly && !switchingOnly && !titlesOnly) {
     const first = await launch(env, "initial");
     assert.equal(first.sendScrollFollow, true);
     assert.ok(observed.image && observed.approved && observed.rejected);
@@ -1409,8 +1511,21 @@ try {
     assert.equal(restart.sessionId, dock.sessionId);
     assert.ok(restart.savedDock && restart.explicitBrowserRestore && restart.terminalRestartRequiresStart &&
       restart.parallelBrowsers && restart.staleBrowserShowIgnored);
+  } else if (titlesOnly) {
+    const warm = await launch(env, "titles");
+    assert.ok(warm.generatedTitle && warm.followupWhileTitlePending && warm.manualTitleRetained && warm.manualTitleWonRace);
+    assert.equal(titleRequests, 2);
+    assert.equal(titleConversationTurns, 4);
+    fixture.titleSessionId = warm.sessionId;
+    fixture.titleRaceSessionId = warm.raceSessionId;
+    const cold = await launch(env, "titles-restart");
+    assert.equal(cold.sessionId, warm.sessionId);
+    assert.equal(cold.manualTitleRetained, true);
+    assert.equal(titleRequests, 2, "A cold reopen must not regenerate a title");
+    assert.equal(titleConversationTurns, 4, "A cold reopen must not send a conversation turn");
   } else if (switchingOnly) {
     const result = await launch(env, "switching");
+    assert.ok(!result.profileFailure, JSON.stringify(result.profileFailure));
     assert.ok(result.sessionSwitches.length >= 8 && result.modeSwitches.length >= 8);
     if (!fixture.switching.baseline) {
       for (const [name, passed] of Object.entries(result.checks))

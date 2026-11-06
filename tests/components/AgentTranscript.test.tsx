@@ -113,6 +113,33 @@ describe("Agent history windows", () => {
     expect(article).toBeInTheDocument();
     expect(article).not.toBeVisible();
     expect(screen.getAllByRole("article")).toHaveLength(1);
+    // A snapshot evicted independently of its pane must not reset the window.
+    view.rerender(
+      <AgentTranscriptDeck
+        {...props}
+        sessionId="a"
+        messages={[]}
+        ready={false}
+        loading
+      />,
+    );
+    expect(
+      view.container.querySelector("[data-conversation-loading]"),
+    ).toBeVisible();
+    expect(screen.queryByRole("article")).toBeNull();
+    expect(article).toBeInTheDocument();
+    view.rerender(
+      <AgentTranscriptDeck
+        {...props}
+        sessionId="a"
+        messages={[]}
+        ready={false}
+      />,
+    );
+    expect(
+      view.container.querySelector("[data-conversation-loading]"),
+    ).toBeNull();
+    expect(article).not.toBeVisible();
     view.rerender(<AgentTranscriptDeck {...props} sessionId="a" />);
     expect(screen.getByText("Request 20").closest("article")).toBe(article);
     expect(article).toBeVisible();
@@ -132,6 +159,85 @@ describe("Agent history windows", () => {
     expect(
       view.container.querySelectorAll("[data-agent-transcript-session]"),
     ).toHaveLength(3);
+  });
+
+  it("reuses prepared rows on selection without replacing the visited history", () => {
+    const first = {
+      projectPath: "/project",
+      sessionId: "a",
+      messages: history,
+    };
+    const second = {
+      projectPath: "/project",
+      sessionId: "b",
+      messages: [user("b")],
+    };
+    const onEvict = vi.fn();
+    const view = render(<AgentTranscriptDeck {...first} onEvict={onEvict} />);
+    fireEvent.click(screen.getByRole("button", { name: "加载更早的消息" }));
+    const visited = screen.getByText("Request 20").closest("article");
+    const prepared = [
+      second,
+      ...["c", "d", "e"].map((sessionId) => ({
+        ...second,
+        sessionId,
+        messages: [user(sessionId)],
+      })),
+    ];
+    view.rerender(
+      <AgentTranscriptDeck {...first} prepared={prepared} onEvict={onEvict} />,
+    );
+    const standby = screen.getByText("Request b").closest("article");
+    expect(standby).not.toBeVisible();
+    expect(standby?.querySelector("[data-companion-surface]")).toBeNull();
+    expect(screen.queryByText("Request e")).toBeNull();
+    expect(visited).toBeVisible();
+    expect(onEvict).not.toHaveBeenCalled();
+
+    view.rerender(
+      <AgentTranscriptDeck
+        {...second}
+        prepared={prepared.slice(1)}
+        onEvict={onEvict}
+      />,
+    );
+    expect(screen.getByText("Request b").closest("article")).toBe(standby);
+    expect(standby).toBeVisible();
+    expect(standby?.querySelector("[data-companion-surface]")).not.toBeNull();
+    expect(visited).not.toBeVisible();
+    view.rerender(
+      <AgentTranscriptDeck {...first} prepared={prepared} onEvict={onEvict} />,
+    );
+    expect(screen.getByText("Request 20").closest("article")).toBe(visited);
+    expect(visited).toBeVisible();
+    expect(onEvict).not.toHaveBeenCalled();
+  });
+
+  it("keeps prepared messages hidden when the selected snapshot is missing", () => {
+    const first = {
+      projectPath: "/project",
+      sessionId: "a",
+      messages: [user("a")],
+    };
+    const second = {
+      projectPath: "/project",
+      sessionId: "b",
+      messages: [user("b")],
+    };
+    const prepared = [second];
+    const view = render(<AgentTranscriptDeck {...first} prepared={prepared} />);
+    const standby = screen.getByText("Request b");
+    expect(standby).not.toBeVisible();
+    view.rerender(
+      <AgentTranscriptDeck
+        {...second}
+        messages={[]}
+        prepared={prepared}
+        ready={false}
+      />,
+    );
+    expect(screen.queryByRole("article")).toBeNull();
+    expect(standby).not.toBeVisible();
   });
 
   it("closes an inactive conversation's image portal without reopening it on return", async () => {

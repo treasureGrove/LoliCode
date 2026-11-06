@@ -8,6 +8,8 @@ import {
 } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { ConversationLoading } from "@/components/motion/ConversationLoading";
+import { DRAG_REGION_ATTR } from "@/lib/platform";
 import { useTranslation } from "react-i18next";
 import {
   BookHeart,
@@ -374,8 +376,14 @@ export function TavernPage({
     >
       <AppPageHeader
         title={
-          storyCharacter?.name ??
-          (i18n.language.startsWith("zh") ? "选择好友" : "Choose a friend")
+          <span
+            data-workspace-entry
+            className="inline-block"
+            {...DRAG_REGION_ATTR}
+          >
+            {storyCharacter?.name ??
+              (i18n.language.startsWith("zh") ? "选择好友" : "Choose a friend")}
+          </span>
         }
         subtitle={
           sending || selectedStory?.isGenerating
@@ -428,16 +436,7 @@ export function TavernPage({
           ) : (
             <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 lg:px-8">
               {snapshot.isPending ? (
-                <div
-                  role="status"
-                  className="flex h-full items-center justify-center gap-2 text-sm text-fg-3"
-                >
-                  <LoaderCircle
-                    className="h-4 w-4 animate-spin"
-                    aria-hidden="true"
-                  />
-                  {t("common.loading")}
-                </div>
+                <ConversationLoading label={t("common.loading")} />
               ) : !selectedStory ? (
                 <div className="flex h-full min-h-[300px] flex-col items-center justify-center text-center">
                   <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-border bg-subtle text-action-text">
@@ -547,6 +546,11 @@ export function TavernPage({
                   </Button>
                 </div>
               </div>
+            ) : snapshot.isPending ? (
+              <div
+                aria-hidden="true"
+                className="mx-auto h-[120px] max-w-[840px] rounded-xl border border-border bg-app"
+              />
             ) : (
               <p className="text-center text-xs text-fg-3">
                 {catalog.isLoading

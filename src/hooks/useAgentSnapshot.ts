@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  startTransition,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { agentApi } from "@/lib/api/agent";
 import type { AgentMessage, AgentSnapshot } from "@/types/agent";
 import { useTauriEvent } from "@/hooks/useTauriEvent";
@@ -17,9 +24,35 @@ type CachedSession = {
   lastRead: number;
   revision: number;
   readRevision: number;
+  prefetched?: boolean;
 };
 const CACHE_LIMIT = 6;
 const CHANGE_DELAY = 40;
+export const AGENT_PREPARED_SESSION_LIMIT = 3;
+
+function cacheSession(
+  sessions: Map<string, CachedSession>,
+  id: string,
+  selected?: string,
+) {
+  const entry = sessions.get(id) ?? {
+    snapshot: null,
+    tail: null,
+    error: null,
+    lastRead: 0,
+    revision: 0,
+    readRevision: -1,
+  };
+  sessions.delete(id);
+  sessions.set(id, entry);
+  if (sessions.size > CACHE_LIMIT) {
+    const keys = sessions.keys();
+    const first = keys.next().value;
+    const oldest = first === selected ? keys.next().value : first;
+    if (oldest !== undefined) sessions.delete(oldest);
+  }
+  return entry;
+}
 
 function streamTailMode(snapshot: AgentSnapshot, stream: StreamTail) {
   if (snapshot.status !== "running" || snapshot.session.id !== stream.sessionId)
@@ -118,15 +151,68 @@ export function useAgentSnapshot(
 ) {
   const cache = useRef(new Map<string, CachedSession>());
   const [, setRevision] = useState(0);
+  const [preparedSnapshots, setPreparedSnapshots] = useState<AgentSnapshot[]>(
+    [],
+  );
   const callback = useRef(options.onSnapshot);
   callback.current = options.onSnapshot;
   const active = useRef<{ id: string; invalidate: () => void }>();
+  const prefetching = useRef<{
+    entry: CachedSession;
+    revision: number;
+    read: Promise<AgentSnapshot>;
+  }>();
   const previousSelection = useRef<{
     id: string | null;
     fast: boolean;
     refresh: number;
   }>();
   const { fast, refresh } = options;
+
+  // Warm one likely destination at a time. A click during the read can adopt
+  // it, and background results never update the selected conversation.
+  const prefetch = useCallback((id: string) => {
+    const sessions = cache.current;
+    if (
+      prefetching.current ||
+      active.current?.id === id ||
+      sessions.get(id)?.snapshot
+    )
+      return;
+    const entry = cacheSession(sessions, id, active.current?.id);
+    const revision = entry.revision;
+    const read = Promise.resolve().then(() => agentApi.getSession(id));
+    prefetching.current = { entry, revision, read };
+    return read
+      .then(
+        (snapshot) => {
+          if (
+            snapshot.session.id === id &&
+            sessions.get(id) === entry &&
+            active.current?.id !== id &&
+            entry.revision === revision
+          ) {
+            entry.snapshot = snapshot;
+            entry.error = null;
+            entry.lastRead = Date.now();
+            entry.readRevision = revision;
+            entry.prefetched = true;
+            startTransition(() => {
+              setPreparedSnapshots((current) =>
+                [
+                  ...current.filter((item) => item.session.id !== id),
+                  snapshot,
+                ].slice(-AGENT_PREPARED_SESSION_LIMIT),
+              );
+            });
+          }
+        },
+        () => {},
+      )
+      .finally(() => {
+        prefetching.current = undefined;
+      });
+  }, []);
 
   useTauriEvent<SessionUpdate>(
     "agent-session-update",
@@ -135,6 +221,13 @@ export function useAgentSnapshot(
       if (!entry) return;
       const selected =
         active.current?.id === update.sessionId ? active.current : null;
+      if (entry.prefetched && !selected) {
+        entry.snapshot = null;
+        entry.prefetched = false;
+        setPreparedSnapshots((current) =>
+          current.filter((item) => item.session.id !== update.sessionId),
+        );
+      }
       if (update.type === "tail") {
         entry.tail = update;
         if (selected) setRevision((value) => value + 1);
@@ -152,23 +245,7 @@ export function useAgentSnapshot(
     previousSelection.current = { id: sessionId, fast, refresh };
     if (!sessionId) return;
 
-    const sessions = cache.current;
-    const entry = sessions.get(sessionId) ?? {
-      snapshot: null,
-      tail: null,
-      error: null,
-      lastRead: 0,
-      revision: 0,
-      readRevision: -1,
-    };
-    // Map order records most recently selected conversations. Inactive
-    // notifications only update entries we already own.
-    sessions.delete(sessionId);
-    sessions.set(sessionId, entry);
-    if (sessions.size > CACHE_LIMIT) {
-      const oldest = sessions.keys().next().value;
-      if (oldest !== undefined) sessions.delete(oldest);
-    }
+    const entry = cacheSession(cache.current, sessionId);
     let disposed = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let reading = false;
@@ -192,7 +269,11 @@ export function useAgentSnapshot(
       const requestedTail = entry.tail;
       let delay = fast ? 800 : 5000;
       try {
-        const next = await agentApi.getSession(sessionId);
+        const pending = prefetching.current;
+        const next = await (pending?.entry === entry &&
+        pending.revision === requestedRevision
+          ? pending.read
+          : agentApi.getSession(sessionId));
         if (disposed) return;
         if (next.session.id !== sessionId) {
           throw new Error("会话内容与当前选择不一致，请重新加载。");
@@ -250,6 +331,15 @@ export function useAgentSnapshot(
     };
     const explicit =
       previous && (previous.refresh !== refresh || (fast && !previous.fast));
+    if (entry.prefetched && entry.snapshot) {
+      entry.prefetched = false;
+      if (entry.readRevision === entry.revision)
+        callback.current(entry.snapshot);
+      setPreparedSnapshots((current) =>
+        current.filter((item) => item.session.id !== sessionId),
+      );
+      setRevision((value) => value + 1);
+    }
     if (!entry.snapshot || (explicit && previous.id === sessionId)) {
       void poll();
     } else {
@@ -279,5 +369,7 @@ export function useAgentSnapshot(
     snapshot: displayed,
     error,
     loading: Boolean(sessionId && !snapshot && !error),
+    prefetch,
+    preparedSnapshots,
   };
 }

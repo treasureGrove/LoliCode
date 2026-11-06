@@ -68,6 +68,7 @@ import { agentApi } from "@/lib/api/agent";
 import { agentFilesApi } from "@/lib/api/agent-files";
 import {
   readAgentDocumentAttachments,
+  readAgentHistoryAttachments,
   readAgentImageAttachments,
   saveAgentDocumentAttachments,
   saveAgentImageAttachments,
@@ -103,7 +104,11 @@ import {
   type AgentSubmission,
   type AgentDraftToken,
 } from "@/lib/agentInputLedger";
-import { agentErrorMessage, useAgentSnapshot } from "@/hooks/useAgentSnapshot";
+import {
+  AGENT_PREPARED_SESSION_LIMIT,
+  agentErrorMessage,
+  useAgentSnapshot,
+} from "@/hooks/useAgentSnapshot";
 import { useLolicodeAccount } from "@/hooks/useLolicodeAccount";
 import { useTauriEvent } from "@/hooks/useTauriEvent";
 import assistantPortrait from "@/assets/brand/lolicode-icon.png";
@@ -737,6 +742,17 @@ export function AgentPage({
   const overridesRef = useRef(sessionOverrides);
   overridesRef.current = sessionOverrides;
   const overrideFields = useRef<Record<string, (keyof AgentSession)[]>>({});
+  const sessionTitles = useRef(
+    new Map<string, Pick<AgentSession, "title" | "updatedAt">>(),
+  );
+  const withCommittedTitle = useCallback((session: AgentSession) => {
+    const committed = sessionTitles.current.get(session.id);
+    return committed &&
+      session.updatedAt <= committed.updatedAt &&
+      session.title !== committed.title
+      ? { ...session, title: committed.title }
+      : session;
+  }, []);
   const [engine, setEngine] = useState<AgentEngineStatus | null>(null);
   const [initializing, setInitializing] = useState(true);
   const hasExplicitStartupTarget = useRef(false);
@@ -1060,8 +1076,7 @@ export function AgentPage({
   const addLocalDocumentsRef = useRef<(paths: string[]) => Promise<void>>(
     async () => {},
   );
-  const imageLoadAttempts = useRef(new Set<string>());
-  const documentLoadAttempts = useRef(new Set<string>());
+  const attachmentLoadAttempts = useRef(new Set<string>());
   const pendingImageRestoreAttempts = useRef(new Set<string>());
   const pendingDocumentRestoreAttempts = useRef(new Set<string>());
   const queueAttachmentRestoreAttempts = useRef(new Set<string>());
@@ -1343,6 +1358,35 @@ export function AgentPage({
     composerDocumentsRef.current = documents;
     setComposerDocumentsBySession(documents);
   }, []);
+  const updateSessionRows = useCallback(
+    (
+      { id, projectPath }: Pick<AgentSession, "id" | "projectPath">,
+      update: (current: AgentSession) => AgentSession,
+    ) => {
+      const replace = (items: AgentSession[]) => {
+        const index = items.findIndex((session) => session.id === id);
+        if (index < 0) return items;
+        const current = items[index];
+        const next = update(current);
+        if (
+          next === current ||
+          JSON.stringify(next) === JSON.stringify(current)
+        )
+          return items;
+        const sessions = [...items];
+        sessions[index] = next;
+        return sessions;
+      };
+      setSessions(replace);
+      setWorkspaceSessions((old) => {
+        const items = old[projectPath];
+        if (!items) return old;
+        const next = replace(items);
+        return next === items ? old : { ...old, [projectPath]: next };
+      });
+    },
+    [],
+  );
   const onSnapshot = useCallback(
     (next: AgentSnapshot) => {
       if (!mounted.current) return;
@@ -1371,17 +1415,14 @@ export function AgentPage({
           return confirmed[field] === next.session[field];
         });
       if (matchesConfirmed) {
-        setSessions((old) => {
-          const index = old.findIndex((session) => session.id === id);
-          if (
-            index < 0 ||
-            JSON.stringify(old[index]) === JSON.stringify(next.session)
-          )
-            return old;
-          const sessions = [...old];
-          sessions[index] = next.session;
-          return sessions;
-        });
+        // A title commit can overtake an already-running background read.
+        const committed = sessionTitles.current.get(id);
+        const session = withCommittedTitle(next.session);
+        if (committed && next.session.updatedAt > committed.updatedAt)
+          sessionTitles.current.delete(id);
+        updateSessionRows(session, (current) =>
+          current.updatedAt > session.updatedAt ? current : session,
+        );
         if (confirmed) {
           delete overrideFields.current[id];
           const current = { ...overridesRef.current };
@@ -1654,12 +1695,43 @@ export function AgentPage({
         });
       }
     },
-    [acceptQueuedDraft],
+    [acceptQueuedDraft, updateSessionRows, withCommittedTitle],
+  );
+  useTauriEvent<{
+    type: "changed" | "tail";
+    sessionId: string;
+    projectPath?: string;
+    title?: string;
+    updatedAt?: number;
+  }>(
+    "agent-session-update",
+    ({ type, sessionId, projectPath, title, updatedAt }) => {
+      if (
+        type !== "changed" ||
+        !projectPath ||
+        !title ||
+        typeof updatedAt !== "number" ||
+        removedSessions.current.has(sessionId) ||
+        overrideFields.current[sessionId]?.includes("title")
+      )
+        return;
+      const previous = sessionTitles.current.get(sessionId);
+      if (previous && previous.updatedAt >= updatedAt) return;
+      sessionTitles.current.set(sessionId, { title, updatedAt });
+      updateSessionRows({ id: sessionId, projectPath }, (session) =>
+        session.updatedAt > updatedAt || session.title === title
+          ? session
+          : { ...session, title },
+      );
+    },
+    "main",
   );
   const {
     snapshot,
     error: snapshotError,
     loading: snapshotLoading,
+    prefetch: prefetchSession,
+    preparedSnapshots,
   } = useAgentSnapshot(sessionId, {
     fast: Boolean(sessionId && (pending[sessionId] || stopping[sessionId])),
     refresh,
@@ -1910,39 +1982,38 @@ export function AgentPage({
     updateDock,
   ]);
   useEffect(() => {
+    const requestIds = new Set<string>();
     for (const message of transcriptMessages) {
-      if (message.role !== "user") continue;
-      if (
-        !sentImageAttachments[message.id] &&
-        !imageLoadAttempts.current.has(message.id)
-      ) {
-        imageLoadAttempts.current.add(message.id);
-        void readAgentImageAttachments(message.id)
-          .then((images) => {
-            if (mounted.current && images?.length)
-              setSentImageAttachments((old) => ({
-                ...old,
-                [message.id]: images,
-              }));
-          })
-          .catch(() => {});
-      }
-      if (
-        !sentDocumentAttachments[message.id] &&
-        !documentLoadAttempts.current.has(message.id)
-      ) {
-        documentLoadAttempts.current.add(message.id);
-        void readAgentDocumentAttachments(message.id)
-          .then((documents) => {
-            if (mounted.current && documents?.length)
-              setSentDocumentAttachments((old) => ({
-                ...old,
-                [message.id]: documents,
-              }));
-          })
-          .catch(() => {});
-      }
+      const { id, role } = message;
+      if (role !== "user" || attachmentLoadAttempts.current.has(id)) continue;
+      if (sentImageAttachments[id] && sentDocumentAttachments[id]) continue;
+      requestIds.add(id);
+      attachmentLoadAttempts.current.add(id);
     }
+    if (!requestIds.size) return;
+    void readAgentHistoryAttachments(requestIds)
+      .then((records) => {
+        if (!mounted.current || !records.length) return;
+        setSentImageAttachments((old) => {
+          let next = old;
+          for (const { requestId, attachments } of records) {
+            if (old[requestId] || !attachments?.length) continue;
+            if (next === old) next = { ...old };
+            next[requestId] = attachments;
+          }
+          return next;
+        });
+        setSentDocumentAttachments((old) => {
+          let next = old;
+          for (const { requestId, documents } of records) {
+            if (old[requestId] || !documents?.length) continue;
+            if (next === old) next = { ...old };
+            next[requestId] = documents;
+          }
+          return next;
+        });
+      })
+      .catch(() => {});
   }, [sentDocumentAttachments, sentImageAttachments, transcriptMessages]);
   useEffect(() => {
     const id = sessionId;
@@ -2041,10 +2112,13 @@ export function AgentPage({
   const chatReady = Boolean(snapshot);
   useLayoutEffect(() => {
     const scroll = scrollRef.current;
-    if (!isActive || !chatReady || !scroll) {
+    if (!chatReady || !scroll) {
       readingSession.current = null;
       return;
     }
+    // Mode changes preserve the same scroll element at its original width.
+    // Only a different conversation needs a synchronous position restore.
+    if (!isActive || readingSession.current === identity) return;
     readingSession.current = identity;
     const position = readingPositions.current.get(identity);
     atBottom.current = position === undefined;
@@ -2116,10 +2190,14 @@ export function AgentPage({
     Object.values(statuses).some(activeStatus) ||
     Object.keys(pending).length > 0 ||
     Object.keys(stopping).length > 0;
-  const selectedSession =
-    (sessionId && sessionOverrides[sessionId]) ||
-    snapshot?.session ||
-    sessions.find((session) => session.id === sessionId);
+  const listedSession = sessions.find((session) => session.id === sessionId);
+  const selectedOverride = sessionId ? sessionOverrides[sessionId] : undefined;
+  const selectedSession = selectedOverride || snapshot?.session || listedSession;
+  const selectedTitle =
+    (listedSession && withCommittedTitle(listedSession).title) ||
+    selectedOverride?.title ||
+    snapshot?.session.title ||
+    "编程工作台";
   const readOnlySession = Boolean(sessionId && isLegacySession(sessionId));
   const isSecretaryWorker = selectedSession?.coordination?.role === "worker";
   const workerPermissionLocked =
@@ -3739,9 +3817,12 @@ export function AgentPage({
   };
   const confirmSession = useCallback(
     (session: AgentSession, fields: (keyof AgentSession)[]) => {
-      setSessions((old) =>
-        old.map((item) => (item.id === session.id ? session : item)),
-      );
+      if (fields.includes("title"))
+        sessionTitles.current.set(session.id, {
+          title: session.title,
+          updatedAt: session.updatedAt,
+        });
+      updateSessionRows(session, () => withCommittedTitle(session));
       overrideFields.current[session.id] = [
         ...new Set([...(overrideFields.current[session.id] || []), ...fields]),
       ];
@@ -3749,7 +3830,7 @@ export function AgentPage({
       setSessionOverrides(overridesRef.current);
       setRefresh((old) => old + 1);
     },
-    [],
+    [updateSessionRows, withCommittedTitle],
   );
   const updateSessionConfig = async (patch: {
     modelId?: string;
@@ -3838,6 +3919,7 @@ export function AgentPage({
       } else if (result) confirmSession(result, fields);
       if (remove && workspace) {
         removedSessions.current.add(id);
+        sessionTitles.current.delete(id);
         const owner = `${workspace.path}\0${id}`;
         clearDockOwners((key) => key === owner);
         storePending(workspace.path, id);
@@ -4014,6 +4096,7 @@ export function AgentPage({
   const visibleWorkspaceSessions = useMemo(
     () =>
       sessions
+        .map(withCommittedTitle)
         .filter(
           (session) =>
             session.coordination?.role !== "worker" &&
@@ -4022,11 +4105,73 @@ export function AgentPage({
               session.title.toLocaleLowerCase().includes(sessionQuery)),
         )
         .sort(compareSidebarSessions),
-    [sessions, showArchived, sessionQuery],
+    [sessions, showArchived, sessionQuery, withCommittedTitle],
   );
   const workspaceExpanded = workspace
     ? (expandedWorkspaces[workspace.path] ?? true)
     : false;
+  const prefetchIds = useMemo(
+    () =>
+      visibleWorkspaceSessions
+        .filter((session) => session.id !== sessionId)
+        .slice(0, AGENT_PREPARED_SESSION_LIMIT)
+        .map((session) => session.id),
+    [visibleWorkspaceSessions, sessionId],
+  );
+  const canPrefetchSession = Boolean(
+    isActive && workspaceExpanded && snapshot && !busy && !activeTool,
+  );
+  useEffect(() => {
+    if (!canPrefetchSession || !prefetchIds.length) return;
+    let stopped = false;
+    let cancel = () => {};
+    const prepare = (index: number) => {
+      if (stopped || index === prefetchIds.length) return;
+      const read = async () => {
+        await prefetchSession(prefetchIds[index]);
+        prepare(index + 1);
+      };
+      if (typeof window.requestIdleCallback === "function") {
+        const task = window.requestIdleCallback(() => void read());
+        cancel = () => window.cancelIdleCallback(task);
+      } else {
+        const timer = setTimeout(() => void read(), 80);
+        cancel = () => clearTimeout(timer);
+      }
+    };
+    prepare(0);
+    return () => {
+      stopped = true;
+      cancel();
+    };
+  }, [canPrefetchSession, prefetchIds, prefetchSession]);
+  const preparedTranscripts = useMemo(
+    () =>
+      preparedSnapshots
+        .filter(
+          (item) =>
+            item.session.projectPath === selectedProjectPath &&
+            item.messages.length,
+        )
+        .map((item) => ({
+          sessionId: item.session.id,
+          projectPath: item.session.projectPath,
+          messages: item.messages,
+          status: item.status,
+          userIdentity,
+          imageAttachmentsByMessage: sentImageAttachments,
+          documentAttachmentsByMessage: sentDocumentAttachments,
+          onLoadEarlier: preserveEarlierHistory,
+        })),
+    [
+      preparedSnapshots,
+      selectedProjectPath,
+      userIdentity,
+      sentImageAttachments,
+      sentDocumentAttachments,
+      preserveEarlierHistory,
+    ],
+  );
   const sidebarProjects = useMemo(() => {
     const items: AgentProject[] = projects.length
       ? [...projects]
@@ -4305,6 +4450,7 @@ export function AgentPage({
             ? visibleWorkspaceSessions
             : expanded
               ? (workspaceSessions[project.path] || [])
+                  .map(withCommittedTitle)
                   .filter(
                     (session) =>
                       session.coordination?.role !== "worker" &&
@@ -4401,6 +4547,17 @@ export function AgentPage({
                               busy === "secretary"
                             }
                             aria-pressed={session.id === sessionId}
+                            onPointerEnter={(event) => {
+                              if (
+                                event.pointerType === "mouse" &&
+                                canPrefetchSession
+                              )
+                                prefetchSession(session.id);
+                            }}
+                            onFocus={() => {
+                              if (canPrefetchSession)
+                                prefetchSession(session.id);
+                            }}
                             onClick={() =>
                               navigateWorkspace(() => {
                                 setError(null);
@@ -4652,12 +4809,16 @@ export function AgentPage({
             style={DRAG_REGION_STYLE as React.CSSProperties}
           >
             {sidebarToggle}
-            <div className="wb-titlebar-heading" {...DRAG_REGION_ATTR}>
+            <div
+              className="wb-titlebar-heading"
+              data-workspace-entry
+              {...DRAG_REGION_ATTR}
+            >
               <h1
-                title={selectedSession?.title || "编程工作台"}
+                title={selectedTitle}
                 {...DRAG_REGION_ATTR}
               >
-                {selectedSession?.title || "编程工作台"}
+                {selectedTitle}
               </h1>
             </div>
             {secretarySessionId && (
@@ -4985,6 +5146,10 @@ export function AgentPage({
                   <div ref={chatContentRef} className="wb-chat-content">
                     <AgentTranscriptDeck
                       active={isActive}
+                      loading={snapshotLoading}
+                      loadingLabel={t("common.loading")}
+                      ready={Boolean(snapshot)}
+                      prepared={preparedTranscripts}
                       onEvict={forgetTranscriptPosition}
                       messages={transcriptMessages}
                       userIdentity={userIdentity}

@@ -100,6 +100,34 @@ export async function saveAgentDocumentAttachments(
   await saveAgentAttachmentPatch(requestId, { documents });
 }
 
+export async function readAgentHistoryAttachments(
+  requestIds: ReadonlySet<string>,
+) {
+  if (typeof indexedDB === "undefined" || !requestIds.size) return [];
+  const database = await openDatabase();
+  return await new Promise<StoredAgentImages[]>((resolve, reject) => {
+    const transaction = database.transaction(STORE_NAME, "readonly");
+    const store = transaction.objectStore(STORE_NAME);
+    const records: StoredAgentImages[] = [];
+    // Most historical messages have no cached attachments. Read keys first
+    // so unrelated attachment payloads never enter the renderer.
+    const keys = store.getAllKeys();
+    keys.onsuccess = () => {
+      for (const id of keys.result) {
+        if (typeof id !== "string" || !requestIds.has(id)) continue;
+        const request = store.get(id);
+        request.onsuccess = () => {
+          const record = request.result as StoredAgentImages | undefined;
+          if (record) records.push(record);
+        };
+      }
+    };
+    transaction.oncomplete = () => resolve(records);
+    transaction.onabort = () =>
+      reject(transaction.error || new Error("会话附件读取失败"));
+  });
+}
+
 export async function readAgentImageAttachments(requestId: string) {
   if (typeof indexedDB === "undefined") return undefined;
   const database = await openDatabase();

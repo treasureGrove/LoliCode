@@ -687,7 +687,10 @@
   min-height: 100%;
 }
 .wb-transcript-pane:not([hidden]) {
-  display: contents;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: inherit;
 }
 .wb-history-earlier {
   align-self: center;

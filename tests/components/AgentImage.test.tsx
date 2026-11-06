@@ -4,7 +4,10 @@ import { invoke } from "@tauri-apps/api/core";
 import { vi, describe, it, expect, beforeEach } from "vitest";
 import { AgentMessageView } from "@/features/agent/AgentParts";
 import { AgentImage } from "@/features/agent/AgentImage";
-import { AgentTranscript } from "@/features/agent/AgentTranscript";
+import {
+  AgentTranscript,
+  AgentTranscriptDeck,
+} from "@/features/agent/AgentTranscript";
 import { AgentFileActionsContext } from "@/features/agent/AgentFilePath";
 import { SessionMarkdown } from "@/features/sessions/reader/SessionMarkdown";
 
@@ -32,6 +35,47 @@ describe("generated agent image previews", () => {
       />,
     );
   }
+
+  it("defers local and remote images in a prepared conversation until selected", async () => {
+    const first = {
+      projectPath: "C:/project",
+      sessionId: "zc:first",
+      messages: [],
+    };
+    const second = {
+      projectPath: first.projectPath,
+      sessionId: "zc:fixture",
+      messages: [
+        {
+          id: "assistant",
+          role: "assistant" as const,
+          createdAt: 1,
+          parts: [
+            {
+              type: "text" as const,
+              text: "![本地](./outputs/result.png)\n\n![远程](https://example.com/result.png)",
+            },
+          ],
+        },
+      ],
+    };
+    const prepared = [second];
+    const view = render(<AgentTranscriptDeck {...first} prepared={prepared} />);
+    expect(view.container.querySelector('img[alt="远程"]')).toBeNull();
+    expect(invoke).not.toHaveBeenCalled();
+
+    view.rerender(<AgentTranscriptDeck {...second} prepared={prepared} />);
+    expect(screen.getByRole("img", { name: "远程" })).toHaveAttribute(
+      "src",
+      "https://example.com/result.png",
+    );
+    await screen.findByRole("button", { name: "放大图片：本地" });
+    expect(invoke).toHaveBeenCalledTimes(1);
+    expect(invoke).toHaveBeenCalledWith("get_agent_image", {
+      sessionId: "zc:fixture",
+      path: "./outputs/result.png",
+    });
+  });
 
   it.each(["message", "transcript"])(
     "loads local reasoning images in the %s view after expansion and opens their preview",

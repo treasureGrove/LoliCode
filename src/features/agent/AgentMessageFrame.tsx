@@ -1,5 +1,6 @@
-import { memo, useState, type ReactNode } from "react";
+import { memo, useContext, useState, type ReactNode } from "react";
 import { Sparkles, UserRound } from "lucide-react";
+import { ViewPreparationContext } from "@/components/ViewActivityContext";
 import assistantPortrait from "@/assets/brand/lolicode-icon.png";
 import { BUILTIN_AGENT_NICKNAME } from "@/lib/branding";
 import { cn } from "@/lib/utils";
@@ -64,9 +65,11 @@ export const AgentMessageFrame = memo(function AgentMessageFrame({
   companionSurface?: { id: string; text: string };
   children: ReactNode;
 }) {
+  const preparing = useContext(ViewPreparationContext);
   // Code and execution surfaces stay clear; the companion checks the remaining
   // bubble's visible width and headroom before offering its top edge.
   const companionSurfaceId =
+    !preparing &&
     role !== "system" &&
     companionSurface?.text.trim() &&
     !/`|^\s*~{3,}|^(?: {4}|\t)\S/m.test(companionSurface.text)

@@ -19,6 +19,7 @@ import {
 import { ChannelCenterPanel } from "@/features/channels/ChannelCenterPanel";
 import { EnvWarningBanner } from "@/features/env/EnvWarningBanner";
 import { MotionSurface } from "@/components/motion/MotionSurface";
+import { useWorkspaceEntryMotion } from "@/components/motion/useWorkspaceEntryMotion";
 import { SettingsPage } from "@/features/settings/SettingsPage";
 import {
   AppPageHeader,
@@ -41,6 +42,7 @@ import { useUsageCacheBridge } from "@/hooks/useUsageCacheBridge";
 import { providersApi, type AppId } from "@/lib/api";
 import { checkAllEnvConflicts, checkEnvConflicts } from "@/lib/api/env";
 import { proxyApi } from "@/lib/api/proxy";
+import { tavernSnapshotQuery } from "@/lib/api/tavern";
 import {
   APP_STORAGE_KEY,
   productViewOf,
@@ -63,6 +65,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   Fragment,
+  startTransition,
   useCallback,
   useEffect,
   useMemo,
@@ -92,19 +95,48 @@ function WorkspaceModes({
   mode,
   agent,
   tavern,
+  warmTavern,
 }: {
   mode: WorkspaceMode;
   agent: ReactNode;
   tavern: ReactNode;
+  warmTavern: boolean;
 }) {
+  const queryClient = useQueryClient();
+  const surface = useRef<HTMLDivElement>(null);
+  useWorkspaceEntryMotion(
+    surface,
+    mode,
+    "[data-workspace-active] [data-workspace-entry]",
+  );
   const [visited, setVisited] = useState(() => ({
     agent: mode === "agent",
     tavern: mode === "tavern",
   }));
   if (!visited[mode]) setVisited({ ...visited, [mode]: true });
+  useEffect(() => {
+    if (mode !== "agent" || visited.tavern || !warmTavern) return;
+    const prepare = () => {
+      void queryClient.prefetchQuery(tavernSnapshotQuery);
+      startTransition(() =>
+        setVisited((current) =>
+          current.tavern ? current : { ...current, tavern: true },
+        ),
+      );
+    };
+    if (typeof window.requestIdleCallback === "function") {
+      const task = window.requestIdleCallback(prepare);
+      return () => window.cancelIdleCallback(task);
+    }
+    const timer = setTimeout(prepare, 80);
+    return () => clearTimeout(timer);
+  }, [mode, queryClient, visited.tavern, warmTavern]);
   const pages = { agent, tavern };
   return (
-    <div className="tai-page relative flex min-h-0 flex-1 flex-col">
+    <div
+      ref={surface}
+      className="tai-page relative flex min-h-0 flex-1 flex-col"
+    >
       {(["agent", "tavern"] as const).map((view) => {
         if (!visited[view]) return null;
         const active = mode === view;
@@ -112,6 +144,7 @@ function WorkspaceModes({
           <div
             key={view}
             id={active && view === "agent" ? "main-content" : undefined}
+            data-workspace-active={active || undefined}
             aria-hidden={!active || undefined}
             ref={(node) => {
               if (node) node.inert = !active;
@@ -119,9 +152,13 @@ function WorkspaceModes({
             className={cn(
               "min-h-0 flex-1",
               view === "agent" ? "overflow-hidden" : "flex flex-col",
-              // Preserve the mounted page without laying out its inactive subtree.
+              !active && "pointer-events-none absolute inset-0",
+              // The Tavern rail sits outside this container. Keep Agent's
+              // original width while parked so returning can reuse its layout.
               !active &&
-                "pointer-events-none invisible absolute inset-0 [content-visibility:hidden]",
+                (view === "agent"
+                  ? "w-screen opacity-0"
+                  : "invisible [content-visibility:hidden]"),
             )}
           >
             {pages[view]}
@@ -142,7 +179,17 @@ function App() {
   );
 
   const [activeApp, setActiveApp] = useState<AppId>(getInitialApp);
-  const [currentView, setCurrentView] = useState<View>(readStoredView);
+  const [{ currentView, previousView }, setView] = useState<{
+    currentView: View;
+    previousView?: View;
+  }>(() => ({ currentView: readStoredView() }));
+  const setCurrentView = useCallback((nextView: View) => {
+    setView((view) =>
+      view.currentView === nextView
+        ? view
+        : { currentView: nextView, previousView: view.currentView },
+    );
+  }, []);
   const [settingsSection, setSettingsSection] =
     useState<SettingsSection>("general");
   const [appConfigScrollTarget, setAppConfigScrollTarget] = useState<AppId>();
@@ -178,6 +225,7 @@ function App() {
     null,
   );
   const [workspaceSidebarCompact, setWorkspaceSidebarCompact] = useState(false);
+  const sidebarModePosition = useRef<number>();
   const agentPreviewVisible = useRef(false);
   const rememberAgentPreview = useCallback((visible: boolean) => {
     agentPreviewVisible.current = visible;
@@ -499,10 +547,11 @@ function App() {
           : origin;
     }
     setActiveAgentTool(null);
-    setAgentToolRequest((previous) => ({
-      tool: null,
-      id: (previous?.id ?? 0) + 1,
-    }));
+    setAgentToolRequest((previous) =>
+      activeAgentTool || previous?.tool
+        ? { tool: null, id: (previous?.id ?? 0) + 1 }
+        : previous,
+    );
     setCurrentView(destination);
   };
 
@@ -654,6 +703,12 @@ function App() {
   ) => {
     const props: SidebarProps = {
       ...slots,
+      workspaceModePosition:
+        view === currentView ? sidebarModePosition : undefined,
+      workspaceModeSwitch:
+        view === currentView &&
+        ((view === "agent" && previousView === "tavern") ||
+          (view === "tavern" && previousView === "agent")),
       sidebarCompact:
         slots.sidebarCompact ??
         ((view === "agent" || view === "tavern") && workspaceSidebarCompact),
@@ -856,6 +911,7 @@ function App() {
                 <WorkspaceModes
                   mode={currentView}
                   agent={renderAgentPage(currentView === "agent")}
+                  warmTavern={tavernEnabled === true}
                   tavern={
                     tavernEnabled ? (
                       <TavernPage

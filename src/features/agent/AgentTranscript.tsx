@@ -1,12 +1,18 @@
 import {
   memo,
   useContext,
+  useDeferredValue,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
-import { ViewActivityContext } from "@/components/ViewActivityContext";
+import {
+  ViewActivityContext,
+  ViewPreparationContext,
+} from "@/components/ViewActivityContext";
+import { ConversationLoading } from "@/components/motion/ConversationLoading";
+import { useWorkspaceEntryMotion } from "@/components/motion/useWorkspaceEntryMotion";
 import { AgentFileActionsContext } from "./AgentFilePath";
 import { ChevronRight, CircleAlert, Loader2, Wrench } from "lucide-react";
 import type {
@@ -265,6 +271,8 @@ export interface AgentTranscriptProps {
 // than mounting every historical Markdown/code surface on a session change.
 // This only pages the view; the native session and model context stay complete.
 const HISTORY_PAGE_SIZE = 40;
+const transcriptIdentity = (projectPath: string, sessionId?: string) =>
+  `${projectPath}\0${sessionId || ""}`;
 
 export const AgentTranscript = memo(function AgentTranscript({
   messages,
@@ -277,7 +285,7 @@ export const AgentTranscript = memo(function AgentTranscript({
   onLoadEarlier,
 }: AgentTranscriptProps) {
   const blocks = useMemo(() => groupAgentTranscript(messages), [messages]);
-  const identity = `${projectPath}\0${sessionId || ""}`;
+  const identity = transcriptIdentity(projectPath, sessionId);
   const [window, setWindow] = useState(() => ({
     identity,
     first: blocks[Math.max(0, blocks.length - HISTORY_PAGE_SIZE)]?.key,
@@ -392,53 +400,114 @@ export const AgentTranscript = memo(function AgentTranscript({
   );
 });
 
-/** Keep a small recent-session working set, including disclosure and paging state. */
+const RETAINED_TRANSCRIPTS = 3;
+
+/** Keep recent visits and a separate, bounded set of prepared histories. */
 export const AgentTranscriptDeck = memo(function AgentTranscriptDeck({
   active = true,
   onEvict,
+  prepared,
+  loading = false,
+  loadingLabel,
+  ready = true,
   ...props
 }: AgentTranscriptProps & {
   active?: boolean;
   onEvict?: (identity: string) => void;
+  prepared?: AgentTranscriptProps[];
+  loading?: boolean;
+  loadingLabel?: string;
+  ready?: boolean;
 }) {
-  const key = `${props.projectPath}\0${props.sessionId || ""}`;
+  const key = transcriptIdentity(props.projectPath, props.sessionId);
+  const deferredKey = useDeferredValue(key);
   const actions = useContext(AgentFileActionsContext);
   const [entries, setEntries] = useState(() => [{ key, props, actions }]);
-  const committed = useRef<string[]>([]);
-  useLayoutEffect(() => {
-    const next = entries.map((entry) => entry.key);
-    for (const previous of committed.current)
-      if (!next.includes(previous)) onEvict?.(previous);
-    committed.current = next;
-  }, [entries, onEvict]);
+  const committed = useRef({
+    visited: [] as string[],
+    prepared: [] as string[],
+  });
   const latest = entries.at(-1)!;
+  const visited = new Set(entries.map((entry) => entry.key));
+  const warming: typeof entries = [];
+  for (const candidate of prepared ?? []) {
+    if (warming.length >= RETAINED_TRANSCRIPTS) break;
+    const candidateKey = transcriptIdentity(
+      candidate.projectPath,
+      candidate.sessionId,
+    );
+    if (
+      !candidate.sessionId ||
+      !candidate.messages.length ||
+      candidate.projectPath !== props.projectPath ||
+      visited.has(candidateKey) ||
+      warming.some((entry) => entry.key === candidateKey)
+    )
+      continue;
+    warming.push({ key: candidateKey, props: candidate, actions: null });
+  }
+  useLayoutEffect(() => {
+    for (const previous of committed.current.visited)
+      if (!visited.has(previous)) onEvict?.(previous);
+    committed.current = {
+      visited: [...visited],
+      prepared: warming.map((entry) => entry.key),
+    };
+  });
+  // A new history may mount dozens of Markdown surfaces. Let the sidebar and
+  // composer switch first unless this conversation is already mounted. Only
+  // the selected snapshot can make a speculative pane visible.
+  const canShow =
+    deferredKey === key ||
+    visited.has(key) ||
+    (props.messages.length > 0 && committed.current.prepared.includes(key));
+  const pending = loading || (ready && props.messages.length > 0 && !canShow);
+  const showTranscript = ready && !pending && props.messages.length > 0;
+  const selectedPane = useRef<HTMLDivElement>(null);
+  useWorkspaceEntryMotion(selectedPane, showTranscript ? key : null);
   if (
-    latest.key !== key ||
-    latest.actions !== actions ||
-    (Object.keys(props) as (keyof AgentTranscriptProps)[]).some(
-      (name) => !Object.is(props[name], latest.props[name]),
-    ) ||
-    Object.keys(latest.props).length !== Object.keys(props).length
+    ready &&
+    canShow &&
+    (latest.key !== key ||
+      latest.actions !== actions ||
+      (Object.keys(props) as (keyof AgentTranscriptProps)[]).some(
+        (name) => !Object.is(props[name], latest.props[name]),
+      ) ||
+      Object.keys(latest.props).length !== Object.keys(props).length)
   ) {
     setEntries(
       [
         ...entries.filter((entry) => entry.key !== key),
         { key, props, actions },
-      ].slice(-3),
+      ].slice(-RETAINED_TRANSCRIPTS),
     );
   }
-  return entries.map((entry) => (
-    <div
-      key={entry.key}
-      data-agent-transcript-session={entry.props.sessionId}
-      hidden={entry.key !== key}
-      className="wb-transcript-pane"
-    >
-      <ViewActivityContext.Provider value={active && entry.key === key}>
-        <AgentFileActionsContext.Provider value={entry.actions}>
-          <AgentTranscript {...entry.props} />
-        </AgentFileActionsContext.Provider>
-      </ViewActivityContext.Provider>
-    </div>
-  ));
+  return (
+    <>
+      {pending && (
+        <ConversationLoading label={loading ? undefined : loadingLabel} />
+      )}
+      {[...entries, ...warming].map((entry) => {
+        const preparing = !visited.has(entry.key);
+        const selected = showTranscript && !preparing && entry.key === key;
+        return (
+          <div
+            key={entry.key}
+            ref={selected ? selectedPane : undefined}
+            data-agent-transcript-session={entry.props.sessionId}
+            hidden={!selected}
+            className="wb-transcript-pane"
+          >
+            <ViewActivityContext.Provider value={active && selected}>
+              <ViewPreparationContext.Provider value={preparing}>
+                <AgentFileActionsContext.Provider value={entry.actions}>
+                  <AgentTranscript {...entry.props} />
+                </AgentFileActionsContext.Provider>
+              </ViewPreparationContext.Provider>
+            </ViewActivityContext.Provider>
+          </div>
+        );
+      })}
+    </>
+  );
 });

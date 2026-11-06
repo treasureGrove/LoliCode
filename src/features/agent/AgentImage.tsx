@@ -1,5 +1,6 @@
-import { memo, useEffect, useState } from "react";
+import { memo, useContext, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { ViewPreparationContext } from "@/components/ViewActivityContext";
 import { PathChip } from "@/features/sessions/reader/PathChip";
 import { SessionImageLightbox } from "@/features/sessions/reader/SessionImageLightbox";
 
@@ -18,6 +19,7 @@ export const AgentImage = memo(function AgentImage({
   alt: string;
   projectPath: string;
 }) {
+  const preparing = useContext(ViewPreparationContext);
   const [image, setImage] = useState<ImageResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
@@ -27,7 +29,7 @@ export const AgentImage = memo(function AgentImage({
     setImage(null);
     setError(null);
     setOpen(false);
-    if (!sessionId) return;
+    if (!sessionId || preparing) return;
     void invoke<ImageResult>("get_agent_image", { sessionId, path }).then(
       (result) => {
         if (!disposed) setImage(result);
@@ -40,7 +42,7 @@ export const AgentImage = memo(function AgentImage({
     return () => {
       disposed = true;
     };
-  }, [sessionId, path, retry]);
+  }, [sessionId, path, retry, preparing]);
   const label = alt || path.split(/[\\/]/).pop() || "生成的图片";
   if (!sessionId) return <PathChip path={path} projectDir={projectPath} />;
   if (error)

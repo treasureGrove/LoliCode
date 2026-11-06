@@ -28,6 +28,8 @@ pub(super) struct SessionStore {
 #[serde(rename_all = "camelCase")]
 struct Metadata {
     session: AgentSession,
+    #[serde(default, skip_serializing_if = "TitlePolicy::is_fixed")]
+    title_policy: TitlePolicy,
     #[serde(default)]
     deleted: bool,
     // Older desktop builds stored full_access even when they actually ran
@@ -37,6 +39,21 @@ struct Metadata {
     full_access_selected: bool,
     #[serde(default)]
     background_only: bool,
+}
+
+#[derive(Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+enum TitlePolicy {
+    #[default]
+    Fixed,
+    Eligible,
+    Fallback,
+}
+
+impl TitlePolicy {
+    fn is_fixed(&self) -> bool {
+        *self == Self::Fixed
+    }
 }
 
 pub(super) fn normalized_permission(mode: &str, full_access_selected: bool) -> &'static str {
@@ -132,6 +149,7 @@ impl SessionStore {
                         id,
                         Metadata {
                             session,
+                            title_policy: TitlePolicy::Fixed,
                             deleted: false,
                             full_access_selected: false,
                             background_only: legacy.background_only(),
@@ -216,6 +234,43 @@ impl SessionStore {
         self.sessions.contains_key(id)
     }
 
+    pub(super) fn automatic_title_allowed(&self, id: &str) -> bool {
+        self.sessions
+            .get(id)
+            .is_some_and(|entry| !entry.deleted && entry.title_policy == TitlePolicy::Eligible)
+    }
+
+    pub(super) fn accept_automatic_title(
+        &mut self,
+        id: &str,
+        title: &str,
+        generated: bool,
+    ) -> Result<Option<AgentSession>, String> {
+        let title = title.trim();
+        if title.is_empty() || title.len() > 80 || title.chars().any(char::is_control) {
+            return Ok(None);
+        }
+        let Some(mut entry) = self.sessions.get(id).cloned() else {
+            return Ok(None);
+        };
+        if entry.deleted
+            || entry.title_policy.is_fixed()
+            || (entry.title_policy == TitlePolicy::Fallback && !generated)
+        {
+            return Ok(None);
+        }
+        entry.title_policy = if generated {
+            TitlePolicy::Fixed
+        } else {
+            TitlePolicy::Fallback
+        };
+        entry.session.title = title.into();
+        entry.session.updated_at = now().max(entry.session.updated_at.saturating_add(1));
+        let session = entry.session.clone();
+        self.persist(entry)?;
+        Ok(Some(session))
+    }
+
     pub(super) fn requires_background_review(&self, id: &str) -> Result<bool, String> {
         self.get(id)?;
         Ok(self
@@ -290,6 +345,9 @@ impl SessionStore {
         }
         let time = now();
         let background_only = args["backgroundOnly"] == true;
+        let custom_title = args["title"]
+            .as_str()
+            .filter(|title| !title.trim().is_empty());
         let default_permission = if background_only || remote || args["mode"] == "plan" {
             "ask"
         } else {
@@ -300,13 +358,7 @@ impl SessionStore {
             title: if secretary {
                 "总秘书".into()
             } else {
-                args["title"]
-                    .as_str()
-                    .filter(|title| !title.trim().is_empty())
-                    .unwrap_or("新会话")
-                    .chars()
-                    .take(160)
-                    .collect()
+                custom_title.unwrap_or("新会话").chars().take(160).collect()
             },
             project_path: project.into(),
             mode: "build".into(),
@@ -336,6 +388,11 @@ impl SessionStore {
             return Err("后台会话必须逐次审批".into());
         }
         self.persist(Metadata {
+            title_policy: if secretary || background_only || custom_title.is_some() {
+                TitlePolicy::Fixed
+            } else {
+                TitlePolicy::Eligible
+            },
             full_access_selected: session.permission_mode == "full_access",
             background_only,
             session: session.clone(),
@@ -352,6 +409,7 @@ impl SessionStore {
     ) -> Result<AgentSession, String> {
         let id = argument(args, "sessionId")?;
         let mut session = self.get(id)?.clone();
+        let mut title_policy = self.sessions[id].title_policy;
         let background_only = self.requires_background_review(id)?;
         match method {
             "renameSession" => {
@@ -360,6 +418,7 @@ impl SessionStore {
                     return Err("会话名称需为 1 到 160 个字符".into());
                 }
                 session.title = title.into();
+                title_policy = TitlePolicy::Fixed;
             }
             "setSessionMetadata" => {
                 if let Some(value) = args["pinned"].as_bool() {
@@ -390,8 +449,9 @@ impl SessionStore {
             }
             _ => return Err("未知会话设置操作".into()),
         }
-        session.updated_at = now();
+        session.updated_at = now().max(session.updated_at.saturating_add(1));
         self.persist(Metadata {
+            title_policy,
             full_access_selected: session.permission_mode == "full_access",
             background_only,
             session: session.clone(),
@@ -406,6 +466,7 @@ impl SessionStore {
             return Err("秘书及工作会话请使用归档".into());
         }
         self.persist(Metadata {
+            title_policy: TitlePolicy::Fixed,
             full_access_selected: false,
             background_only: false,
             session,
@@ -465,10 +526,10 @@ pub(super) fn role(session: &AgentSession, role: &str) -> bool {
         .is_some_and(|relation| relation.role == role)
 }
 
-pub(super) fn activity(session: &mut AgentSession, status: AgentStatus) {
+pub(super) fn activity(session: &mut AgentSession, status: AgentStatus, title_pending: bool) {
     session.activity = Some(AgentSessionActivity {
         status,
-        title_pending: false,
+        title_pending,
     });
 }
 
@@ -544,6 +605,65 @@ fn update_settings(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn automatic_titles_are_monotonic_and_manual_names_win_after_reload() {
+        let profile = tempfile::tempdir().unwrap();
+        let id = "lc:49295d67-2041-4a47-a38b-8dfeaf7ab788";
+        let path = profile
+            .path()
+            .join("agent/harness-sessions/49295d67-2041-4a47-a38b-8dfeaf7ab788.json");
+        let entry = json!({"titlePolicy":"eligible","session":{
+            "id":id,"title":"新会话","projectPath":profile.path(),"mode":"build",
+            "permissionMode":"ask","model":null,"createdAt":1,"updatedAt":1,
+        }});
+        crate::config::write_json_file_private(&path, &entry).unwrap();
+        let mut store = SessionStore::load(profile.path()).unwrap();
+        assert!(store.automatic_title_allowed(id));
+        let fallback = store
+            .accept_automatic_title(id, "首条消息", false)
+            .unwrap()
+            .unwrap();
+        assert!(!store.automatic_title_allowed(id));
+        let generated = store
+            .accept_automatic_title(id, "改进会话切换", true)
+            .unwrap()
+            .unwrap();
+        assert!(generated.updated_at > fallback.updated_at);
+        let mut restored = SessionStore::load(profile.path()).unwrap();
+        assert_eq!(restored.get(id).unwrap().title, "改进会话切换");
+        assert!(restored
+            .accept_automatic_title(id, "较迟的回退标题", false)
+            .unwrap()
+            .is_none());
+
+        crate::config::write_json_file_private(&path, &entry).unwrap();
+        let mut store = SessionStore::load(profile.path()).unwrap();
+        let fallback = store
+            .accept_automatic_title(id, "首条消息", false)
+            .unwrap()
+            .unwrap();
+        let catalog = AgentCatalog {
+            revision: 0,
+            models: Vec::new(),
+            default_model: None,
+            excluded_sources: Vec::new(),
+        };
+        let renamed = store
+            .update(
+                "renameSession",
+                &json!({"sessionId":id,"title":"新会话"}),
+                &catalog,
+            )
+            .unwrap();
+        assert!(renamed.updated_at > fallback.updated_at);
+        let mut restored = SessionStore::load(profile.path()).unwrap();
+        assert!(restored
+            .accept_automatic_title(id, "较迟的自动标题", true)
+            .unwrap()
+            .is_none());
+        assert_eq!(restored.get(id).unwrap().title, "新会话");
+    }
 
     #[test]
     fn preexisting_full_access_requires_a_new_selection_and_explicit_modes_survive_reload() {

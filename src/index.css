@@ -367,12 +367,12 @@
   border-top: 2px solid hsl(var(--border));
 }
 
-[data-tauri-drag-region] {
+[data-webkit-drag-region] {
   -webkit-app-region: drag;
 }
 
 [data-tauri-no-drag],
-[data-tauri-drag-region] .no-drag {
+[data-webkit-drag-region] .no-drag {
   -webkit-app-region: no-drag;
 }
 

@@ -39,10 +39,91 @@ function visible(scope, selector) {
   return [...(scope?.querySelectorAll(selector) ?? [])].find(node => !node.closest(hidden));
 }
 
+function painted(node) {
+  return Boolean(node?.getClientRects().length && node.checkVisibility({
+    opacityProperty: true,
+    visibilityProperty: true,
+  }));
+}
+
+function pendingPaintProbe(isPainted) {
+  let release;
+  const wait = new Promise(resolve => { release = resolve; });
+  const frames = [];
+  return {
+    wait,
+    release,
+    onPending() {
+      frames.push(isPainted());
+      if (frames.length === 2) release();
+    },
+    passed: () => frames.length >= 2 && frames.every(Boolean),
+  };
+}
+
+function traceChatLayout(entries) {
+  const prototype = Element.prototype;
+  const originals = new Map();
+  for (const property of ["scrollTop", "scrollHeight", "clientHeight"]) {
+    const descriptor = Object.getOwnPropertyDescriptor(prototype, property);
+    if (!descriptor?.configurable || !descriptor.get) continue;
+    originals.set(property, descriptor);
+    const timed = (method, accessor) => function (...args) {
+      if (!this.classList.contains("wb-chat")) return accessor.apply(this, args);
+      const startTime = performance.now();
+      const value = accessor.apply(this, args);
+      const duration = performance.now() - startTime;
+      if (duration >= 5) entries.push({ property, method, startTime, duration: round(duration) });
+      return value;
+    };
+    Object.defineProperty(prototype, property, {
+      ...descriptor,
+      get: timed("get", descriptor.get),
+      ...(descriptor.set ? { set: timed("set", descriptor.set) } : {}),
+    });
+  }
+  return () => {
+    for (const [property, descriptor] of originals)
+      Object.defineProperty(prototype, property, descriptor);
+  };
+}
+
+function verifyWindowsDragPath() {
+  const targets = [...document.querySelectorAll("[data-tauri-drag-region]")];
+  const target = targets.find(node => !node.closest(hidden));
+  if (!target || targets.some(node => getComputedStyle(node).webkitAppRegion === "drag")) return false;
+  const dragUrl = window.__TAURI_INTERNALS__.convertFileSrc("plugin:window|start_dragging", "ipc");
+  const fetchOriginal = window.fetch;
+  let calls = 0;
+  window.fetch = function (input, ...args) {
+    if (input === dragUrl) {
+      calls++;
+      return Promise.resolve(new Response("null", {
+        headers: { "content-type": "application/json", "tauri-response": "ok" },
+      }));
+    }
+    return fetchOriginal.call(this, input, ...args);
+  };
+  try {
+    const down = new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, detail: 1 });
+    target.dispatchEvent(down);
+    return calls === 1 && down.defaultPrevented;
+  } finally {
+    window.fetch = fetchOriginal;
+  }
+}
+
 export async function verifySwitching(fixture, { configureFixtureChannel, invoke }) {
-  const { sessions, turns, source, baseline } = fixture.switching;
+  const { sessions, turns, source, baseline, profileScale } = fixture.switching;
+  const verifyPending = !baseline && !profileScale;
+  const attachmentName = `switching-${sessions[1].id.slice(-8)}.txt`;
   if (!sessionStorage.getItem(setupKey)) {
     await configureFixtureChannel(fixture);
+    const { saveAgentDocumentAttachments } = await import("/lib/agentImageStore.ts");
+    await saveAgentDocumentAttachments(`user-B-${turns}`, [{
+      id: "switching-attachment", fileName: attachmentName, mime: "text/plain",
+      bytes: 1, dataBase64: "YQ==",
+    }]);
     await invoke("set_builtin_app_enabled", { app: "tavern", enabled: true });
     const [preset] = await invoke("get_tavern_presets");
     check(preset, "The fixture could not find a built-in Tavern character");
@@ -62,6 +143,10 @@ export async function verifySwitching(fixture, { configureFixtureChannel, invoke
   const agent = () => document.querySelector('#content-area[data-view="agent"] #agent-content-area');
   const chat = () => visible(agent(), ".wb-chat");
   const composer = () => visible(agent(), "textarea#agent-message");
+  const followsTail = () => {
+    const scroll = chat();
+    return Boolean(scroll && Math.abs(scroll.scrollHeight - scroll.clientHeight - scroll.scrollTop) <= 2);
+  };
   const transcript = session => {
     const content = visible(chat(), ".wb-chat-content");
     if (content?.querySelector("[data-agent-transcript-session]"))
@@ -70,14 +155,33 @@ export async function verifySwitching(fixture, { configureFixtureChannel, invoke
   };
   const tail = session => transcript(session)?.querySelector('article[aria-label="Agent 回复"]:last-of-type');
   const group = session => [...(transcript(session)?.querySelectorAll(".wb-execution-group") ?? [])].at(-1);
-  const sessionReady = session => agent()?.querySelector(".wb-titlebar h1")?.textContent.trim() === session.title &&
-    Boolean(composer()?.getClientRects().length) && tail(session)?.textContent.includes(session.last);
+  const sessionContentReady = session => Boolean(tail(session)?.textContent.includes(session.last));
+  const sessionTitleReady = session => agent()?.querySelector(".wb-titlebar h1")?.textContent.trim() === session.title;
+  const sessionReady = (session, hasContent = sessionContentReady(session)) =>
+    hasContent && sessionTitleReady(session) && Boolean(composer()?.getClientRects().length);
   const tavern = () => document.querySelector('#content-area[data-view="tavern"]');
   const tavernComposer = () => visible(tavern(), "#main-content textarea");
   const tavernReady = () => Boolean(tavernComposer()?.getClientRects().length &&
     visible(tavern(), 'button[aria-label="打开对话菜单"]'));
   const nav = () => visible(document, "nav.lolicode-unified-sidebar");
   const modeButton = label => visible(nav(), `button[aria-label="${label}"]`);
+  const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const hasAnimation = (node, name) => Boolean(
+    node?.getAnimations().some(animation => animation.id === name),
+  );
+  const modeMotion = () => {
+    const sidebar = nav();
+    const foreground = visible(document, "[data-workspace-active] [data-workspace-entry]");
+    const indicator = hasAnimation(sidebar?.querySelector(".lolicode-sidebar-mode-selection"), "lolicode-sidebar-mode-slide");
+    const directory = hasAnimation(
+      sidebar?.querySelector(".lolicode-sidebar-workspaces, .lolicode-sidebar-tavern-directory"), "lolicode-sidebar-directory-enter",
+    );
+    const workspace = hasAnimation(foreground, "lolicode-workspace-enter");
+    const onlyDestination = painted(foreground) && [...document.querySelectorAll("[data-workspace-entry]")]
+      .every(node => node === foreground || !painted(node));
+    return { indicator, directory, workspace, onlyDestination, reducedMotion, mode: sidebar?.dataset.workspaceMode,
+      switching: sidebar?.dataset.workspaceModeSwitch, compact: sidebar?.dataset.sidebarCompact };
+  };
   const sessionButton = session => [...(nav()?.querySelectorAll("button.wb-session-row") ?? [])]
     .find(button => !button.disabled && button.textContent.trim() === session.title);
   const goalControlHidden = () => !visible(agent(), '[aria-label="Agent 会话模式"]') &&
@@ -86,8 +190,7 @@ export async function verifySwitching(fixture, { configureFixtureChannel, invoke
     .find(button => !button.closest(hidden) &&
       (button.getAttribute("aria-label") ?? button.textContent.trim()) === "加载更早的消息");
 
-  const first = sessions[0];
-  const second = sessions[1];
+  const [first, second, third, fourth, fifth, sixth] = sessions;
   await waitForPaint(() => sessionReady(first) && sessionButton(second), "the seeded Agent conversation");
   const articles = session => transcript(session)?.querySelectorAll("article").length ?? 0;
   const initialArticles = articles(first);
@@ -99,6 +202,15 @@ export async function verifySwitching(fixture, { configureFixtureChannel, invoke
     tavernDraftPreserved: true,
     readingPositionPreserved: true,
     toolExpansionPreserved: true,
+    firstFrameNavigation: true,
+    firstFrameSessionTitle: true,
+    sidebarModeMotion: true,
+    workspaceModeMotion: true,
+    inactiveWorkspaceNotPainted: true,
+    reducedMotionPreferenceApplied: !fixture.switching.reducedMotion || reducedMotion,
+    firstVisitFollowsTail: followsTail(),
+    rapidSwitchKeepsLastSelection: true,
+    ...(verifyPending ? { pendingTranscriptPainted: false, pendingTavernPainted: false, loadedTranscriptMotion: false } : {}),
   };
   const expected = new Map();
   const setInput = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value").set;
@@ -113,6 +225,16 @@ export async function verifySwitching(fixture, { configureFixtureChannel, invoke
     await waitForPaint(() => group(session)?.open && group(session)?.querySelector(".wb-tool"),
       `${session.title} expanded execution group`);
     const scroll = chat();
+    if (scroll.scrollHeight <= scroll.clientHeight) {
+      const boxes = [];
+      for (let node = scroll; node; node = node.parentElement) {
+        const css = getComputedStyle(node);
+        boxes.push({ node: node.id || String(node.className).split(" ")[0] || node.tagName,
+          height: node.clientHeight, display: css.display, flex: css.flex,
+          direction: css.flexDirection, overflow: css.overflowY, minHeight: css.minHeight });
+      }
+      throw new Error(`No scroll range at viewport ${innerWidth}×${innerHeight}: ${JSON.stringify(boxes)}`);
+    }
     const position = Math.max(1, scroll.scrollHeight - scroll.clientHeight - 620);
     scroll.scrollTop = position;
     await waitForPaint(() => Math.abs(scroll.scrollTop - position) <= 2 && composer()?.value === draft,
@@ -133,56 +255,275 @@ export async function verifySwitching(fixture, { configureFixtureChannel, invoke
     ? new PerformanceObserver(list => longTasks.push(...list.getEntries()))
     : null;
   observer?.observe({ type: "longtask" });
-  const measure = async (name, button, ready) => {
+  const longFrames = [];
+  const chatLayout = [];
+  const stopLayoutTrace = profileScale ? traceChatLayout(chatLayout) : null;
+  const frameObserver = profileScale && PerformanceObserver.supportedEntryTypes.includes("long-animation-frame")
+    ? new PerformanceObserver(list => longFrames.push(...list.getEntries()))
+    : null;
+  frameObserver?.observe({ type: "long-animation-frame" });
+  const { readAgentImageAttachments } = await import("/lib/agentImageStore.ts");
+  let attachmentStoreError;
+  try {
+    await readAgentImageAttachments("switching-fixture-probe");
+  } catch (error) {
+    attachmentStoreError = String(error);
+  }
+  const { agentApi } = await import("/lib/api/agent.ts");
+  const originalGetSession = agentApi.getSession;
+  const snapshotReads = [];
+  let profileFailure;
+  const coldTranscript = pendingPaintProbe(() =>
+    painted(chat()?.querySelector("[data-conversation-loading]")) &&
+    [...(chat()?.querySelectorAll("[data-agent-transcript-session]") ?? [])].every(node => !painted(node)),
+  );
+  agentApi.getSession = async function (...args) {
+    const read = { session: args[0], started: performance.now(), finished: null };
+    snapshotReads.push(read);
+    try {
+      const snapshot = await originalGetSession.apply(this, args);
+      read.ipcFinished = performance.now();
+      if (verifyPending && read.session === sixth.id) await coldTranscript.wait;
+      return snapshot;
+    } finally {
+      read.finished = performance.now();
+    }
+  };
+  const originalTransaction = IDBDatabase.prototype.transaction;
+  let attachmentReads = 0;
+  IDBDatabase.prototype.transaction = function (store, mode, ...options) {
+    if (store === "sent-images" && mode === "readonly") attachmentReads++;
+    return originalTransaction.call(this, store, mode, ...options);
+  };
+  const measure = async (name, control, selection, ready, {
+    sessionId, contentReady, titleReady, onSelected, onPending, onContent,
+  } = {}) => {
+    const button = control();
     check(button, `Missing switching control for ${name}`);
     await nextFrame();
     const start = performance.now();
+    const readsBefore = attachmentReads;
+    let clickMilliseconds;
+    let frames = 0;
+    let navigationFrame = null;
+    let navigationMilliseconds = null;
+    let contentFrame = null;
+    let contentMilliseconds = null;
+    let animations;
     button.click();
-    await waitForPaint(ready, name);
+    if (profileScale) clickMilliseconds = round(performance.now() - start);
+    // Selection can paint while the destination is still preparing its content.
+    try {
+      await waitForPaint(() => {
+        frames += 1;
+        const selected = control()?.matches(selection);
+        if (selected && navigationFrame === null) {
+          navigationFrame = frames;
+          navigationMilliseconds = round(performance.now() - start);
+          animations = onSelected?.();
+          if (titleReady) checks.firstFrameSessionTitle &&= titleReady();
+        }
+        const hasContent = contentReady?.();
+        if (hasContent && contentFrame === null) {
+          contentFrame = frames;
+          contentMilliseconds = round(performance.now() - start);
+          onContent?.();
+        }
+        const complete = selected && ready(hasContent);
+        if (selected && !complete) onPending?.();
+        return complete;
+      }, name);
+    } catch (error) {
+      if (profileScale) profileFailure = {
+        name, message: error.message, frames, navigationFrame, navigationMilliseconds,
+        contentFrame, contentMilliseconds, clickMilliseconds,
+        pendingSnapshotReads: snapshotReads.filter(read => !read.finished).map(read => ({
+          session: sessions.findIndex(session => session.id === read.session),
+          nativePending: read.ipcFinished === undefined,
+          ageMs: round(performance.now() - read.started),
+        })),
+        selected: Boolean(control()?.matches(selection)), contentReady: contentReady?.(),
+        titleReady: titleReady?.(), loading: painted(agent()?.querySelector("[data-conversation-loading]")),
+      };
+      throw error;
+    }
     const end = performance.now();
+    checks.firstFrameNavigation &&= navigationFrame === 1;
     await nextFrame();
     longTasks.push(...(observer?.takeRecords() ?? []));
     const overlapping = longTasks.filter(entry =>
       entry.startTime < end && entry.startTime + entry.duration > start,
     );
+    longFrames.push(...(frameObserver?.takeRecords() ?? []));
+    const slowest = longFrames.filter(entry => entry.startTime < end && entry.startTime + entry.duration > start)
+      .sort((a, b) => b.duration - a.duration)[0];
     return {
       name, milliseconds: round(end - start),
+      navigationFrame, navigationMilliseconds,
+      ...(contentReady ? { contentFrame, contentMilliseconds } : {}),
+      ...(animations ? { animations } : {}),
+      attachmentReadTransactions: attachmentReads - readsBefore,
+      snapshotReadMs: snapshotReads.filter(read => read.started >= start && read.finished !== null && read.finished <= end)
+        .map(read => round(read.finished - read.started)),
+      ...(sessionId ? { pendingPrefetchMs: snapshotReads.filter(read =>
+        read.session === sessionId && read.started < start && read.finished > start && read.finished <= end,
+      ).map(read => round(read.finished - start)) } : {}),
       longTasks: overlapping.length,
       maxLongTask: round(Math.max(0, ...overlapping.map(entry => entry.duration))),
+      ...(profileScale ? {
+        clickMilliseconds,
+        nativeSnapshotReadMs: snapshotReads.filter(read => read.started >= start && read.ipcFinished <= end)
+          .map(read => round(read.ipcFinished - read.started)),
+        chatLayout: chatLayout.filter(read => read.startTime >= start && read.startTime <= end)
+          .map(({ property, method, duration }) => ({ property, method, duration })),
+        ...(slowest ? { slowFrame: {
+          milliseconds: round(slowest.duration),
+          blockingMs: round(slowest.blockingDuration),
+          forcedLayoutMs: round(slowest.scripts.reduce((total, script) => total + script.forcedStyleAndLayoutDuration, 0)),
+          leadingScript: [...slowest.scripts].sort((a, b) => b.duration - a.duration)[0]?.sourceFunctionName,
+        } } : {}),
+      } : {}),
     };
   };
   const sessionSwitches = [];
   const modeSwitches = [];
-  const switchSession = async (session, label) => {
-    sessionSwitches.push(await measure(label, sessionButton(session), () => sessionReady(session)));
+  const idleAfterAgentReturn = [];
+  const observeReturn = async () => {
+    const start = performance.now();
+    let previous = start;
+    let largestGap = 0;
+    while (previous - start < 1000) {
+      await nextFrame();
+      const now = performance.now();
+      largestGap = Math.max(largestGap, now - previous);
+      previous = now;
+    }
+    longTasks.push(...(observer?.takeRecords() ?? []));
+    longFrames.push(...(frameObserver?.takeRecords() ?? []));
+    const longest = entries => round(Math.max(0, ...entries.filter(entry => entry.startTime >= start)
+      .map(entry => entry.duration)));
+    idleAfterAgentReturn.push({ frameGapMs: round(largestGap), longTaskMs: longest(longTasks), longFrameMs: longest(longFrames) });
+  };
+  const switchSession = async (session, label, probes) => {
+    sessionSwitches.push(await measure(label, () => sessionButton(session),
+      '[aria-pressed="true"]', hasContent => sessionReady(session, hasContent),
+      { sessionId: session.id, contentReady: () => sessionContentReady(session),
+        titleReady: () => sessionTitleReady(session), ...probes }));
     checkReadingState(session);
   };
-  try {
-    await prepareReadingState(first);
+  const switchToTavern = async (label, onPending) => {
+    modeSwitches.push(await measure(label, () => modeButton("角色对话"), '[aria-current="page"]',
+      tavernReady, { onSelected: modeMotion, onPending }));
+  };
+  const switchToAgent = async label => {
+    modeSwitches.push(await measure(label, () => modeButton("编程工作台"), '[aria-current="page"]',
+      hasContent => sessionReady(first, hasContent), { contentReady: () => sessionContentReady(first),
+        titleReady: () => sessionTitleReady(first), onSelected: modeMotion }));
+  };
+  const verifyPendingTavern = async () => {
+    const { queryClient } = await import("/lib/query/queryClient.ts");
+    const { tavernSnapshotQuery } = await import("/lib/api/tavern.ts");
+    await queryClient.cancelQueries({ queryKey: tavernSnapshotQuery.queryKey });
+    queryClient.removeQueries({ queryKey: tavernSnapshotQuery.queryKey });
+    const coldTavern = pendingPaintProbe(() => painted(tavern()?.querySelector("[data-conversation-loading]")));
+    const request = queryClient.fetchQuery({
+      ...tavernSnapshotQuery,
+      queryFn: async () => {
+        await coldTavern.wait;
+        return tavernSnapshotQuery.queryFn();
+      },
+    });
+    try {
+      await switchToTavern("Tavern with pending snapshot", coldTavern.onPending);
+      checks.pendingTavernPainted = coldTavern.passed();
+    } finally {
+      coldTavern.release();
+      await request;
+    }
+    await switchToAgent("Agent after pending Tavern snapshot");
+  };
+  const verifyWarmSessions = async () => {
     await switchSession(second, "cold B");
+    await waitForPaint(() => transcript(second)?.textContent.includes(attachmentName),
+      "the stored document attachment after switching");
+    checks.firstVisitFollowsTail &&= followsTail();
     await prepareReadingState(second);
     for (let attempt = 1; attempt <= 4; attempt++) {
       await switchSession(first, `warm A ${attempt}`);
       await switchSession(second, `warm B ${attempt}`);
     }
-    await switchSession(first, "warm A before mode switches");
+    await switchSession(first, profileScale ? "warm A after session loop" : "warm A before mode switches");
+  };
+  try {
+    await prepareReadingState(first);
+    if (!profileScale) await verifyWarmSessions();
     const tavernDraft = "未发送的酒馆验收草稿";
     for (let attempt = 1; attempt <= 5; attempt++) {
-      modeSwitches.push(await measure(attempt === 1 ? "cold Tavern" : `warm Tavern ${attempt}`,
-        modeButton("角色对话"), tavernReady));
+      await switchToTavern(attempt === 1 ? "cold Tavern" : `warm Tavern ${attempt}`);
       if (attempt === 1) {
         fillDraft(tavernComposer(), tavernDraft);
         await waitForPaint(() => tavernComposer()?.value === tavernDraft, "the Tavern draft");
       } else checks.tavernDraftPreserved &&= tavernComposer()?.value === tavernDraft;
-      modeSwitches.push(await measure(`warm Agent ${attempt}`, modeButton("编程工作台"), () => sessionReady(first)));
+      await switchToAgent(`warm Agent ${attempt}`);
       checkReadingState(first);
+      if (profileScale && (attempt === 1 || attempt === 5)) await observeReturn();
     }
+    if (profileScale) await verifyWarmSessions();
+    await switchSession(third, "first visit C");
+    checks.firstVisitFollowsTail &&= followsTail();
+    await switchSession(fifth, "first visit E outside recent set");
+    checks.firstVisitFollowsTail &&= followsTail();
+    await switchSession(first, "warm A before rapid switch");
+    const interrupted = sessionButton(fourth);
+    const finalTarget = sessionButton(first);
+    check(interrupted && finalTarget, "Missing the rapid switching controls");
+    interrupted.click();
+    await nextFrame();
+    checks.rapidSwitchKeepsLastSelection &&= sessionButton(fourth)?.matches('[aria-pressed="true"]');
+    finalTarget.click();
+    await waitForPaint(() => {
+      const selected = sessionButton(first)?.matches('[aria-pressed="true"]');
+      if (selected) {
+        checks.rapidSwitchKeepsLastSelection &&= sessions.slice(1).every(session => !sessionContentReady(session));
+      }
+      return selected && sessionReady(first) && snapshotReads.every(read =>
+        read.session !== fourth.id || read.finished !== null,
+      );
+    }, "the final target after switching away from the fourth session");
+    checkReadingState(first);
+    if (verifyPending) {
+      await switchSession(sixth, "Agent with pending snapshot", {
+        onPending: coldTranscript.onPending,
+        onContent() {
+          checks.loadedTranscriptMotion = hasAnimation(transcript(sixth), "lolicode-transcript-enter") !== reducedMotion;
+        },
+      });
+      checks.pendingTranscriptPainted = coldTranscript.passed();
+      await switchSession(first, "Agent after pending snapshot");
+      await verifyPendingTavern();
+    }
+  } catch (error) {
+    if (!profileScale) throw error;
+    profileFailure ??= { message: error.message };
   } finally {
+    coldTranscript.release();
+    agentApi.getSession = originalGetSession;
+    IDBDatabase.prototype.transaction = originalTransaction;
     observer?.disconnect();
+    frameObserver?.disconnect();
+    stopLayoutTrace?.();
   }
 
+  checks.sidebarModeMotion = modeSwitches.every(({ animations }) =>
+    animations?.reducedMotion ? !animations.indicator && !animations.directory
+      : animations?.indicator && animations.directory,
+  );
+  checks.workspaceModeMotion = modeSwitches.every(({ animations }) => animations?.workspace === !reducedMotion);
+  checks.inactiveWorkspaceNotPainted = modeSwitches.every(({ animations }) => animations?.onlyDestination);
+  checks.windowsDragUsesTauri = !profileFailure && verifyWindowsDragPath();
+
   let olderMessagesError;
-  if (checks.historyWindowed) {
+  if (checks.historyWindowed && !profileFailure) {
     const firstUser = () => transcript(first)?.querySelector('article[aria-label="你的消息"]')?.textContent;
     const previousFirst = firstUser();
     loadOlder().click();
@@ -197,7 +538,9 @@ export async function verifySwitching(fixture, { configureFixtureChannel, invoke
 
   return {
     source, turnsPerSession: turns, baseline, initialArticles,
-    documentHidden: document.hidden, longTaskSupported: Boolean(observer),
-    sessionSwitches, modeSwitches, checks, olderMessagesError,
+    ...(profileScale ? { snapshotBytes: sessions.map(session => session.bytes), longFrameSupported: Boolean(frameObserver),
+      idleAfterAgentReturn, profileFailure } : {}),
+    documentHidden: document.hidden, reducedMotion, longTaskSupported: Boolean(observer),
+    sessionSwitches, modeSwitches, checks, olderMessagesError, attachmentStoreError,
   };
 }

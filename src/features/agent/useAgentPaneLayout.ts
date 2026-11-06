@@ -117,17 +117,18 @@ export function useAgentPaneLayout({
     if (!isActive) return;
     setSidebar((previous) => readWidth(SIDEBAR_KEY, previous));
     const container = containerRef.current;
-    const measure = () =>
-      setWidth(
-        container?.getBoundingClientRect().width || window.innerWidth || 1024,
-      );
-    measure();
-    const observer = new ResizeObserver(measure);
+    const measureViewport = () => setWidth(window.innerWidth || 1024);
+    measureViewport();
+    // The observed size is already available after layout. Reading the DOM
+    // synchronously here used to force the whole retained page to lay out.
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry?.contentRect.width) setWidth(entry.contentRect.width);
+    });
     if (container) observer.observe(container);
-    window.addEventListener("resize", measure);
+    window.addEventListener("resize", measureViewport);
     return () => {
       observer.disconnect();
-      window.removeEventListener("resize", measure);
+      window.removeEventListener("resize", measureViewport);
     };
   }, [isActive]);
   const changeSidebar = useCallback((next: number) => {

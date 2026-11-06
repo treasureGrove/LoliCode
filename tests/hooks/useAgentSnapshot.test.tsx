@@ -209,6 +209,69 @@ it("switches back synchronously without issuing another full read for a fresh id
   await act(async () => {});
 });
 
+it("shows prefetched history on selection and reconciles only the selected session", async () => {
+  const read = vi.mocked(agentApi.getSession);
+  read.mockReset().mockImplementation(async (id) => sessionSnapshot(id));
+  const onSnapshot = vi.fn();
+  const { result, rerender } = follow("lc:first", onSnapshot);
+  await act(async () => {});
+
+  await act(async () => result.current.prefetch("lc:second"));
+  expect(result.current.snapshot?.session.id).toBe("lc:first");
+  expect(
+    result.current.preparedSnapshots.map((item) => item.session.id),
+  ).toEqual(["lc:second"]);
+  expect(onSnapshot).toHaveBeenCalledTimes(1);
+
+  rerender({ id: "lc:second", refresh: 0 });
+  expect(result.current.snapshot?.session.id).toBe("lc:second");
+  expect(result.current.loading).toBe(false);
+  expect(result.current.preparedSnapshots).toEqual([]);
+  expect(onSnapshot).toHaveBeenLastCalledWith(result.current.snapshot);
+  expect(read.mock.calls.map(([id]) => id)).toEqual(["lc:first", "lc:second"]);
+});
+
+it("adopts an in-flight read on click and discards a changed speculative snapshot", async () => {
+  const read = vi.mocked(agentApi.getSession);
+  let finishSecond!: (snapshot: AgentSnapshot) => void;
+  read.mockReset().mockImplementation((id) =>
+    id === "lc:second"
+      ? new Promise((resolve) => {
+          finishSecond = resolve;
+        })
+      : Promise.resolve(sessionSnapshot(id)),
+  );
+  const { result, rerender } = follow("lc:first");
+  await act(async () => {});
+  await act(async () => {
+    void result.current.prefetch("lc:second");
+  });
+  rerender({ id: "lc:second", refresh: 0 });
+  expect(read).toHaveBeenCalledTimes(2);
+  await act(async () => finishSecond(sessionSnapshot("lc:second")));
+  expect(result.current.snapshot?.session.id).toBe("lc:second");
+
+  await act(async () => result.current.prefetch("lc:third"));
+  expect(result.current.preparedSnapshots).toHaveLength(1);
+  act(() =>
+    emitTauriEvent("agent-session-update", {
+      type: "changed",
+      sessionId: "lc:third",
+    }),
+  );
+  expect(result.current.preparedSnapshots).toEqual([]);
+  rerender({ id: "lc:third", refresh: 0 });
+  expect(result.current.loading).toBe(true);
+  await act(async () => {});
+  expect(result.current.snapshot?.session.id).toBe("lc:third");
+  expect(read.mock.calls.map(([id]) => id)).toEqual([
+    "lc:first",
+    "lc:second",
+    "lc:third",
+    "lc:third",
+  ]);
+});
+
 it("reuses a background tail and ignores the read left behind by a switch", async () => {
   vi.useFakeTimers();
   const first = sessionSnapshot("lc:first", "running");

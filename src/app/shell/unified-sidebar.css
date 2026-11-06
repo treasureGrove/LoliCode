@@ -73,6 +73,8 @@
 
 .lolicode-unified-sidebar[data-sidebar-compact="true"]
   .lolicode-sidebar-segments {
+  --sidebar-mode-x: 0px;
+  --sidebar-mode-y: calc(100% + 3px);
   grid-template-columns: 1fr;
 }
 
@@ -164,6 +166,9 @@
 }
 
 .lolicode-sidebar-segments {
+  --sidebar-mode-x: calc(100% + 3px);
+  --sidebar-mode-y: 0px;
+  position: relative;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   flex-shrink: 0;
@@ -241,6 +246,7 @@
 }
 
 .lolicode-sidebar-segments .lolicode-sidebar-nav-item {
+  z-index: 1;
   justify-content: center;
   min-height: 35px;
   gap: 8px;
@@ -253,9 +259,19 @@
   background: transparent;
 }
 
-.lolicode-sidebar-segments .lolicode-sidebar-selection {
+.lolicode-sidebar-mode-selection {
+  position: absolute;
+  inset: 0;
+  grid-area: 1 / 1 / 2 / 2;
+  border-radius: 11px;
   background: var(--action-bg);
   box-shadow: 0 2px 5px rgb(98 50 69 / 13%);
+  pointer-events: none;
+}
+
+.lolicode-unified-sidebar[data-workspace-mode="tavern"]
+  .lolicode-sidebar-mode-selection {
+  transform: translate(var(--sidebar-mode-x), var(--sidebar-mode-y));
 }
 
 .lolicode-sidebar-status,
@@ -750,6 +766,10 @@
   font-size: var(--workspace-label);
   font-weight: 400;
   color: var(--text-2);
+  transition:
+    color var(--motion-fast, 160ms) var(--motion-ease, ease),
+    background-color var(--motion-fast, 160ms) var(--motion-ease, ease),
+    transform var(--motion-fast, 160ms) var(--motion-ease, ease);
 }
 
 :root
@@ -778,7 +798,10 @@
   .lolicode-unified-sidebar
   :is(.wb-session-menu, .wb-project-menu-trigger) {
   color: var(--sidebar-muted);
-  transition: opacity var(--motion-fast, 160ms) var(--motion-ease, ease);
+  transition:
+    color var(--motion-fast, 160ms) var(--motion-ease, ease),
+    background-color var(--motion-fast, 160ms) var(--motion-ease, ease),
+    opacity var(--motion-fast, 160ms) var(--motion-ease, ease);
 }
 
 @media (hover: hover) {
@@ -811,7 +834,12 @@
     .lolicode-workbench.wb-unified
     .wb-sidebar
     .lolicode-unified-sidebar
-    :is(.wb-session-menu, .wb-project-menu-trigger, .wb-search) {
+    :is(
+      .wb-session-row,
+      .wb-session-menu,
+      .wb-project-menu-trigger,
+      .wb-search
+    ) {
     transition: none;
   }
 }
@@ -834,5 +862,9 @@
     .wb-session-row[aria-pressed="true"] {
     color: HighlightText;
     background: Highlight;
+  }
+
+  .lolicode-sidebar-mode-selection {
+    display: none;
   }
 }

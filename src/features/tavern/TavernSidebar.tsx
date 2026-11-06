@@ -32,7 +32,7 @@ export function TavernSidebar({
     refetchOnMount: false,
   });
   return (
-    <div className="flex min-h-0 flex-1 flex-col pt-4">
+    <div className="lolicode-sidebar-tavern-directory flex min-h-0 flex-1 flex-col pt-4">
       <div className="min-h-0 flex-1 space-y-1 overflow-y-auto">
         {(characters ?? []).map((character) => (
           <TavernSidebarCharacter

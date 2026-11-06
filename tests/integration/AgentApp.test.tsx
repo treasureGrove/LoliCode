@@ -172,6 +172,9 @@ describe("LoliCode desktop entry", () => {
     const agent = await screen.findByTestId("agent-workspace");
     const usageKey = usageKeys.summary("today", undefined, undefined);
     await waitFor(() => expect(client.getQueryData(usageKey)).toEqual(summary));
+    expect(screen.getByRole("navigation")).not.toHaveAttribute(
+      "data-workspace-mode-switch",
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "角色对话" }));
     const tavern = document.getElementById("main-content");
@@ -181,10 +184,18 @@ describe("LoliCode desktop entry", () => {
       "tavern",
     );
     expect(agent.closest("[aria-hidden=true]")).toHaveClass(
-      "[content-visibility:hidden]",
+      "w-screen",
+      "opacity-0",
     );
     expect(client.isFetching({ queryKey: usageKey })).toBe(0);
-    expect(screen.getAllByRole("navigation")).toHaveLength(1);
+    expect(screen.getByRole("navigation")).toHaveAttribute(
+      "data-workspace-mode-switch",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "角色对话" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "编程工作台" }));
     expect(screen.getByTestId("agent-workspace")).toBe(agent);
@@ -192,7 +203,14 @@ describe("LoliCode desktop entry", () => {
     expect(tavern?.closest("[aria-hidden=true]")).toHaveClass(
       "[content-visibility:hidden]",
     );
-    expect(screen.getAllByRole("navigation")).toHaveLength(1);
+    expect(screen.getByRole("navigation")).toHaveAttribute(
+      "data-workspace-mode-switch",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "编程工作台" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "角色对话" }));
     expect(document.getElementById("main-content")).toBe(tavern);

@@ -43,6 +43,22 @@ impl InprocessAgentState {
         self.lifecycle.lock().await
     }
 
+    pub(super) async fn automatic_title_allowed(&self, id: &str) -> Result<bool, String> {
+        Ok(self.sessions()?.read().await.automatic_title_allowed(id))
+    }
+
+    pub(super) async fn accept_automatic_title(
+        &self,
+        id: &str,
+        title: &str,
+        generated: bool,
+    ) -> Result<Option<lolicode_agent::AgentSession>, String> {
+        self.sessions()?
+            .write()
+            .await
+            .accept_automatic_title(id, title, generated)
+    }
+
     pub async fn ensure_started(&self, app: &tauri::AppHandle) -> Result<(), String> {
         if self.sessions.get().is_some() {
             return Ok(());

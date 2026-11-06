@@ -398,6 +398,72 @@ describe("unified workspace navigation", () => {
     expect(values.onSelectPage).not.toHaveBeenCalled();
   });
 
+  it("hands off a moving indicator between workspace sidebars and respects reduced motion", () => {
+    const position = { current: undefined as number | undefined };
+    const preference = {
+      matches: false,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    };
+    const finish = vi.fn();
+    const animate = vi.fn(
+      (_frames: Keyframe[], _timing: KeyframeAnimationOptions) => ({
+        effect: { getComputedTiming: () => ({ progress: 0.35 }) },
+        playState: "running",
+        cancel: vi.fn(),
+        finish,
+      }),
+    );
+    const originalAnimate = Object.getOwnPropertyDescriptor(
+      Element.prototype,
+      "animate",
+    );
+    Object.defineProperty(Element.prototype, "animate", {
+      configurable: true,
+      value: animate,
+    });
+    vi.stubGlobal("matchMedia", () => preference);
+    const switching = props({
+      view: "tavern",
+      tavernEnabled: false,
+      workspaceModeSwitch: true,
+      workspaceModePosition: position,
+    });
+    try {
+      const tavern = mount(switching);
+      tavern.unmount();
+      expect(position.current).toBe(0.35);
+
+      animate.mockClear();
+      const agent = mount({ ...switching, view: "agent" });
+      const [frames, timing] = animate.mock.calls[0];
+      expect(frames[0].transform).toContain("var(--sidebar-mode-x) * 0.35");
+      expect(frames[1].transform).toContain("var(--sidebar-mode-x) * 0");
+      expect(timing.id).toBe("lolicode-sidebar-mode-slide");
+      expect(
+        screen.getByRole("button", { name: "编程工作台" }),
+      ).toHaveAttribute("aria-current", "page");
+      preference.matches = true;
+      preference.addEventListener.mock.lastCall?.[1](preference);
+      expect(finish).toHaveBeenCalledTimes(2);
+      agent.unmount();
+
+      animate.mockClear();
+      const reduced = mount(switching);
+      expect(animate).not.toHaveBeenCalled();
+      expect(screen.getByRole("button", { name: "角色对话" })).toHaveAttribute(
+        "aria-current",
+        "page",
+      );
+      reduced.unmount();
+    } finally {
+      vi.unstubAllGlobals();
+      if (originalAnimate)
+        Object.defineProperty(Element.prototype, "animate", originalAnimate);
+      else Reflect.deleteProperty(Element.prototype, "animate");
+    }
+  });
+
   it("keeps named controls reachable with the keyboard", async () => {
     const values = props({ view: "channels" });
     mount(values);

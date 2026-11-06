@@ -9,6 +9,7 @@ const dockKey = `${endpoint.pathname}:dock-tools`;
 const compactKey = `${endpoint.pathname}:compact`;
 const backgroundJobsKey = `${endpoint.pathname}:background-jobs`;
 const nativeModesKey = `${endpoint.pathname}:native-modes`;
+const titlesKey = `${endpoint.pathname}:titles`;
 const savedWorkerInput = "desktop-worker-queue-after-restart";
 const png =
   "iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAIAAABvFaqvAAAAK0lEQVR4nGNkaGCgCmCijjEMowYRAUYDmzAYDSPCYDSMCIPRMCIMBl8YAQAWVACw3XqkiQAAAABJRU5ErkJggg==";
@@ -1104,6 +1105,134 @@ async function configureFixtureChannel(fixture) {
   });
 }
 
+async function verifySessionTitles(fixture) {
+  const { titles } = fixture;
+  const restarted = fixture.phase === "titles-restart";
+  const saved = JSON.parse(sessionStorage.getItem(titlesKey));
+  if (!restarted && !saved) {
+    await configureFixtureChannel(fixture);
+    const opened = await invoke("open_agent_project", { path: fixture.project });
+    check(opened.sessions.length === 0, "The title fixture requires an empty workspace");
+    const catalog = await invoke("get_agent_catalog");
+    const session = await invoke("create_agent_session", {
+      projectPath: fixture.project, modelId: catalog.defaultModel ?? catalog.models[0].id, mode: "build",
+    });
+    check(session.title !== titles.generatedTitle, "The blank session already had a generated title");
+    localStorage.setItem("cc-switch-last-view", "agent");
+    localStorage.setItem("lolicode.agent.last-selection.v1", JSON.stringify({
+      projectPath: session.projectPath, sessionId: session.id,
+    }));
+    sessionStorage.setItem(titlesKey, JSON.stringify({ id: session.id, initialTitle: session.title }));
+    return { reload: true };
+  }
+
+  const sessionId = restarted ? fixture.titleSessionId : saved.id;
+  const snapshot = (id = sessionId) => invoke("get_agent_session", { sessionId: id });
+  const composer = () => document.querySelector("textarea#agent-message");
+  const titleVisible = title => document.querySelector(".wb-titlebar h1")?.textContent.trim() === title &&
+    document.querySelector('button.wb-session-row[aria-pressed="true"]')?.textContent.trim() === title;
+  const answerVisible = answer => document.querySelector(".wb-transcript-pane:not([hidden])")?.textContent.includes(answer);
+  const hasAnswer = (state, answer) => state.messages.some(message => message.role === "assistant" &&
+    message.parts.some(part => part.text?.includes(answer)));
+  const verifyTurn = async (title, answer, id = sessionId) => {
+    await waitFor(async () => {
+      const state = await snapshot(id);
+      if (state.status === "error") throw new Error(state.error || "The title fixture turn failed");
+      return state.status === "idle" && !state.titlePending && state.session.title === title && hasAnswer(state, answer);
+    }, `the settled turn with title ${title}`, 20_000);
+    await waitFor(() => titleVisible(title) && answerVisible(answer),
+      `the desktop header, sidebar, and answer for ${title}`, 20_000);
+  };
+
+  if (restarted) {
+    await verifyTurn(titles.manualTitle, titles.manualAnswer);
+    const listed = await invoke("open_agent_project", { path: fixture.project });
+    check(listed.sessions.some(session => session.id === sessionId && session.title === titles.manualTitle),
+      "Cold workspace listing lost the manually chosen title");
+    check(listed.sessions.some(session => session.id === fixture.titleRaceSessionId && session.title === titles.raceManualTitle),
+      "Cold workspace listing lost the title chosen while generation was pending");
+    return { sessionId, manualTitleRetained: true };
+  }
+
+  const fill = (input, value) => {
+    Object.getOwnPropertyDescriptor(Object.getPrototypeOf(input), "value").set.call(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  };
+  const submit = async text => {
+    const input = await waitFor(composer, "the title fixture composer", 10_000);
+    fill(input, text);
+    await waitFor(() => !input.form.querySelector('button[type="submit"]').disabled, "an enabled composer", 5000);
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+  };
+  const renameTitle = async (current, next) => {
+    const trigger = await waitFor(() => [...document.querySelectorAll("button.wb-session-menu:not(:disabled)")]
+      .find(button => button.getAttribute("aria-label") === "管理会话：" + current), "the selected session's menu");
+    trigger.focus();
+    trigger.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    const rename = await waitFor(() => [...document.querySelectorAll('[role="menuitem"]')]
+      .find(item => item.textContent.trim() === "重命名"), "the Rename menu item");
+    rename.click();
+    const input = await waitFor(() => document.querySelector('input[aria-label="会话名称"]'), "the Rename dialog");
+    fill(input, next);
+    const save = [...input.closest('[role="dialog"]').querySelectorAll("button")]
+      .find(button => button.textContent.trim() === "保存名称");
+    check(save, "The Rename dialog has no Save button");
+    save.click();
+    await waitFor(() => titleVisible(next), "the manual title in the workbench");
+  };
+  const waitForPendingTitle = async (id, answer, timeout) => {
+    let progress;
+    try {
+      return await waitFor(async () => {
+        const state = await snapshot(id);
+        if (state.status === "error") throw new Error(state.error || "The title fixture turn failed");
+        progress = { status: state.status, titlePending: state.titlePending, messages: state.messages.length,
+          mainAnswer: hasAnswer(state, answer), answerVisible: Boolean(answerVisible(answer)) };
+        return progress.status === "idle" && progress.titlePending && progress.mainAnswer && progress.answerVisible && state;
+      }, "the visible main answer while its auxiliary title request is pending", timeout);
+    } catch (error) {
+      throw new Error(`${error.message} (${JSON.stringify(progress)})`);
+    }
+  };
+  const releaseTitle = number => waitFor(async () => {
+    const result = await fetch(new URL(`titles-release/${number}`, endpoint), { method: "POST" });
+    if (result.status === 409) return false;
+    check(result.ok, "The title fixture could not release its model response");
+    return true;
+  }, "the held title response", 5_000);
+
+  await waitFor(() => titleVisible(saved.initialTitle), "the unnamed conversation in the workbench");
+  await submit(titles.firstPrompt);
+  await waitForPendingTitle(sessionId, titles.firstAnswer, 45_000);
+  await submit(titles.nextPrompt);
+  await waitForPendingTitle(sessionId, titles.nextAnswer, 4500);
+  await releaseTitle(1);
+  await verifyTurn(titles.generatedTitle, titles.nextAnswer);
+  await renameTitle(titles.generatedTitle, titles.manualTitle);
+  await submit(titles.manualPrompt);
+  await verifyTurn(titles.manualTitle, titles.manualAnswer);
+
+  const create = await waitFor(() => document.querySelector("button.wb-nav-create:not(:disabled)"), "the new conversation button");
+  create.click();
+  const raceSessionId = await waitFor(() => {
+    const selected = JSON.parse(localStorage.getItem("lolicode.agent.last-selection.v1"));
+    return selected?.sessionId !== sessionId && selected?.sessionId;
+  }, "the new conversation selected for the title race");
+  await submit(titles.racePrompt);
+  const pending = await waitForPendingTitle(raceSessionId, titles.raceAnswer, 45_000);
+  await renameTitle(pending.session.title, titles.raceManualTitle);
+  await releaseTitle(2);
+  await verifyTurn(titles.raceManualTitle, titles.raceAnswer, raceSessionId);
+
+  const original = [...document.querySelectorAll("button.wb-session-row")]
+    .find(button => button.textContent.trim() === titles.manualTitle);
+  check(original, "The original titled conversation was lost");
+  original.click();
+  await verifyTurn(titles.manualTitle, titles.manualAnswer);
+  return { sessionId, raceSessionId, generatedTitle: true, followupWhileTitlePending: true,
+    manualTitleRetained: true, manualTitleWonRace: true };
+}
+
 async function run(fixture) {
   check(
     location.origin === fixture.origin,
@@ -1148,6 +1277,7 @@ async function run(fixture) {
     const { verifySwitching } = await import("./switching.mjs");
     return verifySwitching(fixture, { configureFixtureChannel, invoke });
   }
+  if (fixture.phase === "titles" || fixture.phase === "titles-restart") return verifySessionTitles(fixture);
   if (fixture.phase === "browser-tool") {
     if (fixture.permissionsOnly && !sessionStorage.getItem(browserToolKey))
       await configureFixtureChannel(fixture);

@@ -38,6 +38,7 @@ use uuid::Uuid;
 const INTERRUPTED: &str = "上次 Harness 会话中断，已保留已确认的历史。";
 const MAX_RECEIPTS: usize = 4096;
 const SNAPSHOT_EVENT: &str = "agent-session-update";
+const AUTOMATIC_TITLE_GRACE: Duration = Duration::from_secs(6);
 
 #[derive(Clone, Default)]
 pub(crate) struct HarnessDesktop(Arc<Mutex<DesktopState>>);
@@ -291,16 +292,17 @@ impl HarnessDesktop {
                 Some((
                     record.snapshot.session.updated_at,
                     record.snapshot.status.clone(),
+                    record.snapshot.title_pending,
                 ))
             } else {
                 stored
                     .next()
                     .flatten()
-                    .map(|sidebar| (sidebar.updated_at, sidebar.status.clone()))
+                    .map(|sidebar| (sidebar.updated_at, sidebar.status.clone(), false))
             };
-            if let Some((updated_at, status)) = info {
+            if let Some((updated_at, status, title_pending)) = info {
                 session.updated_at = session.updated_at.max(updated_at);
-                activity(session, status);
+                activity(session, status, title_pending);
             }
         }
         Ok(())
@@ -1052,6 +1054,20 @@ impl HarnessDesktop {
             )
             .await?;
         let background = background_only || args["backgroundOnly"] == true;
+        let auto_title = secretary.is_none()
+            && native.session.coordination.is_none()
+            && !background
+            && !compact
+            && !mode_command
+            && content.as_array().is_some_and(|blocks| {
+                blocks.iter().any(|block| {
+                    block["type"] == "text"
+                        && block["text"]
+                            .as_str()
+                            .is_some_and(|text| !text.trim().is_empty())
+                })
+            })
+            && carrier.automatic_title_allowed(&id).await?;
         let local_interactive = !background && remote_tools.is_none();
         let policy = workspace_policy(&native.session, background, remote_tools.is_some());
         let model = native
@@ -1209,6 +1225,7 @@ impl HarnessDesktop {
                 model,
                 accounts,
                 content,
+                auto_title,
                 compact,
                 worker,
                 worker_queue_request,
@@ -1248,6 +1265,7 @@ impl HarnessDesktop {
                 receipt.status = outcome;
             }
             saved.snapshot.background_jobs = 0;
+            saved.snapshot.title_pending = false;
             saved.snapshot.session.updated_at = now();
             clear_waits(&mut saved.snapshot);
             saved.secretary.settle_interrupted();
@@ -1490,6 +1508,7 @@ fn load_record(file: &Path, id: &str) -> Result<SessionRecord, String> {
     }
     // Child inbox IDs from an earlier process cannot address the new actor.
     record.snapshot.background_jobs = 0;
+    record.snapshot.title_pending = false;
     if let Some(goal) = &mut record.snapshot.goal {
         goal.activation = "disarmed".into();
     }
@@ -2584,6 +2603,7 @@ struct Turn<'a> {
     model: String,
     accounts: Vec<(String, String)>,
     content: Value,
+    auto_title: bool,
     compact: bool,
     worker: Option<WorkerAction>,
     worker_queue_request: Option<String>,
@@ -2628,6 +2648,14 @@ async fn run_turn(mut turn: Turn<'_>) -> Result<ReceiptStatus, String> {
         .ok_or("无效的 Harness 会话编号")?;
     let mut gateway =
         HarnessGateway::open(&turn.state, &turn.model, turn.id, &turn.accounts).await?;
+    if turn.auto_title {
+        // The pinned SDK profile disables the title provider that Desktop uses.
+        gateway
+            .profile_patch
+            .as_array_mut()
+            .ok_or("Harness 渠道配置无效")?
+            .push(json!({"id":"session-title-llm","disabled":false}));
+    }
     if turn.remote_tools.is_some() {
         // A remote anchor has no project content. Keep automatic SDK discovery
         // from treating local instructions or skills as part of that workspace.
@@ -3104,6 +3132,12 @@ async fn publish_web_preview(turn: &Turn<'_>) {
 enum SnapshotNotice<'a> {
     Changed {
         session_id: &'a str,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        title: Option<&'a str>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        project_path: Option<&'a str>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        updated_at: Option<u64>,
     },
     Tail {
         session_id: &'a str,
@@ -3116,8 +3150,67 @@ fn notify_snapshot_changed(app: &AppHandle, session_id: &str) {
     let _ = app.emit_to(
         "main",
         SNAPSHOT_EVENT,
-        SnapshotNotice::Changed { session_id },
+        SnapshotNotice::Changed {
+            session_id,
+            title: None,
+            project_path: None,
+            updated_at: None,
+        },
     );
+}
+
+async fn observe_automatic_title(turn: &Turn<'_>, sdk_id: &str, notification: &Value) {
+    let params = &notification["params"];
+    if !turn.auto_title
+        || notification["method"] != "session.event"
+        || params["sessionId"] != sdk_id
+    {
+        return;
+    }
+    let carrier = turn.app.state::<InprocessAgentState>();
+    let event = &params["event"];
+    if event["type"] == "session/title-llm-request" {
+        turn.record.lock().await.snapshot.title_pending = true;
+        return;
+    }
+    if event["type"] != "session/title" {
+        return;
+    }
+    let data = &event["data"];
+    let generated = match data["source"]["kind"].as_str() {
+        Some("provider") => true,
+        Some("fallback") => false,
+        _ => return,
+    };
+    let Some(title) = data["title"].as_str() else {
+        return;
+    };
+    let applied = carrier
+        .accept_automatic_title(turn.id, title, generated)
+        .await;
+    let mut saved = turn.record.lock().await;
+    if generated {
+        saved.snapshot.title_pending = false;
+    }
+    match applied {
+        Ok(Some(session)) => {
+            saved.snapshot.session.title.clone_from(&session.title);
+            saved.snapshot.session.updated_at =
+                saved.snapshot.session.updated_at.max(session.updated_at);
+            let _ = turn.app.emit_to(
+                "main",
+                SNAPSHOT_EVENT,
+                SnapshotNotice::Changed {
+                    session_id: &session.id,
+                    title: Some(&session.title),
+                    project_path: Some(&session.project_path),
+                    updated_at: Some(session.updated_at),
+                },
+            );
+        }
+        Ok(None) => {}
+        Err(error) => log::warn!("无法保存 Harness 自动会话标题：{error}"),
+    }
 }
 
 enum SnapshotChange {
@@ -3236,9 +3329,19 @@ async fn observe_turn(
     let mut wait = Some(request_wait());
     let mut wait_settlements = 0;
     let mut primary_settled = false;
+    let mut title_settlement = None;
+    let mut title_deadline = Box::pin(tokio::time::sleep(Duration::ZERO));
     let mut command_result = None;
     let mut mode_commands = HashMap::new();
     let result = async { loop {
+        if title_settlement.is_some() && !turn.record.lock().await.snapshot.title_pending {
+            let status = title_settlement.take().expect("retained title turn");
+            if wait.is_none() && mode_commands.is_empty() && outcome.active_jobs() == 0
+                && !has_live_goal(&turn.record.lock().await.snapshot)
+            {
+                return status;
+            }
+        }
         tokio::select! {
             event = events.recv() => {
                 let event = event.ok_or("Harness 事件连接已关闭")?;
@@ -3260,6 +3363,10 @@ async fn observe_turn(
                 if let Some(change) = change { change.publish(turn.app, &mut stream_tails); }
             }
             _ = stream_tick.tick(), if !stream_tails.is_empty() => publish_stream_tails(turn, &mut stream_tails).await,
+            _ = &mut title_deadline, if title_settlement.is_some() => {
+                turn.record.lock().await.snapshot.title_pending = false;
+                notify_snapshot_changed(turn.app, turn.id);
+            }
             completed = host_tools.tasks.join_next(), if !host_tools.tasks.is_empty() => {
                 if let Some(Ok(key)) = completed { host_tools.active.remove(&key); }
             }
@@ -3434,8 +3541,15 @@ async fn observe_turn(
                 if stop_requested {
                     return status;
                 }
-                let active_goal = has_live_goal(&turn.record.lock().await.snapshot);
-                if outcome.active_jobs() == 0 && !active_goal { return status; }
+                let (active_goal, title_pending) = {
+                    let saved = turn.record.lock().await;
+                    (has_live_goal(&saved.snapshot), saved.snapshot.title_pending)
+                };
+                if outcome.active_jobs() == 0 && !active_goal && !title_pending { return status; }
+                if title_pending && title_settlement.is_none() {
+                    title_deadline.as_mut().reset(tokio::time::Instant::now() + AUTOMATIC_TITLE_GRACE);
+                    title_settlement = Some(status.clone());
+                }
                 settle_retained_foreground(turn, (!primary_settled).then_some(&status)).await?;
                 primary_settled = true;
                 if status == Ok(ReceiptStatus::Completed) { publish_web_preview(turn).await; }
@@ -3756,6 +3870,7 @@ async fn apply_event(
 ) -> Result<(), String> {
     match event {
         HarnessEvent::Notification(notification) => {
+            observe_automatic_title(turn, sdk_id, &notification).await;
             if notification["method"] == "user-question.cancelled" {
                 if let (Some(source), Some(id)) = (
                     notification["params"]["sessionId"].as_str(),

@@ -13,6 +13,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 
+import { ViewPreparationContext } from "@/components/ViewActivityContext";
 import { toast } from "@/lib/toast";
 import { prepareEmbeddedMarkdownImages } from "@/lib/embeddedMarkdownImages";
 import { cn } from "@/lib/utils";
@@ -953,6 +954,7 @@ const RemoteImage = ({
   searchQuery,
 }: RemoteImageProps) => {
   const { t } = useTranslation();
+  const preparing = useContext(ViewPreparationContext);
   const { autoLoadRemoteImages, embeddedImages } = useContext(
     MarkdownActionsContext,
   );
@@ -990,7 +992,7 @@ const RemoteImage = ({
     );
   }
 
-  if (embedded || autoLoadRemoteImages || loadedSrc === src) {
+  if (!preparing && (embedded || autoLoadRemoteImages || loadedSrc === src)) {
     return (
       <>
         <button

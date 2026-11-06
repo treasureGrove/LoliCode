@@ -5845,6 +5845,140 @@ describe("AgentPage", () => {
     expect(agentApi.interruptSession).not.toHaveBeenCalled();
   });
 
+  it("updates an expanded inactive workspace title from polls and durable title notices", async () => {
+    const otherPath = "D:/fixture/other-project";
+    const other = {
+      ...session,
+      id: "other-task",
+      projectPath: otherPath,
+      title: "初始后台任务",
+    };
+    const background: AgentSnapshot = {
+      ...emptySnapshot(),
+      session: other,
+      titlePending: true,
+    };
+    vi.mocked(agentApi.listProjects).mockResolvedValue([
+      {
+        path: otherPath,
+        name: "other-project",
+        pinned: false,
+        lastOpenedAt: 3,
+      },
+    ]);
+    vi.mocked(agentApi.listSessions).mockImplementation(async (path) =>
+      path === otherPath
+        ? [{ ...other, activity: { status: "idle", titlePending: true } }]
+        : [session],
+    );
+    let finishRead: ((value: AgentSnapshot) => void) | undefined;
+    let holdRead = false;
+    vi.mocked(agentApi.getSession).mockImplementation(async (id) =>
+      id === other.id
+        ? holdRead
+          ? new Promise((resolve) => {
+              finishRead = resolve;
+            })
+          : structuredClone(background)
+        : structuredClone(snapshot),
+    );
+    render(<AgentPage />);
+    await flush();
+    fill("留在当前会话的草稿");
+    fireEvent.click(
+      screen.getByRole("button", { name: "展开 other-project 的任务" }),
+    );
+    await flush();
+    const list = within(
+      screen.getByRole("group", { name: "other-project 的任务" }),
+    );
+    expect(list.getByRole("button", { name: other.title })).toBeVisible();
+
+    background.session = { ...other, title: "后台轮询已同步" };
+    await tick(1500);
+    expect(
+      list.getByRole("button", { name: background.session.title }),
+    ).toBeVisible();
+
+    holdRead = true;
+    await tick(1500);
+    expect(finishRead).toBeDefined();
+    const fallback = {
+      type: "changed",
+      sessionId: other.id,
+      projectPath: otherPath,
+      updatedAt: other.updatedAt + 1,
+      title: "首条消息生成的临时标题",
+    };
+    act(() => emitTauriEvent("agent-session-update", fallback));
+    expect(list.getByRole("button", { name: fallback.title })).toBeVisible();
+    act(() =>
+      emitTauriEvent("agent-session-update", {
+        ...fallback,
+        updatedAt: fallback.updatedAt + 1,
+        title: "自动归纳的新标题",
+      }),
+    );
+    expect(list.getByRole("button", { name: "自动归纳的新标题" })).toBeVisible();
+    act(() => emitTauriEvent("agent-session-update", fallback));
+    finishRead?.(structuredClone(background));
+    await flush();
+    expect(list.getByRole("button", { name: "自动归纳的新标题" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: session.title })).toBeVisible();
+    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
+      "留在当前会话的草稿",
+    );
+    expect(agentApi.openProject).not.toHaveBeenCalled();
+  });
+
+  it("updates the selected title immediately and keeps a saved name over stale automatic title updates", async () => {
+    const previous = { ...session, title: "自动归纳标题" };
+    const renamed = {
+      ...previous,
+      title: "我的手动标题",
+      updatedAt: session.updatedAt + 1,
+    };
+    vi.mocked(agentApi.renameSession).mockImplementation(async () => {
+      snapshot.session = renamed;
+      return renamed;
+    });
+    render(<AgentPage />);
+    await flush();
+    const titleNotice = {
+      type: "changed",
+      sessionId: session.id,
+      projectPath: project,
+      updatedAt: previous.updatedAt,
+      title: previous.title,
+    };
+    act(() => emitTauriEvent("agent-session-update", titleNotice));
+    expect(screen.getByRole("heading", { name: previous.title })).toBeVisible();
+    fireEvent.keyDown(
+      screen.getByRole("button", { name: `管理会话：${previous.title}` }),
+      { key: "Enter" },
+    );
+    fireEvent.click(screen.getByRole("menuitem", { name: "重命名" }));
+    const input = screen.getByRole("textbox", { name: "会话名称" });
+    expect(input).toHaveValue(previous.title);
+    fireEvent.change(input, { target: { value: renamed.title } });
+    fireEvent.click(screen.getByRole("button", { name: "保存名称" }));
+    await flush();
+    expect(agentApi.renameSession).toHaveBeenCalledWith(
+      session.id,
+      renamed.title,
+    );
+    expect(screen.getByRole("heading", { name: renamed.title })).toBeVisible();
+
+    snapshot.session = previous;
+    act(() => emitTauriEvent("agent-session-update", titleNotice));
+    await tick(100);
+    expect(screen.getByRole("heading", { name: renamed.title })).toBeVisible();
+    expect(screen.getByRole("button", { name: renamed.title })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
   it("keeps an in-flight stop associated with its original conversation when another history is selected", async () => {
     const second = { ...session, id: "s2", title: "完成的会话" };
     snapshot.status = "running";
