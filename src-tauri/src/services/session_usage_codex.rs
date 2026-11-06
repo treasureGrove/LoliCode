@@ -30,6 +30,7 @@ use crate::services::usage_stats::{
 };
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::fs;
 use std::io::BufRead;
@@ -46,6 +47,7 @@ use windows_sys::Win32::Storage::FileSystem::{
 };
 
 const CODEX_THREAD_REQUEST_ID_PREFIX: &str = "codex_session:thread-v1";
+const DEFERRED_META_PREFIX_LIMIT: usize = 256 * 1024;
 
 /// 累计 token 用量（跟踪 total_token_usage 字段）
 #[derive(Debug, Clone, Default)]
@@ -451,6 +453,7 @@ struct ParsedCodexFile {
     meta_thread_id: Option<String>,
     root_meta_seen: bool,
     root_timestamp: Option<DateTime<Utc>>,
+    root_meta_prefix: Option<RootMetaPrefix>,
     parent: ParentResolution,
     token_events: Vec<ParsedTokenEvent>,
     line_offset: i64,
@@ -463,10 +466,29 @@ struct ParsedCodexFile {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+struct RootMetaPrefix {
+    len: usize,
+    digest: [u8; 32],
+}
+
+impl RootMetaPrefix {
+    fn matches(&self, file_path: &Path) -> bool {
+        let mut prefix = vec![0; self.len];
+        codex_rollout_file::read_prefix(file_path, &mut prefix).is_ok()
+            && <[u8; 32]>::from(Sha256::digest(&prefix)) == self.digest
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum PendingReason {
     MissingParent(String),
     Stable(String),
-    Retryable(String),
+    Retryable {
+        parent_id: String,
+        cutoff: DateTime<Utc>,
+        root_meta_prefix: Option<RootMetaPrefix>,
+        reason: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1049,10 +1071,17 @@ fn collect_jsonl_recursive(dir: &Path, files: &mut Vec<PathBuf>, depth: u32, max
     }
 }
 
+#[cfg(test)]
+thread_local! {
+    static TEST_CHILD_PARSE_COUNT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
 fn parse_codex_file(
     file_path: &Path,
     root_thread_id: Option<String>,
 ) -> Result<ParsedCodexFile, AppError> {
+    #[cfg(test)]
+    TEST_CHILD_PARSE_COUNT.with(|count| count.set(count.get() + 1));
     let file =
         fs::File::open(file_path).map_err(|e| AppError::Config(format!("无法打开文件: {e}")))?;
     // 压缩文件（`.jsonl.zst`）的 observed_bytes 记磁盘上的压缩大小：
@@ -1070,6 +1099,8 @@ fn parse_codex_file(
         .map_err(|e| AppError::Config(format!("无法打开文件: {e}")))?;
     let mut root_meta_seen = false;
     let mut root_timestamp = None;
+    let mut root_meta_prefix = None;
+    let mut root_meta_hasher = Sha256::new();
     let mut meta_thread_id = None;
     let mut parent = ParentResolution::None;
     let mut current_model = "unknown".to_string();
@@ -1109,6 +1140,9 @@ fn parse_codex_file(
             break;
         }
         line_offset += 1;
+        if !root_meta_seen && observed_bytes <= DEFERRED_META_PREFIX_LIMIT as i64 {
+            root_meta_hasher.update(&bytes);
+        }
         let line = match String::from_utf8(bytes) {
             Ok(line) => line,
             Err(_) => continue,
@@ -1144,6 +1178,12 @@ fn parse_codex_file(
             "session_meta" if !root_meta_seen => {
                 root_meta_seen = true;
                 root_timestamp = parse_timestamp(value.get("timestamp"));
+                if line.ends_with('\n') && observed_bytes <= DEFERRED_META_PREFIX_LIMIT as i64 {
+                    root_meta_prefix = Some(RootMetaPrefix {
+                        len: observed_bytes as usize,
+                        digest: root_meta_hasher.clone().finalize().into(),
+                    });
+                }
                 let payload = value.get("payload").unwrap_or(&serde_json::Value::Null);
                 parent = explicit_parent_from_meta(payload);
 
@@ -1334,6 +1374,7 @@ fn parse_codex_file(
         meta_thread_id,
         root_meta_seen,
         root_timestamp,
+        root_meta_prefix,
         parent,
         token_events,
         line_offset,
@@ -1494,7 +1535,9 @@ fn mark_deferred(
     if should_warn {
         let reason = match &entry.reason {
             PendingReason::MissingParent(parent) => format!("找不到父 rollout {parent}"),
-            PendingReason::Stable(reason) | PendingReason::Retryable(reason) => reason.clone(),
+            PendingReason::Stable(reason) | PendingReason::Retryable { reason, .. } => {
+                reason.clone()
+            }
         };
         log::warn!("[CODEX-SYNC] deferred {}: {reason}", file_path.display());
     }
@@ -1561,36 +1604,60 @@ fn sync_single_codex_file(
         return Ok(CodexFileSyncResult::default());
     }
 
-    if let Ok(mut caches) = replay_caches().lock() {
-        if let Some(pending) = caches.pending.get(file_path).cloned() {
-            if pending.modified == file_modified && pending.size == file_size {
-                match &pending.reason {
-                    PendingReason::MissingParent(parent) if !rollout_index.contains_key(parent) => {
-                        return Ok(CodexFileSyncResult {
-                            deferred: true,
-                            ..CodexFileSyncResult::default()
-                        });
-                    }
-                    PendingReason::Stable(_) => {
-                        return Ok(CodexFileSyncResult {
-                            deferred: true,
-                            ..CodexFileSyncResult::default()
-                        });
-                    }
-                    PendingReason::Retryable(_) => {
-                        caches.pending.remove(file_path);
-                    }
-                    _ => {
-                        caches.pending.remove(file_path);
-                    }
+    let pending = replay_caches().lock().ok().and_then(|caches| {
+        caches
+            .pending
+            .get(file_path)
+            .filter(|pending| pending.modified == file_modified && pending.size == file_size)
+            .cloned()
+    });
+    if let Some(pending) = pending {
+        match pending.reason {
+            PendingReason::MissingParent(parent) if !rollout_index.contains_key(&parent) => {
+                return Ok(CodexFileSyncResult {
+                    deferred: true,
+                    ..CodexFileSyncResult::default()
+                });
+            }
+            PendingReason::Stable(_) => {
+                return Ok(CodexFileSyncResult {
+                    deferred: true,
+                    ..CodexFileSyncResult::default()
+                });
+            }
+            PendingReason::Retryable {
+                parent_id,
+                cutoff,
+                root_meta_prefix: Some(root_meta_prefix),
+                ..
+            } if rollout_index.contains_key(&parent_id) && root_meta_prefix.matches(file_path) => {
+                // Validate the dependency from the child header, then retry the
+                // parent alone. Once it is ready, parse the current child before
+                // updating its usage or cursor.
+                if let Err(reason) = resolve_parent_signatures(&parent_id, cutoff, rollout_index) {
+                    return Ok(mark_deferred(
+                        file_path,
+                        file_modified,
+                        file_size,
+                        PendingReason::Retryable {
+                            parent_id,
+                            cutoff,
+                            root_meta_prefix: Some(root_meta_prefix),
+                            reason,
+                        },
+                    ));
                 }
             }
+            _ => {}
         }
     }
 
     let parsed = parse_codex_file(file_path, thread_id_from_filename(file_path))?;
     if !parsed.has_billable_tokens {
         update_codex_sync_state(db, &file_path_str, file_modified, &parsed)?;
+        if let Ok(mut caches) = replay_caches().lock() {
+            caches.pending.remove(file_path);
+        }
         return Ok(CodexFileSyncResult::default());
     }
     let Some(root_thread_id) = parsed.root_thread_id.as_deref() else {
@@ -1649,7 +1716,12 @@ fn sync_single_codex_file(
                             Ok(signatures) => signatures,
                             Err(reason) => {
                                 let pending_reason = if rollout_index.contains_key(parent_id) {
-                                    PendingReason::Retryable(reason)
+                                    PendingReason::Retryable {
+                                        parent_id: parent_id.clone(),
+                                        cutoff,
+                                        root_meta_prefix: parsed.root_meta_prefix.clone(),
+                                        reason,
+                                    }
                                 } else {
                                     PendingReason::MissingParent(parent_id.clone())
                                 };
@@ -3569,6 +3641,107 @@ mod tests {
             ],
         );
         let recovered = sync_test_file(&db, &child, &[&parent, &child])?;
+        assert_eq!((recovered.imported, recovered.deferred), (1, false));
+        Ok(())
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn test_retryable_child_is_only_reparsed_once_parent_catches_up() -> Result<(), AppError> {
+        use std::io::Write;
+
+        clear_codex_replay_caches();
+        let db = Database::memory()?;
+        let temp = tempdir().unwrap();
+        let parent = rollout_path(temp.path(), PARENT_ID);
+        let child = rollout_path(temp.path(), CHILD_A_ID);
+        write_jsonl(
+            &parent,
+            &[
+                session_meta(PARENT_ID),
+                token_count_at(100, 50, 10, "2026-07-10T03:00:01Z"),
+            ],
+        );
+        write_jsonl(
+            &child,
+            &[
+                session_meta_at(CHILD_A_ID, Some(PARENT_ID), None, "2026-07-10T03:00:05Z"),
+                token_count_at(100, 50, 10, "2026-07-10T03:00:06Z"),
+                token_count_at(150, 75, 15, "2026-07-10T03:00:07Z"),
+            ],
+        );
+
+        let child = compress_rollout(&child);
+        let files: [&Path; 2] = [&parent, &child];
+        assert!(sync_test_file(&db, &child, &files)?.deferred);
+        let parse_count = TEST_CHILD_PARSE_COUNT.with(std::cell::Cell::get);
+
+        assert!(sync_test_file(&db, &child, &files)?.deferred);
+        assert_eq!(
+            TEST_CHILD_PARSE_COUNT.with(std::cell::Cell::get),
+            parse_count
+        );
+        assert_eq!(get_sync_state(&db, &child.to_string_lossy())?, (0, 0));
+
+        let mut writer = fs::OpenOptions::new().append(true).open(&parent).unwrap();
+        writeln!(writer, "{}", turn_context_at("2026-07-10T03:00:10Z")).unwrap();
+        drop(writer);
+        let recovered = sync_test_file(&db, &child, &files)?;
+        assert_eq!(
+            (recovered.imported, recovered.skipped, recovered.deferred),
+            (1, 1, false)
+        );
+        assert_eq!(
+            TEST_CHILD_PARSE_COUNT.with(std::cell::Cell::get),
+            parse_count + 1
+        );
+        assert_eq!(sync_test_file(&db, &child, &files)?.imported, 0);
+        Ok(())
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn test_retryable_child_rechecks_same_size_same_mtime_header() -> Result<(), AppError> {
+        clear_codex_replay_caches();
+        let db = Database::memory()?;
+        let temp = tempdir().unwrap();
+        let parent = rollout_path(temp.path(), PARENT_ID);
+        let child = rollout_path(temp.path(), CHILD_A_ID);
+        write_jsonl(
+            &parent,
+            &[
+                session_meta(PARENT_ID),
+                token_count_at(100, 50, 10, "2026-07-10T03:00:01Z"),
+            ],
+        );
+        let write_child = |fork_time| {
+            write_jsonl(
+                &child,
+                &[
+                    session_meta_at(CHILD_A_ID, Some(PARENT_ID), None, fork_time),
+                    token_count_at(150, 75, 15, "2026-07-10T03:00:07Z"),
+                ],
+            );
+        };
+        write_child("2026-07-10T03:00:05Z");
+        let files: [&Path; 2] = [&parent, &child];
+        assert!(sync_test_file(&db, &child, &files)?.deferred);
+        let original = fs::metadata(&child).unwrap();
+
+        write_child("2026-07-10T03:00:00Z");
+        let child_file = fs::OpenOptions::new().write(true).open(&child).unwrap();
+        child_file
+            .set_times(fs::FileTimes::new().set_modified(original.modified().unwrap()))
+            .unwrap();
+        drop(child_file);
+        let rewritten = fs::metadata(&child).unwrap();
+        assert_eq!(rewritten.len(), original.len());
+        assert_eq!(
+            metadata_modified_nanos(&rewritten),
+            metadata_modified_nanos(&original)
+        );
+
+        let recovered = sync_test_file(&db, &child, &files)?;
         assert_eq!((recovered.imported, recovered.deferred), (1, false));
         Ok(())
     }

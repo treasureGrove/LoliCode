@@ -75,6 +75,16 @@ pub fn reader_from_file(path: &Path, file: File) -> io::Result<Box<dyn BufRead +
     }
 }
 
+/// 读取指定的前缀，不预读整段日志。
+pub fn read_prefix(path: &Path, prefix: &mut [u8]) -> io::Result<()> {
+    let mut file = File::open(path)?;
+    if is_compressed(path) {
+        zstd::stream::read::Decoder::new(file)?.read_exact(prefix)
+    } else {
+        file.read_exact(prefix)
+    }
+}
+
 /// 读出全文（UTF-8），压缩文件先解压。
 pub fn read_to_string(path: &Path) -> io::Result<String> {
     if !is_compressed(path) {
