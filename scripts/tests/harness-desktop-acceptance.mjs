@@ -160,6 +160,23 @@ const workspaceSwitch = {
     answer: "The second workspace finished while the original was waiting.",
   },
 };
+const globalSecretary = {
+  file: "global-secretary-proof.txt",
+  tasks: [
+    {
+      title: "Global secretary first project",
+      prompt: "HARNESS_DESKTOP_GLOBAL_FIRST: write global-secretary-proof.txt in the assigned project.",
+      content: "Global secretary first project\n",
+      answer: "The global secretary's first worker finished.",
+    },
+    {
+      title: "Global secretary second project",
+      prompt: "HARNESS_DESKTOP_GLOBAL_SECOND: write global-secretary-proof.txt in the assigned project.",
+      content: "Global secretary second project\n",
+      answer: "The global secretary's second worker finished.",
+    },
+  ],
+};
 const website = {
   goal: "做一个简单的活动报名网页，完成后把运行页面给我看。",
   title: "制作活动报名网页",
@@ -375,8 +392,10 @@ const observed = {
   legacyWorker: false,
   automation: false,
   workspaceSwitch: false,
+  globalSecretary: false,
 };
 const finishedWorkspaceWrites = new Set();
+const finishedGlobalWrites = new Set();
 let modelError;
 let releaseKeyboardReply;
 let releaseWorkerReply;
@@ -613,7 +632,7 @@ const modelServer = createServer(async (request, response) => {
     }
     if (outputLinksOnly && userMessages.includes(outputLinks.prompt)) {
       reply(response, {
-        content: `[${outputLinks.label}](${outputLinks.url}) and [the project report](${outputLinks.file}#L${outputLinks.fileLine}).`,
+        content: `[${outputLinks.label}](${outputLinks.url}) and [the project report](${outputLinks.file}#L${outputLinks.fileLine}).\n\nRender ~literal~ and ~~obsolete~~.`,
       }, "stop");
       return;
     }
@@ -750,6 +769,23 @@ const modelServer = createServer(async (request, response) => {
         await reply(response, { content: workerQueue.first }, "stop", () =>
           new Promise((resolve) => { releaseWorkerReply = resolve; }),
         );
+      }
+      return;
+    }
+    for (const [index, directory] of [project, otherProject].entries()) {
+      const task = globalSecretary.tasks[index];
+      if (!userMessages.includes(task.prompt)) continue;
+      assert.ok(!allMessages.includes(secretaryPrompt));
+      const callId = `call_desktop_global_secretary_${index}`;
+      if (!hasResult(callId)) {
+        assert.ok(hasTool("write"));
+        toolReply(response, "write", { file_path: globalSecretary.file, content: task.content }, callId);
+      } else {
+        assert.equal(await readFile(path.join(directory, globalSecretary.file), "utf8"), task.content);
+        assert.ok(!finishedGlobalWrites.has(index), "A global secretary worker ran twice");
+        finishedGlobalWrites.add(index);
+        observed.globalSecretary = finishedGlobalWrites.size === globalSecretary.tasks.length;
+        await reply(response, { content: task.answer }, "stop");
       }
       return;
     }
@@ -1573,6 +1609,7 @@ try {
     answers,
     keyboard,
     workspaceSwitch,
+    globalSecretary,
     website,
     browserTool,
     outputLinks,
@@ -1631,8 +1668,15 @@ try {
     assert.equal(observed.workerQueue, true);
     assert.ok(observed.automation);
     fixture.workerQueueSessionId = resumed.manualWorkerSessionId;
-    await launch(env, "worker-queue-restart");
+    assert.ok(observed.globalSecretary && resumed.globalSecretaryRun?.tasks.length === 2);
+    fixture.globalSecretaryRun = resumed.globalSecretaryRun;
+    const workerRestart = await launch(env, "worker-queue-restart");
+    assert.equal(workerRestart.globalSecretaryRestored, true);
     assert.equal(observed.workerQueueRestart, true);
+    for (const [index, directory] of [project, otherProject].entries()) {
+      assert.equal(await readFile(path.join(directory, globalSecretary.file), "utf8"), globalSecretary.tasks[index].content);
+    }
+    await assert.rejects(readFile(path.join(profile, "agent", "standalone-workspace", globalSecretary.file), "utf8"), { code: "ENOENT" });
     assert.equal(await readFile(path.join(resumed.manualWorktree, "manual-worker.txt"), "utf8"), "isolated manual worker\n");
     await assert.rejects(readFile(path.join(project, "manual-worker.txt")), { code: "ENOENT" });
     for (const [file, contents] of legacyFiles) assert.equal(await readFile(file, "utf8"), contents);

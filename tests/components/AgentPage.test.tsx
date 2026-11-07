@@ -4625,16 +4625,40 @@ describe("AgentPage", () => {
     expect(modelRefreshButton()).toBeEnabled();
   });
 
+  it("distinguishes duplicate workspace names with the shortest path suffix", async () => {
+    const otherPath = "D:/other/project";
+    vi.mocked(agentApi.listProjects).mockResolvedValue([
+      { path: project, name: "同名项目", pinned: false, lastOpenedAt: 2 },
+      { path: otherPath, name: "同名项目", pinned: false, lastOpenedAt: 3 },
+      { path: "D:/fixture/solo", name: "独立名称", pinned: false, lastOpenedAt: 1 },
+    ]);
+    render(<AgentPage />);
+    await flush();
+
+    expect(
+      screen.getByRole("button", {
+        name: "收起 同名项目 fixture/project 的任务",
+      }),
+    ).toBeVisible();
+    const other = screen.getByRole("button", { name: "同名项目 other/project" });
+    expect(other).toHaveAttribute("title", otherPath);
+    expect(screen.getByRole("button", { name: "独立名称" })).toBeVisible();
+
+    fireEvent.click(other);
+    expect(agentApi.openProject).toHaveBeenCalledWith(otherPath);
+    await flush();
+  });
+
   it("keeps expanded workspace task lists isolated when switching projects and back", async () => {
     const otherPath = "D:/fixture/other-project";
     const anotherSession: AgentSession = {
       ...session,
-      id: "another_project_task",
+      id: "lc:81f2ec26-12e1-45d7-851b-c9ac8a472db9",
       title: "当前项目的另一任务",
     };
     const otherSession: AgentSession = {
       ...session,
-      id: "other_project_task",
+      id: "lc:80ad8bf2-78bd-4685-a7f1-a663d7a66821",
       title: "其他工作区的任务",
       projectPath: otherPath,
     };
@@ -4727,6 +4751,26 @@ describe("AgentPage", () => {
     expect(
       otherTasks.queryByRole("button", { name: /^修复测试/ }),
     ).not.toBeInTheDocument();
+
+    const search = screen.getByRole("textbox", { name: "搜索会话" });
+    fireEvent.change(search, { target: { value: " EC26-12E1 " } });
+    expect(
+      currentTasks.getByRole("button", { name: /^当前项目的另一任务/ }),
+    ).toBeInTheDocument();
+    expect(
+      currentTasks.queryByRole("button", { name: /^修复测试/ }),
+    ).toBeNull();
+    expect(
+      otherTasks.queryByRole("button", { name: /^其他工作区的任务/ }),
+    ).toBeNull();
+
+    fireEvent.change(search, { target: { value: "LC:80AD8BF2" } });
+    expect(
+      otherTasks.getByRole("button", { name: /^其他工作区的任务/ }),
+    ).toBeInTheDocument();
+    expect(
+      currentTasks.queryByRole("button", { name: /^当前项目的另一任务/ }),
+    ).toBeNull();
   });
 
   it("shows only unarchived tasks in the previous workspace after leaving its archive view", async () => {

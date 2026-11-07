@@ -130,6 +130,10 @@ async function verifyOutputLinks(fixture) {
   const anchor = await waitFor(() =>
     document.querySelector(`a[href="${links.url}"]`), "the assistant's website link");
   check(anchor.textContent.includes(links.label), "The clickable link lost the assistant's label");
+  const answer = anchor.closest("article");
+  await waitFor(() => answer?.textContent.includes("~literal~") &&
+    answer.querySelector("del")?.textContent === "obsolete",
+    "literal single tildes and double-tilde strikethrough in the assistant reply");
   check(!visibleBrowserPanel(), "The assistant reply opened the link without a user click");
   anchor.click();
   const stage = await waitForNativeBrowser();
@@ -1032,6 +1036,90 @@ async function keyboardSteering({ sessionId, keyboardSessionId }, fixture) {
   return { sessionId, keyboardSteering: true, sendScrollFollow: true };
 }
 
+async function verifyCompletedGlobalSecretaryTasks(run, fixture) {
+  const { session } = await invoke("get_agent_session", { sessionId: run.secretaryId });
+  check(session.coordination?.role === "secretary" &&
+    windowsPath(session.projectPath) === windowsPath(run.workspace),
+  "The global secretary changed identity or workspace");
+  const state = await invoke("get_agent_secretary", { sessionId: run.secretaryId });
+  check(state.sessionId === run.secretaryId && state.tasks.length === run.tasks.length,
+    "The global secretary lost or duplicated a task");
+  for (const [index, expected] of run.tasks.entries()) {
+    const task = state.tasks.find(({ id }) => id === expected.id);
+    check(task?.status === "completed" && task.parentSessionId === run.secretaryId &&
+      task.sessionId === expected.sessionId && task.requestId === expected.requestId &&
+      windowsPath(task.projectPath) === windowsPath(expected.projectPath),
+    "The global secretary's task changed owner, identity, project or outcome");
+    const worker = await invoke("get_agent_session", { sessionId: expected.sessionId });
+    check(worker.session.coordination?.role === "worker" &&
+      worker.session.coordination.parentSessionId === run.secretaryId &&
+      worker.session.permissionMode === "ask" &&
+      windowsPath(worker.session.projectPath) === windowsPath(expected.projectPath) &&
+      worker.messages.some((message) => message.role === "assistant" &&
+        message.parts.some((part) => part.type === "text" && part.text === fixture.globalSecretary.tasks[index].answer)),
+    "The global secretary's worker lost its project, review policy or answer");
+  }
+}
+
+async function verifyGlobalSecretaryDispatch(fixture) {
+  const { projectPath: workspace } = await invoke("get_agent_status");
+  const catalog = await invoke("get_agent_catalog");
+  const secretary = await invoke("open_agent_secretary", {
+    projectPath: workspace, modelId: catalog.defaultModel ?? catalog.models[0].id, locale: "zh",
+  });
+  const configured = await invoke("update_agent_session", {
+    sessionId: secretary.id, permissionMode: "full_access",
+  });
+  check(configured.permissionMode === "full_access", "The global secretary did not enter Full access for the scope test");
+  const projects = await invoke("list_agent_projects");
+  const run = { secretaryId: secretary.id, workspace, tasks: [] };
+  for (const [index, path] of [fixture.project, fixture.otherProject].entries()) {
+    const project = projects.find((entry) => windowsPath(entry.path) === windowsPath(path));
+    check(project && !project.remote && !project.standalone, "The cross-project fixture needs two registered local projects");
+    const expected = fixture.globalSecretary.tasks[index];
+    const args = {
+      sessionId: secretary.id, projectPath: project.path, title: expected.title,
+      instructions: expected.prompt, requestId: `desktop-global-secretary-${index}`,
+      executionMode: "shared", locale: "zh",
+    };
+    const task = await invoke("delegate_agent_secretary_task", args);
+    check(task.id.startsWith("harness-") && task.parentSessionId === secretary.id &&
+      windowsPath(task.projectPath) === windowsPath(project.path) &&
+      !run.tasks.some(({ sessionId }) => sessionId === task.sessionId),
+    "Manual cross-project delegation did not create a distinct owned worker");
+    const approval = await waitFor(async () => {
+      const state = await invoke("get_agent_secretary", { sessionId: secretary.id });
+      const current = state.tasks.find(({ id }) => id === task.id);
+      if (current?.status === "completed") throw new Error("Cross-project worker completed without scoped approval");
+      if (["failed", "cancelled", "interrupted"].includes(current?.status))
+        throw new Error(current.error || "Cross-project task failed");
+      if (current?.status !== "waiting_permission") return false;
+      const worker = await invoke("get_agent_session", { sessionId: task.sessionId });
+      if (worker.status === "error" || worker.error) throw new Error(worker.error || "Cross-project worker failed");
+      check(worker.session.permissionMode === "ask", "A cross-project worker inherited the secretary's Full access");
+      return worker.status === "waiting_permission" && worker.permissions.length === 1 && worker.permissions[0];
+    }, `the scoped approval for ${expected.title}`);
+    check(approval.toolName === "write" && approval.approvalMode === "user-once",
+      "A cross-project write did not require a real one-shot approval");
+    await invoke("reply_agent_permission", {
+      sessionId: task.sessionId, requestId: approval.id, decision: "once",
+    });
+    await waitFor(async () => {
+      const state = await invoke("get_agent_secretary", { sessionId: secretary.id });
+      const current = state.tasks.find(({ id }) => id === task.id);
+      if (["failed", "cancelled", "interrupted"].includes(current?.status))
+        throw new Error(current.error || "Cross-project task failed");
+      return current?.status === "completed";
+    }, `the completed worker for ${expected.title}`);
+    const replayed = await invoke("delegate_agent_secretary_task", args);
+    check(replayed.id === task.id && replayed.sessionId === task.sessionId,
+      "Replaying a global secretary request allocated another worker");
+    run.tasks.push({ id: task.id, sessionId: task.sessionId, requestId: args.requestId, projectPath: project.path });
+  }
+  await verifyCompletedGlobalSecretaryTasks(run, fixture);
+  return run;
+}
+
 async function verifyWorkerQueue(chiefId, task, fixture) {
   const { workerQueue } = fixture;
   const sessionId = task.sessionId;
@@ -1313,6 +1401,7 @@ async function run(fixture) {
 
   if (fixture.phase === "worker-queue-restart") {
     await invoke("open_agent_project", { path: fixture.project });
+    await verifyCompletedGlobalSecretaryTasks(fixture.globalSecretaryRun, fixture);
     const sessionId = fixture.workerQueueSessionId;
     const read = () => invoke("get_agent_session", { sessionId });
     const saved = await read();
@@ -1326,7 +1415,7 @@ async function run(fixture) {
         state.messages.some((message) => message.role === "user" && message.id === savedWorkerInput) &&
         state.messages.some((message) => message.role === "assistant" && message.parts.some((part) => part.text === fixture.workerQueue.resumed));
     }, "the saved worker queue resuming with the original message ID");
-    return { sessionId, workerQueueRestart: true };
+    return { sessionId, workerQueueRestart: true, globalSecretaryRestored: true };
   }
 
   let sessionId;
@@ -1529,6 +1618,7 @@ async function run(fixture) {
         (await invoke("get_agent_status")).projectPath?.endsWith("standalone-workspace"),
       "the global secretary in its independent workspace",
     );
+    const globalSecretaryRun = await verifyGlobalSecretaryDispatch(fixture);
     const projectButton = await waitFor(() => Array.from(
       document.querySelectorAll("button.wb-workspace-project"),
     ).find((button) => !button.disabled && windowsPath(button.title) === windowsPath(fixture.project)),
@@ -1697,6 +1787,7 @@ async function run(fixture) {
       manualWorktree: manualTask.worktree.path,
       manualWorkerSessionId: manualTask.sessionId,
       legacyWorkerSessionId: legacy.sessionId,
+      globalSecretaryRun,
     };
   }
   return { sessionId };

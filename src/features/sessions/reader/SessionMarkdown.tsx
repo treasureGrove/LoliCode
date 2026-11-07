@@ -147,6 +147,7 @@ const PLAIN_OUTPUT_TARGET =
 const outputMarkdownParser = markdown({
   base: markdownLanguage,
   extensions: {
+    remove: ["Subscript"],
     defineNodes: ["OutputFilePath"],
     parseInline: [
       {

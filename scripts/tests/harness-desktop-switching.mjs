@@ -116,6 +116,7 @@ function verifyWindowsDragPath() {
 export async function verifySwitching(fixture, { configureFixtureChannel, invoke }) {
   const { sessions, turns, source, baseline, profileScale } = fixture.switching;
   const verifyPending = !baseline && !profileScale;
+  const duplicateName = "同名工作区路径优先显示验收专用超长工作区标题";
   const attachmentName = `switching-${sessions[1].id.slice(-8)}.txt`;
   if (!sessionStorage.getItem(setupKey)) {
     await configureFixtureChannel(fixture);
@@ -129,7 +130,16 @@ export async function verifySwitching(fixture, { configureFixtureChannel, invoke
     check(preset, "The fixture could not find a built-in Tavern character");
     const character = await invoke("add_tavern_preset", { presetId: preset.id });
     await invoke("create_tavern_story", { characterId: character.id, title: "切换验收对话" });
+    const alternate = verifyPending
+      ? await invoke("open_agent_project", { path: fixture.otherProject })
+      : undefined;
+    if (alternate) {
+      await invoke("set_agent_project_metadata", { path: alternate.workspace.path, name: duplicateName });
+    }
     const opened = await invoke("open_agent_project", { path: fixture.project });
+    if (alternate) {
+      await invoke("set_agent_project_metadata", { path: opened.workspace.path, name: duplicateName });
+    }
     for (const { id } of sessions)
       check(opened.sessions.some(session => session.id === id), "Seeded Harness desktop history was not listed");
     localStorage.setItem("lolicode-theme", "dark");
@@ -595,6 +605,36 @@ export async function verifySwitching(fixture, { configureFixtureChannel, invoke
     } catch (error) {
       olderMessagesError = error.message;
     }
+  }
+
+  if (!profileFailure && !baseline && !profileScale) {
+    const search = visible(nav(), 'input[aria-label="搜索会话"]');
+    check(search, "The session search input is missing");
+    const setSearch = value => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(search, value);
+      search.dispatchEvent(new Event("input", { bubbles: true }));
+    };
+    setSearch(second.id.slice(3, 16).toUpperCase());
+    await waitForPaint(() => sessionButton(second) && !sessionButton(first),
+      "an uppercase session ID fragment filtering the sidebar");
+    sessionButton(second).click();
+    await waitForPaint(() => sessionReady(second), "opening the session found by ID");
+    setSearch("");
+    await waitForPaint(() => sessionButton(first) && sessionButton(second),
+      "restoring the session list after clearing the ID filter");
+    checks.sessionIdSearch = true;
+
+    const labels = [...nav().querySelectorAll(".wb-workspace-label")];
+    const suffixes = labels.map(label => label.querySelector(".wb-workspace-suffix"));
+    check(labels.length === 2 && suffixes.some(node => node?.textContent === "project") &&
+      suffixes.some(node => node?.textContent === "other workspace"),
+    "The two same-named workspaces did not show their distinct shortest path suffixes");
+    check(labels.every(label => {
+      const [title, suffix] = label.children;
+      return title.scrollWidth > title.clientWidth && suffix.clientWidth > 0 &&
+        suffix.scrollWidth <= suffix.clientWidth + 1;
+    }), "The workspace labels did not keep the full suffix when truncating their shared title");
+    checks.workspacePathSuffixes = true;
   }
 
   return {

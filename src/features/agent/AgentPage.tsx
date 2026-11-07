@@ -296,6 +296,10 @@ function projectDockKey(path: string) {
 const compareSidebarSessions = (a: AgentSession, b: AgentSession) =>
   Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) ||
   b.updatedAt - a.updatedAt;
+const matchesSidebarSession = (session: AgentSession, query: string) =>
+  !query ||
+  session.title.toLocaleLowerCase().includes(query) ||
+  session.id.toLocaleLowerCase().includes(query);
 const IMAGE_MIME_TYPES = new Set([
   "image/png",
   "image/jpeg",
@@ -395,6 +399,41 @@ const nameOf = (path: string) =>
     .replace(/[\\/]+$/, "")
     .split(/[\\/]/)
     .pop() || path;
+// The pinned Harness WorkspacePicker uses the shortest distinguishing path suffix.
+function workspacePathSuffixes(projects: readonly AgentProject[]) {
+  const byName = new Map<string, AgentProject[]>();
+  for (const project of projects) {
+    const group = byName.get(project.name);
+    if (group) group.push(project);
+    else byName.set(project.name, [project]);
+  }
+  const suffixes = new Map<string, string>();
+  const suffix = (parts: string[], length: number) =>
+    parts.slice(-(2 * length - 1)).join("");
+  for (const group of byName.values()) {
+    if (group.length < 2) continue;
+    const rows = group.map(({ path }) => ({
+      path,
+      parts: path.split(/([\\/])/),
+    }));
+    for (const row of rows) {
+      let length = 1;
+      while (2 * length - 1 < row.parts.length) {
+        const candidate = suffix(row.parts, length);
+        if (
+          candidate &&
+          !rows.some(
+            (peer) => peer !== row && suffix(peer.parts, length) === candidate,
+          )
+        )
+          break;
+        length++;
+      }
+      suffixes.set(row.path, suffix(row.parts, length));
+    }
+  }
+  return suffixes;
+}
 const isLegacySession = (id: string) =>
   id.startsWith("ses_") || id.startsWith("zc:");
 const draftKey = (path: string, id: string) =>
@@ -4104,7 +4143,7 @@ export function AgentPage({
     (runningHere || queuedHere || uncertainHere || stoppingHere) &&
     (sendDisabled || (uncertainHere && !canRetryUncertain));
   const submittingHere = sendingHere || steeringHere || enqueuingHere;
-  const sessionQuery = sessionSearch.toLocaleLowerCase();
+  const sessionQuery = sessionSearch.trim().toLocaleLowerCase();
   const visibleWorkspaceSessions = useMemo(
     () =>
       sessions
@@ -4113,8 +4152,7 @@ export function AgentPage({
           (session) =>
             session.coordination?.role !== "worker" &&
             Boolean(session.archived) === showArchived &&
-            (!sessionQuery.trim() ||
-              session.title.toLocaleLowerCase().includes(sessionQuery)),
+            matchesSidebarSession(session, sessionQuery),
         )
         .sort(compareSidebarSessions),
     [sessions, showArchived, sessionQuery, withCommittedTitle],
@@ -4202,6 +4240,10 @@ export function AgentPage({
         Number(b.pinned) - Number(a.pinned),
     );
   }, [projects, recent, workspace]);
+  const sidebarPathSuffixes = useMemo(
+    () => workspacePathSuffixes(sidebarProjects),
+    [sidebarProjects],
+  );
 
   const navigateWorkspace = (action: () => void) => {
     const proceed = () => {
@@ -4460,6 +4502,18 @@ export function AgentPage({
           </button>
         </div>
         {sidebarProjects.map((project) => {
+          const suffix = sidebarPathSuffixes.get(project.path);
+          const accessibleName = suffix
+            ? `${project.name} ${suffix}`
+            : project.name;
+          const label = suffix ? (
+            <span className="wb-workspace-label">
+              <span className="truncate">{project.name}</span>{" "}
+              <span className="wb-workspace-suffix truncate">{suffix}</span>
+            </span>
+          ) : (
+            <span className="truncate">{project.name}</span>
+          );
           const isCurrentWorkspace = project.path === workspace?.path;
           const expanded = isCurrentWorkspace
             ? workspaceExpanded
@@ -4475,10 +4529,7 @@ export function AgentPage({
                   .filter(
                     (session) =>
                       session.coordination?.role !== "worker" &&
-                      (!sessionQuery.trim() ||
-                        session.title
-                          .toLocaleLowerCase()
-                          .includes(sessionQuery)),
+                      matchesSidebarSession(session, sessionQuery),
                   )
                   .sort(compareSidebarSessions)
               : [];
@@ -4495,7 +4546,7 @@ export function AgentPage({
                 <button
                   type="button"
                   className={`wb-workspace-toggle${isCurrentWorkspace ? " wb-current-workspace-toggle" : ""}`}
-                  aria-label={`${expanded ? "收起" : "展开"} ${project.name} 的任务`}
+                  aria-label={`${expanded ? "收起" : "展开"} ${accessibleName} 的任务`}
                   aria-expanded={expanded}
                   aria-controls={taskListId}
                   disabled={initializing || Boolean(busy)}
@@ -4506,7 +4557,7 @@ export function AgentPage({
                 {isCurrentWorkspace ? (
                   <>
                     {project.standalone ? <MessageSquare /> : <Folder />}
-                    <span>{project.name}</span>
+                    {label}
                     {project.pinned && <Pin size={11} />}
                   </>
                 ) : (
@@ -4523,7 +4574,7 @@ export function AgentPage({
                     }
                   >
                     {project.standalone ? <MessageSquare /> : <Folder />}
-                    <span className="truncate">{project.name}</span>
+                    {label}
                     {project.pinned && <Pin size={11} />}
                   </button>
                 )}
@@ -4554,7 +4605,7 @@ export function AgentPage({
                   }`}
                   id={taskListId}
                   role="group"
-                  aria-label={`${project.name} 的任务`}
+                  aria-label={`${accessibleName} 的任务`}
                 >
                   {isCurrentWorkspace ? (
                     matchingTasks.length ? (

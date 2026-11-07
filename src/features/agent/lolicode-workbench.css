@@ -282,6 +282,19 @@
   font-size: 13px;
   font-weight: 500;
 }
+.wb-workspace-label {
+  display: flex;
+  min-width: 0;
+  gap: 4px;
+}
+.wb-workspace-label > span {
+  min-width: 0;
+}
+.wb-workspace-suffix {
+  flex: none;
+  max-width: 75%;
+  color: var(--wb-muted);
+}
 .wb-workspace-toggle {
   display: grid;
   place-items: center;

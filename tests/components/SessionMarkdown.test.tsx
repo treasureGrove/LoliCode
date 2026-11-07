@@ -678,6 +678,21 @@ describe("SessionMarkdown", () => {
   });
 
   describe("Agent output links", () => {
+    it("keeps single tildes literal in Agent output while preserving double-tilde strikethrough", () => {
+      const content = "~one~ and ~~two~~";
+      const { container, rerender } = render(
+        <SessionMarkdown content={content} outputLinks />,
+      );
+
+      expect(container).toHaveTextContent("~one~ and two");
+      expect(container.querySelector("sub")).toBeNull();
+      expect(container.querySelector("del")).toHaveTextContent("two");
+
+      rerender(<SessionMarkdown content={content} />);
+      expect(container.querySelector("sub")).toHaveTextContent("one");
+      expect(container.querySelector("del")).toHaveTextContent("two");
+    });
+
     it("keeps complete bare and inline URLs out of the system browser by default", () => {
       const renderWebLink = vi.fn((url: string, label: React.ReactNode) => (
         <a href={url}>{label}</a>
