@@ -113,14 +113,121 @@ const harnessPayloadFiles = [
   "node_modules\\@deepseek-ai\\dsh\\lib\\bin.js",
 ];
 
+// Generated payloads exceed 30 MiB. Never run a multi-line capture over the
+// whole section: V8 can exhaust its regexp stack even for a lazy capture.
+// All regexps below see only one bounded line; section slicing uses offsets.
+function* scriptLines(source) {
+  for (let start = 0; start < source.length; ) {
+    const newline = source.indexOf("\n", start);
+    const end = newline === -1 ? source.length : newline;
+    const raw = source.slice(start, end);
+    assert(
+      raw.length <= 65536,
+      "Generated NSIS line exceeds the reviewed limit",
+    );
+    yield { line: raw.trim(), start, next: end + 1 };
+    start = end + 1;
+  }
+}
+
+function generatedPayloadLayout(source) {
+  const bundledHookIncludes = [];
+  const definitions = new Map();
+  const markers = [
+    "; Copy main executable",
+    "; Copy external binaries",
+    "; Create file associations",
+  ];
+  const offsets = [];
+  let openSection;
+  let installSections = 0;
+  for (const entry of scriptLines(source)) {
+    const { line } = entry;
+    const hook = line.match(
+      /^!include "([^"\r\n]*lolicode-installer-hooks\.nsh)"$/u,
+    );
+    if (hook) bundledHookIncludes.push(hook);
+    if (
+      /^!define\s+(?:VERSION|MAINBINARYNAME|MAINBINARYSRCPATH)(?:\s|$)/u.test(
+        line,
+      )
+    ) {
+      const definition = line.match(
+        /^!define (VERSION|MAINBINARYNAME|MAINBINARYSRCPATH) "([^"\r\n]+)"$/u,
+      );
+      assert(definition, `Malformed generated payload definition: ${line}`);
+      assert(
+        !definitions.has(definition[1]),
+        `Duplicate generated payload definition: ${definition[1]}`,
+      );
+      definitions.set(definition[1], definition[2]);
+    }
+    if (/^Section(?:\s|$)/u.test(line)) {
+      assert.equal(
+        openSection,
+        undefined,
+        "Nested or unterminated generated section",
+      );
+      openSection = line;
+      if (line === "Section Install") {
+        installSections += 1;
+        assert.equal(installSections, 1, "Duplicate generated Install section");
+      }
+    } else if (line === "SectionEnd") {
+      assert(openSection, "Generated SectionEnd has no matching section");
+      if (openSection === "Section Install")
+        assert.equal(
+          offsets.length,
+          markers.length,
+          "Generated payload boundaries are missing; review the new Tauri layout",
+        );
+      openSection = undefined;
+    } else if (openSection === "Section Install") {
+      const marker = markers.indexOf(line);
+      if (marker !== -1) {
+        assert.equal(
+          marker,
+          offsets.length,
+          "Duplicate or out-of-order generated payload boundary",
+        );
+        offsets.push(entry);
+      }
+    }
+  }
+  assert.equal(
+    openSection,
+    undefined,
+    "Generated section is missing SectionEnd",
+  );
+  assert.equal(
+    installSections,
+    1,
+    "Generated installer must have exactly named Install section",
+  );
+  assert.equal(
+    offsets.length,
+    markers.length,
+    "Generated payload boundaries are missing",
+  );
+  for (const { line } of scriptLines(
+    source.slice(offsets[1].next, offsets[2].start),
+  ))
+    assert(
+      !line || line.startsWith(";"),
+      "External binary payload requires explicit fixture support",
+    );
+  return {
+    bundledHookIncludes,
+    definitions,
+    block: source.slice(offsets[0].next, offsets[1].start),
+  };
+}
+
 function payloadFromGeneratedScript(filename, boundary = defaultBoundary) {
   const generatedScriptPath = boundary.generatedScript(filename);
   const source = readFileSync(generatedScriptPath, "utf8");
-  const bundledHookIncludes = [
-    ...source.matchAll(
-      /^!include "([^"\r\n]*lolicode-installer-hooks\.nsh)"\r?$/gmu,
-    ),
-  ];
+  const { bundledHookIncludes, definitions, block } =
+    generatedPayloadLayout(source);
   assert.equal(
     bundledHookIncludes.length,
     1,
@@ -145,55 +252,20 @@ function payloadFromGeneratedScript(filename, boundary = defaultBoundary) {
   boundary.sourceFile(
     path.join(path.dirname(bundledHooks), "lolicode-process-guard.ps1"),
   );
-  const version = source.match(/^!define VERSION "([^"\r\n]+)"\r?$/mu)?.[1];
+  const version = definitions.get("VERSION");
   assert.equal(
     version,
     expectedVersion,
     "Generated installer must be the intended release",
   );
-  assert.equal(
-    source.match(/^!define MAINBINARYNAME "([^"\r\n]+)"\r?$/mu)?.[1],
-    "LoliCode",
-  );
-  const executable = source.match(
-    /^!define MAINBINARYSRCPATH "([^"\r\n]+)"\r?$/mu,
-  )?.[1];
+  assert.equal(definitions.get("MAINBINARYNAME"), "LoliCode");
+  const executable = definitions.get("MAINBINARYSRCPATH");
   assert(executable, "Generated installer must declare its actual executable");
   assert.equal(path.win32.basename(executable), "LoliCode.exe");
-  const section = source.match(
-    /^Section Install\r?\n([\s\S]*?)^SectionEnd\r?$/mu,
-  )?.[1];
-  assert(
-    section,
-    "Generated installer must have exactly named Install section",
-  );
-  const block = section.match(
-    /; Copy main executable\r?\n([\s\S]*?); Copy external binaries/u,
-  )?.[1];
-  assert(
-    block,
-    "Generated payload boundaries are missing; review the new Tauri layout",
-  );
-  const external = section.match(
-    /; Copy external binaries\r?\n([\s\S]*?); Create file associations/u,
-  )?.[1];
-  assert.notEqual(
-    external,
-    undefined,
-    "Generated external payload boundary is missing",
-  );
-  assert(
-    external
-      .split(/\r?\n/u)
-      .every((line) => !line.trim() || line.trim().startsWith(";")),
-    "External binary payload requires explicit fixture support",
-  );
-
   const files = [];
   const operations = [];
   const destinations = new Set();
-  for (const raw of block.split(/\r?\n/u)) {
-    const line = raw.trim();
+  for (const { line } of scriptLines(block)) {
     if (!line || line.startsWith(";")) continue;
     // Root-level notices make Tauri explicitly create the existing install root.
     if (line === 'CreateDirectory "$INSTDIR\\"') continue;
@@ -279,7 +351,7 @@ function payloadFromGeneratedScript(filename, boundary = defaultBoundary) {
   };
 }
 
-test("actual NSIS payload parser requires both official companion license bytes at their installed paths", () => {
+function withSyntheticPayload(action) {
   const temporaryParent = path.join(repositoryRoot, "tmp");
   mkdirSync(temporaryParent, { recursive: true });
   const temporary = mkdtempSync(
@@ -306,42 +378,63 @@ test("actual NSIS payload parser requires both official companion license bytes 
       `licenses\\companion\\${name}`,
       path.join(repositoryRoot, "src-tauri/resources/companion-licenses", name),
     ]);
-    function render(licenses) {
+    function render(
+      licenses = required,
+      { resources = [], mutate = (source) => source } = {},
+    ) {
       writeFileSync(
         filename,
-        [
-          `!include "${hooksPath}"`,
-          `!define VERSION "${expectedVersion}"`,
-          '!define MAINBINARYNAME "LoliCode"',
-          `!define MAINBINARYSRCPATH "${executable}"`,
-          "Section Install",
-          "; Copy main executable",
-          '  File "${MAINBINARYSRCPATH}"',
-          '  CreateDirectory "$INSTDIR\\"',
-          resource(
-            "agent\\extensions\\manifest.json",
-            path.join(extensionRoot, "manifest.json"),
-          ),
-          ...extensionLicenses.map((name) =>
+        mutate(
+          [
+            `!include "${hooksPath}"`,
+            `!define VERSION "${expectedVersion}"`,
+            '!define MAINBINARYNAME "LoliCode"',
+            `!define MAINBINARYSRCPATH "${executable}"`,
+            "Section Install",
+            "; Copy main executable",
+            '  File "${MAINBINARYSRCPATH}"',
+            '  CreateDirectory "$INSTDIR\\"',
             resource(
-              `agent\\extensions\\${name.replaceAll("/", "\\")}`,
-              path.join(extensionRoot, name),
+              "agent\\extensions\\manifest.json",
+              path.join(extensionRoot, "manifest.json"),
             ),
-          ),
-          ...harnessPayloadFiles.map((name) =>
-            resource(`agent\\harness-runtime\\${name}`, executable),
-          ),
-          ...licenses.map(([destination, source]) =>
-            resource(destination, source),
-          ),
-          "; Copy external binaries",
-          "; Create file associations",
-          "SectionEnd",
-          "",
-        ].join("\n"),
+            ...extensionLicenses.map((name) =>
+              resource(
+                `agent\\extensions\\${name.replaceAll("/", "\\")}`,
+                path.join(extensionRoot, name),
+              ),
+            ),
+            ...harnessPayloadFiles.map((name) =>
+              resource(`agent\\harness-runtime\\${name}`, executable),
+            ),
+            ...licenses.map(([destination, source]) =>
+              resource(destination, source),
+            ),
+            ...resources.map((destination) =>
+              resource(destination, executable),
+            ),
+            "; Copy external binaries",
+            "; Create file associations",
+            "SectionEnd",
+            "",
+          ].join("\n"),
+        ),
       );
       return () => payloadFromGeneratedScript(filename);
     }
+    return action({ render, required, temporary, filename });
+  } finally {
+    assert.equal(
+      path.dirname(path.resolve(temporary)),
+      path.resolve(temporaryParent),
+    );
+    assert(!lstatSync(temporary).isSymbolicLink());
+    rmSync(temporary, { recursive: true, force: true });
+  }
+}
+
+test("actual NSIS payload parser requires both official companion license bytes at their installed paths", () => {
+  withSyntheticPayload(({ render, required, temporary }) => {
     assert.equal(render(required)().companionLicenseFiles, 2);
     assert.throws(render(required.slice(1)), /must include companion license/u);
     assert.throws(
@@ -354,14 +447,188 @@ test("actual NSIS payload parser requires both official companion license bytes 
       render([[required[0][0], changed], required[1]]),
       /must match official WebRTC/u,
     );
-  } finally {
-    assert.equal(
-      path.dirname(path.resolve(temporary)),
-      path.resolve(temporaryParent),
+  });
+});
+
+test("actual NSIS payload parser handles over 30 MiB and 70000 resources without a regexp stack capture", (context) => {
+  withSyntheticPayload(({ render, filename }) => {
+    const resources = Array.from({ length: 70000 }, (_, index) =>
+      [
+        "agent",
+        "synthetic",
+        "segment-".repeat(10),
+        "nested-".repeat(10),
+        "payload-".repeat(10),
+        "resource-".repeat(10),
+        `${index}.bin`,
+      ].join("\\"),
     );
-    assert(!lstatSync(temporary).isSymbolicLink());
-    rmSync(temporary, { recursive: true, force: true });
-  }
+    const parse = render(undefined, { resources });
+    const bytes = readFileSync(filename);
+    assert(bytes.length >= 30 * 1024 * 1024);
+    const payload = parse();
+    assert.equal(payload.files.length, resources.length + 18);
+    assert.equal(
+      payload.files.filter((file) =>
+        file.destination.startsWith("agent\\synthetic\\"),
+      ).length,
+      70000,
+    );
+    assert.equal(payload.files.at(-1).destination, resources.at(-1));
+    assert.equal(
+      payload.generatedScriptSha256,
+      createHash("sha256").update(bytes).digest("hex"),
+    );
+    // Exercise malformed boundaries at release scale as well as in the small
+    // fixtures below. These must fail closed, not overflow or accept a prefix.
+    const source = bytes.toString("utf8");
+    assert.throws(
+      () => generatedPayloadLayout(source + "Section Install\nSectionEnd\n"),
+      /Duplicate generated Install section/u,
+    );
+    assert.throws(
+      () => generatedPayloadLayout(source.replace("SectionEnd\n", "")),
+      /missing SectionEnd/u,
+    );
+    assert.throws(
+      () =>
+        generatedPayloadLayout(
+          source.replace("; Copy external binaries\n", ""),
+        ),
+      /out-of-order/u,
+    );
+    context.diagnostic(
+      `${bytes.length} synthetic NSIS bytes, ${payload.files.length} files parsed; no NSIS compiler or installer executed`,
+    );
+  });
+});
+
+test("actual NSIS payload parser rejects duplicate sections and missing, repeated or reordered boundaries", () => {
+  withSyntheticPayload(({ render }) => {
+    const reject = (mutate, expected) =>
+      assert.throws(render(undefined, { mutate }), expected);
+    reject(
+      (source) => source + "Section Install\nSectionEnd\n",
+      /Duplicate generated Install section/u,
+    );
+    reject(
+      (source) =>
+        source.replace(
+          "Section Install\n",
+          "Section Install\nSection Install\n",
+        ),
+      /Nested or unterminated/u,
+    );
+    reject(
+      (source) => source.replace("Section Install\n", "Section Other\n"),
+      /exactly named Install section/u,
+    );
+    reject(
+      (source) => source.replace("SectionEnd\n", ""),
+      /missing SectionEnd/u,
+    );
+    reject((source) => source + "SectionEnd\n", /no matching section/u);
+    for (const marker of [
+      "; Copy main executable",
+      "; Copy external binaries",
+      "; Create file associations",
+    ]) {
+      reject(
+        (source) => source.replace(marker + "\n", ""),
+        /boundaries are missing|out-of-order/u,
+      );
+      reject(
+        (source) => source.replace(marker, `${marker}\n${marker}`),
+        /out-of-order/u,
+      );
+    }
+    reject(
+      (source) =>
+        source.replace("; Copy main executable", "; Copy external binaries"),
+      /out-of-order/u,
+    );
+    // Uninstall also has a Copy main executable marker in the real template.
+    assert.equal(
+      render(undefined, {
+        mutate: (source) =>
+          "Section EarlyChecks\nSectionEnd\n" +
+          source.replaceAll("\n", "\r\n") +
+          "Section Uninstall\n; Copy main executable\nSectionEnd",
+      })().version,
+      expectedVersion,
+    );
+  });
+});
+
+test("actual NSIS payload parser keeps version, hook, instruction and destination guards", () => {
+  withSyntheticPayload(({ render }) => {
+    const reject = (mutate, expected) =>
+      assert.throws(render(undefined, { mutate }), expected);
+    reject(
+      (source) => source + `!define VERSION "${expectedVersion}"\n`,
+      /Duplicate generated payload definition/u,
+    );
+    reject(
+      (source) =>
+        source.replace(
+          `!define VERSION "${expectedVersion}"`,
+          '!define VERSION "0.0.0"',
+        ),
+      /intended release/u,
+    );
+    reject(
+      (source) =>
+        source.replace(
+          '!define MAINBINARYNAME "LoliCode"',
+          '!define MAINBINARYNAME "Other"',
+        ),
+      /LoliCode/u,
+    );
+    reject(
+      (source) => source + `!include "${hooksPath}"\n`,
+      /hook used by this actual/u,
+    );
+    reject(
+      (source) => source.replace(`!include "${hooksPath}"\n`, ""),
+      /hook used by this actual/u,
+    );
+    reject(
+      (source) =>
+        source.replace(
+          "; Copy external binaries",
+          'Exec "unexpected.exe"\n; Copy external binaries',
+        ),
+      /Unrecognized generated payload instruction/u,
+    );
+    reject(
+      (source) =>
+        source.replace(
+          "; Create file associations",
+          'File "unexpected.exe"\n; Create file associations',
+        ),
+      /External binary payload/u,
+    );
+    reject(
+      (source) =>
+        source.replace(
+          '  File "${MAINBINARYSRCPATH}"',
+          '  File "${MAINBINARYSRCPATH}"\n  File "${MAINBINARYSRCPATH}"',
+        ),
+      /AssertionError/u,
+    );
+    assert.throws(
+      render(undefined, { resources: ["duplicate.bin", "DUPLICATE.bin"] }),
+      /Duplicate destination/u,
+    );
+    assert.throws(
+      render(undefined, { resources: ["..\\escape.bin"] }),
+      /AssertionError/u,
+    );
+    reject(
+      (source) => source + ";" + "x".repeat(65536),
+      /line exceeds the reviewed limit/u,
+    );
+  });
 });
 
 function run(command, args, options, label) {
