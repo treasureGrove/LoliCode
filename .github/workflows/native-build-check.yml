@@ -195,3 +195,94 @@ jobs:
           macOS outputs are .app archives; Linux outputs are .deb files. See
           docs/guides/native-build-check.md for remaining UI and distribution checks.
           SUMMARY
+
+  windows-tests:
+    name: Windows x64 full Rust tests (hosted, no package)
+    if: github.repository == 'treasureGrove/LoliCode'
+    runs-on: windows-2022
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+      CARGO_BUILD_JOBS: "2"
+      CARGO_INCREMENTAL: "0"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      CARGO_TARGET_DIR: ${{ github.workspace }}/src-tauri/target/hosted-windows-tests
+      CC_SWITCH_TEST_HOME: ${{ runner.temp }}/lolicode-native-check-home
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+          architecture: x64
+
+      - name: Read pinned Rust toolchain
+        id: rust
+        run: |
+          $toolchain = Select-String -Path rust-toolchain.toml -Pattern '^channel\s*=\s*"([^"]+)"'
+          if (-not $toolchain) { throw 'Missing pinned Rust toolchain.' }
+          "channel=$($toolchain.Matches[0].Groups[1].Value)" >> $env:GITHUB_OUTPUT
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ steps.rust.outputs.channel }}
+
+      - uses: taiki-e/install-action@e407f7bafb71fd004bc5c2da3032e5470cbb6ef0 # v2.87.24
+        with:
+          tool: cargo-nextest
+
+      - name: Verify hosted Windows host and prepare disposable test home
+        run: |
+          if ($env:RUNNER_ENVIRONMENT -ne 'github-hosted') { throw 'Use a disposable GitHub-hosted runner, never a personal computer.' }
+          $hostLine = rustc -vV | Select-String '^host: x86_64-pc-windows-msvc$'
+          if ($LASTEXITCODE -ne 0 -or -not $hostLine) { throw 'Expected native Windows x64 MSVC toolchain.' }
+          node -e 'if (process.platform !== "win32" || process.arch !== "x64") process.exit(1)'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (Test-Path -LiteralPath $env:CC_SWITCH_TEST_HOME) { throw 'Expected a fresh test home.' }
+          New-Item -ItemType Directory -Path $env:CC_SWITCH_TEST_HOME | Out-Null
+          rustc -vV
+
+      - name: Install pinned dependencies and run verifier contracts
+        run: |
+          corepack enable
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          corepack install
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pnpm install --frozen-lockfile
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm ci --prefix packages/companion-relay --ignore-scripts --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node --test scripts/tests/native-build-check.test.mjs scripts/tests/prepare-agent-assets.test.mjs
+          exit $LASTEXITCODE
+
+      - name: Prepare frontend placeholder and native bundled agent assets
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          node scripts/build/prepare-agent-assets.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/build/prepare-lolicode-harness-runtime.mjs --bundle
+          exit $LASTEXITCODE
+
+      # No test name/filter/exclusion and no continue-on-error. Project-declared
+      # ignored tests retain their normal semantics, as in the existing CI.
+      - name: Run full native Windows Rust suite
+        run: cargo nextest run --locked --manifest-path src-tauri/Cargo.toml --profile ci
+
+      - name: State Windows test boundary
+        if: always()
+        run: |
+          @'
+          ## Windows hosted Rust tests only
+          The complete normal nextest suite runs on a fresh GitHub-hosted Windows x64 account,
+          with a disposable CC_SWITCH_TEST_HOME. No tests run on the owner's Windows account.
+          Review the nextest result; this job does not build installers, upload artifacts,
+          sign, publish, or claim native GUI/installation acceptance.
+          '@ >> $env:GITHUB_STEP_SUMMARY

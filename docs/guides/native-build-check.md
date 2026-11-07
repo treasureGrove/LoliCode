@@ -39,18 +39,33 @@ Linux 显式安装 WebKitGTK 4.1、GTK3、libsoup3、Ayatana AppIndicator、libr
 3. 每个平台独立准备 Harness/Node，核对 runtime-manifest 的平台、架构、版本、Node 和 CLI SHA256、必需许可证。执行捆绑 Node 身份检查、Harness `--version` 及 node-pty 原生 `/bin/sh` smoke，不调用模型服务。
 4. 每个平台运行 Rust fmt、Clippy（warnings 为错误）、nextest 全套后端测试，包含 macOS 菜单的库内契约测试。macOS 测试临时目录沿用现有 CI 的物理路径处理。
 5. 使用独立 `.github/native-build-check.conf.json` 构建原生 app/deb。它设置 Validation 名称/应用标识、关闭 updater 产物和 feed；`--no-sign` 禁用打包签名。构建设置 development 通道，使用开发资料目录和凭据命名空间；不调用 Windows 发布脚本。保留正常 release 优化，测试调试符号和增量编译关闭以控制标准 runner 的资源开销。
-6. 从真实 `.app` 或解出的 `.deb` 验证包版本、主程序 Mach-O/ELF 架构、所有映射资源的文件列表/字节/可执行权限与源码准备目录一致，包括扩展、Harness 全依赖与许可证。再次在包内路径执行 Node/Harness/PTY smoke。
+6. 从真实 `.app` 或解出的 `.deb` 验证包版本、主程序 Mach-O/ELF 架构、所有映射资源的文件列表/字节/可执行权限与源码准备目录一致，包括扩展、Harness 全依赖与许可证。再次在包内路径执行 Node/Harness/PTY smoke。macOS 额外只读运行 `xcrun otool -l`，解析主程序与捆绑 Node 的 `LC_BUILD_VERSION` / `LC_VERSION_MIN_MACOSX` 最低系统及 SDK；报告记录原配置、Info.plist 和两个实际二进制值。若实际最低值高于配置，输出明确 warning 并标记 `declared-minimum-mismatch`，不更改产品要求，也不声称最低系统已通过。打包前 runtime 阶段也记录 Node 的实际值。
 7. 仅全部成功后上传上述公开验证 artifact，保留 7 天，附 `validation-report.json`、`SHA256SUMS`、`VALIDATION-ONLY.txt`。报告绑定源码 SHA、版本、平台和原生包摘要，并标记公开验证用途；输出目录必须恰好包含该目标包和这三个辅助文件。macOS 用 tar 保留权限。Tauri 的 Debian 资源目录是 `usr/lib/<productName>`，不同于 `usr/bin/<mainBinaryName>`。
 
 原生产配置、Windows 发布工作流、正式 feed 和网站均不改变。工作流 `contents: read`，checkout 不保留 Git 凭据，无 secrets/environment/release write 权限。校验器拒绝接收签名或公证凭据。artifact 仅标“VALIDATION / 仅验证用，非正式版”，不得作为正式下载分发。
 
+## 本轮 Windows 托管测试补齐
+
+同一工作流另有独立 `windows-tests` job，与三个 macOS/Linux 目标并行，只在 GitHub 托管的 `windows-2022` x64 runner 上运行本轮完整常规 Rust 测试。它沿用上方精确仓库/验证分支触发限制，不新增其他分支或定时任务。
+
+该 job 固定 `.node-version`、`rust-toolchain.toml` 和 packageManager 的 pnpm，独立安装依赖、relay 测试 fixture、Harness/agent assets；断言 `RUNNER_ENVIRONMENT=github-hosted` 和原生 `x86_64-pc-windows-msvc`，并把 `CC_SWITCH_TEST_HOME` 设到 runner 的新建临时目录。随后运行：
+
+```sh
+cargo nextest run --locked --manifest-path src-tauri/Cargo.toml --profile ci
+```
+
+不添加测试名称过滤、不额外排除测试、不设置 continue-on-error。项目原来声明的 ignored 测试保持现有 CI 的正常语义，nextest 的真实通过/失败/跳过数量以对应 run 为准。部分 Windows 测试会访问系统用户目录或注册表，故全套只在可丢弃托管账号运行，**不在用户本机的日常 Windows 账号运行**。设置临时 home 不等同于证明所有测试都只访问该目录；隔离边界是整台全新的托管 runner。
+
+这个 Windows job 不打包、不上传任何额外产物、不签名或发布，也不代表 Windows GUI、安装/覆盖升级已验收。Windows 正式发布 workflow 不变。
+
 ## 仍然必须验证的项目
 
-- 此实现阶段只有 Windows 本地脚本/YAML/契约回归检查；没有运行 macOS/Linux runner，不能把新增工作流或朋友一次编译成功写成三个目标已经通过。
+- [首轮原生验证](https://github.com/treasureGrove/LoliCode/actions/runs/42332307515) 对应提交 `322a79420719fb348c2299d0cb8850887bf70b3f`：三个目标均通过真实 host 核对与打包前 Node/Harness/PTY smoke，但均被相同的 7 处非 Windows 源码 Clippy 错误阻断，未进入 nextest、构建和包内 smoke，也未上传产物。修复后的第二轮须重新验证，不能把前置 smoke 或朋友一次编译成功写成整个平台通过。
 - 工作流跑绿后仍不代表真实桌面验收：要在各目标系统启动 WebView、操作聊天/工具/权限/文件选择、检查窗口关闭与重开、托盘与多窗口、字体和布局。
 - macOS 特别检查四语言菜单即时保存与重启、⌘Z / ⇧⌘Z / ⌘X/C/V/A/W/Q、最小化/缩放/全屏、窗口列表和帮助搜索。原生系统菜单可能有系统语言控制的项目，须区分应用文本和系统文本。
 - 用可丢弃的操作系统测试账号检查真实启动；不要在用户日常账号安装或启动这些验证包。Validation 使用开发资料目录，会与同一账号的其他开发构建共享该目录，并非全新独立的用户数据沙箱。
-- macOS 15 构建不能证明配置中的 macOS 12 最低版本已可用；尚需最低系统兼容性、干净机器依赖、Intel/Apple Silicon 安装、Gatekeeper、正式签名、公证与升级验证。不要通过关停 Gatekeeper 来把失败当作通过。
+- **最低系统声明已纠正：** 先前 macOS 12.0 声明与捆绑 Node 的要求冲突。本轮经批准把产品最低声明更正为 **macOS 13.5** 并更新发布说明；Node 版本不变。[Node 24.19.0 官方 BUILDING.md](https://raw.githubusercontent.com/nodejs/node/v24.19.0/BUILDING.md) 对 x64/arm64 均列 macOS >=13.5，官方二进制使用 `-mmacosx-version-min=13.5`。校验器继续读取真实配置与实际 Mach-O 值，保留不匹配 warning，不固定假设任何二进制最低版本。
+- macOS 15 runner 构建成功仍不证明 **macOS 13.5 真机兼容**，Mach-O 最低版本记录也不等于最低系统实测。原生 `.node` 依赖还需逐一核对最低系统，并在干净的 13.5 系统验证；此外仍需 Intel/Apple Silicon 安装、Gatekeeper、正式签名、公证与升级验证。不要通过关停 Gatekeeper 来把失败当作通过。回归测试中的 12.0 是保留的合成旧版/不匹配样例，不是当前产品声明。
 - Linux 本轮只构建 Ubuntu 22.04 x64 的 deb；未验证其他发行版、AppImage、RPM、Wayland/X11 差异或 Linux arm64。macOS 不含 DMG/universal 分发验证。
 - 当前正式签名 feed/发布器仍是 Windows 链路。未经真实平台验证及独立发布授权，不增加其他平台 feed 或正式资产。
 - 任务因 runner 额度、磁盘、网络或平台依赖失败时保持失败，不跳过步骤、不借用其他平台依赖、不新增付费服务/凭据，也不把部分成功包装为完成。

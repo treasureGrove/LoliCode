@@ -16,6 +16,7 @@ import test from "node:test";
 import { parsers } from "prettier/plugins/yaml";
 import {
   binaryArchitecture,
+  parseMacOSMinimum,
   compareTree,
   targets,
   verifyInputs,
@@ -178,6 +179,40 @@ test("runtime verifies all supported platform and architecture manifests", (t) =
   }
 });
 
+test("Mach-O deployment metadata records modern and legacy minimum OS without guessing", () => {
+  assert.deepEqual(
+    parseMacOSMinimum(
+      "node:\nLoad command 1\n      cmd LC_BUILD_VERSION\n cmdsize 32\n platform 1\n    minos 13.5\n      sdk 15.0\n   ntools 1\nLoad command 2\n      cmd LC_MAIN\n",
+    ),
+    {
+      minimumSystemVersion: "13.5",
+      sdkVersion: "15.0",
+      loadCommand: "LC_BUILD_VERSION",
+    },
+  );
+  assert.deepEqual(
+    parseMacOSMinimum(
+      "app:\nLoad command 1\n      cmd LC_VERSION_MIN_MACOSX\n cmdsize 16\n  version 12.0\n      sdk 14.5\n",
+    ),
+    {
+      minimumSystemVersion: "12.0",
+      sdkVersion: "14.5",
+      loadCommand: "LC_VERSION_MIN_MACOSX",
+    },
+  );
+  assert.throws(
+    () => parseMacOSMinimum("no load command"),
+    /one minimum OS record/,
+  );
+  assert.throws(
+    () =>
+      parseMacOSMinimum(
+        "\nLoad command 1\n cmd LC_BUILD_VERSION\n platform 2\n minos 13.5\n sdk 15.0\n",
+      ),
+    /macOS build platform/,
+  );
+});
+
 test("runtime rejects altered Node and Harness bytes", (t) => {
   const first = runtimeFixture(t);
   put(first.directory, "node", "altered");
@@ -232,7 +267,10 @@ test("workflow triggers only on the authorized branch or manually, without publi
     branches: ["fix/mail-ui-main-20261107"],
   });
   assert.deepEqual(workflow.permissions, { contents: "read" });
-  assert.deepEqual(Object.keys(workflow.jobs), ["native"]);
+  assert.deepEqual(Object.keys(workflow.jobs).sort(), [
+    "native",
+    "windows-tests",
+  ]);
   const job = workflow.jobs.native;
   assert.equal(job.if, "github.repository == 'treasureGrove/LoliCode'");
   assert.equal(job.environment, undefined);
@@ -298,4 +336,49 @@ test("workflow triggers only on the authorized branch or manually, without publi
   assert.equal(build.env.VITE_LOLICODE_BUILD_CHANNEL, "development");
   assert.match(source, /cargo nextest run --locked/);
   assert.match(source, /verify-native-build\.mjs bundle/);
+  const windows = workflow.jobs["windows-tests"];
+  assert.equal(windows.if, "github.repository == 'treasureGrove/LoliCode'");
+  assert.equal(windows["runs-on"], "windows-2022");
+  assert.equal(
+    windows.needs,
+    undefined,
+    "Windows tests must run independently",
+  );
+  assert.deepEqual(windows.permissions, { contents: "read" });
+  assert.equal(windows.environment, undefined);
+  assert.match(windows.env.CC_SWITCH_TEST_HOME, /^\$\{\{ runner\.temp \}\}\//);
+  assert.equal(
+    windows.steps.find((step) => step.uses === "actions/checkout@v6").with[
+      "persist-credentials"
+    ],
+    "false",
+  );
+  assert.equal(
+    windows.steps.find((step) => step.uses === "actions/setup-node@v6").with[
+      "node-version-file"
+    ],
+    ".node-version",
+  );
+  const suite = windows.steps.find(
+    (step) => step.name === "Run full native Windows Rust suite",
+  );
+  assert.equal(
+    suite.run,
+    "cargo nextest run --locked --manifest-path src-tauri/Cargo.toml --profile ci",
+  );
+  assert(!windows.steps.some((step) => step["continue-on-error"]));
+  assert(
+    !windows.steps.some((step) =>
+      /upload-artifact|tauri-action/.test(step.uses || ""),
+    ),
+  );
+  const commands = windows.steps.map((step) => step.run || "").join("\n");
+  assert.match(commands, /RUNNER_ENVIRONMENT -ne 'github-hosted'/);
+  assert.match(commands, /prepare-lolicode-harness-runtime\.mjs --bundle/);
+  assert.match(commands, /npm ci --prefix packages\/companion-relay/);
+  assert.match(commands, /pnpm install --frozen-lockfile/);
+  assert.doesNotMatch(
+    commands,
+    /tauri build|build:release|gh release|verify-native-build\.mjs bundle/,
+  );
 });

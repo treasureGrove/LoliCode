@@ -64,6 +64,58 @@ export function binaryArchitecture(bytes) {
   return { platform: "darwin", arch: cpu === 0x01000007 ? "x64" : "arm64" };
 }
 
+export function parseMacOSMinimum(output) {
+  const records = output
+    .split(/\r?\nLoad command \d+\r?\n/)
+    .flatMap((block) => {
+      const modern = /^\s*cmd LC_BUILD_VERSION\s*$/m.test(block);
+      const legacy = /^\s*cmd LC_VERSION_MIN_MACOSX\s*$/m.test(block);
+      if (!modern && !legacy) return [];
+      if (modern)
+        assert.match(
+          block,
+          /^\s*platform (?:1|MACOS|macos)\s*$/m,
+          "Expected macOS build platform",
+        );
+      const minimum = block.match(
+        modern
+          ? /^\s*minos ([0-9]+(?:\.[0-9]+){1,2})\s*$/m
+          : /^\s*version ([0-9]+(?:\.[0-9]+){1,2})\s*$/m,
+      )?.[1];
+      const sdk = block.match(/^\s*sdk ([0-9]+(?:\.[0-9]+){1,2})\s*$/m)?.[1];
+      assert(minimum && sdk, "Mach-O minimum version or SDK is missing");
+      return [
+        {
+          minimumSystemVersion: minimum,
+          sdkVersion: sdk,
+          loadCommand: modern ? "LC_BUILD_VERSION" : "LC_VERSION_MIN_MACOSX",
+        },
+      ];
+    });
+  assert.equal(
+    records.length,
+    1,
+    "Expected one minimum OS record in a thin Mach-O executable",
+  );
+  return records[0];
+}
+
+function readMacOSMinimum(file) {
+  return parseMacOSMinimum(run("xcrun", ["otool", "-l", file]));
+}
+
+function exceedsMinimum(actual, declared) {
+  const parts = (value) => {
+    assert.match(value, /^[0-9]+(?:\.[0-9]+){1,2}$/);
+    return [...value.split(".").map(Number), 0].slice(0, 3);
+  };
+  const left = parts(actual);
+  const right = parts(declared);
+  for (let i = 0; i < 3; i++)
+    if (left[i] !== right[i]) return left[i] > right[i];
+  return false;
+}
+
 export function verifyInputs(base = root) {
   const product = read(base, "product-release.json");
   const pkg = read(base, "package.json");
@@ -279,6 +331,7 @@ function verifyBundle(expected) {
   const stem = `LoliCode-${expected.productVersion}-VALIDATION-${expected.platform}-${expected.arch}`;
   let artifact;
   let runtime;
+  let macOSCompatibility;
   if (expected.platform === "darwin") {
     const application = path.join(bundle, "macos/LoliCode Validation.app");
     const contents = path.join(application, "Contents");
@@ -299,6 +352,32 @@ function verifyBundle(expected) {
     assert.equal(plist.CFBundleExecutable, "lolicode-validation");
     executable(path.join(contents, "MacOS/lolicode-validation"), expected);
     runtime = verifyResources(path.join(contents, "Resources"), expected);
+    const configuredMinimum = read(root, "src-tauri/tauri.conf.json").bundle
+      .macOS.minimumSystemVersion;
+    const mainExecutable = readMacOSMinimum(
+      path.join(contents, "MacOS/lolicode-validation"),
+    );
+    const bundledNode = readMacOSMinimum(
+      path.join(contents, "Resources/agent/harness-runtime/node"),
+    );
+    const mismatch = [mainExecutable, bundledNode].some((item) =>
+      exceedsMinimum(item.minimumSystemVersion, configuredMinimum),
+    );
+    macOSCompatibility = {
+      configuredMinimumSystemVersion: configuredMinimum,
+      bundleMinimumSystemVersion: plist.LSMinimumSystemVersion,
+      mainExecutable,
+      bundledNode,
+      status: mismatch
+        ? "declared-minimum-mismatch"
+        : "oldest-OS-runtime-not-tested",
+      nativeAddonMinimumVersionsVerified: false,
+      note: "Load commands are evidence of minimum deployment targets, not proof of compatibility. No product configuration is changed.",
+    };
+    if (mismatch)
+      console.warn(
+        `::warning title=macOS minimum mismatch::Configured minimum ${configuredMinimum}; app ${mainExecutable.minimumSystemVersion}; bundled Node ${bundledNode.minimumSystemVersion}. Resolve before claiming minimum OS support or releasing.`,
+      );
     artifact = path.join(output, `${stem}.app.tar.gz`);
     run("tar", [
       "-czf",
@@ -346,6 +425,7 @@ function verifyBundle(expected) {
     sourceCommit: commit,
     workflowRun: `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`,
     runtime,
+    ...(macOSCompatibility ? { macOSCompatibility } : {}),
     artifact: {
       name: path.basename(artifact),
       bytes: lstatSync(artifact).size,
@@ -431,6 +511,21 @@ function main() {
     );
     verifyRuntime(runtime, expected);
     smokeRuntime(runtime, expected);
+    if (platform === "darwin") {
+      const nodeMinimum = readMacOSMinimum(path.join(runtime, "node"));
+      const configured = read(root, "src-tauri/tauri.conf.json").bundle.macOS
+        .minimumSystemVersion;
+      console.log(
+        JSON.stringify({
+          configuredMacOSMinimum: configured,
+          bundledNodeMachO: nodeMinimum,
+        }),
+      );
+      if (exceedsMinimum(nodeMinimum.minimumSystemVersion, configured))
+        console.warn(
+          `::warning title=macOS runtime minimum mismatch::Configured minimum ${configured}; bundled Node requires ${nodeMinimum.minimumSystemVersion}. macOS runner success does not establish oldest-OS compatibility.`,
+        );
+    }
     console.log(`Verified native Harness, Node and PTY: ${platform}-${arch}`);
   } else if (command === "bundle") verifyBundle(expected);
   else throw new Error("Use verify-native-build.mjs inputs|runtime|bundle");
