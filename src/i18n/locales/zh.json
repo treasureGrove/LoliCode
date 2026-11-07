@@ -1312,6 +1312,8 @@
     "saveFailedGeneric": "保存失败，请重试",
     "sections": {
       "general": "通用",
+      "usage": "用量统计",
+      "memory": "记忆",
       "appConfig": "应用配置",
       "routing": "本地路由",
       "network": "网络",
