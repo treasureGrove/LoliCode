@@ -296,3 +296,135 @@ test("leaving Settings uses its Back control before the Agent directory returns"
       ),
   );
 });
+
+test("fresh Tavern requires exact native no-model error and real empty snapshot", async () => {
+  const renderer = await readFile(
+    new URL("./native-gui-smoke-renderer.mjs", import.meta.url),
+    "utf8",
+  );
+  const center = await readFile(
+    new URL("../../src-tauri/src/services/channel_center.rs", import.meta.url),
+    "utf8",
+  );
+  const errors = await readFile(
+    new URL("../../src-tauri/src/error.rs", import.meta.url),
+    "utf8",
+  );
+  const locale = JSON.parse(
+    await readFile(
+      new URL("../../src/i18n/locales/en.json", import.meta.url),
+      "utf8",
+    ),
+  );
+  const expected = JSON.parse(
+    renderer.match(/const expectedMissingModel =\s*("(?:[^"\\]|\\.)*");/u)[1],
+  );
+  const nativeMessage = center
+    .slice(center.indexOf("async fn prepare_agent_binding_with"))
+    .match(/AppError::InvalidInput\(\s*"([^"]+)"/u)[1];
+  const nativePrefix = errors.match(
+    /#\[error\("([^"]+)"\)\]\s*InvalidInput/u,
+  )[1];
+  assert.equal(expected, nativePrefix.replace("{0}", nativeMessage));
+  const accepts = (error) => error === expected;
+  assert.ok(accepts(expected));
+  for (const error of [
+    "",
+    "database corrupted",
+    "IPC denied",
+    { message: expected },
+    expected + "\n",
+    undefined,
+  ])
+    assert.ok(!accepts(error));
+  assert.ok(renderer.includes("(error) => error === expectedMissingModel"));
+  assert.ok(renderer.includes("() => false"));
+  assert.ok(renderer.includes(locale.tavern.configureModelsHint));
+  assert.ok(!renderer.includes(locale.tavern.selectStoryHint));
+  assert.ok(
+    renderer.indexOf('checkpoint = "tavern-snapshot"') <
+      renderer.indexOf('checkpoint = "tavern-ready"'),
+  );
+  assert.ok(renderer.includes("snapshot.characters.length === 0"));
+  assert.ok(renderer.includes("snapshot.stories.length === 0"));
+  for (const forbidden of [
+    "send_tavern_message",
+    "install_tavern_local_model",
+    "set_tavern_local_model_enabled",
+  ])
+    assert.ok(!renderer.includes(forbidden));
+});
+test("post-Tavern path retains DOM checks and normal authorized process exit", async () => {
+  const renderer = await readFile(
+    new URL("./native-gui-smoke-renderer.mjs", import.meta.url),
+    "utf8",
+  );
+  const app = await readFile(
+    new URL("../../src/app/App.tsx", import.meta.url),
+    "utf8",
+  );
+  const page = await readFile(
+    new URL("../../src/features/tavern/TavernPage.tsx", import.meta.url),
+    "utf8",
+  );
+  const capability = JSON.parse(
+    await readFile(
+      new URL("../../src-tauri/capabilities/default.json", import.meta.url),
+      "utf8",
+    ),
+  );
+  assert.ok(app.includes("key={view}"));
+  assert.ok(app.includes("if (!visited[view]) return null"));
+  assert.ok(page.includes("<h3"));
+  assert.ok(renderer.includes('tavern.querySelectorAll("h3")'));
+  assert.ok(renderer.includes("visible(agent) && !visible(tavern)"));
+  assert.ok(
+    renderer.includes("check(agent.isConnected && tavern.isConnected)"),
+  );
+  const returned = renderer.slice(
+    renderer.indexOf('checkpoint = "agent-return"'),
+    renderer.indexOf('phases.push("navigation")'),
+  );
+  assert.ok(returned.includes('agent.querySelector(".wb-chat-surface")'));
+  assert.ok(returned.includes("visible(content) && content"));
+  assert.ok(returned.includes("await paint("));
+  assert.ok(capability.permissions.includes("process:allow-exit"));
+  assert.ok(capability.windows.includes("main"));
+  assert.ok(
+    renderer.indexOf('result: "passed"') < renderer.indexOf("passed = true"),
+  );
+  assert.ok(
+    renderer.includes(
+      'if (verified) await invoke("plugin:process|exit", { code: passed ? 0 : 1 })',
+    ),
+  );
+});
+
+test("async Tavern enable waits for saved enablement and the real page, not library wrapper", async () => {
+  const renderer = await readFile(
+    new URL("./native-gui-smoke-renderer.mjs", import.meta.url),
+    "utf8",
+  );
+  const library = await readFile(
+    new URL(
+      "../../src/features/apps/BuiltinApplicationsPage.tsx",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  assert.ok(library.includes("await builtinAppsApi.setEnabled(id, enabled)"));
+  assert.ok(renderer.includes('invoke("list_builtin_apps")'));
+  assert.ok(renderer.includes('app.id === "tavern" && app.enabled === true'));
+  assert.ok(
+    renderer.indexOf('checkpoint = "tavern-enabled"') <
+      renderer.indexOf('checkpoint = "tavern-snapshot"'),
+  );
+  const section = renderer.slice(
+    renderer.indexOf('checkpoint = "tavern-section"'),
+    renderer.indexOf('checkpoint = "tavern-ready"'),
+  );
+  assert.ok(section.includes("waitFor("));
+  assert.ok(section.includes('tavern.querySelector("section")'));
+  assert.ok(section.includes("visible(section) && section"));
+  assert.ok(!renderer.includes('check(tavern.querySelector("section"))'));
+});

@@ -43,7 +43,10 @@ export const checkpoints = [
   "agent-ready",
   "tavern-entry",
   "tavern-enable",
+  "tavern-enabled",
   "tavern-visible",
+  "tavern-catalog",
+  "tavern-section",
   "tavern-ready",
   "tavern-heading",
   "tavern-snapshot",
@@ -64,6 +67,7 @@ export const failureCodes = [
   "build-revision",
   "harness-unavailable",
   "harness-version",
+  "tavern-catalog-unexpected",
   "unknown",
 ];
 const hostCodes = [

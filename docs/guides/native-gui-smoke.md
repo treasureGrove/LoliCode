@@ -59,3 +59,10 @@ geometry or replace visual review. Private build/application logs remain only in
 the disposable runner temporary directory. Old failed runs remain failed; adding
 safe diagnostics does not establish their cause or turn those runs into GUI
 passes.
+
+The fresh Tavern profile deliberately has no model or story. Its expected loaded
+UI is the model-configuration hint, not the story-selection hint. The smoke still
+requires a successful native empty snapshot and accepts only the exact native
+missing-model catalog error defined in the source. Any other catalog error, an
+unexpected configured model, a loading placeholder, or a failed snapshot fails.
+No model is installed, configured or called to make this assertion pass.

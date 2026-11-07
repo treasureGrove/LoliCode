@@ -171,28 +171,18 @@ try {
   await click('button[aria-label="Character chat"]');
   checkpoint = "tavern-enable";
   await click('article[data-app="tavern"] button:not([disabled])');
+  checkpoint = "tavern-enabled";
+  await waitFor(async () =>
+    (await invoke("list_builtin_apps")).some(
+      (app) => app.id === "tavern" && app.enabled === true,
+    ),
+  );
   checkpoint = "tavern-visible";
   const tavern = await waitFor(() => {
     const el = query("[data-workspace-active]");
     return el && el !== agent && !visible(agent) && el;
   });
   await paint(tavern);
-  checkpoint = "tavern-ready";
-  // Panel content must exist, not just the outer navigation marker.
-  check(tavern.querySelector("section"));
-  await paint(
-    await waitFor(() => {
-      const hint = query(".tavern-composer-hint");
-      return (
-        hint?.textContent.trim() === "Select or create a story to continue." &&
-        hint
-      );
-    }),
-  );
-  checkpoint = "tavern-heading";
-  await paint(
-    await waitFor(() => [...tavern.querySelectorAll("h3")].find(visible)),
-  );
   checkpoint = "tavern-snapshot";
   const snapshot = await invoke("get_tavern_snapshot");
   check(
@@ -201,10 +191,53 @@ try {
       Array.isArray(snapshot.stories) &&
       snapshot.stories.length === 0,
   );
+  checkpoint = "tavern-catalog";
+  // A fresh signed-out profile intentionally has no model. Only this exact native
+  // missing-model error is expected; corruption, IPC failure and other errors fail.
+  const expectedMissingModel =
+    "无效输入: 请先在渠道与模型中添加并启用一个可通过共享网关调用的模型";
+  const noConfiguredModel = await bounded(
+    window.__TAURI_INTERNALS__.invoke("get_tavern_catalog").then(
+      () => false,
+      (error) => error === expectedMissingModel,
+    ),
+  );
+  check(noConfiguredModel, "tavern-catalog-unexpected");
+  checkpoint = "tavern-section";
+  // The active wrapper first holds the app library; enabling Tavern is asynchronous.
+  // Wait for the real page's visible section, not merely its retained wrapper.
+  await paint(
+    await waitFor(() => {
+      const section = tavern.querySelector("section");
+      return visible(section) && section;
+    }),
+  );
+  checkpoint = "tavern-ready";
+  await paint(
+    await waitFor(() => {
+      const hint = query(".tavern-composer-hint");
+      return (
+        hint?.textContent.trim() ===
+          "Set up the local companion above, or add a model in Models & channels to begin." &&
+        hint
+      );
+    }),
+  );
+  checkpoint = "tavern-heading";
+  await paint(
+    await waitFor(() => [...tavern.querySelectorAll("h3")].find(visible)),
+  );
   checkpoint = "agent-return";
   await click('button[aria-label="Coding workspace"]');
   await waitFor(() => visible(agent) && !visible(tavern));
+  check(agent.isConnected && tavern.isConnected);
   await paint(agent);
+  await paint(
+    await waitFor(() => {
+      const content = agent.querySelector(".wb-chat-surface");
+      return visible(content) && content;
+    }),
+  );
   phases.push("navigation");
   checkpoint = "success-report";
   await request("report", {
@@ -232,6 +265,7 @@ try {
     "build-revision",
     "harness-unavailable",
     "harness-version",
+    "tavern-catalog-unexpected",
   ].includes(error?.message)
     ? error.message
     : "unknown";
