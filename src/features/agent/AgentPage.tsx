@@ -2202,7 +2202,8 @@ export function AgentPage({
     Object.keys(stopping).length > 0;
   const listedSession = sessions.find((session) => session.id === sessionId);
   const selectedOverride = sessionId ? sessionOverrides[sessionId] : undefined;
-  const selectedSession = selectedOverride || snapshot?.session || listedSession;
+  const selectedSession =
+    selectedOverride || snapshot?.session || listedSession;
   const selectedTitle =
     (listedSession && withCommittedTitle(listedSession).title) ||
     selectedOverride?.title ||
@@ -4209,8 +4210,7 @@ export function AgentPage({
   const collapseSidebar = useCallback(() => {
     const focused = document.activeElement;
     const focusedInSidebar =
-      focused instanceof HTMLElement &&
-      Boolean(focused.closest(".wb-sidebar"));
+      focused instanceof HTMLElement && Boolean(focused.closest(".wb-sidebar"));
     if (onSidebarCompactChange) {
       restoreCompactSidebarFocus.current = focusedInSidebar;
       onSidebarCompactChange(true);
@@ -4276,18 +4276,19 @@ export function AgentPage({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [canOpenBrowser, isActive, openWebPreview, toggleSidebar]);
-  const sidebarToggle = !sharedPaneLayout && !paneLayout.sidebarVisible ? (
-    <button
-      type="button"
-      className="wb-icon-button wb-pane-toggle wb-sidebar-expand"
-      title={"Ctrl + \\"}
-      aria-label="展开项目侧栏"
-      onClick={toggleSidebar}
-      style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
-    >
-      <PanelLeftOpen />
-    </button>
-  ) : null;
+  const sidebarToggle =
+    !sharedPaneLayout && !paneLayout.sidebarVisible ? (
+      <button
+        type="button"
+        className="wb-icon-button wb-pane-toggle wb-sidebar-expand"
+        title={"Ctrl + \\"}
+        aria-label="展开项目侧栏"
+        onClick={toggleSidebar}
+        style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+      >
+        <PanelLeftOpen />
+      </button>
+    ) : null;
   const sidebarActions = (
     <nav className="wb-nav" aria-label="工作台操作">
       <div className="wb-create-task">
@@ -4862,10 +4863,7 @@ export function AgentPage({
               data-workspace-entry
               {...DRAG_REGION_ATTR}
             >
-              <h1
-                title={selectedTitle}
-                {...DRAG_REGION_ATTR}
-              >
+              <h1 title={selectedTitle} {...DRAG_REGION_ATTR}>
                 {selectedTitle}
               </h1>
             </div>

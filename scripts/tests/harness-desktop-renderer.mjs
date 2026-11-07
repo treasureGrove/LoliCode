@@ -1487,19 +1487,15 @@ async function run(fixture) {
       sessionStorage.setItem(chiefKey, chief.id);
       return { reload: true };
     }
-    await waitFor(
-      () =>
-        document.querySelector("#agent-message") &&
-        document.querySelector("main")?.innerText.includes("Loli 秘书"),
-      "the normal secretary composer",
-    );
     const secretaryButton = await waitFor(() => {
       const button = document.querySelector("button.wb-nav-secretary");
-      return button && !button.disabled && button;
-    }, "the secretary navigation button");
+      return document.querySelector("#agent-message") && button && !button.disabled && button;
+    }, "the normal composer and enabled secretary navigation");
     if (secretaryButton.getAttribute("aria-pressed") !== "true") secretaryButton.click();
     await waitFor(
-      () => document.querySelector('button.wb-nav-secretary[aria-pressed="true"]') && document.querySelector("#agent-message"),
+      () => document.querySelector('button.wb-nav-secretary[aria-pressed="true"]') &&
+        document.querySelector("#agent-message") &&
+        document.querySelector("main")?.innerText.includes("Loli 秘书"),
       "the old secretary selected in the real workbench",
     );
     await invoke("send_agent_message", {
