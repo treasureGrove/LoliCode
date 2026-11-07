@@ -71,6 +71,128 @@ Var NoShortcutMode
 Var WixMode
 Var OldMainBinaryName
 
+; LoliCode resource filesystem helpers begin
+; Only resource I/O uses this normalized extended path. Keep INSTDIR and OUTDIR
+; unchanged for process checks, registration, shortcuts and upgrade recovery.
+; This does not make arbitrary-length installation roots supported.
+Var LoliCodeResourceRoot
+!macro LoliCodeRejectResourceRoot message
+  Pop $R9
+  Pop $R8
+  Pop $R7
+  Pop $R6
+  Pop $9
+  Pop $8
+  Abort "${message}"
+!macroend
+!macro LoliCodePrepareResourceRoot
+  Push $8
+  Push $9
+  Push $R6
+  Push $R7
+  Push $R8
+  Push $R9
+  ; Main binary/uninstaller, shortcuts and guards still use ordinary paths.
+  ; Keep uninstall.exe within 259 UTF-16 characters and reject truncated roots.
+  StrLen $R9 "$INSTDIR"
+  ${If} $R9 > 245
+    !insertmacro LoliCodeRejectResourceRoot "The LoliCode installation folder is too long (maximum 245 characters)."
+  ${EndIf}
+  StrCpy $R8 "$INSTDIR" 1
+  StrCpy $R9 "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+  StrCpy $R7 0
+  ${Do}
+    StrCpy $R6 "$R9" 1 $R7
+    ${If} $R6 == ""
+      !insertmacro LoliCodeRejectResourceRoot "LoliCode requires a local drive-letter installation folder."
+    ${EndIf}
+    ${If} $R6 == $R8
+      ${ExitDo}
+    ${EndIf}
+    IntOp $R7 $R7 + 1
+  ${Loop}
+  StrCpy $R8 "$INSTDIR" 2 1
+  ${If} $R8 != ":\"
+    !insertmacro LoliCodeRejectResourceRoot "LoliCode resources require an absolute local installation folder."
+  ${EndIf}
+  ; Check before normalization too: GetFullPathNameW can trim a final dot/space.
+  ; Exact dot segments may normalize, but ordinary component suffixes may not.
+  StrCpy $R6 ""
+  StrCpy $R9 0
+  ${Do}
+    StrCpy $R8 "$INSTDIR" 1 $R9
+    ${If} $R8 == "\"
+    ${OrIf} $R8 == "/"
+    ${OrIf} $R8 == ""
+      ${If} $R6 != "."
+      ${AndIf} $R6 != ".."
+        StrCpy $R7 "$R6" 1 -1
+        ${If} $R7 == "."
+        ${OrIf} $R7 == " "
+          !insertmacro LoliCodeRejectResourceRoot "Installation folder components cannot end in a dot or space."
+        ${EndIf}
+      ${EndIf}
+      StrCpy $R6 ""
+    ${Else}
+      StrCpy $R6 "$R6$R8"
+    ${EndIf}
+    ${If} $R8 == ""
+      ${ExitDo}
+    ${EndIf}
+    IntOp $R9 $R9 + 1
+  ${Loop}
+  ; NSIS GetFullPathName also asks for the existing long filename and fails on
+  ; a fresh folder. This Win32 call only normalizes syntax, without creating it.
+  System::Call 'kernel32::GetFullPathNameW(w "$INSTDIR", i ${NSIS_MAX_STRLEN}, w .r9, p 0)i.r8'
+  StrCpy $LoliCodeResourceRoot "$9"
+  StrLen $R9 "$LoliCodeResourceRoot"
+  ${If} $8 == 0
+  ${OrIf} $8 >= ${NSIS_MAX_STRLEN}
+  ${OrIf} $8 != $R9
+    !insertmacro LoliCodeRejectResourceRoot "LoliCode could not normalize the installation folder."
+  ${EndIf}
+  ${Do}
+    StrCpy $R8 "$LoliCodeResourceRoot" 1 -1
+    ${If} $R8 != "\"
+      ${ExitDo}
+    ${EndIf}
+    StrCpy $LoliCodeResourceRoot "$LoliCodeResourceRoot" -1
+  ${Loop}
+  StrLen $R9 "$LoliCodeResourceRoot"
+  ${If} $R9 < 4
+    !insertmacro LoliCodeRejectResourceRoot "LoliCode cannot install resources in a drive root."
+  ${ElseIf} $R9 > 245
+    !insertmacro LoliCodeRejectResourceRoot "The normalized LoliCode installation folder is too long."
+  ${EndIf}
+  ; Extended paths do not trim component-final dots/spaces as Win32 does.
+  ; Reject them rather than splitting the main binary and resources across paths.
+  StrCpy $R9 0
+  StrCpy $R7 ""
+  ${Do}
+    StrCpy $R8 "$LoliCodeResourceRoot" 1 $R9
+    ${If} $R8 == "\"
+    ${OrIf} $R8 == ""
+      ${If} $R7 == "."
+      ${OrIf} $R7 == " "
+        !insertmacro LoliCodeRejectResourceRoot "Installation folder components cannot end in a dot or space."
+      ${EndIf}
+    ${EndIf}
+    ${If} $R8 == ""
+      ${ExitDo}
+    ${EndIf}
+    StrCpy $R7 "$R8"
+    IntOp $R9 $R9 + 1
+  ${Loop}
+  StrCpy $LoliCodeResourceRoot "\\?\$LoliCodeResourceRoot"
+  Pop $R9
+  Pop $R8
+  Pop $R7
+  Pop $R6
+  Pop $9
+  Pop $8
+!macroend
+; LoliCode resource filesystem helpers end
+
 Name "${PRODUCTNAME}"
 BrandingText "${COPYRIGHT}"
 OutFile "${OUTFILE}"
@@ -620,6 +742,7 @@ SectionEnd
 Section Install
   ; Silent installations skip custom pages, so enforce this here as well.
   Call LoliCodeCheckDowngrade
+  !insertmacro LoliCodePrepareResourceRoot
   SetOutPath $INSTDIR
 
   !ifmacrodef NSIS_HOOK_PREINSTALL
@@ -633,10 +756,10 @@ Section Install
 
   ; Copy resources
   {{#each resources_dirs}}
-    CreateDirectory "$INSTDIR\\{{this}}"
+    CreateDirectory "$LoliCodeResourceRoot\\{{this}}"
   {{/each}}
   {{#each resources}}
-    File /a "/oname={{this.[1]}}" "{{no-escape @key}}"
+    File /a "/oname=$LoliCodeResourceRoot\\{{this.[1]}}" "{{no-escape @key}}"
   {{/each}}
 
   ; Copy external binaries
@@ -757,6 +880,7 @@ Function un.onInit
 FunctionEnd
 
 Section Uninstall
+  !insertmacro LoliCodePrepareResourceRoot
 
   !ifmacrodef NSIS_HOOK_PREUNINSTALL
     !insertmacro NSIS_HOOK_PREUNINSTALL
@@ -770,7 +894,7 @@ Section Uninstall
 
   ; Delete resources
   {{#each resources}}
-    Delete "$INSTDIR\\{{this.[1]}}"
+    Delete "$LoliCodeResourceRoot\\{{this.[1]}}"
   {{/each}}
 
   ; Delete external binaries
@@ -798,7 +922,7 @@ Section Uninstall
   Delete "$INSTDIR\uninstall.exe"
 
   {{#each resources_ancestors}}
-  RMDir /REBOOTOK "$INSTDIR\\{{this}}"
+  RMDir /REBOOTOK "$LoliCodeResourceRoot\\{{this}}"
   {{/each}}
   RMDir "$INSTDIR"
 

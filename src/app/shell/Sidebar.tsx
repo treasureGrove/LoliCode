@@ -13,12 +13,10 @@ import {
   Brain,
   ChartColumn,
   Database,
-  Download,
   Folder,
   Globe,
   Grid2X2,
   Info,
-  MoreHorizontal,
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
@@ -32,12 +30,9 @@ import type { GlobalPage, SettingsSection, View } from "@/lib/navigation";
 import { useUpdate } from "@/contexts/UpdateContext";
 import { useSidebarStatus } from "@/hooks/useSidebarStatus";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
-  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { fmtUsd } from "@/features/usage/format";
 import { HoverTip } from "@/components/ui/hover-tip";
@@ -188,7 +183,9 @@ export function Sidebar(props: SidebarProps) {
                   props.onAddTavernCharacter ??
                   ((source) =>
                     window.dispatchEvent(
-                      new CustomEvent("lolicode:tavern-add", { detail: source }),
+                      new CustomEvent("lolicode:tavern-add", {
+                        detail: source,
+                      }),
                     ))
                 }
               />
@@ -200,13 +197,22 @@ export function Sidebar(props: SidebarProps) {
             <SidebarProfileMenu
               expanded={!compact}
               hasUpdate={hasUpdate}
-              selected={props.view === "settings"}
+              selected={
+                props.view === "settings" ||
+                props.view === "usage" ||
+                props.view === "allowance" ||
+                props.view === "applications" ||
+                (props.view !== "tavern" && isBuiltinApp(props.view)) ||
+                (props.view === "agent" && Boolean(props.activeAgentTool))
+              }
+              navigationItems={
+                <NavigationItems {...props} todayCost={status.todayCost} />
+              }
               onOpenSettings={() => props.onSelectPage("settings")}
               onOpenUpdates={props.onOpenUpdates}
               onOpenAllowance={() => props.onSelectPage("allowance")}
             />
           </div>
-          <MoreMenu {...props} {...status} hasUpdate={hasUpdate} />
         </div>
       </nav>
     </LayoutGroup>
@@ -319,19 +325,15 @@ const AGENT_TOOLS: {
   { id: "memory", icon: Brain, label: ["记忆", "Memory"] },
 ];
 
-function MoreMenu({
+function NavigationItems({
   view,
   activeAgentTool,
   onOpenAgentTool,
-  hasUpdate,
-  onOpenUpdates,
   onSelectPage,
   todayCost,
-}: SidebarProps &
-  ReturnType<typeof useSidebarStatus> & { hasUpdate: boolean }) {
+}: SidebarProps & { todayCost: number }) {
   const { t, i18n } = useTranslation();
   const chinese = i18n.language.startsWith("zh");
-  const noticeId = useId();
   const activeTool = view === "agent" ? activeAgentTool : null;
   const applicationsSelected =
     view === "applications" || (view !== "tavern" && isBuiltinApp(view));
@@ -345,90 +347,43 @@ function MoreMenu({
         })
       : undefined;
   return (
-    <DropdownMenu>
-      <HoverTip content={t("common.more")} side="right" disableHoverableContent>
-        <DropdownMenuTrigger asChild>
-          <button
-            type="button"
-            className="lolicode-sidebar-icon-button lolicode-sidebar-more"
-            aria-label={t("common.more")}
-            aria-describedby={hasUpdate ? noticeId : undefined}
-            data-selected={
-              Boolean(activeTool) || applicationsSelected || usageSelected
-            }
-          >
-            <MoreHorizontal aria-hidden="true" />
-            {hasUpdate && (
-              <span className="lolicode-sidebar-notice" aria-hidden="true" />
-            )}
-          </button>
-        </DropdownMenuTrigger>
-      </HoverTip>
-      {hasUpdate && (
-        <span id={noticeId} className="sr-only">
-          {t("nav.softwareUpdatesAvailable")}
-        </span>
-      )}
-      <DropdownMenuContent
-        side="right"
-        align="end"
-        className="tai-shell-more-menu"
-        collisionPadding={12}
+    <>
+      <DropdownMenuItem
+        aria-current={usageSelected ? "page" : undefined}
+        aria-label={[usageLabel, costLabel].filter(Boolean).join(" · ")}
+        onSelect={() => onSelectPage("usage")}
       >
+        <ChartColumn className="h-4 w-4" aria-hidden="true" />
+        {usageLabel}
+        {todayCost > 0 && (
+          <span className="lolicode-sidebar-menu-detail">
+            {fmtUsd(todayCost, 2)}
+          </span>
+        )}
+      </DropdownMenuItem>
+      <DropdownMenuItem
+        aria-current={applicationsSelected ? "page" : undefined}
+        onSelect={() => onSelectPage("applications")}
+      >
+        <Grid2X2 className="h-4 w-4" aria-hidden="true" />
+        {t("applications.title")}
+      </DropdownMenuItem>
+      <DropdownMenuSeparator />
+      <DropdownMenuLabel>
+        {chinese ? "工作台工具" : "Workspace tools"}
+      </DropdownMenuLabel>
+      {AGENT_TOOLS.map(({ id, icon: Icon, label }) => (
         <DropdownMenuItem
-          aria-current={usageSelected ? "page" : undefined}
-          aria-label={[usageLabel, costLabel].filter(Boolean).join(" · ")}
-          onSelect={() => onSelectPage("usage")}
+          key={id}
+          disabled={!onOpenAgentTool}
+          aria-current={activeTool === id ? "page" : undefined}
+          onSelect={() => onOpenAgentTool?.(id)}
         >
-          <ChartColumn className="h-4 w-4" aria-hidden="true" />
-          {usageLabel}
-          {todayCost > 0 && (
-            <span className="lolicode-sidebar-menu-detail">
-              {fmtUsd(todayCost, 2)}
-            </span>
-          )}
+          <Icon className="h-4 w-4" aria-hidden="true" />
+          {label[chinese ? 0 : 1]}
         </DropdownMenuItem>
-        <DropdownMenuItem
-          aria-current={applicationsSelected ? "page" : undefined}
-          onSelect={() => onSelectPage("applications")}
-        >
-          <Grid2X2 className="h-4 w-4" aria-hidden="true" />
-          {t("applications.title")}
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuLabel>
-          {chinese ? "工作台工具" : "Workspace tools"}
-        </DropdownMenuLabel>
-        {AGENT_TOOLS.map(({ id, icon: Icon, label }) => (
-          <DropdownMenuItem
-            key={id}
-            disabled={!onOpenAgentTool}
-            aria-current={activeTool === id ? "page" : undefined}
-            onSelect={() => onOpenAgentTool?.(id)}
-          >
-            <Icon className="h-4 w-4" aria-hidden="true" />
-            {label[chinese ? 0 : 1]}
-          </DropdownMenuItem>
-        ))}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          onSelect={onOpenUpdates}
-          aria-label={
-            hasUpdate
-              ? `${t("nav.softwareUpdates", { defaultValue: chinese ? "软件更新" : "Software updates" })} · ${t("nav.softwareUpdatesAvailable")}`
-              : undefined
-          }
-        >
-          <Download className="h-4 w-4" aria-hidden="true" />
-          {t("nav.softwareUpdates", {
-            defaultValue: chinese ? "软件更新" : "Software updates",
-          })}
-          {hasUpdate && (
-            <span className="tai-shell-menu-notice" aria-hidden="true" />
-          )}
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+      ))}
+    </>
   );
 }
 

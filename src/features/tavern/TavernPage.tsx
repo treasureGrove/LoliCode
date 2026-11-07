@@ -48,6 +48,7 @@ import {
 import { TavernPresetGallery } from "./TavernPresetGallery";
 import { TavernTranscript } from "./TavernTranscript";
 import companion from "@/assets/atelier/companion.png";
+import "./tavern-composer.css";
 
 const TAVERN_QUERY_KEY = tavernSnapshotQuery.queryKey;
 const CATALOG_QUERY_KEY = ["tavern", "catalog"] as const;
@@ -491,9 +492,9 @@ export function TavernPage({
             </div>
           )}
 
-          <div className="shrink-0 bg-surface px-5 pb-4 pt-3 lg:px-10">
+          <div className="tavern-composer-area">
             {selectedStory ? (
-              <div className="mx-auto max-w-[840px] rounded-xl border border-border bg-app shadow-sm transition-shadow focus-within:border-border-strong focus-within:ring-[3px] focus-within:ring-action/10">
+              <div className="tavern-composer">
                 <textarea
                   value={draft}
                   onChange={(event) => setDraft(event.target.value)}
@@ -503,9 +504,9 @@ export function TavernPage({
                   })}
                   aria-label={t("tavern.messageInput")}
                   disabled={sending || modelOptions.length === 0}
-                  className="block max-h-[210px] min-h-[78px] w-full resize-y border-0 bg-transparent px-[15px] pb-2 pt-[14px] text-sm leading-6 text-fg-1 outline-none placeholder:text-fg-3 disabled:opacity-60"
+                  className="tavern-composer-input block max-h-[210px] w-full resize-y border-0 bg-transparent text-fg-1 outline-none placeholder:text-fg-3 disabled:opacity-60"
                 />
-                <div className="flex flex-wrap items-center gap-2 px-2 pb-2">
+                <div className="tavern-composer-toolbar flex flex-wrap items-center">
                   {addCharacterMenu}
                   <select
                     id="tavern-model"
@@ -548,10 +549,10 @@ export function TavernPage({
             ) : snapshot.isPending ? (
               <div
                 aria-hidden="true"
-                className="mx-auto h-[120px] max-w-[840px] rounded-xl border border-border bg-app"
+                className="tavern-composer-placeholder h-[120px]"
               />
             ) : (
-              <p className="text-center text-xs text-fg-3">
+              <p className="tavern-composer-hint text-center text-xs text-fg-3">
                 {catalog.isLoading
                   ? t("tavern.loadingModels")
                   : catalog.error

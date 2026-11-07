@@ -28,6 +28,8 @@ mod mcode_config;
 mod mcp;
 pub mod mode;
 mod model_capabilities;
+#[cfg(any(target_os = "macos", test))]
+mod native_menu;
 mod openclaw_config;
 mod opencode_config;
 mod panic_hook;
@@ -591,6 +593,11 @@ pub fn run() {
                     channel::name(),
                     env!("CARGO_PKG_VERSION")
                 );
+            }
+
+            #[cfg(target_os = "macos")]
+            if let Err(error) = native_menu::refresh(app.handle()) {
+                log::warn!("Failed to schedule macOS application menu initialization: {error}");
             }
 
             // 首次读取覆盖路径时 logger 尚未可用；此处重放一次，

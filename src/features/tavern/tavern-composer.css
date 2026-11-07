@@ -1,0 +1,59 @@
+/* Match the agent workspace's full-width, bottom-attached composer. */
+.tavern-composer-area {
+  flex: 0 0 auto;
+  padding: 0;
+  border-top: 1px solid hsl(var(--border) / 0.8);
+  background: var(--workspace-composer);
+  transition: border-color 160ms ease;
+}
+
+.tavern-composer {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.tavern-composer-input {
+  min-height: 104px;
+  padding: 18px 28px 12px;
+  font-family: var(--workspace-font);
+  font-size: var(--workspace-text);
+  line-height: 1.65;
+}
+
+.tavern-composer-toolbar {
+  gap: 5px;
+  padding: 4px 20px 16px;
+}
+
+.tavern-composer-hint {
+  padding: 18px 28px;
+}
+
+.tavern-composer-area:focus-within {
+  border-top-color: color-mix(
+    in srgb,
+    var(--action-text) 40%,
+    hsl(var(--border))
+  );
+}
+
+@media (max-width: 900px) {
+  .tavern-composer-input {
+    padding-inline: 18px;
+  }
+
+  .tavern-composer-toolbar {
+    padding-inline: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tavern-composer-area {
+    transition: none;
+  }
+}

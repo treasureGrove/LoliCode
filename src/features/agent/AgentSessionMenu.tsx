@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Archive,
   ArchiveRestore,
@@ -35,6 +35,7 @@ export function AgentSessionMenu({
   onPin,
   onArchive,
   onDelete,
+  onDialogOpenChange,
 }: {
   session: AgentSession;
   disabled: boolean;
@@ -43,6 +44,7 @@ export function AgentSessionMenu({
   onPin: () => Promise<void>;
   onArchive: () => Promise<void>;
   onDelete: () => Promise<void>;
+  onDialogOpenChange?: (open: boolean) => void;
 }) {
   const [dialog, setDialog] = useState<"rename" | "delete" | null>(null);
   const [title, setTitle] = useState(session.title);
@@ -50,6 +52,12 @@ export function AgentSessionMenu({
   const [error, setError] = useState<string | null>(null);
   const pending = useRef(false);
   const { copying, copy } = useAgentSessionMarkdownCopy();
+  const dialogOpen = dialog !== null;
+  useEffect(() => {
+    if (!dialogOpen) return;
+    onDialogOpenChange?.(true);
+    return () => onDialogOpenChange?.(false);
+  }, [dialogOpen, onDialogOpenChange]);
   const run = async (operation: () => Promise<void>) => {
     if (pending.current) return;
     pending.current = true;

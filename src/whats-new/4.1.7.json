@@ -1,0 +1,33 @@
+{
+  "version": "4.1.7",
+  "items": [
+    {
+      "type": "new",
+      "zh": "Agent 迁移到 DeepSeek Harness，支持原生任务与会话恢复",
+      "zh-TW": "Agent 遷移至 DeepSeek Harness，支援原生任務與對話恢復",
+      "en": "Move Agent execution to DeepSeek Harness with native tasks and session recovery",
+      "ja": "AgentをDeepSeek Harnessへ移行し、ネイティブタスクと会話の復元に対応"
+    },
+    {
+      "type": "new",
+      "zh": "秘书支持 GitHub 收件、独立工作树和经审阅的草稿 PR",
+      "zh-TW": "秘書支援 GitHub 收件、獨立工作樹與經審閱的草稿 PR",
+      "en": "Add GitHub intake, isolated worktrees, and reviewed draft PRs to Loli Secretary",
+      "ja": "秘書がGitHub受付、独立ワークツリー、レビュー済みドラフトPRに対応"
+    },
+    {
+      "type": "improve",
+      "zh": "改进会话切换与标题、折叠侧栏入口和输入框，合并头像与更多菜单",
+      "zh-TW": "改善會話切換與標題、收合側欄入口和輸入框，合併頭像與更多選單",
+      "en": "Improve sessions, compact sidebar access and composers; combine avatar and More menus",
+      "ja": "会話切替・タイトル、折りたたみサイドバーと入力欄を改善し、アバターとその他を統合"
+    },
+    {
+      "type": "fix",
+      "zh": "macOS 构建最低要求 13.5+，菜单跟随应用语言",
+      "zh-TW": "macOS 建置最低要求 13.5+，選單跟隨應用程式語言",
+      "en": "Set macOS builds to require 13.5+ and match menus to the app language",
+      "ja": "macOS ビルドの最低要件を 13.5+ に設定し、メニューをアプリの言語に統一"
+    }
+  ]
+}

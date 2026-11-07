@@ -17,6 +17,171 @@ $powershell = Join-Path $env:WINDIR 'System32\WindowsPowerShell\v1.0\powershell.
 $profileList = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList'
 $profilesRoot = [Environment]::ExpandEnvironmentVariables((Get-ItemProperty -LiteralPath $profileList).ProfilesDirectory)
 
+function Write-Phase([string]$Name, $Record) {
+    $destination = Join-Path $stage "$Name.json"
+    $temporary = "$destination.tmp"
+    $text = $Record | ConvertTo-Json -Depth 12 -Compress
+    foreach ($file in @($temporary, $destination)) {
+        # The worker may only open controller-owned pre-created evidence files.
+        # Never replace them: CREATOR OWNER would otherwise add an orphan SID ACE.
+        $mode = if ($ExpectedSid) { [IO.FileMode]::Open } else { [IO.FileMode]::OpenOrCreate }
+        $stream = [IO.File]::Open($file, $mode, [IO.FileAccess]::Write, [IO.FileShare]::Read)
+        try {
+            $stream.SetLength(0)
+            $writer = [IO.StreamWriter]::new($stream, [Text.UTF8Encoding]::new($false))
+            try { $writer.Write($text); $writer.Flush() } finally { $writer.Dispose() }
+        } finally { $stream.Dispose() }
+    }
+}
+
+function Get-DaclDigest($Acl) {
+    $sddl = $Acl.GetSecurityDescriptorSddlForm([Security.AccessControl.AccessControlSections]::Access)
+    $hash = [Security.Cryptography.SHA256]::Create()
+    try { return ([BitConverter]::ToString($hash.ComputeHash([Text.Encoding]::UTF8.GetBytes($sddl)))).Replace('-', '').ToLowerInvariant() }
+    finally { $hash.Dispose() }
+}
+
+function Get-StageAclSnapshot([string]$Directory, [string]$TestSid) {
+    # Walk only this exact stage and never follow a junction/symlink.
+    $pending = [Collections.Generic.Queue[string]]::new()
+    $pending.Enqueue($Directory)
+    while ($pending.Count) {
+        $name = $pending.Dequeue()
+        $entry = Get-Item -LiteralPath $name -Force
+        if ($entry.FullName -ne $Directory -and !$entry.FullName.StartsWith($Directory + '\', [StringComparison]::OrdinalIgnoreCase)) {
+            throw 'An ACL inspection escaped the exact test stage'
+        }
+        if ($entry.Attributes.HasFlag([IO.FileAttributes]::ReparsePoint)) { throw "Refusing to inspect a reparse point: $name" }
+        $acl = Get-Acl -LiteralPath $name
+        $rules = @($acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]) |
+            Where-Object { $_.IdentityReference.Value -eq $TestSid })
+        [pscustomobject]@{ path = $name; daclSha256 = Get-DaclDigest $acl; testSidAceCount = $rules.Count }
+        if ($entry.PSIsContainer) {
+            foreach ($child in Get-ChildItem -LiteralPath $name -Force) { $pending.Enqueue($child.FullName) }
+        }
+    }
+}
+
+function Get-TestAccountProcesses([string]$TestSid, $PreviousProcesses) {
+    foreach ($process in Get-CimInstance -ClassName Win32_Process) {
+        # A process already alive before this account existed cannot belong to it.
+        # This also avoids treating protected pre-existing system processes as ours.
+        $identity = "$($process.ProcessId):$($process.CreationDate.Ticks)"
+        if ($PreviousProcesses.ContainsKey($identity)) { continue }
+        try { $owner = Invoke-CimMethod -InputObject $process -MethodName GetOwnerSid }
+        catch {
+            $current = Get-CimInstance -ClassName Win32_Process -Filter "ProcessId=$($process.ProcessId)"
+            if (!$current -or $current.CreationDate -ne $process.CreationDate) { continue }
+            throw
+        }
+        if ($owner.ReturnValue -ne 0 -or !$owner.Sid) {
+            $current = Get-CimInstance -ClassName Win32_Process -Filter "ProcessId=$($process.ProcessId)"
+            if ($current -and $current.CreationDate -eq $process.CreationDate) {
+                throw "Cannot verify owner SID of new process $($process.ProcessId) (code $($owner.ReturnValue))"
+            }
+        } elseif ($owner.Sid -eq $TestSid) {
+            [pscustomobject]@{ processId = $process.ProcessId; name = $process.Name; created = $process.CreationDate }
+        }
+    }
+}
+
+function Complete-IsolatedCleanup($Context, [int]$GraceSeconds = 15) {
+    # Every destructive operation below is bound to the SID returned by New-LocalUser.
+    # Never sweep LCU* accounts, reset a DACL, unload a hive, or kill a process here.
+    $errors = [Collections.Generic.List[string]]::new()
+    $result = [ordered]@{
+        accountName = $Context.accountName; accountSid = $Context.testSid; profile = $Context.expectedProfile
+        stage = $Context.stage; originalAcl = $Context.originalAcl; accountRemoved = $false
+        profileRemoved = $false; profileRegistrationRemoved = $false; profileDirectoryRemoved = $false
+        processesCleared = $false; remainingProcesses = @(); daclRestored = $false
+        stageSidRemoved = $false; completed = $false
+    }
+    if ($Context.accountName -notmatch '^LCU[a-f0-9]{10}$' -or $Context.testSid -notmatch '^S-1-5-21-[0-9-]+$' -or
+        $Context.expectedProfile -ne (Join-Path $Context.profilesRoot $Context.accountName) -or
+        $Context.stage -ne (Join-Path $common ('LoliCodeUpgrade-' + $Context.accountName.Substring(3)))) {
+        $result.errors = @('Invalid cleanup identity; no cleanup actions attempted')
+        return $result
+    }
+    $safeProfile = $false
+    try {
+        # Give ordinary WebView/Node exit and profile unloading a bounded grace period.
+        $deadline = [DateTime]::UtcNow.AddSeconds($GraceSeconds)
+        do {
+            $result.remainingProcesses = @(Get-TestAccountProcesses $Context.testSid $Context.previousProcesses)
+            $profile = Get-CimInstance -ClassName Win32_UserProfile -Filter "SID='$($Context.testSid)'"
+            if (!$result.remainingProcesses.Count -and (!$profile -or !$profile.Loaded)) { break }
+            Start-Sleep -Milliseconds 250
+        } while ([DateTime]::UtcNow -lt $deadline)
+        if ($result.remainingProcesses.Count) { throw 'Exact test-SID processes remain; preserving the profile' }
+        $result.processesCleared = $true
+        if ($profile -and $profile.Loaded) { throw 'The exact test profile is still Loaded; preserving it' }
+        if ($profile -and $profile.LocalPath -ne $Context.expectedProfile) { throw 'The test SID profile path changed; preserving it' }
+        if (Test-Path -LiteralPath $Context.expectedProfile) {
+            $entry = Get-Item -LiteralPath $Context.expectedProfile -Force
+            if ($entry.FullName -ne $Context.expectedProfile -or $entry.Attributes.HasFlag([IO.FileAttributes]::ReparsePoint)) {
+                throw 'The exact test profile is a reparse point or changed path; preserving it'
+            }
+        }
+        $safeProfile = $true
+    } catch { $errors.Add($_.Exception.Message) }
+    try {
+        $users = @(Get-LocalUser | Where-Object { $_.SID.Value -eq $Context.testSid })
+        if ($users.Count -gt 1 -or ($users.Count -eq 1 -and $users[0].Name -ne $Context.accountName)) { throw 'Test SID account identity changed' }
+        if ($users.Count -eq 1) { Remove-LocalUser -SID ([Security.Principal.SecurityIdentifier]$Context.testSid) }
+        if (@(Get-LocalUser | Where-Object { $_.SID.Value -eq $Context.testSid }).Count) { throw 'The exact test account remains' }
+        $result.accountRemoved = $true
+    } catch { $errors.Add($_.Exception.Message) }
+    try {
+        if ($safeProfile -and $result.accountRemoved) {
+            # Recheck immediately before Remove-CimInstance; never delete a loaded profile.
+            $profile = Get-CimInstance -ClassName Win32_UserProfile -Filter "SID='$($Context.testSid)'"
+            if ($profile) {
+                if ($profile.Loaded -or $profile.LocalPath -ne $Context.expectedProfile) { throw 'Profile changed before cleanup; preserving it' }
+                if (@(Get-TestAccountProcesses $Context.testSid $Context.previousProcesses).Count) { throw 'A test process appeared before profile cleanup' }
+                $entry = Get-Item -LiteralPath $Context.expectedProfile -Force
+                if ($entry.FullName -ne $Context.expectedProfile -or $entry.Attributes.HasFlag([IO.FileAttributes]::ReparsePoint)) {
+                    throw 'The test profile path changed before removal; preserving it'
+                }
+                Remove-CimInstance -InputObject $profile
+            }
+        }
+        $result.profileRemoved = !(Get-CimInstance -ClassName Win32_UserProfile -Filter "SID='$($Context.testSid)'")
+        $result.profileRegistrationRemoved = !(Test-Path -LiteralPath (Join-Path $profileList $Context.testSid))
+        $result.profileDirectoryRemoved = !(Test-Path -LiteralPath $Context.expectedProfile)
+        if (!$result.profileRemoved -or !$result.profileRegistrationRemoved -or !$result.profileDirectoryRemoved) {
+            throw 'The exact test profile, ProfileList key, or directory remains; no recursive fallback deletion was attempted'
+        }
+    } catch { $errors.Add($_.Exception.Message) }
+    try {
+        # RemoveAccessRuleSpecific removes only our exact explicit Modify grant.
+        # The current ACL is used so any unrelated changes are never overwritten.
+        if ($Context.grantAttempted) {
+            $entry = Get-Item -LiteralPath $Context.stage -Force
+            if ($entry.FullName -ne $Context.stage -or $entry.Attributes.HasFlag([IO.FileAttributes]::ReparsePoint)) { throw 'Stage changed before grant removal' }
+            $acl = Get-Acl -LiteralPath $Context.stage
+            $acl.RemoveAccessRuleSpecific($Context.grantRule)
+            Set-Acl -LiteralPath $Context.stage -AclObject $acl
+        }
+        $after = @(Get-StageAclSnapshot $Context.stage $Context.testSid)
+        $result.stageSidRemoved = !(@($after | Where-Object { $_.testSidAceCount -ne 0 }).Count)
+        if (!$result.stageSidRemoved) { throw 'The exact test SID still has a stage DACL entry; evidence retained' }
+        foreach ($before in $Context.originalAcl) {
+            $current = @($after | Where-Object { $_.path -eq $before.path })
+            if ($current.Count -ne 1 -or $current[0].daclSha256 -ne $before.daclSha256) { throw "Original DACL changed: $($before.path)" }
+        }
+        $result.daclRestored = $true
+        $result.finalAcl = $after
+    } catch { $errors.Add($_.Exception.Message) }
+    try {
+        $result.remainingProcesses = @(Get-TestAccountProcesses $Context.testSid $Context.previousProcesses)
+        $result.processesCleared = !$result.remainingProcesses.Count
+        if (!$result.processesCleared) { throw 'Exact test-SID processes remain after cleanup' }
+    } catch { $result.processesCleared = $false; $errors.Add($_.Exception.Message) }
+    $result.errors = @($errors.ToArray())
+    $result.completed = $errors.Count -eq 0
+    return $result
+}
+
 if (!$ExpectedSid) {
     $principal = [Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())
     if (!$principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
@@ -25,49 +190,64 @@ if (!$ExpectedSid) {
     $accountName = 'LCU' + $stageName.Substring('LoliCodeUpgrade-'.Length)
     $password = ConvertTo-SecureString ('Lc!8z' + [Guid]::NewGuid().ToString('N')) -AsPlainText -Force
     $account = $null
+    $context = @{
+        accountName = $accountName; testSid = $null; expectedProfile = Join-Path $profilesRoot $accountName
+        stage = $stage; profilesRoot = $profilesRoot; grantAttempted = $false; previousProcesses = @{}
+        originalAcl = @(Get-StageAclSnapshot $stage '')
+    }
+    foreach ($process in Get-CimInstance -ClassName Win32_Process) {
+        $context.previousProcesses["$($process.ProcessId):$($process.CreationDate.Ticks)"] = $true
+    }
+    $workerFailure = $null
     try {
         $account = New-LocalUser -Name $accountName -Password $password -Description 'Disposable LoliCode NSIS upgrade test'
-        Add-LocalGroupMember -SID ([Security.Principal.SecurityIdentifier]'S-1-5-32-545') -Member $account
         $testSid = $account.SID.Value
-        & icacls.exe $stage /grant ('*' + $testSid + ':(OI)(CI)(M)') | Out-Null
-        if ($LASTEXITCODE -ne 0) { throw 'Cannot authorize the isolated account to access its fixture' }
+        $context.testSid = $testSid
+        $context.grantRule = [Security.AccessControl.FileSystemAccessRule]::new(
+            [Security.Principal.SecurityIdentifier]$testSid, 'Modify', 'ContainerInherit, ObjectInherit', 'None', 'Allow')
+        Write-Phase 'cleanup-identity' @{
+            accountName = $accountName; accountSid = $testSid; profile = $context.expectedProfile
+            stage = $stage; originalAcl = $context.originalAcl
+        }
+        Add-LocalGroupMember -SID ([Security.Principal.SecurityIdentifier]'S-1-5-32-545') -Member $account
+        $acl = Get-Acl -LiteralPath $stage
+        if (@($acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]) | Where-Object { $_.IdentityReference.Value -eq $testSid }).Count) {
+            throw 'The fresh test SID unexpectedly already has stage access'
+        }
+        $acl.AddAccessRule($context.grantRule)
+        $context.grantAttempted = $true
+        Set-Acl -LiteralPath $stage -AclObject $acl
         $credential = [pscredential]::new(".\$accountName", $password)
         $arguments = "-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$PSCommandPath`" -StageDirectory `"$stage`" -ExpectedSid $testSid -ExpectedName $accountName"
         $worker = Start-Process -FilePath $powershell -Credential $credential -LoadUserProfile -WorkingDirectory $stage -WindowStyle Hidden -ArgumentList $arguments -PassThru
-        if (!$worker.WaitForExit(900000)) {
-            Stop-Process -Id $worker.Id
-            throw 'The isolated account worker exceeded the 15 minute timeout'
+        if (!$worker.WaitForExit(1800000)) {
+            Write-Phase 'cancel' @{ reason = 'The isolated account worker exceeded the 30 minute timeout' }
+            # Let the worker unwind its own finally; never kill its cleanup path.
+            if (!$worker.WaitForExit(120000)) { throw 'The worker did not exit after cancellation; retain its exact profile and report remaining processes' }
+            throw 'The isolated account worker exceeded the 30 minute timeout'
         }
-        if (!(Test-Path -LiteralPath (Join-Path $stage 'account-finished.json'))) {
+        $workerRecord = Get-Content -LiteralPath (Join-Path $stage 'account-finished.json') -Raw | ConvertFrom-Json
+        if ($worker.ExitCode -ne 0 -or $workerRecord.pending -or !$workerRecord.persistedLegacySha256) {
             $failure = Join-Path $stage 'failure.txt'
-            if (Test-Path -LiteralPath $failure) { throw (Get-Content -LiteralPath $failure -Raw) }
+            $message = Get-Content -LiteralPath $failure -Raw
+            if ($message) { throw $message }
             throw "The isolated account worker exited with $($worker.ExitCode)"
         }
-    } finally {
+    } catch { $workerFailure = $_ } finally {
         if ($account) {
-            Remove-LocalUser -SID $account.SID
-            $testProfile = Get-CimInstance -ClassName Win32_UserProfile -Filter "SID='$($account.SID.Value)'"
-            $expectedProfile = Join-Path $profilesRoot $accountName
-            if ($testProfile -and !$testProfile.Loaded -and $testProfile.LocalPath -eq $expectedProfile) {
-                $resolvedProfile = Get-Item -LiteralPath $expectedProfile
-                if ($resolvedProfile.FullName -eq $expectedProfile -and
-                    !$resolvedProfile.Attributes.HasFlag([IO.FileAttributes]::ReparsePoint)) {
-                    Remove-CimInstance -InputObject $testProfile
-                }
-            }
+            $cleanup = Complete-IsolatedCleanup $context
+            Write-Phase 'cleanup' $cleanup
+            if (!$cleanup.completed) { throw "Isolated cleanup failed; evidence retained at ${stage}: $($cleanup.errors -join '; ')" }
         }
     }
+    if ($workerFailure) { throw $workerFailure }
     return
 }
 
-function Write-Phase([string]$Name, $Record) {
-    $destination = Join-Path $stage "$Name.json"
-    $temporary = "$destination.tmp"
-    $Record | ConvertTo-Json -Depth 8 -Compress | Set-Content -LiteralPath $temporary -Encoding UTF8
-    Move-Item -LiteralPath $temporary -Destination $destination
-}
-
 function Install-Product([string]$Installer, [string]$Version, [string[]]$Arguments) {
+    $installerHash = (Get-FileHash -LiteralPath $Installer).Hash.ToLowerInvariant()
+    $expectedHash = if ($Version -eq '4.1.6') { 'e21021377ea8284eb00f73d297700644db76dd41bc93de7d3290833678b018b9' } else { $plan.candidateSha256 }
+    if ($installerHash -cne $expectedHash) { throw 'Installer bytes changed before installation' }
     $install = Start-Process -FilePath $Installer -ArgumentList $Arguments -WindowStyle Hidden -Wait -PassThru
     if ($install.ExitCode -ne 0) { throw "NSIS $Version exited with $($install.ExitCode)" }
     $entry = Get-ItemProperty -LiteralPath 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\LoliCode'
@@ -75,7 +255,7 @@ function Install-Product([string]$Installer, [string]$Version, [string[]]$Argume
         throw 'NSIS registration does not match the isolated install directory and expected version'
     }
     return @{
-        installerSha256 = (Get-FileHash -LiteralPath $Installer).Hash.ToLowerInvariant()
+        installerSha256 = $installerHash
         executableSha256 = (Get-FileHash -LiteralPath $executable).Hash.ToLowerInvariant()
         installedVersion = $entry.DisplayVersion
         exitCode = $install.ExitCode
@@ -93,12 +273,18 @@ function Start-InstalledApp([string]$Phase, $InstallProof) {
     try {
         Write-Phase $Phase @{
             account = $ExpectedName
+            accountSid = $ExpectedSid
+            accountProfile = $accountHome
             profile = $appProfile
             project = $project
             processId = $app.Id
             install = $InstallProof
         }
-        if (!$app.WaitForExit(360000)) { throw "Installed $Phase app did not exit after WebView acceptance" }
+        $deadline = [DateTime]::UtcNow.AddMinutes(6)
+        while (!$app.WaitForExit(1000)) {
+            if (Test-Path -LiteralPath (Join-Path $stage 'cancel.json')) { throw "Installed $Phase acceptance was cancelled" }
+            if ([DateTime]::UtcNow -ge $deadline) { throw "Installed $Phase app did not exit after WebView acceptance" }
+        }
         if ($app.ExitCode -ne 0) { throw "Installed $Phase app exited with $($app.ExitCode)" }
     } finally {
         if (!$app.HasExited) { Stop-Process -Id $app.Id }
@@ -184,11 +370,36 @@ try {
         $receipt.harnessSessionId -notmatch '^[0-9a-f-]{36}$') {
         throw 'Missing or invalid committed Harness migration receipt'
     }
+    $receiptHash = (Get-FileHash -LiteralPath $receiptPath).Hash
+    function Assert-PreservedUpgrade([string]$Phase) {
+        if ((Get-Content -LiteralPath $installedMarker) -ne $sourceHash -or
+            (Get-FileHash -LiteralPath $source.FullName).Hash -ne $sourceHash -or
+            (Get-FileHash -LiteralPath $receiptPath).Hash -ne $receiptHash -or
+            (Get-FileHash -LiteralPath $executable).Hash.ToLowerInvariant() -cne $candidate.executableSha256) {
+            throw "$Phase changed the install marker, legacy source, committed migration receipt, or candidate executable"
+        }
+    }
+    # Same Windows account, same profile, same session. The JS driver requires a
+    # fresh model request containing every previous question/answer each time.
+    Start-InstalledApp 'restart' $candidate
+    Assert-PreservedUpgrade 'Restart'
+    $reinstalled = Install-Product (Join-Path $stage 'candidate.exe') $plan.candidateVersion @('/S', '/UPDATE', '/NS')
+    if ($reinstalled.installerSha256 -cne $candidate.installerSha256 -or
+        $reinstalled.executableSha256 -cne $candidate.executableSha256) {
+        throw 'Repeated installation did not use the identical verified candidate'
+    }
+    Assert-PreservedUpgrade 'Repeated installation'
+    Start-InstalledApp 'reinstall' $reinstalled
+    Assert-PreservedUpgrade 'Post-reinstall conversation'
     Write-Phase 'finished' @{
         preservedLegacySha256 = $sourceHash.ToLowerInvariant()
         harnessSessionId = $receipt.harnessSessionId
         harnessVersion = $runtimePackage.version
         overwroteOriginalInstall = $true
+        restartVerified = $true
+        sameCandidateReinstalled = $true
+        candidateSha256 = $candidate.installerSha256
+        migrationReceiptSha256 = $receiptHash.ToLowerInvariant()
     }
     Write-Phase 'account-finished' @{ persistedLegacySha256 = $sourceHash.ToLowerInvariant() }
 } catch {

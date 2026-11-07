@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { SidebarProfileMenu } from "@/app/shell/SidebarProfileMenu";
 import type {
   LolicodeAccount,
@@ -53,7 +54,7 @@ const account: LolicodeAccount = {
   avatarUrl: "https://lolicode.com/assets/avatars/42.png",
   profileUrl: "https://lolicode.com/u/forum-user",
 };
-function mount() {
+function mount(navigationItems?: React.ReactNode) {
   const onOpenSettings = vi.fn();
   const onOpenUpdates = vi.fn();
   const onOpenAllowance = vi.fn();
@@ -67,6 +68,7 @@ function mount() {
     ...render(
       <SidebarProfileMenu
         selected
+        navigationItems={navigationItems}
         hasUpdate
         onOpenSettings={onOpenSettings}
         onOpenUpdates={onOpenUpdates}
@@ -354,6 +356,37 @@ describe("LoliCode sidebar account", () => {
       expect(screen.queryByRole("menu")).not.toBeInTheDocument(),
     );
     expect(document.body.style.pointerEvents).not.toBe("none");
+  });
+
+  it("keeps injected navigation alongside signed-in account actions in one menu", async () => {
+    mocks.account = account;
+    const onNavigate = vi.fn();
+    mount(
+      <DropdownMenuItem onSelect={onNavigate}>
+        Navigation destination
+      </DropdownMenuItem>,
+    );
+    await openMenu();
+    expect(screen.getAllByRole("menu")).toHaveLength(1);
+    for (const name of [
+      "使用情况与额度",
+      "个人空间",
+      "刷新账户资料",
+      "社区网站",
+      "连接手机",
+      "设置",
+      "退出 LoliCode 登录",
+    ]) {
+      expect(screen.getByRole("menuitem", { name })).toBeInTheDocument();
+    }
+    expect(screen.getAllByRole("menuitem", { name: /^软件更新/ })).toHaveLength(
+      1,
+    );
+    await userEvent
+      .setup()
+      .click(screen.getByRole("menuitem", { name: "Navigation destination" }));
+    expect(onNavigate).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 
   it("uses the editor language for account actions", async () => {

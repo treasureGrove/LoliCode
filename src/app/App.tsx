@@ -193,7 +193,9 @@ function App() {
     const currentView = readStoredView();
     return {
       currentView,
-      workspaceDirectory: isWorkspaceMode(currentView) ? currentView : undefined,
+      workspaceDirectory: isWorkspaceMode(currentView)
+        ? currentView
+        : undefined,
     };
   });
   const setCurrentView = useCallback((nextView: View) => {
@@ -254,14 +256,17 @@ function App() {
       ? currentView
       : null;
   const sidebarView =
-    currentView === "channels" ? workspaceDirectory ?? currentView : currentView;
+    currentView === "channels"
+      ? (workspaceDirectory ?? currentView)
+      : currentView;
   const paneLayout = useAgentPaneLayout({
     sidebarVisible: true,
     sidebarCompact: workspaceSidebarCompact,
     sidebarAutoCompact: true,
     previewVisible: agentPreviewVisible,
   });
-  const compactSidebar = paneLayout.sidebarCompact || !paneLayout.sidebarVisible;
+  const compactSidebar =
+    paneLayout.sidebarCompact || !paneLayout.sidebarVisible;
   const sidebarWidth = workspaceMode ? paneLayout.sidebarWidth || 72 : 248;
 
   useEffect(() => {
@@ -591,7 +596,7 @@ function App() {
   const backToPreviousPage = () => {
     const previous =
       currentViewRef.current === "channels"
-        ? workspaceDirectory ?? pageReturnViewRef.current
+        ? (workspaceDirectory ?? pageReturnViewRef.current)
         : pageReturnViewRef.current;
     openPage(previous === currentViewRef.current ? "agent" : previous, true);
   };
@@ -906,7 +911,9 @@ function App() {
                     workspaceMode ? toggleWorkspaceSidebar : undefined
                   }
                   onOpenAgentTool={openAgentTool}
-                  activeAgentTool={currentView === "agent" ? activeAgentTool : null}
+                  activeAgentTool={
+                    currentView === "agent" ? activeAgentTool : null
+                  }
                   selectedTavernCharacterId={tavernCharacterId}
                   onSelectTavernCharacter={(id) =>
                     navigateFromDirectory("tavern", () =>
@@ -916,7 +923,9 @@ function App() {
                   onAddTavernCharacter={(source) =>
                     navigateFromDirectory("tavern", () =>
                       window.dispatchEvent(
-                        new CustomEvent("lolicode:tavern-add", { detail: source }),
+                        new CustomEvent("lolicode:tavern-add", {
+                          detail: source,
+                        }),
                       ),
                     )
                   }

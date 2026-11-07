@@ -16,12 +16,34 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import {
+  createSnapshotBoundary,
+  createWorkspaceBoundary,
+  isWithin,
+} from "./lolicode-nsis-payload-boundary.mjs";
 
 const repositoryRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "../..",
 );
 const generatedScript = process.env.LOLICODE_NSIS_GENERATED_SCRIPT;
+// Optional frozen-build mode: supply both LOLICODE_NSIS_SOURCE_SNAPSHOT and
+// LOLICODE_NSIS_EXPECTED_SNAPSHOT_SHA256 after independently verifying the
+// receipt's Git/archive mapping. Keep GENERATED_SCRIPT at that work's exact
+// src-tauri/target/release/nsis/x64/installer.nsi alias. Never rewrite the NSIS.
+const snapshotFile = process.env.LOLICODE_NSIS_SOURCE_SNAPSHOT;
+const expectedSnapshotSha256 =
+  process.env.LOLICODE_NSIS_EXPECTED_SNAPSHOT_SHA256;
+assert.equal(
+  Boolean(snapshotFile),
+  Boolean(expectedSnapshotSha256),
+  "Snapshot path and independently verified receipt SHA256 must be supplied together",
+);
+if (snapshotFile)
+  assert(
+    generatedScript,
+    "Snapshot mode must verify the actual generated installer, not skip it",
+  );
 const expectedVersion =
   process.env.LOLICODE_NSIS_EXPECTED_VERSION ??
   JSON.parse(readFileSync(path.join(repositoryRoot, "package.json"), "utf8"))
@@ -33,6 +55,7 @@ const hooksPath = path.join(
   repositoryRoot,
   "src-tauri/nsis/lolicode-installer-hooks.nsh",
 );
+const defaultBoundary = createWorkspaceBoundary(repositoryRoot);
 // Exact source bytes from the official webrtc-rs/webrtc v0.17.2 tag.
 // https://raw.githubusercontent.com/webrtc-rs/webrtc/v0.17.2/LICENSE-MIT
 // https://raw.githubusercontent.com/webrtc-rs/webrtc/v0.17.2/LICENSE-APACHE
@@ -47,52 +70,8 @@ const companionLicenses = [
   ],
 ];
 
-function isWithin(parent, candidate) {
-  const relative = path.relative(parent, candidate);
-  return (
-    relative !== "" &&
-    relative !== ".." &&
-    !relative.startsWith(`..${path.sep}`) &&
-    !path.isAbsolute(relative)
-  );
-}
-
 // Never interpolate instructions from the generated installer. Only validated
 // regular input files and relative payload destinations enter the fixture.
-function workspaceFile(candidate) {
-  assert(path.isAbsolute(candidate), `Source must be absolute: ${candidate}`);
-  const absolute = path.resolve(candidate);
-  assert(
-    isWithin(repositoryRoot, absolute),
-    `Source leaves workspace: ${candidate}`,
-  );
-  // Build checkouts may alias the shared target cache with a junction. Resolve
-  // that read-only alias first, then allow only canonical workspace sources.
-  const canonicalRoot = realpathSync(repositoryRoot);
-  const canonical = realpathSync(absolute);
-  assert(
-    isWithin(canonicalRoot, canonical),
-    `Resolved source leaves workspace: ${candidate}`,
-  );
-  const relative = path.relative(canonicalRoot, canonical);
-  let current = canonicalRoot;
-  for (const component of relative.split(path.sep)) {
-    current = path.join(current, component);
-    assert(
-      !lstatSync(current).isSymbolicLink(),
-      `Source traverses a link: ${current}`,
-    );
-  }
-  assert(
-    lstatSync(canonical).isFile(),
-    `Source is not a regular file: ${candidate}`,
-  );
-  assert(
-    !/[\r\n\0"$]/u.test(canonical),
-    "Source contains unsupported NSIS syntax",
-  );
-  return canonical;
-}
 
 function relativeDestination(candidate) {
   assert(candidate.length > 0 && !path.win32.isAbsolute(candidate));
@@ -114,6 +93,44 @@ function relativeDestination(candidate) {
   return candidate;
 }
 
+const resourcePrefix = "$LoliCodeResourceRoot\\";
+function resourceDestination(candidate, allowRoot = false) {
+  assert(
+    candidate.startsWith(resourcePrefix),
+    "Resource I/O must use the exact normalized extended-path root",
+  );
+  const relative = candidate.slice(resourcePrefix.length);
+  return allowRoot && relative === "" ? "" : relativeDestination(relative);
+}
+
+function resourceHelpers(source) {
+  const begin = "; LoliCode resource filesystem helpers begin";
+  const end = "; LoliCode resource filesystem helpers end";
+  const start = source.indexOf(begin);
+  const finish = source.indexOf(end);
+  assert(
+    start >= 0 && finish > start,
+    "Generated resource filesystem helpers are missing",
+  );
+  assert.equal(
+    source.indexOf(begin, start + begin.length),
+    -1,
+    "Duplicate resource filesystem helpers",
+  );
+  assert.equal(
+    source.indexOf(end, finish + end.length),
+    -1,
+    "Duplicate resource filesystem helper end",
+  );
+  return source.slice(start, finish + end.length).replaceAll("\r\n", "\n");
+}
+const reviewedResourceHelpers = resourceHelpers(
+  readFileSync(
+    path.join(repositoryRoot, "src-tauri/nsis/installer.nsi"),
+    "utf8",
+  ),
+);
+
 function quoted(value) {
   return value.replaceAll("$", () => "$$").replaceAll('"', () => '$\\"');
 }
@@ -134,94 +151,209 @@ const harnessPayloadFiles = [
   "node_modules\\@deepseek-ai\\dsh\\lib\\bin.js",
 ];
 
-function payloadFromGeneratedScript(filename) {
-  const source = readFileSync(workspaceFile(filename), "utf8");
-  const bundledHookIncludes = [
-    ...source.matchAll(
-      /^!include "([^"\r\n]*lolicode-installer-hooks\.nsh)"\r?$/gmu,
-    ),
+// Generated payloads exceed 30 MiB. Never run a multi-line capture over the
+// whole section: V8 can exhaust its regexp stack even for a lazy capture.
+// All regexps below see only one bounded line; section slicing uses offsets.
+function* scriptLines(source) {
+  for (let start = 0; start < source.length; ) {
+    const newline = source.indexOf("\n", start);
+    const end = newline === -1 ? source.length : newline;
+    const raw = source.slice(start, end);
+    assert(
+      raw.length <= 65536,
+      "Generated NSIS line exceeds the reviewed limit",
+    );
+    yield { line: raw.trim(), start, next: end + 1 };
+    start = end + 1;
+  }
+}
+
+function generatedPayloadLayout(source) {
+  const bundledHookIncludes = [];
+  const definitions = new Map();
+  const markers = [
+    "; Copy main executable",
+    "; Copy external binaries",
+    "; Create file associations",
   ];
+  const offsets = [];
+  let openSection;
+  let installSections = 0;
+  let resourcePreparation = 0;
+  for (const entry of scriptLines(source)) {
+    const { line } = entry;
+    const hook = line.match(
+      /^!include "([^"\r\n]*lolicode-installer-hooks\.nsh)"$/u,
+    );
+    if (hook) bundledHookIncludes.push(hook);
+    if (
+      /^!define\s+(?:VERSION|MAINBINARYNAME|MAINBINARYSRCPATH)(?:\s|$)/u.test(
+        line,
+      )
+    ) {
+      const definition = line.match(
+        /^!define (VERSION|MAINBINARYNAME|MAINBINARYSRCPATH) "([^"\r\n]+)"$/u,
+      );
+      assert(definition, `Malformed generated payload definition: ${line}`);
+      assert(
+        !definitions.has(definition[1]),
+        `Duplicate generated payload definition: ${definition[1]}`,
+      );
+      definitions.set(definition[1], definition[2]);
+    }
+    if (/^Section(?:\s|$)/u.test(line)) {
+      assert.equal(
+        openSection,
+        undefined,
+        "Nested or unterminated generated section",
+      );
+      openSection = line;
+      if (line === "Section Install") {
+        installSections += 1;
+        assert.equal(installSections, 1, "Duplicate generated Install section");
+      }
+    } else if (line === "SectionEnd") {
+      assert(openSection, "Generated SectionEnd has no matching section");
+      if (openSection === "Section Install") {
+        assert.equal(
+          resourcePreparation,
+          1,
+          "Install must prepare the normalized resource root exactly once",
+        );
+        assert.equal(
+          offsets.length,
+          markers.length,
+          "Generated payload boundaries are missing; review the new Tauri layout",
+        );
+      }
+      openSection = undefined;
+    } else if (openSection === "Section Install") {
+      if (line === "!insertmacro LoliCodePrepareResourceRoot") {
+        assert.equal(
+          offsets.length,
+          0,
+          "Prepare resource root before copying payload",
+        );
+        resourcePreparation += 1;
+      }
+      const marker = markers.indexOf(line);
+      if (marker !== -1) {
+        assert.equal(
+          marker,
+          offsets.length,
+          "Duplicate or out-of-order generated payload boundary",
+        );
+        offsets.push(entry);
+      }
+    }
+  }
+  assert.equal(
+    openSection,
+    undefined,
+    "Generated section is missing SectionEnd",
+  );
+  assert.equal(
+    installSections,
+    1,
+    "Generated installer must have exactly named Install section",
+  );
+  assert.equal(
+    offsets.length,
+    markers.length,
+    "Generated payload boundaries are missing",
+  );
+  for (const { line } of scriptLines(
+    source.slice(offsets[1].next, offsets[2].start),
+  ))
+    assert(
+      !line || line.startsWith(";"),
+      "External binary payload requires explicit fixture support",
+    );
+  return {
+    bundledHookIncludes,
+    definitions,
+    block: source.slice(offsets[0].next, offsets[1].start),
+  };
+}
+
+function payloadFromGeneratedScript(filename, boundary = defaultBoundary) {
+  const generatedScriptPath = boundary.generatedScript(filename);
+  const source = readFileSync(generatedScriptPath, "utf8");
+  const { bundledHookIncludes, definitions, block } =
+    generatedPayloadLayout(source);
+  const helpers = resourceHelpers(source);
+  assert.equal(
+    helpers,
+    reviewedResourceHelpers,
+    "Generated installer must use the reviewed resource path preparation",
+  );
+  assert.equal(
+    helpers,
+    resourceHelpers(
+      readFileSync(
+        boundary.sourceFile(
+          path.join(boundary.sourceRoot, "src-tauri/nsis/installer.nsi"),
+        ),
+        "utf8",
+      ),
+    ),
+    "Generated resource path preparation must match the exact source snapshot",
+  );
   assert.equal(
     bundledHookIncludes.length,
     1,
     "Verify the hook used by this actual generated installer",
   );
-  const bundledHooks = workspaceFile(bundledHookIncludes[0][1]);
+  const bundledHooks = boundary.sourceFile(bundledHookIncludes[0][1]);
+  assert.equal(
+    bundledHooks,
+    boundary.sourceFile(
+      path.join(
+        boundary.sourceRoot,
+        "src-tauri/nsis/lolicode-installer-hooks.nsh",
+      ),
+    ),
+    "Generated installer hook must belong to this exact source snapshot",
+  );
   assert.equal(
     readFileSync(bundledHooks, "utf8").replaceAll("\r\n", "\n"),
     readFileSync(hooksPath, "utf8").replaceAll("\r\n", "\n"),
     "Generated installer must use the reviewed hook, not a stale build copy",
   );
-  workspaceFile(
+  boundary.sourceFile(
     path.join(path.dirname(bundledHooks), "lolicode-process-guard.ps1"),
   );
-  const version = source.match(/^!define VERSION "([^"\r\n]+)"\r?$/mu)?.[1];
+  const version = definitions.get("VERSION");
   assert.equal(
     version,
     expectedVersion,
     "Generated installer must be the intended release",
   );
-  assert.equal(
-    source.match(/^!define MAINBINARYNAME "([^"\r\n]+)"\r?$/mu)?.[1],
-    "LoliCode",
-  );
-  const executable = source.match(
-    /^!define MAINBINARYSRCPATH "([^"\r\n]+)"\r?$/mu,
-  )?.[1];
+  assert.equal(definitions.get("MAINBINARYNAME"), "LoliCode");
+  const executable = definitions.get("MAINBINARYSRCPATH");
   assert(executable, "Generated installer must declare its actual executable");
   assert.equal(path.win32.basename(executable), "LoliCode.exe");
-  const section = source.match(
-    /^Section Install\r?\n([\s\S]*?)^SectionEnd\r?$/mu,
-  )?.[1];
-  assert(
-    section,
-    "Generated installer must have exactly named Install section",
-  );
-  const block = section.match(
-    /; Copy main executable\r?\n([\s\S]*?); Copy external binaries/u,
-  )?.[1];
-  assert(
-    block,
-    "Generated payload boundaries are missing; review the new Tauri layout",
-  );
-  const external = section.match(
-    /; Copy external binaries\r?\n([\s\S]*?); Create file associations/u,
-  )?.[1];
-  assert.notEqual(
-    external,
-    undefined,
-    "Generated external payload boundary is missing",
-  );
-  assert(
-    external
-      .split(/\r?\n/u)
-      .every((line) => !line.trim() || line.trim().startsWith(";")),
-    "External binary payload requires explicit fixture support",
-  );
-
   const files = [];
   const operations = [];
   const destinations = new Set();
-  for (const raw of block.split(/\r?\n/u)) {
-    const line = raw.trim();
+  for (const { line } of scriptLines(block)) {
     if (!line || line.startsWith(";")) continue;
-    // Root-level notices make Tauri explicitly create the existing install root.
-    if (line === 'CreateDirectory "$INSTDIR\\"') continue;
     if (line === 'File "${MAINBINARYSRCPATH}"') {
       assert(!files.some((file) => file.destination === "LoliCode.exe"));
       const file = {
         destination: "LoliCode.exe",
-        source: workspaceFile(executable),
+        source: boundary.executable(executable),
       };
       files.push(file);
       operations.push({ type: "file", ...file });
       continue;
     }
-    const directory = line.match(/^CreateDirectory "\$INSTDIR\\([^"\r\n]+)"$/u);
+    const directory = line.match(/^CreateDirectory "([^"\r\n]+)"$/u);
     if (directory) {
       operations.push({
         type: "directory",
-        destination: relativeDestination(directory[1]),
+        destination: resourceDestination(directory[1], true),
+        nsisDestination: directory[1],
       });
       continue;
     }
@@ -229,16 +361,16 @@ function payloadFromGeneratedScript(filename) {
       /^File \/a "\/oname=([^"\r\n]+)" "([^"\r\n]+)"$/u,
     );
     assert(resource, `Unrecognized generated payload instruction: ${line}`);
-    const destination = relativeDestination(resource[1]);
+    const destination = resourceDestination(resource[1]);
     assert.notEqual(destination.toLowerCase(), "lolicode.exe");
     assert(
       !destinations.has(destination.toLowerCase()),
       `Duplicate destination: ${destination}`,
     );
     destinations.add(destination.toLowerCase());
-    const file = { destination, source: workspaceFile(resource[2]) };
+    const file = { destination, source: boundary.sourceFile(resource[2]) };
     files.push(file);
-    operations.push({ type: "file", ...file });
+    operations.push({ type: "file", ...file, nsisDestination: resource[1] });
   }
   assert.equal(
     files.filter((file) => file.destination === "LoliCode.exe").length,
@@ -284,10 +416,13 @@ function payloadFromGeneratedScript(filename) {
     version,
     hooksPath: bundledHooks,
     companionLicenseFiles: companionLicenses.length,
+    generatedScriptPath,
+    generatedScriptSha256: sha256(generatedScriptPath),
+    resourceHelpers: helpers,
   };
 }
 
-test("actual NSIS payload parser requires both official companion license bytes at their installed paths", () => {
+function withSyntheticPayload(action) {
   const temporaryParent = path.join(repositoryRoot, "tmp");
   mkdirSync(temporaryParent, { recursive: true });
   const temporary = mkdtempSync(
@@ -309,47 +444,70 @@ test("actual NSIS payload parser requires both official companion license bytes 
       "skills/xlsx/LICENSE.txt",
     ];
     const resource = (destination, source) =>
-      `  File /a "/oname=${destination}" "${source}"`;
+      `  File /a "/oname=${resourcePrefix}${destination}" "${source}"`;
     const required = companionLicenses.map(([name]) => [
       `licenses\\companion\\${name}`,
       path.join(repositoryRoot, "src-tauri/resources/companion-licenses", name),
     ]);
-    function render(licenses) {
+    function render(
+      licenses = required,
+      { resources = [], mutate = (source) => source } = {},
+    ) {
       writeFileSync(
         filename,
-        [
-          `!include "${hooksPath}"`,
-          `!define VERSION "${expectedVersion}"`,
-          '!define MAINBINARYNAME "LoliCode"',
-          `!define MAINBINARYSRCPATH "${executable}"`,
-          "Section Install",
-          "; Copy main executable",
-          '  File "${MAINBINARYSRCPATH}"',
-          '  CreateDirectory "$INSTDIR\\"',
-          resource(
-            "agent\\extensions\\manifest.json",
-            path.join(extensionRoot, "manifest.json"),
-          ),
-          ...extensionLicenses.map((name) =>
+        mutate(
+          [
+            reviewedResourceHelpers,
+            `!include "${hooksPath}"`,
+            `!define VERSION "${expectedVersion}"`,
+            '!define MAINBINARYNAME "LoliCode"',
+            `!define MAINBINARYSRCPATH "${executable}"`,
+            "Section Install",
+            "!insertmacro LoliCodePrepareResourceRoot",
+            "; Copy main executable",
+            '  File "${MAINBINARYSRCPATH}"',
+            `  CreateDirectory "${resourcePrefix}"`,
             resource(
-              `agent\\extensions\\${name.replaceAll("/", "\\")}`,
-              path.join(extensionRoot, name),
+              "agent\\extensions\\manifest.json",
+              path.join(extensionRoot, "manifest.json"),
             ),
-          ),
-          ...harnessPayloadFiles.map((name) =>
-            resource(`agent\\harness-runtime\\${name}`, executable),
-          ),
-          ...licenses.map(([destination, source]) =>
-            resource(destination, source),
-          ),
-          "; Copy external binaries",
-          "; Create file associations",
-          "SectionEnd",
-          "",
-        ].join("\n"),
+            ...extensionLicenses.map((name) =>
+              resource(
+                `agent\\extensions\\${name.replaceAll("/", "\\")}`,
+                path.join(extensionRoot, name),
+              ),
+            ),
+            ...harnessPayloadFiles.map((name) =>
+              resource(`agent\\harness-runtime\\${name}`, executable),
+            ),
+            ...licenses.map(([destination, source]) =>
+              resource(destination, source),
+            ),
+            ...resources.map((destination) =>
+              resource(destination, executable),
+            ),
+            "; Copy external binaries",
+            "; Create file associations",
+            "SectionEnd",
+            "",
+          ].join("\n"),
+        ),
       );
       return () => payloadFromGeneratedScript(filename);
     }
+    return action({ render, required, temporary, filename });
+  } finally {
+    assert.equal(
+      path.dirname(path.resolve(temporary)),
+      path.resolve(temporaryParent),
+    );
+    assert(!lstatSync(temporary).isSymbolicLink());
+    rmSync(temporary, { recursive: true, force: true });
+  }
+}
+
+test("actual NSIS payload parser requires both official companion license bytes at their installed paths", () => {
+  withSyntheticPayload(({ render, required, temporary }) => {
     assert.equal(render(required)().companionLicenseFiles, 2);
     assert.throws(render(required.slice(1)), /must include companion license/u);
     assert.throws(
@@ -362,14 +520,221 @@ test("actual NSIS payload parser requires both official companion license bytes 
       render([[required[0][0], changed], required[1]]),
       /must match official WebRTC/u,
     );
-  } finally {
-    assert.equal(
-      path.dirname(path.resolve(temporary)),
-      path.resolve(temporaryParent),
+  });
+});
+
+test("actual NSIS payload parser handles over 30 MiB and 70000 resources without a regexp stack capture", (context) => {
+  withSyntheticPayload(({ render, filename }) => {
+    const resources = Array.from({ length: 70000 }, (_, index) =>
+      [
+        "agent",
+        "synthetic",
+        "segment-".repeat(10),
+        "nested-".repeat(10),
+        "payload-".repeat(10),
+        "resource-".repeat(10),
+        `${index}.bin`,
+      ].join("\\"),
     );
-    assert(!lstatSync(temporary).isSymbolicLink());
-    rmSync(temporary, { recursive: true, force: true });
-  }
+    const parse = render(undefined, { resources });
+    const bytes = readFileSync(filename);
+    assert(bytes.length >= 30 * 1024 * 1024);
+    const payload = parse();
+    assert.equal(payload.files.length, resources.length + 18);
+    assert.equal(
+      payload.files.filter((file) =>
+        file.destination.startsWith("agent\\synthetic\\"),
+      ).length,
+      70000,
+    );
+    assert.equal(payload.files.at(-1).destination, resources.at(-1));
+    assert.equal(
+      payload.generatedScriptSha256,
+      createHash("sha256").update(bytes).digest("hex"),
+    );
+    // Exercise malformed boundaries at release scale as well as in the small
+    // fixtures below. These must fail closed, not overflow or accept a prefix.
+    const source = bytes.toString("utf8");
+    assert.throws(
+      () => generatedPayloadLayout(source + "Section Install\nSectionEnd\n"),
+      /Duplicate generated Install section/u,
+    );
+    assert.throws(
+      () => generatedPayloadLayout(source.replace("SectionEnd\n", "")),
+      /missing SectionEnd/u,
+    );
+    assert.throws(
+      () =>
+        generatedPayloadLayout(
+          source.replace("; Copy external binaries\n", ""),
+        ),
+      /out-of-order/u,
+    );
+    context.diagnostic(
+      `${bytes.length} synthetic NSIS bytes, ${payload.files.length} files parsed; no NSIS compiler or installer executed`,
+    );
+  });
+});
+
+test("actual NSIS payload parser rejects duplicate sections and missing, repeated or reordered boundaries", () => {
+  withSyntheticPayload(({ render }) => {
+    const reject = (mutate, expected) =>
+      assert.throws(render(undefined, { mutate }), expected);
+    reject(
+      (source) => source + "Section Install\nSectionEnd\n",
+      /Duplicate generated Install section/u,
+    );
+    reject(
+      (source) =>
+        source.replace(
+          "Section Install\n",
+          "Section Install\nSection Install\n",
+        ),
+      /Nested or unterminated/u,
+    );
+    reject(
+      (source) => source.replace("Section Install\n", "Section Other\n"),
+      /exactly named Install section/u,
+    );
+    reject(
+      (source) => source.replace("SectionEnd\n", ""),
+      /missing SectionEnd/u,
+    );
+    reject((source) => source + "SectionEnd\n", /no matching section/u);
+    for (const marker of [
+      "; Copy main executable",
+      "; Copy external binaries",
+      "; Create file associations",
+    ]) {
+      reject(
+        (source) => source.replace(marker + "\n", ""),
+        /boundaries are missing|out-of-order/u,
+      );
+      reject(
+        (source) => source.replace(marker, `${marker}\n${marker}`),
+        /out-of-order/u,
+      );
+    }
+    reject(
+      (source) =>
+        source.replace("; Copy main executable", "; Copy external binaries"),
+      /out-of-order/u,
+    );
+    // Uninstall also has a Copy main executable marker in the real template.
+    assert.equal(
+      render(undefined, {
+        mutate: (source) =>
+          "Section EarlyChecks\nSectionEnd\n" +
+          source.replaceAll("\n", "\r\n") +
+          "Section Uninstall\n; Copy main executable\nSectionEnd",
+      })().version,
+      expectedVersion,
+    );
+  });
+});
+
+test("actual NSIS payload parser keeps version, hook, instruction and destination guards", () => {
+  withSyntheticPayload(({ render }) => {
+    const reject = (mutate, expected) =>
+      assert.throws(render(undefined, { mutate }), expected);
+    reject(
+      (source) =>
+        source.replace("!insertmacro LoliCodePrepareResourceRoot\n", ""),
+      /prepare the normalized resource root/u,
+    );
+    reject(
+      (source) =>
+        source.replace(
+          '"The normalized LoliCode installation folder is too long."',
+          '"changed"',
+        ),
+      /reviewed resource path preparation/u,
+    );
+    for (const invalid of [
+      "LICENSE",
+      "$INSTDIR\\LICENSE",
+      "\\\\?\\$INSTDIR\\LICENSE",
+      "$LoliCodeResourceRoot\\\\LICENSE",
+      "$LoliCodeResourceRoot\\..\\LICENSE",
+      "$LoliCodeResourceRoot\\$TEMP\\LICENSE",
+      "$LoliCodeResourceRoot\\Foo.\\LICENSE",
+      "$LoliCodeResourceRoot\\Foo \\LICENSE",
+      "$LoliCodeResourceRoot\\",
+    ]) {
+      reject(
+        (source) =>
+          source.replace(
+            `/oname=${resourcePrefix}agent\\extensions\\manifest.json`,
+            `/oname=${invalid}`,
+          ),
+        /extended-path root|AssertionError|Unsafe destination|Ambiguous Windows/u,
+      );
+    }
+    reject(
+      (source) => source + `!define VERSION "${expectedVersion}"\n`,
+      /Duplicate generated payload definition/u,
+    );
+    reject(
+      (source) =>
+        source.replace(
+          `!define VERSION "${expectedVersion}"`,
+          '!define VERSION "0.0.0"',
+        ),
+      /intended release/u,
+    );
+    reject(
+      (source) =>
+        source.replace(
+          '!define MAINBINARYNAME "LoliCode"',
+          '!define MAINBINARYNAME "Other"',
+        ),
+      /LoliCode/u,
+    );
+    reject(
+      (source) => source + `!include "${hooksPath}"\n`,
+      /hook used by this actual/u,
+    );
+    reject(
+      (source) => source.replace(`!include "${hooksPath}"\n`, ""),
+      /hook used by this actual/u,
+    );
+    reject(
+      (source) =>
+        source.replace(
+          "; Copy external binaries",
+          'Exec "unexpected.exe"\n; Copy external binaries',
+        ),
+      /Unrecognized generated payload instruction/u,
+    );
+    reject(
+      (source) =>
+        source.replace(
+          "; Create file associations",
+          'File "unexpected.exe"\n; Create file associations',
+        ),
+      /External binary payload/u,
+    );
+    reject(
+      (source) =>
+        source.replace(
+          '  File "${MAINBINARYSRCPATH}"',
+          '  File "${MAINBINARYSRCPATH}"\n  File "${MAINBINARYSRCPATH}"',
+        ),
+      /AssertionError/u,
+    );
+    assert.throws(
+      render(undefined, { resources: ["duplicate.bin", "DUPLICATE.bin"] }),
+      /Duplicate destination/u,
+    );
+    assert.throws(
+      render(undefined, { resources: ["..\\escape.bin"] }),
+      /AssertionError/u,
+    );
+    reject(
+      (source) => source + ";" + "x".repeat(65536),
+      /line exceeds the reviewed limit/u,
+    );
+  });
 });
 
 function run(command, args, options, label) {
@@ -416,15 +781,38 @@ const skipReason = !generatedScript
 test(
   "final NSIS payload extracts every real file into the install directory and passes the packaged runtime check",
   { skip: skipReason, timeout: 1_200_000 },
-  (context) => {
+  async (context) => {
     assert(existsSync(makensis), `NSIS compiler not found: ${makensis}`);
-    const payload = payloadFromGeneratedScript(path.resolve(generatedScript));
+    const boundary = snapshotFile
+      ? await createSnapshotBoundary({
+          repositoryRoot,
+          snapshotFile,
+          expectedSnapshotSha256,
+          expectedVersion,
+        })
+      : defaultBoundary;
+    const payload = payloadFromGeneratedScript(
+      path.resolve(generatedScript),
+      boundary,
+    );
+    context.diagnostic(
+      JSON.stringify({
+        inputBoundary: boundary.provenance ?? {
+          sourceRoot: boundary.sourceRoot,
+        },
+        generatedScriptSha256: payload.generatedScriptSha256,
+        mainExecutableSha256: sha256(
+          payload.files.find((file) => file.destination === "LoliCode.exe")
+            .source,
+        ),
+      }),
+    );
     for (const name of ["LICENSE", "THIRD_PARTY_NOTICES.md"]) {
       const notice = payload.files.find((file) => file.destination === name);
       assert(notice, `Actual NSIS payload must include ${name}`);
       assert.equal(
         readFileSync(notice.source, "utf8").replace(/\r\n/g, "\n"),
-        readFileSync(path.join(repositoryRoot, name), "utf8").replace(
+        readFileSync(path.join(boundary.sourceRoot, name), "utf8").replace(
           /\r\n/g,
           "\n",
         ),
@@ -494,10 +882,12 @@ test(
         // production uninstall registration or installer instructions are run.
         `!define UNINSTKEY "${quoted(registryKey)}"`,
         "Var OldMainBinaryName",
+        payload.resourceHelpers,
         `OutFile "${quoted(installer)}"`,
         `InstallDir "${quoted(destination)}"`,
         'Section "PayloadFixture"',
         "  SetShellVarContext current",
+        "  !insertmacro LoliCodePrepareResourceRoot",
         "  SetOutPath $INSTDIR",
         "  !insertmacro NSIS_HOOK_PREINSTALL",
         "  StrCmp $OUTDIR $INSTDIR +3 0",
@@ -510,12 +900,10 @@ test(
       ];
       for (const operation of payload.operations) {
         if (operation.type === "directory") {
-          lines.push(
-            `  CreateDirectory "$INSTDIR\\${quoted(operation.destination)}"`,
-          );
+          lines.push(`  CreateDirectory "${operation.nsisDestination}"`);
         } else {
           lines.push(
-            `  File /a "/oname=${quoted(operation.destination)}" "${quoted(operation.source)}"`,
+            `  File /a "/oname=${operation.nsisDestination ?? quoted(operation.destination)}" "${quoted(operation.source)}"`,
           );
         }
       }
@@ -607,6 +995,17 @@ test(
       assert.equal(report.realReadWriteAndContinuation, true);
       assert.equal(report.sessionRestartVerified, true);
       assert(report.defaultSkillsVerified >= 5);
+      assert.equal(
+        sha256(boundary.generatedScript(path.resolve(generatedScript))),
+        payload.generatedScriptSha256,
+        "Actual generated installer changed during payload acceptance",
+      );
+      for (const file of payload.files)
+        assert.equal(
+          sha256(file.source),
+          expectedHashes.get(file.destination),
+          `Payload source changed during acceptance: ${file.destination}`,
+        );
       const licenses = payload.files.filter((file) =>
         /(?:^|\\)LICENSE(?:\.[^\\]+)?$/iu.test(file.destination),
       );

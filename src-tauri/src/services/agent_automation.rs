@@ -415,9 +415,9 @@ fn delivery_target(value: &Value) -> Result<Option<DeliveryTarget>, String> {
     let target: Option<DeliveryTarget> =
         serde_json::from_value(value.clone()).map_err(|_| "自动化投递目标无效")?;
     if let Some(DeliveryTarget::Session { session_id }) = &target {
-        if !session_id
+        if session_id
             .strip_prefix("lc:")
-            .is_some_and(|id| uuid::Uuid::parse_str(id).is_ok())
+            .is_none_or(|id| uuid::Uuid::parse_str(id).is_err())
         {
             return Err("自动化只能投递到本体会话".into());
         }

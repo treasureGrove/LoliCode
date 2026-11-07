@@ -1610,9 +1610,9 @@ async function run(fixture) {
     }
     const secretaryButton = await waitFor(() => {
       const button = document.querySelector("button.wb-nav-secretary");
-      return button && !button.disabled && button;
-    }, "the secretary navigation button");
-    secretaryButton.click();
+      return document.querySelector("#agent-message") && button && !button.disabled && button;
+    }, "the normal composer and enabled secretary navigation");
+    if (secretaryButton.getAttribute("aria-pressed") !== "true") secretaryButton.click();
     await waitFor(
       async () => secretaryButton.getAttribute("aria-pressed") === "true" &&
         (await invoke("get_agent_status")).projectPath?.endsWith("standalone-workspace"),
@@ -1624,6 +1624,11 @@ async function run(fixture) {
     ).find((button) => !button.disabled && windowsPath(button.title) === windowsPath(fixture.project)),
     "the original project's sidebar entry");
     projectButton.click();
+    await waitFor(async () => {
+      const status = await invoke("get_agent_status");
+      return status.projectPath && windowsPath(status.projectPath) === windowsPath(fixture.project) &&
+        document.querySelector("#agent-message");
+    }, "the original project and its restored composer");
     const { session: oldChief } = await invoke("get_agent_session", { sessionId: chiefId });
     const oldChiefButton = await waitFor(() => Array.from(
       document.querySelectorAll(".wb-current-workspace-sessions button.wb-session-row"),
@@ -1632,7 +1637,9 @@ async function run(fixture) {
     oldChiefButton.click();
     await waitFor(
       () => oldChiefButton.getAttribute("aria-pressed") === "true" &&
-        secretaryButton.getAttribute("aria-pressed") === "false" && document.querySelector("#agent-message"),
+        secretaryButton.getAttribute("aria-pressed") === "false" && document.querySelector("#agent-message") &&
+        document.querySelector(".wb-titlebar h1")?.textContent === oldChief.title &&
+        document.querySelector("main")?.innerText.includes("Loli 秘书"),
       "the migrated secretary selected in the real workbench",
     );
     await invoke("send_agent_message", {

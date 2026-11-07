@@ -5,6 +5,7 @@ const SIDEBAR_KEY = "lolicode.agent.layout.sidebarWidth";
 const PREVIEW_KEY = "lolicode.agent.layout.previewWidth";
 const HANDLE_WIDTH = 8;
 const COMPACT_SIDEBAR_WIDTH = 72;
+const MIN_SIDEBAR_WIDTH = 240;
 const clamp = (value: number, min: number, max: number) =>
   Math.round(Math.max(min, Math.min(max, value)));
 const readWidth = (key: string, fallback: number) => {
@@ -53,9 +54,9 @@ export function computeAgentPaneLayout({
     available -
     chatMinimum -
     (previewVisible ? previewMinimum + HANDLE_WIDTH : 0);
-  const sidebarCanOpen = sidebarBudget >= 160 + HANDLE_WIDTH;
+  const sidebarCanOpen = sidebarBudget >= MIN_SIDEBAR_WIDTH + HANDLE_WIDTH;
   const compact = sidebarCompact || (sidebarAutoCompact && !sidebarCanOpen);
-  const sidebarMinimum = compact ? COMPACT_SIDEBAR_WIDTH : 160;
+  const sidebarMinimum = compact ? COMPACT_SIDEBAR_WIDTH : MIN_SIDEBAR_WIDTH;
   const showSidebar =
     sidebarVisible &&
     (compact ? sidebarBudget >= COMPACT_SIDEBAR_WIDTH : sidebarCanOpen);
@@ -133,7 +134,7 @@ export function useAgentPaneLayout({
   }, [isActive]);
   const changeSidebar = useCallback((next: number) => {
     if (!Number.isFinite(next)) return;
-    setSidebar(clamp(next, 160, 420));
+    setSidebar(clamp(next, MIN_SIDEBAR_WIDTH, 420));
   }, []);
   const changePreview = useCallback((next: number) => {
     if (!Number.isFinite(next)) return;
