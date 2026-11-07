@@ -32,7 +32,6 @@ import {
 import { Sidebar } from "@/app/shell/Sidebar";
 import { WindowControls } from "@/app/shell/WindowControls";
 import { SimpleUsagePage } from "@/features/usage/SimpleUsagePage";
-import { LolicodeAllowancePage } from "@/features/usage/LolicodeAllowancePage";
 import { APP_IDS, DEFAULT_VISIBLE_APPS } from "@/config/appConfig";
 import { useUpdate } from "@/contexts/UpdateContext";
 import { useTauriEvent } from "@/hooks/useTauriEvent";
@@ -848,7 +847,7 @@ function App() {
       case "usage":
         return <SimpleUsagePage />;
       case "allowance":
-        return <LolicodeAllowancePage onBack={exitAllowance} />;
+        return <SimpleUsagePage />;
       case "rankings":
       case "free-ai":
         return <DiscoveryPage key={productView} kind={productView} />;

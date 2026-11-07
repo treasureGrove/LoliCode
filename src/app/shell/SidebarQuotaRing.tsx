@@ -118,10 +118,7 @@ export function SidebarQuotaRing({
           onPointerLeave={closeSoon}
           onClick={(event) => {
             event.preventDefault();
-            keepOpen();
-            openedByPointer.current = false;
-            setOpen(false);
-            onManage();
+            event.stopPropagation();
           }}
         >
           <svg

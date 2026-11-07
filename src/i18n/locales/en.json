@@ -1310,6 +1310,8 @@
     "saveFailedGeneric": "Save failed, please try again",
     "sections": {
       "general": "General",
+      "usage": "Usage",
+      "memory": "Memory",
       "appConfig": "App config",
       "routing": "Local routing",
       "network": "Network",

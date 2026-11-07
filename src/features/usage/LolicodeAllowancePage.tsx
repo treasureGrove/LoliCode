@@ -21,7 +21,7 @@ function remainingPercentage(remaining: number, limit: number) {
   return Math.max(0, Math.min(100, (remaining / limit) * 100));
 }
 
-export function LolicodeAllowancePage({ onBack }: { onBack: () => void }) {
+export function LolicodeAllowancePage({ onBack, embedded = false }: { onBack?: () => void; embedded?: boolean }) {
   const { i18n } = useTranslation();
   const chinese = i18n.language.startsWith("zh");
   const text = (zh: string, en: string) => (chinese ? zh : en);
@@ -75,8 +75,8 @@ export function LolicodeAllowancePage({ onBack }: { onBack: () => void }) {
       : text("请检查网络连接后重试。", "Check your connection and try again.");
 
   return (
-    <div className="lolicode-allowance-page">
-      <header
+    <div className={`lolicode-allowance-page${embedded ? " allowance-embedded" : ""}`}>
+      {!embedded && <header
         className="allowance-topbar"
         {...DRAG_REGION_ATTR}
         style={DRAG_REGION_STYLE as React.CSSProperties}
@@ -92,12 +92,12 @@ export function LolicodeAllowancePage({ onBack }: { onBack: () => void }) {
           {text("返回", "Back")}
         </button>
         {windowControls && <div style={NO_DRAG}>{windowControls}</div>}
-      </header>
-      <main id="main-content" className="allowance-scroll">
+      </header>}
+      <main id={embedded ? undefined : "main-content"} className={embedded ? "allowance-embedded-content" : "allowance-scroll"}>
         <div className="allowance-content">
-          <div className="allowance-page-heading">
+          {!embedded && <div className="allowance-page-heading">
             <div>
-              <h1>{text("使用情况与额度", "Usage and allowance")}</h1>
+              <h1>{text("账户额度", "Account allowance")}</h1>
               <p>
                 {text(
                   "查看你的每日免费 Credit 与各模型消耗费率。",
@@ -128,7 +128,7 @@ export function LolicodeAllowancePage({ onBack }: { onBack: () => void }) {
                   : text("刷新", "Refresh")}
               </button>
             )}
-          </div>
+          </div>}
 
           {identity.isLoading || identity.isPending ? (
             <div className="allowance-state" role="status">

@@ -17,6 +17,46 @@
   background: var(--allowance-bg);
 }
 
+.lolicode-allowance-page.allowance-embedded {
+  min-height: auto;
+  background: transparent;
+  color: inherit;
+}
+
+.allowance-embedded .allowance-content {
+  max-width: none;
+  padding: 0 0 24px;
+}
+
+.allowance-embedded .allowance-section {
+  margin-top: 16px;
+}
+
+.allowance-embedded .allowance-model {
+  padding: 10px 14px;
+}
+
+.allowance-embedded .allowance-model strong {
+  font-size: 12px;
+}
+
+.allowance-embedded .allowance-model > div > span {
+  font-size: 10px;
+}
+
+.allowance-embedded .allowance-models-empty {
+  padding: 12px 14px;
+}
+
+.allowance-embedded .allowance-rules {
+  margin-top: 18px;
+  padding-top: 12px;
+}
+
+.allowance-embedded-content {
+  min-height: 0;
+}
+
 .dark .lolicode-allowance-page {
   --allowance-bg: #1f1f1f;
   --allowance-card: #292929;
