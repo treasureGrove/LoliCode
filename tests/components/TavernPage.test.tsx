@@ -1,4 +1,11 @@
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -228,6 +235,49 @@ const calls = (command: string) =>
   vi.mocked(invoke).mock.calls.filter(([name]) => name === command);
 
 describe("Tavern history rendering", () => {
+  it("uses the bottom-flat composer without changing model selection or keyboard submission", async () => {
+    const user = userEvent.setup();
+    localEnabled = true;
+    stored.characters = [character];
+    stored.stories = [
+      {
+        id: "composer-story",
+        characterId: character.id,
+        title: "Composer test",
+        createdAt: 1,
+        updatedAt: 1,
+        isGenerating: false,
+        messages: [],
+      },
+    ];
+    mount();
+    const input = await screen.findByRole("textbox", {
+      name: zh.tavern.messageInput,
+    });
+    await waitFor(() => expect(input).toBeEnabled());
+    expect(input).toHaveClass("tavern-composer-input");
+    expect(input.parentElement).toHaveClass("tavern-composer");
+    expect(input.parentElement?.parentElement).toHaveClass(
+      "tavern-composer-area",
+    );
+    expect(input.parentElement).not.toHaveClass("rounded-xl", "shadow-sm");
+    expect(screen.getByRole("combobox", { name: zh.tavern.model })).toHaveValue(
+      "tavern-local:sbg-v2-9b-q4-16k",
+    );
+    await user.type(input, "hello");
+    fireEvent.keyDown(input, { key: "Enter", shiftKey: true });
+    fireEvent.keyDown(input, { key: "Enter", isComposing: true });
+    expect(calls("send_tavern_message")).toHaveLength(0);
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(calls("send_tavern_message")).toHaveLength(1));
+    expect(calls("send_tavern_message")[0][1]).toMatchObject({
+      storyId: "composer-story",
+      text: "hello",
+      modelId: "tavern-local:sbg-v2-9b-q4-16k",
+    });
+    await waitFor(() => expect(input).toHaveValue(""));
+  });
+
   it("renders only the recent history at first and keeps the visible anchor when loading earlier messages", async () => {
     const user = userEvent.setup();
     stored.characters = [character];

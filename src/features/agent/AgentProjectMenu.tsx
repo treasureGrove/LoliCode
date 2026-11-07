@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   FolderMinus,
   MoreHorizontal,
@@ -36,6 +36,7 @@ export function AgentProjectMenu({
   onRename,
   onTogglePin,
   onRemove,
+  onDialogOpenChange,
 }: {
   name: string;
   standalone?: boolean;
@@ -46,12 +47,18 @@ export function AgentProjectMenu({
   onRename?: (name: string) => Promise<void>;
   onTogglePin: () => void;
   onRemove: () => void;
+  onDialogOpenChange?: (open: boolean) => void;
 }) {
   const [renaming, setRenaming] = useState(false);
   const [nextName, setNextName] = useState(name);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const pending = useRef(false);
+  useEffect(() => {
+    if (!renaming) return;
+    onDialogOpenChange?.(true);
+    return () => onDialogOpenChange?.(false);
+  }, [renaming, onDialogOpenChange]);
   const saveName = async () => {
     if (!onRename || pending.current) return;
     const value = nextName.trim();

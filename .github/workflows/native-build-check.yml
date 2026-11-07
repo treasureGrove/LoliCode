@@ -1,0 +1,291 @@
+name: LoliCode native build checks (NOT A RELEASE)
+
+# No formal release: source changes and validation artifacts are public with approval.
+# Checks run on the explicitly authorized validation branch.
+# No broad push, PR, tag or schedule trigger. Manual dispatch remains available.
+on:
+  push:
+    branches: [fix/mail-ui-main-20261107]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lolicode-native-check-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  native:
+    name: Validate ${{ matrix.platform }} ${{ matrix.arch }}
+    if: github.repository == 'treasureGrove/LoliCode'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Explicit labels, checked against GitHub's standard-runner reference.
+          # Do not infer architecture from macos-latest or cross-bundle node_modules.
+          - runner: macos-15
+            platform: darwin
+            arch: arm64
+            target: aarch64-apple-darwin
+            bundle: app
+          - runner: macos-15-intel
+            platform: darwin
+            arch: x64
+            target: x86_64-apple-darwin
+            bundle: app
+          - runner: ubuntu-22.04
+            platform: linux
+            arch: x64
+            target: x86_64-unknown-linux-gnu
+            bundle: deb
+    defaults:
+      run:
+        shell: bash
+    env:
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+      CARGO_BUILD_JOBS: "2"
+      CARGO_INCREMENTAL: "0"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      CARGO_TARGET_DIR: ${{ github.workspace }}/src-tauri/target/native-check
+      EXPECTED_PLATFORM: ${{ matrix.platform }}
+      EXPECTED_ARCH: ${{ matrix.arch }}
+      EXPECTED_RUST_TARGET: ${{ matrix.target }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+          architecture: ${{ matrix.arch }}
+
+      - name: Read pinned Rust toolchain
+        id: rust
+        run: |
+          channel=$(sed -nE 's/^channel *= *"([^"]+)".*/\1/p' rust-toolchain.toml)
+          test -n "$channel"
+          echo "channel=$channel" >> "$GITHUB_OUTPUT"
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ steps.rust.outputs.channel }}
+          components: rustfmt, clippy
+
+      - name: Confirm actual native host
+        run: |
+          test "$(rustc -vV | sed -n 's/^host: //p')" = "$EXPECTED_RUST_TARGET"
+          node -e 'if (process.platform !== process.env.EXPECTED_PLATFORM || process.arch !== process.env.EXPECTED_ARCH) process.exit(1)'
+          uname -a
+          df -h .
+          rustc -vV
+
+      - name: Install Linux system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config libssl-dev libgtk-3-dev \
+            libwebkit2gtk-4.1-dev libsoup-3.0-dev libxdo-dev \
+            libayatana-appindicator3-dev librsvg2-dev patchelf file \
+            curl wget xdg-utils
+
+      - name: Confirm macOS build tools
+        if: runner.os == 'macOS'
+        run: |
+          xcodebuild -version
+          xcrun --find clang
+          xcrun --show-sdk-path
+
+      - name: Install dependencies on this native host
+        run: |
+          corepack enable
+          corepack install
+          pnpm install --frozen-lockfile
+          npm ci --prefix packages/companion-relay --ignore-scripts --no-audit --no-fund
+
+      - name: Validate frontend and build-check contracts
+        run: |
+          node scripts/tests/verify-native-build.mjs inputs
+          pnpm typecheck
+          node --test scripts/tests/native-build-check.test.mjs scripts/tests/prepare-agent-assets.test.mjs
+
+      - name: Run frontend checks once
+        if: runner.os == 'Linux'
+        run: |
+          pnpm format:check
+          pnpm test:unit
+
+      - name: Prepare and verify native bundled runtime
+        run: |
+          mkdir -p dist
+          node scripts/build/prepare-agent-assets.mjs
+          node scripts/build/prepare-lolicode-harness-runtime.mjs --bundle
+          node scripts/tests/verify-native-build.mjs runtime
+
+      - name: Check Rust formatting and Clippy
+        run: |
+          cargo fmt --check --manifest-path src-tauri/Cargo.toml
+          cargo clippy --locked --manifest-path src-tauri/Cargo.toml -- -D warnings
+
+      - uses: taiki-e/install-action@e407f7bafb71fd004bc5c2da3032e5470cbb6ef0 # v2.87.24
+        with:
+          tool: cargo-nextest
+
+      - name: Prepare a physical macOS test temporary root
+        if: runner.os == 'macOS'
+        run: |
+          test -d "$RUNNER_TEMP"
+          test_temp="$(mktemp -d "$RUNNER_TEMP/lolicode-native-tests.XXXXXX")"
+          test_temp="$(cd "$test_temp" && pwd -P)"
+          test -O "$test_temp"
+          printf 'TMPDIR=%s\n' "$test_temp" >> "$GITHUB_ENV"
+
+      - name: Run native backend tests including macOS menu contracts
+        run: cargo nextest run --locked --manifest-path src-tauri/Cargo.toml --profile ci
+
+      - name: Build validation bundle without release credentials
+        env:
+          BUNDLE_TYPE: ${{ matrix.bundle }}
+          # Isolated development profile, normal release optimization settings.
+          LOLICODE_BUILD_CHANNEL: development
+          VITE_LOLICODE_BUILD_CHANNEL: development
+          LOLICODE_BUILD_NUMBER: VALIDATION-${{ github.run_id }}-${{ github.run_attempt }}
+          VITE_LOLICODE_BUILD_NUMBER: VALIDATION-${{ github.run_id }}-${{ github.run_attempt }}
+          LOLICODE_BUILD_REVISION: ${{ github.sha }}
+          VITE_LOLICODE_BUILD_REVISION: ${{ github.sha }}
+        run: |
+          pnpm exec tauri build --ci --no-sign --target "$EXPECTED_RUST_TARGET" \
+            --config "$GITHUB_WORKSPACE/.github/native-build-check.conf.json" --bundles "$BUNDLE_TYPE" -- --locked
+
+      - name: Verify actual bundle and stage validation-only artifact
+        run: node scripts/tests/verify-native-build.mjs bundle
+
+      # Allow only validation packages, checksums and summaries. Never upload a
+      # checkout, source archive, user configuration, credentials or diagnostic logs.
+      - name: Upload public validation artifact (7 days, NOT A RELEASE)
+        uses: actions/upload-artifact@v7
+        with:
+          name: LoliCode-VALIDATION-NOT-A-RELEASE-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.sha }}
+          path: |
+            tmp/native-build-check/artifacts/*.app.tar.gz
+            tmp/native-build-check/artifacts/*.deb
+            tmp/native-build-check/artifacts/validation-report.json
+            tmp/native-build-check/artifacts/SHA256SUMS
+            tmp/native-build-check/artifacts/VALIDATION-ONLY.txt
+          if-no-files-found: error
+          retention-days: 7
+          include-hidden-files: false
+
+      - name: State verification boundary
+        if: always()
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<'SUMMARY'
+          ## Validation only, not a release / 仅验证用，非正式版
+          Review every step's result. An uploaded artifact means native build, package,
+          version, architecture, runtime, PTY and license checks passed, not GUI acceptance.
+          No release, tag, website, feed, signing identity or notarization is created.
+          Authorized validation packages, checksums and summaries are public for 7 days.
+          User configuration, credentials, diagnostic logs and source archives are excluded.
+          macOS outputs are .app archives; Linux outputs are .deb files. See
+          docs/guides/native-build-check.md for remaining UI and distribution checks.
+          SUMMARY
+
+  windows-tests:
+    name: Windows x64 full Rust tests (hosted, no package)
+    if: github.repository == 'treasureGrove/LoliCode'
+    runs-on: windows-2022
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+      CARGO_BUILD_JOBS: "2"
+      CARGO_INCREMENTAL: "0"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      CARGO_TARGET_DIR: ${{ github.workspace }}/src-tauri/target/hosted-windows-tests
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+          architecture: x64
+
+      - name: Read pinned Rust toolchain
+        id: rust
+        run: |
+          $toolchain = Select-String -Path rust-toolchain.toml -Pattern '^channel\s*=\s*"([^"]+)"'
+          if (-not $toolchain) { throw 'Missing pinned Rust toolchain.' }
+          "channel=$($toolchain.Matches[0].Groups[1].Value)" >> $env:GITHUB_OUTPUT
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ steps.rust.outputs.channel }}
+
+      - uses: taiki-e/install-action@e407f7bafb71fd004bc5c2da3032e5470cbb6ef0 # v2.87.24
+        with:
+          tool: cargo-nextest
+
+      - name: Verify hosted Windows host and prepare disposable test home
+        run: |
+          if ($env:RUNNER_ENVIRONMENT -ne 'github-hosted') { throw 'Use a disposable GitHub-hosted runner, never a personal computer.' }
+          $hostLine = rustc -vV | Select-String '^host: x86_64-pc-windows-msvc$'
+          if ($LASTEXITCODE -ne 0 -or -not $hostLine) { throw 'Expected native Windows x64 MSVC toolchain.' }
+          node -e 'if (process.platform !== "win32" || process.arch !== "x64") process.exit(1)'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          # runner context is unavailable in job.env; resolve this only on the host.
+          if (-not $env:RUNNER_TEMP -or -not (Test-Path -LiteralPath $env:RUNNER_TEMP -PathType Container)) { throw 'Missing hosted runner temporary directory.' }
+          $env:CC_SWITCH_TEST_HOME = Join-Path $env:RUNNER_TEMP 'lolicode-native-check-home'
+          if (Test-Path -LiteralPath $env:CC_SWITCH_TEST_HOME) { throw 'Expected a fresh test home.' }
+          New-Item -ItemType Directory -Path $env:CC_SWITCH_TEST_HOME | Out-Null
+          "CC_SWITCH_TEST_HOME=$env:CC_SWITCH_TEST_HOME" >> $env:GITHUB_ENV
+          rustc -vV
+
+      - name: Install pinned dependencies and run verifier contracts
+        run: |
+          corepack enable
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          corepack install
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pnpm install --frozen-lockfile
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm ci --prefix packages/companion-relay --ignore-scripts --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node --test scripts/tests/native-build-check.test.mjs scripts/tests/prepare-agent-assets.test.mjs
+          exit $LASTEXITCODE
+
+      - name: Prepare frontend placeholder and native bundled agent assets
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          node scripts/build/prepare-agent-assets.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/build/prepare-lolicode-harness-runtime.mjs --bundle
+          exit $LASTEXITCODE
+
+      # No test name/filter/exclusion and no continue-on-error. Project-declared
+      # ignored tests retain their normal semantics, as in the existing CI.
+      - name: Run full native Windows Rust suite
+        run: cargo nextest run --locked --manifest-path src-tauri/Cargo.toml --profile ci
+
+      - name: State Windows test boundary
+        if: always()
+        run: |
+          @'
+          ## Windows hosted Rust tests only
+          The complete normal nextest suite runs on a fresh GitHub-hosted Windows x64 account,
+          with a disposable CC_SWITCH_TEST_HOME. No tests run on the owner's Windows account.
+          Review the nextest result; this job does not build installers, upload artifacts,
+          sign, publish, or claim native GUI/installation acceptance.
+          '@ >> $env:GITHUB_STEP_SUMMARY

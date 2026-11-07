@@ -35,13 +35,24 @@ v1.0.2 及后续安装包使用 `src-tauri/nsis/installer.nsi` 自定义模板�
 
 发版前执行 `node --test scripts/tests/lolicode-nsis-overwrite-upgrade.test.mjs`。此测试通过本机已安装的 Tauri CLI 和真实 NSIS 编译器打包隔离程序，实际验证旧 publisher 项缺失、中文/空格路径、重复覆盖、应用内更新、旧程序名缺失、数据保留、禁止降级策略与异常目录拒绝；使用唯一测试注册项，不操作真实用户安装。升级 Tauri CLI 时同步复核自定义模板和上游差异。
 
-Harness 迁移可用下面的命令复现真实覆盖安装。在管理员 PowerShell 中运行，提前关闭正在运行的 LoliCode，并传入已发布的 v1.0.6 NSIS 安装器和本地 4.1.7 测试安装器。脚本创建临时标准 Windows 用户，从旧版桌面保存模拟渠道并生成会话，再让候选安装器原地覆盖，检查新桌面续聊发出的请求仍使用原来的渠道凭据和会话历史。
+Harness 迁移可用下面的命令复现真实覆盖安装。先取得临时标准 Windows 测试账户、其测试目录 ACL 以及必要时关闭 LoliCode 的授权，再在管理员 PowerShell 中运行。传入已发布的 v1.0.6 NSIS 安装器、已独立完成签名与载荷核验的本地 4.1.7 候选、该候选冻结时的 `source-snapshot.json` 和已核验的候选完整 SHA256。执行者还须独立核对 `source.tar` SHA256、冻结 commit/tree 及其与候选源码的对应关系；本脚本只记录并绑定传入的已核验回执，不独立证明源码到产物的映射。缺少参数、SHA 格式错误或版本不符时会在创建测试目录、账户及修改 ACL 前拒绝；本脚本不代替安装器签名验签。
 
 ```powershell
-node scripts/tests/lolicode-overwrite-upgrade-acceptance.mjs "<published-v1.0.6-setup.exe>" "<local-4.1.7-setup.exe>"
+node scripts/tests/lolicode-overwrite-upgrade-acceptance.mjs `
+  "<published-v1.0.6-setup.exe>" `
+  "<local-4.1.7-setup.exe>" `
+  "<candidate-freeze>\source-snapshot.json" `
+  "<independently-verified-64-hex-candidate-sha256>"
+
+# 仅运行纯模拟回归，不创建真实账户、安装程序或修改实际 ACL：
+node --test scripts/tests/lolicode-overwrite-upgrade-cleanup.test.mjs
 ```
 
-只传旧版安装器可以先验证基线。4.1.7 是这次本地覆盖测试用的 Tauri 版本覆盖值，验收报告保留在脚本输出的路径。此过程使用本机模拟模型，不写入正式发布渠道。
+脚本在同一临时标准账户中从旧版桌面保存模拟渠道、实际生成旧会话，再依次验证候选原地覆盖、迁移后退出重启续聊、同一 SHA256 候选再次覆盖安装后续聊。每阶段使用独立新问题和 `requestId`，要求真实新增的本机模拟模型请求携带此前所有问答，并保留同一 profile、会话 ID、渠道、原始旧会话 SHA、安装目录标记与迁移回执。这验证合成测试数据的真实旧版迁移链路，不代表已验证真实用户的所有设置、OAuth 或远程项目。
+
+证据保留在脚本输出的 `LoliCodeUpgrade-*` 精确目录。报告分别记录产品冻结提交/tree/父提交及候选 SHA，和验收脚本自身 Git 提交、脏改状态及文件 SHA，不要求为测试脚本重新编译产品。授 ACL 前预建 worker 证据文件，避免 `CREATOR OWNER` 产生额外测试 SID 权限。`finally` 只撤回本轮 SID 的精确显式 Modify grant，不重置 ACL、不按名称批量删除账户、不关闭无关进程；独立验证该 SID 的账户、Profile/CIM、ProfileList 项、目录、进程及 stage 子项 ACL。profile 仍 Loaded、进程归属不可核实、残留或清理失败时明确失败并保留证据和未清现场，不递归兜底删除。成功后只删除测试复制的安装器，保留报告。
+
+只传旧版安装器可以先验证基线，不进行候选升级。完整测试额外增加两次隐藏启动与一次同候选覆盖安装，通常比单次升级多约 2–5 分钟；每次桌面阶段和 CDP 调用有界，账户 worker 总超时为 30 分钟并请求协作取消，不强杀其 `finally`。此过程只使用本机模拟模型，不写入正式发布渠道。
 
 v1.0.2 已交付该修复，并真实验证远端正式 v1.0.1 与本机 4.0.11 程序副本覆盖升级；已发布的 v1.0.1 文件保持不变，不覆盖同版本历史附件。
 

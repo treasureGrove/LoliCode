@@ -894,7 +894,29 @@ mod tests {
             .inspect(&anchor, "tavern_list_characters", &json!({}))
             .unwrap()
             .is_err());
-        assert_eq!(host.project_schemas(&anchor).unwrap().len(), 7);
+        let schemas = host.project_schemas(&anchor).unwrap();
+        let mut names: Vec<_> = schemas
+            .iter()
+            .map(|schema| schema["function"]["name"].as_str().unwrap())
+            .collect();
+        names.sort_unstable();
+        let mut expected = vec![
+            "apply_patch",
+            "list_files",
+            "open_preview",
+            "read_file",
+            "run_command",
+            "search_files",
+            "view_image",
+            "web_fetch",
+            "write_file",
+        ];
+        // Public search is advertised only when the existing provider is configured.
+        if std::env::var("LOLICODE_BRAVE_SEARCH_API_KEY").is_ok_and(|key| !key.trim().is_empty()) {
+            expected.push("web_search");
+        }
+        expected.sort_unstable();
+        assert_eq!(names, expected);
         assert!(host.project_schemas(dir.path()).is_none());
         let id = remote.resolve(&anchor).unwrap().connection.id;
         remote.disconnect(&id).unwrap();

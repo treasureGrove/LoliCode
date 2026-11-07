@@ -720,6 +720,9 @@ impl Browser {
     }
 
     async fn cdp(&mut self, method: &str, params: Value) -> Result<Value, String> {
+        #[cfg(not(windows))]
+        let BrowserTransport::Headless(headless) = &mut self.transport;
+        #[cfg(windows)]
         let headless = match &mut self.transport {
             BrowserTransport::Headless(browser) => browser,
             #[cfg(windows)]
@@ -902,6 +905,8 @@ impl Browser {
                 );
                 let point = self.evaluate(&expression).await?;
                 let (x, y) = self.point(&point, "x", "y")?;
+                // Initialize pointer hit-testing before pressing in a newly opened WebView.
+                self.pointer("mouseMoved", x, y, 0, None).await?;
                 self.pointer("mousePressed", x, y, 1, None).await?;
                 self.pointer("mouseReleased", x, y, 0, None).await?;
             }
@@ -974,7 +979,11 @@ impl Browser {
         }
         if !self.is_native() {
             let _ = timeout(Duration::from_secs(1), self.cdp("Browser.close", json!({}))).await;
-            let BrowserTransport::Headless(browser) = &mut self.transport else {
+            #[cfg(not(windows))]
+            let BrowserTransport::Headless(browser) = &mut self.transport;
+            #[cfg(windows)]
+            let BrowserTransport::Headless(browser) = &mut self.transport
+            else {
                 return;
             };
             if timeout(Duration::from_secs(2), browser.child.wait())
@@ -1400,6 +1409,81 @@ mod tests {
       <button id="offscreen" style="position:absolute;top:1500px">OFFSCREEN_TEXT</button>
       <button id="partly-visible" style="position:fixed;left:-10px;bottom:10px">PARTIAL_TEXT</button>
     </body></html>"#;
+
+    #[tokio::test]
+    #[ignore = "requires a local Chromium browser"]
+    async fn browser_click_positions_pointer_and_dispatches_one_trusted_click() {
+        const FIXTURE: &str = r#"<!doctype html><html><body>
+          <button id="counter" style="margin:100px">0</button>
+          <button id="disabled" disabled>Disabled</button>
+          <button id="hidden" style="display:none">Hidden</button>
+          <script>
+            window.events = [];
+            const counter = document.getElementById('counter');
+            for (const type of ['mousemove', 'mousedown', 'mouseup', 'click']) {
+              counter.addEventListener(type, event => {
+                window.events.push({type: event.type, trusted: event.isTrusted, buttons: event.buttons});
+              });
+            }
+            counter.addEventListener('click', () => counter.textContent = String(Number(counter.textContent) + 1));
+          </script>
+        </body></html>"#;
+        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
+        let (url, origin) =
+            page_url(&format!("http://{}/", listener.local_addr().unwrap())).unwrap();
+        let server = tokio::spawn(async move {
+            let app = axum::Router::new().route(
+                "/",
+                axum::routing::get(|| async { axum::response::Html(FIXTURE) }),
+            );
+            axum::serve(listener, app).await.unwrap();
+        });
+        let project = tempfile::tempdir().unwrap();
+        let mut browser = Browser::launch(
+            #[cfg(windows)]
+            None,
+            #[cfg(windows)]
+            "click-fixture",
+            project.path().canonicalize().unwrap(),
+            url,
+            origin,
+            1280,
+            800,
+        )
+        .await
+        .unwrap();
+        // The first action must work without a snapshot, warm-up click, or retry.
+        browser
+            .action(Action::Click("#counter"), &json!({}))
+            .await
+            .unwrap();
+        let events = browser.evaluate("window.events").await.unwrap();
+        assert_eq!(
+            events,
+            json!([
+                {"type":"mousemove","trusted":true,"buttons":0},
+                {"type":"mousedown","trusted":true,"buttons":1},
+                {"type":"mouseup","trusted":true,"buttons":0},
+                {"type":"click","trusted":true,"buttons":0}
+            ])
+        );
+        assert_eq!(
+            browser
+                .evaluate("document.getElementById('counter').textContent")
+                .await
+                .unwrap(),
+            "1"
+        );
+        for selector in ["#disabled", "#hidden", "#missing"] {
+            assert!(browser
+                .action(Action::Click(selector), &json!({}))
+                .await
+                .is_err());
+        }
+        assert_eq!(browser.evaluate("window.events").await.unwrap(), events);
+        browser.close().await;
+        server.abort();
+    }
 
     #[tokio::test]
     #[ignore = "requires a local Chromium browser"]

@@ -83,6 +83,7 @@ pub async fn get_settings() -> Result<crate::settings::AppSettings, String> {
 /// 保存设置
 #[tauri::command]
 pub async fn save_settings(
+    _app: AppHandle,
     state: tauri::State<'_, crate::store::AppState>,
     settings: crate::settings::AppSettings,
 ) -> Result<bool, String> {
@@ -162,6 +163,12 @@ pub async fn save_settings(
             if let Err(err) = crate::settings::clear_codex_unify_migrate_existing() {
                 log::warn!("清除统一会话迁移意愿失败: {err}");
             }
+        }
+    }
+    #[cfg(target_os = "macos")]
+    if existing.language != crate::settings::get_settings().language {
+        if let Err(error) = crate::native_menu::refresh(&_app) {
+            log::warn!("Failed to schedule macOS application menu language update: {error}");
         }
     }
     Ok(true)

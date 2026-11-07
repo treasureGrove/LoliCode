@@ -57,6 +57,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { Notice } from "@/components/ui/notice";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
   FullScreenPanelHostContext,
   FullScreenPanelNavigationContext,
 } from "@/components/common/FullScreenPanel";
@@ -700,6 +705,11 @@ export function AgentPage({
   const secretaryNavigation = useRef(0);
   const [secretaryRequestRevision, setSecretaryRequestRevision] = useState(0);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [compactSessionsOpen, setCompactSessionsOpen] = useState(false);
+  const [sidebarDialogCount, setSidebarDialogCount] = useState(0);
+  const onSidebarDialogOpenChange = useCallback((open: boolean) => {
+    setSidebarDialogCount((count) => Math.max(0, count + (open ? 1 : -1)));
+  }, []);
   const [sessionSearch, setSessionSearch] = useState("");
   const sessionSearchRef = useRef<HTMLInputElement>(null);
   const [activeTool, setActiveTool] = useState<AgentTool | null>(null);
@@ -2192,7 +2202,8 @@ export function AgentPage({
     Object.keys(stopping).length > 0;
   const listedSession = sessions.find((session) => session.id === sessionId);
   const selectedOverride = sessionId ? sessionOverrides[sessionId] : undefined;
-  const selectedSession = selectedOverride || snapshot?.session || listedSession;
+  const selectedSession =
+    selectedOverride || snapshot?.session || listedSession;
   const selectedTitle =
     (listedSession && withCommittedTitle(listedSession).title) ||
     selectedOverride?.title ||
@@ -2291,6 +2302,18 @@ export function AgentPage({
     previewVisible,
   });
   const paneLayout = sharedPaneLayout ?? localPaneLayout;
+  const [sidebarWorkspaceCompact, setSidebarWorkspaceCompact] = useState(
+    paneLayout.sidebarCompact,
+  );
+  // Moving the tree into/out of the popover remounts its menu dialogs. Defer
+  // only that move while a dialog is open; the panes may still resize normally.
+  useLayoutEffect(() => {
+    if (sidebarDialogCount === 0)
+      setSidebarWorkspaceCompact(paneLayout.sidebarCompact);
+  }, [paneLayout.sidebarCompact, sidebarDialogCount]);
+  useEffect(() => {
+    if (!sidebarWorkspaceCompact || !isActive) setCompactSessionsOpen(false);
+  }, [isActive, sidebarWorkspaceCompact]);
   const lastSidebarWidth = useRef(paneLayout.sidebarWidth || 252);
   if (paneLayout.sidebarVisible)
     lastSidebarWidth.current = paneLayout.sidebarWidth;
@@ -4167,6 +4190,7 @@ export function AgentPage({
 
   const navigateWorkspace = (action: () => void) => {
     const proceed = () => {
+      setCompactSessionsOpen(false);
       setActiveTool(null);
       action();
     };
@@ -4186,8 +4210,7 @@ export function AgentPage({
   const collapseSidebar = useCallback(() => {
     const focused = document.activeElement;
     const focusedInSidebar =
-      focused instanceof HTMLElement &&
-      Boolean(focused.closest(".wb-sidebar"));
+      focused instanceof HTMLElement && Boolean(focused.closest(".wb-sidebar"));
     if (onSidebarCompactChange) {
       restoreCompactSidebarFocus.current = focusedInSidebar;
       onSidebarCompactChange(true);
@@ -4253,24 +4276,26 @@ export function AgentPage({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [canOpenBrowser, isActive, openWebPreview, toggleSidebar]);
-  const sidebarToggle = !sharedPaneLayout && !paneLayout.sidebarVisible ? (
-    <button
-      type="button"
-      className="wb-icon-button wb-pane-toggle wb-sidebar-expand"
-      title={"Ctrl + \\"}
-      aria-label="展开项目侧栏"
-      onClick={toggleSidebar}
-      style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
-    >
-      <PanelLeftOpen />
-    </button>
-  ) : null;
+  const sidebarToggle =
+    !sharedPaneLayout && !paneLayout.sidebarVisible ? (
+      <button
+        type="button"
+        className="wb-icon-button wb-pane-toggle wb-sidebar-expand"
+        title={"Ctrl + \\"}
+        aria-label="展开项目侧栏"
+        onClick={toggleSidebar}
+        style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+      >
+        <PanelLeftOpen />
+      </button>
+    ) : null;
   const sidebarActions = (
     <nav className="wb-nav" aria-label="工作台操作">
       <div className="wb-create-task">
         <button
           className="wb-nav-button wb-nav-create"
           aria-label={busy === "create" ? "正在创建…" : "新建任务"}
+          title={busy === "create" ? "正在创建…" : "新建任务"}
           disabled={
             initializing ||
             Boolean(busy) ||
@@ -4288,6 +4313,7 @@ export function AgentPage({
               type="button"
               className="wb-create-task-options"
               aria-label="选择新建任务类型"
+              title="选择新建任务类型"
               disabled={
                 initializing || Boolean(busy) || engine?.available === false
               }
@@ -4331,6 +4357,7 @@ export function AgentPage({
         aria-label={t("agentSecretary.open", {
           defaultValue: "打开 Loli 秘书",
         })}
+        title={t("agentSecretary.open", { defaultValue: "打开 Loli 秘书" })}
         aria-pressed={Boolean(secretarySessionId)}
         disabled={
           initializing ||
@@ -4490,6 +4517,7 @@ export function AgentPage({
                   </button>
                 )}
                 <AgentProjectMenu
+                  onDialogOpenChange={onSidebarDialogOpenChange}
                   name={project.name}
                   standalone={project.standalone}
                   pinned={Boolean(project.pinned)}
@@ -4561,6 +4589,7 @@ export function AgentPage({
                             )}
                           </button>
                           <AgentSessionMenu
+                            onDialogOpenChange={onSidebarDialogOpenChange}
                             session={session}
                             disabled={
                               Boolean(busy) || isLegacySession(session.id)
@@ -4721,7 +4750,36 @@ export function AgentPage({
 
   const sidebarContent = renderSidebar?.({
     actions: sidebarActions,
-    workspace: sidebarWorkspace,
+    workspace: sidebarWorkspaceCompact ? (
+      <Popover open={compactSessionsOpen} onOpenChange={setCompactSessionsOpen}>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            className="lolicode-sidebar-icon-button lolicode-compact-sessions"
+            aria-label="项目与会话"
+            title="项目与会话"
+          >
+            <MessageSquare aria-hidden="true" />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent
+          side="right"
+          align="start"
+          sideOffset={12}
+          collisionPadding={12}
+          aria-label="项目与会话"
+          className="lolicode-workbench wb-unified lolicode-compact-sessions-popover"
+          onOpenAutoFocus={(event) => {
+            event.preventDefault();
+            sessionSearchRef.current?.focus();
+          }}
+        >
+          <div className="wb-sidebar">{sidebarWorkspace}</div>
+        </PopoverContent>
+      </Popover>
+    ) : (
+      sidebarWorkspace
+    ),
     onCollapse: toggleSidebar,
     compact: paneLayout.sidebarCompact,
   });
@@ -4805,10 +4863,7 @@ export function AgentPage({
               data-workspace-entry
               {...DRAG_REGION_ATTR}
             >
-              <h1
-                title={selectedTitle}
-                {...DRAG_REGION_ATTR}
-              >
+              <h1 title={selectedTitle} {...DRAG_REGION_ATTR}>
                 {selectedTitle}
               </h1>
             </div>
