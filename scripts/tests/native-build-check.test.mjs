@@ -108,6 +108,24 @@ function decode(node) {
   return node.children?.length ? decode(node.children[0]) : null;
 }
 
+// YAML parsing cannot detect GitHub Actions expression-context scope errors.
+// These contexts exist in steps but are not available in jobs.<job_id>.env.
+function assertJobEnvironmentContexts(workflow) {
+  for (const job of Object.values(workflow.jobs)) {
+    for (const value of Object.values(job.env || {})) {
+      for (const [, expression] of String(value).matchAll(
+        /\$\{\{([\s\S]*?)\}\}/g,
+      )) {
+        assert.doesNotMatch(
+          expression,
+          /\b(?:runner|steps|env|job)\s*[.\[]/,
+          "Step-only context is unavailable in job.env",
+        );
+      }
+    }
+  }
+}
+
 test("committed product, Cargo, Tauri, Node and Harness pins agree", () => {
   const expected = verifyInputs(root);
   assert(
@@ -259,6 +277,14 @@ test("workflow triggers only on the authorized branch or manually, without publi
     "utf8",
   );
   const workflow = decode(parsers.yaml.parse(source));
+  assertJobEnvironmentContexts(workflow);
+  const invalid = structuredClone(workflow);
+  invalid.jobs["windows-tests"].env.CC_SWITCH_TEST_HOME =
+    "${{ runner.temp }}/lolicode-native-check-home";
+  assert.throws(
+    () => assertJobEnvironmentContexts(invalid),
+    /Step-only context is unavailable in job.env/,
+  );
   assert.deepEqual(Object.keys(workflow.on).sort(), [
     "push",
     "workflow_dispatch",
@@ -346,7 +372,7 @@ test("workflow triggers only on the authorized branch or manually, without publi
   );
   assert.deepEqual(windows.permissions, { contents: "read" });
   assert.equal(windows.environment, undefined);
-  assert.match(windows.env.CC_SWITCH_TEST_HOME, /^\$\{\{ runner\.temp \}\}\//);
+  assert.equal(windows.env.CC_SWITCH_TEST_HOME, undefined);
   assert.equal(
     windows.steps.find((step) => step.uses === "actions/checkout@v6").with[
       "persist-credentials"
@@ -374,6 +400,14 @@ test("workflow triggers only on the authorized branch or manually, without publi
   );
   const commands = windows.steps.map((step) => step.run || "").join("\n");
   assert.match(commands, /RUNNER_ENVIRONMENT -ne 'github-hosted'/);
+  assert.match(
+    commands,
+    /\$env:CC_SWITCH_TEST_HOME = Join-Path \$env:RUNNER_TEMP 'lolicode-native-check-home'/,
+  );
+  assert.match(
+    commands,
+    /"CC_SWITCH_TEST_HOME=\$env:CC_SWITCH_TEST_HOME" >> \$env:GITHUB_ENV/,
+  );
   assert.match(commands, /prepare-lolicode-harness-runtime\.mjs --bundle/);
   assert.match(commands, /npm ci --prefix packages\/companion-relay/);
   assert.match(commands, /pnpm install --frozen-lockfile/);

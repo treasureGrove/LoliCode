@@ -213,7 +213,6 @@ jobs:
       CARGO_PROFILE_DEV_DEBUG: "0"
       CARGO_PROFILE_TEST_DEBUG: "0"
       CARGO_TARGET_DIR: ${{ github.workspace }}/src-tauri/target/hosted-windows-tests
-      CC_SWITCH_TEST_HOME: ${{ runner.temp }}/lolicode-native-check-home
     steps:
       - uses: actions/checkout@v6
         with:
@@ -246,8 +245,12 @@ jobs:
           if ($LASTEXITCODE -ne 0 -or -not $hostLine) { throw 'Expected native Windows x64 MSVC toolchain.' }
           node -e 'if (process.platform !== "win32" || process.arch !== "x64") process.exit(1)'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          # runner context is unavailable in job.env; resolve this only on the host.
+          if (-not $env:RUNNER_TEMP -or -not (Test-Path -LiteralPath $env:RUNNER_TEMP -PathType Container)) { throw 'Missing hosted runner temporary directory.' }
+          $env:CC_SWITCH_TEST_HOME = Join-Path $env:RUNNER_TEMP 'lolicode-native-check-home'
           if (Test-Path -LiteralPath $env:CC_SWITCH_TEST_HOME) { throw 'Expected a fresh test home.' }
           New-Item -ItemType Directory -Path $env:CC_SWITCH_TEST_HOME | Out-Null
+          "CC_SWITCH_TEST_HOME=$env:CC_SWITCH_TEST_HOME" >> $env:GITHUB_ENV
           rustc -vV
 
       - name: Install pinned dependencies and run verifier contracts

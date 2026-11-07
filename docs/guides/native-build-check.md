@@ -54,6 +54,8 @@ Linux 显式安装 WebKitGTK 4.1、GTK3、libsoup3、Ayatana AppIndicator、libr
 cargo nextest run --locked --manifest-path src-tauri/Cargo.toml --profile ci
 ```
 
+临时 home 在 Windows 准备步骤中通过 `$env:RUNNER_TEMP` 构造，再写入 `GITHUB_ENV` 供后续步骤使用。不要在 job 级 `env` 引用 `${{ runner.temp }}`：GitHub 在该作用域不提供 runner context，会在启动任何 job 前拒绝整个 workflow。回归契约覆盖这个错误及修复后的环境传递。
+
 不添加测试名称过滤、不额外排除测试、不设置 continue-on-error。项目原来声明的 ignored 测试保持现有 CI 的正常语义，nextest 的真实通过/失败/跳过数量以对应 run 为准。部分 Windows 测试会访问系统用户目录或注册表，故全套只在可丢弃托管账号运行，**不在用户本机的日常 Windows 账号运行**。设置临时 home 不等同于证明所有测试都只访问该目录；隔离边界是整台全新的托管 runner。
 
 这个 Windows job 不打包、不上传任何额外产物、不签名或发布，也不代表 Windows GUI、安装/覆盖升级已验收。Windows 正式发布 workflow 不变。
