@@ -93,6 +93,19 @@ test(
     const install = path.join(temporary, "旧版 安装 中文", "LoliCode");
     const marker = path.join(temporary, "old-uninstaller-was-called.txt");
     const versionResource = path.join(project, "version.txt");
+    const fresh = path.join(temporary, "首次 安装 中文", "LoliCode");
+    const relativeParts = [];
+    let relativeLength = 520 - fresh.length - 1 - "version.txt".length - 1;
+    while (relativeLength > 60) {
+      relativeParts.push("深" + "x".repeat(59));
+      relativeLength -= 61;
+    }
+    assert(relativeLength > 0);
+    const longResource = [
+      ...relativeParts,
+      "路" + "x".repeat(relativeLength - 1),
+      "version.txt",
+    ].join("/");
     const exe = path.join(project, "target/release/fixture-app.exe");
     const env = {
       ...process.env,
@@ -172,7 +185,10 @@ test(
             publisher: fixtureId,
             createUpdaterArtifacts: false,
             icon: [],
-            resources: { "version.txt": "version.txt" },
+            resources: {
+              "version.txt": "version.txt",
+              "long-version.txt": longResource,
+            },
             windows: {
               allowDowngrades: false,
               webviewInstallMode: { type: "skip" },
@@ -189,6 +205,7 @@ test(
           JSON.stringify(config),
         );
         writeFileSync(versionResource, version);
+        writeFileSync(path.join(project, "long-version.txt"), version);
         run(
           process.execPath,
           [
@@ -217,6 +234,21 @@ test(
           "utf8",
         );
         assert.doesNotMatch(generated, /_\?=/);
+        // Check the actual Handlebars result, not a manually replaced template:
+        // doubled source escapes must become exactly one real separator.
+        assert(
+          generated.includes(
+            'File /a "/oname=$LoliCodeResourceRoot\\version.txt"',
+          ),
+        );
+        assert(generated.includes('CreateDirectory "$LoliCodeResourceRoot\\"'));
+        assert(
+          generated.includes(
+            `Delete "$LoliCodeResourceRoot\\${longResource.replaceAll("/", "\\")}"`,
+          ),
+        );
+        assert(!generated.includes("$LoliCodeResourceRoot\\\\"));
+        assert(!generated.includes("{{this"));
         return installer;
       });
       run(makensis, ["/V1", oldSource]);
@@ -230,6 +262,11 @@ test(
         assert.equal(digest(path.join(install, "LoliCode.exe")), digest(exe));
         assert.equal(
           readFileSync(path.join(install, "version.txt"), "utf8"),
+          version,
+        );
+        assert(path.join(install, longResource).length > 260);
+        assert.equal(
+          readFileSync(path.join(install, longResource), "utf8"),
           version,
         );
         assert.equal(
@@ -255,7 +292,6 @@ test(
       }
 
       // Fresh installs and an explicit user-requested uninstall still work.
-      const fresh = path.join(temporary, "首次 安装 中文", "LoliCode");
       // NSIS requires /D= last and unquoted, including when it has spaces.
       run(installers[0], ["/S", "/NS", `/D=${fresh}`], {
         windowsVerbatimArguments: true,
@@ -265,20 +301,67 @@ test(
         readFileSync(path.join(fresh, "version.txt"), "utf8"),
         "4.1.2",
       );
+      assert.equal(path.join(fresh, longResource).length, 520);
+      assert.equal(
+        readFileSync(path.join(fresh, longResource), "utf8"),
+        "4.1.2",
+      );
       writeFileSync(path.join(fresh, "user-sentinel.txt"), "keep user file");
       run(path.join(fresh, "uninstall.exe"), ["/S", `_?=${fresh}`], {
         windowsVerbatimArguments: true,
       });
       assert.equal(existsSync(path.join(fresh, "LoliCode.exe")), false);
+      assert(!existsSync(path.join(fresh, longResource)));
+      assert(!existsSync(path.join(fresh, relativeParts[0])));
       assert.equal(
         readFileSync(path.join(fresh, "user-sentinel.txt"), "utf8"),
         "keep user file",
+      );
+
+      // The explicit root ceiling must be accepted by the real installer too,
+      // including ordinary main/uninstaller paths and the scoped process guard.
+      const boundaryParent = path.join(temporary, "root-boundary");
+      const boundaryRoot = path.join(
+        boundaryParent,
+        "r".repeat(245 - boundaryParent.length - 1),
+      );
+      assert.equal(boundaryRoot.length, 245);
+      assert.equal(path.join(boundaryRoot, "uninstall.exe").length, 259);
+      run(installers[0], ["/S", "/NS", `/D=${boundaryRoot}`], {
+        windowsVerbatimArguments: true,
+      });
+      assert.equal(
+        digest(path.join(boundaryRoot, "LoliCode.exe")),
+        digest(exe),
+      );
+      assert.equal(
+        readFileSync(path.join(boundaryRoot, longResource), "utf8"),
+        "4.1.2",
+      );
+      writeFileSync(
+        path.join(boundaryRoot, "sentinel.txt"),
+        "preserve boundary user file",
+      );
+      run(
+        path.join(boundaryRoot, "uninstall.exe"),
+        ["/S", `_?=${boundaryRoot}`],
+        { windowsVerbatimArguments: true },
+      );
+      assert(!existsSync(path.join(boundaryRoot, "LoliCode.exe")));
+      assert(!existsSync(path.join(boundaryRoot, longResource)));
+      assert.equal(
+        readFileSync(path.join(boundaryRoot, "sentinel.txt"), "utf8"),
+        "preserve boundary user file",
       );
 
       seedLegacyRegistration();
       // No /D: the installer must recover the original directory by itself.
       run(installers[0], ["/P", "/NS"]); // manual download, passive maintenance path
       verify("4.1.2");
+      writeFileSync(
+        path.join(install, longResource),
+        "stale content before reinstall",
+      );
       run(installers[0], ["/S", "/NS"]); // repeat installation
       verify("4.1.2");
       run(installers[1], ["/S", "/UPDATE", "/NS"]); // app updater

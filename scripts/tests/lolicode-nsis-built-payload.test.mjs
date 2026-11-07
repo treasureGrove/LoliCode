@@ -93,6 +93,44 @@ function relativeDestination(candidate) {
   return candidate;
 }
 
+const resourcePrefix = "$LoliCodeResourceRoot\\";
+function resourceDestination(candidate, allowRoot = false) {
+  assert(
+    candidate.startsWith(resourcePrefix),
+    "Resource I/O must use the exact normalized extended-path root",
+  );
+  const relative = candidate.slice(resourcePrefix.length);
+  return allowRoot && relative === "" ? "" : relativeDestination(relative);
+}
+
+function resourceHelpers(source) {
+  const begin = "; LoliCode resource filesystem helpers begin";
+  const end = "; LoliCode resource filesystem helpers end";
+  const start = source.indexOf(begin);
+  const finish = source.indexOf(end);
+  assert(
+    start >= 0 && finish > start,
+    "Generated resource filesystem helpers are missing",
+  );
+  assert.equal(
+    source.indexOf(begin, start + begin.length),
+    -1,
+    "Duplicate resource filesystem helpers",
+  );
+  assert.equal(
+    source.indexOf(end, finish + end.length),
+    -1,
+    "Duplicate resource filesystem helper end",
+  );
+  return source.slice(start, finish + end.length).replaceAll("\r\n", "\n");
+}
+const reviewedResourceHelpers = resourceHelpers(
+  readFileSync(
+    path.join(repositoryRoot, "src-tauri/nsis/installer.nsi"),
+    "utf8",
+  ),
+);
+
 function quoted(value) {
   return value.replaceAll("$", () => "$$").replaceAll('"', () => '$\\"');
 }
@@ -141,6 +179,7 @@ function generatedPayloadLayout(source) {
   const offsets = [];
   let openSection;
   let installSections = 0;
+  let resourcePreparation = 0;
   for (const entry of scriptLines(source)) {
     const { line } = entry;
     const hook = line.match(
@@ -175,14 +214,28 @@ function generatedPayloadLayout(source) {
       }
     } else if (line === "SectionEnd") {
       assert(openSection, "Generated SectionEnd has no matching section");
-      if (openSection === "Section Install")
+      if (openSection === "Section Install") {
+        assert.equal(
+          resourcePreparation,
+          1,
+          "Install must prepare the normalized resource root exactly once",
+        );
         assert.equal(
           offsets.length,
           markers.length,
           "Generated payload boundaries are missing; review the new Tauri layout",
         );
+      }
       openSection = undefined;
     } else if (openSection === "Section Install") {
+      if (line === "!insertmacro LoliCodePrepareResourceRoot") {
+        assert.equal(
+          offsets.length,
+          0,
+          "Prepare resource root before copying payload",
+        );
+        resourcePreparation += 1;
+      }
       const marker = markers.indexOf(line);
       if (marker !== -1) {
         assert.equal(
@@ -228,6 +281,24 @@ function payloadFromGeneratedScript(filename, boundary = defaultBoundary) {
   const source = readFileSync(generatedScriptPath, "utf8");
   const { bundledHookIncludes, definitions, block } =
     generatedPayloadLayout(source);
+  const helpers = resourceHelpers(source);
+  assert.equal(
+    helpers,
+    reviewedResourceHelpers,
+    "Generated installer must use the reviewed resource path preparation",
+  );
+  assert.equal(
+    helpers,
+    resourceHelpers(
+      readFileSync(
+        boundary.sourceFile(
+          path.join(boundary.sourceRoot, "src-tauri/nsis/installer.nsi"),
+        ),
+        "utf8",
+      ),
+    ),
+    "Generated resource path preparation must match the exact source snapshot",
+  );
   assert.equal(
     bundledHookIncludes.length,
     1,
@@ -267,8 +338,6 @@ function payloadFromGeneratedScript(filename, boundary = defaultBoundary) {
   const destinations = new Set();
   for (const { line } of scriptLines(block)) {
     if (!line || line.startsWith(";")) continue;
-    // Root-level notices make Tauri explicitly create the existing install root.
-    if (line === 'CreateDirectory "$INSTDIR\\"') continue;
     if (line === 'File "${MAINBINARYSRCPATH}"') {
       assert(!files.some((file) => file.destination === "LoliCode.exe"));
       const file = {
@@ -279,11 +348,12 @@ function payloadFromGeneratedScript(filename, boundary = defaultBoundary) {
       operations.push({ type: "file", ...file });
       continue;
     }
-    const directory = line.match(/^CreateDirectory "\$INSTDIR\\([^"\r\n]+)"$/u);
+    const directory = line.match(/^CreateDirectory "([^"\r\n]+)"$/u);
     if (directory) {
       operations.push({
         type: "directory",
-        destination: relativeDestination(directory[1]),
+        destination: resourceDestination(directory[1], true),
+        nsisDestination: directory[1],
       });
       continue;
     }
@@ -291,7 +361,7 @@ function payloadFromGeneratedScript(filename, boundary = defaultBoundary) {
       /^File \/a "\/oname=([^"\r\n]+)" "([^"\r\n]+)"$/u,
     );
     assert(resource, `Unrecognized generated payload instruction: ${line}`);
-    const destination = relativeDestination(resource[1]);
+    const destination = resourceDestination(resource[1]);
     assert.notEqual(destination.toLowerCase(), "lolicode.exe");
     assert(
       !destinations.has(destination.toLowerCase()),
@@ -300,7 +370,7 @@ function payloadFromGeneratedScript(filename, boundary = defaultBoundary) {
     destinations.add(destination.toLowerCase());
     const file = { destination, source: boundary.sourceFile(resource[2]) };
     files.push(file);
-    operations.push({ type: "file", ...file });
+    operations.push({ type: "file", ...file, nsisDestination: resource[1] });
   }
   assert.equal(
     files.filter((file) => file.destination === "LoliCode.exe").length,
@@ -348,6 +418,7 @@ function payloadFromGeneratedScript(filename, boundary = defaultBoundary) {
     companionLicenseFiles: companionLicenses.length,
     generatedScriptPath,
     generatedScriptSha256: sha256(generatedScriptPath),
+    resourceHelpers: helpers,
   };
 }
 
@@ -373,7 +444,7 @@ function withSyntheticPayload(action) {
       "skills/xlsx/LICENSE.txt",
     ];
     const resource = (destination, source) =>
-      `  File /a "/oname=${destination}" "${source}"`;
+      `  File /a "/oname=${resourcePrefix}${destination}" "${source}"`;
     const required = companionLicenses.map(([name]) => [
       `licenses\\companion\\${name}`,
       path.join(repositoryRoot, "src-tauri/resources/companion-licenses", name),
@@ -386,14 +457,16 @@ function withSyntheticPayload(action) {
         filename,
         mutate(
           [
+            reviewedResourceHelpers,
             `!include "${hooksPath}"`,
             `!define VERSION "${expectedVersion}"`,
             '!define MAINBINARYNAME "LoliCode"',
             `!define MAINBINARYSRCPATH "${executable}"`,
             "Section Install",
+            "!insertmacro LoliCodePrepareResourceRoot",
             "; Copy main executable",
             '  File "${MAINBINARYSRCPATH}"',
-            '  CreateDirectory "$INSTDIR\\"',
+            `  CreateDirectory "${resourcePrefix}"`,
             resource(
               "agent\\extensions\\manifest.json",
               path.join(extensionRoot, "manifest.json"),
@@ -564,6 +637,39 @@ test("actual NSIS payload parser keeps version, hook, instruction and destinatio
   withSyntheticPayload(({ render }) => {
     const reject = (mutate, expected) =>
       assert.throws(render(undefined, { mutate }), expected);
+    reject(
+      (source) =>
+        source.replace("!insertmacro LoliCodePrepareResourceRoot\n", ""),
+      /prepare the normalized resource root/u,
+    );
+    reject(
+      (source) =>
+        source.replace(
+          '"The normalized LoliCode installation folder is too long."',
+          '"changed"',
+        ),
+      /reviewed resource path preparation/u,
+    );
+    for (const invalid of [
+      "LICENSE",
+      "$INSTDIR\\LICENSE",
+      "\\\\?\\$INSTDIR\\LICENSE",
+      "$LoliCodeResourceRoot\\\\LICENSE",
+      "$LoliCodeResourceRoot\\..\\LICENSE",
+      "$LoliCodeResourceRoot\\$TEMP\\LICENSE",
+      "$LoliCodeResourceRoot\\Foo.\\LICENSE",
+      "$LoliCodeResourceRoot\\Foo \\LICENSE",
+      "$LoliCodeResourceRoot\\",
+    ]) {
+      reject(
+        (source) =>
+          source.replace(
+            `/oname=${resourcePrefix}agent\\extensions\\manifest.json`,
+            `/oname=${invalid}`,
+          ),
+        /extended-path root|AssertionError|Unsafe destination|Ambiguous Windows/u,
+      );
+    }
     reject(
       (source) => source + `!define VERSION "${expectedVersion}"\n`,
       /Duplicate generated payload definition/u,
@@ -776,10 +882,12 @@ test(
         // production uninstall registration or installer instructions are run.
         `!define UNINSTKEY "${quoted(registryKey)}"`,
         "Var OldMainBinaryName",
+        payload.resourceHelpers,
         `OutFile "${quoted(installer)}"`,
         `InstallDir "${quoted(destination)}"`,
         'Section "PayloadFixture"',
         "  SetShellVarContext current",
+        "  !insertmacro LoliCodePrepareResourceRoot",
         "  SetOutPath $INSTDIR",
         "  !insertmacro NSIS_HOOK_PREINSTALL",
         "  StrCmp $OUTDIR $INSTDIR +3 0",
@@ -792,12 +900,10 @@ test(
       ];
       for (const operation of payload.operations) {
         if (operation.type === "directory") {
-          lines.push(
-            `  CreateDirectory "$INSTDIR\\${quoted(operation.destination)}"`,
-          );
+          lines.push(`  CreateDirectory "${operation.nsisDestination}"`);
         } else {
           lines.push(
-            `  File /a "/oname=${quoted(operation.destination)}" "${quoted(operation.source)}"`,
+            `  File /a "/oname=${operation.nsisDestination ?? quoted(operation.destination)}" "${quoted(operation.source)}"`,
           );
         }
       }
