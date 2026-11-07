@@ -17,17 +17,17 @@
     },
     {
       "type": "improve",
-      "zh": "改进会话切换与标题生成，合并头像和更多菜单",
-      "zh-TW": "改善對話切換與標題產生，合併頭像與更多選單",
-      "en": "Improve session switching and titles, and combine the avatar and More menus",
-      "ja": "会話の切り替えとタイトル生成を改善し、アバターとその他のメニューを統合"
+      "zh": "改进会话切换与标题、折叠侧栏入口和输入框，合并头像与更多菜单",
+      "zh-TW": "改善會話切換與標題、收合側欄入口和輸入框，合併頭像與更多選單",
+      "en": "Improve sessions, compact sidebar access and composers; combine avatar and More menus",
+      "ja": "会話切替・タイトル、折りたたみサイドバーと入力欄を改善し、アバターとその他を統合"
     },
     {
       "type": "fix",
-      "zh": "折叠侧栏保留会话与秘书入口，统一底部输入区",
-      "zh-TW": "收合側欄保留對話與秘書入口，統一底部輸入區",
-      "en": "Keep sessions and Secretary reachable in the compact sidebar and align bottom composers",
-      "ja": "折りたたんだサイドバーの会話・秘書への導線を保ち、下部の入力欄を統一"
+      "zh": "macOS 构建最低要求 13.5+，菜单跟随应用语言",
+      "zh-TW": "macOS 建置最低要求 13.5+，選單跟隨應用程式語言",
+      "en": "Set macOS builds to require 13.5+ and match menus to the app language",
+      "ja": "macOS ビルドの最低要件を 13.5+ に設定し、メニューをアプリの言語に統一"
     }
   ]
 }

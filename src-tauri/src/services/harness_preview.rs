@@ -24,6 +24,7 @@ use std::{
         Arc,
     },
 };
+#[cfg(windows)]
 use tauri::AppHandle;
 use tokio::{
     net::TcpListener,
@@ -65,7 +66,11 @@ struct LivePreview {
 
 enum PreviewSource {
     Tool,
-    Delivery(PreviewServer),
+    Delivery {
+        // Own the server until this preview closes, including on platforms
+        // where no native guest needs to read its URL again.
+        _server: PreviewServer,
+    },
     #[cfg(windows)]
     Link(Url),
 }
@@ -274,7 +279,7 @@ impl HarnessPreview {
                     native: cfg!(windows),
                 },
                 last_used: Instant::now(),
-                source: PreviewSource::Delivery(server),
+                source: PreviewSource::Delivery { _server: server },
                 #[cfg(windows)]
                 view: None,
             },
@@ -393,7 +398,7 @@ impl HarnessPreview {
                 }
                 return Ok(());
             }
-            PreviewSource::Delivery(server) => {
+            PreviewSource::Delivery { _server: server } => {
                 super::agent_preview_guest::PreviewPage::Delivery(server.url.clone())
             }
             PreviewSource::Link(url) => super::agent_preview_guest::PreviewPage::Link {
@@ -442,7 +447,7 @@ impl HarnessPreview {
             .filter(|entry| {
                 entry.request.session_id == session_id
                     && entry.scope.native
-                    && !matches!(entry.source, PreviewSource::Delivery(_))
+                    && !matches!(entry.source, PreviewSource::Delivery { .. })
             })
             .ok_or("此会话的浏览器预览已关闭")?;
         let (result, done) = tokio::sync::oneshot::channel();
@@ -723,6 +728,19 @@ fn asset_mime(path: &Path) -> Option<&'static str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn delivery_source_retains_server_until_dropped() {
+        let temp = tempfile::tempdir().unwrap();
+        let server = PreviewServer::start(temp.path().to_owned(), "index.html")
+            .await
+            .unwrap();
+        let active = server.active.clone();
+        let source = PreviewSource::Delivery { _server: server };
+        assert!(active.load(Ordering::Acquire));
+        drop(source);
+        assert!(!active.load(Ordering::Acquire));
+    }
 
     #[tokio::test]
     async fn serves_delivered_assets_only_with_owned_capability() {

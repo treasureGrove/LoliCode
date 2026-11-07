@@ -720,6 +720,9 @@ impl Browser {
     }
 
     async fn cdp(&mut self, method: &str, params: Value) -> Result<Value, String> {
+        #[cfg(not(windows))]
+        let BrowserTransport::Headless(headless) = &mut self.transport;
+        #[cfg(windows)]
         let headless = match &mut self.transport {
             BrowserTransport::Headless(browser) => browser,
             #[cfg(windows)]
@@ -976,7 +979,11 @@ impl Browser {
         }
         if !self.is_native() {
             let _ = timeout(Duration::from_secs(1), self.cdp("Browser.close", json!({}))).await;
-            let BrowserTransport::Headless(browser) = &mut self.transport else {
+            #[cfg(not(windows))]
+            let BrowserTransport::Headless(browser) = &mut self.transport;
+            #[cfg(windows)]
+            let BrowserTransport::Headless(browser) = &mut self.transport
+            else {
                 return;
             };
             if timeout(Duration::from_secs(2), browser.child.wait())

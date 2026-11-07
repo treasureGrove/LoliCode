@@ -454,7 +454,11 @@ pub(crate) async fn sync_agent_browser_preview_webview(
     }
     #[cfg(not(windows))]
     {
-        let _ = (app, session_id, browser_id, bounds, reload, presentation);
+        // Keep decoding the shared command payload even without a native guest.
+        if let Some(bounds) = bounds {
+            let _ = (bounds.x, bounds.y, bounds.width, bounds.height);
+        }
+        let _ = (app, session_id, browser_id, reload, presentation);
         Err("当前平台不支持实时页面预览".into())
     }
 }
@@ -483,7 +487,16 @@ pub(crate) async fn navigate_agent_browser_preview(
     }
     #[cfg(not(windows))]
     {
-        let _ = (app, session_id, browser_id, action);
+        // The wire format is shared; only Windows can execute the navigation.
+        match action {
+            crate::services::PreviewNavigation::History(history) => {
+                let _ = history;
+            }
+            crate::services::PreviewNavigation::Address { url } => {
+                let _ = url;
+            }
+        }
+        let _ = (app, session_id, browser_id);
         Err("当前平台不支持实时页面预览".into())
     }
 }
