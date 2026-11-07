@@ -2,10 +2,11 @@
 // Uses native IPC and actual DOM controls, not mocked Tauri or navigation state.
 const endpoint = new URL(".", import.meta.url);
 const phases = [];
+let checkpoint = "config";
 let fixture,
   verified = false;
-const check = (value) => {
-  if (!value) throw new Error("smoke assertion");
+const check = (value, code = "assertion") => {
+  if (!value) throw new Error(code);
 };
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 async function bounded(promise, ms = 15000) {
@@ -14,7 +15,7 @@ async function bounded(promise, ms = 15000) {
     return await Promise.race([
       promise,
       new Promise((_, reject) => {
-        timer = setTimeout(() => reject(new Error("deadline")), ms);
+        timer = setTimeout(() => reject(new Error("timeout")), ms);
       }),
     ]);
   } finally {
@@ -22,7 +23,11 @@ async function bounded(promise, ms = 15000) {
   }
 }
 const invoke = (command, args = {}) =>
-  bounded(window.__TAURI_INTERNALS__.invoke(command, args));
+  bounded(
+    window.__TAURI_INTERNALS__.invoke(command, args).catch(() => {
+      throw new Error("ipc-rejected");
+    }),
+  );
 async function waitFor(read, timeout = 20000) {
   const end = Date.now() + timeout;
   while (Date.now() < end) {
@@ -30,7 +35,7 @@ async function waitFor(read, timeout = 20000) {
     if (result) return result;
     await sleep(100);
   }
-  throw new Error("DOM deadline");
+  throw new Error("timeout");
 }
 function visible(element) {
   if (!element || element.closest('[hidden], [aria-hidden="true"], [inert]'))
@@ -69,15 +74,15 @@ async function click(selector) {
   element.click();
 }
 async function paint(element) {
-  check(visible(element));
+  check(visible(element), "geometry-hidden");
   await bounded(
     new Promise((resolve) =>
       requestAnimationFrame(() => requestAnimationFrame(resolve)),
     ),
     5000,
   );
-  check(visible(element));
-  check(document.visibilityState === "visible");
+  check(visible(element), "geometry-hidden");
+  check(document.visibilityState === "visible", "document-hidden");
 }
 async function request(name, options) {
   const response = await bounded(fetch(new URL(name, endpoint), options));
@@ -87,69 +92,90 @@ async function request(name, options) {
 let passed = false;
 try {
   fixture = await (await request("config")).json();
-  check(location.origin === fixture.origin);
+  check(location.origin === fixture.origin, "origin-mismatch");
+  checkpoint = "native-bridge";
   await waitFor(() => window.__TAURI_INTERNALS__?.invoke);
+  checkpoint = "build-identity";
   const build = await invoke("get_build_info");
-  check(
-    build.channel === "development" &&
-      build.dataDirectory === fixture.profile &&
-      build.sourceRevision === fixture.revision,
-  );
+  check(build.channel === "development", "build-channel");
+  check(build.dataDirectory === fixture.profile, "build-profile");
+  check(build.sourceRevision === fixture.revision, "build-revision");
   verified = true;
   phases.push("identity");
+  checkpoint = "harness-status";
   const engine = await invoke("get_agent_status");
-  check(engine.available && /^deepseek-harness-/.test(engine.version));
+  check(engine.available, "harness-unavailable");
+  check(/^deepseek-harness-/.test(engine.version), "harness-version");
   phases.push("harness");
+  checkpoint = "window-visible";
   await waitFor(() => invoke("plugin:window|is_visible", { label: "main" }));
+  checkpoint = "root-painted";
   await paint(await waitFor(() => query("#root")));
+  checkpoint = "workspace-painted";
   await paint(await waitFor(() => query("[data-workspace-active]")));
   phases.push("paint");
+  checkpoint = "profile-menu";
   await click('button[aria-label="Profile and settings"]');
+  checkpoint = "settings-menu";
   const settings = await waitFor(() =>
     [...document.querySelectorAll('[role="menuitem"]')].find(
       (el) => visible(el) && el.textContent.trim() === "Settings",
     ),
   );
   settings.click();
+  checkpoint = "language-control";
   await click('[role="combobox"][aria-label="Language"]');
+  checkpoint = "chinese-option";
   const chinese = await waitFor(() =>
     [...document.querySelectorAll('[role="option"]')].find(
       (el) => visible(el) && el.textContent.trim() === "简体中文",
     ),
   );
+  checkpoint = "chinese-copy";
   chinese.click();
   await paint(
     await waitFor(() => query('[role="combobox"][aria-label="界面语言"]')),
   );
   check(document.body.textContent.includes("外观"));
+  checkpoint = "chinese-persisted";
   await waitFor(async () => (await invoke("get_settings")).language === "zh");
   await click('[role="combobox"][aria-label="界面语言"]');
+  checkpoint = "english-option";
   const english = await waitFor(() =>
     [...document.querySelectorAll('[role="option"]')].find(
       (el) => visible(el) && el.textContent.trim() === "English",
     ),
   );
+  checkpoint = "english-copy";
   english.click();
   await paint(
     await waitFor(() => query('[role="combobox"][aria-label="Language"]')),
   );
+  checkpoint = "english-persisted";
   await waitFor(async () => (await invoke("get_settings")).language === "en");
   check(document.body.textContent.includes("Appearance"));
   phases.push("language");
   await click('button[aria-label="Coding workspace"]');
+  checkpoint = "agent-entry";
   const agent = await waitFor(() =>
     query("[data-workspace-active]#main-content"),
   );
   await paint(agent);
+  checkpoint = "agent-content";
   await paint(await waitFor(() => query(".wb-chat-surface")));
+  checkpoint = "agent-ready";
   await paint(await waitFor(() => query(".wb-welcome-action:not([disabled])")));
+  checkpoint = "tavern-entry";
   await click('button[aria-label="Character chat"]');
+  checkpoint = "tavern-enable";
   await click('article[data-app="tavern"] button:not([disabled])');
+  checkpoint = "tavern-visible";
   const tavern = await waitFor(() => {
     const el = query("[data-workspace-active]");
     return el && el !== agent && !visible(agent) && el;
   });
   await paint(tavern);
+  checkpoint = "tavern-ready";
   // Panel content must exist, not just the outer navigation marker.
   check(tavern.querySelector("section"));
   await paint(
@@ -161,9 +187,11 @@ try {
       );
     }),
   );
+  checkpoint = "tavern-heading";
   await paint(
     await waitFor(() => [...tavern.querySelectorAll("h3")].find(visible)),
   );
+  checkpoint = "tavern-snapshot";
   const snapshot = await invoke("get_tavern_snapshot");
   check(
     Array.isArray(snapshot.characters) &&
@@ -172,9 +200,11 @@ try {
       snapshot.stories.length === 0,
   );
   await click('button[aria-label="Coding workspace"]');
+  checkpoint = "agent-return";
   await waitFor(() => visible(agent) && !visible(tavern));
   await paint(agent);
   phases.push("navigation");
+  checkpoint = "success-report";
   await request("report", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -186,7 +216,23 @@ try {
     }),
   });
   passed = true;
-} catch {
+} catch (error) {
+  const failureCode = [
+    "assertion",
+    "timeout",
+    "ipc-rejected",
+    "request-failed",
+    "geometry-hidden",
+    "document-hidden",
+    "origin-mismatch",
+    "build-channel",
+    "build-profile",
+    "build-revision",
+    "harness-unavailable",
+    "harness-version",
+  ].includes(error?.message)
+    ? error.message
+    : "unknown";
   if (fixture) {
     try {
       await request("report", {
@@ -197,6 +243,8 @@ try {
           revision: fixture.revision,
           result: "failed",
           phases,
+          checkpoint,
+          failureCode,
         }),
       });
     } catch {

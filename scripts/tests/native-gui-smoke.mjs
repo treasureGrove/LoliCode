@@ -20,6 +20,176 @@ export const phases = [
   "language",
   "navigation",
 ];
+export const checkpoints = [
+  "config",
+  "native-bridge",
+  "build-identity",
+  "harness-status",
+  "window-visible",
+  "root-painted",
+  "workspace-painted",
+  "profile-menu",
+  "settings-menu",
+  "language-control",
+  "chinese-option",
+  "chinese-copy",
+  "chinese-persisted",
+  "english-option",
+  "english-copy",
+  "english-persisted",
+  "agent-entry",
+  "agent-content",
+  "agent-ready",
+  "tavern-entry",
+  "tavern-enable",
+  "tavern-visible",
+  "tavern-ready",
+  "tavern-heading",
+  "tavern-snapshot",
+  "agent-return",
+  "success-report",
+  "native-exit",
+];
+export const failureCodes = [
+  "assertion",
+  "timeout",
+  "ipc-rejected",
+  "request-failed",
+  "geometry-hidden",
+  "document-hidden",
+  "origin-mismatch",
+  "build-channel",
+  "build-profile",
+  "build-revision",
+  "harness-unavailable",
+  "harness-version",
+  "unknown",
+];
+const hostCodes = [
+  "cancelled",
+  "gui-handshake-deadline",
+  "native-exit-deadline",
+  "native-deadline",
+  "report-failed",
+  "report-body",
+  "server-start",
+  "server-close",
+  "owned-process-cleanup",
+];
+export function safeDiagnostic(report) {
+  return {
+    checkpoint: checkpoints.includes(report?.checkpoint)
+      ? report.checkpoint
+      : "unknown",
+    code: failureCodes.includes(report?.failureCode)
+      ? report.failureCode
+      : "unknown",
+  };
+}
+const nativeClasses = [
+  "cli-config",
+  "compile",
+  "native-exit-before-handshake",
+  "native-exit-after-handshake",
+  "running-or-unknown",
+  "log-unavailable",
+];
+export function classifyNativeLog(text, exit, handshakeSeen) {
+  const rustErrors = [
+    ...new Set(
+      [...text.matchAll(/\berror\[(E[0-9]{4})\]/g)].map((match) => match[1]),
+    ),
+  ].slice(0, 12);
+  const classification =
+    /could not compile|failed to run custom build command|\berror\[E[0-9]{4}\]/i.test(
+      text,
+    )
+      ? "compile"
+      : /(?:failed to (?:parse|read)|invalid)[^\r\n]{0,80}(?:tauri[^\r\n]{0,20})?config|error[^\r\n]{0,80}configuration/i.test(
+            text,
+          )
+        ? "cli-config"
+        : exit
+          ? handshakeSeen
+            ? "native-exit-after-handshake"
+            : "native-exit-before-handshake"
+          : "running-or-unknown";
+  return {
+    classification,
+    rustErrors,
+    exitCode:
+      Number.isInteger(exit?.code) && exit.code >= 0 && exit.code <= 255
+        ? exit.code
+        : null,
+  };
+}
+async function readNativeDiagnostic(file, exit, handshakeSeen) {
+  const handle = await open(file, "r");
+  try {
+    const { size } = await handle.stat();
+    const bytes = Buffer.alloc(Math.min(size, 262144));
+    const { bytesRead } = await handle.read(
+      bytes,
+      0,
+      bytes.length,
+      Math.max(0, size - bytes.length),
+    );
+    return classifyNativeLog(
+      bytes.subarray(0, bytesRead).toString("utf8"),
+      exit,
+      handshakeSeen,
+    );
+  } finally {
+    await handle.close();
+  }
+}
+export function formatSummary(stage, revision, diagnostic = {}) {
+  const stages = [
+    "host",
+    "server",
+    "native-build-and-gui",
+    "gui-handshake",
+    "native-normal-exit",
+    "report-and-exit",
+    "cleanup",
+    "passed",
+    ...phases.map((phase) => "gui-" + phase),
+    "gui-exit",
+  ];
+  const safeStage = stages.includes(stage) ? stage : "unknown";
+  const checkpoint = checkpoints.includes(diagnostic.checkpoint)
+    ? diagnostic.checkpoint
+    : "unknown";
+  const code = [...failureCodes, ...hostCodes, "none"].includes(diagnostic.code)
+    ? diagnostic.code
+    : "unknown";
+  const sha = /^[a-f0-9]{40}$/.test(revision ?? "") ? revision : "invalid";
+  const nativeClass = nativeClasses.includes(diagnostic.classification)
+    ? diagnostic.classification
+    : "running-or-unknown";
+  const exitCode =
+    Number.isInteger(diagnostic.exitCode) &&
+    diagnostic.exitCode >= 0 &&
+    diagnostic.exitCode <= 255
+      ? diagnostic.exitCode
+      : "unknown";
+  const rustErrors = Array.isArray(diagnostic.rustErrors)
+    ? diagnostic.rustErrors
+        .filter((code) => typeof code === "string" && /^E[0-9]{4}$/.test(code))
+        .slice(0, 12)
+        .join(",") || "none"
+    : "none";
+  return `Native GUI smoke: ${safeStage === "passed" ? "PASS" : "FAIL"}; stage: ${safeStage}; checkpoint: ${checkpoint}; code: ${code}; SHA: ${sha}; native-class: ${nativeClass}; exit-code: ${exitCode}; rust-errors: ${rustErrors}. Test-instrumented renderer on disposable hosted VM; not release-package or user-machine acceptance.`;
+}
+export function smokeWindow(config) {
+  const window = config.app.windows.find((window) => window.label === "main");
+  assert.ok(window, "Missing main window");
+  return {
+    ...window,
+    title: "Test-instrumented native GUI smoke",
+    visible: true,
+  };
+}
 export function validateReport(report, fixture) {
   assert.equal(report.nonce, fixture.nonce);
   assert.equal(report.revision, fixture.revision);
@@ -66,7 +236,14 @@ async function main() {
     outcome,
     report,
     protocolFailure;
-  let guiTimer, exitTimer, rejectLifecycle, privateLog;
+  let guiTimer,
+    exitTimer,
+    rejectLifecycle,
+    privateLog,
+    privateLogPath,
+    nativeExit;
+  let handshakeSeen = false;
+  let diagnostic = { checkpoint: "unknown", code: "unknown" };
   const lifecycle = new Promise((_, reject) => {
     rejectLifecycle = reject;
   });
@@ -182,6 +359,7 @@ async function main() {
           }
           if (req.method === "GET" && req.url === namespace + "config") {
             res.setHeader("Content-Type", "application/json");
+            handshakeSeen = true;
             stage = "gui-handshake";
             guiTimer ??= setTimeout(
               () => rejectLifecycle(new Error("gui-handshake-deadline")),
@@ -206,6 +384,7 @@ async function main() {
                 "report-body",
               );
               report = JSON.parse(body);
+              diagnostic = safeDiagnostic(report);
               if (
                 report.result === "failed" &&
                 Array.isArray(report.phases) &&
@@ -259,13 +438,14 @@ async function main() {
         build: { devUrl: fixture.origin, beforeDevCommand: "" },
         app: {
           windows: [
-            {
-              label: "main",
-              title: "Test-instrumented native GUI smoke",
-              width: 1000,
-              height: 750,
-              visible: true,
-            },
+            smokeWindow(
+              JSON.parse(
+                await readFile(
+                  path.join(root, "src-tauri/tauri.conf.json"),
+                  "utf8",
+                ),
+              ),
+            ),
           ],
         },
         bundle: { active: false, createUpdaterArtifacts: false },
@@ -274,11 +454,8 @@ async function main() {
     );
     stage = "native-build-and-gui";
     const cli = path.join(root, "node_modules/@tauri-apps/cli/tauri.js");
-    privateLog = await open(
-      path.join(temporary, "native-build-gui.log"),
-      "wx",
-      0o600,
-    );
+    privateLogPath = path.join(temporary, "native-build-gui.log");
+    privateLog = await open(privateLogPath, "wx", 0o600);
     child = spawn(
       process.execPath,
       [
@@ -302,7 +479,10 @@ async function main() {
     );
     outcome = new Promise((resolve, reject) => {
       child.once("error", reject);
-      child.once("close", (code, signal) => resolve({ code, signal }));
+      child.once("close", (code, signal) => {
+        nativeExit = { code, signal };
+        resolve(nativeExit);
+      });
     });
     const exit = await bounded(
       Promise.race([outcome, lifecycle]),
@@ -315,32 +495,67 @@ async function main() {
     assert.equal(exit.signal, null);
     assert.equal(exit.code, 0);
     stage = "passed";
+    diagnostic = { checkpoint: "native-exit", code: "none" };
+  } catch (error) {
+    if (diagnostic.code === "unknown")
+      diagnostic.code = hostCodes.includes(error?.message)
+        ? error.message
+        : error?.code === "ERR_ASSERTION"
+          ? "assertion"
+          : "unknown";
+    throw error;
   } finally {
-    // Only this detached invocation's process group. No system-wide process names.
-    if (child?.pid) {
-      const signal = (value) => {
+    // Freeze natural exit before cleanup signals; cleanup must not look like an app crash.
+    const naturalExit = nativeExit;
+    try {
+      // Only this detached invocation's process group. No system-wide process names.
+      if (child?.pid) {
+        const signal = (value) => {
+          try {
+            process.kill(-child.pid, value);
+          } catch (e) {
+            if (e.code !== "ESRCH") throw e;
+          }
+        };
+        signal("SIGTERM");
+        await delay(1500);
+        signal("SIGKILL");
+        if (outcome) await bounded(outcome, 5000, "owned-process-cleanup");
+      }
+      if (privateLog) await privateLog.close();
+      clearTimeout(guiTimer);
+      clearTimeout(exitTimer);
+      process.removeListener("SIGTERM", cancel);
+      process.removeListener("SIGINT", cancel);
+      if (vite) await bounded(vite.close(), 5000, "server-close");
+    } catch (error) {
+      stage = "cleanup";
+      diagnostic.code = hostCodes.includes(error?.message)
+        ? error.message
+        : "unknown";
+      throw error;
+    } finally {
+      if (privateLogPath) {
         try {
-          process.kill(-child.pid, value);
-        } catch (e) {
-          if (e.code !== "ESRCH") throw e;
+          diagnostic = {
+            ...diagnostic,
+            ...(await bounded(
+              readNativeDiagnostic(privateLogPath, naturalExit, handshakeSeen),
+              5000,
+              "diagnostic-read",
+            )),
+          };
+        } catch {
+          diagnostic.classification = "log-unavailable";
         }
-      };
-      signal("SIGTERM");
-      await delay(1500);
-      signal("SIGKILL");
-      if (outcome) await bounded(outcome, 5000, "owned-process-cleanup");
+      }
+      const summary = formatSummary(stage, revision, diagnostic);
+      console.log(summary);
+      if (stage !== "passed")
+        console.log(`::error title=Native GUI smoke::${summary}`);
+      if (process.env.GITHUB_STEP_SUMMARY)
+        await appendFile(process.env.GITHUB_STEP_SUMMARY, summary + "\n");
     }
-    if (privateLog) await privateLog.close();
-    clearTimeout(guiTimer);
-    clearTimeout(exitTimer);
-    process.removeListener("SIGTERM", cancel);
-    process.removeListener("SIGINT", cancel);
-    if (vite) await bounded(vite.close(), 5000, "server-close");
-    if (process.env.GITHUB_STEP_SUMMARY)
-      await appendFile(
-        process.env.GITHUB_STEP_SUMMARY,
-        `Native GUI smoke: ${stage === "passed" ? "PASS" : "FAIL"}; stage: ${stage}; SHA: ${/^[a-f0-9]{40}$/.test(revision ?? "") ? revision : "invalid"}. Test-instrumented renderer on disposable hosted VM; not release-package or user-machine acceptance.\n`,
-      );
   }
 }
 if (

@@ -6,6 +6,11 @@ import {
   validateReport,
   phases,
   bounded,
+  safeDiagnostic,
+  formatSummary,
+  checkpoints,
+  smokeWindow,
+  classifyNativeLog,
 } from "./native-gui-smoke.mjs";
 const env = {
   RUNNER_ENVIRONMENT: "github-hosted",
@@ -108,4 +113,148 @@ test("native IPC and real DOM remain in test renderer, no mock bridge", async ()
     assert.ok(renderer.includes(name));
   assert.ok(!renderer.includes("__TAURI_INTERNALS__ ="));
   assert.ok(!renderer.includes("agent_send"));
+});
+
+test("public diagnostics accept only fixed identifiers and an exact SHA", () => {
+  const secret = "private token\n::warning::do-not-print";
+  assert.deepEqual(
+    safeDiagnostic({ checkpoint: secret, failureCode: secret }),
+    { checkpoint: "unknown", code: "unknown" },
+  );
+  assert.deepEqual(
+    safeDiagnostic({ checkpoint: "root-painted", failureCode: "timeout" }),
+    { checkpoint: "root-painted", code: "timeout" },
+  );
+  const summary = formatSummary(secret, secret, {
+    checkpoint: secret,
+    code: secret,
+  });
+  assert.ok(!summary.includes(secret));
+  assert.ok(!summary.includes("private token"));
+  assert.ok(!summary.includes("\n"));
+  assert.match(
+    summary,
+    /stage: unknown; checkpoint: unknown; code: unknown; SHA: invalid/,
+  );
+  assert.match(
+    formatSummary("gui-paint", "a".repeat(40), {
+      checkpoint: "root-painted",
+      code: "timeout",
+    }),
+    /FAIL.*gui-paint.*root-painted.*timeout/,
+  );
+  assert.match(
+    formatSummary("passed", "a".repeat(40), {
+      checkpoint: "native-exit",
+      code: "none",
+    }),
+    /PASS/,
+  );
+});
+test("every renderer checkpoint is allowlisted and no arbitrary error is reported", async () => {
+  const renderer = await readFile(
+    new URL("./native-gui-smoke-renderer.mjs", import.meta.url),
+    "utf8",
+  );
+  for (const match of renderer.matchAll(/checkpoint = "([^"]+)"/g))
+    assert.ok(checkpoints.includes(match[1]), match[1]);
+  assert.ok(renderer.includes("checkpoint,"));
+  assert.ok(renderer.includes("failureCode,"));
+  assert.ok(!renderer.includes("message: error"));
+  const runner = await readFile(
+    new URL("./native-gui-smoke.mjs", import.meta.url),
+    "utf8",
+  );
+  assert.ok(runner.includes("console.log(summary)"));
+  assert.ok(runner.includes("::error title=Native GUI smoke::${summary}"));
+});
+test("test window preserves original native chrome and geometry", () => {
+  const original = {
+    label: "main",
+    title: "original",
+    visible: false,
+    titleBarStyle: "Overlay",
+    trafficLightPosition: { x: 14, y: 16 },
+    width: 1000,
+    height: 650,
+    minWidth: 900,
+    minHeight: 600,
+    resizable: true,
+    fullscreen: false,
+    center: true,
+  };
+  const result = smokeWindow({ app: { windows: [original] } });
+  assert.deepEqual(result, {
+    ...original,
+    title: "Test-instrumented native GUI smoke",
+    visible: true,
+  });
+  assert.equal(original.visible, false);
+  assert.throws(() => smokeWindow({ app: { windows: [] } }));
+});
+
+test("native diagnostics publish only classifications, exit code and Rust error IDs", () => {
+  const secret = "private credentials /home/private/source.rs";
+  assert.deepEqual(
+    classifyNativeLog(
+      `error[E0308]: ${secret}\nerror[E0308]: duplicate\nerror[E0432]: ${secret}`,
+      { code: 101 },
+      false,
+    ),
+    {
+      classification: "compile",
+      rustErrors: ["E0308", "E0432"],
+      exitCode: 101,
+    },
+  );
+  assert.equal(
+    classifyNativeLog(
+      `Error invalid configuration ${secret}`,
+      { code: 1 },
+      false,
+    ).classification,
+    "cli-config",
+  );
+  assert.equal(
+    classifyNativeLog(secret, { code: 0 }, false).classification,
+    "native-exit-before-handshake",
+  );
+  assert.equal(
+    classifyNativeLog(secret, { code: 1 }, true).classification,
+    "native-exit-after-handshake",
+  );
+  const summary = formatSummary("native-build-and-gui", "a".repeat(40), {
+    classification: secret,
+    exitCode: secret,
+    rustErrors: [secret, "E0308", "E99999", "E0001\n::error::secret"],
+  });
+  assert.ok(!summary.includes(secret));
+  assert.ok(!summary.includes("\n"));
+  assert.match(
+    summary,
+    /native-class: running-or-unknown; exit-code: unknown; rust-errors: E0308/,
+  );
+});
+
+test("timeout classification does not turn cleanup termination into a natural crash", async () => {
+  assert.equal(
+    classifyNativeLog("", undefined, true).classification,
+    "running-or-unknown",
+  );
+  const runner = await readFile(
+    new URL("./native-gui-smoke.mjs", import.meta.url),
+    "utf8",
+  );
+  assert.ok(
+    runner.indexOf("const naturalExit = nativeExit") <
+      runner.indexOf('signal("SIGTERM")'),
+  );
+  assert.match(
+    runner,
+    /readNativeDiagnostic\(privateLogPath, naturalExit, handshakeSeen\)/,
+  );
+  assert.ok(
+    !runner.includes("security:"),
+    "Overlay must not replace the base CSP or security settings",
+  );
 });
