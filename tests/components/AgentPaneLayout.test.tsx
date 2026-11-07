@@ -111,12 +111,13 @@ describe("Agent pane layout", () => {
   });
 
   it("supports direction keys and Home/End with opposite growth directions for the two panes", () => {
+    vi.stubGlobal("innerWidth", 1200);
     render(<Layout />);
     const left = screen.getByRole("separator", { name: "调整项目侧栏宽度" });
     fireEvent.keyDown(left, { key: "ArrowRight" });
     expect(left).toHaveAttribute("aria-valuenow", "268");
     fireEvent.keyDown(left, { key: "Home" });
-    expect(left).toHaveAttribute("aria-valuenow", "160");
+    expect(left).toHaveAttribute("aria-valuenow", "240");
     fireEvent.keyDown(left, { key: "End" });
     expect(Number(left.getAttribute("aria-valuenow"))).toBe(
       Number(left.getAttribute("aria-valuemax")),
@@ -141,6 +142,23 @@ describe("Agent pane layout", () => {
       "320",
     );
     expect(localStorage.getItem(keys[0])).toBe("320");
+  });
+
+  it("clamps an old narrow preference without overwriting it and auto-compacts instead of squeezing labels", () => {
+    localStorage.setItem(keys[0], "160");
+    render(<Layout preview={false} />);
+    expect(layoutValue().sidebarWidth).toBe(240);
+    expect(localStorage.getItem(keys[0])).toBe("160");
+    expect(
+      computeAgentPaneLayout({
+        width: 800,
+        sidebarVisible: true,
+        sidebarAutoCompact: true,
+        previewVisible: true,
+        sidebarPreferred: 252,
+        previewPreferred: 420,
+      }),
+    ).toMatchObject({ sidebarCompact: true, sidebarWidth: 72 });
   });
 
   it("falls back to the compact rail when a visible preview leaves too little room to expand", () => {
@@ -257,6 +275,6 @@ describe("Agent pane layout", () => {
     render(<Layout />);
     const left = screen.getByRole("separator", { name: "调整项目侧栏宽度" });
     fireEvent.keyDown(left, { key: "Home" });
-    expect(left).toHaveAttribute("aria-valuenow", "160");
+    expect(left).toHaveAttribute("aria-valuenow", "240");
   });
 });

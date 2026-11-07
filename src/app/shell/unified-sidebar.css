@@ -57,10 +57,6 @@
 .lolicode-unified-sidebar[data-sidebar-compact="true"]
   .lolicode-sidebar-nav-label,
 .lolicode-unified-sidebar[data-sidebar-compact="true"]
-  .lolicode-sidebar-actions,
-.lolicode-unified-sidebar[data-sidebar-compact="true"]
-  .lolicode-sidebar-workspaces,
-.lolicode-unified-sidebar[data-sidebar-compact="true"]
   .lolicode-sidebar-shortcuts,
 .lolicode-unified-sidebar[data-sidebar-compact="true"] .lolicode-sidebar-more,
 .lolicode-unified-sidebar[data-sidebar-compact="true"] .tai-shell-quota-button {
@@ -69,7 +65,101 @@
 
 .lolicode-unified-sidebar[data-sidebar-compact="true"]
   .lolicode-sidebar-segments {
-  grid-template-columns: 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px;
+  padding: 2px;
+}
+
+.lolicode-unified-sidebar[data-sidebar-compact="true"]
+  .lolicode-sidebar-segments
+  .lolicode-sidebar-nav-item {
+  min-height: 32px;
+  padding: 3px;
+}
+
+.lolicode-unified-sidebar[data-sidebar-compact="true"]
+  .lolicode-sidebar-segments
+  .lolicode-sidebar-nav-icon {
+  flex-basis: 18px;
+  width: 18px;
+  height: 18px;
+}
+
+.lolicode-unified-sidebar[data-sidebar-compact="true"]
+  .lolicode-sidebar-actions {
+  margin-top: 12px;
+}
+
+.lolicode-unified-sidebar[data-sidebar-compact="true"]
+  .lolicode-sidebar-workspaces {
+  flex: 0 0 auto;
+  align-items: center;
+  margin-top: 4px;
+  overflow: visible;
+}
+
+:root
+  .lolicode-workbench.wb-unified
+  .wb-sidebar
+  .lolicode-unified-sidebar[data-sidebar-compact="true"]
+  .wb-nav-button {
+  justify-content: center;
+  min-height: 38px;
+  padding: 6px;
+  gap: 0;
+  font-size: 0;
+}
+
+:root
+  .lolicode-workbench.wb-unified
+  .wb-sidebar
+  .lolicode-unified-sidebar[data-sidebar-compact="true"]
+  .wb-create-task
+  > .wb-nav-create {
+  padding-inline: 3px;
+  gap: 0;
+}
+
+:root
+  .lolicode-workbench.wb-unified
+  .wb-sidebar
+  .lolicode-unified-sidebar[data-sidebar-compact="true"]
+  .wb-create-task-options {
+  flex-basis: 20px;
+}
+
+.lolicode-unified-sidebar[data-sidebar-compact="true"]
+  .wb-nav-secretary
+  > :is(span, svg) {
+  display: none;
+}
+
+.lolicode-unified-sidebar[data-sidebar-compact="true"] .wb-nav-secretary > img {
+  width: 28px;
+  height: 28px;
+}
+
+.lolicode-compact-sessions {
+  width: 38px;
+  min-height: 38px;
+}
+
+.lolicode-workbench.lolicode-compact-sessions-popover {
+  width: min(320px, calc(100vw - 96px));
+  height: min(520px, var(--radix-popover-content-available-height));
+  padding: 8px;
+  overflow: hidden;
+  background: var(--bg-sidebar);
+}
+
+:root .lolicode-workbench.lolicode-compact-sessions-popover > .wb-sidebar {
+  width: 100%;
+  flex: 1 1 auto;
+  margin: 0;
+  padding: 4px;
+  border: 0;
+  border-radius: 0;
+  animation: none;
 }
 
 .lolicode-unified-sidebar[data-sidebar-compact="true"]

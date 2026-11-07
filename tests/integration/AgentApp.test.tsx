@@ -132,7 +132,7 @@ describe("LoliCode desktop entry", () => {
     expect(screen.getByRole("navigation")).toBe(sidebar);
   });
 
-  it("reaches usage and applications through the unified sidebar More menu", async () => {
+  it("reaches usage and applications through the unified sidebar profile menu", async () => {
     const user = userEvent.setup();
     render(
       <QueryClientProvider
@@ -145,7 +145,7 @@ describe("LoliCode desktop entry", () => {
     );
     await screen.findByTestId("agent-workspace");
     await user.click(
-      screen.getByRole("button", { name: /^(更多|common\.more)(?: ·|$)/ }),
+      screen.getByRole("button", { name: /^(头像与设置|nav\.profileMenu)$/ }),
     );
     expect(
       screen.getByRole("menuitem", { name: /^nav.usage/ }),
@@ -162,7 +162,7 @@ describe("LoliCode desktop entry", () => {
     await user.click(screen.getByRole("button", { name: "编程工作台" }));
     expect(await screen.findByTestId("workspace-tree")).toBeInTheDocument();
     await user.click(
-      screen.getByRole("button", { name: /^(更多|common\.more)(?: ·|$)/ }),
+      screen.getByRole("button", { name: /^(头像与设置|nav\.profileMenu)$/ }),
     );
     await user.click(
       screen.getByRole("menuitem", { name: /^applications.title/ }),

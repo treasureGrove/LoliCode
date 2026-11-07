@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from "react";
+import { useId, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import {
   ChartColumn,
@@ -44,6 +44,7 @@ import { SidebarQuotaRing } from "./SidebarQuotaRing";
 
 export interface SidebarProfileMenuProps {
   expanded?: boolean;
+  navigationItems?: ReactNode;
   onOpenSettings: () => void;
   onOpenUpdates: () => void;
   onOpenAllowance: () => void;
@@ -80,6 +81,7 @@ function AccountAvatar({ account }: { account: LolicodeAccount | null }) {
 /** One forum identity also unlocks the sponsored model allowance. */
 export function SidebarProfileMenu({
   expanded = false,
+  navigationItems,
   onOpenSettings,
   onOpenUpdates,
   onOpenAllowance,
@@ -292,6 +294,12 @@ export function SidebarProfileMenu({
               <RefreshCw size={15} aria-hidden="true" />
               {text("重新读取账户", "Retry loading account")}
             </DropdownMenuItem>
+          )}
+          {navigationItems && (
+            <>
+              <DropdownMenuSeparator />
+              {navigationItems}
+            </>
           )}
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={() => setMobileOpen(true)}>

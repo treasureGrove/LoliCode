@@ -57,8 +57,8 @@ function mount(values: SidebarProps) {
   return render(<Sidebar {...values} />, { wrapper });
 }
 
-const moreButton = () =>
-  screen.getByRole("button", { name: /^(更多|common\.more)(?: ·|$)/ });
+const profileButton = () =>
+  screen.getByRole("button", { name: /^头像与设置$/ });
 
 beforeEach(() => {
   appChanges = [];
@@ -88,11 +88,7 @@ describe("unified workspace navigation", () => {
     mount(values);
     const navigation = screen.getByRole("navigation");
     expect(navigation).toHaveAttribute("data-collapsed", "false");
-    for (const name of [
-      /^编程工作台/,
-      /^角色对话/,
-      /^(更多|common\.more)(?: ·|$)/,
-    ]) {
+    for (const name of [/^编程工作台/, /^角色对话/, /^头像与设置$/]) {
       const button = within(navigation).getByRole("button", { name });
       expect(button).toHaveAccessibleName();
     }
@@ -110,7 +106,7 @@ describe("unified workspace navigation", () => {
     );
   });
 
-  it("opens Agent, character chat, and the More destinations", async () => {
+  it("opens Agent, character chat, and the profile menu destinations", async () => {
     const values = props({ view: "channels" });
     mount(values);
     for (const [name, page] of [
@@ -125,7 +121,7 @@ describe("unified workspace navigation", () => {
       [/^nav.usage/, "usage"],
       [/^applications.title/, "applications"],
     ] as const) {
-      await user.click(moreButton());
+      await user.click(profileButton());
       const item = screen.getByRole("menuitem", { name });
       if (page === "usage") expect(item).toHaveAccessibleName(/\$1\.25/);
       await user.click(item);
@@ -219,7 +215,7 @@ describe("unified workspace navigation", () => {
       tree.compareDocumentPosition(tools) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(
-      tools.compareDocumentPosition(moreButton()) &
+      tools.compareDocumentPosition(profileButton()) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(
@@ -242,36 +238,38 @@ describe("unified workspace navigation", () => {
     ["skills", "技能"],
     ["workflows", "工作流与自动化"],
     ["memory", "记忆"],
-  ] as const)("marks the active %s panel inside More", async (tool, label) => {
-    const values = props({ view: "agent", activeAgentTool: tool });
-    mount(values);
-    expect(moreButton()).toHaveAttribute("data-selected", "true");
-    expect(screen.getByRole("button", { name: "编程工作台" })).toHaveAttribute(
-      "aria-current",
-      "page",
-    );
-    expect(
-      screen.queryByRole("button", { name: label }),
-    ).not.toBeInTheDocument();
-    await userEvent.setup().click(moreButton());
-    expect(screen.getByRole("menuitem", { name: label })).toHaveAttribute(
-      "aria-current",
-      "page",
-    );
-    expect(values.onSelectPage).not.toHaveBeenCalled();
-  });
+  ] as const)(
+    "marks the active %s panel inside the profile menu",
+    async (tool, label) => {
+      const values = props({ view: "agent", activeAgentTool: tool });
+      mount(values);
+      expect(profileButton()).toHaveAttribute("data-selected", "true");
+      expect(
+        screen.getByRole("button", { name: "编程工作台" }),
+      ).toHaveAttribute("aria-current", "page");
+      expect(
+        screen.queryByRole("button", { name: label }),
+      ).not.toBeInTheDocument();
+      await userEvent.setup().click(profileButton());
+      expect(screen.getByRole("menuitem", { name: label })).toHaveAttribute(
+        "aria-current",
+        "page",
+      );
+      expect(values.onSelectPage).not.toHaveBeenCalled();
+    },
+  );
 
   it.each([
     ["skills", "技能"],
     ["workflows", "工作流与自动化"],
     ["memory", "记忆"],
   ] as const)(
-    "opens %s from More without changing the destination directly",
+    "opens %s from the profile menu without changing the destination directly",
     async (tool, label) => {
       const onOpenAgentTool = vi.fn();
       const values = props({ onOpenAgentTool });
       mount(values);
-      await userEvent.setup().click(moreButton());
+      await userEvent.setup().click(profileButton());
       await userEvent
         .setup()
         .click(screen.getByRole("menuitem", { name: label }));
@@ -282,20 +280,26 @@ describe("unified workspace navigation", () => {
     },
   );
 
-  it("keeps updates in More and the profile menu without a separate rail button", async () => {
+  it("keeps one updates action in the profile menu without a separate rail button", async () => {
     const values = props({ view: "agent" });
     mount(values);
     expect(
       screen.queryByRole("button", { name: /^软件更新|^nav.softwareUpdates/ }),
     ).not.toBeInTheDocument();
     const user = userEvent.setup();
-    await user.click(moreButton());
+    await user.click(profileButton());
     const updates = screen.getByRole("menuitem", {
       name: /^软件更新|^nav.softwareUpdates/,
     });
     expect(updates).toHaveAccessibleName(
       /发现 LoliCode 新版本|nav.softwareUpdatesAvailable/,
     );
+    expect(
+      screen.getAllByRole("menuitem", {
+        name: /^软件更新|^nav.softwareUpdates/,
+      }),
+    ).toHaveLength(1);
+    expect(document.querySelector(".lolicode-sidebar-more")).toBeNull();
     await user.click(updates);
     expect(values.onOpenUpdates).toHaveBeenCalledOnce();
     await user.click(screen.getByRole("button", { name: "头像与设置" }));
@@ -312,8 +316,8 @@ describe("unified workspace navigation", () => {
     async (view) => {
       const values = props({ view });
       mount(values);
-      expect(moreButton()).toHaveAttribute("data-selected", "true");
-      await userEvent.setup().click(moreButton());
+      expect(profileButton()).toHaveAttribute("data-selected", "true");
+      await userEvent.setup().click(profileButton());
       expect(
         screen.getByRole("menuitem", { name: "applications.title" }),
       ).toHaveAttribute("aria-current", "page");
@@ -354,20 +358,58 @@ describe("unified workspace navigation", () => {
   });
 
   it.each(["agent", "settings"] as const)(
-    "keeps account and More together in the %s footer and Applications reachable",
+    "keeps one profile menu in the %s footer and Applications reachable",
     async (view) => {
       const values = props({ view });
       const { container } = mount(values);
       const footer = container.querySelector(".lolicode-sidebar-footer")!;
-      expect(footer).toContainElement(moreButton());
+      expect(footer.querySelectorAll('[aria-haspopup="menu"]')).toHaveLength(1);
+      expect(footer).toContainElement(profileButton());
       expect(footer).toContainElement(
         screen.getByRole("button", { name: "头像与设置" }),
       );
-      await userEvent.setup().click(moreButton());
+      await userEvent.setup().click(profileButton());
       await userEvent
         .setup()
         .click(screen.getByRole("menuitem", { name: "applications.title" }));
       expect(values.onSelectPage).toHaveBeenCalledWith("applications");
+    },
+  );
+
+  it.each([false, true])(
+    "retains every merged destination with compact=%s",
+    async (sidebarCompact) => {
+      const values = props({
+        view: "agent",
+        sidebarCompact,
+        onOpenAgentTool: vi.fn(),
+      });
+      const { container } = mount(values);
+      const user = userEvent.setup();
+      expect(container.querySelectorAll('[aria-haspopup="menu"]')).toHaveLength(
+        1,
+      );
+      await user.click(profileButton());
+      for (const name of [
+        /^nav.usage/,
+        /^applications.title/,
+        "技能",
+        "工作流与自动化",
+        "记忆",
+        "登录 LoliCode",
+        "社区网站",
+        "连接手机",
+        "设置",
+        /^软件更新/,
+      ]) {
+        expect(screen.getByRole("menuitem", { name })).toBeInTheDocument();
+      }
+      await user.keyboard("{Escape}");
+      expect(profileButton()).toHaveFocus();
+      await user.keyboard("{Enter}");
+      await user.click(screen.getByRole("menuitem", { name: "记忆" }));
+      expect(values.onOpenAgentTool).toHaveBeenCalledWith("memory");
+      expect(screen.queryByRole("menu")).not.toBeInTheDocument();
     },
   );
 
@@ -446,12 +488,12 @@ describe("unified workspace navigation", () => {
     const user = userEvent.setup();
     await user.keyboard("{Enter}");
     expect(values.onSelectPage).toHaveBeenCalledWith("tavern");
-    moreButton().focus();
+    profileButton().focus();
     await user.keyboard("{Enter}");
     expect(screen.getByRole("menu")).toBeVisible();
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
-    expect(moreButton()).toHaveFocus();
+    expect(profileButton()).toHaveFocus();
   });
 });
 

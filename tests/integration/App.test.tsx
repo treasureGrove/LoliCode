@@ -277,7 +277,7 @@ describe("LoliCode product shell with retained native compatibility", () => {
     );
     expect(await screen.findByTestId("channel-center")).toBeInTheDocument();
     await user.click(
-      screen.getByRole("button", { name: /^(更多|common\.more)(?: ·|$)/ }),
+      screen.getByRole("button", { name: /^(头像与设置|nav\.profileMenu)$/ }),
     );
     await user.click(screen.getByRole("menuitem", { name: /^nav.usage/ }));
     expect(await screen.findByTestId("usage-page")).toBeInTheDocument();

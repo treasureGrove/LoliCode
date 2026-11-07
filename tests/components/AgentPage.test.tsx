@@ -6,10 +6,11 @@ import {
   screen,
   within,
 } from "@testing-library/react";
-import type { ReactElement } from "react";
+import { useState, type ReactElement } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AgentPage } from "@/features/agent/AgentPage";
+import { useAgentPaneLayout } from "@/features/agent/useAgentPaneLayout";
 import { agentApi } from "@/lib/api/agent";
 import { agentFilesApi } from "@/lib/api/agent-files";
 import { settingsApi } from "@/lib/api";
@@ -268,7 +269,19 @@ beforeEach(() => {
     partialRequests: 0,
     cachePartialRequests: 0,
   });
-  vi.useFakeTimers();
+  // Fake RAF along with timers: JSDOM otherwise retains its internal interval
+  // across clock resets after nested dialog/rail transitions.
+  vi.useFakeTimers({
+    toFake: [
+      "setTimeout",
+      "clearTimeout",
+      "setInterval",
+      "clearInterval",
+      "Date",
+      "requestAnimationFrame",
+      "cancelAnimationFrame",
+    ],
+  });
   vi.spyOn(toast, "warning").mockClear().mockReturnValue(0);
   sessionStorage.clear();
   for (const key of Object.keys(localStorage))
@@ -2115,6 +2128,178 @@ describe("AgentPage", () => {
         fireEvent.click(scope.getByRole("button", { name: "返回工作台" }));
         await flush();
         await tick(250);
+      }
+    },
+  );
+
+  it("keeps new tasks, secretary and searchable sessions reachable in the compact sidebar", async () => {
+    render(
+      <AgentPage
+        sidebarCompact
+        onSidebarCompactChange={vi.fn()}
+        renderSidebar={({ actions, workspace }) => (
+          <>
+            {actions}
+            {workspace}
+          </>
+        )}
+      />,
+    );
+    await flush();
+    expect(screen.getByRole("button", { name: "新建任务" })).toBeEnabled();
+    expect(
+      screen.getByRole("button", { name: "打开 Loli 秘书" }),
+    ).toBeEnabled();
+    expect(
+      screen.queryByRole("textbox", { name: "搜索会话" }),
+    ).not.toBeInTheDocument();
+    const sessions = screen.getByRole("button", { name: "项目与会话" });
+    fireEvent.click(sessions);
+    await flush();
+    const popup = screen.getByRole("dialog", { name: "项目与会话" });
+    const search = within(popup).getByRole("textbox", { name: "搜索会话" });
+    expect(search).toHaveFocus();
+    fireEvent.keyDown(search, { key: "Escape" });
+    await flush();
+    await tick(1);
+    expect(
+      screen.queryByRole("dialog", { name: "项目与会话" }),
+    ).not.toBeInTheDocument();
+    expect(sessions).toHaveFocus();
+    fireEvent.click(sessions);
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: "打开 Loli 秘书" }));
+    await flush();
+    expect(agentApi.openSecretary).toHaveBeenCalledOnce();
+    expect(
+      screen.queryByRole("dialog", { name: "项目与会话" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it.each([
+    [false, "project", "resize"],
+    [true, "project", "resize"],
+    [false, "session", "resize"],
+    [true, "session", "resize"],
+    [false, "delete", "resize"],
+    [true, "delete", "resize"],
+    [false, "project", "keyboard"],
+    [true, "project", "keyboard"],
+    [false, "session", "keyboard"],
+    [true, "session", "keyboard"],
+    [false, "delete", "keyboard"],
+    [true, "delete", "keyboard"],
+  ] as const)(
+    "preserves the %s compact sidebar's %s dialog across %s layout changes",
+    async (initiallyCompact, operation, change) => {
+      vi.stubGlobal(
+        "innerWidth",
+        change === "resize" && initiallyCompact ? 800 : 1100,
+      );
+      function SidebarDialogFixture() {
+        const [compact, setCompact] = useState(
+          change === "keyboard" && initiallyCompact,
+        );
+        // Use the app's shared split layout without starting unrelated preview
+        // animations in this fake-clock test.
+        const layout = useAgentPaneLayout({
+          sidebarVisible: true,
+          sidebarCompact: compact,
+          sidebarAutoCompact: true,
+          previewVisible: true,
+        });
+        return (
+          <AgentPage
+            sharedPaneLayout={layout}
+            sidebarCompact={compact}
+            onSidebarCompactChange={setCompact}
+            renderSidebar={({ actions, workspace }) => (
+              <>
+                {actions}
+                {workspace}
+              </>
+            )}
+          />
+        );
+      }
+      try {
+        render(<SidebarDialogFixture />);
+        await flush();
+        if (initiallyCompact) {
+          fireEvent.click(screen.getByRole("button", { name: "项目与会话" }));
+          await flush();
+        }
+        fireEvent.keyDown(
+          screen.getByRole("button", {
+            name:
+              operation === "project"
+                ? "管理项目：project"
+                : `管理会话：${session.title}`,
+          }),
+          { key: "Enter" },
+        );
+        await flush();
+        fireEvent.click(
+          screen.getByRole("menuitem", {
+            name:
+              operation === "project"
+                ? "重命名项目"
+                : operation === "session"
+                  ? "重命名"
+                  : "删除会话",
+          }),
+        );
+        await flush();
+        await tick(1);
+        const dialog = screen.getByRole("dialog", {
+          name:
+            operation === "project"
+              ? "重命名项目"
+              : operation === "session"
+                ? "重命名会话"
+                : "删除会话",
+        });
+        const input =
+          operation === "delete" ? null : within(dialog).getByRole("textbox");
+        if (input)
+          fireEvent.change(input, {
+            target: { value: "Keep this unsaved name" },
+          });
+
+        if (change === "resize") {
+          vi.stubGlobal("innerWidth", initiallyCompact ? 1100 : 800);
+          fireEvent(window, new Event("resize"));
+        } else {
+          fireEvent.keyDown(input ?? dialog, { key: "\\", ctrlKey: true });
+        }
+        await flush();
+        expect(dialog).toBeInTheDocument();
+        if (input) expect(input).toHaveValue("Keep this unsaved name");
+
+        fireEvent.click(within(dialog).getByRole("button", { name: "取消" }));
+        await flush();
+        await tick(1);
+        expect(dialog).not.toBeInTheDocument();
+        if (initiallyCompact) {
+          expect(
+            screen.getByRole("textbox", { name: "搜索会话" }),
+          ).toBeInTheDocument();
+          expect(
+            screen.queryByRole("button", { name: "项目与会话" }),
+          ).not.toBeInTheDocument();
+        } else {
+          expect(
+            screen.getByRole("button", { name: "项目与会话" }),
+          ).toBeInTheDocument();
+          expect(
+            screen.queryByRole("textbox", { name: "搜索会话" }),
+          ).not.toBeInTheDocument();
+        }
+        expect(agentApi.renameProject).not.toHaveBeenCalled();
+        expect(agentApi.renameSession).not.toHaveBeenCalled();
+        expect(agentApi.deleteSession).not.toHaveBeenCalled();
+      } finally {
+        vi.unstubAllGlobals();
       }
     },
   );
