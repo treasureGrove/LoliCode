@@ -37,6 +37,7 @@ export const checkpoints = [
   "english-option",
   "english-copy",
   "english-persisted",
+  "settings-return",
   "agent-entry",
   "agent-content",
   "agent-ready",

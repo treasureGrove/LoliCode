@@ -155,7 +155,9 @@ try {
   await waitFor(async () => (await invoke("get_settings")).language === "en");
   check(document.body.textContent.includes("Appearance"));
   phases.push("language");
-  await click('button[aria-label="Coding workspace"]');
+  // Settings replaces the main directory, so use its actual Back control.
+  checkpoint = "settings-return";
+  await click('.lolicode-sidebar-settings button[aria-label="Back"]');
   checkpoint = "agent-entry";
   const agent = await waitFor(() =>
     query("[data-workspace-active]#main-content"),
@@ -199,8 +201,8 @@ try {
       Array.isArray(snapshot.stories) &&
       snapshot.stories.length === 0,
   );
-  await click('button[aria-label="Coding workspace"]');
   checkpoint = "agent-return";
+  await click('button[aria-label="Coding workspace"]');
   await waitFor(() => visible(agent) && !visible(tavern));
   await paint(agent);
   phases.push("navigation");

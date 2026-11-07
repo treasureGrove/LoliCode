@@ -258,3 +258,41 @@ test("timeout classification does not turn cleanup termination into a natural cr
     "Overlay must not replace the base CSP or security settings",
   );
 });
+
+test("leaving Settings uses its Back control before the Agent directory returns", async () => {
+  const renderer = await readFile(
+    new URL("./native-gui-smoke-renderer.mjs", import.meta.url),
+    "utf8",
+  );
+  const sidebar = await readFile(
+    new URL("../../src/app/shell/Sidebar.tsx", import.meta.url),
+    "utf8",
+  );
+  const locale = JSON.parse(
+    await readFile(
+      new URL("../../src/i18n/locales/en.json", import.meta.url),
+      "utf8",
+    ),
+  );
+  assert.equal(locale.nav.back, "Back");
+  assert.ok(sidebar.includes('props.view === "settings" ? ('));
+  assert.ok(sidebar.includes("<SettingsDirectory"));
+  assert.ok(sidebar.includes("onClick={props.onExitSettings}"));
+  const navigationStart = renderer.indexOf('phases.push("language")');
+  const agentEntry = renderer.indexOf(
+    'checkpoint = "agent-entry"',
+    navigationStart,
+  );
+  const transition = renderer.slice(navigationStart, agentEntry);
+  assert.ok(transition.includes('checkpoint = "settings-return"'));
+  assert.ok(
+    transition.includes('.lolicode-sidebar-settings button[aria-label="Back"]'),
+  );
+  assert.ok(!transition.includes("Coding workspace"));
+  assert.ok(
+    renderer.indexOf('checkpoint = "agent-return"') <
+      renderer.lastIndexOf(
+        "await click('button[aria-label=\"Coding workspace\"]')",
+      ),
+  );
+});
