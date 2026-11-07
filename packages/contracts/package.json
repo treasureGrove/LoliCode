@@ -4,5 +4,5 @@
   "private": true,
   "type": "module",
   "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" }, "./sse": { "types": "./dist/sse.d.ts", "default": "./dist/sse.js" } },
-  "dependencies": { "zod": "^4.1.12" }
+  "dependencies": { "zod": "^4.6.7" }
 }
