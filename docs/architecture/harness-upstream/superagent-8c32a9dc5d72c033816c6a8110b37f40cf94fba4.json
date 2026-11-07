@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "kind": "superagent-reference-baseline",
-  "checkedAt": "2026-11-05T18:23:40.956Z",
+  "checkedAt": "2026-11-07T06:32:45.940Z",
   "upstreamHead": "8c32a9dc5d72c033816c6a8110b37f40cf94fba4",
   "upstreamUrl": "https://github.com/deepseek-ai/dsh-superagent-prototype/commit/8c32a9dc5d72c033816c6a8110b37f40cf94fba4",
   "originalReference": "6337fc823ce20251c8de8085948165c81aaa701e",
@@ -55,7 +55,13 @@
         "https://github.com/deepseek-ai/dsh-superagent-prototype/blob/6337fc823ce20251c8de8085948165c81aaa701e/src/app/notices.ts",
         "https://github.com/deepseek-ai/dsh-superagent-prototype/blob/6337fc823ce20251c8de8085948165c81aaa701e/src/app/outbox.ts",
         "https://github.com/deepseek-ai/dsh-superagent-prototype/blob/6337fc823ce20251c8de8085948165c81aaa701e/src/app/delivery.ts",
-        "https://github.com/deepseek-ai/dsh-superagent-prototype/blob/6337fc823ce20251c8de8085948165c81aaa701e/src/core/replies.ts"
+        "https://github.com/deepseek-ai/dsh-superagent-prototype/blob/6337fc823ce20251c8de8085948165c81aaa701e/src/core/replies.ts",
+        "https://github.com/deepseek-ai/dsh-superagent-prototype/blob/8c32a9dc5d72c033816c6a8110b37f40cf94fba4/src/app/notices.ts#L116-L128",
+        "https://github.com/deepseek-ai/dsh-superagent-prototype/blob/8c32a9dc5d72c033816c6a8110b37f40cf94fba4/tests/runtime-concurrency.spec.ts#L932",
+        "https://github.com/deepseek-ai/dsh-superagent-prototype/blob/8c32a9dc5d72c033816c6a8110b37f40cf94fba4/src/app/tools/executor.ts#L89-L99",
+        "https://github.com/deepseek-ai/dsh-superagent-prototype/blob/8c32a9dc5d72c033816c6a8110b37f40cf94fba4/src/app/sessions.ts#L170-L173",
+        "https://github.com/deepseek-ai/dsh-superagent-prototype/blob/8c32a9dc5d72c033816c6a8110b37f40cf94fba4/src/app/runtime.ts#L133",
+        "https://github.com/deepseek-ai/dsh-superagent-prototype/blob/8c32a9dc5d72c033816c6a8110b37f40cf94fba4/src/app/delivery.ts#L34-L84"
       ],
       "lolicode": [
         "packages/lolicode-harness-runtime/host-secretary-report.mjs",
@@ -63,9 +69,9 @@
       ],
       "acceptance": [
         "node scripts/tests/harness-desktop-acceptance.mjs",
-        "补测：progress 报告进入父模型上下文恰好一次、重启幂等、不得授予新的动作权限"
+        "模拟报告写入与投递之间中断，重启后真实父会话只收到一条 ready 报告。普通 progress 只留任务记录，另一个父会话没有报告，权限沿用原父会话。"
       ],
-      "note": "report_task worker归属和UI就绪已验证；仅由UI不能认定父模型收到纯上下文的独立持久投递。"
+      "note": "普通 progress 保留在任务记录。原型通过持久化 relay 将需处理的报告 steer 给父会话，可能唤醒父会话。现有 report_task 持久化子任务记录，未接入父会话 relay。最小切片为一层已校验归属的 ready 报告，使用原子报告和 outbox、稳定消息 ID 及 SDK steer，避免重复和越权。"
     },
     {
       "id": "context-only-note",
@@ -73,7 +79,11 @@
       "status": "needs-host-ui",
       "upstream": [
         "https://github.com/deepseek-ai/dsh-superagent-prototype/blob/6337fc823ce20251c8de8085948165c81aaa701e/docs/002-authorization.md",
-        "https://github.com/deepseek-ai/dsh-superagent-prototype/blob/6337fc823ce20251c8de8085948165c81aaa701e/src/core/tickets.ts"
+        "https://github.com/deepseek-ai/dsh-superagent-prototype/blob/6337fc823ce20251c8de8085948165c81aaa701e/src/core/tickets.ts",
+        "https://github.com/deepseek-ai/dsh-superagent-prototype/blob/8c32a9dc5d72c033816c6a8110b37f40cf94fba4/src/core/tickets.ts#L395",
+        "https://github.com/deepseek-ai/dsh-superagent-prototype/blob/8c32a9dc5d72c033816c6a8110b37f40cf94fba4/tests/runtime-concurrency.spec.ts#L384-L391",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/core/agent/src/runtime-types.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/core/agent-loop/src/index.ts"
       ],
       "lolicode": [
         "packages/lolicode-harness-runtime/host-operations.mjs",
@@ -81,9 +91,9 @@
         "docs/architecture/deepseek-superagent-adaptation.md"
       ],
       "acceptance": [
-        "补SDK测试：idle/ended/stopped worker 收便签不运行；事实在下次明确跟进可读；重复请求和重启不重复"
+        "给同一归属的等待或空闲子任务投递两次同 ID 便笺，验证无模型请求、无权限变化。重启后下一次授权操作只收到一条，并验证已结束任务拒收。"
       ],
-      "note": "本轮确认旧 send_task_note 仅在遗留 Rust runtime；当前 Harness host 未注册。普通 subagent.sendMessage 会唤醒空闲任务，不能冒充该能力。已修正文档。"
+      "note": "公开原型会保持等待人工的任务挂起，但可唤醒开放的 ready 任务。当前 Harness Agent.inject 将用户内容排入下一 pre-step，空闲时不会自行启动。桌面已有 legacy 上下文补挂路径，任务便笺仍需独立持久化归属及稳定 ID，并在明确授权后的实际用户消息中检查重启去重。"
     },
     {
       "id": "github",
@@ -162,6 +172,36 @@
         "按官方部署测试验证常驻、来源鉴权、控制台、恢复；需明确宿主及部署环境"
       ],
       "note": "当前是Windows桌面宿主，没有受管理云部署，不能声称等效完整研究原型。"
+    },
+    {
+      "id": "global-local-dispatch",
+      "label": "全局秘书向已注册本地项目派工",
+      "status": "equivalent-verified",
+      "upstream": [
+        "https://github.com/deepseek-ai/dsh-superagent-prototype/blob/8c32a9dc5d72c033816c6a8110b37f40cf94fba4/src/core/tickets.ts",
+        "https://github.com/deepseek-ai/dsh-superagent-prototype/blob/8c32a9dc5d72c033816c6a8110b37f40cf94fba4/src/core/assignments.ts"
+      ],
+      "lolicode": [
+        "src-tauri/src/commands/agent_secretary.rs",
+        "src-tauri/src/services/harness_desktop.rs",
+        "src-tauri/src/services/harness_secretary.rs",
+        "src/features/agent/AgentSecretaryTasks.tsx"
+      ],
+      "acceptance": [
+        "pnpm exec vitest run tests/components/AgentPage.test.tsx tests/components/AgentSecretaryTasks.test.tsx",
+        "node --test packages/lolicode-harness-runtime/tests/host-operations.test.mjs",
+        "node scripts/tests/harness-desktop-acceptance.mjs"
+      ],
+      "note": "本地主机扩展。Windows 实际桌面 IPC 验证全局秘书在完整权限下向两个已注册本地项目派工，子任务各自使用逐次确认，批准后写入各自目录，重试复用任务与工作会话，应用重启仍能读出两者和结果。前端项目选择由组件测试覆盖。范围限已注册本地项目的手动派工。",
+      "desktop": {
+        "result": "passed",
+        "report": "D:/projectGithub/lolicode-harness-audit-20261106/src-tauri/target/audit-logs/1107/lolicode-harness-desktop-4cuhGN/report.ndjson",
+        "phases": [
+          "restart",
+          "worker-queue-restart"
+        ]
+      }
     }
-  ]
+  ],
+  "lolicodeCommit": "83119678bc97a5a04354d610214ab14b7d52aac3"
 }
