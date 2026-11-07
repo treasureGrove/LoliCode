@@ -1079,8 +1079,12 @@ describe("AgentSecretaryTasks", () => {
       />,
     );
     await flush();
-    expect(screen.getByText("1 项需要你")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^工作任务/ })).toHaveAttribute(
+      "title",
+      expect.stringContaining("1 项需要你"),
+    );
     expand();
+    expect(screen.getByText("1 项需要你")).toBeInTheDocument();
     expect(
       within(screen.getByRole("article")).getByText("需要授权"),
     ).toBeInTheDocument();
@@ -1237,7 +1241,144 @@ describe("AgentSecretaryTasks", () => {
     ).toBeInTheDocument();
   });
 
-  it("removes only the confirmed finished task and keeps active tasks in the list", async () => {
+  it("closes the current finished tab after returning to the secretary, preserving its active descendants", async () => {
+    const finished = task({ status: "completed" });
+    const activeTasks = (
+      ["running", "queued", "waiting_permission", "waiting_question"] as const
+    ).map((status) =>
+      task({
+        id: status,
+        sessionId: `lc:${status}`,
+        title: status,
+        status,
+        directParentSessionId: finished.sessionId,
+      }),
+    );
+    vi.mocked(agentApi.getSecretary).mockResolvedValue(
+      overview([finished, ...activeTasks]),
+    );
+    let returned!: (opened: boolean) => void;
+    const onOpenSession = vi.fn().mockReturnValue(
+      new Promise<boolean>((resolve) => {
+        returned = resolve;
+      }),
+    );
+    vi.mocked(agentApi.deleteSecretaryTask).mockImplementation(async () => {
+      vi.mocked(agentApi.getSecretary).mockResolvedValue(overview(activeTasks));
+    });
+    render(
+      <AgentSecretaryTasks
+        sessionId="lc:secretary"
+        selectedSessionId={finished.sessionId}
+        workerTaskId={finished.id}
+        onOpenSession={onOpenSession}
+      />,
+    );
+    await flush();
+    const tabs = within(screen.getByRole("navigation", { name: "秘书会话" }));
+    expect(screen.getByRole("button", { name: /^工作任务/ })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    for (const activeTask of activeTasks)
+      expect(
+        tabs.queryByRole("button", { name: `关闭任务：${activeTask.title}` }),
+      ).not.toBeInTheDocument();
+    fireEvent.click(tabs.getByRole("button", { name: "关闭任务：整理文档" }));
+    const confirmation = within(
+      screen.getByRole("alertdialog", { name: "关闭任务" }),
+    );
+    expect(confirmation.getByText(/工作对话和文件会保留/)).toBeInTheDocument();
+    expect(agentApi.deleteSecretaryTask).not.toHaveBeenCalled();
+    fireEvent.click(confirmation.getByRole("button", { name: "确认关闭" }));
+    await flush();
+    expect(onOpenSession).toHaveBeenCalledWith("lc:secretary");
+    expect(agentApi.deleteSecretaryTask).not.toHaveBeenCalled();
+    await act(async () => returned(true));
+    await flush();
+    expect(agentApi.deleteSecretaryTask).toHaveBeenCalledWith(
+      "lc:secretary",
+      finished.id,
+    );
+    expect(tabs.queryByRole("button", { name: /^整理文档/ })).toBeNull();
+    for (const activeTask of activeTasks) {
+      const chip = tabs.getByRole("button", {
+        name: new RegExp(`^${activeTask.title} ·`),
+      });
+      expect(chip).toBeInTheDocument();
+      expect(chip).not.toHaveAttribute("aria-description");
+    }
+    expect(agentApi.deleteSecretaryTask).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["failure", "superseded"] as const)(
+    "keeps the current task when returning to the secretary reports %s",
+    async (outcome) => {
+      const finished = task({ status: "completed" });
+      vi.mocked(agentApi.getSecretary).mockResolvedValue(overview([finished]));
+      const onOpenSession =
+        outcome === "failure"
+          ? vi.fn().mockRejectedValue(new Error("会话读取失败"))
+          : vi.fn().mockResolvedValue(false);
+      render(
+        <AgentSecretaryTasks
+          sessionId="lc:secretary"
+          selectedSessionId={finished.sessionId}
+          workerTaskId={finished.id}
+          onOpenSession={onOpenSession}
+        />,
+      );
+      await flush();
+      const tabs = within(screen.getByRole("navigation", { name: "秘书会话" }));
+      fireEvent.click(tabs.getByRole("button", { name: "关闭任务：整理文档" }));
+      fireEvent.click(
+        within(screen.getByRole("alertdialog", { name: "关闭任务" })).getByRole(
+          "button",
+          { name: "确认关闭" },
+        ),
+      );
+      await flush();
+      expect(onOpenSession).toHaveBeenCalledWith("lc:secretary");
+      expect(agentApi.deleteSecretaryTask).not.toHaveBeenCalled();
+      expect(tabs.getByRole("button", { name: /^整理文档 ·/ })).toBeInTheDocument();
+      if (outcome === "failure")
+        expect(screen.getByText("会话读取失败")).toBeInTheDocument();
+    },
+  );
+
+  it("keeps a finished tab after a failed close and retries without navigating away from the secretary", async () => {
+    const finished = task({ status: "completed" });
+    vi.mocked(agentApi.getSecretary).mockResolvedValue(overview([finished]));
+    vi.mocked(agentApi.deleteSecretaryTask)
+      .mockRejectedValueOnce(new Error("关闭暂时失败"))
+      .mockImplementationOnce(async () => {
+        vi.mocked(agentApi.getSecretary).mockResolvedValue(overview());
+      });
+    const onOpenSession = vi.fn();
+    render(
+      <AgentSecretaryTasks
+        sessionId="lc:secretary"
+        onOpenSession={onOpenSession}
+      />,
+    );
+    await flush();
+    const tabs = within(screen.getByRole("navigation", { name: "秘书会话" }));
+    fireEvent.click(tabs.getByRole("button", { name: "关闭任务：整理文档" }));
+    fireEvent.click(screen.getByRole("button", { name: "确认关闭" }));
+    await flush();
+    expect(screen.getByText("关闭暂时失败")).toBeInTheDocument();
+    expect(tabs.getByRole("button", { name: /^整理文档 ·/ })).toBeInTheDocument();
+    if (!screen.queryByRole("alertdialog", { name: "关闭任务" }))
+      fireEvent.click(tabs.getByRole("button", { name: "关闭任务：整理文档" }));
+    fireEvent.click(screen.getByRole("button", { name: "确认关闭" }));
+    await flush();
+    expect(agentApi.deleteSecretaryTask).toHaveBeenCalledTimes(2);
+    expect(tabs.queryByRole("button", { name: /^整理文档 ·/ })).toBeNull();
+    expect(onOpenSession).not.toHaveBeenCalled();
+    expect(tabs.getByRole("button", { name: "总秘书" })).toHaveFocus();
+  });
+
+  it("closes a finished task from the drawer after confirmation and preserves active tasks", async () => {
     const running = task();
     const finished = task({
       id: "done",
@@ -1262,16 +1403,23 @@ describe("AgentSecretaryTasks", () => {
     await flush();
     expand();
     expect(
-      screen.queryByRole("button", { name: "删除任务：整理文档" }),
+      screen.queryByRole("button", { name: "关闭任务：整理文档" }),
     ).not.toBeInTheDocument();
-    const remove = screen.getByRole("button", {
-      name: "删除任务：已交付的任务",
+    const drawer = within(
+      screen.getByRole("button", { name: "已交付的任务" }).closest("article")!,
+    );
+    const remove = drawer.getByRole("button", {
+      name: "关闭任务：已交付的任务",
     });
     fireEvent.click(remove);
-    fireEvent.click(screen.getByRole("button", { name: "返回" }));
+    let confirmation = within(
+      screen.getByRole("alertdialog", { name: "关闭任务" }),
+    );
+    fireEvent.click(confirmation.getByRole("button", { name: "返回" }));
     expect(agentApi.deleteSecretaryTask).not.toHaveBeenCalled();
     fireEvent.click(remove);
-    fireEvent.click(screen.getByRole("button", { name: "确认删除" }));
+    confirmation = within(screen.getByRole("alertdialog", { name: "关闭任务" }));
+    fireEvent.click(confirmation.getByRole("button", { name: "确认关闭" }));
     await flush();
     expect(agentApi.deleteSecretaryTask).toHaveBeenCalledWith(
       "lc:secretary",
@@ -1279,6 +1427,12 @@ describe("AgentSecretaryTasks", () => {
     );
     expect(
       screen.queryByRole("button", { name: "已交付的任务" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(screen.getByRole("navigation", { name: "秘书会话" })).queryByRole(
+        "button",
+        { name: /^已交付的任务/ },
+      ),
     ).not.toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "整理文档" }),
@@ -1352,7 +1506,15 @@ describe("AgentSecretaryTasks", () => {
       />,
     );
     await flush();
-    fireEvent.click(screen.getByRole("button", { name: "返回秘书" }));
+    expect(
+      screen.queryByRole("button", { name: "返回秘书" }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(
+      within(screen.getByRole("navigation", { name: "秘书会话" })).getByRole(
+        "button",
+        { name: "总秘书" },
+      ),
+    );
     await flush();
     expect(onOpenSession).toHaveBeenCalledWith("lc:secretary");
     view.rerender(

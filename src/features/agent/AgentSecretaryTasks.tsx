@@ -1,7 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  ArrowLeft,
   ArrowUpRight,
   ChevronDown,
   ChevronRight,
@@ -11,12 +10,11 @@ import {
   GitBranch,
   ListTodo,
   LoaderCircle,
-  MessageCircle,
   Plus,
   RefreshCw,
   Send,
   Square,
-  Trash2,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { agentApi } from "@/lib/api/agent";
@@ -131,16 +129,16 @@ export function AgentSecretaryTasks({
   canDelegate = true,
   onOpenSession,
   projectChoices,
-  onFocusComposer,
 }: {
   sessionId: string;
   selectedSessionId?: string;
   active?: boolean;
   workerTaskId?: string;
   canDelegate?: boolean;
-  onOpenSession: (sessionId: string) => Promise<void> | void;
+  onOpenSession: (
+    sessionId: string,
+  ) => Promise<void | boolean> | void | boolean;
   projectChoices?: AgentProject[];
-  onFocusComposer?: () => void;
 }) {
   const { t } = useTranslation();
   const label = (
@@ -156,7 +154,7 @@ export function AgentSecretaryTasks({
   const [delegation, setDelegation] = useState(emptyDelegation);
   const [followups, setFollowups] = useState<Record<string, string>>({});
   const [openedTask, setOpenedTask] = useState<string | null>(null);
-  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [confirmClose, setConfirmClose] = useState<string | null>(null);
   const [readError, setReadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -170,9 +168,13 @@ export function AgentSecretaryTasks({
   const delegationTrigger = useRef<HTMLButtonElement>(null);
   const delegationTitle = useRef<HTMLInputElement>(null);
   const selectedChip = useRef<HTMLButtonElement>(null);
+  const restoreCloseFocus = useRef(false);
+  const closeTrigger = useRef<HTMLButtonElement | null>(null);
+  const closeCancel = useRef<HTMLButtonElement>(null);
   const tasksId = useId();
   const githubId = useId();
   const delegationId = useId();
+  const closeDescriptionId = useId();
   const delegationAllowed = canDelegate && !workerTaskId;
   const delegationOpen = delegationAllowed && active && expanded && adding;
   const delegating = busy === "delegate";
@@ -189,6 +191,9 @@ export function AgentSecretaryTasks({
       ? tasks.find((task) => task.id === workerTaskId)?.sessionId
       : sessionId);
   const chiefSelected = currentConversationId === sessionId;
+  const closingTask = tasks.find(
+    (task) => task.id === confirmClose && terminal.has(task.status),
+  );
   const runningCount = tasks.filter((task) => task.status === "running").length;
   const queuedCount = tasks.filter((task) => task.status === "queued").length;
   const occupied = tasks.filter(
@@ -201,6 +206,21 @@ export function AgentSecretaryTasks({
     (task) => task.executionMode === "worktree",
   ).length;
   const needsAttention = tasks.filter(needsUser);
+  const taskSummary = [
+    label("tasks", "工作任务"),
+    stateHere &&
+      label("totalCount", "共 {{count}} 项", { count: tasks.length }),
+    runningCount > 0 &&
+      label("runningCount", "{{count}} 路运行", { count: runningCount }),
+    queuedCount > 0 &&
+      label("queuedCount", "{{count}} 项排队", { count: queuedCount }),
+    needsAttention.length > 0 &&
+      label("attentionCount", "{{count}} 项需要你", {
+        count: needsAttention.length,
+      }),
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   useEffect(() => {
     lifetime.current += 1;
@@ -208,10 +228,11 @@ export function AgentSecretaryTasks({
     setDelegation(emptyDelegation);
     setFollowups({});
     setOpenedTask(null);
-    setConfirmDelete(null);
+    setConfirmClose(null);
     setBusy(null);
     setActionError(null);
     pending.current = false;
+    restoreCloseFocus.current = false;
     navigation.current = null;
     return () => {
       lifetime.current += 1;
@@ -219,6 +240,15 @@ export function AgentSecretaryTasks({
   }, [sessionId]);
 
   useEffect(() => setOpenedTask(workerTaskId || null), [workerTaskId]);
+  useEffect(() => {
+    if (closingTask) closeCancel.current?.focus({ preventScroll: true });
+  }, [closingTask?.id]);
+  useEffect(() => {
+    if (active && !busy && restoreCloseFocus.current) {
+      restoreCloseFocus.current = false;
+      selectedChip.current?.focus({ preventScroll: true });
+    }
+  }, [active, busy, currentConversationId, tasks.length]);
   useEffect(() => {
     if (delegationOpen) delegationTitle.current?.focus();
   }, [delegationOpen]);
@@ -324,6 +354,7 @@ export function AgentSecretaryTasks({
   const openConversation = async (id: string) => {
     if (
       !active ||
+      pending.current ||
       navigation.current?.id === id ||
       (id === currentConversationId && !navigation.current)
     )
@@ -387,195 +418,272 @@ export function AgentSecretaryTasks({
     );
   };
 
-  const deleteTask = (taskId: string) => {
+  const requestClose = (
+    task: AgentSecretaryTask,
+    trigger: HTMLButtonElement,
+  ) => {
+    if (!active || pending.current || !terminal.has(task.status)) return;
+    closeTrigger.current = trigger;
+    setConfirmClose(task.id);
+    setActionError(null);
+  };
+
+  const closeTask = (task: AgentSecretaryTask) => {
+    if (!terminal.has(task.status)) return;
+    const epoch = lifetime.current;
     void act(
-      `delete:${taskId}`,
-      () => agentApi.deleteSecretaryTask(sessionId, taskId),
+      `close:${task.id}`,
+      async () => {
+        if (
+          task.sessionId === currentConversationId ||
+          navigation.current?.id === task.sessionId
+        ) {
+          const opened = await onOpenSession(sessionId);
+          if (opened === false)
+            throw new Error(
+              label("returnBeforeClose", "请先返回总秘书，再关闭这项任务。"),
+            );
+        }
+        if (
+          scope.current !== sessionId ||
+          lifetime.current !== epoch ||
+          !pending.current
+        )
+          return;
+        await agentApi.deleteSecretaryTask(sessionId, task.id);
+      },
       () => {
         readSequence.current += 1;
         setState((old) =>
           old?.sessionId === sessionId
-            ? { ...old, tasks: old.tasks.filter((task) => task.id !== taskId) }
+            ? { ...old, tasks: old.tasks.filter((item) => item.id !== task.id) }
             : old,
         );
-        setOpenedTask((old) => (old === taskId ? null : old));
-        setConfirmDelete(null);
-        clearRequestIdentity(`${sessionId}:followup:${taskId}`);
+        setOpenedTask((old) => (old === task.id ? null : old));
+        setConfirmClose(null);
+        clearRequestIdentity(`${sessionId}:followup:${task.id}`);
+        restoreCloseFocus.current = true;
       },
     );
   };
 
   return (
     <section className="wb-secretary" aria-label={label("tasks", "工作任务")}>
-      <nav
-        className="wb-secretary-sessions"
-        aria-label={label("sessions", "秘书会话")}
-      >
-        <button
-          ref={chiefSelected ? selectedChip : undefined}
-          type="button"
-          className="wb-secretary-session-chip"
-          aria-current={chiefSelected ? "page" : undefined}
-          disabled={!active}
-          onClick={() => void openConversation(sessionId)}
-        >
-          <img src={assistantPortrait} alt="" className="wb-secretary-avatar" />
-          <span>{label("chiefSession", "总秘书")}</span>
-        </button>
-        {conversations.map(({ task, parent }) => {
-          const selected = task.sessionId === currentConversationId;
-          const status = label(
-            `status.${task.status}`,
-            statusLabels[task.status],
-          );
-          const name = `${task.title} · ${status}`;
-          return (
-            <button
-              key={task.id}
-              ref={selected ? selectedChip : undefined}
-              type="button"
-              className="wb-secretary-session-chip"
-              data-status={task.status}
-              data-attention={needsUser(task) || undefined}
-              aria-label={name}
-              aria-description={
-                parent
-                  ? label("childOf", "上一级工作对话：{{title}}", {
-                      title: parent.title,
-                    })
-                  : undefined
-              }
-              aria-current={selected ? "page" : undefined}
-              disabled={!active}
-              title={name}
-              onClick={() => void openConversation(task.sessionId)}
-            >
-              {parent && (
-                <CornerDownRight
-                  className="wb-secretary-session-branch"
-                  size={13}
-                  aria-hidden="true"
-                />
-              )}
-              <span className="wb-secretary-session-dot" aria-hidden="true" />
-              <span className="wb-secretary-session-title">{task.title}</span>
-              <span className="wb-secretary-session-status">{status}</span>
-            </button>
-          );
-        })}
-      </nav>
       <div className="wb-secretary-bar">
-        {workerTaskId && (
+        <nav
+          className="wb-secretary-sessions"
+          aria-label={label("sessions", "秘书会话")}
+        >
           <button
+            ref={chiefSelected ? selectedChip : undefined}
             type="button"
-            className="wb-secretary-back"
-            disabled={Boolean(busy)}
+            className="wb-secretary-session-chip"
+            aria-current={chiefSelected ? "page" : undefined}
+            disabled={!active || Boolean(busy)}
             onClick={() => void openConversation(sessionId)}
           >
-            <ArrowLeft aria-hidden="true" />
-            {label("back", "返回秘书")}
-          </button>
-        )}
-        <button
-          type="button"
-          className="wb-secretary-toggle"
-          aria-expanded={expanded}
-          aria-controls={tasksId}
-          onClick={() => {
-            setGithubOpen(false);
-            setConfirmDelete(null);
-            setExpanded((value) => !value);
-          }}
-        >
-          <ListTodo aria-hidden="true" />
-          <strong>{label("tasks", "工作任务")}</strong>
-          {stateHere && runningCount === 0 && queuedCount === 0 && (
-            <span className="wb-secretary-count">
-              {label("totalCount", "共 {{count}} 项", { count: tasks.length })}
-            </span>
-          )}
-          {runningCount > 0 && (
-            <span className="wb-secretary-running">
-              {label("runningCount", "{{count}} 路运行", {
-                count: runningCount,
-              })}
-            </span>
-          )}
-          {queuedCount > 0 && (
-            <span className="wb-secretary-count">
-              {label("queuedCount", "{{count}} 项排队", { count: queuedCount })}
-            </span>
-          )}
-          {needsAttention.length > 0 && (
-            <span className="wb-secretary-attention">
-              {label("attentionCount", "{{count}} 项需要你", {
-                count: needsAttention.length,
-              })}
-            </span>
-          )}
-          {!stateHere && !readError && (
-            <LoaderCircle
-              className="animate-spin"
-              aria-label={label("loading", "正在读取任务")}
+            <img
+              src={assistantPortrait}
+              alt=""
+              className="wb-secretary-avatar"
             />
-          )}
-          {expanded ? (
-            <ChevronDown aria-hidden="true" />
-          ) : (
-            <ChevronRight aria-hidden="true" />
-          )}
-        </button>
-        {!workerTaskId && !projectChoices && (
-          <button
-            type="button"
-            className="wb-secretary-source"
-            aria-label={label("github.title", "GitHub 收件箱")}
-            aria-expanded={githubOpen}
-            aria-controls={githubId}
-            title={label("github.title", "GitHub 收件箱")}
-            onClick={() => {
-              setGithubVisited(true);
-              setExpanded(false);
-              setConfirmDelete(null);
-              setGithubOpen((value) => !value);
-            }}
-          >
-            <Github aria-hidden="true" />
-            <span>GitHub</span>
+            <span>{label("chiefSession", "总秘书")}</span>
           </button>
-        )}
-        {!workerTaskId && onFocusComposer && (
+          {conversations.map(({ task, parent }) => {
+            const selected = task.sessionId === currentConversationId;
+            const status = label(
+              `status.${task.status}`,
+              statusLabels[task.status],
+            );
+            const name = `${task.title} · ${status}`;
+            return (
+              <div
+                key={task.id}
+                className="wb-secretary-session"
+                data-status={task.status}
+                data-attention={needsUser(task) || undefined}
+                data-selected={selected || undefined}
+              >
+                <button
+                  ref={selected ? selectedChip : undefined}
+                  type="button"
+                  className="wb-secretary-session-chip"
+                  aria-label={name}
+                  aria-description={
+                    parent
+                      ? label("childOf", "上一级工作对话：{{title}}", {
+                          title: parent.title,
+                        })
+                      : undefined
+                  }
+                  aria-current={selected ? "page" : undefined}
+                  disabled={!active || Boolean(busy)}
+                  title={name}
+                  onClick={() => void openConversation(task.sessionId)}
+                >
+                  {parent && (
+                    <CornerDownRight
+                      className="wb-secretary-session-branch"
+                      size={13}
+                      aria-hidden="true"
+                    />
+                  )}
+                  <span
+                    className="wb-secretary-session-dot"
+                    aria-hidden="true"
+                  />
+                  <span className="wb-secretary-session-title">
+                    {task.title}
+                  </span>
+                </button>
+                {terminal.has(task.status) && (
+                  <button
+                    type="button"
+                    className="wb-secretary-session-close"
+                    disabled={!active || Boolean(busy)}
+                    aria-label={label("closeNamed", "关闭任务：{{title}}", {
+                      title: task.title,
+                    })}
+                    aria-expanded={confirmClose === task.id}
+                    title={label("closeTask", "关闭任务")}
+                    onClick={(event) => requestClose(task, event.currentTarget)}
+                  >
+                    {busy === `close:${task.id}` ? (
+                      <LoaderCircle
+                        className="animate-spin"
+                        aria-hidden="true"
+                      />
+                    ) : (
+                      <X aria-hidden="true" />
+                    )}
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </nav>
+        <div className="wb-secretary-actions">
           <button
             type="button"
-            className="wb-secretary-add"
-            disabled={!active}
-            aria-label={label("tellGoal", "告诉秘书目标")}
-            onClick={onFocusComposer}
-          >
-            <MessageCircle aria-hidden="true" />
-            <span>{label("tellGoal", "告诉秘书目标")}</span>
-          </button>
-        )}
-        {delegationAllowed && (
-          <button
-            ref={delegationTrigger}
-            type="button"
-            className="wb-secretary-add wb-secretary-delegate"
-            disabled={!active}
-            aria-expanded={delegationOpen}
-            aria-controls={delegationOpen ? delegationId : undefined}
+            className="wb-secretary-toggle"
+            aria-label={taskSummary}
+            title={taskSummary}
+            aria-expanded={expanded}
+            aria-controls={tasksId}
             onClick={() => {
               setGithubOpen(false);
-              setConfirmDelete(null);
-              setExpanded(true);
-              setAdding(!delegationOpen);
+              setConfirmClose(null);
+              setExpanded((value) => !value);
             }}
           >
-            <Plus aria-hidden="true" />
-            <span>{label("delegate", "交办任务")}</span>
+            <ListTodo aria-hidden="true" />
+            <strong>{label("tasks", "工作任务")}</strong>
+            {stateHere && (
+              <span className="wb-secretary-count" aria-hidden="true">
+                {tasks.length}
+              </span>
+            )}
+            {needsAttention.length > 0 && (
+              <span className="wb-secretary-attention-dot" aria-hidden="true" />
+            )}
+            {!stateHere && !readError && (
+              <LoaderCircle
+                className="animate-spin"
+                aria-label={label("loading", "正在读取任务")}
+              />
+            )}
+            {expanded ? (
+              <ChevronDown aria-hidden="true" />
+            ) : (
+              <ChevronRight aria-hidden="true" />
+            )}
           </button>
-        )}
+          {!workerTaskId && !projectChoices && (
+            <button
+              type="button"
+              className="wb-secretary-source"
+              aria-label={label("github.title", "GitHub 收件箱")}
+              aria-expanded={githubOpen}
+              aria-controls={githubId}
+              title={label("github.title", "GitHub 收件箱")}
+              onClick={() => {
+                setGithubVisited(true);
+                setExpanded(false);
+                setConfirmClose(null);
+                setGithubOpen((value) => !value);
+              }}
+            >
+              <Github aria-hidden="true" />
+            </button>
+          )}
+          {delegationAllowed && (
+            <button
+              ref={delegationTrigger}
+              type="button"
+              className="wb-secretary-add wb-secretary-delegate"
+              disabled={!active}
+              aria-label={label("delegate", "交办任务")}
+              aria-expanded={delegationOpen}
+              aria-controls={delegationOpen ? delegationId : undefined}
+              onClick={() => {
+                setGithubOpen(false);
+                setConfirmClose(null);
+                setExpanded(true);
+                setAdding(!delegationOpen);
+              }}
+            >
+              <Plus aria-hidden="true" />
+              <span>{label("delegate", "交办任务")}</span>
+            </button>
+          )}
+        </div>
       </div>
+      {closingTask && (
+        <div
+          className="wb-secretary-close-confirm"
+          role="alertdialog"
+          aria-label={label("closeTask", "关闭任务")}
+          aria-describedby={closeDescriptionId}
+          onKeyDown={(event) => {
+            if (event.key === "Escape" && !busy) {
+              event.stopPropagation();
+              setConfirmClose(null);
+              closeTrigger.current?.focus({ preventScroll: true });
+            }
+          }}
+        >
+          <p id={closeDescriptionId}>
+            {label(
+              "closePrompt",
+              "关闭「{{title}}」并从任务栏移除？工作对话和文件会保留。",
+              { title: closingTask.title },
+            )}
+          </p>
+          <Button
+            ref={closeCancel}
+            type="button"
+            variant="neutral"
+            disabled={Boolean(busy)}
+            onClick={() => {
+              setConfirmClose(null);
+              closeTrigger.current?.focus({ preventScroll: true });
+            }}
+          >
+            {label("dismissDelete", "返回")}
+          </Button>
+          <Button
+            type="button"
+            variant="neutral"
+            disabled={!active || Boolean(busy)}
+            onClick={() => closeTask(closingTask)}
+          >
+            {busy === `close:${closingTask.id}` && (
+              <LoaderCircle className="animate-spin" aria-hidden="true" />
+            )}
+            {label("confirmClose", "确认关闭")}
+          </Button>
+        </div>
+      )}
       {readError && (
         <div className="wb-secretary-error" role="alert">
           <span>{readError}</span>
@@ -605,21 +713,38 @@ export function AgentSecretaryTasks({
             active={active && githubOpen}
             tasks={tasks}
             onTaskCreated={acceptTask}
-            onOpenSession={onOpenSession}
+            onOpenSession={openConversation}
           />
         </div>
       )}
       {expanded && (
         <div id={tasksId} className="wb-secretary-content">
-          {!workerTaskId && (
-            <p className="wb-secretary-note">
-              {label(
-                "description",
-                projectChoices
-                  ? "在对话中讨论目标，或在交办任务时选择执行项目。"
-                  : "直接在对话里告诉我目标，我来拆解、分派和跟进工作。",
+          {(runningCount > 0 ||
+            queuedCount > 0 ||
+            needsAttention.length > 0) && (
+            <div className="wb-secretary-task-summary">
+              {runningCount > 0 && (
+                <span className="wb-secretary-running">
+                  {label("runningCount", "{{count}} 路运行", {
+                    count: runningCount,
+                  })}
+                </span>
               )}
-            </p>
+              {queuedCount > 0 && (
+                <span className="wb-secretary-count">
+                  {label("queuedCount", "{{count}} 项排队", {
+                    count: queuedCount,
+                  })}
+                </span>
+              )}
+              {needsAttention.length > 0 && (
+                <span className="wb-secretary-attention">
+                  {label("attentionCount", "{{count}} 项需要你", {
+                    count: needsAttention.length,
+                  })}
+                </span>
+              )}
+            </div>
           )}
           {worktreeCount > 0 && (
             <p className="wb-secretary-lanes">
@@ -775,7 +900,7 @@ export function AgentSecretaryTasks({
           <div className="wb-secretary-task-list">
             {tasks.map((task) => {
               const opened = openedTask === task.id;
-              const canDelete = !workerTaskId && terminal.has(task.status);
+              const canClose = terminal.has(task.status);
               const sourceHref =
                 task.sourceUrl && safeGithubUrl(task.sourceUrl);
               const report = visibleReport(task);
@@ -866,63 +991,24 @@ export function AgentSecretaryTasks({
                         )}
                       </button>
                     )}
-                    {canDelete && (
+                    {canClose && (
                       <button
                         type="button"
                         className="wb-icon-button"
                         disabled={!active || Boolean(busy)}
-                        aria-label={label(
-                          "deleteNamed",
-                          "删除任务：{{title}}",
-                          {
-                            title: task.title,
-                          },
-                        )}
-                        aria-expanded={confirmDelete === task.id}
-                        title={label("deleteTask", "删除任务")}
-                        onClick={() =>
-                          setConfirmDelete((old) =>
-                            old === task.id ? null : task.id,
-                          )
+                        aria-label={label("closeNamed", "关闭任务：{{title}}", {
+                          title: task.title,
+                        })}
+                        aria-expanded={confirmClose === task.id}
+                        title={label("closeTask", "关闭任务")}
+                        onClick={(event) =>
+                          requestClose(task, event.currentTarget)
                         }
                       >
-                        <Trash2 aria-hidden="true" />
+                        <X aria-hidden="true" />
                       </button>
                     )}
                   </div>
-                  {canDelete && confirmDelete === task.id && (
-                    <div className="mb-2 flex flex-wrap items-center gap-2 rounded-control bg-bg-subtle p-2">
-                      <p className="mr-auto min-w-0 break-words text-caption">
-                        {label(
-                          "deletePrompt",
-                          "从列表删除「{{title}}」？工作对话和文件会保留。",
-                          { title: task.title },
-                        )}
-                      </p>
-                      <Button
-                        type="button"
-                        variant="neutral"
-                        disabled={Boolean(busy)}
-                        onClick={() => setConfirmDelete(null)}
-                      >
-                        {label("dismissDelete", "返回")}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        disabled={!active || Boolean(busy)}
-                        onClick={() => deleteTask(task.id)}
-                      >
-                        {busy === `delete:${task.id}` && (
-                          <LoaderCircle
-                            className="animate-spin"
-                            aria-hidden="true"
-                          />
-                        )}
-                        {label("confirmDelete", "确认删除")}
-                      </Button>
-                    </div>
-                  )}
                   {opened && (
                     <div className="wb-secretary-task-detail">
                       <p>{task.instructions}</p>

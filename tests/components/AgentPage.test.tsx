@@ -74,6 +74,7 @@ vi.mock("@/lib/api/agent", () => ({
     delegateSecretaryTask: vi.fn(),
     sendSecretaryTaskMessage: vi.fn(),
     cancelSecretaryTask: vi.fn(),
+    deleteSecretaryTask: vi.fn(),
     updateSession: vi.fn(),
     renameSession: vi.fn(),
     setSessionMetadata: vi.fn(),
@@ -397,6 +398,7 @@ beforeEach(() => {
     .mockReset()
     .mockResolvedValue({ sessionId: "lc:secretary", tasks: [] });
   vi.mocked(agentApi.sendSecretaryTaskMessage).mockReset();
+  vi.mocked(agentApi.deleteSecretaryTask).mockReset().mockResolvedValue();
   vi.mocked(agentApi.openStandalone)
     .mockReset()
     .mockResolvedValue({
@@ -503,7 +505,9 @@ describe("AgentPage", () => {
         },
       ],
     });
-    render(<AgentPage />);
+    render(
+      <AgentPage secretaryRequest={{ requestId: 1, sessionId: secretary.id }} />,
+    );
     await flush();
     fireEvent.click(screen.getByRole("button", { name: /^工作任务/ }));
     fireEvent.click(screen.getByRole("button", { name: "打开工作对话" }));
@@ -923,7 +927,10 @@ describe("AgentPage", () => {
       screen.getByRole("heading", { name: "目标工作任务" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "返回秘书" }),
+      within(screen.getByRole("navigation", { name: "秘书会话" })).getByRole(
+        "button",
+        { name: "总秘书" },
+      ),
     ).toBeInTheDocument();
     expect(consumed).toHaveBeenCalledTimes(1);
     expect(agentApi.openSecretary).not.toHaveBeenCalled();
@@ -1050,6 +1057,11 @@ describe("AgentPage", () => {
       screen.getByRole("heading", { name: "Loli 秘书" }),
     ).toBeInTheDocument();
     expect(
+      within(
+        screen.getByRole("heading", { name: "Loli 秘书" }).closest("header")!,
+      ).getAllByText("Loli 秘书"),
+    ).toHaveLength(1);
+    expect(
       screen.getByRole("region", { name: "工作任务" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "交办任务" })).toBeEnabled();
@@ -1081,13 +1093,189 @@ describe("AgentPage", () => {
     expect(screen.getByRole("heading", { name: "Loli 秘书" })).toBeInTheDocument();
   });
 
+  it.each([false, true])(
+    "opens ordinary project tasks instead of old secretaries on startup and project switches (saved secretary: %s)",
+    async (savedSecretary) => {
+      const other = "D:/fixture/other";
+      const chief: AgentSession = {
+        ...session,
+        id: "lc:old-project-secretary",
+        title: "旧项目秘书",
+        coordination: { role: "secretary" },
+      };
+      const worker: AgentSession = {
+        ...session,
+        id: "lc:old-project-worker",
+        coordination: {
+          role: "worker",
+          parentSessionId: chief.id,
+          taskId: "old-task",
+        },
+      };
+      const otherTask = {
+        ...session,
+        id: "other-task",
+        title: "另一项目任务",
+        projectPath: other,
+      };
+      const otherChief = {
+        ...chief,
+        id: "lc:other-secretary",
+        projectPath: other,
+      };
+      vi.mocked(agentApi.listSessions).mockResolvedValue([chief, worker, session]);
+      vi.mocked(agentApi.listProjects).mockResolvedValue([
+        { path: project, name: "project", pinned: false, lastOpenedAt: 2 },
+        { path: other, name: "other", pinned: false, lastOpenedAt: 1 },
+      ]);
+      vi.mocked(agentApi.openProject).mockResolvedValue({
+        workspace: { path: other, name: "other" },
+        catalog,
+        sessions: [otherChief, otherTask],
+      });
+      const all = [chief, worker, session, otherChief, otherTask];
+      vi.mocked(agentApi.getSession).mockImplementation(async (id) => ({
+        ...emptySnapshot(),
+        session: all.find((item) => item.id === id)!,
+      }));
+      if (savedSecretary)
+        localStorage.setItem(
+          "lolicode.agent.last-selection.v1",
+          JSON.stringify({ projectPath: project, sessionId: chief.id }),
+        );
+      render(<AgentPage />);
+      await flush();
+      expect(
+        screen.getByRole("heading", { name: session.title }),
+      ).toBeInTheDocument();
+      expect(agentApi.getSession).not.toHaveBeenCalledWith(chief.id);
+      fireEvent.click(screen.getByRole("button", { name: "other" }));
+      await flush();
+      expect(
+        screen.getByRole("heading", { name: otherTask.title }),
+      ).toBeInTheDocument();
+      expect(agentApi.getSession).not.toHaveBeenCalledWith(otherChief.id);
+      expect(agentApi.openSecretary).not.toHaveBeenCalled();
+    },
+  );
+
+  it("keeps secretaries and workers out of current, expanded, searched and archived workspace task lists", async () => {
+    const other = "D:/fixture/other";
+    const chief: AgentSession = {
+      ...session,
+      id: "lc:project-secretary",
+      title: "项目总秘书",
+      coordination: { role: "secretary" },
+    };
+    const worker: AgentSession = {
+      ...session,
+      id: "lc:project-worker",
+      title: "项目后台任务",
+      coordination: {
+        role: "worker",
+        parentSessionId: chief.id,
+        taskId: "task-1",
+      },
+    };
+    const archivedChief = {
+      ...chief,
+      id: "lc:archived-chief",
+      title: "归档总秘书",
+      archived: true,
+    };
+    const archivedWorker = {
+      ...worker,
+      id: "lc:archived-worker",
+      title: "归档后台任务",
+      archived: true,
+    };
+    const archivedTask = {
+      ...session,
+      id: "archived-task",
+      title: "归档普通任务",
+      archived: true,
+    };
+    const current = [
+      chief,
+      worker,
+      session,
+      archivedChief,
+      archivedWorker,
+      archivedTask,
+    ];
+    const otherSessions = [
+      {
+        ...chief,
+        id: "lc:other-chief",
+        title: "另一项目总秘书",
+        projectPath: other,
+      },
+      {
+        ...worker,
+        id: "lc:other-worker",
+        title: "另一项目后台任务",
+        projectPath: other,
+      },
+      {
+        ...session,
+        id: "other-task",
+        title: "另一项目普通任务",
+        projectPath: other,
+      },
+    ];
+    vi.mocked(agentApi.listProjects).mockResolvedValue([
+      { path: project, name: "project", pinned: false, lastOpenedAt: 2 },
+      { path: other, name: "other", pinned: false, lastOpenedAt: 1 },
+    ]);
+    vi.mocked(agentApi.listSessions).mockImplementation(
+      async (path, includeArchived) =>
+        (path === other ? otherSessions : current).filter(
+          (item) => includeArchived || !item.archived,
+        ),
+    );
+    render(<AgentPage />);
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: "展开 other 的任务" }));
+    await flush();
+    const currentTasks = screen.getByRole("group", { name: "project 的任务" });
+    const otherTasks = screen.getByRole("group", { name: "other 的任务" });
+    expect(
+      within(currentTasks).getByRole("button", { name: session.title }),
+    ).toBeInTheDocument();
+    expect(
+      within(otherTasks).getByRole("button", { name: "另一项目普通任务" }),
+    ).toBeInTheDocument();
+    expect(currentTasks).not.toHaveTextContent("项目总秘书");
+    expect(currentTasks).not.toHaveTextContent("项目后台任务");
+    expect(otherTasks).not.toHaveTextContent("另一项目总秘书");
+    expect(otherTasks).not.toHaveTextContent("另一项目后台任务");
+    fireEvent.change(screen.getByRole("textbox", { name: "搜索会话" }), {
+      target: { value: "秘书" },
+    });
+    expect(within(currentTasks).queryByRole("button")).toBeNull();
+    expect(within(otherTasks).queryByRole("button")).toBeNull();
+    expect(
+      screen.getAllByRole("button", { name: "打开 Loli 秘书" }),
+    ).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "清空会话搜索" }));
+    fireEvent.click(screen.getByRole("button", { name: "显示归档会话" }));
+    await flush();
+    expect(
+      within(currentTasks).getByRole("button", { name: archivedTask.title }),
+    ).toBeInTheDocument();
+    expect(currentTasks).not.toHaveTextContent(archivedChief.title);
+    expect(currentTasks).not.toHaveTextContent(archivedWorker.title);
+    expect(currentTasks).not.toHaveTextContent(session.title);
+  });
+
   it("still sends a goal directly through the secretary chat", async () => {
     render(<AgentPage />);
     await flush();
     fireEvent.click(screen.getByRole("button", { name: "打开 Loli 秘书" }));
     await flush();
-    fireEvent.click(screen.getByRole("button", { name: "告诉秘书目标" }));
-    expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveFocus();
+    expect(
+      screen.queryByRole("button", { name: "告诉秘书目标" }),
+    ).not.toBeInTheDocument();
     expect(screen.queryByLabelText("任务名称")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("执行方式")).not.toBeInTheDocument();
     const goal = "整理项目文档，再核对安装步骤";
@@ -1117,12 +1305,21 @@ describe("AgentPage", () => {
       ...emptySnapshot(),
       session: id === archived.id ? archived : session,
     }));
-    render(<AgentPage />);
+    vi.mocked(agentApi.getSecretary).mockResolvedValue({
+      sessionId: archived.id,
+      tasks: [],
+    });
+    render(
+      <AgentPage secretaryRequest={{ requestId: 1, sessionId: archived.id }} />,
+    );
     await flush();
-    fireEvent.click(screen.getByRole("button", { name: "显示归档会话" }));
-    await flush();
-    fireEvent.click(screen.getByRole("button", { name: /^归档秘书/ }));
-    await flush();
+    expect(screen.getByRole("heading", { name: "归档秘书" })).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("group", { name: "project 的任务" })).queryByRole(
+        "button",
+        { name: /^归档秘书/ },
+      ),
+    ).not.toBeInTheDocument();
     expect(
       screen.getByRole("region", { name: "工作任务" }),
     ).toBeInTheDocument();
@@ -1146,31 +1343,55 @@ describe("AgentPage", () => {
     );
   });
 
-  it("keeps worker conversations out of the sidebar and restores the secretary as the visible conversation", async () => {
+  it("restores the saved global secretary without listing it or its workers as workspace tasks", async () => {
+    const standalone = "D:/fixture/app/agent/standalone-workspace";
     const secretary: AgentSession = {
       ...session,
       id: "lc:secretary",
       title: "Loli 秘书",
+      projectPath: standalone,
       coordination: { role: "secretary" },
     };
     const worker: AgentSession = {
       ...session,
       id: "lc:worker",
       title: "后台分析任务",
+      projectPath: standalone,
       coordination: {
         role: "worker",
         parentSessionId: secretary.id,
         taskId: "task-1",
       },
     };
+    vi.mocked(agentApi.getStatus).mockResolvedValue({
+      available: true,
+      running: true,
+      projectPath: standalone,
+    });
+    vi.mocked(agentApi.listProjects).mockResolvedValue([
+      {
+        path: standalone,
+        name: "独立任务",
+        standalone: true,
+        pinned: false,
+        lastOpenedAt: 2,
+      },
+    ]);
+    localStorage.setItem(
+      "lolicode.agent.last-selection.v1",
+      JSON.stringify({ projectPath: standalone, sessionId: secretary.id }),
+    );
+    const independent = { ...session, projectPath: standalone };
     vi.mocked(agentApi.listSessions).mockResolvedValue([
       worker,
       secretary,
-      session,
+      independent,
     ]);
     vi.mocked(agentApi.getSession).mockImplementation(async (id) => ({
       ...emptySnapshot(),
-      session: structuredClone(id === worker.id ? worker : secretary),
+      session: structuredClone(
+        id === worker.id ? worker : id === secretary.id ? secretary : independent,
+      ),
     }));
     render(<AgentPage />);
     await flush();
@@ -1180,6 +1401,16 @@ describe("AgentPage", () => {
     expect(
       screen.queryByRole("button", { name: "后台分析任务" }),
     ).not.toBeInTheDocument();
+    const tasks = within(screen.getByRole("group", { name: "独立任务 的任务" }));
+    expect(tasks.queryByRole("button", { name: "Loli 秘书" })).toBeNull();
+    expect(tasks.getByRole("button", { name: session.title })).toBeInTheDocument();
+    expect(
+      screen.getAllByRole("button", { name: "打开 Loli 秘书" }),
+    ).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "打开 Loli 秘书" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
   });
 
   it.each([false, true])("switches between secretary and worker from the header without losing the draft (permissions locked: %s)", async (permissionLocked) => {
@@ -1231,7 +1462,9 @@ describe("AgentPage", () => {
         },
       ],
     });
-    render(<AgentPage />);
+    render(
+      <AgentPage secretaryRequest={{ requestId: 1, sessionId: secretary.id }} />,
+    );
     await flush();
     fill("给秘书保留的补充要求");
     const lineage = within(screen.getByRole("navigation", { name: "秘书会话" }));
@@ -1258,6 +1491,11 @@ describe("AgentPage", () => {
     await flush();
     expect(
       screen.getByRole("heading", { name: "后台分析任务" }),
+    ).toBeInTheDocument();
+    expect(
+      within(
+        screen.getByRole("heading", { name: "后台分析任务" }).closest("header")!,
+      ).getByText("工作对话"),
     ).toBeInTheDocument();
     expect(lineage.getByRole("button", { name: /^分析任务/ })).toHaveAttribute(
       "aria-current",
@@ -1287,6 +1525,85 @@ describe("AgentPage", () => {
     expect(screen.getByLabelText("发送给 Agent 的消息")).toHaveValue(
       "给秘书保留的补充要求",
     );
+  });
+
+  it("does not enter a closed worker when its earlier tab navigation finishes late", async () => {
+    const secretary: AgentSession = {
+      ...session,
+      id: "lc:secretary",
+      title: "Loli 秘书",
+      coordination: { role: "secretary" },
+    };
+    const worker: AgentSession = {
+      ...session,
+      id: "lc:finished-worker",
+      title: "已完成的工作",
+      coordination: {
+        role: "worker",
+        parentSessionId: secretary.id,
+        taskId: "finished-task",
+      },
+    };
+    vi.mocked(agentApi.getSession).mockImplementation(async (id) => ({
+      ...emptySnapshot(),
+      session:
+        id === worker.id ? worker : id === secretary.id ? secretary : session,
+    }));
+    vi.mocked(agentApi.getSecretary).mockResolvedValue({
+      sessionId: secretary.id,
+      tasks: [
+        {
+          id: "finished-task",
+          parentSessionId: secretary.id,
+          sessionId: worker.id,
+          title: worker.title,
+          instructions: "完成项目任务",
+          status: "completed",
+          projectPath: project,
+          requestId: "finished-request",
+          createdAt: 1,
+          updatedAt: 2,
+        },
+      ],
+    });
+    vi.mocked(agentApi.deleteSecretaryTask).mockImplementation(async () => {
+      vi.mocked(agentApi.getSecretary).mockResolvedValue({
+        sessionId: secretary.id,
+        tasks: [],
+      });
+    });
+    render(
+      <AgentPage secretaryRequest={{ requestId: 1, sessionId: secretary.id }} />,
+    );
+    await flush();
+    let finishOpen!: (next: AgentSnapshot) => void;
+    vi.mocked(agentApi.getSession).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishOpen = resolve;
+        }),
+    );
+    const tabs = within(screen.getByRole("navigation", { name: "秘书会话" }));
+    fireEvent.click(tabs.getByRole("button", { name: "已完成的工作 · 已完成" }));
+    fireEvent.click(tabs.getByRole("button", { name: "关闭任务：已完成的工作" }));
+    fireEvent.click(
+      within(screen.getByRole("alertdialog", { name: "关闭任务" })).getByRole(
+        "button",
+        { name: "确认关闭" },
+      ),
+    );
+    await flush();
+    expect(agentApi.deleteSecretaryTask).toHaveBeenCalledWith(
+      secretary.id,
+      "finished-task",
+    );
+    await act(async () => finishOpen({ ...emptySnapshot(), session: worker }));
+    await flush();
+    expect(
+      screen.getByRole("heading", { name: secretary.title }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: worker.title })).toBeNull();
+    expect(tabs.queryByRole("button", { name: /^已完成的工作/ })).toBeNull();
   });
 
   it("preserves the current conversation and input if opening the secretary fails", async () => {

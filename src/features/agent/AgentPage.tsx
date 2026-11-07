@@ -301,6 +301,10 @@ function projectDockKey(path: string) {
 const compareSidebarSessions = (a: AgentSession, b: AgentSession) =>
   Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) ||
   b.updatedAt - a.updatedAt;
+// Secretary conversations belong to the top-level entry and its task switcher.
+const isWorkspaceTask = (session: AgentSession) =>
+  session.coordination?.role !== "secretary" &&
+  session.coordination?.role !== "worker";
 const matchesSidebarSession = (session: AgentSession, query: string) =>
   !query ||
   session.title.toLocaleLowerCase().includes(query) ||
@@ -1296,7 +1300,11 @@ export function AgentPage({
       const savedSession =
         saved?.projectPath === restoredWorkspace.path
           ? restoredSessions.find(
-              (session) => session.id === saved.sessionId && !session.archived,
+              (session) =>
+                session.id === saved.sessionId &&
+                !session.archived &&
+                (session.coordination?.role !== "secretary" ||
+                  restoredWorkspace.standalone),
             )
           : undefined;
       restored.warnings?.forEach((warning) => toast.warning(warning));
@@ -1314,7 +1322,7 @@ export function AgentPage({
       setSessionId(
         savedSession?.id ||
           restoredSessions.find(
-            (item) => !item.archived && item.coordination?.role !== "worker",
+            (item) => !item.archived && isWorkspaceTask(item),
           )?.id ||
           null,
       );
@@ -2689,8 +2697,7 @@ export function AgentPage({
     setSessionId(
       result.sessions.find((session) => session.id === preferredSessionId)
         ?.id ||
-        result.sessions.find((item) => item.coordination?.role !== "worker")
-          ?.id ||
+        result.sessions.find(isWorkspaceTask)?.id ||
         null,
     );
     setShowArchived(false);
@@ -2743,6 +2750,7 @@ export function AgentPage({
         running: true,
         projectPath: result.workspace.path,
       }));
+      return true;
     } catch (cause) {
       if (mounted.current && generation.current === requestGeneration)
         setError(agentErrorMessage(cause));
@@ -3050,7 +3058,8 @@ export function AgentPage({
   ]);
   const openSecretarySession = async (id: string) => {
     const request = ++secretaryNavigation.current;
-    if (mutation.current || !workspace || id === selectedId.current) return;
+    if (id === selectedId.current) return true;
+    if (mutation.current || !workspace) return false;
     const target = workspace.path;
     const requestGeneration = generation.current;
     const selectionRevision = selection.current.revision;
@@ -3065,9 +3074,9 @@ export function AgentPage({
       next = await agentApi.getSession(id);
     } catch (cause) {
       if (isCurrent()) throw cause;
-      return;
+      return false;
     }
-    if (!isCurrent()) return;
+    if (!isCurrent()) return false;
     const link = next.session.coordination;
     if (
       next.session.id !== id ||
@@ -3082,8 +3091,9 @@ export function AgentPage({
         }),
       );
     if (next.session.projectPath !== target) {
-      await openProject(next.session.projectPath, id, next.session);
-      return;
+      return Boolean(
+        await openProject(next.session.projectPath, id, next.session),
+      );
     }
     setShowArchived(false);
     setSessions((old) => [
@@ -3093,6 +3103,7 @@ export function AgentPage({
     setError(null);
     setSessionId(id);
     setRefresh((value) => value + 1);
+    return true;
   };
   const startAutomationConversation = async (text: string) => {
     if (mutation.current || !workspace || initializing)
@@ -3820,9 +3831,7 @@ export function AgentPage({
         setSessionId((current) =>
           refreshedSessions.some((session) => session.id === current)
             ? current
-            : refreshedSessions.find(
-                (item) => item.coordination?.role !== "worker",
-              )?.id || null,
+            : refreshedSessions.find(isWorkspaceTask)?.id || null,
         );
         setEngine((old) => ({
           ...old,
@@ -3973,7 +3982,7 @@ export function AgentPage({
               (item) =>
                 item.id !== id &&
                 !item.archived &&
-                item.coordination?.role !== "worker",
+                isWorkspaceTask(item),
             )?.id || null,
           );
       } else if (result) confirmSession(result, fields);
@@ -4172,7 +4181,7 @@ export function AgentPage({
         .map(withCommittedTitle)
         .filter(
           (session) =>
-            session.coordination?.role !== "worker" &&
+            isWorkspaceTask(session) &&
             Boolean(session.archived) === showArchived &&
             matchesSidebarSession(session, sessionQuery),
         )
@@ -4554,7 +4563,7 @@ export function AgentPage({
                   .map(withCommittedTitle)
                   .filter(
                     (session) =>
-                      session.coordination?.role !== "worker" &&
+                      isWorkspaceTask(session) &&
                       matchesSidebarSession(session, sessionQuery),
                   )
                   .sort(compareSidebarSessions)
@@ -4955,13 +4964,11 @@ export function AgentPage({
                 {selectedTitle}
               </h1>
             </div>
-            {secretarySessionId && (
+            {isSecretaryWorker && (
               <span className="wb-secretary-role">
-                {isSecretary
-                  ? t("agentSecretary.name", { defaultValue: "Loli 秘书" })
-                  : t("agentSecretary.workerRole", {
-                      defaultValue: "工作对话",
-                    })}
+                {t("agentSecretary.workerRole", {
+                  defaultValue: "工作对话",
+                })}
               </span>
             )}
             {workspace && (
@@ -5084,11 +5091,6 @@ export function AgentPage({
               projectChoices={
                 isSecretary && workspace?.standalone
                   ? sidebarProjects
-                  : undefined
-              }
-              onFocusComposer={
-                isSecretary
-                  ? () => composerInputRef.current?.focus()
                   : undefined
               }
             />
@@ -6185,7 +6187,9 @@ export function AgentPage({
               catalog={catalog}
               working={working}
               onBuildAutomation={startAutomationConversation}
-              onOpenProject={openProject}
+              onOpenProject={async (path) => {
+                await openProject(path);
+              }}
               onSession={(session) => {
                 if (
                   !mounted.current ||
