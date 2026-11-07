@@ -16,12 +16,34 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import {
+  createSnapshotBoundary,
+  createWorkspaceBoundary,
+  isWithin,
+} from "./lolicode-nsis-payload-boundary.mjs";
 
 const repositoryRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "../..",
 );
 const generatedScript = process.env.LOLICODE_NSIS_GENERATED_SCRIPT;
+// Optional frozen-build mode: supply both LOLICODE_NSIS_SOURCE_SNAPSHOT and
+// LOLICODE_NSIS_EXPECTED_SNAPSHOT_SHA256 after independently verifying the
+// receipt's Git/archive mapping. Keep GENERATED_SCRIPT at that work's exact
+// src-tauri/target/release/nsis/x64/installer.nsi alias. Never rewrite the NSIS.
+const snapshotFile = process.env.LOLICODE_NSIS_SOURCE_SNAPSHOT;
+const expectedSnapshotSha256 =
+  process.env.LOLICODE_NSIS_EXPECTED_SNAPSHOT_SHA256;
+assert.equal(
+  Boolean(snapshotFile),
+  Boolean(expectedSnapshotSha256),
+  "Snapshot path and independently verified receipt SHA256 must be supplied together",
+);
+if (snapshotFile)
+  assert(
+    generatedScript,
+    "Snapshot mode must verify the actual generated installer, not skip it",
+  );
 const expectedVersion =
   process.env.LOLICODE_NSIS_EXPECTED_VERSION ??
   JSON.parse(readFileSync(path.join(repositoryRoot, "package.json"), "utf8"))
@@ -33,6 +55,7 @@ const hooksPath = path.join(
   repositoryRoot,
   "src-tauri/nsis/lolicode-installer-hooks.nsh",
 );
+const defaultBoundary = createWorkspaceBoundary(repositoryRoot);
 // Exact source bytes from the official webrtc-rs/webrtc v0.17.2 tag.
 // https://raw.githubusercontent.com/webrtc-rs/webrtc/v0.17.2/LICENSE-MIT
 // https://raw.githubusercontent.com/webrtc-rs/webrtc/v0.17.2/LICENSE-APACHE
@@ -47,52 +70,8 @@ const companionLicenses = [
   ],
 ];
 
-function isWithin(parent, candidate) {
-  const relative = path.relative(parent, candidate);
-  return (
-    relative !== "" &&
-    relative !== ".." &&
-    !relative.startsWith(`..${path.sep}`) &&
-    !path.isAbsolute(relative)
-  );
-}
-
 // Never interpolate instructions from the generated installer. Only validated
 // regular input files and relative payload destinations enter the fixture.
-function workspaceFile(candidate) {
-  assert(path.isAbsolute(candidate), `Source must be absolute: ${candidate}`);
-  const absolute = path.resolve(candidate);
-  assert(
-    isWithin(repositoryRoot, absolute),
-    `Source leaves workspace: ${candidate}`,
-  );
-  // Build checkouts may alias the shared target cache with a junction. Resolve
-  // that read-only alias first, then allow only canonical workspace sources.
-  const canonicalRoot = realpathSync(repositoryRoot);
-  const canonical = realpathSync(absolute);
-  assert(
-    isWithin(canonicalRoot, canonical),
-    `Resolved source leaves workspace: ${candidate}`,
-  );
-  const relative = path.relative(canonicalRoot, canonical);
-  let current = canonicalRoot;
-  for (const component of relative.split(path.sep)) {
-    current = path.join(current, component);
-    assert(
-      !lstatSync(current).isSymbolicLink(),
-      `Source traverses a link: ${current}`,
-    );
-  }
-  assert(
-    lstatSync(canonical).isFile(),
-    `Source is not a regular file: ${candidate}`,
-  );
-  assert(
-    !/[\r\n\0"$]/u.test(canonical),
-    "Source contains unsupported NSIS syntax",
-  );
-  return canonical;
-}
 
 function relativeDestination(candidate) {
   assert(candidate.length > 0 && !path.win32.isAbsolute(candidate));
@@ -134,8 +113,9 @@ const harnessPayloadFiles = [
   "node_modules\\@deepseek-ai\\dsh\\lib\\bin.js",
 ];
 
-function payloadFromGeneratedScript(filename) {
-  const source = readFileSync(workspaceFile(filename), "utf8");
+function payloadFromGeneratedScript(filename, boundary = defaultBoundary) {
+  const generatedScriptPath = boundary.generatedScript(filename);
+  const source = readFileSync(generatedScriptPath, "utf8");
   const bundledHookIncludes = [
     ...source.matchAll(
       /^!include "([^"\r\n]*lolicode-installer-hooks\.nsh)"\r?$/gmu,
@@ -146,13 +126,23 @@ function payloadFromGeneratedScript(filename) {
     1,
     "Verify the hook used by this actual generated installer",
   );
-  const bundledHooks = workspaceFile(bundledHookIncludes[0][1]);
+  const bundledHooks = boundary.sourceFile(bundledHookIncludes[0][1]);
+  assert.equal(
+    bundledHooks,
+    boundary.sourceFile(
+      path.join(
+        boundary.sourceRoot,
+        "src-tauri/nsis/lolicode-installer-hooks.nsh",
+      ),
+    ),
+    "Generated installer hook must belong to this exact source snapshot",
+  );
   assert.equal(
     readFileSync(bundledHooks, "utf8").replaceAll("\r\n", "\n"),
     readFileSync(hooksPath, "utf8").replaceAll("\r\n", "\n"),
     "Generated installer must use the reviewed hook, not a stale build copy",
   );
-  workspaceFile(
+  boundary.sourceFile(
     path.join(path.dirname(bundledHooks), "lolicode-process-guard.ps1"),
   );
   const version = source.match(/^!define VERSION "([^"\r\n]+)"\r?$/mu)?.[1];
@@ -211,7 +201,7 @@ function payloadFromGeneratedScript(filename) {
       assert(!files.some((file) => file.destination === "LoliCode.exe"));
       const file = {
         destination: "LoliCode.exe",
-        source: workspaceFile(executable),
+        source: boundary.executable(executable),
       };
       files.push(file);
       operations.push({ type: "file", ...file });
@@ -236,7 +226,7 @@ function payloadFromGeneratedScript(filename) {
       `Duplicate destination: ${destination}`,
     );
     destinations.add(destination.toLowerCase());
-    const file = { destination, source: workspaceFile(resource[2]) };
+    const file = { destination, source: boundary.sourceFile(resource[2]) };
     files.push(file);
     operations.push({ type: "file", ...file });
   }
@@ -284,6 +274,8 @@ function payloadFromGeneratedScript(filename) {
     version,
     hooksPath: bundledHooks,
     companionLicenseFiles: companionLicenses.length,
+    generatedScriptPath,
+    generatedScriptSha256: sha256(generatedScriptPath),
   };
 }
 
@@ -416,15 +408,38 @@ const skipReason = !generatedScript
 test(
   "final NSIS payload extracts every real file into the install directory and passes the packaged runtime check",
   { skip: skipReason, timeout: 1_200_000 },
-  (context) => {
+  async (context) => {
     assert(existsSync(makensis), `NSIS compiler not found: ${makensis}`);
-    const payload = payloadFromGeneratedScript(path.resolve(generatedScript));
+    const boundary = snapshotFile
+      ? await createSnapshotBoundary({
+          repositoryRoot,
+          snapshotFile,
+          expectedSnapshotSha256,
+          expectedVersion,
+        })
+      : defaultBoundary;
+    const payload = payloadFromGeneratedScript(
+      path.resolve(generatedScript),
+      boundary,
+    );
+    context.diagnostic(
+      JSON.stringify({
+        inputBoundary: boundary.provenance ?? {
+          sourceRoot: boundary.sourceRoot,
+        },
+        generatedScriptSha256: payload.generatedScriptSha256,
+        mainExecutableSha256: sha256(
+          payload.files.find((file) => file.destination === "LoliCode.exe")
+            .source,
+        ),
+      }),
+    );
     for (const name of ["LICENSE", "THIRD_PARTY_NOTICES.md"]) {
       const notice = payload.files.find((file) => file.destination === name);
       assert(notice, `Actual NSIS payload must include ${name}`);
       assert.equal(
         readFileSync(notice.source, "utf8").replace(/\r\n/g, "\n"),
-        readFileSync(path.join(repositoryRoot, name), "utf8").replace(
+        readFileSync(path.join(boundary.sourceRoot, name), "utf8").replace(
           /\r\n/g,
           "\n",
         ),
@@ -607,6 +622,17 @@ test(
       assert.equal(report.realReadWriteAndContinuation, true);
       assert.equal(report.sessionRestartVerified, true);
       assert(report.defaultSkillsVerified >= 5);
+      assert.equal(
+        sha256(boundary.generatedScript(path.resolve(generatedScript))),
+        payload.generatedScriptSha256,
+        "Actual generated installer changed during payload acceptance",
+      );
+      for (const file of payload.files)
+        assert.equal(
+          sha256(file.source),
+          expectedHashes.get(file.destination),
+          `Payload source changed during acceptance: ${file.destination}`,
+        );
       const licenses = payload.files.filter((file) =>
         /(?:^|\\)LICENSE(?:\.[^\\]+)?$/iu.test(file.destination),
       );
