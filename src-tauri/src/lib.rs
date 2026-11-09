@@ -131,18 +131,8 @@ pub mod agent_test_support {
     };
     pub use crate::services::resource_updates::{Envelope as ResourceEnvelope, ResourceStore};
     pub use crate::services::zhipu_login::acceptance_secret_read_only as glm_acceptance_secret;
-    pub use crate::services::{
-        agent::{AgentState, AgentWorkspace},
-        agent_extensions::{AgentExtensionStore, AgentExtensionsCatalog},
-        channel_center, UsageCache,
-    };
+    pub use crate::services::{channel_center, UsageCache};
     pub use crate::services::{builtin_apps as builtin_apps_test, tavern as tavern_test};
-    pub async fn extensions_runtime_catalog(
-        state: &AgentState,
-        catalog: AgentExtensionsCatalog,
-    ) -> Result<serde_json::Value, String> {
-        crate::commands::agent_extensions::runtime_catalog(state, catalog).await
-    }
 }
 use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};

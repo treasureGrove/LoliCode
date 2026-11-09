@@ -4,11 +4,10 @@ version = "0.1.0"
 edition = "2021"
 rust-version = "1.85"
 license = "MIT"
-description = "In-process LoliCode Rust coding core and legacy session DTO adapters"
+description = "Harness desktop contracts, product tools and legacy history adapters"
 
 [features]
-default = ["legacy-runtime", "legacy-native-tests"]
-legacy-runtime = []
+default = ["legacy-native-tests"]
 legacy-native-tests = []
 
 [dependencies]

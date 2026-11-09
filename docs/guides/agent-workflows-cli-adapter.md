@@ -31,7 +31,7 @@
 
 ### 兼容扩展来源与许可
 
-- 旧适配器参考本仓库固定的 `third-party/zcode-runtime/upstream`。CLI 安装器由 LoliCode 用 Rust 实现，已有包由兼容扩展继续管理。
+- 旧适配器参考 [ZCode 固定提交](https://github.com/zai-org/ZCode/tree/aac4755666d09fdcd70272fcf063c077a639015f)；旧运行时源码已从当前工作树移除。CLI 安装器由 LoliCode 用 Rust 实现，已有包由兼容扩展继续管理。
 - CLI 目录来源：<https://cdn-zcode.z.ai/zcode/official-plugin/marketplace.json>。`cli-marketplace.json` 保存 2026-10-17 的八项元数据与原始包校验值；刷新通过同一官方地址进行。
 - CLI 插件正文未作为本轮源码打包或重新发布；用户安装时从原发布服务获取，原始包声明继续适用。接入或改写并不自动免除原许可要求。
 - 实测 GitHub CLI 包的 `UPSTREAM.md` 写明其原上游声称 MIT、但缺少 LICENSE 的发布条件仍待确认。保留该声明，不把市场条目一律标为 MIT。若未来随安装包分发完整 CLI 插件，需要逐项审查各自许可与来源。

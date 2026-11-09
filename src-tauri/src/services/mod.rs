@@ -1,5 +1,3 @@
-#[cfg(any(test, feature = "test-hooks"))]
-pub mod agent;
 pub mod agent_automation;
 mod agent_browser;
 #[cfg(target_os = "windows")]
@@ -9,8 +7,6 @@ pub(crate) use agent_preview_navigation::PreviewNavigation;
 pub mod agent_extensions;
 pub mod agent_history;
 pub mod agent_host;
-#[cfg(any(test, feature = "test-hooks"))]
-pub mod agent_policy;
 pub mod agent_preferences;
 pub(crate) mod agent_terminal;
 mod agent_web;
@@ -96,8 +92,6 @@ pub mod usage_stats;
 pub mod webdav;
 pub mod webdav_auto_sync;
 pub mod webdav_sync;
-#[cfg(any(test, feature = "test-hooks"))]
-pub mod zcode_agent;
 pub mod zhipu_login;
 
 pub use config::ConfigService;

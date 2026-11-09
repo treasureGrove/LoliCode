@@ -2,8 +2,6 @@
 
 pub(crate) mod agent_dispatch;
 mod agent_documents;
-#[cfg(any(test, feature = "test-hooks"))]
-pub(crate) mod agent_extensions;
 pub(crate) mod agent_files;
 mod agent_images;
 mod agent_mcp;

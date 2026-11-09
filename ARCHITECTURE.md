@@ -1,24 +1,23 @@
 # 代码架构与维护入口
 
-LoliCode 的桌面主程序由 React 界面、Tauri 原生宿主和 Rust Agent 核心组成。第一次维护时，从下面两个入口读起：
+LoliCode 的桌面主程序由 React 界面、Tauri 原生宿主和 DeepSeek Harness 运行时组成。Rust 负责宿主接入、产品工具、模型网关和数据；Agent 执行循环由 Harness 提供。第一次维护时，从下面两个入口读起：
 
 - 界面：[src/app/App.tsx](src/app/App.tsx)，组合业务页面与导航。
 - 原生宿主：[src-tauri/src/lib.rs](src-tauri/src/lib.rs)，初始化服务并注册界面可调用的命令。
 
-在支持 VS Code 工作区的编辑器中打开 [LoliCode.code-workspace](LoliCode.code-workspace)，可以收起依赖、构建产物、日志和固定版本的第三方上游源码。文件仍保留在磁盘上，普通文件夹视图不受影响。
+在支持 VS Code 工作区的编辑器中打开 [LoliCode.code-workspace](LoliCode.code-workspace)，可以收起依赖、构建产物和日志。文件仍保留在磁盘上，普通文件夹视图不受影响。
 
 ## 先认清这些目录
 
 - [src/](src/README.md)：桌面界面。`app/` 管启动和应用外壳，`features/` 放业务页面，`components/` 放共用组件。
 - [src-tauri/](src-tauri/README.md)：桌面原生宿主。`commands/` 接界面调用，`services/` 实现业务，`proxy/` 管模型网关，`database/` 管存储。
-- [crates/](crates/README.md)：独立 Rust 库；`lolicode-agent/` 是内置 Agent 执行核心。
+- [crates/](crates/README.md)：独立 Rust 库；`lolicode-agent/` 提供共享数据、旧会话解码及宿主复用的能力，旧 Rust 执行器用于回归夹具。
 - [apps/](apps/README.md)：独立客户端，目前是 Android companion；桌面源码在 `src/` 和 `src-tauri/`。
-- [packages/](packages/README.md)：共享平台协议与适配器，以及各自维护的运行时、伴随服务。工作区成员以 `pnpm-workspace.yaml` 为准。
+- [packages/](packages/README.md)：Harness 运行时及 companion relay，各自管理依赖和锁文件。
 - `deploy/`：配套服务部署与运维，先读相应子目录 README。
 - [scripts/](scripts/README.md)：开发、构建、发布、数据维护脚本及脚本测试。
 - [docs/](docs/README.md)：功能说明、架构约定和用户手册；`docs/history/` 保存旧验收与交接材料。
 - `assets/`、`design/`：项目素材与设计资料；界面自身资源在 `src/assets/`。
-- `specs/`：专项集成规格与验收要求；当前运行时实现边界仍需核对对应 `packages/` 和服务入口。
 - `third-party/`：带来源与许可记录的第三方材料；上游更新通过集成脚本完成。
 - `.github/`、`flatpak/`：持续集成、社区配置和 Flatpak 打包资料。
 
@@ -37,10 +36,11 @@ src/main.tsx
   → lib/api/                   Tauri 调用与前端数据接口
   → src-tauri/src/commands/    命令入口
   → src-tauri/src/services/    业务服务
-  → proxy/、database/ 或 crates/lolicode-agent/
+  → harness_desktop.rs         Harness SDK 分派与产品能力接入
+  → Harness / proxy/ / database/ / Rust 宿主工具
 ```
 
-原生进程由 `src-tauri/src/main.rs` 进入 `lib.rs::run()`。默认内置 Agent 通过 `services/inprocess_agent.rs` 连接 `crates/lolicode-agent/src/native/`；`packages/` 的平台适配器与独立运行时有各自入口。
+原生进程由 `src-tauri/src/main.rs` 进入 `lib.rs::run()`。`services/inprocess_agent.rs` 管理宿主状态，`harness_desktop.rs` 分派 SDK 操作，`harness_runtime.rs` 管理随包提供的 Harness 进程。运行时准备与覆盖层在 `packages/lolicode-harness-runtime/`。旧 OpenCode、ZCode 引擎及平台实验已移除；来源、技能资源和旧会话只读兼容分别保留。
 
 ## 改什么，去哪里
 
@@ -49,7 +49,7 @@ src/main.tsx
 - 应用导航、侧栏与窗口：`src/app/` 和 `src/app/shell/`。
 - 设置、用量、发现、酒馆或 UE 页面：对应的 `src/features/<业务>/`。
 - CLI 探测、安装更新、卸载与终端启动：`src-tauri/src/commands/tool_management/`；桌面通用操作在 `commands/desktop.rs`。
-- 模型请求、协议适配与路由：`src-tauri/src/proxy/`；Agent 推理与工具执行：`crates/lolicode-agent/src/native/`。
+- 模型请求、协议适配与路由：`src-tauri/src/proxy/`；Harness 会话、事件和产品工具接入：`services/harness_*.rs`；复用的 Rust 工具和数据能力：`crates/lolicode-agent/src/native/`。
 - 文案翻译：`src/i18n/`；版本摘要：`src/whats-new/`；构建与发布：`scripts/build/`、`scripts/release/`。
 
 ## 后续维护规则

@@ -40,10 +40,11 @@ emit({name:entry['after'] for name,entry in manifest['targets'].items()})
                     'content': (release_credit.HERE / 'portal' / name).read_text(encoding='utf8'),
                     'baseline': baseline[target],
                 }
-        for name in ('LICENSE', 'README.md'):
+        # Preserve deployed paths and release baselines after the repository move.
+        for name, source in (('LICENSE', 'litellm-LICENSE'), ('README.md', 'litellm.md')):
             relative = 'third_party/litellm/' + name
             files[relative] = {
-                'content': (release_credit.REPO / relative).read_text(encoding='utf8'),
+                'content': (release_credit.REPO / 'third-party/notices' / source).read_text(encoding='utf8').replace('(litellm-LICENSE)', '(LICENSE)'),
                 'baseline': baseline.get(relative),
             }
         payload.update(files=files, tests=TESTS)

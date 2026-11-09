@@ -84,4 +84,4 @@ the existing conservative accounting rules.
 The shared-query, draft and budget/spend patterns were reviewed against the
 MIT community portions of BerriAI/LiteLLM at revision
 `73aaf9e3daec8bb174accdf56ecade90b34c27c8`. Attribution and the upstream license
-are in `third_party/litellm/`. The existing gateway stays in place.
+are in `third-party/notices/litellm.md` and `third-party/notices/litellm-LICENSE`. The existing gateway stays in place.

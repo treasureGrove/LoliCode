@@ -17,8 +17,9 @@ The skill-creator package and plugin manifest declare MIT. The repository's
 original Apache-2.0 LICENSE and complete NOTICE are retained as `LICENSE` and
 `UPSTREAM_NOTICE.md`; these do not replace any file-specific notices.
 
-LoliCode uses OpenCode's native skill discovery to load this content into its
-private agent runtime. It does not include ZCode's agent engine, UI Apps host,
+LoliCode verifies and bundles this content through prepare-agent-assets.mjs.
+The desktop extension store exposes the skills to its DeepSeek Harness host.
+It does not include ZCode's agent engine, UI Apps host,
 Browser/Computer Use services, or dynamic-workflow runtime. Document generation
 and rendering still require the dependencies documented by each skill, such as
 Python, Node.js, LibreOffice, and PDF utilities. Importing the instructions does

@@ -56,6 +56,7 @@ def main():
                              '.lolicode-bridge-service-owned', 'compose.yaml',
                              'images.lock.json', '.lolicode-relay-owned', 'data',
                              'bridge-policy.json', 'bridge.py', 'credit_meter.py', 'billing_meter.py', 'quota_snapshot.py',
+                             # Historical deployed path, retained by release baselines.
                              'CREDIT_ARCHITECTURE.md', 'third_party/litellm',
                              'channel_health.py', 'web_account.py', 'public_settings.py', 'admin_accounts.py',
                              'lolicode-relay-health.service', 'lolicode-relay-health.timer',

@@ -6,5 +6,6 @@
 - [TESTING_LOLICODE.md](TESTING_LOLICODE.md)：4.0.10 Windows 测试构建的试用与打包说明。
 - [UI_REBUILD_HANDOFF.md](UI_REBUILD_HANDOFF.md)：2026-10-14 的界面与动效重构交接书。
 - [session-manager.md](session-manager.md)：早期会话管理需求。
+- [lolicode-zcode-runtime.md](lolicode-zcode-runtime.md)：退役 ZCode 运行时的接入规格与历史验收边界。
 
 来源与许可证基线继续保留在根目录 [FORK_BASELINE.md](../../FORK_BASELINE.md)。

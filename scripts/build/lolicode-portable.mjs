@@ -27,6 +27,7 @@ const companionLicenses = [
     "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
   ],
 ];
+const retainedNotices = ["opencode-LICENSE", "litellm-LICENSE"];
 
 const root = path.resolve(process.argv[2] ?? "");
 const snapshot = JSON.parse(
@@ -65,6 +66,11 @@ cpSync(
   path.join(stage, "licenses/companion"),
   { recursive: true },
 );
+for (const name of retainedNotices)
+  copyFileSync(
+    path.join(work, "third-party/notices", name),
+    path.join(stage, "licenses", name),
+  );
 writeFileSync(path.join(stage, "portable.ini"), "# LoliCode portable mode\n");
 const notes = JSON.parse(
   readFileSync(path.join(work, `src/whats-new/${buildVersion}.json`)),
@@ -142,6 +148,14 @@ function files(dir, prefix = "") {
 }
 const packaged = files(extracted);
 assert.deepEqual(packaged, files(stage));
+for (const name of retainedNotices)
+  assert.equal(
+    packaged.find((file) => file.name === `licenses/${name}`)?.sha256,
+    createHash("sha256")
+      .update(readFileSync(path.join(work, "third-party/notices", name)))
+      .digest("hex"),
+    `Extracted portable ZIP must preserve the original notice: ${name}`,
+  );
 for (const [name, expected] of companionLicenses) {
   const source = path.join(
     work,

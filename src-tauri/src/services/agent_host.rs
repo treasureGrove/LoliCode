@@ -129,20 +129,6 @@ pub(crate) fn is_standalone_workspace(path: &Path) -> bool {
         .is_ok_and(|config| path == config.join("agent").join(STANDALONE_WORKSPACE))
 }
 
-#[cfg(any(test, feature = "test-hooks"))]
-pub(crate) fn workspace(path: &Path) -> AgentWorkspace {
-    AgentWorkspace {
-        remote: None,
-        standalone: false,
-        name: path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("项目")
-            .to_string(),
-        path: path.to_string_lossy().into_owned(),
-    }
-}
-
 #[cfg(test)]
 mod standalone_tests {
     use super::*;
@@ -243,20 +229,6 @@ pub(crate) async fn prepare_native_binding(
 ) -> Result<AgentGatewayBinding, String> {
     validate_accounts(state, accounts)?;
     let prepared = channel_center::prepare_inprocess_agent_binding(state)
-        .await
-        .map_err(|e| e.to_string())?;
-    validate_revision(state, prepared.catalog.revision, accounts)?;
-    Ok(prepared)
-}
-
-/// Compatibility preparation for the old engine only.
-#[cfg(any(test, feature = "test-hooks"))]
-pub(crate) async fn prepare_catalog_for_accounts(
-    state: &AppState,
-    accounts: &[(String, String)],
-) -> Result<channel_center::PreparedAgentCatalog, String> {
-    validate_accounts(state, accounts)?;
-    let prepared = channel_center::prepare_agent_catalog(state)
         .await
         .map_err(|e| e.to_string())?;
     validate_revision(state, prepared.catalog.revision, accounts)?;

@@ -3,7 +3,7 @@
 //! The small, exact model/effort facts below are extracted from ZCode's public
 //! modelRules, Apache-2.0, pinned at aac4755666d09fdcd70272fcf063c077a639015f:
 //! https://github.com/zai-org/ZCode/blob/aac4755666d09fdcd70272fcf063c077a639015f/config/provider/zcode-builtin.json
-//! Original license and notices are retained in third-party/zcode-runtime/upstream.
+//! Original license and notices are retained in third-party/zcode/.
 //! These facts describe the mapped upstream model, not proof that a relay accepts
 //! its parameters. No upstream program, executable option maps or network calls
 //! to public registries are used here.

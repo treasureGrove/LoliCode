@@ -198,7 +198,7 @@ Host 崩溃后可以恢复任务信息，不等于可以无条件继续工具副
 - Rust Core：增量编译并重启对应服务；业务页面无须重新打包安装。
 - UE 插件：按 UE 的 C++/模块规则编译，部分修改需要重启编辑器。
 
-当前可以使用 pnpm dev 启动 Tauri 开发版；独立 Rust crate 的监听可使用 pnpm dev --additional-watch-folders ../crates/lolicode-agent。方案确认后再统一新开发入口与进程监督。前一版实验添加的 dev:platform 指向尚未编写的脚本，现已移除这一失效命令；平台实验仍可通过 pnpm build:platform 和 pnpm test:platform 验证。
+当前可以使用 pnpm dev 启动 Tauri 开发版；独立 Rust crate 的监听可使用 pnpm dev --additional-watch-folders ../crates/lolicode-agent。方案确认后再统一新开发入口与进程监督。前一版实验添加的 dev:platform 指向尚未编写的脚本，现已移除这一失效命令；迁移到 Harness 后，未接入桌面的 OpenCode 平台实验包及其 build:platform / test:platform 命令已移除；原实现可从 Git 历史查阅。
 
 ## 8. 迁移顺序与放行条件
 

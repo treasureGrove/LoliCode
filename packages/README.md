@@ -1,19 +1,10 @@
-# 共享包与独立运行时
+# 运行时与伴随服务
 
-这里既有 pnpm 工作区包，也有单独构建或运行的集成。成员范围由根目录 [pnpm-workspace.yaml](../pnpm-workspace.yaml) 明确列出。返回[总架构入口](../ARCHITECTURE.md)。
+桌面使用 DeepSeek Harness。这里的两个集成分别维护依赖及锁文件，不加入根目录 pnpm 工作区。返回[总架构入口](../ARCHITECTURE.md)。
 
-## 平台工作区
-
-- `contracts/`（`@lolicode/platform-contracts`）：共享协议、校验和 SSE 数据。
-- `platform-client/`（`@lolicode/platform-client`）：平台客户端接口。
-- `platform-host/`（`@lolicode/platform-host`）：平台宿主与存储；入口在 `src/entry.ts`。
-- `adapters/opencode/`（`@lolicode/opencode-adapter`）：OpenCode 平台适配器。
-
-依赖从宿主和客户端指向协议包；宿主使用 OpenCode 适配器。各包从 `src/index.ts` 导出接口，编译输出写入各自 `dist/`。在仓库根目录用 `pnpm build:platform` 编译、`pnpm test:platform` 验证。
-
-## 独立集成
-
+- [lolicode-harness-runtime/](lolicode-harness-runtime/README.md)：固定官方 Harness npm 发行物、依赖锁和宿主覆盖层。根目录的 `pnpm prepare:harness-runtime --bundle` 准备随桌面分发的运行资源；SDK 测试见该目录 README。
 - [companion-relay/](companion-relay/README.md)：设备发现、配对和信令的 Node 服务，使用自己的包与启动命令。部署配置见 `deploy/companion/`。
-- [lolicode-zcode-runtime/](lolicode-zcode-runtime/README.md)：固定上游源码的运行时构建边界与宿主适配；来源在 `third-party/zcode-runtime/`，准备脚本在 `scripts/build/`。
 
-桌面默认使用 `crates/lolicode-agent/` 内的 Rust 核心。修改平台或独立运行时前，先确认实际使用它的入口和对应 README，避免把独立服务的构建当作桌面构建的一部分。
+未接入当前桌面的 OpenCode 平台实验（contracts、platform-client、platform-host、adapters/opencode）以及旧 ZCode 运行时桥接已经移除，原实现可从 Git 历史查阅。ZCode 来源的五个默认内容技能继续保存在 `third-party/zcode/`，由 `scripts/build/prepare-agent-assets.mjs` 校验和打包。
+
+清理前基线为 `7dae5521d76e0d00a503817d669437ee692fae9c`，可在该提交查阅退役实现和对应测试。`deploy/ai-rankings/` 的独立采集服务仍使用其自行准备的 OpenCode CLI，与桌面执行路径分开维护。

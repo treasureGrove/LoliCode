@@ -72,7 +72,7 @@ Agent 先澄清缺少的任务内容或时间，再调用原生 `propose_automat
 
 本轮参考交互和功能合同，没有启用整套上游程序，也没有增加默认发行依赖。
 
-- [ZCode，固定提交 aac4755](https://github.com/zai-org/ZCode/tree/aac4755666d09fdcd70272fcf063c077a639015f)：工具与模型折叠、后台标题、模型配置。少量精确模型/档位事实取自 [modelRules](https://github.com/zai-org/ZCode/blob/aac4755666d09fdcd70272fcf063c077a639015f/config/provider/zcode-builtin.json)，来源和 Apache-2.0 声明写在 `litellm_capabilities.rs`，既有许可证及 NOTICE 保留于 `third-party/zcode-runtime/upstream`。不是根据所有同名模型推导通用档位。
+- [ZCode，固定提交 aac4755](https://github.com/zai-org/ZCode/tree/aac4755666d09fdcd70272fcf063c077a639015f)：工具与模型折叠、后台标题、模型配置。少量精确模型/档位事实取自 [modelRules](https://github.com/zai-org/ZCode/blob/aac4755666d09fdcd70272fcf063c077a639015f/config/provider/zcode-builtin.json)，来源和 Apache-2.0 声明写在 `litellm_capabilities.rs`，既有许可证及 NOTICE 保留于 `third-party/zcode/`。不是根据所有同名模型推导通用档位。
 - [DeepSeek Harness，固定提交 5719020](https://github.com/deepseek-ai/deepseek-harness/tree/571902028a75c64c1d767f4ae5fd099485f0ddf0)：持续工具循环、完整工具批次和用户数据形式的上下文检查点。
 - [OpenCode，固定提交 3aa26f1](https://github.com/anomalyco/opencode/tree/3aa26f167660b46d61cbf44c52aa37c0a14bdc27)：工具详情折叠、自动整理与超限恢复、异步模型配置回执。
 - [LiteLLM 模型管理接口](https://docs.litellm.ai/docs/proxy/model_management)与[OpenAI Chat Completions 参数](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create)：目录能力和实际请求参数分别处理。

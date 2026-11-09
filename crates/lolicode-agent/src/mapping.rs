@@ -18,42 +18,6 @@ pub(crate) fn array(value: &Value) -> &[Value] {
     value.as_array().map(Vec::as_slice).unwrap_or(&[])
 }
 
-#[cfg(feature = "legacy-runtime")]
-pub(crate) fn session(value: &Value) -> Result<AgentSession, String> {
-    let id = string(value, "id");
-    let project_path = string(&value["location"], "directory");
-    if id.is_empty() || project_path.is_empty() {
-        return Err("引擎返回了无法识别的会话，请检查引擎版本".into());
-    }
-    let model = value.get("model").and_then(|model| {
-        let provider_id = string(model, "providerID");
-        let model_id = string(model, "id");
-        (!provider_id.is_empty() && !model_id.is_empty()).then_some(AgentModelRef {
-            provider_id,
-            model_id,
-        })
-    });
-    Ok(AgentSession {
-        id,
-        title: optional_string(value, "title").unwrap_or_else(|| "新会话".into()),
-        project_path,
-        mode: optional_string(value, "agent").unwrap_or_else(|| "build".into()),
-        permission_mode: crate::policy::identify(
-            value["agent"].as_str().unwrap_or("build"),
-            &value["permissions"],
-        ),
-        pinned: false,
-        archived: false,
-        model,
-        created_at: timestamp(&value["time"], "created"),
-        updated_at: timestamp(&value["time"], "updated"),
-        activity: None,
-        reasoning_effort: None,
-        context_limit: None,
-        coordination: None,
-    })
-}
-
 pub(crate) fn structured_error(value: &Value) -> Option<String> {
     value.as_str().map(str::to_owned).or_else(|| {
         optional_string(value, "message").or_else(|| optional_string(&value["data"], "message"))
@@ -128,9 +92,8 @@ pub(crate) fn message(value: &Value) -> Option<AgentMessage> {
                 image_parts.push(AgentPart::Text { text });
             }
         }
-        // LiveState indexes upstream text blocks by text-only ordinal. Include
-        // images only in completed snapshots, after the original blocks, so
-        // in-flight or failed-step text overlays retain their real ordinals.
+        // Keep the original text blocks in order. Append image markdown only
+        // for completed historical messages; partial records stay partial.
         parts.extend(image_parts);
     } else if let Some(text) = optional_string(value, "text") {
         parts.push(AgentPart::Text { text });
@@ -171,88 +134,81 @@ pub(crate) fn message(value: &Value) -> Option<AgentMessage> {
     })
 }
 
-#[cfg(feature = "legacy-runtime")]
-pub(crate) fn permission(value: &Value, messages: &[AgentMessage]) -> AgentPermission {
-    let tool_id = string(&value["source"], "id");
-    let source_message = string(&value["source"], "messageID");
-    let tool = messages
-        .iter()
-        .filter(|message| source_message.is_empty() || source_message == message.id)
-        .flat_map(|message| message.parts.iter())
-        .find_map(|part| match part {
-            AgentPart::Tool {
-                id, name, input, ..
-            } if !tool_id.is_empty() && id == &tool_id => Some((name.clone(), input.clone())),
-            _ => None,
-        });
-    AgentPermission {
-        id: string(value, "id"),
-        session_id: string(value, "sessionID"),
-        action: string(value, "action"),
-        resources: array(&value["resources"])
-            .iter()
-            .filter_map(Value::as_str)
-            .map(str::to_owned)
-            .collect(),
-        description: optional_string(value, "message"),
-        tool_name: tool.as_ref().map(|(name, _)| name.clone()),
-        tool_input: tool.map(|(_, input)| input),
-        approval_mode: None,
-        edit_preview: None,
-    }
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
 
-#[cfg(feature = "legacy-runtime")]
-pub(crate) fn question(value: &Value) -> AgentQuestion {
-    AgentQuestion {
-        id: string(value, "id"),
-        session_id: string(value, "sessionID"),
-        title: string(value, "title"),
-        fields: array(&value["fields"]).iter().map(question_field).collect(),
-        plan_review: None,
+    #[test]
+    fn completed_legacy_history_keeps_text_and_deduplicates_safe_image_outputs() {
+        let message = message(&json!({
+            "id":"image-reply", "type":"assistant", "time":{"created":1000,"completed":1002},
+            "content":[
+                {"type":"output_text","text":"The generated previews:"},
+                {"type":"image_url","image_url":{"url":"https://example.com/a.png"},"alt":"A"},
+                {"type":"image","source":{"type":"url","url":"generated/b (2).png"},"alt":"B"},
+                {"type":"image","url":"javascript:alert(1)"},
+                {"type":"reasoning","text":"kept reasoning"}
+            ],
+            "images":[{"url":"https://example.com/a.png"},{"path":"generated/c.svg"}]
+        }))
+        .unwrap();
+        assert_eq!(message.role, "assistant");
+        assert_eq!(message.completed_at, Some(1002));
+        assert_eq!(
+            message.parts,
+            vec![
+                AgentPart::Text {
+                    text: "The generated previews:".into()
+                },
+                AgentPart::Reasoning {
+                    text: "kept reasoning".into()
+                },
+                AgentPart::Text {
+                    text: "\n\n![A](<https://example.com/a.png>)\n\n".into()
+                },
+                AgentPart::Text {
+                    text: "\n\n![B](<generated/b (2).png>)\n\n".into()
+                },
+                AgentPart::Text {
+                    text: "\n\n![图片](<generated/c.svg>)\n\n".into()
+                },
+            ]
+        );
     }
-}
 
-#[cfg(feature = "legacy-runtime")]
-fn question_field(value: &Value) -> AgentQuestionField {
-    AgentQuestionField {
-        key: string(value, "key"),
-        field_type: string(value, "type"),
-        title: optional_string(value, "title"),
-        description: optional_string(value, "description"),
-        required: value["required"].as_bool().unwrap_or(false),
-        options: array(&value["options"])
-            .iter()
-            .map(|option| AgentQuestionOption {
-                value: string(option, "value"),
-                label: string(option, "label"),
-                description: optional_string(option, "description"),
-            })
-            .collect(),
-        custom: value["custom"].as_bool().unwrap_or(false),
-        default_value: value.get("default").cloned(),
-        hidden: value["hidden"].as_bool().unwrap_or(false),
-        when: array(&value["when"]).to_vec(),
-        format: optional_string(value, "format"),
-        placeholder: optional_string(value, "placeholder"),
-        min_length: value["minLength"].as_u64(),
-        max_length: value["maxLength"].as_u64(),
-        pattern: optional_string(value, "pattern"),
-        min_items: value["minItems"].as_u64(),
-        max_items: value["maxItems"].as_u64(),
-        minimum: value["minimum"].as_f64(),
-        maximum: value["maximum"].as_f64(),
-        url: optional_string(value, "url"),
-    }
-}
-
-#[cfg(feature = "legacy-runtime")]
-pub(crate) fn diff(value: &Value) -> AgentDiff {
-    AgentDiff {
-        path: string(value, "file"),
-        patch: string(value, "patch"),
-        additions: timestamp(value, "additions"),
-        deletions: timestamp(value, "deletions"),
-        status: string(value, "status"),
+    #[test]
+    fn incomplete_legacy_records_do_not_invent_final_images_or_visible_idle_messages() {
+        assert!(message(&json!({"id":"idle", "type":"idle"})).is_none());
+        assert!(message(&json!({"type":"user", "text":"missing identity"})).is_none());
+        let message = message(&json!({
+            "id":"partial", "type":"assistant", "time":{"created":1000},
+            "content":[
+                {"type":"text","text":"partial answer"},
+                {"type":"image","path":"generated/unfinished.png"},
+                {"type":"tool","id":"read-1","name":"read","state":{
+                    "status":"completed", "input":{"path":"README.md"},
+                    "content":[{"type":"text","text":"stored output"}]
+                }}
+            ]
+        }))
+        .unwrap();
+        assert_eq!(message.completed_at, None);
+        assert_eq!(
+            message.parts,
+            vec![
+                AgentPart::Text {
+                    text: "partial answer".into()
+                },
+                AgentPart::Tool {
+                    id: "read-1".into(),
+                    name: "read".into(),
+                    state: "completed".into(),
+                    input: json!({"path":"README.md"}),
+                    output: Some("stored output".into()),
+                    error: None,
+                },
+            ]
+        );
     }
 }

@@ -46,6 +46,8 @@
     "resources": {
       "../LICENSE": "LICENSE",
       "../THIRD_PARTY_NOTICES.md": "THIRD_PARTY_NOTICES.md",
+      "../third-party/notices/opencode-LICENSE": "licenses/opencode-LICENSE",
+      "../third-party/notices/litellm-LICENSE": "licenses/litellm-LICENSE",
       "resources/agent/extensions/": "agent/extensions/",
       "resources/agent/harness-runtime/": "agent/harness-runtime/",
       "resources/companion-licenses/": "licenses/companion/"

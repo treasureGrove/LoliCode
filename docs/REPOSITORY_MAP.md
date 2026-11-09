@@ -6,7 +6,7 @@
 
 - 桌面界面：`src/main.tsx` → `src/app/bootstrap.tsx` → `src/app/App.tsx`；业务页面在 `src/features/`，共享组件在 `src/components/`，API 封装在 `src/lib/api/`，翻译在 `src/i18n/`。详见[src/README.md](../src/README.md)。
 - 桌面原生层：`src-tauri/src/lib.rs`，Tauri 命令在 `src-tauri/src/commands/`，服务实现主要在 `src-tauri/src/services/`。
-- 内置 Agent：`crates/lolicode-agent/src/`；桌面端接入也涉及 `src-tauri/src/services/inprocess_agent.rs`。
+- Agent：`packages/lolicode-harness-runtime/` 固定 DeepSeek Harness 发行物；桌面接入在 `src-tauri/src/services/inprocess_agent.rs` 和 `harness_*.rs`。`crates/lolicode-agent/src/` 保留共享数据、宿主复用能力及旧会话解码。
 - 移动端：[apps/android/README.md](../apps/android/README.md)，独立的 Kotlin/Compose 项目。
 - 测试：前端主要在 `tests/`，Rust 测试在对应 crate 内，脚本测试在 `scripts/tests/`。
 
@@ -14,16 +14,17 @@
 
 - `src/`：React/TypeScript 桌面界面、资源和本地化。
 - `src-tauri/`：Tauri 桌面宿主、Rust 命令、服务、代理和打包配置。
-- `crates/`：独立 Rust crate，目前包含内置 Agent。
-- `packages/`：共享协议、平台客户端和宿主、适配器，以及独立运行时和配套服务。pnpm 工作区成员以 [pnpm-workspace.yaml](../pnpm-workspace.yaml) 为准；并非 `packages/` 下每个目录都是成员。
+- `crates/`：独立 Rust crate，提供共享数据、工具能力及旧会话兼容。
+- `packages/`：Harness 运行时和 companion relay，分别管理依赖及锁文件；根目录 [pnpm-workspace.yaml](../pnpm-workspace.yaml) 不包含子包。
 - `apps/`：独立客户端，目前包括 Android companion。
 - `deploy/`：配套服务的部署、运维和验证代码；部署前阅读各子目录说明。
 - `scripts/`：按 `dev/`、`build/`、`release/`、`data/` 分组的工程脚本，回归测试在 `tests/`；见[脚本入口](../scripts/README.md)。
 - `docs/`：架构、指南、验收、发布记录及多语言用户手册。部分手册保留历史参考语境，见[文档索引](README.md)。
 - `assets/`、`design/`：项目素材和设计资料；界面运行时使用的素材也有一部分在 `src/assets/`。
-- `specs/`：专项集成规格与验收要求，当前包含 ZCode 运行时的集成约束。
-- `third-party/`：保留来源的第三方材料。尤其 `zcode-runtime/upstream/` 是固定版本的上游源码，更新和校验方式见[其说明](../third-party/zcode-runtime/README.md)；应用集成边界见 [packages/lolicode-zcode-runtime/README.md](../packages/lolicode-zcode-runtime/README.md)。不要把它当成可随意删除的构建缓存，也不要直接修改上游源码。
+- `third-party/`：保留来源的第三方材料。`zcode/` 是仍在分发的五个默认内容技能、原始清单与许可；`deepseek-superagent/` 和 `notices/` 保留来源及许可记录。旧 ZCode vendor 源码和 OpenCode 平台实验已移除，可从 Git 历史查阅；旧集成规格归档在 [docs/history/lolicode-zcode-runtime.md](history/lolicode-zcode-runtime.md)。
 - `.github/`、`flatpak/`：CI、社区配置和 Flatpak 相关文件。
+
+LiteLLM 没有作为运行时引入；Credit 实现的参考记录与 MIT 许可统一保存在 `third-party/notices/litellm.md`、`litellm-LICENSE`，原 `third_party/` 目录已合并。
 
 根目录的 `package.json` 是桌面前端开发命令入口；`src-tauri/Cargo.toml` 和 `crates/lolicode-agent/Cargo.toml` 分别管理桌面宿主与 Agent 的 Rust 构建。发布步骤以[发布指南](guides/lolicode-release.md)为准。
 

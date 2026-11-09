@@ -11,9 +11,9 @@
 
 LoliCode 4.0.15 的新会话使用本项目的 Rust 应用内核心，默认发行版不再分发 Node、ZCode 或 OpenCode 执行引擎。桌面界面、渠道桥接和本体执行代码保留本项目及上游 CC Switch 的许可与版权信息。
 
-历史 4.0.14 版本采用 [ZCode](https://github.com/zai-org/ZCode) 3.15.1 执行器，固定源码提交为 `aac4755666d09fdcd70272fcf063c077a639015f`，许可 Apache-2.0。原始 Git 文件及逐文件摘要仍保存在源码的 `third-party/zcode-runtime/`；旧桥接保留在 `packages/lolicode-zcode-runtime/`，用于历史参考和专门测试。其 Node 与 npm 依赖不属于当前默认安装包。
+历史 4.0.14 版本采用 [ZCode](https://github.com/zai-org/ZCode) 3.15.1 执行器，固定源码提交为 `aac4755666d09fdcd70272fcf063c077a639015f`，许可 Apache-2.0。迁移到 Harness 后，旧运行时 vendor 源码、构建桥接和专项测试已从当前工作树移除，可从 Git 历史查阅。模型元数据和外部配置适配仍记录固定来源；原始仓库许可与 NOTICE 保留在 `third-party/zcode/`，技能及逐文件声明见下文。
 
-历史 OpenCode 二进制固定为 `@opencode/cli` 2.0.12，官方源码提交 `2670273ff17da96f85c5826ced57aa1b368754fa`，仓库为 https://github.com/anomalyco/opencode，MIT 许可见 `third-party/opencode/LICENSE`。其锁定开发依赖和手动准备脚本仍保留；本版本只读读取旧会话，不启动或分发该引擎。
+历史 OpenCode 二进制固定为 `@opencode/cli` 2.0.12，官方源码提交 `2670273ff17da96f85c5826ced57aa1b368754fa`，仓库为 https://github.com/anomalyco/opencode。旧二进制依赖、启动器、平台实验、构建脚本和运行时专项测试已移除；旧会话只读解码仍保留，MIT 许可见 `third-party/notices/opencode-LICENSE`。本版本不启动或分发 OpenCode 引擎。
 
 默认技能来自 [ZCode](https://github.com/zai-org/ZCode) 源码提交 `aac4755666d09fdcd70272fcf063c077a639015f`：skill-creator、docx、pdf、pptx、xlsx，按该提交的官方 defaultEnabled 清单默认启用。保留原始技能、脚本、引用资料和许可文件，并记录每个文件的 SHA-256；见 `third-party/zcode/manifest.json` 与 `third-party/zcode/NOTICE.md`。文档技能原始 frontmatter 与 LICENSE.txt 的不同许可标注原文保留并在 NOTICE 中解释。
 
@@ -37,26 +37,6 @@ The Credit quota refactor adapts the shared current-user query, budget draft, an
 cache-invalidation patterns from the MIT community portions of BerriAI/LiteLLM,
 reviewed at commit `73aaf9e3daec8bb174accdf56ecade90b34c27c8`. It does not distribute
 the LiteLLM runtime or enterprise code. Source paths and local adaptations are
-recorded in `third_party/litellm/README.md`. The applicable upstream notice is:
-
-MIT License
-
-Copyright (c) 2023 Berri AI
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+recorded in `third-party/notices/litellm.md`. The original MIT license is
+retained in `third-party/notices/litellm-LICENSE` and bundled under
+`licenses/litellm-LICENSE`.

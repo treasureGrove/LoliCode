@@ -17,7 +17,7 @@ doctest = false
 
 [features]
 default = []
-test-hooks = ["tauri/test", "lolicode-agent/legacy-runtime"]
+test-hooks = ["tauri/test"]
 
 [build-dependencies]
 sha2 = "0.10"
@@ -149,7 +149,7 @@ strip = "symbols"
 opt-level = 3
 
 [dev-dependencies]
-lolicode-agent = { path = "../crates/lolicode-agent", default-features = false, features = ["legacy-runtime", "legacy-native-tests"] }
+lolicode-agent = { path = "../crates/lolicode-agent", default-features = false, features = ["legacy-native-tests"] }
 serial_test = "3"
 tempfile = "3"
 

@@ -1,4 +1,4 @@
-//! Stable renderer IPC for the in-process Rust agent and read-only history.
+//! Stable renderer IPC for DeepSeek Harness and read-only legacy history.
 use crate::{
     commands::{CodexOAuthState, CopilotAuthState, XaiOAuthState},
     services::{

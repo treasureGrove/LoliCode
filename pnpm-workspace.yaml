@@ -1,8 +1,5 @@
-packages:
-  - packages/contracts
-  - packages/platform-client
-  - packages/platform-host
-  - packages/adapters/opencode
+# Runtime and companion packages manage their own dependency locks.
+packages: []
 
 onlyBuiltDependencies:
   - '@tailwindcss/oxide'
@@ -10,8 +7,3 @@ onlyBuiltDependencies:
 
 ignoredBuiltDependencies:
   - msw
-
-allowBuilds:
-  '@opencode/cli': set this to true or false
-  esbuild: set this to true or false
-  msw: set this to true or false

@@ -17,9 +17,9 @@
 
 - WorkBuddy 模型配置：https://cloud.tencent.com/document/product/1831/134445 （官方文档，核验 2026-10-17）。字段兼容性以已安装版本实际解析为准；本模块通过脱敏 fixture 验证文件读写与保留语义，未向个人 live 配置写入。
 - DSH 官方：https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/user/guide/providers.md 以及 `packages/llm/llm-pi-ai/{README.md,src/config.ts}`。MIT。
-- ZCode 固定上游：本仓 `third-party/zcode-runtime/upstream/apps/zcode-cli/packages/bootstrap/src/app/legacy-cli-model-config.ts` 与已有第三方声明。
+- ZCode 固定上游：[legacy-cli-model-config.ts](https://github.com/zai-org/ZCode/blob/aac4755666d09fdcd70272fcf063c077a639015f/apps/zcode-cli/packages/bootstrap/src/app/legacy-cli-model-config.ts)，固定提交 `aac4755666d09fdcd70272fcf063c077a639015f`。旧运行时源码已从当前工作树移除，配置适配及本地回归测试保留。
 - MiMo Code 官方：https://github.com/XiaomiMiMo/MiMo-Code （MIT）；配置定义 `packages/opencode/src/config/{config.ts,paths.ts}` 以及内置 mimocode-docs 的 reference/config.md。上游路径会随版本调整。
 
 验收命令：`cargo test --manifest-path src-tauri/Cargo.toml --lib external_agent_config`。全部测试使用临时目录与合成 token，不读取或改变真实凭据。DSH 写后对照整棵 YAML 数据树，确认只改变自有 provider，保留 `!!js` 标签与其它值；包含合法冒号前缀 provider 名的回归用例。Windows 逐段拒绝 reparse point，使用实际 `mklink /J` 隔离 fixture 验证不能写入联接目标。
 
-可选的真实 ZCode reader 验收：已有开发用依赖工作区时运行 `node scripts/tests/zcode-personal-config-interop.mjs`；缺少时先运行 `pnpm prepare:zcode-runtime`，这仅是开发验收依赖，不会把 ZCode runtime 加回主 Agent。脚本逐文件核对 reader 所依赖四个包的源码与本仓固定上游 `aac4755666d09fdcd70272fcf063c077a639015f` 一致，把 Rust 实际生成的脱敏 fixture 经 stdin 交给官方 `decodeProviderConfigFile`、`ProviderConfigResolver` 和 `ProviderRegistry`，并检验原始及冲突回避提供商的默认模型可执行、图像／上下文能力及 `reasoning_effort`／`max_tokens` 的实际 Option Maps 输出。临时打包文件完成后清除，不依赖 `release/` 目录或读取用户配置。
+旧的 `zcode-personal-config-interop.mjs` 依赖完整退役 ZCode 构建工作区，已随旧引擎移除。此前的 reader 验收记录属于历史证据；当前配置适配使用上述 Rust 回归命令验证，不代表已对新版 ZCode 做真实 reader 验收。

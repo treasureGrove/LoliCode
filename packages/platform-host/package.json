@@ -1,5 +1,0 @@
-{
-  "name": "@lolicode/platform-host", "version": "0.1.0", "private": true, "type": "module",
-  "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } },
-  "dependencies": { "@lolicode/platform-contracts": "workspace:*", "@lolicode/opencode-adapter": "workspace:*" }
-}
