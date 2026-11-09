@@ -112,6 +112,7 @@ jobs:
       - name: Validate frontend and build-check contracts
         run: |
           node scripts/tests/verify-native-build.mjs inputs
+          pnpm prepare:harness-runtime
           pnpm typecheck
           node --test scripts/tests/native-build-check.test.mjs scripts/tests/prepare-agent-assets.test.mjs
 

@@ -12,6 +12,7 @@ const NODE_VERSION: &str = "24.19.0";
 pub(super) struct HarnessPaths {
     pub(super) node: PathBuf,
     pub(super) package: PathBuf,
+    pub(super) native_reader: PathBuf,
     pub(super) version: String,
 }
 
@@ -96,11 +97,13 @@ impl HarnessPaths {
             || !package.join("host-operations.mjs").is_file()
             || !package.join("host-mcp.mjs").is_file()
             || !package.join("host-session-markdown.mjs").is_file()
+            || !package.join("host-session-native.mjs").is_file()
         {
             return Err("内置 Harness 文件不完整，请重新安装完整的 LoliCode 安装包".into());
         }
         Ok(Self {
             node,
+            native_reader: package.join("host-session-native.mjs"),
             package,
             version: manifest.harness_version,
         })

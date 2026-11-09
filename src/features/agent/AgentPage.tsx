@@ -131,6 +131,7 @@ import type {
   AgentWorkspace,
 } from "@/types/agent";
 import { AgentTranscriptDeck } from "./AgentTranscript";
+import { AgentNativeSessionPreview } from "./AgentNativeSessionPreview";
 import { AgentMessageQueue } from "./AgentMessageQueue";
 import { AgentRunError, lastAgentUserTurn } from "./AgentRunError";
 import { AgentChanges } from "./AgentChanges";
@@ -618,9 +619,13 @@ const LoliCodeRepository = "https://github.com/treasureGrove/LoliCode";
 function AgentHelpMenu({
   onOpenAbout,
   onCheckUpdate,
+  onNativePreview,
+  nativePreviewAvailable,
 }: {
   onOpenAbout?: () => void;
   onCheckUpdate?: () => void;
+  onNativePreview?: () => void;
+  nativePreviewAvailable?: boolean;
 }) {
   const openExternal = (url: string) => {
     void settingsApi.openExternal(url).catch((error) => {
@@ -655,6 +660,12 @@ function AgentHelpMenu({
               <BuildChannelBadge developmentOnly compact showRefresh={false} />
             </DropdownMenuLabel>
             <DevelopmentFrontendRefreshMenuItem />
+            <DropdownMenuItem
+              onSelect={onNativePreview}
+              disabled={!nativePreviewAvailable}
+            >
+              <ScrollText aria-hidden="true" /> 原生会话预览
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
           </>
         )}
@@ -830,6 +841,7 @@ export function AgentPage({
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [nativePreviewOpen, setNativePreviewOpen] = useState(false);
   const identity = `${workspace?.path || ""}\0${sessionId || ""}`;
   const selection = useRef({ identity: "", revision: 0 });
   if (selection.current.identity !== identity)
@@ -3980,9 +3992,7 @@ export function AgentPage({
           setSessionId(
             sessions.find(
               (item) =>
-                item.id !== id &&
-                !item.archived &&
-                isWorkspaceTask(item),
+                item.id !== id && !item.archived && isWorkspaceTask(item),
             )?.id || null,
           );
       } else if (result) confirmSession(result, fields);
@@ -5035,6 +5045,8 @@ export function AgentPage({
             <AgentHelpMenu
               onOpenAbout={onOpenAbout}
               onCheckUpdate={onCheckUpdate}
+              nativePreviewAvailable={Boolean(sessionId?.startsWith("lc:"))}
+              onNativePreview={() => setNativePreviewOpen(true)}
             />
             {canOpenBrowser && !browserDeck && (
               <button
@@ -6272,6 +6284,14 @@ export function AgentPage({
                   : undefined
               }
             />
+            {IS_DEVELOPMENT_BUILD && (
+              <AgentNativeSessionPreview
+                open={isActive && nativePreviewOpen}
+                onOpenChange={setNativePreviewOpen}
+                sessionId={sessionId?.startsWith("lc:") ? sessionId : null}
+                title={selectedSession?.title}
+              />
+            )}
             <AgentToolPanel
               open={isActive && activeTool === "memory"}
               onClose={() => setActiveTool(null)}

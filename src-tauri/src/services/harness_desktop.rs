@@ -11,8 +11,8 @@ use super::{
     harness_preview::HarnessPreview,
     harness_questions::{answer_for_question, question_from_params},
     harness_runtime::{
-        read_cold_session_markdown, HarnessClient, HarnessEvent, HarnessHostRequest,
-        HarnessRuntime, MARKDOWN_MISSING,
+        native_read_request, read_cold_session_markdown, read_cold_session_native, HarnessClient,
+        HarnessEvent, HarnessHostRequest, HarnessRuntime, MARKDOWN_MISSING, NATIVE_MISSING,
     },
     harness_secretary::{HarnessSecretary, SecretaryCommand, SecretarySidebar, WorkerAction},
     harness_sessions::activity,
@@ -125,6 +125,11 @@ enum Control {
         child: Option<String>,
         reply: oneshot::Sender<Result<Option<String>, String>>,
     },
+    ReadNative {
+        child: Option<String>,
+        request: Value,
+        reply: oneshot::Sender<Result<Option<Value>, String>>,
+    },
     WorkerEnqueue {
         session: String,
         args: Value,
@@ -234,6 +239,32 @@ pub(super) fn sync_snapshot(profile: &Path, id: &str) -> Result<Option<AgentSnap
     Ok(Some(load_record(&file, id)?.snapshot))
 }
 
+struct VerifiedSessionRead {
+    owner_root: PathBuf,
+    sdk_id: String,
+    child: Option<String>,
+    controls: Option<mpsc::Sender<Control>>,
+}
+
+async fn verified_sessions_directory(
+    root: PathBuf,
+    missing: &'static str,
+) -> Result<PathBuf, String> {
+    tokio::task::spawn_blocking(move || {
+        existing_markdown_directory(&root.join("home/sessions"))?.ok_or_else(|| missing.to_owned())
+    })
+    .await
+    .map_err(|_| "无法读取 Harness 日志目录")?
+}
+
+fn native_context_error(error: String) -> String {
+    match error.as_str() {
+        MARKDOWN_MISSING => NATIVE_MISSING.into(),
+        LEGACY_MARKDOWN => "旧引擎迁移会话没有完整的原生 Harness 历史".into(),
+        _ => error,
+    }
+}
+
 impl HarnessDesktop {
     pub(super) async fn busy(&self) -> bool {
         !self.0.lock().await.flights.is_empty()
@@ -276,12 +307,12 @@ impl HarnessDesktop {
         Ok(Some(snapshot))
     }
 
-    pub(crate) async fn read_session_markdown(
+    async fn verified_read_context(
         &self,
         app: &AppHandle,
         carrier: &InprocessAgentState,
         id: &str,
-    ) -> Result<String, String> {
+    ) -> Result<VerifiedSessionRead, String> {
         let profile = config::get_app_config_dir();
         let selected_root = private_root(&profile, id).ok_or("无效的 Harness 会话编号")?;
         let id_for_paths = id.to_owned();
@@ -313,26 +344,17 @@ impl HarnessDesktop {
             .flights
             .get(&owner)
             .map(|flight| (flight.record.clone(), flight.controls.clone()));
-        let sdk_id = id.strip_prefix("lc:").ok_or("无效的 Harness 会话编号")?;
-        if let Some((record, controls)) = flight {
+        let sdk_id = id
+            .strip_prefix("lc:")
+            .ok_or("无效的 Harness 会话编号")?
+            .to_owned();
+        let child = (owner != id).then(|| sdk_id.clone());
+        let controls = if let Some((record, controls)) = flight {
             let project = markdown_session(&*record.lock().await, &owner, id)?
                 .project_path
                 .clone();
             crate::commands::agent_dispatch::check_project(app, &project)?;
-            let child = (owner != id).then(|| sdk_id.to_owned());
-            let response = tokio::time::timeout(
-                Duration::from_secs(55),
-                forward_live_control(&controls, |reply| Control::ReadMarkdown { child, reply }),
-            )
-            .await
-            .map_err(|_| "读取完整会话日志超时，请重试")?;
-            match response {
-                Some(Ok(Some(markdown))) => return Ok(markdown),
-                Some(Err(error)) => return Err(error),
-                // The runtime can exit while the read is in flight. A nonresident
-                // child or finished root can still have a committed stored log.
-                Some(Ok(None)) | None => {}
-            }
+            Some(controls)
         } else {
             let id = id.to_owned();
             let project = tokio::task::spawn_blocking(move || {
@@ -345,14 +367,84 @@ impl HarnessDesktop {
             .await
             .map_err(|_| "无法读取 Harness 会话")??;
             crate::commands::agent_dispatch::check_project(app, &project)?;
-        }
-        let sessions = tokio::task::spawn_blocking(move || {
-            existing_markdown_directory(&owner_root.join("home/sessions"))?
-                .ok_or_else(|| MARKDOWN_MISSING.to_owned())
+            None
+        };
+        Ok(VerifiedSessionRead {
+            owner_root,
+            sdk_id,
+            child,
+            controls,
         })
+    }
+
+    pub(crate) async fn read_session_markdown(
+        &self,
+        app: &AppHandle,
+        carrier: &InprocessAgentState,
+        id: &str,
+    ) -> Result<String, String> {
+        let context = self.verified_read_context(app, carrier, id).await?;
+        if let Some(controls) = &context.controls {
+            let child = context.child.clone();
+            let response = tokio::time::timeout(
+                Duration::from_secs(55),
+                forward_live_control(controls, |reply| Control::ReadMarkdown { child, reply }),
+            )
+            .await
+            .map_err(|_| "读取完整会话日志超时，请重试")?;
+            match response {
+                Some(Ok(Some(markdown))) => return Ok(markdown),
+                Some(Err(error)) => return Err(error),
+                // The runtime can exit while the read is in flight. A nonresident
+                // child or finished root can still have a committed stored log.
+                Some(Ok(None)) | None => {}
+            }
+        }
+        let sessions = verified_sessions_directory(context.owner_root, MARKDOWN_MISSING).await?;
+        read_cold_session_markdown(&HarnessPaths::resolve(app)?, &sessions, &context.sdk_id).await
+    }
+
+    pub(crate) async fn read_session_native(
+        &self,
+        app: &AppHandle,
+        carrier: &InprocessAgentState,
+        id: &str,
+        before_seq: Option<u64>,
+        through_seq: Option<u64>,
+        max_messages: Option<u32>,
+    ) -> Result<Value, String> {
+        let request = native_read_request(before_seq, through_seq, max_messages)?;
+        let context = self
+            .verified_read_context(app, carrier, id)
+            .await
+            .map_err(native_context_error)?;
+        if let Some(controls) = &context.controls {
+            let child = context.child.clone();
+            let live_request = request.clone();
+            let response = tokio::time::timeout(
+                Duration::from_secs(55),
+                forward_live_control(controls, |reply| Control::ReadNative {
+                    child,
+                    request: live_request,
+                    reply,
+                }),
+            )
+            .await
+            .map_err(|_| "读取原生会话超时，请重试")?;
+            match response {
+                Some(Ok(Some(value))) => return Ok(value),
+                Some(Err(error)) => return Err(error),
+                Some(Ok(None)) | None => {}
+            }
+        }
+        let sessions = verified_sessions_directory(context.owner_root, NATIVE_MISSING).await?;
+        read_cold_session_native(
+            &HarnessPaths::resolve(app)?,
+            &sessions,
+            &context.sdk_id,
+            &request,
+        )
         .await
-        .map_err(|_| "无法读取 Harness 日志目录")??;
-        read_cold_session_markdown(&HarnessPaths::resolve(app)?, &sessions, sdk_id).await
     }
 
     pub(super) async fn session_list_activity(
@@ -2637,6 +2729,24 @@ fn reply_live_markdown(
     });
 }
 
+fn reply_live_native(
+    client: &HarnessClient,
+    sdk_id: &str,
+    child: Option<String>,
+    request: Value,
+    reply: oneshot::Sender<Result<Option<Value>, String>>,
+) {
+    // Like Markdown reads, native history must never stall approval/event draining.
+    let client = client.clone();
+    let sdk_id = sdk_id.to_owned();
+    tokio::spawn(async move {
+        let result = client
+            .read_session_native(&sdk_id, child.as_deref(), &request)
+            .await;
+        let _ = reply.send(result);
+    });
+}
+
 async fn send_secretary_control(
     controls: &mpsc::Sender<Control>,
     args: &Value,
@@ -3095,6 +3205,13 @@ async fn run_turn(mut turn: Turn<'_>) -> Result<ReceiptStatus, String> {
                 Control::ReadMarkdown { child, reply } => {
                     reply_live_markdown(&client, sdk_id, child, reply);
                 }
+                Control::ReadNative {
+                    child,
+                    request,
+                    reply,
+                } => {
+                    reply_live_native(&client, sdk_id, child, request, reply);
+                }
                 Control::WorkerEnqueue { reply, .. } => {
                     let _ = reply.send(Err("子任务正在启动，请稍后再加入队列".into()));
                 }
@@ -3259,6 +3376,9 @@ async fn run_compaction(
                     Some(Control::Shutdown) | None => return Ok(ReceiptStatus::Cancelled),
                     Some(Control::ReadMarkdown { child, reply }) => {
                         reply_live_markdown(client, sdk_id, child, reply);
+                    }
+                    Some(Control::ReadNative { child, request, reply }) => {
+                        reply_live_native(client, sdk_id, child, request, reply);
                     }
                     Some(Control::StopWorker { reply, .. } | Control::Approval { reply, .. }
                         | Control::Enqueue { reply, .. } | Control::WorkerEnqueue { reply, .. }
@@ -3696,6 +3816,9 @@ async fn observe_turn(
                 }
                 Some(Control::ReadMarkdown { child, reply }) => {
                     reply_live_markdown(client, sdk_id, child, reply);
+                }
+                Some(Control::ReadNative { child, request, reply }) => {
+                    reply_live_native(client, sdk_id, child, request, reply);
                 }
                 Some(Control::ModeCommand { args, reply }) => {
                     let result = accept_mode_command(turn, client, sdk_id, args).await.map(|accepted| {

@@ -9,6 +9,7 @@ import { installSecretaryReport, reportToolName } from "./host-secretary-report.
 import {
   formatBoundedSessionMarkdown, logCold, logMissing, materializedSessionPath, sessionMarkdownError,
 } from "./host-session-markdown.mjs";
+import { nativePagination, nativeSessionError, readNativeSession } from "./host-session-native.mjs";
 
 export { Config };
 export const name = "lolicode-host-operations";
@@ -140,6 +141,9 @@ class LoliCodeSdkServer extends HarnessSdkJsonRpcServer {
   }
 
   async handleRequest(method, params) {
+    if (method === "lolicode/session/read-native") {
+      return this.#readNativeSession(params);
+    }
     if (method === "lolicode/session/read-markdown") {
       return this.#readSessionMarkdown(params);
     }
@@ -315,6 +319,30 @@ class LoliCodeSdkServer extends HarnessSdkJsonRpcServer {
       return formatBoundedSessionMarkdown(events, sourcePath);
     } catch (error) {
       throw new Error(sessionMarkdownError(error));
+    }
+  }
+
+  async #readNativeSession(params) {
+    if (!params || Object.keys(params).some((key) =>
+      !["sessionId", "childSessionId", "beforeSeq", "throughSeq", "maxMessages"].includes(key))) {
+      throw new Error("Invalid native session parameters");
+    }
+    const { sessionId, childSessionId, ...request } = params;
+    if (!validSessionId(sessionId)) throw new Error("Invalid LoliCode session");
+    const pagination = nativePagination(request);
+    const root = this.#ownedRoot(sessionId);
+    let selected = root;
+    if (childSessionId !== undefined) {
+      if (!validSessionId(childSessionId) || childSessionId === sessionId) throw new Error("Invalid LoliCode worker session");
+      if (!this.#ctx.agents.get(childSessionId)) return null;
+      selected = this.#ownedWorker(root, childSessionId);
+      if (!selected) throw new Error("Worker is not owned by this LoliCode session");
+    }
+    try {
+      if (!await materializedSessionPath(this.#ctx.sessionPersistence, selected.session.id)) throw new Error(logMissing);
+      return await readNativeSession(this.#ctx, selected.session.id, pagination);
+    } catch (error) {
+      throw new Error(nativeSessionError(error));
     }
   }
 

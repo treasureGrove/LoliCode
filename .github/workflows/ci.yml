@@ -48,6 +48,8 @@ jobs:
               - "pnpm-workspace.yaml"
               - "tsconfig.json"
               - "tsconfig.node.json"
+              - "packages/lolicode-harness-runtime/**"
+              - "scripts/build/prepare-lolicode-harness-runtime.mjs"
               - "vite.config.ts"
               - "vitest.config.ts"
               - "tailwind.config.cjs"
@@ -73,7 +75,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: "20"
+          node-version-file: .node-version
 
       - name: Setup pnpm
         env:
@@ -99,13 +101,18 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: TypeScript type check
-        run: pnpm typecheck
+        run: |
+          pnpm prepare:harness-runtime
+          pnpm typecheck
 
       - name: Check formatting
         run: pnpm format:check
 
       - name: Unit tests
         run: pnpm test:unit
+
+      - name: Harness integration tests
+        run: node --test packages/lolicode-harness-runtime/tests/*.test.mjs
 
       - name: Build frontend
         run: pnpm build:renderer

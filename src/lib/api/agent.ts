@@ -5,6 +5,10 @@ import type {
 } from "@/types/agent";
 import i18n from "@/i18n";
 import type {
+  AgentNativeSessionPageOptions,
+  AgentNativeSessionRead,
+} from "@/types/harness-session";
+import type {
   AgentCatalog,
   AgentEngineStatus,
   AgentNativeActivity,
@@ -86,6 +90,14 @@ export interface AgentSessionSyncResult {
 }
 
 export const agentApi = {
+  readSessionNative: (
+    sessionId: string,
+    options: AgentNativeSessionPageOptions = {},
+  ) =>
+    invoke<AgentNativeSessionRead>("read_agent_session_native", {
+      sessionId,
+      ...options,
+    }),
   readSessionMarkdown: (sessionId: string) =>
     invoke<string>("read_agent_session_markdown", { sessionId }),
   syncSessions: (direction: AgentSessionSyncDirection = "both") =>

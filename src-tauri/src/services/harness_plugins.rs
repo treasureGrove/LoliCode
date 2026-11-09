@@ -145,6 +145,7 @@ mod tests {
         let profile = temporary.path().join("profile");
         let paths = HarnessPaths {
             node: PathBuf::new(),
+            native_reader: temporary.path().join("runtime/host-session-native.mjs"),
             package: temporary.path().join("runtime"),
             version: "test-version".into(),
         };

@@ -413,6 +413,32 @@ pub async fn read_agent_session_markdown(
 }
 
 #[tauri::command(rename_all = "camelCase")]
+pub async fn read_agent_session_native(
+    app: AppHandle,
+    session_id: String,
+    before_seq: Option<u64>,
+    through_seq: Option<u64>,
+    max_messages: Option<u32>,
+) -> Result<Value, String> {
+    if legacy_id(&session_id)? {
+        return Err("旧引擎迁移会话没有完整的原生 Harness 历史".into());
+    }
+    let carrier = app.state::<InprocessAgentState>();
+    carrier.ensure_started(&app).await?;
+    carrier
+        .harness
+        .read_session_native(
+            &app,
+            &carrier,
+            &session_id,
+            before_seq,
+            through_seq,
+            max_messages,
+        )
+        .await
+}
+
+#[tauri::command(rename_all = "camelCase")]
 pub async fn send_agent_message(
     app: AppHandle,
     session_id: String,

@@ -15,6 +15,8 @@ node scripts/build/prepare-lolicode-harness-runtime.mjs
 Preparation uses the public npm registry and installs the lock without
 dependency lifecycle scripts. The installed entry point is
 `packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh/lib/bin.js`.
+Prepare this package before the desktop TypeScript check as well: the native
+session preview imports the pinned official public declarations as types only.
 For desktop packaging, pass `--bundle` or use the regular Tauri build command.
 The builder installs a separate lockfile-resolved dependency tree and verifies
 the official Node.js 24.19.0 artifact. It stages the runtime, profile overlays,
@@ -41,6 +43,23 @@ The host operations patch delegates standard requests to the upstream SDK
 server. It adds the desktop operations for owned sessions, secretary trees,
 pending prompts, bounded legacy context, and approved MCP calls. The tests use
 disposable projects and loopback models.
+
+The optional native session preview reads `lolicode/session/read-native` over
+the same private stdio connection. The bridge verifies root/worker ownership,
+then lazily mounts the official Session Controller dependencies and invokes
+its generated `events`, `projections`, and `state` contracts through the official
+Gateway with a fixed, noninteractive owner peer. It preserves event envelopes
+and projection cursors and does not add an HTTP listener. Page requests are
+bounded to 200 messages and responses to 8 MiB; oversized events are rejected
+without truncation. Projection and state cursors may be newer than a fixed
+history page while the Agent is running.
+
+`host-session-native.mjs` handles cold reads in a disposable Harness HOME with
+the original JSONL directory mounted as the read backend. The SDK server and
+startup entry are disabled, no Agent is restored, and user channel credentials
+are not inherited. The helper deliberately returns the same upstream result
+shapes as the live bridge. The existing main transcript remains available while
+the development-only preview is evaluated.
 
 ```sh
 node --test packages/lolicode-harness-runtime/tests/*.test.mjs

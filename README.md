@@ -41,12 +41,13 @@ These are plans, not shipped features. We adopt useful capabilities and componen
 
 ## Develop locally
 
-Use Node.js 22.12+ (or a version supported by Vite), pnpm 10.12.3, the Rust toolchain pinned in `rust-toolchain.toml`, and the [Tauri platform prerequisites](https://v2.tauri.app/start/prerequisites/).
+Use the Node.js version pinned in `.node-version` (Harness requires 24.9+), pnpm 10.12.3, the Rust toolchain pinned in `rust-toolchain.toml`, and the [Tauri platform prerequisites](https://v2.tauri.app/start/prerequisites/).
 
 ```sh
 git clone https://github.com/treasureGrove/LoliCode.git
 cd LoliCode
 pnpm install --frozen-lockfile
+pnpm prepare:harness-runtime
 pnpm dev
 ```
 

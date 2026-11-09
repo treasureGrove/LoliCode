@@ -20,7 +20,7 @@ use tokio::{
     io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader},
     process::Command,
     sync::{mpsc, oneshot, watch, Semaphore},
-    time::timeout,
+    time::{timeout, timeout_at, Instant},
 };
 
 const RPC_TIMEOUT: Duration = Duration::from_secs(45);
@@ -33,6 +33,11 @@ const MAX_MARKDOWN: usize = 8 * 1024 * 1024;
 pub(super) const MARKDOWN_MISSING: &str = "会话尚未形成原生 Harness 日志，无法复制完整历史";
 const MARKDOWN_TOO_LARGE: &str = "完整会话 Markdown 超过 8 MiB，无法复制";
 const MARKDOWN_READ_FAILED: &str = "无法读取完整的原生 Harness 会话日志，请重试";
+const MAX_NATIVE: usize = 8 * 1024 * 1024;
+pub(super) const NATIVE_MISSING: &str = "会话尚未形成原生 Harness 日志";
+const NATIVE_TOO_LARGE: &str = "原生会话页面超过 8 MiB，请缩小读取范围";
+const NATIVE_READ_FAILED: &str = "无法读取原生 Harness 会话，请重试";
+static NATIVE_READ_SLOTS: Semaphore = Semaphore::const_new(2);
 
 type Reply = Result<Value, String>;
 type Requests = Mutex<HashMap<u64, oneshot::Sender<Reply>>>;
@@ -143,6 +148,29 @@ impl HarnessClient {
             .map(|_| ())
     }
 
+    pub(super) async fn read_session_native(
+        &self,
+        root_id: &str,
+        child_id: Option<&str>,
+        request: &Value,
+    ) -> Result<Option<Value>, String> {
+        let mut params = request.clone();
+        params["sessionId"] = json!(root_id);
+        if let Some(child) = child_id {
+            params["childSessionId"] = json!(child);
+        }
+        match self.request("lolicode/session/read-native", params).await {
+            Ok(Value::Null) => Ok(None),
+            Ok(value) => validate_native(value).map(Some),
+            Err(error) => match error.as_str() {
+                "LOLICODE_SESSION_LOG_COLD" | "Harness 进程已断开" => Ok(None),
+                "LOLICODE_SESSION_LOG_MISSING" => Err(NATIVE_MISSING.into()),
+                "LOLICODE_SESSION_NATIVE_TOO_LARGE" => Err(NATIVE_TOO_LARGE.into()),
+                _ => Err(NATIVE_READ_FAILED.into()),
+            },
+        }
+    }
+
     pub(super) async fn shutdown(&self) -> Result<(), String> {
         let _shutdown = self.shutdown_lock.lock().await;
         let mut stopped = self.stopped.clone();
@@ -171,6 +199,108 @@ fn validate_markdown(markdown: String) -> Result<String, String> {
         return Err(MARKDOWN_READ_FAILED.into());
     }
     Ok(markdown)
+}
+
+pub(super) fn native_read_request(
+    before_seq: Option<u64>,
+    through_seq: Option<u64>,
+    max_messages: Option<u32>,
+) -> Result<Value, String> {
+    const MAX_SAFE_INTEGER: u64 = 9_007_199_254_740_991;
+    if before_seq.is_some_and(|seq| seq > MAX_SAFE_INTEGER)
+        || through_seq.is_some_and(|seq| seq > MAX_SAFE_INTEGER)
+        || max_messages.is_some_and(|count| count == 0 || count > 200)
+    {
+        return Err("原生会话分页参数无效".into());
+    }
+    let mut request = json!({});
+    for (key, value) in [("beforeSeq", before_seq), ("throughSeq", through_seq)] {
+        if let Some(value) = value {
+            request[key] = json!(value);
+        }
+    }
+    if let Some(value) = max_messages {
+        request["maxMessages"] = json!(value);
+    }
+    Ok(request)
+}
+
+fn validate_native(value: Value) -> Result<Value, String> {
+    if !value["page"].is_object()
+        || value.get("projections").is_none()
+        || !value["state"].is_object()
+    {
+        return Err(NATIVE_READ_FAILED.into());
+    }
+    if serde_json::to_vec(&value)
+        .map_err(|_| NATIVE_READ_FAILED)?
+        .len()
+        > MAX_NATIVE
+    {
+        return Err(NATIVE_TOO_LARGE.into());
+    }
+    Ok(value)
+}
+
+pub(super) async fn read_cold_session_native(
+    paths: &HarnessPaths,
+    sessions: &Path,
+    session_id: &str,
+    request: &Value,
+) -> Result<Value, String> {
+    let deadline = Instant::now() + RPC_TIMEOUT;
+    timeout_at(deadline, async {
+        // A stale frontend read can outlive its view. Bound the heavy helpers
+        // across all sessions; queuing consumes the same deadline as execution.
+        let _permit = NATIVE_READ_SLOTS
+            .acquire()
+            .await
+            .map_err(|_| NATIVE_READ_FAILED)?;
+        let request = serde_json::to_string(request).map_err(|_| NATIVE_READ_FAILED)?;
+        let mut command = Command::new(&paths.node);
+        command
+            .arg(&paths.native_reader)
+            .arg(sessions)
+            .arg(session_id)
+            .arg(request)
+            .current_dir(&paths.package)
+            .env_clear()
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .kill_on_drop(true);
+        #[cfg(windows)]
+        {
+            command.creation_flags(0x08000000);
+            for name in ["SystemRoot", "TEMP", "TMP"] {
+                if let Some(value) = std::env::var_os(name) {
+                    command.env(name, value);
+                }
+            }
+        }
+        let mut child = command.spawn().map_err(|_| NATIVE_READ_FAILED)?;
+        let stdout = child.stdout.take().ok_or(NATIVE_READ_FAILED)?;
+        let mut bytes = Vec::new();
+        stdout
+            .take(MAX_NATIVE as u64 + 1)
+            .read_to_end(&mut bytes)
+            .await
+            .map_err(|_| NATIVE_READ_FAILED)?;
+        if bytes.len() > MAX_NATIVE {
+            return Err(NATIVE_TOO_LARGE.into());
+        }
+        let status = child.wait().await.map_err(|_| NATIVE_READ_FAILED)?;
+        match status.code() {
+            Some(0) => {
+                validate_native(serde_json::from_slice(&bytes).map_err(|_| NATIVE_READ_FAILED)?)
+            }
+            Some(2) => Err(NATIVE_MISSING.into()),
+            Some(3) => Err(NATIVE_TOO_LARGE.into()),
+            _ => Err(NATIVE_READ_FAILED.into()),
+        }
+    })
+    .await
+    .map_err(|_| "读取原生会话超时，请重试")?
 }
 
 pub(super) async fn read_cold_session_markdown(
@@ -607,6 +737,38 @@ mod tests {
     use super::*;
 
     #[test]
+    fn native_pagination_preserves_cut_and_rejects_unsafe_numbers() {
+        assert_eq!(native_read_request(None, None, None).unwrap(), json!({}));
+        assert_eq!(
+            native_read_request(Some(11), Some(19), Some(25)).unwrap(),
+            json!({"beforeSeq":11,"throughSeq":19,"maxMessages":25})
+        );
+        assert!(native_read_request(Some(9_007_199_254_740_992), None, None).is_err());
+        assert!(native_read_request(None, Some(9_007_199_254_740_992), None).is_err());
+        assert!(native_read_request(None, None, Some(0)).is_err());
+        assert!(native_read_request(None, None, Some(201)).is_err());
+    }
+
+    #[test]
+    fn native_payload_keeps_official_fields_and_enforces_a_complete_page_limit() {
+        let value = json!({
+            "page": {"cursor":19,"records":[{"type":"event","event":{
+                "seq":7,"time":100,"type":"assistant/message","surfaceOp":"append",
+                "data":{"turn":2,"step":3,"providerMetadata":{"fixture":[1,2,3]}}
+            }}],"hasMore":true},
+            // State may be newer than the fixed history cut. Do not normalize it.
+            "projections":{"asOfSeq":22,"values":{"turnOutline":[{"turn":2,"seq":5}]}},
+            "state":{"cursor":22,"active":true,"running":false},
+            "futureOfficialField":{"keep":true}
+        });
+        assert_eq!(validate_native(value.clone()).unwrap(), value);
+        assert!(validate_native(json!({"page":{},"state":{}})).is_err());
+        let oversized =
+            json!({"page":{"payload":"x".repeat(MAX_NATIVE)},"projections":{},"state":{}});
+        assert_eq!(validate_native(oversized).unwrap_err(), NATIVE_TOO_LARGE);
+    }
+
+    #[test]
     fn markdown_size_limit_counts_utf8_bytes_without_truncating() {
         let markdown = "é".repeat(MAX_MARKDOWN / 2);
         assert_eq!(
@@ -713,6 +875,44 @@ Committed log
 "
                 )
             );
+            assert!(!turn.is_finished());
+
+            let reading = client.clone();
+            let native = tokio::spawn(async move {
+                reading
+                    .read_session_native(
+                        "first",
+                        Some("worker"),
+                        &native_read_request(Some(11), Some(19), Some(25)).unwrap(),
+                    )
+                    .await
+            });
+            let native_frame = receive(&mut sdk_in).await.unwrap().unwrap();
+            assert_eq!(native_frame["method"], "lolicode/session/read-native");
+            assert_eq!(
+                native_frame["params"],
+                json!({
+                    "sessionId":"first","childSessionId":"worker",
+                    "beforeSeq":11,"throughSeq":19,"maxMessages":25
+                })
+            );
+            let native_value = json!({
+                "page":{"cursor":19,"records":[{"type":"event","event":{
+                    "seq":7,"time":100,"type":"turn/end",
+                    "data":{"turn":2,"reason":{"kind":"max-tokens"}}
+                }}],"hasMore":true},
+                "projections":{"asOfSeq":22,"values":{}},
+                "state":{"cursor":22,"active":true,"running":false}
+            });
+            sdk_out
+                .write_all(
+                    &encode(&json!({"jsonrpc":"2.0","id":native_frame["id"],
+                "result":native_value}))
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(native.await.unwrap().unwrap(), Some(native_value));
             assert!(!turn.is_finished());
 
             approval

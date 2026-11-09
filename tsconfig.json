@@ -16,7 +16,10 @@
     "noFallthroughCasesInSwitch": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["src/*"],
+      "@deepseek-ai/dsh-api-session-controller/types": [
+        "packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-api-session-controller/lib/types/types.d.ts"
+      ]
     },
     "types": ["vitest/globals"]
   },

@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { JsonRpcLineTransport } from "@deepseek-ai/dsh-sdk-protocol";
 import { formatBoundedSessionMarkdown } from "../host-session-markdown.mjs";
+import { boundedNativeSession, nativePagination } from "../host-session-native.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const provider = "lolicode-gateway";
@@ -163,6 +164,69 @@ async function fixture(t, onModelCall, onHostRequest) {
   };
 }
 
+test("native history crosses the official Gateway without flattening events or activating cold Agents", { timeout: 60_000 }, async (t) => {
+  const sessionId = "native-history-root";
+  const method = "lolicode/session/read-native";
+  let modelCalls = 0;
+  const runtime = await fixture(t, (_body, response) => {
+    modelCalls++;
+    modelReply(response, "Native session answer");
+  });
+  const client = await runtime.start();
+  let live;
+  try {
+    await assert.rejects(client.request(method, { sessionId }), /not an open root/);
+    await client.open(sessionId);
+    await assert.rejects(client.request(method, { sessionId }), /LOLICODE_SESSION_LOG_MISSING/);
+    for (const request of [{ maxMessages: 0 }, { beforeSeq: -1 }, { throughSeq: 2 ** 53 }, { principal: "owner" }]) {
+      await assert.rejects(client.request(method, { sessionId, ...request }), /Invalid/);
+    }
+    await client.prompt(sessionId, "Keep the official event envelope");
+    await client.wait(sessionId);
+    live = await client.request(method, { sessionId, maxMessages: 200 });
+    assert.equal(live.projections.kind, "sequenced");
+    assert.equal(live.projections.values.turnOutline.length, 1);
+    assert.equal(live.projections.values.sessionStats.turns, 1);
+    assert.ok(live.page.records.some(({ event }) => event.type === "assistant/message" && event.data.stream));
+    assert.ok(live.page.records.some(({ event }) => event.type === "user/message" && event.surfaceOp === "append"));
+    assert.equal(live.page.records.filter(({ event }) => event.type === "turn/end").at(-1).event.data.reason.kind, "completed");
+    await client.open("another-native-root");
+    await assert.rejects(client.request(method, { sessionId, childSessionId: "another-native-root" }), /Worker is not owned/);
+    assert.equal(await client.request(method, { sessionId, childSessionId: "not-resident" }), null);
+  } finally {
+    await client.shutdown();
+  }
+  const sessions = path.join(runtime.home, "sessions");
+  const journal = (await readdir(sessions, { recursive: true })).find((entry) =>
+    entry.split(path.sep).includes(sessionId) && /\.jsonl(?:\.zstd)?$/.test(entry));
+  assert.ok(journal);
+  const journalPath = path.join(sessions, journal);
+  const bytesBefore = await readFile(journalPath);
+  const mtimeBefore = (await stat(journalPath)).mtimeMs;
+  const filesBefore = (await readdir(runtime.home, { recursive: true })).sort();
+  const cold = await execFileAsync(process.execPath, [
+    path.join(root, "host-session-native.mjs"), sessions, sessionId,
+    JSON.stringify({ maxMessages: 200, throughSeq: live.page.cursor }),
+  ], { env: {}, windowsHide: true, timeout: 45_000 });
+  const restored = JSON.parse(cold.stdout);
+  assert.deepEqual(restored.page, live.page);
+  assert.equal(restored.state.active, false);
+  assert.equal(restored.projections.values.turnOutline.length, 1);
+  assert.deepEqual(await readFile(journalPath), bytesBefore);
+  assert.equal((await stat(journalPath)).mtimeMs, mtimeBefore);
+  assert.deepEqual((await readdir(runtime.home, { recursive: true })).sort(), filesBefore);
+  assert.equal(modelCalls, 1);
+});
+
+test("native history bounds pagination and rejects oversized values without truncation", () => {
+  assert.deepEqual(nativePagination({}), { maxMessages: 50 });
+  for (const request of [null, [], { maxMessages: 201 }, { beforeSeq: 0.5 }, { activate: true }]) {
+    assert.throws(() => nativePagination(request), /Invalid/);
+  }
+  const value = { text: "x".repeat(8 * 1024 * 1024) };
+  assert.throws(() => boundedNativeSession(value), /LOLICODE_SESSION_NATIVE_TOO_LARGE/);
+});
+
 test("Markdown copies a complete native log live or cold without starting another turn or writing", { timeout: 45_000 }, async (t) => {
   const sessionId = "markdown-test-root";
   const method = "lolicode/session/read-markdown";
@@ -253,6 +317,12 @@ test("Markdown reads an owned active worker without copying the transient assist
     const activeMarkdown = await client.request(method, { sessionId, childSessionId });
     assert.ok(activeMarkdown.includes(input));
     assert.ok(!activeMarkdown.includes(draft));
+    const nativeMethod = "lolicode/session/read-native";
+    await assert.rejects(client.request(nativeMethod, { sessionId: otherRoot, childSessionId }), /Worker is not owned/);
+    const activeNative = await client.request(nativeMethod, { sessionId, childSessionId, maxMessages: 200 });
+    assert.ok(JSON.stringify(activeNative.page.records).includes(input));
+    assert.ok(!JSON.stringify(activeNative.page.records).includes(draft));
+    assert.equal(activeNative.state.active, true);
     assert.equal(modelCalls, 1);
     writeModelChunk(response, {}, "stop");
     response.end("data: [DONE]\n\n");
@@ -260,6 +330,13 @@ test("Markdown reads an owned active worker without copying the transient assist
     await assert.rejects(client.request(method, { sessionId, childSessionId }), /LOLICODE_SESSION_LOG_COLD/);
     const completed = await readColdMarkdown(path.join(runtime.home, "sessions"), childSessionId);
     assert.ok(completed.stdout.includes(draft));
+    const coldNative = await execFileAsync(process.execPath, [
+      path.join(root, "host-session-native.mjs"), path.join(runtime.home, "sessions"), childSessionId,
+      JSON.stringify({ maxMessages: 200 }),
+    ], { env: {}, windowsHide: true, timeout: 45_000 });
+    const nativeChild = JSON.parse(coldNative.stdout);
+    assert.ok(JSON.stringify(nativeChild.page.records).includes(draft));
+    assert.equal(nativeChild.state.active, false);
     assert.equal(modelCalls, 1);
   } finally {
     if (response && !response.writableEnded) response.destroy();

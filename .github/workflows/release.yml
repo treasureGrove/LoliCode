@@ -62,6 +62,8 @@ jobs:
       - name: Validate release
         shell: pwsh
         run: |
+          pnpm prepare:harness-runtime
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           pnpm typecheck
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           pnpm exec vitest run tests/config/whatsNewEntries.test.ts tests/lib/whatsNew.test.ts tests/lib/updater.test.ts

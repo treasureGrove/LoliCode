@@ -1970,6 +1970,7 @@ pub fn run() {
             commands::delete_agent_session,
             commands::get_agent_session,
             commands::read_agent_session_markdown,
+            commands::read_agent_session_native,
             commands::inspect_agent_document,
             commands::send_agent_message,
             commands::enqueue_agent_message,
