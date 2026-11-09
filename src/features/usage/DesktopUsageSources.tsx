@@ -9,7 +9,7 @@ import { DESKTOP_USAGE_APPS } from "./desktopSources";
 import { fmtInt, fmtUsd } from "./format";
 import { usageCostSource } from "@/lib/usageCostSource";
 import type { DataSourceSummary } from "@/types/usage";
-import lolicodeLogo from "@/assets/brand/lolicode.svg";
+import lolicodeLogo from "@/assets/brand/lolicode-icon.png";
 
 const LOCAL_USAGE_APPS = { lolicode: "LoliCode", ...DESKTOP_USAGE_APPS };
 
