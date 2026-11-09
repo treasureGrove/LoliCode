@@ -161,6 +161,17 @@ export function commitBundle(
           path.join(previous, "node_modules"),
         );
       if (isSameDirectory(previous, oldIdentity)) rename(previous, directory);
+      if (oldIdentity && !isSameDirectory(directory, oldIdentity))
+        throw new Error(
+          "The original Harness runtime directory was not restored.",
+        );
+      if (
+        sdkIdentity &&
+        !isSameDirectory(path.join(directory, "node_modules"), sdkIdentity)
+      )
+        throw new Error(
+          "The original Harness SDK payload was not restored; preserving its transaction.",
+        );
     } catch (rollback) {
       const failure = new AggregateError(
         [error, rollback],

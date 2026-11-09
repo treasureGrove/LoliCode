@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import { createHash } from "node:crypto";
+import { syncBuiltinESMExports } from "node:module";
 import {
   copyFileSync,
   existsSync,
@@ -332,6 +334,54 @@ test("bundle cleanup never deletes the recovery transaction after rollback failu
   );
   assert(existsSync(path.join(recoveryStage, entry)));
   assert(existsSync(path.join(recoveryPrevious, "runtime-manifest.json")));
+});
+
+test("rollback verifies SDK restoration when existsSync suppresses an access failure", async (t) => {
+  const f = fixture(t);
+  await bundleHarness(f.options);
+  put(f.packageRoot, "host.mjs", "new bridge");
+  let recoveryStage;
+  let recoveryPrevious;
+  let hideSdk = false;
+  const originalExists = fs.existsSync;
+  const mock = t.mock.method(fs, "existsSync", (file) =>
+    hideSdk && String(file) === path.join(recoveryStage, "node_modules")
+      ? false
+      : originalExists(file),
+  );
+  syncBuiltinESMExports();
+  let failure;
+  try {
+    await bundleHarness({
+      ...f.options,
+      publish(stage, directory, previous, reuse) {
+        recoveryStage = stage;
+        recoveryPrevious = previous;
+        let calls = 0;
+        commitBundle(stage, directory, previous, reuse, (from, to) => {
+          if (++calls === 3) {
+            hideSdk = true;
+            throw new Error("fixture publication failed");
+          }
+          renameSync(from, to);
+        });
+      },
+    });
+  } catch (error) {
+    failure = error;
+  } finally {
+    mock.mock.restore();
+    syncBuiltinESMExports();
+  }
+  assert(
+    existsSync(path.join(recoveryStage, entry)),
+    "the only SDK must survive in the recovery transaction",
+  );
+  assert(
+    existsSync(path.join(f.directory, "runtime-manifest.json")) ||
+      existsSync(path.join(recoveryPrevious, "runtime-manifest.json")),
+  );
+  assert.equal(failure?.code, "HARNESS_RUNTIME_ROLLBACK_FAILED");
 });
 
 test("workspace preparation receipts validate installed payload and exclude their own cache file", async (t) => {
