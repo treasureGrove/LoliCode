@@ -28,6 +28,11 @@ import {
   saveAgentSubmission,
 } from "@/lib/agentInputLedger";
 import type { AgentCatalog, AgentSession, AgentSnapshot } from "@/types/agent";
+import type {
+  AgentNativeSessionWatchMessage,
+  SessionAssistantStreamAttempt,
+  SessionWireEvent,
+} from "@/types/harness-session";
 import { emitTauriEvent } from "../msw/tauriMocks";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 
@@ -88,6 +93,10 @@ vi.mock("@/lib/api/agent", () => ({
     native: vi.fn(),
     automation: vi.fn(),
     getSession: vi.fn(),
+    readSessionNative: vi.fn(),
+    watchSessionNative: vi.fn(),
+    stopSessionNative: vi.fn(),
+    readNativeMessageAliases: vi.fn(),
     sendMessage: vi.fn(),
     enqueueMessage: vi.fn(),
     removeQueuedMessage: vi.fn(),
@@ -368,6 +377,24 @@ beforeEach(() => {
   vi.mocked(agentApi.getSession)
     .mockReset()
     .mockImplementation(async () => structuredClone(snapshot));
+  vi.mocked(agentApi.readSessionNative)
+    .mockReset()
+    .mockResolvedValue({
+      page: { records: [], cursor: -1, hasMore: false },
+      projections: { kind: "sequenced", asOfSeq: -1, values: {} },
+      state: {
+        cursor: -1,
+        active: false,
+        running: false,
+        queue: null,
+        pendingInput: [],
+      },
+    });
+  vi.mocked(agentApi.watchSessionNative).mockReset().mockResolvedValue(false);
+  vi.mocked(agentApi.stopSessionNative).mockReset().mockResolvedValue();
+  vi.mocked(agentApi.readNativeMessageAliases)
+    .mockReset()
+    .mockResolvedValue({});
   vi.mocked(agentApi.openProject)
     .mockReset()
     .mockResolvedValue({
@@ -461,6 +488,304 @@ afterEach(async () => {
 });
 
 describe("AgentPage", () => {
+  function openNativeFixture(events: SessionWireEvent[] = []) {
+    const nativeSession = {
+      ...session,
+      id: "lc:11111111-1111-4111-8111-111111111111",
+    };
+    snapshot.session = nativeSession;
+    vi.mocked(agentApi.listSessions).mockResolvedValue([nativeSession]);
+    snapshot.messages = [
+      {
+        id: "old-dto",
+        role: "assistant",
+        createdAt: 1,
+        parts: [{ type: "text", text: "旧转换内容不应作为默认聊天来源" }],
+      },
+    ];
+    vi.mocked(agentApi.openProject).mockResolvedValue({
+      workspace: { path: project, name: "project" },
+      catalog: structuredClone(catalog),
+      sessions: [nativeSession],
+    });
+    const cursor = events.at(-1)?.seq ?? -1;
+    vi.mocked(agentApi.readSessionNative).mockResolvedValue({
+      page: {
+        records: events.map((event) => ({ type: "event", event })),
+        cursor,
+        hasMore: false,
+      },
+      projections: { kind: "sequenced", asOfSeq: cursor, values: {} },
+      state: {
+        cursor,
+        active: true,
+        running: true,
+        queue: null,
+        pendingInput: [],
+      },
+    });
+    return nativeSession;
+  }
+
+  it("uses the official native journal in the default conversation and removes the preview entry", async () => {
+    const nativeSession = openNativeFixture([
+      {
+        seq: 0,
+        time: 1,
+        type: "assistant/message",
+        surfaceOp: "append",
+        data: {
+          turn: 1,
+          step: 1,
+          message: {
+            id: "official-answer",
+            role: "assistant",
+            content: [{ type: "text", text: "默认聊天中的官方原生回复" }],
+          },
+          stream: [],
+        },
+      },
+    ]);
+    render(<AgentPage initialProjectPath={project} />);
+    await flush();
+    await tick(80);
+    expect(screen.getByText("默认聊天中的官方原生回复")).toBeVisible();
+    expect(
+      screen.queryByText("旧转换内容不应作为默认聊天来源"),
+    ).not.toBeInTheDocument();
+    expect(agentApi.readSessionNative).toHaveBeenCalledWith(
+      nativeSession.id,
+      expect.any(Object),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "对话更多选项" }));
+    await flush();
+    expect(
+      screen.queryByRole("menuitem", { name: "原生会话预览" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("streams into the default native conversation and replaces the transient reply with one committed message", async () => {
+    const userEvent: SessionWireEvent = {
+      seq: 0,
+      time: 1,
+      type: "user/message",
+      surfaceOp: "append",
+      data: {
+        id: "native-user",
+        role: "user",
+        source: { kind: "user" },
+        content: [{ type: "text", text: "开始任务" }],
+      },
+    };
+    const nativeSession = openNativeFixture([userEvent]);
+    let accept!: (message: AgentNativeSessionWatchMessage) => void;
+    let subscriptionId = "";
+    vi.mocked(agentApi.watchSessionNative).mockImplementation(
+      (_session, id, onMessage) => {
+        subscriptionId = id;
+        accept = onMessage;
+        return new Promise<boolean>(() => {});
+      },
+    );
+    render(<AgentPage initialProjectPath={project} />);
+    await flush();
+    await tick(80);
+    const attemptId =
+      "default-native-attempt" as SessionAssistantStreamAttempt["attemptId"];
+    type FollowFrame = Extract<
+      AgentNativeSessionWatchMessage,
+      { frame: unknown }
+    >["frame"];
+    const send = (frame: FollowFrame) =>
+      act(() => accept({ subscriptionId, frame }));
+    send({
+      type: "snapshot",
+      header: {
+        version: 4,
+        id: nativeSession.id.slice(3) as Extract<
+          FollowFrame,
+          { type: "snapshot" }
+        >["header"]["id"],
+        createdAt: 1,
+        isSeeded: false,
+      },
+      records: [{ type: "event", event: userEvent }],
+      cursor: 0,
+      hasMore: false,
+      projections: { asOfSeq: 0, values: {} },
+      assistantStream: { revision: 0 },
+    });
+    send({
+      type: "assistant-stream",
+      frame: {
+        type: "start",
+        attemptId,
+        revision: 1,
+        startedAfterSeq: 0 as SessionAssistantStreamAttempt["startedAfterSeq"],
+        turn: 1,
+        step: 1,
+      },
+    });
+    send({
+      type: "assistant-stream",
+      frame: {
+        type: "chunk",
+        attemptId,
+        revision: 2,
+        index: 0,
+        time: 2,
+        chunk: { type: "text-delta", index: 0, text: "边生成边显示的原生回复" },
+      },
+    });
+    await flush();
+    expect(screen.getByText("边生成边显示的原生回复")).toBeVisible();
+    send({
+      type: "event",
+      event: {
+        seq: 1,
+        time: 3,
+        type: "assistant/message",
+        surfaceOp: "append",
+        data: {
+          turn: 1,
+          step: 1,
+          message: {
+            id: "committed-answer",
+            role: "assistant",
+            content: [{ type: "text", text: "边生成边显示的原生回复" }],
+          },
+          stream: [],
+        },
+      },
+    });
+    await flush();
+    expect(screen.getAllByText("边生成边显示的原生回复")).toHaveLength(1);
+    expect(screen.queryByLabelText("Agent 正在回复")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("旧转换内容不应作为默认聊天来源"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("uses compatibility history only for an explicit host migration classification", async () => {
+    openNativeFixture();
+    vi.mocked(agentApi.readNativeMessageAliases).mockRejectedValue(
+      "LOLICODE_SESSION_LEGACY_HISTORY",
+    );
+    render(<AgentPage initialProjectPath={project} />);
+    await flush();
+    await tick(80);
+    expect(screen.getByText("旧转换内容不应作为默认聊天来源")).toBeVisible();
+    expect(
+      screen.getByText("此会话包含旧格式历史，已保留原有显示。"),
+    ).toBeVisible();
+  });
+
+  it("keeps native read failures visible instead of silently displaying the old converted transcript", async () => {
+    openNativeFixture();
+    vi.mocked(agentApi.readSessionNative).mockRejectedValue(
+      "读取测试失败，请重试",
+    );
+    vi.mocked(agentApi.readNativeMessageAliases).mockRejectedValue(
+      "权限检查失败",
+    );
+    render(<AgentPage initialProjectPath={project} />);
+    await flush();
+    await tick(80);
+    expect(screen.getByText("读取测试失败，请重试")).toBeVisible();
+    expect(screen.getByRole("button", { name: "重新连接" })).toBeEnabled();
+    expect(
+      screen.queryByText("旧转换内容不应作为默认聊天来源"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("此会话包含旧格式历史，已保留原有显示。"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows a local send immediately while native history is opening and hands it off by receipt identity", async () => {
+    const current = openNativeFixture();
+    vi.mocked(agentApi.queryCommand).mockResolvedValue({ status: "accepted" });
+    type NativeRead = Awaited<ReturnType<typeof agentApi.readSessionNative>>;
+    let finishRead!: (read: NativeRead) => void;
+    vi.mocked(agentApi.readSessionNative).mockReturnValue(
+      new Promise((resolve) => {
+        finishRead = resolve;
+      }),
+    );
+    render(<AgentPage initialProjectPath={project} />);
+    await flush();
+    await tick(80);
+    fill("立即显示我的发送内容");
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+    await flush();
+    expect(vi.mocked(agentApi.sendMessage).mock.calls[0][0]).toBe(current.id);
+    expect(
+      screen
+        .getByText("立即显示我的发送内容", { selector: "p" })
+        .closest("[data-agent-transcript-session]"),
+    ).toHaveAttribute("data-agent-transcript-session", current.id);
+    expect(
+      screen.getByText("立即显示我的发送内容", { selector: "p" }),
+    ).toBeVisible();
+    const requestId = vi.mocked(agentApi.sendMessage).mock.calls[0][2];
+    vi.mocked(agentApi.readNativeMessageAliases).mockResolvedValue({
+      "native-sent": requestId,
+    });
+    snapshot.messages.push({
+      id: requestId,
+      role: "user",
+      createdAt: 2,
+      parts: [{ type: "text", text: "立即显示我的发送内容" }],
+    });
+    act(() =>
+      emitTauriEvent("agent-session-update", {
+        type: "changed",
+        sessionId: current.id,
+      }),
+    );
+    await tick(80);
+    expect(
+      screen.getByText("立即显示我的发送内容", { selector: "p" }),
+    ).toBeVisible();
+    const acceptedUser: SessionWireEvent = {
+      seq: 0,
+      time: 2,
+      type: "user/message",
+      surfaceOp: "append",
+      data: {
+        id: "native-sent",
+        role: "user",
+        source: { kind: "user" },
+        content: [{ type: "text", text: "立即显示我的发送内容" }],
+      },
+    };
+    await act(async () =>
+      finishRead({
+        page: {
+          cursor: 0,
+          hasMore: false,
+          records: [{ type: "event", event: acceptedUser }],
+        },
+        projections: { kind: "sequenced", asOfSeq: 0, values: {} },
+        state: {
+          cursor: 0,
+          active: false,
+          running: false,
+          queue: null,
+          pendingInput: [],
+        },
+      }),
+    );
+    await flush();
+    expect(
+      screen.getAllByText("立即显示我的发送内容", { selector: "p" }),
+    ).toHaveLength(1);
+    expect(
+      screen
+        .getByText("立即显示我的发送内容", { selector: "p" })
+        .closest("[data-native-event-seq]"),
+    ).toHaveAttribute("data-native-event-seq", "0");
+  });
+
   async function openWorkerConversation(
     mode = "build",
     status: AgentSnapshot["status"] = "idle",

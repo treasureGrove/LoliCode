@@ -227,7 +227,7 @@ test("native history bounds pagination and rejects oversized values without trun
   assert.throws(() => boundedNativeSession(value), /LOLICODE_SESSION_NATIVE_TOO_LARGE/);
 });
 
-test("passive native followers are independent and stream only committed events without starting work", { timeout: 60_000 }, async (t) => {
+test("passive native followers retain official transient attempts and committed events without starting work", { timeout: 60_000 }, async (t) => {
   const sessionId = "native-follow-root";
   const method = "lolicode/session.native-follow";
   const first = "11111111-1111-4111-8111-111111111111";
@@ -253,7 +253,13 @@ test("passive native followers are independent and stream only committed events 
   try {
     await assert.rejects(follow(first), /not an open root/);
     await client.open(sessionId);
-    await assert.rejects(follow(first), /LOLICODE_SESSION_LOG_MISSING/);
+    await follow(first);
+    const pending = await fixtureNotice(client, method, (notice) => notice.subscriptionId === first && notice.frame?.type === "snapshot");
+    assert.equal(pending.frame.header.id, sessionId);
+    assert.equal(modelCalls, 0, "opening a native watch must not activate a turn");
+    assert.ok(pending.frame.assistantStream);
+    await stop(first);
+    client.notifications.splice(0);
     await client.prompt(sessionId, "Create a committed baseline");
     await client.wait(sessionId);
     await assert.rejects(follow(first, { activate: true }), /Invalid/);
@@ -270,7 +276,17 @@ test("passive native followers are independent and stream only committed events 
     await client.prompt(sessionId, "Hold this model response open");
     response = await waiting.promise;
     await fixtureNotice(client, method, (notice) => notice.subscriptionId === second && notice.frame?.event?.type === "turn/start");
-    assert.ok(!JSON.stringify(notices(second)).includes("Transient follow fixture answer"));
+    const transient = await fixtureNotice(client, method, (notice) => notice.subscriptionId === second &&
+      notice.frame?.type === "assistant-stream" && JSON.stringify(notice.frame).includes("Transient follow fixture answer"));
+    assert.ok(transient.frame.frame);
+    assert.ok(!notices(second).some((notice) => notice.frame?.event?.type === "assistant/message" &&
+      JSON.stringify(notice.frame.event.data.message).includes("Transient follow fixture answer")));
+    const midAttempt = "native-follow-mid-attempt";
+    await follow(midAttempt);
+    const reconnect = await fixtureNotice(client, method, (notice) => notice.subscriptionId === midAttempt && notice.frame?.type === "snapshot");
+    assert.ok(reconnect.frame.assistantStream.activeAttempt, "reopening while a model response is pending retains its official attempt baseline");
+    assert.ok(JSON.stringify(reconnect.frame.assistantStream).includes("Transient follow fixture answer"));
+    await stop(midAttempt);
     await stop(first);
     const stoppedCount = notices(first).length;
     writeModelChunk(response, {}, "stop");
@@ -280,7 +296,8 @@ test("passive native followers are independent and stream only committed events 
       notice.frame?.event?.type === "assistant/message" && JSON.stringify(notice.frame.event.data.message).includes("Transient follow fixture answer"));
     assert.ok(committed.frame.event.data.stream.length > 0);
     assert.equal(notices(first).length, stoppedCount);
-    assert.ok(notices(second).every((notice) => notice.frame?.type !== "assistant-stream"));
+    await fixtureNotice(client, method, (notice) => notice.subscriptionId === second &&
+      notice.frame?.type === "assistant-stream" && notice.frame.frame.type === "end");
     await follow(later);
     const replacement = await fixtureNotice(client, method, (notice) => notice.subscriptionId === later && notice.frame?.type === "snapshot");
     assert.ok(replacement.frame.records.some((record) => record.event.seq === committed.frame.event.seq));
@@ -298,6 +315,51 @@ test("passive native followers are independent and stream only committed events 
     if (response && !response.writableEnded) response.destroy();
     await Promise.allSettled([stop(first), stop(second)]);
     // Keep the later subscription active: SDK disposal must abort and await it.
+    await client.shutdown();
+  }
+});
+
+test("a native watch opened during the first model response retains the official active attempt prefix", { timeout: 60_000 }, async (t) => {
+  const sessionId = "native-first-attempt-root";
+  const subscriptionId = "native-late-first-view";
+  const ready = Promise.withResolvers();
+  let output;
+  let modelCalls = 0;
+  const runtime = await fixture(t, (_body, response) => {
+    modelCalls++;
+    response.writeHead(200, { "Content-Type": "text/event-stream" });
+    writeModelChunk(response, { role: "assistant" });
+    writeModelChunk(response, { content: "First attempt prefix before viewer" });
+    output = response;
+    ready.resolve();
+  });
+  const client = await runtime.start();
+  const method = "lolicode/session.native-follow";
+  try {
+    await client.open(sessionId);
+    await client.prompt(sessionId, "Start before the first native viewer opens");
+    await ready.promise;
+    // The SDK's stock transient notification confirms it consumed the chunk;
+    // no native read or native follow has been issued yet.
+    await fixtureNotice(client, "lolicode/session.assistant-stream", (notice) =>
+      notice.sessionId === sessionId && JSON.stringify(notice).includes("First attempt prefix before viewer"));
+    await client.request("lolicode/session/follow-native", { sessionId, subscriptionId, maxMessages: 12 });
+    const opening = await fixtureNotice(client, method, (notice) => notice.subscriptionId === subscriptionId && notice.frame?.type === "snapshot");
+    assert.ok(opening.frame.assistantStream.activeAttempt);
+    assert.ok(JSON.stringify(opening.frame.assistantStream).includes("First attempt prefix before viewer"));
+    assert.equal(modelCalls, 1);
+    writeModelChunk(output, { content: " plus the suffix" });
+    writeModelChunk(output, {}, "stop");
+    output.end("data: [DONE]\n\n");
+    await client.wait(sessionId);
+    const committed = await fixtureNotice(client, method, (notice) => notice.subscriptionId === subscriptionId &&
+      notice.frame?.event?.type === "assistant/message");
+    assert.ok(JSON.stringify(committed.frame.event.data.message).includes("First attempt prefix before viewer plus the suffix"));
+    assert.ok(committed.frame.event.data.stream.length > 0);
+    assert.equal(modelCalls, 1);
+  } finally {
+    if (output && !output.writableEnded) output.destroy();
+    await client.request("lolicode/session/unfollow-native", { subscriptionId }).catch(() => {});
     await client.shutdown();
   }
 });

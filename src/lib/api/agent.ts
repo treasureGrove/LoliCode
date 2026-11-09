@@ -136,6 +136,10 @@ export const agentApi = {
       sessionId,
       ...options,
     }),
+  readNativeMessageAliases: (sessionId: string) =>
+    invoke<Record<string, string>>("read_agent_native_message_aliases", {
+      sessionId,
+    }),
   readSessionMarkdown: (sessionId: string) =>
     invoke<string>("read_agent_session_markdown", { sessionId }),
   syncSessions: (direction: AgentSessionSyncDirection = "both") =>

@@ -7,6 +7,10 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      "@deepseek-ai/dsh-llm/assistant-stream": path.resolve(
+        __dirname,
+        "packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-llm/lib/types/assistant-stream.js",
+      ),
     },
   },
   test: {

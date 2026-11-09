@@ -1971,6 +1971,7 @@ pub fn run() {
             commands::get_agent_session,
             commands::read_agent_session_markdown,
             commands::read_agent_session_native,
+            commands::read_agent_native_message_aliases,
             commands::watch_agent_session_native,
             commands::stop_agent_session_native,
             commands::ack_agent_session_native,

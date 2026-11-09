@@ -131,7 +131,8 @@ import type {
   AgentWorkspace,
 } from "@/types/agent";
 import { AgentTranscriptDeck } from "./AgentTranscript";
-import { AgentNativeSessionPreview } from "./AgentNativeSessionPreview";
+import { useAgentNativeSession } from "@/hooks/useAgentNativeSession";
+import { hasNativeTranscriptContent } from "./AgentNativeTranscript";
 import { AgentMessageQueue } from "./AgentMessageQueue";
 import { AgentRunError, lastAgentUserTurn } from "./AgentRunError";
 import { AgentChanges } from "./AgentChanges";
@@ -217,7 +218,30 @@ const EMPTY_CATALOG: AgentCatalog = {
   excludedSources: [],
 };
 const EMPTY_MESSAGES: AgentSnapshot["messages"] = [];
+const EMPTY_NATIVE_ALIASES: Record<string, string> = {};
 const EMPTY_QUEUED_MESSAGES: AgentQueuedMessage[] = [];
+
+function nativeUserIdentifiers(event: {
+  type: string;
+  data: unknown;
+}): string[] {
+  if (
+    event.type !== "user/message" ||
+    !event.data ||
+    typeof event.data !== "object" ||
+    Array.isArray(event.data)
+  )
+    return [];
+  const data = event.data as Record<string, unknown>;
+  const source =
+    data.source && typeof data.source === "object"
+      ? (data.source as Record<string, unknown>)
+      : {};
+  if (source.kind !== "user") return [];
+  return [data.id, source.rpcId].filter(
+    (id): id is string => typeof id === "string",
+  );
+}
 
 function readLastAgentSelection(): {
   projectPath: string;
@@ -619,13 +643,9 @@ const LoliCodeRepository = "https://github.com/treasureGrove/LoliCode";
 function AgentHelpMenu({
   onOpenAbout,
   onCheckUpdate,
-  onNativePreview,
-  nativePreviewAvailable,
 }: {
   onOpenAbout?: () => void;
   onCheckUpdate?: () => void;
-  onNativePreview?: () => void;
-  nativePreviewAvailable?: boolean;
 }) {
   const openExternal = (url: string) => {
     void settingsApi.openExternal(url).catch((error) => {
@@ -660,12 +680,6 @@ function AgentHelpMenu({
               <BuildChannelBadge developmentOnly compact showRefresh={false} />
             </DropdownMenuLabel>
             <DevelopmentFrontendRefreshMenuItem />
-            <DropdownMenuItem
-              onSelect={onNativePreview}
-              disabled={!nativePreviewAvailable}
-            >
-              <ScrollText aria-hidden="true" /> 原生会话预览
-            </DropdownMenuItem>
             <DropdownMenuSeparator />
           </>
         )}
@@ -841,7 +855,6 @@ export function AgentPage({
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const [nativePreviewOpen, setNativePreviewOpen] = useState(false);
   const identity = `${workspace?.path || ""}\0${sessionId || ""}`;
   const selection = useRef({ identity: "", revision: 0 });
   if (selection.current.identity !== identity)
@@ -1796,6 +1809,12 @@ export function AgentPage({
     },
     "main",
   );
+  const [compatibilityHistories, setCompatibilityHistories] = useState<
+    ReadonlySet<string>
+  >(() => new Set());
+  const usesNativeTranscript = Boolean(
+    sessionId?.startsWith("lc:") && !compatibilityHistories.has(sessionId),
+  );
   const {
     snapshot,
     error: snapshotError,
@@ -1806,7 +1825,90 @@ export function AgentPage({
     fast: Boolean(sessionId && (pending[sessionId] || stopping[sessionId])),
     refresh,
     onSnapshot,
+    nativeTranscript: usesNativeTranscript,
   });
+  const nativeSession = useAgentNativeSession(
+    usesNativeTranscript ? sessionId : null,
+    {
+      enabled: isActive,
+      activityRevision: `${snapshot?.status ?? ""}:${snapshot?.messages.length ?? 0}:${refresh}:${Boolean(sessionId && pending[sessionId])}`,
+    },
+  );
+  const nativeSessionRef = useRef(nativeSession);
+  nativeSessionRef.current = nativeSession;
+  const loadNativeEarlier = useCallback(() => {
+    void nativeSessionRef.current.loadOlder();
+  }, []);
+  const nativeTranscript = useMemo(
+    () =>
+      usesNativeTranscript
+        ? {
+            events: nativeSession.events,
+            activeAttempt: nativeSession.activeAttempt ?? undefined,
+            hasMore: nativeSession.hasMore,
+            loadingEarlier: nativeSession.loading,
+            onLoadOlder: loadNativeEarlier,
+          }
+        : undefined,
+    [
+      usesNativeTranscript,
+      nativeSession.events,
+      nativeSession.activeAttempt,
+      nativeSession.hasMore,
+      nativeSession.loading,
+      loadNativeEarlier,
+    ],
+  );
+  const [nativeAliases, setNativeAliases] = useState<{
+    sessionId: string | null;
+    values: Record<string, string>;
+  }>({ sessionId: null, values: {} });
+  const [nativeAliasRevision, setNativeAliasRevision] = useState(0);
+  useTauriEvent<{ sessionId: string }>(
+    "agent-native-message-aliases-changed",
+    (event) => {
+      if (event.sessionId === sessionId)
+        setNativeAliasRevision((revision) => revision + 1);
+    },
+    "main",
+  );
+  const nativeUserRevision = useMemo(
+    () => nativeSession.events.flatMap(nativeUserIdentifiers).join("\0"),
+    [nativeSession.events],
+  );
+  useEffect(() => {
+    if (!usesNativeTranscript || !sessionId || !snapshot) return;
+    let stale = false;
+    void agentApi
+      .readNativeMessageAliases(sessionId)
+      .then((values) => {
+        if (!stale) setNativeAliases({ sessionId, values });
+      })
+      .catch((cause) => {
+        if (
+          !stale &&
+          agentErrorMessage(cause) === "LOLICODE_SESSION_LEGACY_HISTORY"
+        ) {
+          setCompatibilityHistories(
+            (current) => new Set([...current, sessionId]),
+          );
+        }
+      });
+    return () => {
+      stale = true;
+    };
+  }, [
+    usesNativeTranscript,
+    sessionId,
+    snapshot?.messages.length,
+    snapshot?.status,
+    nativeUserRevision,
+    nativeAliasRevision,
+  ]);
+  const nativeMessageAliases =
+    nativeAliases.sessionId === sessionId
+      ? nativeAliases.values
+      : (nativeSession.read?.messageAliases ?? EMPTY_NATIVE_ALIASES);
   const durableMessages = snapshot?.messages || EMPTY_MESSAGES;
   const pendingSend = sessionId ? pending[sessionId] : undefined;
   const outgoingPreview = pendingSend?.uncertain
@@ -1818,11 +1920,21 @@ export function AgentPage({
     outgoingPreview.projectPath === workspace?.path
       ? outgoingPreview.message
       : undefined;
+  const nativeSendEchoes = useRef(
+    new Map<string, Map<string, AgentSnapshot["messages"][number]>>(),
+  );
   const transcriptMessages = useMemo(() => {
     const containsUser = (id: string) =>
-      durableMessages.some(
-        (message) => message.role === "user" && message.id === id,
-      );
+      usesNativeTranscript
+        ? nativeSession.events.some((event) =>
+            nativeUserIdentifiers(event).some(
+              (nativeId) =>
+                nativeId === id || nativeMessageAliases[nativeId] === id,
+            ),
+          )
+        : durableMessages.some(
+            (message) => message.role === "user" && message.id === id,
+          );
     const pendingMessages =
       outgoingMessage && !containsUser(outgoingMessage.id)
         ? [outgoingMessage]
@@ -1853,10 +1965,51 @@ export function AgentPage({
           });
       }
     }
+    if (usesNativeTranscript) {
+      const lane =
+        nativeSendEchoes.current.get(identity) ??
+        new Map<string, AgentSnapshot["messages"][number]>();
+      nativeSendEchoes.current.delete(identity);
+      nativeSendEchoes.current.set(identity, lane);
+      while (nativeSendEchoes.current.size > 3)
+        nativeSendEchoes.current.delete(
+          nativeSendEchoes.current.keys().next().value!,
+        );
+      for (const message of pendingMessages) lane.set(message.id, message);
+      for (const [id] of lane) {
+        const local = pendingMessages.some((message) => message.id === id);
+        // A desktop receipt may precede the native stream. Retain only the
+        // original local send echo until its exact native identity arrives.
+        const admitted = durableMessages.some(
+          (message) => message.role === "user" && message.id === id,
+        );
+        if (containsUser(id) || (!local && !admitted)) lane.delete(id);
+      }
+      return lane.size ? [...lane.values()] : EMPTY_MESSAGES;
+    }
     return pendingMessages.length
-      ? [...durableMessages, ...pendingMessages]
-      : durableMessages;
-  }, [durableMessages, outgoingMessage, queueEchoes, snapshot]);
+      ? [...(usesNativeTranscript ? [] : durableMessages), ...pendingMessages]
+      : usesNativeTranscript
+        ? EMPTY_MESSAGES
+        : durableMessages;
+  }, [
+    durableMessages,
+    outgoingMessage,
+    queueEchoes,
+    snapshot,
+    usesNativeTranscript,
+    nativeSession.events,
+    nativeMessageAliases,
+    identity,
+  ]);
+  const hasChatContent =
+    Boolean(
+      nativeTranscript &&
+        hasNativeTranscriptContent(
+          nativeTranscript.events,
+          nativeTranscript.activeAttempt,
+        ),
+    ) || transcriptMessages.length > 0;
   const latestSnapshot = useRef(snapshot);
   latestSnapshot.current = snapshot;
   const displayedQueue = useMemo(() => {
@@ -2054,12 +2207,23 @@ export function AgentPage({
   ]);
   useEffect(() => {
     const requestIds = new Set<string>();
-    for (const message of transcriptMessages) {
-      const { id, role } = message;
-      if (role !== "user" || attachmentLoadAttempts.current.has(id)) continue;
-      if (sentImageAttachments[id] && sentDocumentAttachments[id]) continue;
+    const acceptAttachmentId = (id: string) => {
+      if (!id || attachmentLoadAttempts.current.has(id)) return;
+      if (sentImageAttachments[id] && sentDocumentAttachments[id]) return;
       requestIds.add(id);
       attachmentLoadAttempts.current.add(id);
+    };
+    if (usesNativeTranscript)
+      for (const event of nativeSession.events) {
+        for (const nativeId of nativeUserIdentifiers(event)) {
+          acceptAttachmentId(nativeId);
+          if (nativeMessageAliases[nativeId])
+            acceptAttachmentId(nativeMessageAliases[nativeId]);
+        }
+      }
+    for (const message of transcriptMessages) {
+      const { id, role } = message;
+      if (role === "user") acceptAttachmentId(id);
     }
     if (!requestIds.size) return;
     void readAgentHistoryAttachments(requestIds)
@@ -2085,7 +2249,14 @@ export function AgentPage({
         });
       })
       .catch(() => {});
-  }, [sentDocumentAttachments, sentImageAttachments, transcriptMessages]);
+  }, [
+    sentDocumentAttachments,
+    sentImageAttachments,
+    transcriptMessages,
+    usesNativeTranscript,
+    nativeSession.events,
+    nativeMessageAliases,
+  ]);
   useEffect(() => {
     const id = sessionId;
     const unresolved = id ? pending[id] : undefined;
@@ -2255,7 +2426,14 @@ export function AgentPage({
       atBottom.current
     )
       jumpToChatTail(scroll);
-  }, [isActive, snapshot, transcriptMessages, jumpToChatTail]);
+  }, [
+    isActive,
+    snapshot,
+    transcriptMessages,
+    nativeSession.events,
+    nativeSession.activeAttempt,
+    jumpToChatTail,
+  ]);
 
   const working =
     Object.values(statuses).some(activeStatus) ||
@@ -4241,6 +4419,7 @@ export function AgentPage({
       preparedSnapshots
         .filter(
           (item) =>
+            !item.session.id.startsWith("lc:") &&
             item.session.projectPath === selectedProjectPath &&
             item.messages.length,
         )
@@ -5045,8 +5224,6 @@ export function AgentPage({
             <AgentHelpMenu
               onOpenAbout={onOpenAbout}
               onCheckUpdate={onCheckUpdate}
-              nativePreviewAvailable={Boolean(sessionId?.startsWith("lc:"))}
-              onNativePreview={() => setNativePreviewOpen(true)}
             />
             {canOpenBrowser && !browserDeck && (
               <button
@@ -5267,6 +5444,11 @@ export function AgentPage({
                   旧版会话只读，原数据保留，请新建本体会话继续
                 </p>
               )}
+              {sessionId && compatibilityHistories.has(sessionId) && (
+                <p role="status" className="wb-notice">
+                  此会话包含旧格式历史，已保留原有显示。
+                </p>
+              )}
               {snapshotError && (
                 <div role="alert" className="wb-notice">
                   <Notice
@@ -5279,6 +5461,23 @@ export function AgentPage({
                         onClick={() => setRefresh((old) => old + 1)}
                       >
                         重试
+                      </Button>
+                    }
+                  />
+                </div>
+              )}
+              {usesNativeTranscript && nativeSession.error && (
+                <div role="alert" className="wb-notice">
+                  <Notice
+                    tone="danger"
+                    title={nativeSession.error}
+                    actions={
+                      <Button
+                        variant="quiet"
+                        size="compact"
+                        onClick={() => void nativeSession.refresh()}
+                      >
+                        重新连接
                       </Button>
                     }
                   />
@@ -5315,12 +5514,25 @@ export function AgentPage({
                   <div ref={chatContentRef} className="wb-chat-content">
                     <AgentTranscriptDeck
                       active={isActive}
-                      loading={snapshotLoading}
+                      loading={
+                        usesNativeTranscript
+                          ? nativeSession.loading &&
+                            !nativeSession.ready &&
+                            !transcriptMessages.length
+                          : snapshotLoading
+                      }
                       loadingLabel={t("common.loading")}
-                      ready={Boolean(snapshot)}
+                      ready={
+                        Boolean(snapshot) &&
+                        (!usesNativeTranscript ||
+                          nativeSession.ready ||
+                          transcriptMessages.length > 0)
+                      }
                       prepared={preparedTranscripts}
                       onEvict={forgetTranscriptPosition}
                       messages={transcriptMessages}
+                      native={nativeTranscript}
+                      messageAliases={nativeMessageAliases}
                       userIdentity={userIdentity}
                       sessionId={sessionId}
                       projectPath={workspace.path}
@@ -5337,97 +5549,100 @@ export function AgentPage({
                         stopping={stoppingHere}
                       />
                     )}
-                    {snapshot && !transcriptMessages.length && (
-                      <div className="wb-empty">
-                        <div className="wb-empty-content">
-                          <WelcomeMark compact />
-                          <span className="wb-welcome-eyebrow">
-                            LET’S MAKE SOMETHING
-                          </span>
-                          <h2>
-                            {isSecretary
-                              ? t("agentSecretary.welcomeTitle", {
-                                  defaultValue: "今天有什么交给我？",
-                                })
-                              : "今天想完成什么？"}
-                          </h2>
-                          <p>
-                            {isSecretary
-                              ? t("agentSecretary.welcomeDescription", {
-                                  defaultValue:
-                                    "告诉我你的目标，我来安排工作、跟进进度，再把结果带回来。",
-                                })
-                              : "一个想法、一处优化，都可以从这里开始。"}
-                          </p>
-                          {!readOnlySession && (
-                            <div
-                              className="wb-task-starters"
-                              aria-label="任务灵感"
-                            >
-                              {[
-                                {
-                                  icon: Compass,
-                                  title: workspace.standalone
-                                    ? "回答问题"
-                                    : "读懂项目",
-                                  detail: workspace.standalone
-                                    ? "解释概念与整理思路"
-                                    : "梳理结构与核心流程",
-                                  prompt: workspace.standalone
-                                    ? "帮我分析并解释这个问题："
-                                    : "帮我梳理这个项目的结构，介绍核心模块和主要运行流程。",
-                                },
-                                {
-                                  icon: Code2,
-                                  title: "实现想法",
-                                  detail: "把灵感变成可用功能",
-                                  prompt: workspace.standalone
-                                    ? "帮我实现这个想法："
-                                    : "我想为这个项目实现一个新功能：",
-                                },
-                                {
-                                  icon: workspace.standalone ? FileText : Bug,
-                                  title: workspace.standalone
-                                    ? "整理资料"
-                                    : "排查问题",
-                                  detail: workspace.standalone
-                                    ? "总结内容与提炼要点"
-                                    : "找到原因，稳妥修复",
-                                  prompt: workspace.standalone
-                                    ? "请帮我整理和总结下面的资料："
-                                    : "帮我排查并修复这个项目中的问题：",
-                                },
-                              ].map(
-                                (
-                                  { icon: Icon, title, detail, prompt },
-                                  index,
-                                ) => (
-                                  <button
-                                    type="button"
-                                    className="wb-task-starter"
-                                    data-companion-surface={`welcome-card-${sessionId}-${index}`}
-                                    data-companion-dock-id={`welcome-card-${sessionId}-${index}`}
-                                    data-companion-rest="sit"
-                                    key={title}
-                                    onClick={() => insertStarter(prompt)}
-                                  >
-                                    <span className="wb-task-starter-icon">
-                                      <Icon aria-hidden="true" />
-                                    </span>
-                                    <strong>{title}</strong>
-                                    <span>{detail}</span>
-                                    <ArrowUpRight
-                                      className="wb-task-starter-arrow"
-                                      aria-hidden="true"
-                                    />
-                                  </button>
-                                ),
-                              )}
-                            </div>
-                          )}
+                    {snapshot &&
+                      !hasChatContent &&
+                      (!usesNativeTranscript ||
+                        (nativeSession.ready && !nativeSession.error)) && (
+                        <div className="wb-empty">
+                          <div className="wb-empty-content">
+                            <WelcomeMark compact />
+                            <span className="wb-welcome-eyebrow">
+                              LET’S MAKE SOMETHING
+                            </span>
+                            <h2>
+                              {isSecretary
+                                ? t("agentSecretary.welcomeTitle", {
+                                    defaultValue: "今天有什么交给我？",
+                                  })
+                                : "今天想完成什么？"}
+                            </h2>
+                            <p>
+                              {isSecretary
+                                ? t("agentSecretary.welcomeDescription", {
+                                    defaultValue:
+                                      "告诉我你的目标，我来安排工作、跟进进度，再把结果带回来。",
+                                  })
+                                : "一个想法、一处优化，都可以从这里开始。"}
+                            </p>
+                            {!readOnlySession && (
+                              <div
+                                className="wb-task-starters"
+                                aria-label="任务灵感"
+                              >
+                                {[
+                                  {
+                                    icon: Compass,
+                                    title: workspace.standalone
+                                      ? "回答问题"
+                                      : "读懂项目",
+                                    detail: workspace.standalone
+                                      ? "解释概念与整理思路"
+                                      : "梳理结构与核心流程",
+                                    prompt: workspace.standalone
+                                      ? "帮我分析并解释这个问题："
+                                      : "帮我梳理这个项目的结构，介绍核心模块和主要运行流程。",
+                                  },
+                                  {
+                                    icon: Code2,
+                                    title: "实现想法",
+                                    detail: "把灵感变成可用功能",
+                                    prompt: workspace.standalone
+                                      ? "帮我实现这个想法："
+                                      : "我想为这个项目实现一个新功能：",
+                                  },
+                                  {
+                                    icon: workspace.standalone ? FileText : Bug,
+                                    title: workspace.standalone
+                                      ? "整理资料"
+                                      : "排查问题",
+                                    detail: workspace.standalone
+                                      ? "总结内容与提炼要点"
+                                      : "找到原因，稳妥修复",
+                                    prompt: workspace.standalone
+                                      ? "请帮我整理和总结下面的资料："
+                                      : "帮我排查并修复这个项目中的问题：",
+                                  },
+                                ].map(
+                                  (
+                                    { icon: Icon, title, detail, prompt },
+                                    index,
+                                  ) => (
+                                    <button
+                                      type="button"
+                                      className="wb-task-starter"
+                                      data-companion-surface={`welcome-card-${sessionId}-${index}`}
+                                      data-companion-dock-id={`welcome-card-${sessionId}-${index}`}
+                                      data-companion-rest="sit"
+                                      key={title}
+                                      onClick={() => insertStarter(prompt)}
+                                    >
+                                      <span className="wb-task-starter-icon">
+                                        <Icon aria-hidden="true" />
+                                      </span>
+                                      <strong>{title}</strong>
+                                      <span>{detail}</span>
+                                      <ArrowUpRight
+                                        className="wb-task-starter-arrow"
+                                        aria-hidden="true"
+                                      />
+                                    </button>
+                                  ),
+                                )}
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      )}
                     {!readOnlySession &&
                       snapshot?.permissions
                         .filter((request) => request.sessionId === sessionId)
@@ -6284,14 +6499,6 @@ export function AgentPage({
                   : undefined
               }
             />
-            {IS_DEVELOPMENT_BUILD && (
-              <AgentNativeSessionPreview
-                open={isActive && nativePreviewOpen}
-                onOpenChange={setNativePreviewOpen}
-                sessionId={sessionId?.startsWith("lc:") ? sessionId : null}
-                title={selectedSession?.title}
-              />
-            )}
             <AgentToolPanel
               open={isActive && activeTool === "memory"}
               onClose={() => setActiveTool(null)}

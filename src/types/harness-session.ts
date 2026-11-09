@@ -6,7 +6,12 @@ import type {
   SessionState,
 } from "@deepseek-ai/dsh-api-session-controller/types";
 
-export type { SessionWireEvent } from "@deepseek-ai/dsh-api-session-controller/types";
+export type {
+  SessionAssistantStreamAttempt,
+  SessionAssistantStreamBaseline,
+  SessionAssistantStreamFrame,
+  SessionWireEvent,
+} from "@deepseek-ai/dsh-api-session-controller/types";
 
 export type AgentNativeSessionWatchMessage =
   | { subscriptionId: string; deliveryId?: number; frame: SessionFollowFrame }
@@ -16,6 +21,8 @@ export interface AgentNativeSessionRead {
   page: SessionEventsPage;
   projections: SessionProjectionsValue;
   state: SessionState;
+  /** Desktop upload/send identity metadata, separate from the upstream journal. */
+  messageAliases?: Record<string, string>;
 }
 
 export interface AgentNativeSessionPageOptions {

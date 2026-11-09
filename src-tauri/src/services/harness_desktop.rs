@@ -48,6 +48,7 @@ const MAX_RECEIPTS: usize = 4096;
 const SNAPSHOT_EVENT: &str = "agent-session-update";
 const AUTOMATIC_TITLE_GRACE: Duration = Duration::from_secs(6);
 const LEGACY_MARKDOWN: &str = "旧引擎迁移会话的完整历史不在原生 Harness 日志中，无法复制完整历史";
+const NATIVE_LEGACY_HISTORY: &str = "LOLICODE_SESSION_LEGACY_HISTORY";
 
 #[derive(Clone, Default)]
 pub(crate) struct HarnessDesktop(Arc<Mutex<DesktopState>>);
@@ -305,6 +306,8 @@ struct SessionRecord {
     snapshot: AgentSnapshot,
     root_created: bool,
     receipts: BTreeMap<String, CommandReceipt>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    native_message_aliases: BTreeMap<String, String>,
     #[serde(default)]
     secretary: HarnessSecretary,
     #[serde(default)]
@@ -378,6 +381,7 @@ pub(super) fn sync_snapshot(profile: &Path, id: &str) -> Result<Option<AgentSnap
 }
 
 struct VerifiedSessionRead {
+    owner_id: String,
     owner_root: PathBuf,
     sdk_id: String,
     child: Option<String>,
@@ -400,6 +404,14 @@ fn native_context_error(error: String) -> String {
         MARKDOWN_MISSING => NATIVE_MISSING.into(),
         LEGACY_MARKDOWN => "旧引擎迁移会话没有完整的原生 Harness 历史".into(),
         _ => error,
+    }
+}
+
+fn native_alias_context_error(error: String) -> String {
+    if error == LEGACY_MARKDOWN {
+        NATIVE_LEGACY_HISTORY.into()
+    } else {
+        native_context_error(error)
     }
 }
 
@@ -495,12 +507,17 @@ impl HarnessDesktop {
             Some(controls)
         } else {
             let id = id.to_owned();
+            let owner_for_load = owner.clone();
             let project = tokio::task::spawn_blocking(move || {
                 if !record_file.is_file() {
                     return Err(MARKDOWN_MISSING.into());
                 }
-                let record = load_record(&record_file, &owner)?;
-                Ok::<_, String>(markdown_session(&record, &owner, &id)?.project_path.clone())
+                let record = load_record(&record_file, &owner_for_load)?;
+                Ok::<_, String>(
+                    markdown_session(&record, &owner_for_load, &id)?
+                        .project_path
+                        .clone(),
+                )
             })
             .await
             .map_err(|_| "无法读取 Harness 会话")??;
@@ -508,6 +525,7 @@ impl HarnessDesktop {
             None
         };
         Ok(VerifiedSessionRead {
+            owner_id: owner,
             owner_root,
             sdk_id,
             child,
@@ -570,19 +588,62 @@ impl HarnessDesktop {
             .await
             .map_err(|_| "读取原生会话超时，请重试")?;
             match response {
-                Some(Ok(Some(value))) => return Ok(value),
+                Some(Ok(Some(mut value))) => {
+                    value["messageAliases"] =
+                        to_value(self.native_aliases_for_context(&context).await?)?;
+                    return Ok(value);
+                }
                 Some(Err(error)) => return Err(error),
                 Some(Ok(None)) | None => {}
             }
         }
-        let sessions = verified_sessions_directory(context.owner_root, NATIVE_MISSING).await?;
-        read_cold_session_native(
+        let sessions =
+            verified_sessions_directory(context.owner_root.clone(), NATIVE_MISSING).await?;
+        let mut value = read_cold_session_native(
             &HarnessPaths::resolve(app)?,
             &sessions,
             &context.sdk_id,
             &request,
         )
+        .await?;
+        value["messageAliases"] = to_value(self.native_aliases_for_context(&context).await?)?;
+        Ok(value)
+    }
+
+    pub(crate) async fn read_native_message_aliases(
+        &self,
+        app: &AppHandle,
+        carrier: &InprocessAgentState,
+        id: &str,
+    ) -> Result<BTreeMap<String, String>, String> {
+        let context = self
+            .verified_read_context(app, carrier, id)
+            .await
+            .map_err(native_alias_context_error)?;
+        self.native_aliases_for_context(&context).await
+    }
+
+    async fn native_aliases_for_context(
+        &self,
+        context: &VerifiedSessionRead,
+    ) -> Result<BTreeMap<String, String>, String> {
+        let live = self
+            .0
+            .lock()
+            .await
+            .flights
+            .get(&context.owner_id)
+            .map(|flight| flight.record.clone());
+        if let Some(record) = live {
+            return Ok(record.lock().await.native_message_aliases.clone());
+        }
+        let owner = context.owner_id.clone();
+        let file = context.owner_root.join("desktop.json");
+        tokio::task::spawn_blocking(move || {
+            load_record(&file, &owner).map(|record| record.native_message_aliases)
+        })
         .await
+        .map_err(|_| "无法读取原生会话消息关联".to_owned())?
     }
 
     pub(crate) async fn watch_session_native(
@@ -2073,11 +2134,31 @@ fn save_record(file: &Path, record: &SessionRecord) -> Result<(), String> {
     Ok(())
 }
 
+fn remember_native_message_alias(record: &mut SessionRecord, native: &str, request: &str) {
+    if !native.is_empty() && !request.is_empty() {
+        // Only an explicit SDK receipt or a matched pending input establishes
+        // this business identity. Never infer it from text or old DTO history.
+        record
+            .native_message_aliases
+            .entry(native.to_owned())
+            .or_insert_with(|| request.to_owned());
+    }
+}
+
+fn notify_native_message_aliases_changed(app: &AppHandle, session_id: &str) {
+    let _ = app.emit_to(
+        "main",
+        "agent-native-message-aliases-changed",
+        json!({"sessionId": session_id}),
+    );
+}
+
 fn record_from_snapshot(snapshot: AgentSnapshot, profile: &Path) -> Result<SessionRecord, String> {
     let mut record = SessionRecord {
         snapshot,
         root_created: false,
         receipts: BTreeMap::new(),
+        native_message_aliases: BTreeMap::new(),
         secretary: HarnessSecretary::default(),
         queue: Vec::new(),
         withdrawn: Vec::new(),
@@ -2344,6 +2425,7 @@ fn claim_worker_queue_message(
     })?;
     let request = queue.inputs.remove(index).message.id;
     queue.paused &= !queue.inputs.is_empty();
+    remember_native_message_alias(saved, native, &request);
     Some((session, native.into(), request))
 }
 
@@ -2581,14 +2663,19 @@ async fn enqueue_live(
         .find(|entry| entry.id() == id)
         .ok_or("排队记录已变化")?;
     queued.sdk_id = Some(message_id.to_owned());
+    remember_native_message_alias(&mut saved, message_id, &id);
     if steering {
         saved.snapshot.queued_messages.push(entry);
         if let Err(error) = save_record(&file, &saved) {
             log::warn!("{error}");
+        } else {
+            notify_native_message_aliases_changed(turn.app, turn.id);
         }
         Ok(())
     } else {
-        save_record(&file, &saved)
+        save_record(&file, &saved)?;
+        notify_native_message_aliases_changed(turn.app, turn.id);
+        Ok(())
     }
 }
 
@@ -2656,11 +2743,12 @@ fn mark_worker_input_live(saved: &mut SessionRecord, session: &str, request: &st
             .iter_mut()
             .find(|input| input.message.id == request)
         {
-            input.sdk_id = Some(sdk_id);
+            input.sdk_id = Some(sdk_id.clone());
             input.provisional = false;
         }
         queue.paused &= queue.inputs.iter().any(|input| input.sdk_id.is_none());
     }
+    remember_native_message_alias(saved, &sdk_id, request);
 }
 
 enum WorkerQueueDelivery {
@@ -2721,6 +2809,8 @@ async fn deliver_worker_queue_input(
     mark_worker_input_live(&mut saved, session, request, message.into());
     if let Err(error) = save_record(&turn.root.join("desktop.json"), &saved) {
         log::warn!("子任务已接收排队消息，回执稍后由会话事件恢复：{error}");
+    } else {
+        notify_native_message_aliases_changed(turn.app, session);
     }
     Ok(WorkerQueueDelivery::Admitted)
 }
@@ -3519,6 +3609,12 @@ async fn run_turn(mut turn: Turn<'_>) -> Result<ReceiptStatus, String> {
                 .ok_or("Harness 缺少消息回执")?
                 .into()
         };
+        if worker.is_none() && !turn.mode_command {
+            let mut saved = turn.record.lock().await;
+            remember_native_message_alias(&mut saved, &message_id, turn.request_id);
+            save_record(&turn.root.join("desktop.json"), &saved)?;
+            notify_native_message_aliases_changed(turn.app, turn.id);
+        }
         observe_turn(
             &mut turn,
             &client,
@@ -3687,7 +3783,17 @@ async fn send_worker_action(
     } else if let Some(receipt) = saved.receipts.get_mut(request) {
         receipt.status = ReceiptStatus::Failed;
     }
+    let native_message = result
+        .as_ref()
+        .ok()
+        .and_then(|value| value["messageId"].as_str());
+    if let Some(message) = native_message {
+        remember_native_message_alias(&mut saved, message, request);
+    }
     save_record(&turn.root.join("desktop.json"), &saved)?;
+    if native_message.is_some_and(|message| !message.is_empty()) {
+        notify_native_message_aliases_changed(turn.app, &format!("lc:{}", action.child));
+    }
     result.map(|value| value["messageId"].as_str().unwrap_or_default().to_owned())
 }
 
@@ -4603,6 +4709,9 @@ async fn apply_event(
             let mut checkpoint = false;
             checkpoint |= notification["method"] == "lolicode/session.mode";
             let worker_message = claim_worker_queue_message(&mut saved, sdk_id, &notification);
+            let mut alias_session = worker_message
+                .as_ref()
+                .map(|(session, _, _)| session.clone());
             checkpoint |= worker_message.is_some();
             if notification["params"]["sessionId"].as_str() == Some(sdk_id) {
                 let event = &notification["params"]["event"];
@@ -4620,6 +4729,8 @@ async fn apply_event(
                                 .snapshot
                                 .queued_messages
                                 .retain(|item| item.id != request);
+                            remember_native_message_alias(&mut saved, sdk_message, &request);
+                            alias_session = Some(turn.id.to_owned());
                             extra_prompts.insert(sdk_message.into(), request);
                             checkpoint = true;
                         }
@@ -4751,6 +4862,9 @@ async fn apply_event(
             }
             if checkpoint {
                 save_record(&turn.root.join("desktop.json"), &saved)?;
+                if let Some(session) = alias_session {
+                    notify_native_message_aliases_changed(turn.app, &session);
+                }
             }
         }
         HarnessEvent::Request(request)
@@ -5106,6 +5220,104 @@ mod markdown_tests {
         std::fs::write(&sessions, b"not a directory").unwrap();
         assert!(existing_markdown_directory(&sessions).is_err());
         assert_eq!(existing_markdown_directory(&root).unwrap(), Some(root));
+    }
+}
+
+#[cfg(test)]
+mod native_message_alias_tests {
+    use super::*;
+
+    fn fixture() -> SessionRecord {
+        serde_json::from_value(json!({
+            "snapshot": {
+                "session": {
+                    "id":"lc:4291e52e-54ba-4e45-8284-e30708f367bd", "title":"Aliases", "projectPath":"fixture", "mode":"build",
+                    "model":null, "createdAt":1, "updatedAt":2
+                },
+                "status":"idle", "messages":[], "permissions":[], "questions":[],
+                "diffs":[], "streamConnected":false, "streamGap":false
+            },
+            "rootCreated":true, "receipts":{},
+            "workerQueues": {"lc:worker": {"inputs":[
+                {"message":{"id":"ui-first","text":"First","createdAt":1,"attachments":[]}, "args":{"requestId":"ui-first"}, "sdkId":null},
+                {"message":{"id":"ui-lost-reply","text":"Second","createdAt":2,"attachments":[]}, "args":{"requestId":"ui-lost-reply"}, "sdkId":null}
+            ],"withdrawn":[],"receipts":{},"paused":false}}
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn explicit_native_receipts_and_worker_claims_keep_business_identity() {
+        let mut record = fixture();
+        remember_native_message_alias(&mut record, "native-root", "ui-root");
+        remember_native_message_alias(&mut record, "native-root", "a-different-request");
+        remember_native_message_alias(&mut record, "", "not-a-message");
+        mark_worker_input_live(&mut record, "lc:worker", "ui-first", "native-worker".into());
+        let first = json!({"params":{"sessionId":"worker","event":{
+            "type":"user/message", "data":{"id":"native-worker","source":{"kind":"user"}}
+        }}});
+        assert_eq!(
+            claim_worker_queue_message(&mut record, "root", &first),
+            Some((
+                "lc:worker".into(),
+                "native-worker".into(),
+                "ui-first".into()
+            ))
+        );
+        let recovered = json!({"params":{"sessionId":"worker","event":{
+            "type":"user/message", "data":{"id":"native-lost-reply","source":{"kind":"user","rpcId":worker_rpc_id("ui-lost-reply")}}
+        }}});
+        assert!(claim_worker_queue_message(&mut record, "root", &recovered).is_some());
+        assert_eq!(record.native_message_aliases["native-root"], "ui-root");
+        assert_eq!(record.native_message_aliases["native-worker"], "ui-first");
+        assert_eq!(
+            record.native_message_aliases["native-lost-reply"],
+            "ui-lost-reply"
+        );
+        assert_eq!(record.native_message_aliases.len(), 3);
+        assert!(record.worker_queues["lc:worker"].inputs.is_empty());
+    }
+
+    #[tokio::test]
+    async fn cold_native_alias_reads_preserve_receipts_and_default_older_records_to_empty() {
+        assert_eq!(
+            native_alias_context_error(LEGACY_MARKDOWN.into()),
+            NATIVE_LEGACY_HISTORY
+        );
+        assert_eq!(
+            native_alias_context_error("other read failure".into()),
+            "other read failure"
+        );
+        let directory = tempfile::tempdir().unwrap();
+        let mut record = fixture();
+        let owner = record.snapshot.session.id.clone();
+        let file = directory.path().join("desktop.json");
+        let context = VerifiedSessionRead {
+            owner_id: owner.clone(),
+            owner_root: directory.path().to_owned(),
+            sdk_id: owner.trim_start_matches("lc:").to_owned(),
+            child: None,
+            controls: None,
+        };
+        let desktop = HarnessDesktop::default();
+        assert!(record.native_message_aliases.is_empty());
+        remember_native_message_alias(&mut record, "native-root", "ui-root");
+        save_record(&file, &record).unwrap();
+        assert_eq!(
+            desktop.native_aliases_for_context(&context).await.unwrap(),
+            record.native_message_aliases
+        );
+        let mut older = serde_json::to_value(&record).unwrap();
+        older
+            .as_object_mut()
+            .unwrap()
+            .remove("nativeMessageAliases");
+        std::fs::write(&file, serde_json::to_vec(&older).unwrap()).unwrap();
+        assert!(desktop
+            .native_aliases_for_context(&context)
+            .await
+            .unwrap()
+            .is_empty());
     }
 }
 

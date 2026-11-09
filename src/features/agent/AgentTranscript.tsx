@@ -39,6 +39,14 @@ import {
   AgentMessageFrame,
   type AgentMessageIdentity,
 } from "./AgentMessageFrame";
+import {
+  AgentNativeTranscript,
+  hasNativeTranscriptContent,
+} from "./AgentNativeTranscript";
+import type {
+  SessionAssistantStreamAttempt,
+  SessionWireEvent,
+} from "@deepseek-ai/dsh-api-session-controller/types";
 
 type ActivityEntry = { key: string; part: AgentPart };
 type TranscriptBlock =
@@ -265,7 +273,26 @@ export interface AgentTranscriptProps {
   documentAttachmentsByMessage?: Record<string, AgentDocumentAttachment[]>;
   userIdentity?: AgentMessageIdentity;
   onLoadEarlier?: () => void;
+  messageAliases?: Readonly<Record<string, string>>;
+  /** Native sessions render the upstream journal; messages are local send echoes only. */
+  native?: {
+    events: readonly SessionWireEvent[];
+    activeAttempt?: SessionAssistantStreamAttempt;
+    hasMore: boolean;
+    loadingEarlier: boolean;
+    onLoadOlder: () => void;
+  };
 }
+
+const hasTranscriptContent = (props: AgentTranscriptProps) =>
+  props.messages.length > 0 ||
+  Boolean(
+    props.native &&
+      hasNativeTranscriptContent(
+        props.native.events,
+        props.native.activeAttempt,
+      ),
+  );
 
 // Like Harness's loaded history window, bound the initial rendering work rather
 // than mounting every historical Markdown/code surface on a session change.
@@ -438,7 +465,7 @@ export const AgentTranscriptDeck = memo(function AgentTranscriptDeck({
     );
     if (
       !candidate.sessionId ||
-      !candidate.messages.length ||
+      !hasTranscriptContent(candidate) ||
       candidate.projectPath !== props.projectPath ||
       visited.has(candidateKey) ||
       warming.some((entry) => entry.key === candidateKey)
@@ -460,9 +487,9 @@ export const AgentTranscriptDeck = memo(function AgentTranscriptDeck({
   const canShow =
     deferredKey === key ||
     visited.has(key) ||
-    (props.messages.length > 0 && committed.current.prepared.includes(key));
-  const pending = loading || (ready && props.messages.length > 0 && !canShow);
-  const showTranscript = ready && !pending && props.messages.length > 0;
+    (hasTranscriptContent(props) && committed.current.prepared.includes(key));
+  const pending = loading || (ready && hasTranscriptContent(props) && !canShow);
+  const showTranscript = ready && !pending && hasTranscriptContent(props);
   const selectedPane = useRef<HTMLDivElement>(null);
   useWorkspaceEntryMotion(selectedPane, showTranscript ? key : null);
   if (
@@ -501,7 +528,15 @@ export const AgentTranscriptDeck = memo(function AgentTranscriptDeck({
             <ViewActivityContext.Provider value={active && selected}>
               <ViewPreparationContext.Provider value={preparing}>
                 <AgentFileActionsContext.Provider value={entry.actions}>
-                  <AgentTranscript {...entry.props} />
+                  {entry.props.native && (
+                    <AgentNativeTranscript
+                      {...entry.props}
+                      {...entry.props.native}
+                    />
+                  )}
+                  {(!entry.props.native || entry.props.messages.length > 0) && (
+                    <AgentTranscript {...entry.props} />
+                  )}
                 </AgentFileActionsContext.Provider>
               </ViewPreparationContext.Provider>
             </ViewActivityContext.Provider>

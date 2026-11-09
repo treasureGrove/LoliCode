@@ -439,6 +439,22 @@ pub async fn read_agent_session_native(
 }
 
 #[tauri::command(rename_all = "camelCase")]
+pub async fn read_agent_native_message_aliases(
+    app: AppHandle,
+    session_id: String,
+) -> Result<std::collections::BTreeMap<String, String>, String> {
+    if legacy_id(&session_id)? {
+        return Err("旧引擎迁移会话没有原生 Harness 消息关联".into());
+    }
+    let carrier = app.state::<InprocessAgentState>();
+    carrier.ensure_started(&app).await?;
+    carrier
+        .harness
+        .read_native_message_aliases(&app, &carrier, &session_id)
+        .await
+}
+
+#[tauri::command(rename_all = "camelCase")]
 pub async fn watch_agent_session_native(
     app: AppHandle,
     window: WebviewWindow,

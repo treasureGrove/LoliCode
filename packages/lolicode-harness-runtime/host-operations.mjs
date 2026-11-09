@@ -9,7 +9,7 @@ import { installSecretaryReport, reportToolName } from "./host-secretary-report.
 import {
   formatBoundedSessionMarkdown, logCold, logMissing, materializedSessionPath, sessionMarkdownError,
 } from "./host-session-markdown.mjs";
-import { followNativeSession, nativePagination, nativeSessionError, notifyNativeSessionFrame, readNativeSession } from "./host-session-native.mjs";
+import { followNativeSession, nativePagination, nativeSessionError, notifyNativeSessionFrame, prepareNativeSession, readNativeSession } from "./host-session-native.mjs";
 
 export { Config };
 export const name = "lolicode-host-operations";
@@ -259,6 +259,9 @@ class LoliCodeSdkServer extends HarnessSdkJsonRpcServer {
     if (!openingMethods.has(method) || !validSessionId(id)) {
       return super.handleRequest(method, params);
     }
+    // Default conversations can attach after a prompt has started. Install the
+    // official accumulator first so its reconnect snapshot includes the prefix.
+    await prepareNativeSession(this.#ctx);
     const isPrompt = method === "session/prompt" || method === "session/query";
     if (isPrompt) {
       if (this.#injections.has(id)) throw new Error("Legacy context is being saved");
@@ -393,7 +396,8 @@ class LoliCodeSdkServer extends HarnessSdkJsonRpcServer {
     entry.done = (async () => {
       let opened = false;
       try {
-        if (!await materializedSessionPath(this.#ctx.sessionPersistence, selected.session.id)) throw new Error(logMissing);
+        // An admitted resident session can be observed before its first native
+        // journal is materialized, so the first prompt streams into this watch.
         if (entry.abort.signal.aborted) throw entry.abort.signal.reason;
         const source = await followNativeSession(this.#ctx, selected.session.id, pagination, entry.abort.signal);
         opened = true;

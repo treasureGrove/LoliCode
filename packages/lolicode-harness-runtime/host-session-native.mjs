@@ -70,6 +70,11 @@ async function readerPeer(ctx) {
   }
 }
 
+/** Install official observation before the first Agent can emit stream frames. */
+export async function prepareNativeSession(ctx) {
+  await readerPeer(ctx);
+}
+
 export function boundedNativeSession(result) {
   if (Buffer.byteLength(JSON.stringify(result), "utf8") > maximumBytes) throw new Error(nativeTooLarge);
   return result;
@@ -127,9 +132,10 @@ export async function followNativeSession(ctx, sessionId, request, signal) {
   if (pagination.beforeSeq !== undefined || pagination.throughSeq !== undefined) throw new Error("Invalid native follow parameters");
   const { host, peer, address } = await nativeSessionAccess(ctx, sessionId);
   const descriptor = TYPERT_REMOTE.methods["session/follow"];
-  // No activate flag and no token-level assistantStream: this is a passive
-  // committed journal, not a request to start an Agent or synthesize a reply.
-  const args = { request: { address, maxMessages: pagination.maxMessages } };
+  // Observe both the official committed journal and transient attempt frames.
+  // assistantStream only binds observation; omitting activate avoids promotion
+  // or a new Agent/turn when opening the default conversation.
+  const args = { request: { address, assistantStream: true, maxMessages: pagination.maxMessages } };
   descriptor.input({ strict: true }).create().parse(args);
   const source = await host.typertGateway.stream({ namespace: "session", method: "follow", args, peer, signal });
   return (async function* () {

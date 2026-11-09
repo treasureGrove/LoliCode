@@ -19,6 +19,9 @@
       "@/*": ["src/*"],
       "@deepseek-ai/dsh-api-session-controller/types": [
         "packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-api-session-controller/lib/types/types.d.ts"
+      ],
+      "@deepseek-ai/dsh-llm/assistant-stream": [
+        "packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-llm/lib/types/assistant-stream.d.ts"
       ]
     },
     "types": ["vitest/globals"]

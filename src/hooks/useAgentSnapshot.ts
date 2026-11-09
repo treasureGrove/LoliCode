@@ -147,6 +147,8 @@ export function useAgentSnapshot(
     fast: boolean;
     refresh: number;
     onSnapshot: (snapshot: AgentSnapshot) => void;
+    /** Native transcript owns transient frames; this hook supplies desktop controls. */
+    nativeTranscript?: boolean;
   },
 ) {
   const cache = useRef(new Map<string, CachedSession>());
@@ -167,7 +169,7 @@ export function useAgentSnapshot(
     fast: boolean;
     refresh: number;
   }>();
-  const { fast, refresh } = options;
+  const { fast, refresh, nativeTranscript = false } = options;
 
   // Warm one likely destination at a time. A click during the read can adopt
   // it, and background results never update the selected conversation.
@@ -229,6 +231,7 @@ export function useAgentSnapshot(
         );
       }
       if (update.type === "tail") {
+        if (nativeTranscript && selected) return;
         entry.tail = update;
         if (selected) setRevision((value) => value + 1);
         else entry.revision += 1;
@@ -362,8 +365,10 @@ export function useAgentSnapshot(
   const tail = cached?.tail ?? null;
   const error = cached?.error ?? null;
   const displayed = useMemo(() => {
-    return snapshot && tail ? withStreamTail(snapshot, tail) : snapshot;
-  }, [snapshot, tail]);
+    return snapshot && tail && !nativeTranscript
+      ? withStreamTail(snapshot, tail)
+      : snapshot;
+  }, [snapshot, tail, nativeTranscript]);
 
   return {
     snapshot: displayed,

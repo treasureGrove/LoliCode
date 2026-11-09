@@ -39,6 +39,46 @@ function follow(initialId: string, onSnapshot = vi.fn()) {
   );
 }
 
+it("keeps desktop controls authoritative without merging converted tails into a native conversation", async () => {
+  vi.useFakeTimers();
+  const stored = sessionSnapshot("lc:native-controls", "running");
+  const read = vi
+    .mocked(agentApi.getSession)
+    .mockReset()
+    .mockResolvedValue(stored);
+  const { result } = renderHook(() =>
+    useAgentSnapshot(stored.session.id, {
+      fast: false,
+      refresh: 0,
+      onSnapshot: () => {},
+      nativeTranscript: true,
+    }),
+  );
+  await act(async () => {});
+  act(() =>
+    emitTauriEvent("agent-session-update", {
+      type: "tail",
+      sessionId: stored.session.id,
+      previousMessageId: stored.messages[0].id,
+      message: {
+        id: "old-converted-tail",
+        role: "assistant",
+        createdAt: 2,
+        parts: [{ type: "text", text: "Old tail" }],
+      },
+    }),
+  );
+  expect(result.current.snapshot?.messages).toEqual(stored.messages);
+  act(() =>
+    emitTauriEvent("agent-session-update", {
+      type: "changed",
+      sessionId: stored.session.id,
+    }),
+  );
+  await act(async () => vi.advanceTimersByTimeAsync(40));
+  expect(read).toHaveBeenCalledTimes(2);
+});
+
 it("shows only the selected session's stream tail before polling and preserves it across a stale read", async () => {
   vi.useFakeTimers();
   const sessionId = "lc:stream-fixture";
