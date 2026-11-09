@@ -12,6 +12,7 @@ import {
   realpathSync,
   renameSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
@@ -56,6 +57,122 @@ const nodeChecksums = {
 const nodeName = process.platform === "win32" ? "node.exe" : "node";
 const sha = (bytes) => createHash("sha256").update(bytes).digest("hex");
 
+// Dependency payloads are immutable after npm ci. Bridge changes must not
+// reinstall the same pinned 70,000-file SDK tree on every desktop build.
+export function dependencyInputsHash(
+  packageRoot = runtime,
+  {
+    platform = process.platform,
+    arch = process.arch,
+    targetNodeVersion = nodeVersion,
+    policy = [verifyLock, npmConfiguration, installHarness, verifyPackageFiles]
+      .map(String)
+      .join("\0"),
+  } = {},
+) {
+  return sha(
+    JSON.stringify([
+      "harness-dependencies-v1",
+      platform,
+      arch,
+      targetNodeVersion,
+      sha(policy),
+      nodeChecksums[`${platform}-${arch}`],
+      ...["package.json", "package-lock.json"].map((name) => [
+        name,
+        sha(readFileSync(path.join(packageRoot, name))),
+      ]),
+    ]),
+  );
+}
+
+export function dependencyInventory(directory) {
+  const hash = createHash("sha256");
+  function visit(parent, prefix = "") {
+    for (const entry of readdirSync(parent, { withFileTypes: true }).sort(
+      (a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0),
+    )) {
+      // npm launcher wrappers are unused by our absolute Node/SDK invocation.
+      if (entry.name === ".bin" || entry.name === ".lolicode-install.json")
+        continue;
+      const file = path.join(parent, entry.name);
+      const relative = prefix + entry.name;
+      if (entry.isDirectory()) visit(file, relative + "/");
+      else if (entry.isFile()) {
+        const value = statSync(file);
+        hash.update(
+          JSON.stringify([relative, value.size, value.mtimeMs, value.mode]) +
+            "\0",
+        );
+      } else
+        throw new Error(`Unexpected non-regular SDK cache file: ${relative}`);
+    }
+  }
+  visit(directory);
+  return hash.digest("hex");
+}
+
+export function commitBundle(
+  stage,
+  directory,
+  previous,
+  reuseDependencies,
+  rename = renameSync,
+) {
+  const stageIdentity = lstatSync(stage, { bigint: true });
+  const oldIdentity = existsSync(directory)
+    ? lstatSync(directory, { bigint: true })
+    : null;
+  const sdkIdentity = reuseDependencies
+    ? lstatSync(path.join(directory, "node_modules"), { bigint: true })
+    : null;
+  const isSameDirectory = (file, identity) => {
+    if (!identity || !existsSync(file)) return false;
+    const value = lstatSync(file, { bigint: true });
+    return (
+      value.isDirectory() &&
+      value.dev === identity.dev &&
+      value.ino === identity.ino
+    );
+  };
+  try {
+    if (existsSync(directory)) {
+      if (!lstatSync(directory).isDirectory())
+        throw new Error("Harness resource path is not a directory.");
+      rename(directory, previous);
+    }
+    if (reuseDependencies) {
+      // Both paths share the canonical parent/volume. Transfer the immutable
+      // SDK in O(1), rather than copying or recreating 70,000 file entries.
+      rename(
+        path.join(previous, "node_modules"),
+        path.join(stage, "node_modules"),
+      );
+    }
+    rename(stage, directory);
+  } catch (error) {
+    try {
+      // Detect completed renames by file identity too: recovery must work even
+      // if an I/O wrapper reported failure after completing its operation.
+      if (isSameDirectory(directory, stageIdentity)) rename(directory, stage);
+      if (isSameDirectory(path.join(stage, "node_modules"), sdkIdentity))
+        rename(
+          path.join(stage, "node_modules"),
+          path.join(previous, "node_modules"),
+        );
+      if (isSameDirectory(previous, oldIdentity)) rename(previous, directory);
+    } catch (rollback) {
+      const failure = new AggregateError(
+        [error, rollback],
+        "Harness replacement and rollback failed; recovery files were preserved.",
+      );
+      failure.code = "HARNESS_RUNTIME_ROLLBACK_FAILED";
+      throw failure;
+    }
+    throw error;
+  }
+}
+
 function run(command, args, env = process.env, cwd = runtime) {
   const result = spawnSync(command, args, {
     cwd,
@@ -71,9 +188,9 @@ function run(command, args, env = process.env, cwd = runtime) {
   }
 }
 
-function verifyLock() {
+function verifyLock(packageRoot = runtime) {
   const { lockfileVersion, packages } = JSON.parse(
-    readFileSync(path.join(runtime, "package-lock.json"), "utf8"),
+    readFileSync(path.join(packageRoot, "package-lock.json"), "utf8"),
   );
   const artifact = packages?.[`node_modules/${packageName}`];
   if (
@@ -132,16 +249,46 @@ function npmConfiguration(packageRoot) {
   };
 }
 
-function installHarness(packageRoot = runtime) {
+export function installedHarnessMatches(packageRoot, inputsHash) {
+  try {
+    const modules = path.join(packageRoot, "node_modules");
+    const cached = JSON.parse(
+      readFileSync(path.join(modules, ".lolicode-install.json"), "utf8"),
+    );
+    const entry = path.join(modules, packageName, "lib/bin.js");
+    return (
+      cached.format === 1 &&
+      cached.inputsSha256 === inputsHash &&
+      cached.harnessVersion === pinnedVersion &&
+      cached.entrySha256 === sha(readFileSync(entry)) &&
+      cached.packageFilesSha256 === dependencyInventory(modules) &&
+      JSON.parse(
+        readFileSync(path.join(modules, packageName, "package.json"), "utf8"),
+      ).version === pinnedVersion
+    );
+  } catch {
+    return false;
+  }
+}
+
+function installHarness(packageRoot = runtime, { cache = false } = {}) {
   const [major, minor] = process.versions.node.split(".").map(Number);
   if (major < 24 || (major === 24 && minor < 9)) {
     throw new Error(
       "Preparing DeepSeek Harness requires Node.js 24.9 or newer.",
     );
   }
-  verifyLock();
+  verifyLock(packageRoot);
 
+  const inputsHash = dependencyInputsHash(packageRoot);
   const npm = npmConfiguration(packageRoot);
+  const cli = path.join(packageRoot, "node_modules", packageName, "lib/bin.js");
+  if (cache && installedHarnessMatches(packageRoot, inputsHash)) {
+    run(process.execPath, [cli, "--version"], process.env, packageRoot);
+    console.log(`Verified existing pinned Harness SDK at ${cli}`);
+    return;
+  }
+
   const args = [
     "ci",
     "--ignore-scripts",
@@ -181,7 +328,6 @@ function installHarness(packageRoot = runtime) {
   }
 
   const installDir = path.join(packageRoot, "node_modules", packageName);
-  const cli = path.join(installDir, "lib", "bin.js");
   const { version } = JSON.parse(
     readFileSync(path.join(installDir, "package.json"), "utf8"),
   );
@@ -191,6 +337,19 @@ function installHarness(packageRoot = runtime) {
     );
   }
   run(process.execPath, [cli, "--version"], process.env, packageRoot);
+  if (cache)
+    writeFileSync(
+      path.join(packageRoot, "node_modules/.lolicode-install.json"),
+      JSON.stringify({
+        format: 1,
+        harnessVersion: pinnedVersion,
+        inputsSha256: inputsHash,
+        entrySha256: sha(readFileSync(cli)),
+        packageFilesSha256: dependencyInventory(
+          path.join(packageRoot, "node_modules"),
+        ),
+      }),
+    );
   console.log(`Prepared DeepSeek Harness SDK at ${cli}`);
 }
 
@@ -260,8 +419,8 @@ async function prepareNode(stage, transaction) {
   return sha(readFileSync(bundledNode));
 }
 
-function runtimeInputs() {
-  return readdirSync(runtime, { withFileTypes: true })
+function runtimeInputs(packageRoot = runtime) {
+  return readdirSync(packageRoot, { withFileTypes: true })
     .filter(
       (entry) =>
         entry.isFile() &&
@@ -271,21 +430,78 @@ function runtimeInputs() {
     .sort();
 }
 
-function bundleMatches(inputsHash) {
+function readBundleManifest(directory = destination) {
   try {
-    const manifest = JSON.parse(
-      readFileSync(path.join(destination, "runtime-manifest.json"), "utf8"),
+    return JSON.parse(
+      readFileSync(path.join(directory, "runtime-manifest.json"), "utf8"),
     );
-    const entry = path.join(
-      destination,
-      "node_modules/@deepseek-ai/dsh/lib/bin.js",
+  } catch {
+    return null;
+  }
+}
+
+function runtimeIdentity() {
+  return {
+    platform: process.platform,
+    arch: process.arch,
+    nodeVersion,
+    harnessVersion: pinnedVersion,
+    nodeName,
+    nodeChecksum:
+      process.platform === "win32"
+        ? nodeChecksums[`${process.platform}-${process.arch}`]
+        : null,
+    licenseChecksum: process.platform === "win32" ? nodeLicenseHash : null,
+  };
+}
+
+export function reusableBundlePayload(
+  directory,
+  manifest,
+  dependencyHash,
+  expected = runtimeIdentity(),
+) {
+  try {
+    return (
+      manifest?.format === 1 &&
+      manifest.harnessVersion === expected.harnessVersion &&
+      manifest.nodeVersion === expected.nodeVersion &&
+      manifest.platform === expected.platform &&
+      manifest.arch === expected.arch &&
+      manifest.dependenciesInputsSha256 === dependencyHash &&
+      (!expected.nodeChecksum ||
+        manifest.nodeSha256 === expected.nodeChecksum) &&
+      manifest.nodeSha256 ===
+        sha(readFileSync(path.join(directory, expected.nodeName))) &&
+      (!expected.licenseChecksum ||
+        manifest.nodeLicenseSha256 === expected.licenseChecksum) &&
+      sha(readFileSync(path.join(directory, "NODE-LICENSE"))) ===
+        manifest.nodeLicenseSha256 &&
+      manifest.entrySha256 ===
+        sha(
+          readFileSync(
+            path.join(directory, "node_modules/@deepseek-ai/dsh/lib/bin.js"),
+          ),
+        ) &&
+      manifest.packageFilesSha256 ===
+        dependencyInventory(path.join(directory, "node_modules"))
     );
+  } catch {
+    return false;
+  }
+}
+
+function bundleMatches(
+  inputsHash,
+  dependencyHash,
+  directory = destination,
+  expected = runtimeIdentity(),
+) {
+  try {
+    const manifest = readBundleManifest(directory);
     return (
       manifest.inputsSha256 === inputsHash &&
-      manifest.nodeSha256 ===
-        sha(readFileSync(path.join(destination, nodeName))) &&
-      manifest.entrySha256 === sha(readFileSync(entry)) &&
-      existsSync(path.join(destination, "NODE-LICENSE"))
+      reusableBundlePayload(directory, manifest, dependencyHash, expected)
     );
   } catch {
     return false;
@@ -308,9 +524,18 @@ function verifyPackageFiles(directory) {
   }
 }
 
-async function bundleHarness() {
-  verifyLock();
-  const inputs = runtimeInputs();
+export async function bundleHarness({
+  packageRoot = runtime,
+  directory = destination,
+  repositoryRoot = repository,
+  prepareNodePayload = prepareNode,
+  install = installHarness,
+  execute = run,
+  publish = commitBundle,
+  identity = runtimeIdentity(),
+} = {}) {
+  verifyLock(packageRoot);
+  const inputs = runtimeInputs(packageRoot);
   const inputsHash = sha(
     JSON.stringify([
       process.platform,
@@ -319,18 +544,19 @@ async function bundleHarness() {
       sha(readFileSync(fileURLToPath(import.meta.url))),
       ...inputs.map((file) => [
         file,
-        sha(readFileSync(path.join(runtime, file))),
+        sha(readFileSync(path.join(packageRoot, file))),
       ]),
     ]),
   );
-  if (bundleMatches(inputsHash)) {
-    console.log(`Verified existing bundled Harness at ${destination}`);
+  const dependenciesHash = dependencyInputsHash(packageRoot);
+  if (bundleMatches(inputsHash, dependenciesHash, directory, identity)) {
+    console.log(`Verified existing bundled Harness at ${directory}`);
     return;
   }
-  const parent = path.dirname(destination);
+  const parent = path.dirname(directory);
   mkdirSync(parent, { recursive: true });
   const canonical = realpathSync(parent);
-  const relative = path.relative(realpathSync(repository), canonical);
+  const relative = path.relative(realpathSync(repositoryRoot), canonical);
   if (
     relative === ".." ||
     relative.startsWith(`..${path.sep}`) ||
@@ -344,14 +570,37 @@ async function bundleHarness() {
   const stage = path.join(transaction, "package");
   const previous = path.join(transaction, "previous");
   mkdirSync(stage);
+  let preserveTransaction = false;
   try {
-    const nodeSha256 = await prepareNode(stage, transaction);
+    const cached = readBundleManifest(directory);
+    const reuse = reusableBundlePayload(
+      directory,
+      cached,
+      dependenciesHash,
+      identity,
+    );
+    const nodeSha256 = reuse
+      ? cached.nodeSha256
+      : await prepareNodePayload(stage, transaction);
+    if (reuse) {
+      copyFileSync(path.join(directory, nodeName), path.join(stage, nodeName));
+      copyFileSync(
+        path.join(directory, "NODE-LICENSE"),
+        path.join(stage, "NODE-LICENSE"),
+      );
+      console.log(
+        "Reused verified immutable Harness dependencies and Node; refreshing bridge files.",
+      );
+    }
     for (const file of inputs)
-      copyFileSync(path.join(runtime, file), path.join(stage, file));
-    installHarness(stage);
-    verifyPackageFiles(path.join(stage, "node_modules"));
-    const entry = path.join(stage, "node_modules/@deepseek-ai/dsh/lib/bin.js");
-    run(path.join(stage, nodeName), [entry, "--version"]);
+      copyFileSync(path.join(packageRoot, file), path.join(stage, file));
+    if (!reuse) install(stage);
+    if (!reuse) verifyPackageFiles(path.join(stage, "node_modules"));
+    const entry = path.join(
+      reuse ? directory : stage,
+      "node_modules/@deepseek-ai/dsh/lib/bin.js",
+    );
+    execute(path.join(stage, nodeName), [entry, "--version"]);
     const manifest = {
       format: 1,
       harnessVersion: pinnedVersion,
@@ -359,38 +608,41 @@ async function bundleHarness() {
       platform: process.platform,
       arch: process.arch,
       inputsSha256: inputsHash,
+      dependenciesInputsSha256: dependenciesHash,
+      packageFilesSha256: reuse
+        ? cached.packageFilesSha256
+        : dependencyInventory(path.join(stage, "node_modules")),
       nodeSha256,
+      nodeLicenseSha256: sha(readFileSync(path.join(stage, "NODE-LICENSE"))),
       entrySha256: sha(readFileSync(entry)),
     };
     writeFileSync(
       path.join(stage, "runtime-manifest.json"),
       `${JSON.stringify(manifest, null, 2)}\n`,
     );
-    if (existsSync(destination)) {
-      if (!lstatSync(destination).isDirectory())
-        throw new Error("Harness resource path is not a directory.");
-      renameSync(destination, previous);
-    }
-    try {
-      renameSync(stage, destination);
-    } catch (error) {
-      if (existsSync(previous)) renameSync(previous, destination);
-      throw error;
-    }
-    console.log(`Bundled DeepSeek Harness and Node.js at ${destination}`);
+    publish(stage, directory, previous, reuse);
+    console.log(`Bundled DeepSeek Harness and Node.js at ${directory}`);
+  } catch (error) {
+    preserveTransaction = error.code === "HARNESS_RUNTIME_ROLLBACK_FAILED";
+    throw error;
   } finally {
     // Keep the original tree available if the replacement and rollback failed.
-    if (!existsSync(previous) || existsSync(destination))
+    if (!preserveTransaction)
       rmSync(transaction, { recursive: true, force: true });
   }
 }
 
-try {
-  const args = process.argv.slice(2);
-  if (args.length === 0) installHarness();
-  else if (args.length === 1 && args[0] === "--bundle") await bundleHarness();
-  else throw new Error("Use prepare-lolicode-harness-runtime.mjs [--bundle].");
-} catch (error) {
-  console.error(error.message);
-  process.exitCode = 1;
-}
+if (
+  process.argv[1] &&
+  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+)
+  try {
+    const args = process.argv.slice(2);
+    if (args.length === 0) installHarness(runtime, { cache: true });
+    else if (args.length === 1 && args[0] === "--bundle") await bundleHarness();
+    else
+      throw new Error("Use prepare-lolicode-harness-runtime.mjs [--bundle].");
+  } catch (error) {
+    console.error(error.message);
+    process.exitCode = 1;
+  }

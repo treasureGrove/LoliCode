@@ -1,7 +1,19 @@
-import { copyFile, mkdir, readFile, lstat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, lstat, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+
+async function writeChangedFile(file, bytes) {
+  try {
+    if (!(await lstat(file)).isFile())
+      throw new Error("Default skill output must be a regular file.");
+    if ((await readFile(file)).equals(bytes)) return 0;
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
+  await writeFile(file, bytes);
+  return 1;
+}
 
 export async function prepareAgentAssets(
   root,
@@ -19,6 +31,7 @@ export async function prepareAgentAssets(
   )
     throw new Error("Default skills source revision mismatch.");
   const extensionsOutput = output;
+  let writtenFiles = 0;
   await mkdir(extensionsOutput, { recursive: true });
   for (const skill of skillsManifest.skills) {
     if (!/^[a-zA-Z0-9_-]+$/.test(skill.directory))
@@ -44,7 +57,7 @@ export async function prepareAgentAssets(
         throw new Error("Default skill source checksum mismatch.");
       const targetFile = path.join(extensionsOutput, file.path);
       await mkdir(path.dirname(targetFile), { recursive: true });
-      await writeFile(targetFile, fileBytes);
+      writtenFiles += await writeChangedFile(targetFile, fileBytes);
     }
   }
   for (const name of [
@@ -53,22 +66,26 @@ export async function prepareAgentAssets(
     "NOTICE.md",
     "UPSTREAM_NOTICE.md",
   ])
-    await copyFile(
-      path.join(vendored, name),
+    writtenFiles += await writeChangedFile(
       path.join(extensionsOutput, name),
+      await readFile(path.join(vendored, name)),
     );
   return {
     skills: skillsManifest.skills.length,
     sourceRevision: skillsManifest.sourceRevision,
+    writtenFiles,
   };
 }
 if (
   process.argv[1] &&
   path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 ) {
-  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+  const root = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "../..",
+  );
   const result = await prepareAgentAssets(root);
   process.stdout.write(
-    `Prepared ${result.skills} pinned content skills for the in-process LoliCode agent.\n`,
+    `Prepared ${result.skills} pinned content skills (${result.writtenFiles} files updated).\n`,
   );
 }

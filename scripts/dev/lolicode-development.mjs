@@ -4,6 +4,7 @@ import { createHash, randomUUID } from "node:crypto";
 import {
   cpSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   openSync,
@@ -18,6 +19,10 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { nativeContract } from "../build/lolicode-renderer-pack.mjs";
+import {
+  buildDevelopmentIncrementally,
+  isDevelopmentCriticalFile,
+} from "./lolicode-development-cache.mjs";
 
 export const DEVELOPMENT_ID = "art.treasuregrove.lolicode.dev";
 export const DEVELOPMENT_NAME = "LoliCode Dev";
@@ -279,10 +284,22 @@ export function buildEnvironment(channel, source = process.env) {
     env.LOLICODE_DEV_NODE_PATH = process.execPath;
     // Development needs fast repeat builds, without release-only whole-program LTO.
     env.CARGO_PROFILE_RELEASE_LTO = "false";
+    env.CARGO_PROFILE_RELEASE_INCREMENTAL = "true";
+    env.LOLICODE_DEV_PROFILE_OVERRIDES = "v1";
     // Local development never consumes a release signing credential.
     delete env.TAURI_SIGNING_PRIVATE_KEY;
     delete env.TAURI_SIGNING_PRIVATE_KEY_PASSWORD;
   } else {
+    if (
+      source.LOLICODE_DEV_PROFILE_OVERRIDES === "v1" ||
+      source.LOLICODE_BUILD_CHANNEL === "development"
+    ) {
+      if (env.CARGO_PROFILE_RELEASE_LTO === "false")
+        delete env.CARGO_PROFILE_RELEASE_LTO;
+      if (env.CARGO_PROFILE_RELEASE_INCREMENTAL === "true")
+        delete env.CARGO_PROFILE_RELEASE_INCREMENTAL;
+    }
+    delete env.LOLICODE_DEV_PROFILE_OVERRIDES;
     delete env.LOLICODE_BUILD_NUMBER;
     delete env.VITE_LOLICODE_BUILD_NUMBER;
     for (const field of ["BRANCH", "TIMESTAMP", "DIRTY"]) {
@@ -419,6 +436,40 @@ function fileList(directory, prefix = "") {
   });
 }
 
+// Preserve the source timestamp so repeat native packaging/installation can
+// avoid rewriting the unchanged SDK tree. Critical bootstrap bytes are checked
+// even if a damaged destination retained the expected size and timestamp.
+function copyDevelopmentPayload(
+  source,
+  destination,
+  criticalRoot = destination,
+) {
+  cpSync(source, destination, {
+    recursive: true,
+    preserveTimestamps: true,
+    filter: (from, to) => {
+      if (!existsSync(to)) return true;
+      const before = lstatSync(from);
+      const current = lstatSync(to);
+      if (before.isSymbolicLink() || current.isSymbolicLink())
+        throw new Error("Development payload cannot contain symlinks.");
+      if (
+        !before.isFile() ||
+        !current.isFile() ||
+        before.size !== current.size ||
+        Math.abs(before.mtimeMs - current.mtimeMs) > 1
+      )
+        return true;
+      const relative = path
+        .relative(criticalRoot, to)
+        .split(path.sep)
+        .join("/");
+      if (!isDevelopmentCriticalFile(relative)) return false;
+      return !readFileSync(from).equals(readFileSync(to));
+    },
+  });
+}
+
 export function stageDevelopmentApp(env) {
   const binary = path.join(
     targetDirectory,
@@ -432,9 +483,14 @@ export function stageDevelopmentApp(env) {
     windowsHide: true,
     timeout: 15000,
   });
+  const nativeBuildInfo =
+    identity.status === 0 ? JSON.parse(identity.stdout) : null;
   if (
     identity.status !== 0 ||
-    JSON.parse(identity.stdout).channel !== "development"
+    nativeBuildInfo?.channel !== "development" ||
+    nativeBuildInfo.builtAt !== env.LOLICODE_BUILD_TIMESTAMP ||
+    nativeBuildInfo.developmentBuildNumber !== env.LOLICODE_BUILD_NUMBER ||
+    nativeBuildInfo.sourceRevision !== env.LOLICODE_BUILD_REVISION
   )
     throw new Error(
       "Refusing to register a binary that is not a development build.",
@@ -442,26 +498,31 @@ export function stageDevelopmentApp(env) {
   // Assemble only the allowlisted runtime payload, never a whole build directory.
   mkdirSync(targetDirectory, { recursive: true });
   const staging = mkdtempSync(path.join(targetDirectory, "package-"));
-  cpSync(binary, path.join(staging, `${DEVELOPMENT_NAME}.exe`));
+  cpSync(binary, path.join(staging, `${DEVELOPMENT_NAME}.exe`), {
+    preserveTimestamps: true,
+  });
   const config = JSON.parse(
     readFileSync(path.join(root, "src-tauri/tauri.conf.json"), "utf8"),
   );
   for (const [source, destination] of Object.entries(config.bundle.resources)) {
-    cpSync(
+    copyDevelopmentPayload(
       path.join(root, "src-tauri", source),
       path.join(staging, destination),
-      { recursive: true },
     );
   }
   for (const name of ["LICENSE", "THIRD_PARTY_NOTICES.md"])
-    cpSync(path.join(root, name), path.join(staging, name));
+    cpSync(path.join(root, name), path.join(staging, name), {
+      preserveTimestamps: true,
+    });
   cpSync(
     path.join(root, "scripts/dev/register-lolicode-development.ps1"),
     path.join(staging, "register-lolicode-development.ps1"),
+    { preserveTimestamps: true },
   );
   cpSync(
     path.join(root, "scripts/dev/launch-lolicode-development.ps1"),
     path.join(staging, "launch-lolicode-development.ps1"),
+    { preserveTimestamps: true },
   );
   const product = JSON.parse(
     readFileSync(path.join(root, "product-release.json"), "utf8"),
@@ -480,6 +541,7 @@ export function stageDevelopmentApp(env) {
     builtAt: env.VITE_LOLICODE_BUILD_TIMESTAMP,
     sourceDirectory: root,
     sourceFingerprint: env.LOLICODE_DEV_SOURCE_FINGERPRINT,
+    nativeBuildInfo,
     nodePath: process.execPath,
     autoBuildOnLaunch: !env.CI && existsSync(path.join(root, ".git")),
     files: fileList(staging),
@@ -507,7 +569,7 @@ export function stageDevelopmentApp(env) {
     }
   }
   mkdirSync(packageDirectory, { recursive: true });
-  cpSync(staging, packageDirectory, { recursive: true });
+  copyDevelopmentPayload(staging, packageDirectory);
   const resolvedStage = path.resolve(staging);
   if (
     path.dirname(resolvedStage) !== targetDirectory ||
@@ -591,28 +653,60 @@ export async function main(args) {
       );
       break;
     case "build": {
-      if (options.some((option) => option !== "--no-register"))
+      if (
+        options.some((option) => !["--no-register", "--force"].includes(option))
+      )
         throw new Error(
-          "Development build supports only --no-register; use build:release for installers.",
+          "Development build supports only --no-register and --force; use build:release for installers.",
         );
       if (process.platform !== "win32")
         throw new Error(
           "The desktop development package currently targets Windows.",
         );
-      devEnv.LOLICODE_DEV_SOURCE_FINGERPRINT = developmentSourceFingerprint();
-      tauri(
-        ["build", "--no-bundle", "--config", "src-tauri/tauri.dev.conf.json"],
-        devEnv,
-      );
-      if (
-        developmentSourceFingerprint() !==
-        devEnv.LOLICODE_DEV_SOURCE_FINGERPRINT
-      )
-        throw new Error(
-          "源码在构建期间发生变化，请重新构建；已安装开发版保持不变。",
-        );
-      stageDevelopmentApp(devEnv);
-      if (!options.includes("--no-register")) registration("Register");
+      await buildDevelopmentIncrementally({
+        repository: root,
+        packageDirectory,
+        installDirectory: path.join(
+          process.env.LOCALAPPDATA || "",
+          "Programs",
+          DEVELOPMENT_NAME,
+        ),
+        environment: devEnv,
+        fingerprintSource: developmentSourceFingerprint,
+        nativeContract,
+        force: options.includes("--force"),
+        noRegister: options.includes("--no-register"),
+        isRunning: developmentIsRunning,
+        buildNative: (env) =>
+          tauri(
+            [
+              "build",
+              "--no-bundle",
+              "--config",
+              "src-tauri/tauri.dev.conf.json",
+              "--config",
+              "src-tauri/tauri.dev.build.conf.json",
+              "--",
+              "--config",
+              "profile.release.package.lolicode.opt-level=1",
+              "--config",
+              "profile.release.package.lolicode.codegen-units=256",
+            ],
+            env,
+          ),
+        stageNative: stageDevelopmentApp,
+        buildRenderer: buildDevelopmentRenderer,
+        rendererFiles: (directory) =>
+          Object.fromEntries(
+            fileList(directory).map((relative) => [
+              relative,
+              createHash("sha256")
+                .update(readFileSync(path.join(directory, relative)))
+                .digest("hex"),
+            ]),
+          ),
+        register: () => registration("Register"),
+      });
       console.log(`Development app: ${packageDirectory}`);
       break;
     }
@@ -640,7 +734,7 @@ export async function main(args) {
       break;
     default:
       throw new Error(
-        "Use dev, build [--no-register], launch, renderer, release, register, or unregister.",
+        "Use dev, build [--no-register] [--force], launch, renderer, release, register, or unregister.",
       );
   }
 }

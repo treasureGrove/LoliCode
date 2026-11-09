@@ -28,6 +28,31 @@ function Read-DevelopmentManifest([string]$ManifestPath) {
     return $taskManifest
 }
 
+function Copy-DevelopmentFile([string]$Source, [string]$Destination, [bool]$VerifyHash = $false) {
+    $taskSourceInfo = [IO.FileInfo]::new($Source)
+    if (-not $taskSourceInfo.Exists) { throw 'Development source file missing.' }
+    $taskDestinationInfo = [IO.FileInfo]::new($Destination)
+    if ($taskDestinationInfo.Exists -and $taskSourceInfo.Length -eq $taskDestinationInfo.Length) {
+        if ($VerifyHash) {
+            $taskHasher = [Security.Cryptography.SHA256]::Create()
+            try {
+                $taskSourceStream = [IO.File]::OpenRead($Source)
+                try { $taskSourceHash = [Convert]::ToBase64String($taskHasher.ComputeHash($taskSourceStream)) }
+                finally { $taskSourceStream.Dispose() }
+                $taskDestinationStream = [IO.File]::OpenRead($Destination)
+                try { $taskDestinationHash = [Convert]::ToBase64String($taskHasher.ComputeHash($taskDestinationStream)) }
+                finally { $taskDestinationStream.Dispose() }
+                if ($taskSourceHash -eq $taskDestinationHash) { return $false }
+            } finally { $taskHasher.Dispose() }
+        } elseif ($taskSourceInfo.LastWriteTimeUtc.Ticks -eq $taskDestinationInfo.LastWriteTimeUtc.Ticks) {
+            return $false
+        }
+    }
+    $null = [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($Destination))
+    [IO.File]::Copy($Source, $Destination, $true)
+    return $true
+}
+
 function Assert-DevelopmentAppClosed {
     $taskRunning = @(Get-Process -Name 'LoliCode Dev' -ErrorAction SilentlyContinue | Where-Object {
         $_.Path -and [IO.Path]::GetFullPath($_.Path) -eq $taskBinary
@@ -104,6 +129,7 @@ if (Test-Path -LiteralPath $taskRegistryPath) {
     $taskExistingRegistry = Get-ItemProperty -LiteralPath $taskRegistryPath
     if ($taskExistingRegistry.InstallLocation -ne $taskInstallDirectory) { throw 'Unexpected development registration; preserved.' }
 }
+$taskCopiedFiles = 0
 foreach ($taskRelativeFile in @($taskManifest.files) + @('development-build.json')) {
     $taskSourceFile = [IO.Path]::GetFullPath((Join-Path $taskSourceDirectory $taskRelativeFile))
     $taskDestinationFile = [IO.Path]::GetFullPath((Join-Path $taskInstallDirectory $taskRelativeFile))
@@ -128,8 +154,11 @@ foreach ($taskRelativeFile in @($taskManifest.files) + @('development-build.json
     $taskDestinationFile = [IO.Path]::GetFullPath((Join-Path $taskInstallDirectory $taskRelativeFile))
     if (-not $taskSourceFile.StartsWith($taskSourceDirectory + '\', [StringComparison]::OrdinalIgnoreCase) -or
         -not $taskDestinationFile.StartsWith($taskInstallDirectory + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Unsafe managed file path.' }
-    $null = New-Item -ItemType Directory -Path ([IO.Path]::GetDirectoryName($taskDestinationFile)) -Force
-    Copy-Item -LiteralPath $taskSourceFile -Destination $taskDestinationFile -Force
+    $taskVerifyHash = $taskRelativeFile -match '\.(exe|dll|node|ps1)$' -or
+        $taskRelativeFile -match '(^|[\\/])[^\\/]+\.mjs$' -and $taskRelativeFile -notmatch 'node_modules' -or
+        $taskRelativeFile -match '(^|[\\/])(development-build|runtime-manifest)\.json$' -or
+        $taskRelativeFile -match 'node_modules[\\/]@deepseek-ai[\\/]dsh[\\/](lib[\\/]bin\.js|package\.json)$'
+    if (Copy-DevelopmentFile $taskSourceFile $taskDestinationFile $taskVerifyHash) { $taskCopiedFiles++ }
 }
 
 foreach ($taskShortcutPath in (Development-ShortcutPaths $taskManifest.shortcutName)) {
@@ -167,3 +196,4 @@ foreach ($taskValueName in @('NoModify', 'NoRepair')) {
     $null = New-ItemProperty -LiteralPath $taskRegistryPath -Name $taskValueName -Value 1 -PropertyType DWord -Force
 }
 Write-Output "Registered $($taskManifest.shortcutName): $taskBinary"
+Write-Output "Updated $taskCopiedFiles managed files; unchanged resources reused."

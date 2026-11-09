@@ -369,6 +369,8 @@ test("development builds isolate output and do not consume release signing crede
   );
   assert.equal(env.TAURI_SIGNING_PRIVATE_KEY, undefined);
   assert.equal(env.TAURI_SIGNING_PRIVATE_KEY_PASSWORD, undefined);
+  assert.equal(env.CARGO_PROFILE_RELEASE_INCREMENTAL, "true");
+  assert.equal(env.CARGO_PROFILE_RELEASE_LTO, "false");
 });
 
 test("stable builds reset an inherited development channel while preserving release credentials", () => {
@@ -386,6 +388,9 @@ test("stable builds reset an inherited development channel while preserving rele
     LOLICODE_BUILD_TIMESTAMP: "2026-10-28T09:42:43Z",
     VITE_LOLICODE_BUILD_TIMESTAMP: "2026-10-28T09:42:43Z",
     TAURI_SIGNING_PRIVATE_KEY: "test-release-key",
+    LOLICODE_DEV_PROFILE_OVERRIDES: "v1",
+    CARGO_PROFILE_RELEASE_INCREMENTAL: "true",
+    CARGO_PROFILE_RELEASE_LTO: "false",
   });
   assert.equal(env.LOLICODE_BUILD_CHANNEL, "stable");
   assert.equal(env.VITE_LOLICODE_BUILD_CHANNEL, "stable");
@@ -397,6 +402,25 @@ test("stable builds reset an inherited development channel while preserving rele
     assert.equal(env[`VITE_LOLICODE_BUILD_${field}`], undefined);
   }
   assert.equal(env.TAURI_SIGNING_PRIVATE_KEY, "test-release-key");
+  assert.equal(env.CARGO_PROFILE_RELEASE_INCREMENTAL, undefined);
+  assert.equal(env.CARGO_PROFILE_RELEASE_LTO, undefined);
+  assert.equal(env.LOLICODE_DEV_PROFILE_OVERRIDES, undefined);
+});
+
+test("stable builds retain independent user profile choices while clearing generated development overrides", () => {
+  const dev = buildEnvironment("development", {
+    PATH: process.env.PATH || process.env.Path,
+  });
+  const stable = buildEnvironment("stable", dev);
+  assert.equal(stable.CARGO_PROFILE_RELEASE_INCREMENTAL, undefined);
+  assert.equal(stable.CARGO_PROFILE_RELEASE_LTO, undefined);
+  const user = buildEnvironment("stable", {
+    PATH: process.env.PATH || process.env.Path,
+    CARGO_PROFILE_RELEASE_LTO: "fat",
+    CARGO_PROFILE_RELEASE_INCREMENTAL: "true",
+  });
+  assert.equal(user.CARGO_PROFILE_RELEASE_LTO, "fat");
+  assert.equal(user.CARGO_PROFILE_RELEASE_INCREMENTAL, "true");
 });
 
 test("development build number uses Singapore time across a UTC date boundary", () => {

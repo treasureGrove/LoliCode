@@ -10,7 +10,7 @@ Start with the [architecture and maintenance guide](ARCHITECTURE.md), then the [
 
 Keep application startup and composition in `src/app/`, business pages and their private components in `src/features/<domain>/`, and reusable controls in `src/components/`. Keep script entry points in `scripts/dev/`, `build/`, `release/` or `data/`, with regression tests in `scripts/tests/`. Update callers, tests and documentation when moving a module.
 
-Requirements are recorded in `.node-version`, `package.json`, and `rust-toolchain.toml`: Node.js 22.12.0 is the repository default, pnpm is pinned to 10.12.3, and Rust is pinned to 1.95. Install the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) for your platform.
+Requirements are recorded in `.node-version`, `package.json`, and `rust-toolchain.toml`: Node.js 24.19.0 is the repository default, pnpm is pinned to 10.12.3, and Rust is pinned to 1.95. Install the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) for your platform.
 
 ```sh
 git clone https://github.com/treasureGrove/LoliCode.git
@@ -54,7 +54,7 @@ Use [LoliCode Issues](https://github.com/treasureGrove/LoliCode/issues) for disc
 
 ## Packaging and documentation
 
-The current desktop uses Tauri with the native Rust Agent. Packaging and signing are documented in [the LoliCode release guide](docs/guides/lolicode-release.md); update summaries are documented in [src/whats-new/README.md](src/whats-new/README.md).
+The current desktop uses a Tauri/Rust host with the official DeepSeek Harness runtime. Incremental development builds are documented in [the development guide](docs/guides/lolicode-development.md). Packaging and signing are documented in [the LoliCode release guide](docs/guides/lolicode-release.md); update summaries are documented in [src/whats-new/README.md](src/whats-new/README.md).
 
 Keep the four root README translations consistent. [docs/README.md](docs/README.md) is the documentation entry point. Historical CC Switch configuration chapters remain reference material; they must not be presented as current LoliCode installation instructions.
 

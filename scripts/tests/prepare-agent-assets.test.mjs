@@ -7,6 +7,8 @@ import {
   readFile,
   rm,
   realpath,
+  stat,
+  utimes,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -77,6 +79,44 @@ test("tampered skill bytes fail the build before a distribution can be produced"
   try {
     await writeFile(path.join(f.vendored, f.relative), "changed source");
     await assert.rejects(prepareAgentAssets(f.root), /checksum mismatch/);
+  } finally {
+    await cleanup(f.root);
+  }
+});
+
+test("unchanged assets preserve mtimes and missing or changed output is repaired", async () => {
+  const f = await fixture();
+  try {
+    const first = await prepareAgentAssets(f.root);
+    assert.equal(first.writtenFiles, 5);
+    const output = path.join(f.root, "src-tauri/resources/agent/extensions");
+    const files = [
+      f.relative,
+      "manifest.json",
+      "LICENSE",
+      "NOTICE.md",
+      "UPSTREAM_NOTICE.md",
+    ];
+    const timestamp = new Date("2001-01-01T00:00:00Z");
+    for (const file of files)
+      await utimes(path.join(output, file), timestamp, timestamp);
+    assert.equal((await prepareAgentAssets(f.root)).writtenFiles, 0);
+    for (const file of files)
+      assert.equal(
+        (await stat(path.join(output, file))).mtimeMs,
+        timestamp.getTime(),
+      );
+    await rm(path.join(output, "LICENSE"));
+    await writeFile(path.join(output, f.relative), "damaged generated output");
+    assert.equal((await prepareAgentAssets(f.root)).writtenFiles, 2);
+    assert.equal(
+      await readFile(path.join(output, f.relative), "utf8"),
+      f.content,
+    );
+    assert.equal(
+      (await stat(path.join(output, "NOTICE.md"))).mtimeMs,
+      timestamp.getTime(),
+    );
   } finally {
     await cleanup(f.root);
   }

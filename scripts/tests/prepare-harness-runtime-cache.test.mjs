@@ -1,0 +1,376 @@
+import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import {
+  copyFileSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  symlinkSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { test } from "node:test";
+import {
+  bundleHarness,
+  commitBundle,
+  dependencyInputsHash,
+  dependencyInventory,
+  installedHarnessMatches,
+  reusableBundlePayload,
+} from "../build/prepare-lolicode-harness-runtime.mjs";
+
+const repository = fileURLToPath(new URL("../../", import.meta.url));
+const source = path.join(repository, "packages/lolicode-harness-runtime");
+const sha = (value) => createHash("sha256").update(value).digest("hex");
+const nodeName = process.platform === "win32" ? "node.exe" : "node";
+const harnessVersion = JSON.parse(
+  readFileSync(path.join(source, "package.json")),
+).dependencies["@deepseek-ai/dsh"];
+const nodeVersion = readFileSync(
+  path.join(repository, ".node-version"),
+  "utf8",
+).trim();
+const entry = "node_modules/@deepseek-ai/dsh/lib/bin.js";
+
+function put(root, file, bytes) {
+  mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
+  writeFileSync(path.join(root, file), bytes);
+}
+function fixture(t) {
+  const root = mkdtempSync(
+    path.join(os.tmpdir(), "lolicode-runtime-cache-test-"),
+  );
+  t.after(() => {
+    assert.equal(path.dirname(root), path.resolve(os.tmpdir()));
+    assert.ok(path.basename(root).startsWith("lolicode-runtime-cache-test-"));
+    rmSync(root, { recursive: true, force: true });
+  });
+  const packageRoot = path.join(root, "runtime-source");
+  const directory = path.join(root, "resources/runtime");
+  for (const name of ["package.json", "package-lock.json"]) {
+    mkdirSync(packageRoot, { recursive: true });
+    copyFileSync(path.join(source, name), path.join(packageRoot, name));
+  }
+  put(packageRoot, "host.mjs", "export const fixture = 1;\n");
+  const binary = "pinned Node fixture";
+  const license = "pinned Node license fixture";
+  let installs = 0;
+  let downloads = 0;
+  let executions = 0;
+  const identity = {
+    platform: process.platform,
+    arch: process.arch,
+    nodeName,
+    harnessVersion,
+    nodeVersion,
+    nodeChecksum: sha(binary),
+    licenseChecksum: sha(license),
+  };
+  const options = {
+    packageRoot,
+    directory,
+    repositoryRoot: root,
+    identity,
+    prepareNodePayload(stage) {
+      downloads++;
+      put(stage, nodeName, binary);
+      put(stage, "NODE-LICENSE", license);
+      return sha(binary);
+    },
+    install(stage) {
+      installs++;
+      put(stage, entry, "console.log('SDK fixture');\n");
+      put(
+        stage,
+        "node_modules/@deepseek-ai/dsh/package.json",
+        JSON.stringify({ version: harnessVersion }),
+      );
+      put(
+        stage,
+        "node_modules/fixture/sub/dependency.js",
+        "unchanged SDK dependency",
+      );
+    },
+    execute() {
+      executions++;
+    },
+  };
+  return {
+    root,
+    packageRoot,
+    directory,
+    options,
+    counters: () => ({ installs, downloads, executions }),
+    manifest: () =>
+      JSON.parse(readFileSync(path.join(directory, "runtime-manifest.json"))),
+  };
+}
+
+test("bridge updates reuse immutable SDK/Node and publish a complete replacement", async (t) => {
+  const f = fixture(t);
+  await bundleHarness(f.options);
+  const before = f.manifest();
+  const originalSdk = readFileSync(path.join(f.directory, entry));
+  await bundleHarness(f.options);
+  assert.deepEqual(f.counters(), { installs: 1, downloads: 1, executions: 1 });
+  put(f.packageRoot, "host.mjs", "export const fixture = 2;\n");
+  await bundleHarness(f.options);
+  assert.deepEqual(f.counters(), { installs: 1, downloads: 1, executions: 2 });
+  assert.equal(
+    readFileSync(path.join(f.directory, "host.mjs"), "utf8"),
+    "export const fixture = 2;\n",
+  );
+  assert.deepEqual(readFileSync(path.join(f.directory, entry)), originalSdk);
+  assert.equal(
+    f.manifest().dependenciesInputsSha256,
+    before.dependenciesInputsSha256,
+  );
+  assert.notEqual(f.manifest().inputsSha256, before.inputsSha256);
+  assert(!lstatSync(path.join(f.directory, "node_modules")).isSymbolicLink());
+  assert(!lstatSync(path.join(f.directory, entry)).isSymbolicLink());
+  // Host files are never shared inodes, even when the SDK was hardlinked.
+  put(f.packageRoot, "host.mjs", "unpublished source changes");
+  assert.equal(
+    readFileSync(path.join(f.directory, "host.mjs"), "utf8"),
+    "export const fixture = 2;\n",
+  );
+});
+
+test("lock, target and install-policy changes invalidate the dependency key", async (t) => {
+  const f = fixture(t);
+  await bundleHarness(f.options);
+  const before = dependencyInputsHash(f.packageRoot);
+  put(f.packageRoot, "host.mjs", "different bridge bytes");
+  assert.equal(dependencyInputsHash(f.packageRoot), before);
+  for (const overrides of [
+    { platform: "different" },
+    { arch: "different" },
+    { targetNodeVersion: "different" },
+    { policy: "changed npm install policy" },
+  ])
+    assert.notEqual(dependencyInputsHash(f.packageRoot, overrides), before);
+  writeFileSync(
+    path.join(f.packageRoot, "package-lock.json"),
+    readFileSync(path.join(f.packageRoot, "package-lock.json"), "utf8") + "\n",
+  );
+  assert.notEqual(dependencyInputsHash(f.packageRoot), before);
+  await bundleHarness(f.options);
+  assert.equal(f.counters().installs, 2);
+});
+
+test("SDK corruption, additions and missing files cause a fresh pinned install", async (t) => {
+  const f = fixture(t);
+  await bundleHarness(f.options);
+  const sdk = path.join(f.directory, "node_modules/fixture/sub/dependency.js");
+  writeFileSync(sdk, "changed dependency bytes");
+  utimesSync(sdk, new Date(), new Date(Date.now() + 60_000));
+  await bundleHarness(f.options);
+  assert.equal(f.counters().installs, 2);
+  assert.equal(readFileSync(sdk, "utf8"), "unchanged SDK dependency");
+  put(f.directory, "node_modules/unexpected.js", "added payload");
+  await bundleHarness(f.options);
+  assert.equal(f.counters().installs, 3);
+  assert(!existsSync(path.join(f.directory, "node_modules/unexpected.js")));
+  rmSync(sdk);
+  await bundleHarness(f.options);
+  assert.equal(f.counters().installs, 4);
+  assert(existsSync(sdk));
+});
+
+test("old manifests and changed Node/license bytes cannot seed dependency reuse", async (t) => {
+  const f = fixture(t);
+  await bundleHarness(f.options);
+  const key = dependencyInputsHash(f.packageRoot);
+  const manifest = f.manifest();
+  assert(reusableBundlePayload(f.directory, manifest, key, f.options.identity));
+  assert(
+    !reusableBundlePayload(
+      f.directory,
+      { ...manifest, packageFilesSha256: undefined },
+      key,
+      f.options.identity,
+    ),
+  );
+  assert(
+    !reusableBundlePayload(
+      f.directory,
+      manifest,
+      "different-lock",
+      f.options.identity,
+    ),
+  );
+  assert(
+    !reusableBundlePayload(
+      f.directory,
+      { ...manifest, arch: "different" },
+      key,
+      f.options.identity,
+    ),
+  );
+  put(f.directory, nodeName, "wrong Node bytes");
+  assert(
+    !reusableBundlePayload(f.directory, manifest, key, f.options.identity),
+  );
+  await bundleHarness(f.options);
+  put(f.directory, "NODE-LICENSE", "wrong license bytes");
+  assert(
+    !reusableBundlePayload(f.directory, f.manifest(), key, f.options.identity),
+  );
+});
+
+test("an unsuccessful staged refresh leaves the existing complete runtime intact", async (t) => {
+  const f = fixture(t);
+  await bundleHarness(f.options);
+  const before = readFileSync(path.join(f.directory, "runtime-manifest.json"));
+  put(f.packageRoot, "host.mjs", "new bridge");
+  await assert.rejects(
+    bundleHarness({
+      ...f.options,
+      execute() {
+        throw new Error("fixture smoke failed");
+      },
+    }),
+    /smoke failed/,
+  );
+  assert.deepEqual(
+    readFileSync(path.join(f.directory, "runtime-manifest.json")),
+    before,
+  );
+  assert.equal(
+    readFileSync(path.join(f.directory, "host.mjs"), "utf8"),
+    "export const fixture = 1;\n",
+  );
+});
+
+test("SDK directory transfer rolls back failures before and after each commit rename", async (t) => {
+  for (const point of [1, 2, 3])
+    for (const after of [false, true]) {
+      const f = fixture(t);
+      await bundleHarness(f.options);
+      const transaction = path.join(f.root, "transaction");
+      const stage = path.join(transaction, "stage");
+      const previous = path.join(transaction, "previous");
+      put(stage, "host.mjs", "not yet published");
+      const before = readFileSync(
+        path.join(f.directory, "runtime-manifest.json"),
+      );
+      let calls = 0;
+      assert.throws(
+        () =>
+          commitBundle(stage, f.directory, previous, true, (from, to) => {
+            const fail = ++calls === point;
+            if (fail && !after) throw new Error("fixture commit failure");
+            renameSync(from, to);
+            if (fail && after) throw new Error("fixture commit failure");
+          }),
+        /fixture commit failure/,
+      );
+      assert.deepEqual(
+        readFileSync(path.join(f.directory, "runtime-manifest.json")),
+        before,
+      );
+      assert(existsSync(path.join(f.directory, entry)));
+      assert.equal(
+        readFileSync(path.join(f.directory, "host.mjs"), "utf8"),
+        "export const fixture = 1;\n",
+      );
+    }
+});
+
+test("a failed rollback preserves the only SDK payload in its transaction", async (t) => {
+  const f = fixture(t);
+  await bundleHarness(f.options);
+  const stage = path.join(f.root, "transaction/stage");
+  const previous = path.join(f.root, "transaction/previous");
+  put(stage, "host.mjs", "new bridge");
+  let calls = 0;
+  assert.throws(
+    () =>
+      commitBundle(stage, f.directory, previous, true, (from, to) => {
+        if (++calls >= 3) throw new Error("fixture publish/rollback failure");
+        renameSync(from, to);
+      }),
+    (error) => error.code === "HARNESS_RUNTIME_ROLLBACK_FAILED",
+  );
+  assert(
+    existsSync(path.join(stage, entry)),
+    "the unique SDK stayed in the staged recovery directory",
+  );
+  assert(
+    existsSync(path.join(previous, "runtime-manifest.json")),
+    "the original manifest stayed in the backup",
+  );
+});
+
+test("bundle cleanup never deletes the recovery transaction after rollback failure", async (t) => {
+  const f = fixture(t);
+  await bundleHarness(f.options);
+  put(f.packageRoot, "host.mjs", "new bridge");
+  let recoveryStage;
+  let recoveryPrevious;
+  await assert.rejects(
+    bundleHarness({
+      ...f.options,
+      publish(stage, directory, previous, reuse) {
+        recoveryStage = stage;
+        recoveryPrevious = previous;
+        let calls = 0;
+        commitBundle(stage, directory, previous, reuse, (from, to) => {
+          if (++calls >= 3) throw new Error("fixture publish/rollback failure");
+          renameSync(from, to);
+        });
+      },
+    }),
+    (error) => error.code === "HARNESS_RUNTIME_ROLLBACK_FAILED",
+  );
+  assert(existsSync(path.join(recoveryStage, entry)));
+  assert(existsSync(path.join(recoveryPrevious, "runtime-manifest.json")));
+});
+
+test("workspace preparation receipts validate installed payload and exclude their own cache file", async (t) => {
+  const f = fixture(t);
+  await bundleHarness(f.options);
+  const modules = path.join(f.directory, "node_modules");
+  const key = dependencyInputsHash(f.packageRoot);
+  const receipt = {
+    format: 1,
+    harnessVersion,
+    inputsSha256: key,
+    entrySha256: sha(readFileSync(path.join(f.directory, entry))),
+    packageFilesSha256: dependencyInventory(modules),
+  };
+  put(modules, ".lolicode-install.json", JSON.stringify(receipt));
+  assert(installedHarnessMatches(f.directory, key));
+  assert(!installedHarnessMatches(f.directory, "different input"));
+  put(f.directory, entry, "corrupted entry");
+  assert(!installedHarnessMatches(f.directory, key));
+});
+
+test("SDK inventory rejects symlinks instead of trusting files outside the payload", async (t) => {
+  const f = fixture(t);
+  await bundleHarness(f.options);
+  const outside = path.join(f.root, "outside");
+  mkdirSync(outside);
+  try {
+    symlinkSync(
+      outside,
+      path.join(f.directory, "node_modules/escape"),
+      process.platform === "win32" ? "junction" : "dir",
+    );
+  } catch (error) {
+    if (error.code === "EPERM")
+      return t.skip("symlink creation requires permission");
+    throw error;
+  }
+  assert.throws(
+    () => dependencyInventory(path.join(f.directory, "node_modules")),
+    /non-regular/,
+  );
+});
