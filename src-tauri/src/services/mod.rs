@@ -27,6 +27,7 @@ pub mod env_manager;
 pub mod external_agent_config;
 mod harness_automation;
 mod harness_desktop;
+pub(crate) use harness_desktop::{ack_native_view, stop_native_view};
 pub(crate) mod harness_diagnostics;
 mod harness_events;
 mod harness_gateway;

@@ -1,4 +1,4 @@
-import { Loader2, RefreshCw } from "lucide-react";
+import { Loader2, Pause, RefreshCw } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -155,13 +155,22 @@ export function AgentNativeSessionPreview({
   title?: string;
 }) {
   const native = useAgentNativeSession(open ? sessionId : null);
+  const following =
+    native.realtime === "live" || native.realtime === "connecting";
+  const realtimeLabel = {
+    history: "仅历史记录",
+    connecting: "正在连接实时记录…",
+    live: "实时跟随已提交记录",
+    paused: "实时更新已暂停",
+    failed: "实时更新未连接",
+  }[native.realtime];
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl p-0">
         <DialogHeader className="border-b border-border px-5 py-4 pr-12">
           <DialogTitle>原生会话预览</DialogTitle>
           <DialogDescription>
-            {title || "当前会话"} · 查看已提交的会话记录，刷新可获取最新内容。
+            {title || "当前会话"} · 实时跟随已提交记录，暂停后可加载更早历史。
           </DialogDescription>
         </DialogHeader>
         <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-2">
@@ -169,13 +178,24 @@ export function AgentNativeSessionPreview({
             {native.loading
               ? "正在读取…"
               : `已读取 ${native.events.length} 条记录`}
-            {native.read?.state.running ? " · 会话正在运行" : ""}
+            {` · ${realtimeLabel}`}
           </span>
+          {following && (
+            <button
+              type="button"
+              className="wb-icon-button"
+              aria-label="暂停实时更新"
+              title="暂停实时更新后可加载更早历史"
+              onClick={native.pauseRealtime}
+            >
+              <Pause size={15} />
+            </button>
+          )}
           <button
             type="button"
             className="wb-icon-button"
             aria-label="刷新原生会话"
-            title="刷新原生会话"
+            title="刷新并重新连接原生会话"
             disabled={native.loading || !sessionId}
             onClick={() => void native.refresh()}
           >
@@ -199,7 +219,7 @@ export function AgentNativeSessionPreview({
                 disabled={native.loading}
                 onClick={() => void native.refresh()}
               >
-                重新读取
+                重新连接并读取
               </button>
             </div>
           )}
@@ -208,11 +228,16 @@ export function AgentNativeSessionPreview({
               <button
                 type="button"
                 className="text-sm text-fg-2 underline disabled:opacity-50"
-                disabled={native.loading}
+                disabled={native.loading || following}
                 onClick={() => void native.loadOlder()}
               >
                 加载更早记录
               </button>
+              {following && (
+                <p className="mt-1 text-xs text-fg-3">
+                  暂停实时更新后可加载更早记录。
+                </p>
+              )}
             </div>
           )}
           {!native.loading && !native.error && !native.events.length && (

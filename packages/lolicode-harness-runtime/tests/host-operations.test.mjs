@@ -227,6 +227,81 @@ test("native history bounds pagination and rejects oversized values without trun
   assert.throws(() => boundedNativeSession(value), /LOLICODE_SESSION_NATIVE_TOO_LARGE/);
 });
 
+test("passive native followers are independent and stream only committed events without starting work", { timeout: 60_000 }, async (t) => {
+  const sessionId = "native-follow-root";
+  const method = "lolicode/session.native-follow";
+  const first = "11111111-1111-4111-8111-111111111111";
+  const second = "22222222-2222-4222-8222-222222222222";
+  const later = "33333333-3333-4333-8333-333333333333";
+  const waiting = Promise.withResolvers();
+  let modelCalls = 0;
+  let response;
+  const runtime = await fixture(t, (_body, output) => {
+    if (++modelCalls === 2) {
+      output.writeHead(200, { "Content-Type": "text/event-stream" });
+      writeModelChunk(output, { role: "assistant" });
+      writeModelChunk(output, { content: "Transient follow fixture answer" });
+      waiting.resolve(output);
+    } else modelReply(output, `Committed follow answer ${modelCalls}`);
+  });
+  const client = await runtime.start();
+  const notices = (id) => client.notifications.filter((item) => item.method === method && item.params.subscriptionId === id);
+  const follow = (subscriptionId, extra = {}) => client.request("lolicode/session/follow-native", {
+    sessionId, subscriptionId, maxMessages: 200, ...extra,
+  });
+  const stop = (subscriptionId) => client.request("lolicode/session/unfollow-native", { subscriptionId });
+  try {
+    await assert.rejects(follow(first), /not an open root/);
+    await client.open(sessionId);
+    await assert.rejects(follow(first), /LOLICODE_SESSION_LOG_MISSING/);
+    await client.prompt(sessionId, "Create a committed baseline");
+    await client.wait(sessionId);
+    await assert.rejects(follow(first, { activate: true }), /Invalid/);
+    await assert.rejects(follow(first, { principal: "owner" }), /Invalid/);
+    const duplicates = await Promise.allSettled([follow(first), follow(first)]);
+    assert.equal(duplicates.filter((result) => result.status === "fulfilled").length, 1);
+    assert.match(duplicates.find((result) => result.status === "rejected").reason.message, /already exists/);
+    await follow(second);
+    const openingA = await fixtureNotice(client, method, (notice) => notice.subscriptionId === first && notice.frame?.type === "snapshot");
+    const openingB = await fixtureNotice(client, method, (notice) => notice.subscriptionId === second && notice.frame?.type === "snapshot");
+    assert.deepEqual(openingA.frame, openingB.frame);
+    assert.equal(modelCalls, 1);
+    await assert.rejects(follow(first), /already exists/);
+    await client.prompt(sessionId, "Hold this model response open");
+    response = await waiting.promise;
+    await fixtureNotice(client, method, (notice) => notice.subscriptionId === second && notice.frame?.event?.type === "turn/start");
+    assert.ok(!JSON.stringify(notices(second)).includes("Transient follow fixture answer"));
+    await stop(first);
+    const stoppedCount = notices(first).length;
+    writeModelChunk(response, {}, "stop");
+    response.end("data: [DONE]\n\n");
+    await client.wait(sessionId);
+    const committed = await fixtureNotice(client, method, (notice) => notice.subscriptionId === second &&
+      notice.frame?.event?.type === "assistant/message" && JSON.stringify(notice.frame.event.data.message).includes("Transient follow fixture answer"));
+    assert.ok(committed.frame.event.data.stream.length > 0);
+    assert.equal(notices(first).length, stoppedCount);
+    assert.ok(notices(second).every((notice) => notice.frame?.type !== "assistant-stream"));
+    await follow(later);
+    const replacement = await fixtureNotice(client, method, (notice) => notice.subscriptionId === later && notice.frame?.type === "snapshot");
+    assert.ok(replacement.frame.records.some((record) => record.event.seq === committed.frame.event.seq));
+    assert.equal(modelCalls, 2);
+    const remaining = Array.from({ length: 6 }, (_, index) => `native-follow-limit-${index}`);
+    try {
+      await Promise.all(remaining.map((id) => follow(id)));
+      await assert.rejects(follow("native-follow-over-limit"), /Too many native subscriptions/);
+    } finally {
+      await Promise.all(remaining.map((id) => stop(id)));
+    }
+    await stop(second);
+    await stop(first); // closing twice is harmless
+  } finally {
+    if (response && !response.writableEnded) response.destroy();
+    await Promise.allSettled([stop(first), stop(second)]);
+    // Keep the later subscription active: SDK disposal must abort and await it.
+    await client.shutdown();
+  }
+});
+
 test("Markdown copies a complete native log live or cold without starting another turn or writing", { timeout: 45_000 }, async (t) => {
   const sessionId = "markdown-test-root";
   const method = "lolicode/session/read-markdown";

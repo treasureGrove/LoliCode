@@ -1,6 +1,6 @@
 # Harness 原生会话与聊天模块复用推进方案
 
-状态：2026-11-09，已接通官方 Gateway 的只读会话通道与开发版原生会话预览；官方聊天插件挂载、实时 follow 和完整端到端迁移仍待验证。
+状态：2026-11-09，已接通官方 Gateway 的只读会话通道、被动实时订阅与开发版原生会话预览；逐 token 的临时流式显示、官方聊天插件挂载和主聊天迁移仍待验证。
 
 ## 目标与当前判断
 
@@ -74,11 +74,11 @@ node --test packages/lolicode-harness-runtime/tests/session-controller-reuse.tes
 
 ## 第一批实现与使用方式
 
-开发版选择一个原生 Harness 会话后，通过帮助菜单的“原生会话预览”打开独立只读窗口。默认关闭，主聊天界面保持原有路径。支持查看已提交事件、结束原因、手动刷新和向前分页；不展示原始 JSON，也不执行模型、工具或授权操作。
+开发版选择一个原生 Harness 会话后，通过“对话更多选项”菜单的“原生会话预览”打开只读面板。默认关闭，主聊天界面保持原有路径。支持查看已提交事件、结束原因、被动实时更新、手动刷新和向前分页；不展示原始 JSON，也不执行模型、工具或授权操作。
 
 链路是 `agentApi.readSessionNative` → Tauri `read_agent_session_native` → 已有私有 SDK stdio 的 `lolicode/session/read-native` → 官方 Gateway 的 `session/events`、`session/projections`、`session/state`。Node 桥先执行现有 root/worker 归属检查，再使用固定 `owner`、`interactions: none` Peer 调用；线上的请求不能指定身份或任意服务方法。输入和结果由固定版本的官方生成契约校验，校验后返回原始值，不丢弃额外事件字段。
 
-Rust 的冷热读取与 Markdown 共用项目窗口、会话归属、迁移历史和私有目录校验。冷读取启动独立临时 HOME 的官方 SDK 基底，禁用 SDK 应用入口与服务器；不恢复 Agent，不继承渠道凭据，不修改原 JSONL。冷读取全局最多同时运行两个 helper，排队与执行共用一个超时期限，避免快速切换会话放大进程数量。
+Rust 的冷热读取与 Markdown 共用项目窗口、会话归属、迁移历史和私有目录校验。冷读取启动独立临时 HOME 的官方 SDK 基底，禁用 SDK 应用入口与服务器；不恢复 Agent，不继承渠道凭据，不修改原 JSONL。冷读取全局最多同时运行两个 helper，排队与执行共用一个超时期限，避免快速切换会话放大进程数量。桌面调用的临时 HOME 由 Rust 持有，独立任务负责进程退出与清理，包含调用取消和超时路径；独立运行 Node CLI 时仍由 Node 创建和清理。
 
 会话控制器及必要服务只在首次原生读取时装配，已有服务会复用；不会因普通聊天启动而额外装配整套 Web Host，也不新增 HTTP 监听。开发资源包已包含新 helper，构建脚本会将根目录 runtime 文件纳入输入哈希。
 
@@ -90,12 +90,26 @@ Rust 的冷热读取与 Markdown 共用项目窗口、会话归属、迁移历�
 pnpm prepare:harness-runtime
 pnpm typecheck
 node --test packages/lolicode-harness-runtime/tests/*.test.mjs
-pnpm exec vitest run tests/hooks/useAgentNativeSession.test.tsx tests/components/AgentNativeSessionPreview.test.tsx
+pnpm exec vitest run tests/hooks/useAgentNativeSession.test.tsx tests/components/AgentNativeSessionPreview.test.tsx tests/lib/agentNativeWatch.test.ts
 ```
 
 真实 stdio/Gateway 测试已覆盖热读、冷读、完整事件、来源元数据、结束原因、越权子会话、分页边界与输出限制；冷读前后原日志内容、mtime 和原 HOME 文件集合保持一致。Rust 还验证了模型请求和授权未答时并发只读不会阻塞执行通道。
 
-这仍是第一批可回退入口：尚未替换主聊天 reducer，未承诺实时 follow、流式衔接或官方 UI Chat 的完整复用。下一批先验证实时订阅和官方客户端事件源，再评估聊天插件组合。
+### 被动实时订阅
+
+预览先读取历史，然后尝试 `watch_agent_session_native` → `lolicode/session/follow-native` → 官方 Gateway `session/follow`。仅对已有运行时与归属明确的驻留会话建立订阅；冷会话保留手动历史读取，不启动额外长期监听进程，也不轮询文件。
+
+官方发布的客户端 `SessionEventStream` 会设置 `activate: true` 与 `assistantStream: true`；直接复用会恢复 Agent，不符合只读预览的边界。本批因此只复用官方 Gateway 的被动 follow，不传这两个选项。原样转交官方起始快照与已提交事件，完整保留最终 `assistant/message` 的 `data.stream`，不把临时 token 拼成日志事件，也不声称已复用官方客户端的自动重连。后续事件只推进日志位置，不在前端重写投影 fold；投影与 state 仍保留各自读取时的官方水位，不能当作持续刷新的状态。
+
+前端按官方序号检查连续性，忽略重复事件；序号缺口、重复起始快照或连接结束会停止订阅并保留已收到的历史，用户可以刷新重新取得官方快照。刷新失败也保留上一次成功结果。实时跟随期间暂停历史分页；点击“暂停实时更新”后可加载更早记录，刷新会重新开启订阅。会话切换、面板关闭及过期启动响应会关闭对应订阅，不停止正常对话。
+
+实时通知不进入主聊天的 Harness 事件队列。每个 SDK 最多八个订阅，Rust 为每个订阅单独限制 64 帧、16 MiB 队列，单帧最多 8 MiB。Node 在发送预览帧前也检查共享输出的缓冲高水位，超过 16 MiB 时停止该订阅继续加帧，不在共享传输上等待 drain。Tauri 每次只投递一帧，渲染层处理后确认；起始快照或投递确认等待 30 秒超时后终止该订阅，成功连接后的订阅没有普通 RPC 的生命周期时限。队列溢出或界面失联只结束观察，不取消模型请求、工具或授权。确认与停止命令验证窗口归属，避免其他项目窗口干扰。
+
+以上限制约束 Rust 队列与 WebView 投递，并非对整个 Node stdio 或预览累计历史内存的端到端上限证明。后续进入主聊天前仍须测量长会话和极端事件突发的资源使用。
+
+本批回归使用真实 SDK 与本地模型 fixture，验证并发订阅、同编号竞争、八订阅上限、观察期间模型调用数不变、临时 token 不进入被动日志、单独停止、重新取得快照和带活动订阅的正常退出。故障注入覆盖首次初始化失败后的重试与输出缓冲保护；前端覆盖旧响应隔离、序号缺口、断流保留、刷新失败和暂停/翻页。Rust 另外验证队列溢出仍可继续处理执行/授权消息、窗口确认隔离及冷读 helper 的取消清理。
+
+这仍是可回退的开发入口，尚未替换主聊天 reducer，未接入逐 token 临时显示，也未挂载官方 UI Chat。下一步应验证官方聊天插件与事件源的组合，并完成下面的验收门槛。
 
 ## 实施顺序与交付边界
 
@@ -144,7 +158,7 @@ pnpm exec vitest run tests/hooks/useAgentNativeSession.test.tsx tests/components
 - 历史加载和重连不会自动重发提示、重复执行工具或代答授权；附件和工具结果的原生引用保持可用。
 - 渠道切换、关闭窗口、重启恢复与现有原生 Markdown 导出不退化；长会话滚动、分页耗时和内存有实测对照。
 
-当前实现不覆盖上述全部端到端门槛。后续应在已经接通的只读通道上验证实时订阅与官方客户端事件源，而不是继续扩充旧聊天 DTO。
+当前实现不覆盖上述全部端到端门槛。被动实时提交已接通，后续应继续验证临时 Assistant 流、官方客户端事件源与聊天插件，而不是继续扩充旧聊天 DTO。
 
 ## 上游依据
 

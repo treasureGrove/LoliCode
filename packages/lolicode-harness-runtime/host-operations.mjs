@@ -9,7 +9,7 @@ import { installSecretaryReport, reportToolName } from "./host-secretary-report.
 import {
   formatBoundedSessionMarkdown, logCold, logMissing, materializedSessionPath, sessionMarkdownError,
 } from "./host-session-markdown.mjs";
-import { nativePagination, nativeSessionError, readNativeSession } from "./host-session-native.mjs";
+import { followNativeSession, nativePagination, nativeSessionError, notifyNativeSessionFrame, readNativeSession } from "./host-session-native.mjs";
 
 export { Config };
 export const name = "lolicode-host-operations";
@@ -93,10 +93,18 @@ class LoliCodeSdkServer extends HarnessSdkJsonRpcServer {
   #modeSignatures = new Map();
   #hostWorkers = new Map();
   #parkedWorkerInputs = new Map();
+  #nativeFollows = new Map();
+  #nativeOutput;
 
-  constructor(ctx, transport, options) {
+  constructor(ctx, transport, options, output) {
     super(ctx, transport, options);
     this.#ctx = ctx;
+    this.#nativeOutput = output;
+    ctx.effect(() => async () => {
+      const follows = [...this.#nativeFollows.values()];
+      for (const entry of follows) entry.abort.abort();
+      await Promise.allSettled(follows.map((entry) => entry.done));
+    }, "native session follow lifetime");
     const workspacePolicy = agent => this.#policyFor(agent);
     this.#hostMcp = installHostMcp(transport, { workspacePolicy });
     this.#hostTools = installHostMcp(transport, {
@@ -141,6 +149,18 @@ class LoliCodeSdkServer extends HarnessSdkJsonRpcServer {
   }
 
   async handleRequest(method, params) {
+    if (method === "lolicode/session/follow-native") return this.#followNativeSession(params);
+    if (method === "lolicode/session/unfollow-native") {
+      if (!params || !validSessionId(params.subscriptionId) || Object.keys(params).some((key) => key !== "subscriptionId")) {
+        throw new Error("Invalid native subscription");
+      }
+      const entry = this.#nativeFollows.get(params.subscriptionId);
+      if (entry) {
+        entry.abort.abort();
+        await entry.done;
+      }
+      return {};
+    }
     if (method === "lolicode/session/read-native") {
       return this.#readNativeSession(params);
     }
@@ -344,6 +364,55 @@ class LoliCodeSdkServer extends HarnessSdkJsonRpcServer {
     } catch (error) {
       throw new Error(nativeSessionError(error));
     }
+  }
+
+  async #followNativeSession(params) {
+    if (!params || Object.keys(params).some((key) =>
+      !["sessionId", "childSessionId", "subscriptionId", "maxMessages"].includes(key))) {
+      throw new Error("Invalid native follow parameters");
+    }
+    const { sessionId, childSessionId, subscriptionId, maxMessages } = params;
+    if (!validSessionId(sessionId) || !validSessionId(subscriptionId)) throw new Error("Invalid native subscription");
+    if (this.#nativeFollows.has(subscriptionId)) throw new Error("Native subscription already exists");
+    if (this.#nativeFollows.size >= 8) throw new Error("Too many native subscriptions");
+    const pagination = nativePagination({ maxMessages });
+    const root = this.#ownedRoot(sessionId);
+    let selected = root;
+    if (childSessionId !== undefined) {
+      if (!validSessionId(childSessionId) || childSessionId === sessionId) throw new Error("Invalid LoliCode worker session");
+      if (!this.#ctx.agents.get(childSessionId)) return null;
+      selected = this.#ownedWorker(root, childSessionId);
+      if (!selected) throw new Error("Worker is not owned by this LoliCode session");
+    }
+    const entry = { abort: new AbortController(), done: undefined };
+    const ready = Promise.withResolvers();
+    this.#nativeFollows.set(subscriptionId, entry);
+    const notify = (value) => {
+      this.transport.notify("lolicode/session.native-follow", { subscriptionId, ...value });
+    };
+    entry.done = (async () => {
+      let opened = false;
+      try {
+        if (!await materializedSessionPath(this.#ctx.sessionPersistence, selected.session.id)) throw new Error(logMissing);
+        if (entry.abort.signal.aborted) throw entry.abort.signal.reason;
+        const source = await followNativeSession(this.#ctx, selected.session.id, pagination, entry.abort.signal);
+        opened = true;
+        ready.resolve({});
+        for await (const frame of source) {
+          if (entry.abort.signal.aborted) break;
+          notifyNativeSessionFrame(this.transport, this.#nativeOutput, subscriptionId, frame);
+        }
+        if (!entry.abort.signal.aborted) notify({ error: "LOLICODE_SESSION_FOLLOW_ENDED" });
+      } catch (error) {
+        if (!opened) ready.reject(new Error(nativeSessionError(error)));
+        else if (!entry.abort.signal.aborted) {
+          try { notify({ error: nativeSessionError(error) }); } catch { /* the private carrier is already closed */ }
+        }
+      } finally {
+        if (this.#nativeFollows.get(subscriptionId) === entry) this.#nativeFollows.delete(subscriptionId);
+      }
+    })();
+    return ready.promise;
   }
 
   #detachWorkerInputs(agent, identities) {
@@ -588,8 +657,9 @@ class LoliCodeSdkServer extends HarnessSdkJsonRpcServer {
 // The SDK app still owns CLI parsing, EOF and signal handling. This row owns
 // the one SDK transport and delegates the entire standard wire API upstream.
 export function apply(ctx, config = {}) {
-  const transport = new JsonRpcLineTransport(config.input ?? process.stdin, config.output ?? process.stdout);
-  const server = new LoliCodeSdkServer(ctx, transport, { maxTokensAsSuccess: config.maxTokensAsSuccess });
+  const output = config.output ?? process.stdout;
+  const transport = new JsonRpcLineTransport(config.input ?? process.stdin, output);
+  const server = new LoliCodeSdkServer(ctx, transport, { maxTokensAsSuccess: config.maxTokensAsSuccess }, output);
   ctx.provide("sdkSessionActivation", { ready: true });
   // Stock SDK notifications carry the durable settlement. Forward the
   // upstream transient frames on the same transport for the desktop view.

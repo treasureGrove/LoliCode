@@ -11,7 +11,7 @@ use std::{
     path::{Path, PathBuf},
     process::Stdio,
     sync::{
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicU64, AtomicUsize, Ordering},
         Arc, Mutex,
     },
     time::Duration,
@@ -38,6 +38,149 @@ pub(super) const NATIVE_MISSING: &str = "会话尚未形成原生 Harness 日志
 const NATIVE_TOO_LARGE: &str = "原生会话页面超过 8 MiB，请缩小读取范围";
 const NATIVE_READ_FAILED: &str = "无法读取原生 Harness 会话，请重试";
 static NATIVE_READ_SLOTS: Semaphore = Semaphore::const_new(2);
+const NATIVE_FOLLOW_CAPACITY: usize = 64;
+const NATIVE_FOLLOW_BYTES: usize = 16 * 1024 * 1024;
+const NATIVE_FOLLOW_LIMIT: usize = 8;
+const NATIVE_FOLLOW_METHOD: &str = "lolicode/session.native-follow";
+const NATIVE_FOLLOW_ENDED: &str = "原生会话实时连接已结束，请手动重新连接";
+const NATIVE_FOLLOW_OVERFLOW: &str = "原生会话实时记录积压，请手动重新连接";
+
+#[derive(Default)]
+struct NativeFollows(Mutex<HashMap<String, NativeFollowRoute>>);
+
+struct NativeFollowRoute {
+    frames: mpsc::Sender<(Value, usize)>,
+    failure: watch::Sender<Option<String>>,
+    bytes: Arc<AtomicUsize>,
+}
+
+/// A distinct bounded observer; dropping it never stops the model's runtime.
+pub(super) struct HarnessNativeSubscription {
+    id: String,
+    client: HarnessClient,
+    frames: mpsc::Receiver<(Value, usize)>,
+    failure: watch::Receiver<Option<String>>,
+    bytes: Arc<AtomicUsize>,
+}
+
+impl HarnessNativeSubscription {
+    pub(super) async fn ended(&mut self) -> String {
+        if let Some(error) = self.failure.borrow().clone() {
+            return error;
+        }
+        let mut stopped = self.client.stopped.clone();
+        if stopped.borrow().is_some() {
+            return NATIVE_FOLLOW_ENDED.into();
+        }
+        tokio::select! {
+            _ = self.failure.changed() => self.failure.borrow().clone().unwrap_or_else(|| NATIVE_FOLLOW_ENDED.into()),
+            _ = stopped.changed() => NATIVE_FOLLOW_ENDED.into(),
+        }
+    }
+    pub(super) async fn next(&mut self) -> Result<Value, String> {
+        if let Some(error) = self.failure.borrow().clone() {
+            return Err(error);
+        }
+        let mut stopped = self.client.stopped.clone();
+        if stopped.borrow().is_some() {
+            return Err(NATIVE_FOLLOW_ENDED.into());
+        }
+        tokio::select! {
+            biased;
+            _ = self.failure.changed() => Err(self.failure.borrow().clone().unwrap_or_else(|| NATIVE_FOLLOW_ENDED.into())),
+            _ = stopped.changed() => Err(NATIVE_FOLLOW_ENDED.into()),
+            frame = self.frames.recv() => match frame {
+                Some((frame, size)) => {
+                    self.bytes.fetch_sub(size, Ordering::Relaxed);
+                    Ok(frame)
+                }
+                None => Err(NATIVE_FOLLOW_ENDED.into()),
+            },
+        }
+    }
+}
+
+impl Drop for HarnessNativeSubscription {
+    fn drop(&mut self) {
+        // Reserve the ID until the upstream unfollow has completed. Otherwise
+        // a delayed cleanup could cancel a new watch that reused the same ID.
+        let routes = self.client.native_follows.0.lock().unwrap();
+        let Some(route) = routes.get(&self.id) else {
+            return;
+        };
+        if !Arc::ptr_eq(&route.bytes, &self.bytes) {
+            return;
+        }
+        route.failure.send_replace(Some(NATIVE_FOLLOW_ENDED.into()));
+        drop(routes);
+        let client = self.client.clone();
+        let id = self.id.clone();
+        let bytes = self.bytes.clone();
+        if let Ok(runtime) = tokio::runtime::Handle::try_current() {
+            runtime.spawn(async move {
+                let _ = client
+                    .request(
+                        "lolicode/session/unfollow-native",
+                        json!({"subscriptionId":id}),
+                    )
+                    .await;
+                client.native_follows.remove(&id, &bytes);
+            });
+        } else {
+            client.native_follows.remove(&id, &bytes);
+        }
+    }
+}
+
+impl NativeFollows {
+    fn remove(&self, id: &str, bytes: &Arc<AtomicUsize>) {
+        let mut routes = self.0.lock().unwrap();
+        if routes
+            .get(id)
+            .is_some_and(|route| Arc::ptr_eq(&route.bytes, bytes))
+        {
+            routes.remove(id);
+        }
+    }
+
+    /// Keep observer traffic out of the execution/approval event queue entirely.
+    fn route(&self, params: &Value) {
+        let Some(id) = params["subscriptionId"].as_str() else {
+            return;
+        };
+        let routes = self.0.lock().unwrap();
+        let Some(route) = routes.get(id) else {
+            return;
+        };
+        if route.failure.borrow().is_some() {
+            return;
+        }
+        let failure = if params["error"].is_string() {
+            Some(NATIVE_FOLLOW_ENDED)
+        } else if let Some(frame) = params.get("frame") {
+            match serde_json::to_vec(frame) {
+                Ok(bytes) if bytes.len() <= MAX_NATIVE => {
+                    let size = bytes.len();
+                    let previous = route.bytes.fetch_add(size, Ordering::Relaxed);
+                    if previous + size > NATIVE_FOLLOW_BYTES
+                        || route.frames.try_send((frame.clone(), size)).is_err()
+                    {
+                        route.bytes.fetch_sub(size, Ordering::Relaxed);
+                        Some(NATIVE_FOLLOW_OVERFLOW)
+                    } else {
+                        None
+                    }
+                }
+                _ => Some(NATIVE_FOLLOW_OVERFLOW),
+            }
+        } else {
+            Some(NATIVE_FOLLOW_ENDED)
+        };
+        if let Some(error) = failure {
+            route.failure.send_replace(Some(error.into()));
+        }
+    }
+}
 
 type Reply = Result<Value, String>;
 type Requests = Mutex<HashMap<u64, oneshot::Sender<Reply>>>;
@@ -74,6 +217,7 @@ pub(super) struct HarnessClient {
     stop: watch::Sender<bool>,
     stopped: watch::Receiver<Option<Result<(), String>>>,
     shutdown_lock: Arc<tokio::sync::Mutex<()>>,
+    native_follows: Arc<NativeFollows>,
 }
 
 struct PendingRequest {
@@ -171,6 +315,54 @@ impl HarnessClient {
         }
     }
 
+    pub(super) async fn follow_session_native(
+        &self,
+        root_id: &str,
+        child_id: Option<&str>,
+        id: String,
+        max_messages: Option<u32>,
+    ) -> Result<Option<HarnessNativeSubscription>, String> {
+        let request = native_read_request(None, None, max_messages)?;
+        let (frames, receiver) = mpsc::channel(NATIVE_FOLLOW_CAPACITY);
+        let (failure, failed) = watch::channel(None);
+        let bytes = Arc::new(AtomicUsize::new(0));
+        {
+            let mut routes = self.native_follows.0.lock().unwrap();
+            if routes.len() >= NATIVE_FOLLOW_LIMIT || routes.contains_key(&id) {
+                return Err("原生会话实时订阅过多或编号重复".into());
+            }
+            routes.insert(
+                id.clone(),
+                NativeFollowRoute {
+                    frames,
+                    failure,
+                    bytes: bytes.clone(),
+                },
+            );
+        }
+        let subscription = HarnessNativeSubscription {
+            id: id.clone(),
+            client: self.clone(),
+            frames: receiver,
+            failure: failed,
+            bytes,
+        };
+        let mut params = request;
+        params["sessionId"] = json!(root_id);
+        params["subscriptionId"] = json!(id);
+        if let Some(child) = child_id {
+            params["childSessionId"] = json!(child);
+        }
+        match self.request("lolicode/session/follow-native", params).await {
+            Ok(Value::Null) => Ok(None),
+            Ok(value) if value == json!({}) => Ok(Some(subscription)),
+            Err(error) if error == "LOLICODE_SESSION_LOG_COLD" || error == "Harness 进程已断开" => {
+                Ok(None)
+            }
+            _ => Err(NATIVE_FOLLOW_ENDED.into()),
+        }
+    }
+
     pub(super) async fn shutdown(&self) -> Result<(), String> {
         let _shutdown = self.shutdown_lock.lock().await;
         let mut stopped = self.stopped.clone();
@@ -248,21 +440,42 @@ pub(super) async fn read_cold_session_native(
     session_id: &str,
     request: &Value,
 ) -> Result<Value, String> {
-    let deadline = Instant::now() + RPC_TIMEOUT;
+    read_cold_session_native_until(
+        paths,
+        sessions,
+        session_id,
+        request,
+        Instant::now() + RPC_TIMEOUT,
+    )
+    .await
+}
+
+async fn read_cold_session_native_until(
+    paths: &HarnessPaths,
+    sessions: &Path,
+    session_id: &str,
+    request: &Value,
+    deadline: Instant,
+) -> Result<Value, String> {
     timeout_at(deadline, async {
         // A stale frontend read can outlive its view. Bound the heavy helpers
         // across all sessions; queuing consumes the same deadline as execution.
-        let _permit = NATIVE_READ_SLOTS
+        let permit = NATIVE_READ_SLOTS
             .acquire()
             .await
             .map_err(|_| NATIVE_READ_FAILED)?;
         let request = serde_json::to_string(request).map_err(|_| NATIVE_READ_FAILED)?;
+        let home = tempfile::Builder::new()
+            .prefix("lolicode-native-read-")
+            .tempdir()
+            .map_err(|_| NATIVE_READ_FAILED)?;
         let mut command = Command::new(&paths.node);
         command
             .arg(&paths.native_reader)
             .arg(sessions)
             .arg(session_id)
             .arg(request)
+            .arg(home.path())
             .current_dir(&paths.package)
             .env_clear()
             .stdin(Stdio::null())
@@ -280,24 +493,50 @@ pub(super) async fn read_cold_session_native(
         }
         let mut child = command.spawn().map_err(|_| NATIVE_READ_FAILED)?;
         let stdout = child.stdout.take().ok_or(NATIVE_READ_FAILED)?;
-        let mut bytes = Vec::new();
-        stdout
-            .take(MAX_NATIVE as u64 + 1)
-            .read_to_end(&mut bytes)
-            .await
-            .map_err(|_| NATIVE_READ_FAILED)?;
-        if bytes.len() > MAX_NATIVE {
-            return Err(NATIVE_TOO_LARGE.into());
-        }
-        let status = child.wait().await.map_err(|_| NATIVE_READ_FAILED)?;
-        match status.code() {
-            Some(0) => {
-                validate_native(serde_json::from_slice(&bytes).map_err(|_| NATIVE_READ_FAILED)?)
+        let (reply, result) = oneshot::channel();
+        tokio::spawn(async move {
+            let _permit = permit;
+            let mut reply = reply;
+            let read = async {
+                let mut bytes = Vec::new();
+                stdout
+                    .take(MAX_NATIVE as u64 + 1)
+                    .read_to_end(&mut bytes)
+                    .await
+                    .map_err(|_| NATIVE_READ_FAILED)?;
+                if bytes.len() > MAX_NATIVE {
+                    return Err(NATIVE_TOO_LARGE.into());
+                }
+                let status = child.wait().await.map_err(|_| NATIVE_READ_FAILED)?;
+                match status.code() {
+                    Some(0) => validate_native(
+                        serde_json::from_slice(&bytes).map_err(|_| NATIVE_READ_FAILED)?,
+                    ),
+                    Some(2) => Err(NATIVE_MISSING.into()),
+                    Some(3) => Err(NATIVE_TOO_LARGE.into()),
+                    _ => Err(NATIVE_READ_FAILED.into()),
+                }
+            };
+            let outcome = tokio::select! {
+                result = read => result,
+                _ = tokio::time::sleep_until(deadline) => Err("读取原生会话超时，请重试".into()),
+                _ = reply.closed() => Err("原生会话读取已取消".into()),
+            };
+            // Kill/wait before deleting HOME: a Windows child can hold cwd and
+            // storage files open even after its caller has stopped waiting.
+            if child.id().is_some() {
+                let _ = child.kill().await;
             }
-            Some(2) => Err(NATIVE_MISSING.into()),
-            Some(3) => Err(NATIVE_TOO_LARGE.into()),
-            _ => Err(NATIVE_READ_FAILED.into()),
-        }
+            let _ = child.wait().await;
+            drop(child);
+            let cleanup = tokio::task::spawn_blocking(move || home.close()).await;
+            let outcome = match cleanup {
+                Ok(Ok(())) => outcome,
+                _ => Err("无法清理原生会话临时读取目录".into()),
+            };
+            let _ = reply.send(outcome);
+        });
+        result.await.map_err(|_| NATIVE_READ_FAILED.to_owned())?
     })
     .await
     .map_err(|_| "读取原生会话超时，请重试")?
@@ -507,10 +746,12 @@ impl HarnessRuntime {
             stop,
             stopped: stopped.clone(),
             shutdown_lock: Arc::new(tokio::sync::Mutex::new(())),
+            native_follows: Arc::new(NativeFollows::default()),
         };
+        let client_native_follows = client.native_follows.clone();
         tokio::spawn(async move {
             let result = tokio::select! {
-                result = read_frames(output, &pending, &publish, outbox, stopped) => result,
+                result = read_frames(output, &pending, &publish, outbox, stopped, &client_native_follows) => result,
                 result = write_frames(input, writes) => result,
                 _ = should_stop.changed() => Err("Harness 连接已关闭".into()),
                 _ = publish.closed() => Err("Harness 事件接收已关闭".into()),
@@ -625,6 +866,7 @@ async fn read_frames(
     publish: &mpsc::Sender<HarnessEvent>,
     outbox: Outbox,
     stopped: watch::Receiver<Option<Result<(), String>>>,
+    native_follows: &NativeFollows,
 ) -> Result<(), String> {
     let mut output = BufReader::new(output);
     let host_slots = Arc::new(Semaphore::new(REQUEST_CAPACITY));
@@ -633,6 +875,10 @@ async fn read_frames(
             return Err("Harness 返回了无效事件".into());
         }
         if let Some(method) = frame["method"].as_str() {
+            if method == NATIVE_FOLLOW_METHOD && frame.get("id").is_none() {
+                native_follows.route(&frame["params"]);
+                continue;
+            }
             let event = if let Some(id) = frame.get("id") {
                 let id = id.clone();
                 let (response, answer) = oneshot::channel();
@@ -736,6 +982,156 @@ async fn receive(output: &mut BufReader<impl AsyncRead + Unpin>) -> Result<Optio
 mod tests {
     use super::*;
 
+    #[tokio::test]
+    #[ignore = "requires the prepared pinned Harness Node runtime"]
+    async fn native_cold_helper_cancellation_and_timeout_remove_the_owned_home() {
+        let resources = Path::new(env!("CARGO_MANIFEST_DIR")).join("resources");
+        let node = HarnessPaths::from_resource_dir(&resources).unwrap().node;
+        let fixture = tempfile::tempdir().unwrap();
+        let helper = fixture.path().join("cold-helper.mjs");
+        std::fs::write(
+            &helper,
+            r#"
+            import fs from 'node:fs';
+            import path from 'node:path';
+            const home = process.argv[5];
+            process.chdir(home);
+            fs.writeFileSync(path.join(process.argv[2], 'started.json'), JSON.stringify({home}));
+            setInterval(() => {}, 1000);
+        "#,
+        )
+        .unwrap();
+        for cancel in [true, false] {
+            let marker = fixture.path().join("started.json");
+            let paths = HarnessPaths {
+                node: node.clone(),
+                package: fixture.path().to_owned(),
+                native_reader: helper.clone(),
+                version: "fixture".into(),
+            };
+            let sessions = fixture.path().to_owned();
+            let run = tokio::spawn(async move {
+                let deadline = Instant::now() + Duration::from_secs(3);
+                read_cold_session_native_until(&paths, &sessions, "fixture", &json!({}), deadline)
+                    .await
+            });
+            timeout(Duration::from_secs(2), async {
+                while !marker.exists() {
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                }
+            })
+            .await
+            .expect("the fixture helper did not start");
+            let started: Value = serde_json::from_slice(&std::fs::read(&marker).unwrap()).unwrap();
+            let home = PathBuf::from(started["home"].as_str().unwrap());
+            assert!(home.is_dir());
+            if cancel {
+                run.abort();
+                assert!(run.await.unwrap_err().is_cancelled());
+            } else {
+                assert_eq!(run.await.unwrap().unwrap_err(), "读取原生会话超时，请重试");
+            }
+            timeout(Duration::from_secs(5), async {
+                while home.exists() {
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                }
+            })
+            .await
+            .expect("cancelled helper left its owned HOME behind");
+            std::fs::remove_file(marker).unwrap();
+        }
+    }
+
+    #[tokio::test]
+    async fn native_follow_overflow_and_cancellation_do_not_block_other_observers_or_rpcs() {
+        timeout(Duration::from_secs(5), async {
+            let (host_in, mut sdk_out) = tokio::io::duplex(16 * 1024);
+            let (host_out, sdk_in) = tokio::io::duplex(16 * 1024);
+            let mut sdk_in = BufReader::new(sdk_in);
+            let (outbox, writes) = mpsc::channel(REQUEST_CAPACITY);
+            let (publish, mut events) = mpsc::channel(1);
+            let (stop, _should_stop) = watch::channel(false);
+            let (_terminated, stopped) = watch::channel(None);
+            let pending = Arc::new(Requests::default());
+            let client = HarnessClient {
+                outbox: outbox.clone(), pending: pending.clone(),
+                sequence: Arc::new(AtomicU64::new(1)), stop, stopped: stopped.clone(),
+                shutdown_lock: Arc::new(tokio::sync::Mutex::new(())),
+                native_follows: Arc::new(NativeFollows::default()),
+            };
+            let routes = client.native_follows.clone();
+            let reader = tokio::spawn(async move {
+                read_frames(host_in, &pending, &publish, outbox, stopped, &routes).await
+            });
+            let writer = tokio::spawn(write_frames(host_out, writes));
+            let first_client = client.clone();
+            let first = tokio::spawn(async move {
+                first_client.follow_session_native("root", None, "first".into(), Some(12)).await
+            });
+            let first_open = receive(&mut sdk_in).await.unwrap().unwrap();
+            sdk_out.write_all(&encode(&json!({"jsonrpc":"2.0","id":first_open["id"],"result":{}})).unwrap()).await.unwrap();
+            let mut first = first.await.unwrap().unwrap().unwrap();
+            let second_client = client.clone();
+            let second = tokio::spawn(async move {
+                second_client.follow_session_native("root", None, "second".into(), Some(12)).await
+            });
+            let second_open = receive(&mut sdk_in).await.unwrap().unwrap();
+            sdk_out.write_all(&encode(&json!({"jsonrpc":"2.0","id":second_open["id"],"result":{}})).unwrap()).await.unwrap();
+            let mut second = second.await.unwrap().unwrap().unwrap();
+            for seq in 0..=NATIVE_FOLLOW_CAPACITY {
+                sdk_out.write_all(&encode(&json!({"jsonrpc":"2.0","method":NATIVE_FOLLOW_METHOD,
+                    "params":{"subscriptionId":"first","frame":{"type":"event","event":{"seq":seq}}}})).unwrap()).await.unwrap();
+            }
+            let expected = json!({"type":"event","event":{"seq":77,"future":{"preserve":true}}});
+            sdk_out.write_all(&encode(&json!({"jsonrpc":"2.0","method":NATIVE_FOLLOW_METHOD,
+                "params":{"subscriptionId":"second","frame":expected}})).unwrap()).await.unwrap();
+            // Observation frames cannot fill even a capacity-one Agent queue.
+            sdk_out.write_all(&encode(&json!({"jsonrpc":"2.0","method":"approval/request","id":"approval",
+                "params":{"kind":"fixture"}})).unwrap()).await.unwrap();
+            let Some(HarnessEvent::Request(approval)) = events.recv().await else { panic!("approval was blocked"); };
+            assert_eq!(second.next().await.unwrap(), expected);
+            assert_eq!(first.next().await.unwrap_err(), NATIVE_FOLLOW_OVERFLOW);
+            assert!(!reader.is_finished());
+            approval.respond(Some(json!({"outcome":"allowed-once"}))).await.unwrap();
+            assert_eq!(receive(&mut sdk_in).await.unwrap().unwrap()["id"], "approval");
+            drop(first);
+            let cancelled = receive(&mut sdk_in).await.unwrap().unwrap();
+            assert_eq!(cancelled["method"], "lolicode/session/unfollow-native");
+            assert_eq!(cancelled["params"]["subscriptionId"], "first");
+            // Cleanup must settle upstream before this ID becomes reusable.
+            assert!(client.follow_session_native("root", None, "first".into(), Some(12)).await.is_err());
+            sdk_out.write_all(&encode(&json!({"jsonrpc":"2.0","id":cancelled["id"],"result":{}})).unwrap()).await.unwrap();
+            while client.native_follows.0.lock().unwrap().contains_key("first") {
+                tokio::task::yield_now().await;
+            }
+            sdk_out.write_all(&encode(&json!({"jsonrpc":"2.0","method":NATIVE_FOLLOW_METHOD,
+                "params":{"subscriptionId":"second","frame":{"type":"event","event":{"seq":78}}}})).unwrap()).await.unwrap();
+            assert_eq!(second.next().await.unwrap()["event"]["seq"], 78);
+            drop(second);
+            let cancelled = receive(&mut sdk_in).await.unwrap().unwrap();
+            assert_eq!(cancelled["params"]["subscriptionId"], "second");
+            sdk_out.write_all(&encode(&json!({"jsonrpc":"2.0","id":cancelled["id"],"result":{}})).unwrap()).await.unwrap();
+            // Closing while the first upstream reply is pending still owns the
+            // cleanup capability; a late successful reply cannot leak a watch.
+            let opening_client = client.clone();
+            let opening = tokio::spawn(async move {
+                opening_client.follow_session_native("root", None, "opening".into(), Some(12)).await
+            });
+            let started = receive(&mut sdk_in).await.unwrap().unwrap();
+            opening.abort();
+            assert!(matches!(opening.await, Err(error) if error.is_cancelled()));
+            let cancelled = receive(&mut sdk_in).await.unwrap().unwrap();
+            assert_eq!(cancelled["method"], "lolicode/session/unfollow-native");
+            assert_eq!(cancelled["params"]["subscriptionId"], "opening");
+            sdk_out.write_all(&encode(&json!({"jsonrpc":"2.0","id":started["id"],"result":{}})).unwrap()).await.unwrap();
+            sdk_out.write_all(&encode(&json!({"jsonrpc":"2.0","id":cancelled["id"],"result":{}})).unwrap()).await.unwrap();
+            while client.native_follows.0.lock().unwrap().contains_key("opening") {
+                tokio::task::yield_now().await;
+            }
+            reader.abort(); writer.abort();
+        }).await.unwrap();
+    }
+
     #[test]
     fn native_pagination_preserves_cut_and_rejects_unsafe_numbers() {
         assert_eq!(native_read_request(None, None, None).unwrap(), json!({}));
@@ -800,9 +1196,19 @@ mod tests {
                 stop,
                 stopped: stopped.clone(),
                 shutdown_lock: Arc::new(tokio::sync::Mutex::new(())),
+                native_follows: Arc::new(NativeFollows::default()),
             };
+            let test_native_follows = client.native_follows.clone();
             let reader = tokio::spawn(async move {
-                read_frames(host_in, &pending, &publish, outbox, stopped).await
+                read_frames(
+                    host_in,
+                    &pending,
+                    &publish,
+                    outbox,
+                    stopped,
+                    &test_native_follows,
+                )
+                .await
             });
             let writer = tokio::spawn(write_frames(host_out, writes));
 

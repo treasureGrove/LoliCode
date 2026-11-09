@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { Channel, invoke } from "@tauri-apps/api/core";
 import type {
   AgentDocumentAttachment,
   AgentImageAttachment,
@@ -7,6 +7,7 @@ import i18n from "@/i18n";
 import type {
   AgentNativeSessionPageOptions,
   AgentNativeSessionRead,
+  AgentNativeSessionWatchMessage,
 } from "@/types/harness-session";
 import type {
   AgentCatalog,
@@ -89,7 +90,44 @@ export interface AgentSessionSyncResult {
   warnings: string[];
 }
 
+const ackSessionNative = (subscriptionId: string, deliveryId: number) =>
+  invoke<void>("ack_agent_session_native", { subscriptionId, deliveryId });
+
 export const agentApi = {
+  ackSessionNative,
+  watchSessionNative: (
+    sessionId: string,
+    subscriptionId: string,
+    onMessage: (message: AgentNativeSessionWatchMessage) => void,
+    options: { maxMessages?: number } = {},
+  ) => {
+    const onFrame = new Channel<AgentNativeSessionWatchMessage>();
+    onFrame.onmessage = (message) => {
+      try {
+        onMessage(message);
+      } finally {
+        if (message.deliveryId !== undefined) {
+          void ackSessionNative(subscriptionId, message.deliveryId).catch(
+            () => {
+              // The hook ignores this after cancellation or a generation change.
+              onMessage({
+                subscriptionId,
+                error: "实时记录确认失败，请重新连接。",
+              });
+            },
+          );
+        }
+      }
+    };
+    return invoke<boolean>("watch_agent_session_native", {
+      sessionId,
+      subscriptionId,
+      onFrame,
+      ...options,
+    });
+  },
+  stopSessionNative: (subscriptionId: string) =>
+    invoke<void>("stop_agent_session_native", { subscriptionId }),
   readSessionNative: (
     sessionId: string,
     options: AgentNativeSessionPageOptions = {},

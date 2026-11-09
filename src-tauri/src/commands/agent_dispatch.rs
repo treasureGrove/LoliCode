@@ -14,7 +14,7 @@ use base64::{engine::general_purpose::STANDARD, Engine as _};
 use lolicode_agent::{AgentSession, AgentSnapshot};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::{json, Value};
-use tauri::{AppHandle, Manager};
+use tauri::{ipc::Channel, AppHandle, Manager, WebviewWindow};
 
 fn legacy_id(id: &str) -> Result<bool, String> {
     if (id.starts_with("ses_") || id.starts_with("zc:")) && id.len() <= 512 && !id.contains('\0') {
@@ -436,6 +436,51 @@ pub async fn read_agent_session_native(
             max_messages,
         )
         .await
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub async fn watch_agent_session_native(
+    app: AppHandle,
+    window: WebviewWindow,
+    session_id: String,
+    subscription_id: String,
+    max_messages: Option<u32>,
+    on_frame: Channel<Value>,
+) -> Result<bool, String> {
+    if legacy_id(&session_id)? {
+        return Err("旧引擎迁移会话没有完整的原生 Harness 历史".into());
+    }
+    let carrier = app.state::<InprocessAgentState>();
+    carrier
+        .harness
+        .watch_session_native(
+            &window,
+            &carrier,
+            &session_id,
+            &subscription_id,
+            max_messages,
+            on_frame,
+        )
+        .await
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub async fn stop_agent_session_native(
+    window: WebviewWindow,
+    subscription_id: String,
+) -> Result<(), String> {
+    crate::services::stop_native_view(window.label(), &subscription_id);
+    Ok(())
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub async fn ack_agent_session_native(
+    window: WebviewWindow,
+    subscription_id: String,
+    delivery_id: u64,
+) -> Result<(), String> {
+    crate::services::ack_native_view(window.label(), &subscription_id, delivery_id);
+    Ok(())
 }
 
 #[tauri::command(rename_all = "camelCase")]

@@ -12,7 +12,8 @@ use super::{
     harness_questions::{answer_for_question, question_from_params},
     harness_runtime::{
         native_read_request, read_cold_session_markdown, read_cold_session_native, HarnessClient,
-        HarnessEvent, HarnessHostRequest, HarnessRuntime, MARKDOWN_MISSING, NATIVE_MISSING,
+        HarnessEvent, HarnessHostRequest, HarnessNativeSubscription, HarnessRuntime,
+        MARKDOWN_MISSING, NATIVE_MISSING,
     },
     harness_secretary::{HarnessSecretary, SecretaryCommand, SecretarySidebar, WorkerAction},
     harness_sessions::activity,
@@ -32,11 +33,14 @@ use sha2::{Digest, Sha256};
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap, VecDeque},
     path::{Path, PathBuf},
-    sync::{Arc, Mutex as StdMutex, OnceLock},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc, Mutex as StdMutex, OnceLock,
+    },
     time::Duration,
 };
-use tauri::{AppHandle, Emitter, Manager};
-use tokio::sync::{mpsc, oneshot, Mutex};
+use tauri::{ipc::Channel, AppHandle, Emitter, Manager, WebviewWindow};
+use tokio::sync::{mpsc, oneshot, watch, Mutex};
 use uuid::Uuid;
 
 const INTERRUPTED: &str = "上次 Harness 会话中断，已保留已确认的历史。";
@@ -62,6 +66,134 @@ struct SessionSidebar {
 
 type SidebarEntry = Arc<OnceLock<Option<Arc<SessionSidebar>>>>;
 static SIDEBAR_CACHE: OnceLock<StdMutex<HashMap<PathBuf, SidebarEntry>>> = OnceLock::new();
+
+#[derive(Default)]
+struct NativeViewWatches {
+    entries: HashMap<(String, String), NativeViewWatch>,
+    windows: BTreeSet<String>,
+}
+
+struct NativeViewWatch {
+    serial: Uuid,
+    cancel: watch::Sender<bool>,
+    ack: watch::Sender<u64>,
+    expected: Arc<AtomicU64>,
+}
+
+static NATIVE_VIEW_WATCHES: OnceLock<StdMutex<NativeViewWatches>> = OnceLock::new();
+
+struct NativeViewWatchGuard {
+    key: (String, String),
+    serial: Uuid,
+}
+
+struct NativeViewRegistration {
+    guard: NativeViewWatchGuard,
+    cancelled: watch::Receiver<bool>,
+    acknowledged: watch::Receiver<u64>,
+    expected: Arc<AtomicU64>,
+}
+
+impl Drop for NativeViewWatchGuard {
+    fn drop(&mut self) {
+        let mut watches = NATIVE_VIEW_WATCHES
+            .get_or_init(Default::default)
+            .lock()
+            .unwrap();
+        if watches
+            .entries
+            .get(&self.key)
+            .is_some_and(|watch| watch.serial == self.serial)
+        {
+            watches.entries.remove(&self.key);
+        }
+    }
+}
+
+fn register_native_view(
+    window: &WebviewWindow,
+    id: &str,
+) -> Result<NativeViewRegistration, String> {
+    if Uuid::parse_str(id).is_err() {
+        return Err("原生会话订阅编号无效".into());
+    }
+    let key = (window.label().to_owned(), id.to_owned());
+    let serial = Uuid::new_v4();
+    let (cancel, cancelled) = watch::channel(false);
+    let (ack, acknowledged) = watch::channel(0);
+    let expected = Arc::new(AtomicU64::new(0));
+    let register_window = {
+        let mut watches = NATIVE_VIEW_WATCHES
+            .get_or_init(Default::default)
+            .lock()
+            .unwrap();
+        if watches.entries.len() >= 16 || watches.entries.contains_key(&key) {
+            return Err("原生会话实时订阅过多或编号重复".into());
+        }
+        watches.entries.insert(
+            key.clone(),
+            NativeViewWatch {
+                serial,
+                cancel,
+                ack,
+                expected: expected.clone(),
+            },
+        );
+        watches.windows.insert(key.0.clone())
+    };
+    if register_window {
+        let label = key.0.clone();
+        window.on_window_event(move |event| {
+            if matches!(event, tauri::WindowEvent::Destroyed) {
+                close_native_window(&label);
+            }
+        });
+    }
+    Ok(NativeViewRegistration {
+        guard: NativeViewWatchGuard { key, serial },
+        cancelled,
+        acknowledged,
+        expected,
+    })
+}
+
+fn close_native_window(label: &str) {
+    let mut watches = NATIVE_VIEW_WATCHES
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap();
+    watches.windows.remove(label);
+    watches.entries.retain(|(window, _), watch| {
+        if window == label {
+            watch.cancel.send_replace(true);
+            false
+        } else {
+            true
+        }
+    });
+}
+
+pub(crate) fn stop_native_view(window: &str, id: &str) {
+    let watches = NATIVE_VIEW_WATCHES
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap();
+    if let Some(watch) = watches.entries.get(&(window.to_owned(), id.to_owned())) {
+        watch.cancel.send_replace(true);
+    }
+}
+
+pub(crate) fn ack_native_view(window: &str, id: &str, delivery: u64) {
+    let watches = NATIVE_VIEW_WATCHES
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap();
+    if let Some(watch) = watches.entries.get(&(window.to_owned(), id.to_owned())) {
+        if delivery != 0 && watch.expected.load(Ordering::Acquire) == delivery {
+            watch.ack.send_replace(delivery);
+        }
+    }
+}
 
 struct Flight {
     request_id: String,
@@ -129,6 +261,12 @@ enum Control {
         child: Option<String>,
         request: Value,
         reply: oneshot::Sender<Result<Option<Value>, String>>,
+    },
+    FollowNative {
+        child: Option<String>,
+        id: String,
+        max_messages: Option<u32>,
+        reply: oneshot::Sender<Result<Option<HarnessNativeSubscription>, String>>,
     },
     WorkerEnqueue {
         session: String,
@@ -445,6 +583,98 @@ impl HarnessDesktop {
             &request,
         )
         .await
+    }
+
+    pub(crate) async fn watch_session_native(
+        &self,
+        window: &WebviewWindow,
+        carrier: &InprocessAgentState,
+        id: &str,
+        subscription_id: &str,
+        max_messages: Option<u32>,
+        on_frame: Channel<Value>,
+    ) -> Result<bool, String> {
+        native_read_request(None, None, max_messages)?;
+        // Register cancellation before validation/transport opening, so an
+        // immediate close can cancel a watch whose first reply is still pending.
+        let NativeViewRegistration {
+            guard: _guard,
+            mut cancelled,
+            mut acknowledged,
+            expected,
+        } = register_native_view(window, subscription_id)?;
+        let app = window.app_handle();
+        let open = async {
+            carrier.ensure_started(app).await?;
+            let context = self
+                .verified_read_context(app, carrier, id)
+                .await
+                .map_err(native_context_error)?;
+            let Some(controls) = context.controls else {
+                return Ok(None);
+            };
+            forward_live_control(&controls, |reply| Control::FollowNative {
+                child: context.child,
+                id: subscription_id.to_owned(),
+                max_messages,
+                reply,
+            })
+            .await
+            .transpose()
+            .map(|result| result.flatten())
+        };
+        let opened = tokio::select! {
+            result = tokio::time::timeout(Duration::from_secs(55), open) => result.map_err(|_| "原生会话实时连接超时，请重试")??,
+            _ = cancelled.changed() => return Ok(true),
+        };
+        let Some(mut subscription) = opened else {
+            return Ok(false);
+        };
+        if *cancelled.borrow() {
+            return Ok(true);
+        }
+        let mut delivery = 0u64;
+        loop {
+            tokio::select! {
+                biased;
+                _ = cancelled.changed() => return Ok(true),
+                frame = async {
+                    if delivery == 0 {
+                        tokio::time::timeout(Duration::from_secs(30), subscription.next())
+                            .await
+                            .map_err(|_| "原生会话起始快照超时，请手动重新连接".to_owned())?
+                    } else {
+                        subscription.next().await
+                    }
+                } => {
+                    delivery = delivery.checked_add(1).ok_or("原生会话交付编号已耗尽")?;
+                    expected.store(delivery, Ordering::Release);
+                    on_frame.send(json!({"subscriptionId":subscription_id,"deliveryId":delivery,"frame":frame?}))
+                        .map_err(|_| "原生会话预览窗口已关闭")?;
+                }
+            }
+            // One unacknowledged IPC message at a time. A frozen renderer must
+            // not move an unlimited stream into Tauri's internal payload queue.
+            let ack = async {
+                loop {
+                    if *acknowledged.borrow_and_update() == delivery {
+                        return Ok::<_, String>(());
+                    }
+                    acknowledged
+                        .changed()
+                        .await
+                        .map_err(|_| "原生会话预览已关闭".to_owned())?;
+                }
+            };
+            tokio::select! {
+                biased;
+                _ = cancelled.changed() => return Ok(true),
+                error = subscription.ended() => return Err(error),
+                result = tokio::time::timeout(Duration::from_secs(30), ack) => {
+                    result.map_err(|_| "原生会话预览响应超时，请手动重新连接")??;
+                }
+            }
+        }
     }
 
     pub(super) async fn session_list_activity(
@@ -2747,6 +2977,26 @@ fn reply_live_native(
     });
 }
 
+fn reply_live_native_follow(
+    client: &HarnessClient,
+    sdk_id: &str,
+    child: Option<String>,
+    id: String,
+    max_messages: Option<u32>,
+    reply: oneshot::Sender<Result<Option<HarnessNativeSubscription>, String>>,
+) {
+    let client = client.clone();
+    let sdk_id = sdk_id.to_owned();
+    tokio::spawn(async move {
+        let result = client
+            .follow_session_native(&sdk_id, child.as_deref(), id, max_messages)
+            .await;
+        // A cancelled opening drops a successfully created subscription here,
+        // invoking its observer-only cleanup without touching the running Agent.
+        let _ = reply.send(result);
+    });
+}
+
 async fn send_secretary_control(
     controls: &mpsc::Sender<Control>,
     args: &Value,
@@ -3212,6 +3462,14 @@ async fn run_turn(mut turn: Turn<'_>) -> Result<ReceiptStatus, String> {
                 } => {
                     reply_live_native(&client, sdk_id, child, request, reply);
                 }
+                Control::FollowNative {
+                    child,
+                    id,
+                    max_messages,
+                    reply,
+                } => {
+                    reply_live_native_follow(&client, sdk_id, child, id, max_messages, reply);
+                }
                 Control::WorkerEnqueue { reply, .. } => {
                     let _ = reply.send(Err("子任务正在启动，请稍后再加入队列".into()));
                 }
@@ -3379,6 +3637,9 @@ async fn run_compaction(
                     }
                     Some(Control::ReadNative { child, request, reply }) => {
                         reply_live_native(client, sdk_id, child, request, reply);
+                    }
+                    Some(Control::FollowNative { child, id, max_messages, reply }) => {
+                        reply_live_native_follow(client, sdk_id, child, id, max_messages, reply);
                     }
                     Some(Control::StopWorker { reply, .. } | Control::Approval { reply, .. }
                         | Control::Enqueue { reply, .. } | Control::WorkerEnqueue { reply, .. }
@@ -3819,6 +4080,9 @@ async fn observe_turn(
                 }
                 Some(Control::ReadNative { child, request, reply }) => {
                     reply_live_native(client, sdk_id, child, request, reply);
+                }
+                Some(Control::FollowNative { child, id, max_messages, reply }) => {
+                    reply_live_native_follow(client, sdk_id, child, id, max_messages, reply);
                 }
                 Some(Control::ModeCommand { args, reply }) => {
                     let result = accept_mode_command(turn, client, sdk_id, args).await.map(|accepted| {
@@ -4842,5 +5106,127 @@ mod markdown_tests {
         std::fs::write(&sessions, b"not a directory").unwrap();
         assert!(existing_markdown_directory(&sessions).is_err());
         assert_eq!(existing_markdown_directory(&root).unwrap(), Some(root));
+    }
+}
+
+#[cfg(test)]
+mod native_watch_tests {
+    use super::*;
+
+    #[test]
+    fn destroyed_windows_release_registration_and_cancel_all_their_watches() {
+        let label = format!("native-watch-window-{}", Uuid::new_v4());
+        for _ in 0..25 {
+            let mut cancelled = Vec::new();
+            {
+                let mut watches = NATIVE_VIEW_WATCHES
+                    .get_or_init(Default::default)
+                    .lock()
+                    .unwrap();
+                watches.windows.insert(label.clone());
+                for _ in 0..3 {
+                    let (cancel, receiver) = watch::channel(false);
+                    let (ack, _) = watch::channel(0);
+                    cancelled.push(receiver);
+                    watches.entries.insert(
+                        (label.clone(), Uuid::new_v4().to_string()),
+                        NativeViewWatch {
+                            serial: Uuid::new_v4(),
+                            cancel,
+                            ack,
+                            expected: Arc::new(AtomicU64::new(0)),
+                        },
+                    );
+                }
+            }
+            close_native_window(&label);
+            assert!(cancelled.iter().all(|receiver| *receiver.borrow()));
+            let watches = NATIVE_VIEW_WATCHES
+                .get_or_init(Default::default)
+                .lock()
+                .unwrap();
+            assert!(!watches.windows.contains(&label));
+            assert!(!watches.entries.keys().any(|(window, _)| window == &label));
+        }
+    }
+
+    #[test]
+    fn native_watch_ack_and_cancel_are_scoped_to_the_invoking_window() {
+        let id = Uuid::new_v4().to_string();
+        let key = ("native-watch-fixture".to_owned(), id.clone());
+        let serial = Uuid::new_v4();
+        let (cancel, cancelled) = watch::channel(false);
+        let (ack, acknowledged) = watch::channel(0);
+        let expected = Arc::new(AtomicU64::new(1));
+        NATIVE_VIEW_WATCHES
+            .get_or_init(Default::default)
+            .lock()
+            .unwrap()
+            .entries
+            .insert(
+                key.clone(),
+                NativeViewWatch {
+                    serial,
+                    cancel,
+                    ack,
+                    expected,
+                },
+            );
+        let _guard = NativeViewWatchGuard { key, serial };
+        ack_native_view("other-window", &id, 1);
+        assert_eq!(*acknowledged.borrow(), 0);
+        ack_native_view("native-watch-fixture", &id, 2);
+        assert_eq!(*acknowledged.borrow(), 0);
+        ack_native_view("native-watch-fixture", &id, 1);
+        assert_eq!(*acknowledged.borrow(), 1);
+        stop_native_view("other-window", &id);
+        assert!(!*cancelled.borrow());
+        stop_native_view("native-watch-fixture", &id);
+        assert!(*cancelled.borrow());
+    }
+
+    #[test]
+    fn a_retired_watch_guard_cannot_remove_a_new_generation() {
+        let key = (
+            "native-watch-generation".to_owned(),
+            Uuid::new_v4().to_string(),
+        );
+        let (cancel, _) = watch::channel(false);
+        let (ack, _) = watch::channel(0);
+        let serial = Uuid::new_v4();
+        NATIVE_VIEW_WATCHES
+            .get_or_init(Default::default)
+            .lock()
+            .unwrap()
+            .entries
+            .insert(
+                key.clone(),
+                NativeViewWatch {
+                    serial,
+                    cancel,
+                    ack,
+                    expected: Arc::new(AtomicU64::new(0)),
+                },
+            );
+        drop(NativeViewWatchGuard {
+            key: key.clone(),
+            serial: Uuid::new_v4(),
+        });
+        assert!(NATIVE_VIEW_WATCHES
+            .get_or_init(Default::default)
+            .lock()
+            .unwrap()
+            .entries
+            .contains_key(&key));
+        drop(NativeViewWatchGuard {
+            key: key.clone(),
+            serial,
+        });
+        assert!(!NATIVE_VIEW_WATCHES
+            .get_or_init(Default::default)
+            .lock()
+            .unwrap()
+            .entries
+            .contains_key(&key));
     }
 }
