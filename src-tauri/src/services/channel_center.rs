@@ -401,7 +401,7 @@ fn publish_catalog(db: &Database, snapshot: &ChannelCenterSnapshot) -> Result<()
     let key = format!("channel_center_catalog_{}", snapshot.revision);
     let raw = serialize(snapshot)?;
     if let Some(existing) = db.get_setting(&key)? {
-        if existing != raw {
+        if !catalog_matches_snapshot(&existing, snapshot)? {
             return Err(AppError::Conflict(
                 "此渠道版本已经应用且内容不同，请重新保存以创建新版本".into(),
             ));
@@ -409,6 +409,20 @@ fn publish_catalog(db: &Database, snapshot: &ChannelCenterSnapshot) -> Result<()
         return Ok(());
     }
     db.set_setting(&key, &raw)
+}
+
+fn catalog_matches_snapshot(
+    existing: &str,
+    snapshot: &ChannelCenterSnapshot,
+) -> Result<bool, AppError> {
+    // Revision immutability protects configuration content, not its JSON
+    // whitespace or object-key order. Compare complete values so unknown fields,
+    // array order and actual channel/model changes still cause a conflict.
+    let existing: Value = serde_json::from_str(existing)
+        .map_err(|_| AppError::Config("已应用渠道版本无法解析，原数据已保留".into()))?;
+    let candidate =
+        serde_json::to_value(snapshot).map_err(|source| AppError::JsonSerialize { source })?;
+    Ok(existing == candidate)
 }
 
 /// Versioned client files may be written even if the final applied marker failed.
@@ -2162,12 +2176,13 @@ fn prepare_agent_gateway_write<'db>(
         })
         .optional()?;
     match existing {
-        Some(existing) if existing != raw => {
-            return Err(AppError::Conflict(
-                "此渠道版本已经应用且内容不同，请重新保存以创建新版本".into(),
-            ));
+        Some(existing) => {
+            if !catalog_matches_snapshot(&existing, snapshot)? {
+                return Err(AppError::Conflict(
+                    "此渠道版本已经应用且内容不同，请重新保存以创建新版本".into(),
+                ));
+            }
         }
-        Some(_) => {}
         None => {
             tx.execute(
                 "INSERT INTO settings (key,value) VALUES (?1,?2)",
@@ -3896,6 +3911,112 @@ mod tests {
         conflicting.channels[0].api_key = "conflict-fixture".into();
         assert!(publish_catalog(&db, &conflicting).is_err());
         assert_eq!(load_catalog(&db, 1).unwrap(), published);
+    }
+
+    #[test]
+    fn catalog_publication_is_idempotent_across_json_format_and_key_order() {
+        let db = Database::memory().unwrap();
+        let mut catalog = snapshot();
+        catalog.revision = 31;
+        let value = serde_json::to_value(&catalog).unwrap();
+        let reordered = json!({
+            "revision": value["revision"],
+            "defaultModel": value["defaultModel"],
+            "targets": value["targets"],
+            "channels": value["channels"],
+        });
+        let preserved = serde_json::to_string_pretty(&reordered).unwrap();
+        assert_ne!(preserved, serialize(&catalog).unwrap());
+        let key = "channel_center_catalog_31";
+        db.set_setting(key, &preserved).unwrap();
+        db.set_setting(SETTINGS_KEY, &preserved).unwrap();
+        db.set_setting(BACKGROUND_KEY, "false").unwrap();
+
+        publish_catalog(&db, &catalog).unwrap();
+        publish_catalog(&db, &catalog).unwrap();
+        {
+            let _cancelled = prepare_agent_gateway_write(&db, &catalog).unwrap();
+            assert!(db.get_bool_flag(BACKGROUND_KEY).unwrap());
+        }
+        assert!(!db.get_bool_flag(BACKGROUND_KEY).unwrap());
+        let mut committed = prepare_agent_gateway_write(&db, &catalog).unwrap();
+        committed.committed = true;
+        drop(committed);
+        assert!(db.get_bool_flag(BACKGROUND_KEY).unwrap());
+        assert_eq!(
+            db.get_setting(key).unwrap().as_deref(),
+            Some(preserved.as_str())
+        );
+        assert_eq!(
+            db.get_setting(SETTINGS_KEY).unwrap().as_deref(),
+            Some(preserved.as_str())
+        );
+        assert_eq!(load_catalog(&db, 31).unwrap(), catalog);
+        assert!(db.get_setting(APPLIED_KEY).unwrap().is_none());
+    }
+
+    #[test]
+    fn catalog_semantic_comparison_keeps_real_changes_and_unknown_fields_immutable() {
+        let db = Database::memory().unwrap();
+        let mut catalog = snapshot();
+        catalog.revision = 31;
+        let preserved = serde_json::to_string_pretty(&catalog).unwrap();
+        let key = "channel_center_catalog_31";
+        db.set_setting(key, &preserved).unwrap();
+        db.set_setting(BACKGROUND_KEY, "false").unwrap();
+        let mut changed_key = catalog.clone();
+        changed_key.channels[0].api_key = "changed-fixture-key".into();
+        let mut changed_order = catalog.clone();
+        changed_order.channels[0].models.reverse();
+        let mut changed_capability = catalog.clone();
+        changed_capability.channels[0].models[0].supports_tools = Some(false);
+        for changed in [changed_key, changed_order, changed_capability] {
+            assert!(matches!(
+                publish_catalog(&db, &changed),
+                Err(AppError::Conflict(_))
+            ));
+            assert!(matches!(
+                prepare_agent_gateway_write(&db, &changed),
+                Err(AppError::Conflict(_))
+            ));
+            assert!(!db.get_bool_flag(BACKGROUND_KEY).unwrap());
+            assert_eq!(
+                db.get_setting(key).unwrap().as_deref(),
+                Some(preserved.as_str())
+            );
+        }
+        let mut future = serde_json::to_value(&catalog).unwrap();
+        future["futureField"] = json!({"retained": true});
+        let future = serialize(&future).unwrap();
+        db.set_setting(key, &future).unwrap();
+        assert!(matches!(
+            publish_catalog(&db, &catalog),
+            Err(AppError::Conflict(_))
+        ));
+        assert!(matches!(
+            prepare_agent_gateway_write(&db, &catalog),
+            Err(AppError::Conflict(_))
+        ));
+        assert_eq!(
+            db.get_setting(key).unwrap().as_deref(),
+            Some(future.as_str())
+        );
+        assert!(!db.get_bool_flag(BACKGROUND_KEY).unwrap());
+
+        db.set_setting(key, "{invalid-preserved-json").unwrap();
+        assert!(matches!(
+            publish_catalog(&db, &catalog),
+            Err(AppError::Config(_))
+        ));
+        assert!(matches!(
+            prepare_agent_gateway_write(&db, &catalog),
+            Err(AppError::Config(_))
+        ));
+        assert_eq!(
+            db.get_setting(key).unwrap().as_deref(),
+            Some("{invalid-preserved-json")
+        );
+        assert!(!db.get_bool_flag(BACKGROUND_KEY).unwrap());
     }
 
     #[test]
