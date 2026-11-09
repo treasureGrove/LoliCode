@@ -9,6 +9,8 @@ import {
 } from "react";
 import {
   Database,
+  Brain,
+  ChartColumn,
   Folder,
   FolderOpen,
   Globe,
@@ -55,12 +57,16 @@ import { useSettings } from "@/hooks/useSettings";
 import { useImportExport } from "@/hooks/useImportExport";
 import type { SettingsFormState } from "@/hooks/useSettings";
 import { isTextEditableTarget } from "@/utils/domUtils";
+import { SimpleUsagePage } from "@/features/usage/SimpleUsagePage";
+import { AgentMemoryPanel } from "@/features/agent/AgentMemoryPanel";
 
 const SECTION_ICON: Record<
   SettingsSection,
   ComponentType<{ className?: string; strokeWidth?: number | string }>
 > = {
   general: SlidersHorizontal,
+  usage: ChartColumn,
+  memory: Brain,
   models: SlidersHorizontal,
   appConfig: Folder,
   routing: Route,
@@ -376,6 +382,10 @@ export function SettingsPage({
   const renderSection = () => {
     if (!settings) return null;
     switch (section) {
+      case "usage":
+        return <SimpleUsagePage />;
+      case "memory":
+        return <AgentMemoryPanel embedded />;
       case "models":
         return (
           <>
@@ -549,6 +559,8 @@ export function SettingsPage({
         return <AboutSection isPortable={isPortable} />;
     }
   };
+
+  if (section === "usage") return <SimpleUsagePage />;
 
   return (
     <>

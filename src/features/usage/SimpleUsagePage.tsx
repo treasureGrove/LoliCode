@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Input, fieldClass } from "@/components/ui/input";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { AppPageHeader } from "@/app/shell/AppPageHeader";
+import { LolicodeAllowancePage } from "./LolicodeAllowancePage";
 import { APP_DISPLAY_NAME } from "@/app/shell/AppGlyph";
 import type { AppId } from "@/lib/api";
 import { fmtInt, fmtUsd } from "./format";
@@ -274,7 +275,7 @@ export function SimpleUsagePage() {
   return (
     <>
       <AppPageHeader
-        title="用量"
+        title="用量统计"
         icon={<ChartColumn className="h-5 w-5" strokeWidth={1.75} />}
         subtitle="查看请求、Token 消耗与模型费用"
         actions={
@@ -297,6 +298,7 @@ export function SimpleUsagePage() {
         className="lolicode-usage-scroll min-h-0 flex-1 overflow-y-auto scroll-stable"
       >
         <div className="lolicode-usage-content">
+          <LolicodeAllowancePage embedded />
           <div className="lolicode-usage-toolbar">
             <div>
               <h2 className="lolicode-usage-range">{rangeLabel}</h2>

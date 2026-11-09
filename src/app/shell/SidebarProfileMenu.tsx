@@ -1,7 +1,6 @@
 import { useId, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  ChartColumn,
   Download,
   ExternalLink,
   Eye,
@@ -191,7 +190,6 @@ export function SidebarProfileMenu({
                       ? text("正在加载…", "Loading…")
                       : text("未登录", "Not signed in"))}
                 </strong>
-                <small>{text("账户与设置", "Account & settings")}</small>
               </span>
             )}
             <span id={identityId} className="sr-only">
@@ -235,10 +233,6 @@ export function SidebarProfileMenu({
           )}
           {account ? (
             <>
-              <DropdownMenuItem onSelect={onOpenAllowance}>
-                <ChartColumn size={15} aria-hidden="true" />
-                {text("使用情况与额度", "Usage and allowance")}
-              </DropdownMenuItem>
               <DropdownMenuItem
                 onSelect={() => void openWebsite(account.profileUrl)}
                 title={text(

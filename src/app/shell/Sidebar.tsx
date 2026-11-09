@@ -20,6 +20,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
+  RefreshCw,
   SlidersHorizontal,
   Workflow,
 } from "lucide-react";
@@ -34,7 +35,6 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import { fmtUsd } from "@/features/usage/format";
 import { HoverTip } from "@/components/ui/hover-tip";
 import { DRAG_REGION_ATTR, DRAG_REGION_STYLE, isMac } from "@/lib/platform";
 import { cn } from "@/lib/utils";
@@ -173,7 +173,7 @@ export function Sidebar(props: SidebarProps) {
           />
         ) : (
           <>
-            <MainDirectory {...props} />
+            <MainDirectory {...props} compact={compact} />
             {props.view === "tavern" && props.tavernEnabled !== false && (
               <TavernSidebar
                 compact={compact}
@@ -206,11 +206,11 @@ export function Sidebar(props: SidebarProps) {
                 (props.view === "agent" && Boolean(props.activeAgentTool))
               }
               navigationItems={
-                <NavigationItems {...props} todayCost={status.todayCost} />
+                <NavigationItems {...props} />
               }
               onOpenSettings={() => props.onSelectPage("settings")}
               onOpenUpdates={props.onOpenUpdates}
-              onOpenAllowance={() => props.onSelectPage("allowance")}
+              onOpenAllowance={() => props.onSelectPage("usage")}
             />
           </div>
         </div>
@@ -227,7 +227,8 @@ function MainDirectory({
   workspaceActions,
   workspaceContent,
   workspaceSlots,
-}: SidebarProps) {
+  compact = false,
+}: SidebarProps & { compact?: boolean }) {
   const { i18n } = useTranslation();
   const chinese = i18n.language.startsWith("zh");
   const agent = view === "agent";
@@ -238,22 +239,36 @@ function MainDirectory({
         aria-label={chinese ? "主要导航" : "Main navigation"}
         className="lolicode-sidebar-segments"
       >
-        <NavItem
-          selected={view === "agent"}
-          icon={ModelsGlyph}
-          selectionLayout={null}
-          label={chinese ? "编程工作台" : "Coding workspace"}
-          visibleLabel={chinese ? "代理" : "Agent"}
-          onClick={() => onSelectPage("agent")}
-        />
-        <NavItem
-          selected={view === "tavern"}
-          icon={ChatGlyph}
-          selectionLayout={null}
-          label={chinese ? "角色对话" : "Character chat"}
-          visibleLabel={chinese ? "对话" : "Chat"}
-          onClick={() => onSelectPage("tavern")}
-        />
+        {compact && (view === "agent" || view === "tavern") ? (
+          <NavItem
+            selected={false}
+            icon={RefreshCw}
+            selectionLayout={null}
+            label={view === "agent" ? (chinese ? "切换到对话" : "Switch to chat") : (chinese ? "切换到代理" : "Switch to Agent")}
+            visibleLabel=""
+            title={view === "agent" ? (chinese ? "切换到对话" : "Switch to chat") : (chinese ? "切换到代理" : "Switch to Agent")}
+            onClick={() => onSelectPage(view === "agent" ? "tavern" : "agent")}
+          />
+        ) : (
+          <>
+            <NavItem
+              selected={view === "agent"}
+              icon={ModelsGlyph}
+              selectionLayout={null}
+              label={chinese ? "编程工作台" : "Coding workspace"}
+              visibleLabel={chinese ? "代理" : "Agent"}
+              onClick={() => onSelectPage("agent")}
+            />
+            <NavItem
+              selected={view === "tavern"}
+              icon={ChatGlyph}
+              selectionLayout={null}
+              label={chinese ? "角色对话" : "Character chat"}
+              visibleLabel={chinese ? "对话" : "Chat"}
+              onClick={() => onSelectPage("tavern")}
+            />
+          </>
+        )}
       </div>
       {(agent || workspaceSlots) && (
         <>
@@ -322,7 +337,6 @@ const AGENT_TOOLS: {
     icon: Workflow,
     label: ["工作流与自动化", "Workflows and automation"],
   },
-  { id: "memory", icon: Brain, label: ["记忆", "Memory"] },
 ];
 
 function NavigationItems({
@@ -330,37 +344,14 @@ function NavigationItems({
   activeAgentTool,
   onOpenAgentTool,
   onSelectPage,
-  todayCost,
-}: SidebarProps & { todayCost: number }) {
+}: SidebarProps) {
   const { t, i18n } = useTranslation();
   const chinese = i18n.language.startsWith("zh");
   const activeTool = view === "agent" ? activeAgentTool : null;
   const applicationsSelected =
     view === "applications" || (view !== "tavern" && isBuiltinApp(view));
-  const usageSelected = view === "usage" || view === "allowance";
-  const usageLabel = t("nav.usage");
-  const costLabel =
-    todayCost > 0
-      ? t("nav.todayCost", {
-          cost: fmtUsd(todayCost, 2),
-          defaultValue: `${chinese ? "今日花费" : "Today's cost"} ${fmtUsd(todayCost, 2)}`,
-        })
-      : undefined;
   return (
     <>
-      <DropdownMenuItem
-        aria-current={usageSelected ? "page" : undefined}
-        aria-label={[usageLabel, costLabel].filter(Boolean).join(" · ")}
-        onSelect={() => onSelectPage("usage")}
-      >
-        <ChartColumn className="h-4 w-4" aria-hidden="true" />
-        {usageLabel}
-        {todayCost > 0 && (
-          <span className="lolicode-sidebar-menu-detail">
-            {fmtUsd(todayCost, 2)}
-          </span>
-        )}
-      </DropdownMenuItem>
       <DropdownMenuItem
         aria-current={applicationsSelected ? "page" : undefined}
         onSelect={() => onSelectPage("applications")}
@@ -447,6 +438,8 @@ function NavItem({
 
 const SETTINGS_ITEMS: { section: SettingsSection; icon: IconComponent }[] = [
   { section: "general", icon: SlidersHorizontal },
+  { section: "usage", icon: ChartColumn },
+  { section: "memory", icon: Brain },
   { section: "models", icon: ModelsGlyph },
   { section: "appConfig", icon: Folder },
   { section: "network", icon: Globe },

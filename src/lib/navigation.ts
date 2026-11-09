@@ -35,6 +35,8 @@ export type View = AppPage | GlobalPage | "settings";
 
 export type SettingsSection =
   | "general"
+  | "usage"
+  | "memory"
   | "models"
   | "appConfig"
   | "routing"
@@ -44,6 +46,8 @@ export type SettingsSection =
 
 export const SETTINGS_SECTIONS: SettingsSection[] = [
   "general",
+  "usage",
+  "memory",
   "models",
   "appConfig",
   "routing",
