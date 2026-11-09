@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "kind": "superagent-reference-baseline",
-  "checkedAt": "2026-11-07T06:32:45.940Z",
+  "checkedAt": "2026-11-09T00:32:55.687Z",
   "upstreamHead": "8c32a9dc5d72c033816c6a8110b37f40cf94fba4",
   "upstreamUrl": "https://github.com/deepseek-ai/dsh-superagent-prototype/commit/8c32a9dc5d72c033816c6a8110b37f40cf94fba4",
   "originalReference": "6337fc823ce20251c8de8085948165c81aaa701e",
@@ -200,8 +200,22 @@
           "restart",
           "worker-queue-restart"
         ]
+      },
+      "automaticCwdDelivery": {
+        "status": "isolated-validation-pending",
+        "harnessCapability": "global-native-cwd-preview",
+        "proof": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-morning/native-proof.json",
+        "synchronized": false
       }
     }
   ],
-  "lolicodeCommit": "83119678bc97a5a04354d610214ab14b7d52aac3"
+  "lolicodeCommit": "83119678bc97a5a04354d610214ab14b7d52aac3",
+  "lastCheck": {
+    "checkedAt": "2026-11-09T00:32:55.687Z",
+    "headUnchanged": true,
+    "actualTargetBranch": "dev",
+    "actualTargetCommit": "ab870bc7f0939936fcb274a5f8659ca232f7221d",
+    "productWiringChanged": false,
+    "note": "No new public prototype commit. This round audited independent chat display contracts. Secretary context-only notes, durable directed reports and current native automatic global-worker preview acceptance remain incomplete."
+  }
 }

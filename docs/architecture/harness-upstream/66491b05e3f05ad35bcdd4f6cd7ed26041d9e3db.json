@@ -14,7 +14,7 @@
   "fullParity": false,
   "scope": "All 126 release items mapped to pinned source and an acceptance method. Scoped verification does not establish release-wide parity.",
   "artifactChecks": {
-    "checkedAt": "2026-11-07T06:32:45.940Z",
+    "checkedAt": "2026-11-09T00:32:55.687Z",
     "current": "0.2.2-rc.1",
     "newer": [],
     "latest": "0.2.2-rc.1",
@@ -968,12 +968,104 @@
         }
       ],
       "lolicode": [
-        "src/features/agent/AgentTranscript.tsx"
+        "src/features/agent/AgentTranscript.tsx",
+        "src/types/agent.ts",
+        "src/features/agent/AgentDisclosure.tsx",
+        "src-tauri/src/services/harness_snapshot.rs"
       ],
       "acceptance": [
-        "含中间回复/最终回复/失败/取消的流式记录，切换展示偏好并重启检查"
+        "含中间回复/最终回复/失败/取消的流式记录，切换展示偏好并重启检查",
+        "Verify live-to-settled replacement, separate background/Goal Turns without extra user bubbles, two user inputs in one Turn, empty-answer/tool-only Turns, paged partial history, search reveal and scroll anchors, session switching and restart. Compare complete export and actual model request bytes before/after the preference."
       ],
-      "note": "现有过程折叠保留助手文本；缺少上游多档模式、仅最终回复偏好及轮次轨道。"
+      "note": "Existing transcript grouping retains assistant prose. Upstream final-only is a native Turn-process visibility preference with independent detail/collapse settings, not a last-message filter. The flattened product message contract lacks authoritative Turn/Step/seq and per-Turn reason, so compatible projection and host/UI preference wiring remain necessary. Five pure upstream contract tests do not establish product parity.",
+      "verification": {
+        "sourceAudit": {
+          "checkedAt": "2026-11-09T00:40:38.860Z",
+          "result": "source-contract-verified-product-wiring-missing",
+          "clientContractTests": 5,
+          "upstreamSourceProofs": [
+            {
+              "path": "packages/client/ui-chat/src/chat-settings.ts",
+              "url": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/client/ui-chat/src/chat-settings.ts",
+              "gitBlobSha1": "ae9333ba37a7eb330019d10df5ff9d84b43c7f26",
+              "sha256": "60e3ccc9a1e550fa5c00d079b38f89ebd9e7f2b94a4ffc82958bba10b5903e60"
+            },
+            {
+              "path": "packages/client/ui-chat/src/client/contract/turn-process.ts",
+              "url": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/client/ui-chat/src/client/contract/turn-process.ts",
+              "gitBlobSha1": "a1f232e851abece81f25408e9bc577202dda3946",
+              "sha256": "dce44841b376607f143df8c990b4f9e54579655a2d6adc8fead2fe7112efe7ef"
+            },
+            {
+              "path": "packages/client/ui-chat/src/client/presentation-policy.ts",
+              "url": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/client/ui-chat/src/client/presentation-policy.ts",
+              "gitBlobSha1": "e1ff9ac04293c78965a6c9b068aaee63234665cd",
+              "sha256": "320f3a5d7c564f3374e98610ab77cfdb9141d3c81f7d1ddde3947ae86c1be4fd"
+            },
+            {
+              "path": "packages/client/ui-chat/src/client/chat/ChatNodeSeat.tsx",
+              "url": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/client/ui-chat/src/client/chat/ChatNodeSeat.tsx",
+              "gitBlobSha1": "4efdb94142b591fea37e5be720dbe23d44135ba8",
+              "sha256": "e3184a591fb0e2d71f6cf64031a36a4a6599edc90c15dd9ed55357d16e7ea754"
+            }
+          ],
+          "localSourceProofs": [
+            {
+              "file": "src/types/agent.ts",
+              "sha256": "3f70ab7af36c8cd872579fb061f8b36d979cd1acecb5a7486d233409f2500b1b"
+            },
+            {
+              "file": "src/features/agent/AgentTranscript.tsx",
+              "sha256": "46bdefdc5d4d3b8c061b1bc2352dc321a9b9f73dfcb3f7ddd309766752806815"
+            },
+            {
+              "file": "src/features/agent/AgentDisclosure.tsx",
+              "sha256": "99201c3c063eed80c72b823722651e302556d09d29641cd286042eb2db44b6d0"
+            },
+            {
+              "file": "src-tauri/src/services/harness_snapshot.rs",
+              "sha256": "916e46890c78793683cc83d4c2008de12b16f4353d003d0a293b43026f3ea02d"
+            }
+          ],
+          "findings": [
+            {
+              "kind": "upstream-contract",
+              "detail": "Host-backed ui-chat settings independently store transcriptView (compact/standard/detailed/verbose), collapseTiming (completion/next-input) and foldedReplies (all/final). The default keeps all replies; legacy normal/expanded detail values remain accepted."
+            },
+            {
+              "kind": "upstream-contract",
+              "detail": "Final-only controls visibility inside a completed native Turn process. It does not remove messages from history/model input. Verbose mode does not fold; open/stopped/interrupted/error Turns stay open. Interleaved input also disables whole-Turn folding; partial history can become eligible from a loaded end without its start."
+            },
+            {
+              "kind": "local-source-fact",
+              "detail": "AgentMessage exposes id/role/createdAt/completedAt/parts, without native Turn/Step/seq membership. harness_snapshot::assistant_message forwards only the nested message and time; turn/start/end update global status/error instead of retaining per-Turn presentation metadata. AgentTranscript groups text and activity boundaries without a native Turn-process projection."
+            },
+            {
+              "kind": "inference",
+              "detail": "A final-only checkbox that filters to the last assistant text between visible user messages would lose native boundaries for background or Goal continuations, interleaved steering, interrupted Turns and partial history. The flattened message contract alone cannot establish upstream-equivalent final-answer selection."
+            }
+          ],
+          "nextImplementation": [
+            "Project authoritative native Turn/Step/seq, final answer boundary and per-Turn lifecycle/reason into a compatible view sidecar for both live frames and read-only history replay; preserve old message IDs and user data.",
+            "Reuse upstream public presentation/Turn-process contracts where possible, with independent durable preferences and proper legacy/default handling. Keep all replies as the default.",
+            "Apply final-only to a completed process disclosure; expanding restores intermediate replies. Keep active/failed/interrupted and interleaved-input processes visible; preserve tool/error/question/automation surfaces.",
+            "Verify live-to-settled replacement, separate background/Goal Turns without extra user bubbles, two user inputs in one Turn, empty-answer/tool-only Turns, paged partial history, search reveal and scroll anchors, session switching and restart. Compare complete export and actual model request bytes before/after the preference."
+          ],
+          "repeat": "node --test D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-morning/display-contract.test.mjs",
+          "testSourceSha256": "769a1f4516c65282ca8d4a2e6c968e0c7241247f1bc83ca0363bd8f42d8c7802",
+          "log": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-morning/display-contract.log",
+          "proof": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-morning/display-contract-proof.json",
+          "scope": "Exact pinned upstream pure TypeScript contracts executed with Node type stripping; only schemastery dependency resolution adapted. React ChatNodeSeat inspected as source. No product renderer, native UI, model, Agent, user settings or user data exercised.",
+          "productFeatureImplemented": false,
+          "productSynced": false
+        }
+      },
+      "remaining": [
+        "Project authoritative native Turn/Step/seq, final answer boundary and per-Turn lifecycle/reason into a compatible view sidecar for both live frames and read-only history replay; preserve old message IDs and user data.",
+        "Reuse upstream public presentation/Turn-process contracts where possible, with independent durable preferences and proper legacy/default handling. Keep all replies as the default.",
+        "Apply final-only to a completed process disclosure; expanding restores intermediate replies. Keep active/failed/interrupted and interleaved-input processes visible; preserve tool/error/question/automation surfaces.",
+        "Verify live-to-settled replacement, separate background/Goal Turns without extra user bubbles, two user inputs in one Turn, empty-answer/tool-only Turns, paged partial history, search reveal and scroll anchors, session switching and restart. Compare complete export and actual model request bytes before/after the preference."
+      ]
     },
     {
       "id": "context-menus",
@@ -1155,12 +1247,72 @@
         "node --test packages/lolicode-harness-runtime/tests/host-operations.test.mjs",
         "node scripts/tests/harness-desktop-acceptance.mjs --session-export --native-zip"
       ],
-      "note": "The ZIP menu and streaming adapter are in the isolated worktree. Required Windows save/cancel and regression evidence is incomplete; retain the current product code.",
-      "implementationLocation": "D:/projectGithub/lolicode-harness-audit-20261106",
+      "note": "ZIP-only differences are ported onto current committed dev (ab870bc7f), preserving menu dialog callbacks and UI/platform work. SDK, relevant frontend, typecheck and normal Markdown export pass. Actual native ZIP save/cancel and all desktop gates are incomplete; no product synchronization. Historical SDK-only verification now covers selected V0–V3 packed/seeded and interrupted-turn samples; it also confirms an explicit unsupported chronology shape stays unchanged. This is not complete historical-corpus or native product acceptance. The isolated host now refuses missing/mismatched own local catalog children through public read handles and the upstream lineage, while retaining inherited/external/subtree semantics. The previously failed V3 case and 31 SDK / 26 archive regression tests pass. Actual current native ZIP acceptance remains incomplete; the candidate is not synchronized.",
+      "implementationLocation": "D:/projectGithub/lolicode-harness-audit-20261108",
       "verification": {
-        "checkedAt": "2026-11-07T07:10:20.886Z",
+        "checkedAt": "2026-11-07T18:59:09.258Z",
         "synced": false,
         "desktop": {
+          "result": "blocked",
+          "baseCommit": "ab870bc7f0939936fcb274a5f8659ca232f7221d",
+          "log": "D:/projectGithub/lolicode-harness-audit-20261106/src-tauri/target/audit-logs/1108-early/native-zip.log",
+          "uiBlockerLog": "D:/projectGithub/lolicode-harness-audit-20261106/src-tauri/target/audit-logs/1108-early/native-zip-ui-blocker.json"
+        },
+        "officialApi": [
+          "streamSessionLogZip",
+          "flushLiveSessionLog",
+          "readSessionLogText",
+          "sessionLogExportDeps"
+        ],
+        "sdkFork": {
+          "completedAt": "2026-11-07T18:59:09.258Z",
+          "result": "passed-sdk-only-on-current-base",
+          "tests": 2,
+          "worktree": "D:/projectGithub/lolicode-harness-audit-20261108",
+          "baseCommit": "ab870bc7f0939936fcb274a5f8659ca232f7221d",
+          "proofs": [
+            {
+              "file": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-early/zip-fork-zstd-proof.json",
+              "checkedAt": "2026-11-07T18:37:45.686Z",
+              "scope": "SDK-only, no product UI or model",
+              "compression": "zstd",
+              "inheritedEventCount": 3,
+              "eventCount": 7,
+              "entries": [
+                "files/15/15a68314ea67bd0199b48fac82ae724c6756c88dc7a91c42ccbaef0a6e7efeb3/inherited.txt",
+                "media/sha256:64573d0bf4823c2a9928649c9511dc3f88969a5327a3ebbf077378b8cbf72794.png",
+                "session.v4.jsonl",
+                "subagents/fork-worker/session.v4.jsonl"
+              ],
+              "liveAndRestartedLogicalEntriesIdentical": true,
+              "sourceBytesAndMtimesUnchanged": true,
+              "sharedFileAndImageBytesVerified": true,
+              "archiveSha256": "3ca342bb00c2d562eff198a50c92a1e8bf9d760ce9e47fd9de9779866cbe23db"
+            },
+            {
+              "file": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-early/zip-fork-none-proof.json",
+              "checkedAt": "2026-11-07T18:37:46.037Z",
+              "scope": "SDK-only, no product UI or model",
+              "compression": "none",
+              "inheritedEventCount": 3,
+              "eventCount": 7,
+              "entries": [
+                "files/15/15a68314ea67bd0199b48fac82ae724c6756c88dc7a91c42ccbaef0a6e7efeb3/inherited.txt",
+                "media/sha256:64573d0bf4823c2a9928649c9511dc3f88969a5327a3ebbf077378b8cbf72794.png",
+                "session.v4.jsonl",
+                "subagents/fork-worker/session.v4.jsonl"
+              ],
+              "liveAndRestartedLogicalEntriesIdentical": true,
+              "sourceBytesAndMtimesUnchanged": true,
+              "sharedFileAndImageBytesVerified": true,
+              "archiveSha256": "56ad92d7af3ddeec626a92d07fbfe2b01d9d896b098054fc95ab0bce62197cd0"
+            }
+          ],
+          "repeat": "node --test D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-early/zip-fork.test.mjs",
+          "log": "D:/projectGithub/lolicode-harness-audit-20261106/src-tauri/target/audit-logs/1108-early/zip-fork.log",
+          "note": "Exact SDK fork prefix, closers, subtree and shared attachments match after a separate cold-process export with source bytes and mtimes unchanged. Zstandard and plain encodings are not historical format generations."
+        },
+        "previousDesktop": {
           "phase": "session-export-zip",
           "result": "blocked",
           "log": "D:/projectGithub/lolicode-harness-audit-20261106/src-tauri/target/audit-logs/1107-afternoon/native-session-export-zip.log",
@@ -1170,7 +1322,7 @@
           "nativeZipRefusals": [],
           "uiBlocker": "D:/projectGithub/lolicode-harness-audit-20261106/src-tauri/target/audit-logs/1107-afternoon/native-zip-ui-blocker.json"
         },
-        "preparedArchive": {
+        "historicalPreparedArchive": {
           "result": "passed-preparation-only",
           "entrypoint": "session-menu",
           "sessionId": "lc:b664882c-1658-428f-ba30-a974c05e557a",
@@ -1187,17 +1339,742 @@
           "savedViaNativeDialog": false,
           "cancelVerified": false
         },
-        "officialApi": [
-          "streamSessionLogZip",
-          "flushLiveSessionLog",
-          "readSessionLogText",
-          "sessionLogExportDeps"
-        ]
+        "historicalSdk": {
+          "checkedAt": "2026-11-08T06:44:14.358Z",
+          "result": "passed-sdk-only",
+          "tests": 16,
+          "successfulExports": 10,
+          "expectedRefusals": 6,
+          "scope": "Selected upstream V0/V1 packed/seeded corpus and frozen-codec-derived V2/V3; V3 interrupted-turn recovery. Both Zstandard and plain encodings. Not blanket compatibility for all historical logs.",
+          "actualColdCliCases": 8,
+          "explicitPlainLoaderCases": 8,
+          "entrypointDifference": "Zstandard invokes the actual cold archive CLI. Plain encoding uses an explicitly configured SDK context in a separate process; the product cold CLI defaults to Zstandard.",
+          "sourceImmutability": "All tests verify source bytes, mtimes and file set after export/refusal and after a separate cold-process run; no current-format successor is published.",
+          "semanticChecks": [
+            "Inherited prefix and compacted historical messages survive once.",
+            "Packed assistant stream becomes one assistant message.",
+            "Command and title references still point to the intended user messages.",
+            "Interrupted V3 turn gains the official logical closer and remapped title reference, without rewriting the source."
+          ],
+          "unsupportedShape": "The official released-v0-real-shapes corpus contains a model-visible surface before its first step. The published migration refuses to insert a system head without changing chronology. V0/V1 and derived V2 are explicitly rejected with no archive or source mutation.",
+          "refusalOwnership": "Inherited official SDK migration contract; do not rewrite the log or bypass its validation to claim compatibility.",
+          "remaining": [
+            "Historical attachments and multi-session subagent catalog migrations were not covered.",
+            "Actual Windows ZIP menu/save/cancel and current-dev complete desktop acceptance remain pending.",
+            "These upstream-format checks do not establish v1.0.6 Rust-engine installer overwrite compatibility."
+          ],
+          "sourceProofs": [
+            {
+              "path": "packages/session/session-persistence-jsonl/tests/fixtures/released-v0-real-shapes.jsonl",
+              "url": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/session/session-persistence-jsonl/tests/fixtures/released-v0-real-shapes.jsonl",
+              "gitBlobSha1": "73df660d9eb766be2d64197a7f2284703874ec39",
+              "sha256": "79f44919a664f867c22d91eb42f97b3de1c88df1a66bd79c0aa3945926873668"
+            },
+            {
+              "path": "packages/session/session-persistence-jsonl/tests/multi-edge-publication.spec.ts",
+              "url": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/session/session-persistence-jsonl/tests/multi-edge-publication.spec.ts",
+              "gitBlobSha1": "162395fdefca1f76bcd050849411ab01fa3e332d",
+              "sha256": "da63e48efb4ef12dc36e28c2d85a4b8603c5118b7527cf4925487ec4b3695bef"
+            },
+            {
+              "path": "packages/session/session-persistence-jsonl/tests/v3-restart-migration.spec.ts",
+              "url": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/session/session-persistence-jsonl/tests/v3-restart-migration.spec.ts",
+              "gitBlobSha1": "941175498ce210a9bfc6f6f6928a0205d78fad99",
+              "sha256": "a46be02cfc949db6d008de82b75960286603764bb34a60626097e54c926c5625"
+            }
+          ],
+          "proofs": [
+            {
+              "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-afternoon/history-0-none-proof.json",
+              "completedAt": "2026-11-08T06:38:40.055Z",
+              "physicalVersion": 0,
+              "case": 0,
+              "compression": "none",
+              "fixtureOrigin": "Official multi-edge historicalRows; V1 shared layout, V2/V3 produced by public frozen codecs",
+              "exportedVersion": 4,
+              "canonicalEventCount": 23,
+              "sourceBytesMtimesAndFileSetUnchanged": true,
+              "noSuccessorGenerationPublished": true,
+              "separateColdProcessEntriesIdentical": true,
+              "modelOrLiveAgentMounted": false,
+              "coldPath": "explicit plain-encoding SDK context"
+            },
+            {
+              "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-afternoon/history-0-zstd-proof.json",
+              "completedAt": "2026-11-08T06:38:38.234Z",
+              "physicalVersion": 0,
+              "case": 0,
+              "compression": "zstd",
+              "fixtureOrigin": "Official multi-edge historicalRows; V1 shared layout, V2/V3 produced by public frozen codecs",
+              "exportedVersion": 4,
+              "canonicalEventCount": 23,
+              "sourceBytesMtimesAndFileSetUnchanged": true,
+              "noSuccessorGenerationPublished": true,
+              "separateColdProcessEntriesIdentical": true,
+              "modelOrLiveAgentMounted": false,
+              "coldPath": "actual host-session-archive CLI"
+            },
+            {
+              "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-afternoon/history-1-none-proof.json",
+              "completedAt": "2026-11-08T06:38:40.285Z",
+              "physicalVersion": 1,
+              "case": 1,
+              "compression": "none",
+              "fixtureOrigin": "Official multi-edge historicalRows; V1 shared layout, V2/V3 produced by public frozen codecs",
+              "exportedVersion": 4,
+              "canonicalEventCount": 23,
+              "sourceBytesMtimesAndFileSetUnchanged": true,
+              "noSuccessorGenerationPublished": true,
+              "separateColdProcessEntriesIdentical": true,
+              "modelOrLiveAgentMounted": false,
+              "coldPath": "explicit plain-encoding SDK context"
+            },
+            {
+              "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-afternoon/history-1-zstd-proof.json",
+              "completedAt": "2026-11-08T06:38:38.461Z",
+              "physicalVersion": 1,
+              "case": 1,
+              "compression": "zstd",
+              "fixtureOrigin": "Official multi-edge historicalRows; V1 shared layout, V2/V3 produced by public frozen codecs",
+              "exportedVersion": 4,
+              "canonicalEventCount": 23,
+              "sourceBytesMtimesAndFileSetUnchanged": true,
+              "noSuccessorGenerationPublished": true,
+              "separateColdProcessEntriesIdentical": true,
+              "modelOrLiveAgentMounted": false,
+              "coldPath": "actual host-session-archive CLI"
+            },
+            {
+              "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-afternoon/history-2-none-proof.json",
+              "completedAt": "2026-11-08T06:38:40.517Z",
+              "physicalVersion": 2,
+              "case": 2,
+              "compression": "none",
+              "fixtureOrigin": "Official multi-edge historicalRows; V1 shared layout, V2/V3 produced by public frozen codecs",
+              "exportedVersion": 4,
+              "canonicalEventCount": 23,
+              "sourceBytesMtimesAndFileSetUnchanged": true,
+              "noSuccessorGenerationPublished": true,
+              "separateColdProcessEntriesIdentical": true,
+              "modelOrLiveAgentMounted": false,
+              "coldPath": "explicit plain-encoding SDK context"
+            },
+            {
+              "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-afternoon/history-2-zstd-proof.json",
+              "completedAt": "2026-11-08T06:38:38.731Z",
+              "physicalVersion": 2,
+              "case": 2,
+              "compression": "zstd",
+              "fixtureOrigin": "Official multi-edge historicalRows; V1 shared layout, V2/V3 produced by public frozen codecs",
+              "exportedVersion": 4,
+              "canonicalEventCount": 23,
+              "sourceBytesMtimesAndFileSetUnchanged": true,
+              "noSuccessorGenerationPublished": true,
+              "separateColdProcessEntriesIdentical": true,
+              "modelOrLiveAgentMounted": false,
+              "coldPath": "actual host-session-archive CLI"
+            },
+            {
+              "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-afternoon/history-3-interrupted-none-proof.json",
+              "completedAt": "2026-11-08T06:38:41.038Z",
+              "physicalVersion": 3,
+              "case": "3-interrupted",
+              "compression": "none",
+              "fixtureOrigin": "Official V3 interrupted-turn test rows",
+              "exportedVersion": 4,
+              "canonicalEventCount": 9,
+              "sourceBytesMtimesAndFileSetUnchanged": true,
+              "noSuccessorGenerationPublished": true,
+              "separateColdProcessEntriesIdentical": true,
+              "modelOrLiveAgentMounted": false,
+              "coldPath": "explicit plain-encoding SDK context"
+            },
+            {
+              "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-afternoon/history-3-interrupted-zstd-proof.json",
+              "completedAt": "2026-11-08T06:38:39.178Z",
+              "physicalVersion": 3,
+              "case": "3-interrupted",
+              "compression": "zstd",
+              "fixtureOrigin": "Official V3 interrupted-turn test rows",
+              "exportedVersion": 4,
+              "canonicalEventCount": 9,
+              "sourceBytesMtimesAndFileSetUnchanged": true,
+              "noSuccessorGenerationPublished": true,
+              "separateColdProcessEntriesIdentical": true,
+              "modelOrLiveAgentMounted": false,
+              "coldPath": "actual host-session-archive CLI"
+            },
+            {
+              "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-afternoon/history-3-none-proof.json",
+              "completedAt": "2026-11-08T06:38:40.812Z",
+              "physicalVersion": 3,
+              "case": 3,
+              "compression": "none",
+              "fixtureOrigin": "Official multi-edge historicalRows; V1 shared layout, V2/V3 produced by public frozen codecs",
+              "exportedVersion": 4,
+              "canonicalEventCount": 23,
+              "sourceBytesMtimesAndFileSetUnchanged": true,
+              "noSuccessorGenerationPublished": true,
+              "separateColdProcessEntriesIdentical": true,
+              "modelOrLiveAgentMounted": false,
+              "coldPath": "explicit plain-encoding SDK context"
+            },
+            {
+              "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-afternoon/history-3-zstd-proof.json",
+              "completedAt": "2026-11-08T06:38:38.958Z",
+              "physicalVersion": 3,
+              "case": 3,
+              "compression": "zstd",
+              "fixtureOrigin": "Official multi-edge historicalRows; V1 shared layout, V2/V3 produced by public frozen codecs",
+              "exportedVersion": 4,
+              "canonicalEventCount": 23,
+              "sourceBytesMtimesAndFileSetUnchanged": true,
+              "noSuccessorGenerationPublished": true,
+              "separateColdProcessEntriesIdentical": true,
+              "modelOrLiveAgentMounted": false,
+              "coldPath": "actual host-session-archive CLI"
+            },
+            {
+              "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-afternoon/history-refusal-0-none-proof.json",
+              "completedAt": "2026-11-08T06:38:41.244Z",
+              "physicalVersion": 0,
+              "compression": "none",
+              "fixtureOrigin": "Official released V0 real-shapes fixture (V1 shared layout, V2 frozen codec)",
+              "expectedUpstreamRefusal": "Surface before first step cannot acquire a system head without changing chronology",
+              "noArchiveCreated": true,
+              "sourceBytesMtimesAndFileSetUnchanged": true,
+              "noSuccessorGenerationPublished": true,
+              "coldPath": "explicit plain-encoding SDK context"
+            },
+            {
+              "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-afternoon/history-refusal-0-zstd-proof.json",
+              "completedAt": "2026-11-08T06:38:39.379Z",
+              "physicalVersion": 0,
+              "compression": "zstd",
+              "fixtureOrigin": "Official released V0 real-shapes fixture (V1 shared layout, V2 frozen codec)",
+              "expectedUpstreamRefusal": "Surface before first step cannot acquire a system head without changing chronology",
+              "noArchiveCreated": true,
+              "sourceBytesMtimesAndFileSetUnchanged": true,
+              "noSuccessorGenerationPublished": true,
+              "coldPath": "actual host-session-archive CLI"
+            },
+            {
+              "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-afternoon/history-refusal-1-none-proof.json",
+              "completedAt": "2026-11-08T06:38:41.445Z",
+              "physicalVersion": 1,
+              "compression": "none",
+              "fixtureOrigin": "Official released V0 real-shapes fixture (V1 shared layout, V2 frozen codec)",
+              "expectedUpstreamRefusal": "Surface before first step cannot acquire a system head without changing chronology",
+              "noArchiveCreated": true,
+              "sourceBytesMtimesAndFileSetUnchanged": true,
+              "noSuccessorGenerationPublished": true,
+              "coldPath": "explicit plain-encoding SDK context"
+            },
+            {
+              "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-afternoon/history-refusal-1-zstd-proof.json",
+              "completedAt": "2026-11-08T06:38:39.600Z",
+              "physicalVersion": 1,
+              "compression": "zstd",
+              "fixtureOrigin": "Official released V0 real-shapes fixture (V1 shared layout, V2 frozen codec)",
+              "expectedUpstreamRefusal": "Surface before first step cannot acquire a system head without changing chronology",
+              "noArchiveCreated": true,
+              "sourceBytesMtimesAndFileSetUnchanged": true,
+              "noSuccessorGenerationPublished": true,
+              "coldPath": "actual host-session-archive CLI"
+            },
+            {
+              "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-afternoon/history-refusal-2-none-proof.json",
+              "completedAt": "2026-11-08T06:38:41.672Z",
+              "physicalVersion": 2,
+              "compression": "none",
+              "fixtureOrigin": "Official released V0 real-shapes fixture (V1 shared layout, V2 frozen codec)",
+              "expectedUpstreamRefusal": "Surface before first step cannot acquire a system head without changing chronology",
+              "noArchiveCreated": true,
+              "sourceBytesMtimesAndFileSetUnchanged": true,
+              "noSuccessorGenerationPublished": true,
+              "coldPath": "explicit plain-encoding SDK context"
+            },
+            {
+              "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-afternoon/history-refusal-2-zstd-proof.json",
+              "completedAt": "2026-11-08T06:38:39.823Z",
+              "physicalVersion": 2,
+              "compression": "zstd",
+              "fixtureOrigin": "Official released V0 real-shapes fixture (V1 shared layout, V2 frozen codec)",
+              "expectedUpstreamRefusal": "Surface before first step cannot acquire a system head without changing chronology",
+              "noArchiveCreated": true,
+              "sourceBytesMtimesAndFileSetUnchanged": true,
+              "noSuccessorGenerationPublished": true,
+              "coldPath": "actual host-session-archive CLI"
+            }
+          ],
+          "testSource": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-afternoon/history-zip.test.mjs",
+          "testSourceSha256": "8fcd666461526b208296d8efe68bf58ccb86a5ba5f133852fab63a2c41ed85aa",
+          "repeat": "node --test D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-afternoon/history-zip.test.mjs",
+          "log": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-afternoon/history-zip.log",
+          "investigationLogs": [
+            "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-afternoon/history-corpus-probe-failure.log",
+            "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-afternoon/history-framing-probe-failure.log"
+          ],
+          "fixtureNotes": "The first corpus probe revealed the documented chronology refusal. Positive coverage uses the official supported packed/seeded corpus; the original real-shapes corpus remains a negative test. Corrected test-only Zstandard framing to keep its header in an independent first frame.",
+          "productSynced": false
+        },
+        "historicalTreeSdk": {
+          "checkedAt": "2026-11-08T12:55:59.350Z",
+          "result": "failed-sdk-only-completeness-gate",
+          "tests": 8,
+          "passed": 7,
+          "failed": 1,
+          "successfulExports": 3,
+          "expectedRefusalsPassed": 4,
+          "unexpectedOmissions": 1,
+          "scope": "Synthetic V3 Zstandard multi-session corpus, using pinned official catalog/descriptor contracts and public persistence/query/export APIs; no user history or live Agent/model.",
+          "actualColdCliCases": 8,
+          "passedChecks": [
+            "Parent catalogs backfill deterministically by createdAt then ID; four nested logs export as V4 with dense coordinates.",
+            "Shared historical image/file references survive migration; each attachment is included once with identical bytes.",
+            "Child-root export includes only that subtree; fork catalog backfill uses the own descriptor after the inherited cut.",
+            "Known descriptor conflicts, a complete-frame checksum failure, missing files and same-size corrupted files refuse publication atomically."
+          ],
+          "failure": {
+            "id": "cataloged-local-child-absent-from-corpus",
+            "result": "unresolved",
+            "proof": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-evening/historical-missing-child-limitation.json",
+            "description": "A parent contains an owned local subagent/catalog fact, but the child log is absent. Official traceSession reports complete=true with no descendants; the official ZIP producer uses that corpus trace and successfully publishes only the parent. The same omission occurs in the actual cold CLI.",
+            "ownership": "Inherited known-corpus behavior in official query/export APIs; treat complete=true as ancestry/corpus completeness, not a guarantee that every owned catalog child is available.",
+            "userDataObserved": false,
+            "productCodeSynced": false,
+            "next": "Add an isolated completeness check or explicit partial-export result through public SDK interfaces. Respect inherited catalog entries and external-carrier entries, child-root archives and intentionally missing ancestry. Keep strict refusal acceptance red until implemented and validated; do not patch official packages."
+          },
+          "sourceImmutability": "All eight cases preserve source bytes, mtimes and file set, including independent cold-process exports/refusals; no V4 successor is published.",
+          "sourceProofs": [
+            {
+              "path": "packages/session/session-format-v3-to-v4/tests/catalog-completion.spec.ts",
+              "url": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/session/session-format-v3-to-v4/tests/catalog-completion.spec.ts",
+              "gitBlobSha1": "455535ed792bce47831779f9ba43359acf12a895",
+              "sha256": "9678f6a372da91add6aff6e945ba3c0286ff8fafaeaa037ea2c339c8f362496a",
+              "retainedAt": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-evening/catalog-completion.spec.ts"
+            },
+            {
+              "path": "packages/session-query/session-log-export/src/archive.ts",
+              "url": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/session-query/session-log-export/src/archive.ts",
+              "gitBlobSha1": "9ff6416689a6b43c635e6279235c9c84bf149713",
+              "sha256": "258cf53c50cfec9995fca90f98300c8f23860e3ade7774bd39bbf1c3aabc65d7",
+              "retainedAt": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-evening/archive.ts"
+            },
+            {
+              "path": "packages/session-query/session-query/src/tracing.ts",
+              "url": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/session-query/session-query/src/tracing.ts",
+              "gitBlobSha1": "0cd3fccfbb8e5f740bd88014d36b52bf23a4740a",
+              "sha256": "f63d528f4e31bbf7bb79c9add03095885e87f1ecf71c6aeaee01d509639ea60a",
+              "retainedAt": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-evening/tracing.ts"
+            }
+          ],
+          "proofs": [
+            {
+              "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-evening/historical-tree-proof.json",
+              "completedAt": "2026-11-08T12:50:20.214Z",
+              "case": "historical-tree",
+              "sourceFormat": 3,
+              "exportedFormat": 4,
+              "sourceCompression": "zstd",
+              "actualColdCli": true,
+              "sourceBytesMtimesAndFileSetUnchanged": true,
+              "noSuccessorGenerationPublished": true,
+              "separateColdProcessEntriesIdentical": true,
+              "modelOrLiveAgentMounted": false,
+              "entryNames": [
+                "session.v4.jsonl",
+                "subagents/a-child/session.v4.jsonl",
+                "subagents/grandchild/session.v4.jsonl",
+                "subagents/z-child/session.v4.jsonl",
+                "media/sha256:64573d0bf4823c2a9928649c9511dc3f88969a5327a3ebbf077378b8cbf72794.png",
+                "files/e9/e9894303057ddb1406840e7ed526d679fe1c235b9d94d070b4dd9561ab6c80a5/history.txt"
+              ],
+              "productSynced": false,
+              "deterministicCatalogOrder": true,
+              "attachmentDedupe": {
+                "image": 1,
+                "file": 1
+              },
+              "logs": 4
+            },
+            {
+              "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-evening/historical-subtree-proof.json",
+              "completedAt": "2026-11-08T12:50:20.592Z",
+              "case": "historical-subtree",
+              "sourceFormat": 3,
+              "exportedFormat": 4,
+              "sourceCompression": "zstd",
+              "actualColdCli": true,
+              "sourceBytesMtimesAndFileSetUnchanged": true,
+              "noSuccessorGenerationPublished": true,
+              "separateColdProcessEntriesIdentical": true,
+              "modelOrLiveAgentMounted": false,
+              "entryNames": [
+                "session.v4.jsonl",
+                "subagents/grandchild/session.v4.jsonl",
+                "media/sha256:64573d0bf4823c2a9928649c9511dc3f88969a5327a3ebbf077378b8cbf72794.png",
+                "files/e9/e9894303057ddb1406840e7ed526d679fe1c235b9d94d070b4dd9561ab6c80a5/history.txt"
+              ],
+              "productSynced": false,
+              "subtreeOnly": true
+            },
+            {
+              "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-evening/historical-fork-proof.json",
+              "completedAt": "2026-11-08T12:50:20.908Z",
+              "case": "historical-fork",
+              "sourceFormat": 3,
+              "exportedFormat": 4,
+              "sourceCompression": "zstd",
+              "actualColdCli": true,
+              "sourceBytesMtimesAndFileSetUnchanged": true,
+              "noSuccessorGenerationPublished": true,
+              "separateColdProcessEntriesIdentical": true,
+              "modelOrLiveAgentMounted": false,
+              "entryNames": [
+                "session.v4.jsonl",
+                "subagents/fork-child/session.v4.jsonl",
+                "media/sha256:64573d0bf4823c2a9928649c9511dc3f88969a5327a3ebbf077378b8cbf72794.png",
+                "files/e9/e9894303057ddb1406840e7ed526d679fe1c235b9d94d070b4dd9561ab6c80a5/history.txt"
+              ],
+              "productSynced": false,
+              "ownDescriptorAfterInheritedCut": true
+            },
+            {
+              "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-evening/historical-catalog-conflict-proof.json",
+              "completedAt": "2026-11-08T12:50:21.141Z",
+              "case": "historical-catalog-conflict",
+              "expectedRefusal": true,
+              "diagnosis": "Session child (raw log: D:\\projectGithub\\lolicode-harness-audit-20261108\\src-tauri\\target\\audit-logs\\1108-evening\\history-tree-fixture-kVCh1j\\home\\sessions\\_no-cwd\\child\\session.v3.jsonl.zstd) conflicts with its parent catalog; source v3 artifact remains unchanged (raw log: D:\\projectGithub\\lolicode-harness-audit-20261108\\src-tauri\\target\\audit-logs\\1108-evening\\history-tree-fixture-kVCh1j\\home\\sessions\\_no-cwd\\root\\session.v3.jsonl.zstd)",
+              "sourceFormat": 3,
+              "sourceCompression": "zstd",
+              "actualColdCli": true,
+              "sourceBytesMtimesAndFileSetUnchanged": true,
+              "noSuccessorGenerationPublished": true,
+              "noArchiveCreated": true,
+              "modelOrLiveAgentMounted": false,
+              "productSynced": false
+            },
+            {
+              "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-evening/historical-corrupt-child-proof.json",
+              "completedAt": "2026-11-08T12:50:21.729Z",
+              "case": "historical-corrupt-child",
+              "expectedRefusal": true,
+              "diagnosis": "LOLICODE_SESSION_LOG_UNREADABLE",
+              "sourceFormat": 3,
+              "sourceCompression": "zstd",
+              "actualColdCli": true,
+              "sourceBytesMtimesAndFileSetUnchanged": true,
+              "noSuccessorGenerationPublished": true,
+              "noArchiveCreated": true,
+              "modelOrLiveAgentMounted": false,
+              "productSynced": false
+            },
+            {
+              "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-evening/historical-missing-attachment-proof.json",
+              "completedAt": "2026-11-08T12:50:22.015Z",
+              "case": "historical-missing-attachment",
+              "expectedRefusal": true,
+              "diagnosis": "LOLICODE_SESSION_LOG_UNREADABLE",
+              "sourceFormat": 3,
+              "sourceCompression": "zstd",
+              "actualColdCli": true,
+              "sourceBytesMtimesAndFileSetUnchanged": true,
+              "noSuccessorGenerationPublished": true,
+              "noArchiveCreated": true,
+              "modelOrLiveAgentMounted": false,
+              "productSynced": false
+            },
+            {
+              "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-evening/historical-corrupt-attachment-proof.json",
+              "completedAt": "2026-11-08T12:50:22.305Z",
+              "case": "historical-corrupt-attachment",
+              "expectedRefusal": true,
+              "diagnosis": "LOLICODE_SESSION_LOG_UNREADABLE",
+              "sourceFormat": 3,
+              "sourceCompression": "zstd",
+              "actualColdCli": true,
+              "sourceBytesMtimesAndFileSetUnchanged": true,
+              "noSuccessorGenerationPublished": true,
+              "noArchiveCreated": true,
+              "modelOrLiveAgentMounted": false,
+              "productSynced": false
+            }
+          ],
+          "testSource": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-evening/history-tree.test.mjs",
+          "testSourceSha256": "783f5abb0de4427795c2c0176e65732518a7fb3365f722ae37347418b5a415f0",
+          "repeat": "node --test D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-evening/history-tree.test.mjs",
+          "log": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-evening/history-tree.log",
+          "investigationLogs": [
+            "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-evening/history-tree-initial-probe.log"
+          ],
+          "fixtureCorrections": "Initial probe truncated the last Zstandard frame (recoverable tail, not confirmed corruption) and tried writing a read-only published attachment. Final checks flip a complete-frame checksum and replace only the disposable attachment before fingerprinting. The strict missing-child completeness assertion was retained as a failing gate.",
+          "remaining": [
+            "Implement and validate a clear missing-owned-child completeness policy before accepting ZIP wiring.",
+            "Other historical generations and real-world attachment/catalog shapes are not covered by these V3 samples.",
+            "Actual native Windows ZIP save/cancel, current-dev desktop gates, remote-carrier export and /export UI remain pending.",
+            "These upstream SDK-format checks do not establish v1.0.6 installer overwrite compatibility."
+          ],
+          "productSynced": false
+        },
+        "catalogCompletenessGuardSdk": {
+          "checkedAt": "2026-11-08T18:41:41.481Z",
+          "result": "passed-sdk-only-awaiting-native-acceptance",
+          "fullSdkRegressionTests": 31,
+          "historicalArchiveRegressionTests": 26,
+          "failed": 0,
+          "historicalBreakdown": {
+            "v3Tree": 8,
+            "selectedV0ToV3Formats": 16,
+            "currentForkEncodings": 2
+          },
+          "changedFiles": [
+            "packages/lolicode-harness-runtime/README.md",
+            "packages/lolicode-harness-runtime/host-session-archive.mjs",
+            "packages/lolicode-harness-runtime/tests/host-operations.test.mjs"
+          ],
+          "fixedGap": {
+            "id": "cataloged-local-child-absent-from-corpus",
+            "status": "fixed-in-isolation-sdk-verified",
+            "previousFailure": {
+              "id": "cataloged-local-child-absent-from-corpus",
+              "proof": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-evening/historical-missing-child-limitation.json",
+              "repeat": "node --test D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-evening/history-tree.test.mjs",
+              "result": "failed"
+            },
+            "currentProof": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/historical-missing-child-proof.json",
+            "behavior": "Reject with LOLICODE_SESSION_LOG_UNREADABLE and publish no ZIP when an exported own local catalog child is missing or has mismatched identity in the exact upstream lineage observation.",
+            "implementation": "A scoped persistence read-handle facade inspects the same logical slices serialized by official readSessionLogText. It uses public inheritedEventCount and compares owned local catalog identities to the official ZIP lineage. Official streamSessionLogZip still owns archive production, attachment verification, backpressure and cancellation; no extra log reads or package edits.",
+            "boundaries": [
+              "Ignore fork-inherited catalog facts using the public inherited cut.",
+              "External catalog carriers do not require local logs; this is not verification of remote-carrier ZIP delivery.",
+              "Missing ancestors do not prevent exporting an available subtree.",
+              "Validate descendant catalogs after live flush; a new child outside the observation refuses publication and can be retried."
+            ],
+            "nativeProductVerified": false,
+            "productSynced": false
+          },
+          "meaningfulChecks": [
+            "Current format one-shot, continuable and unknown missing-child facts fail; mismatched creation date or parent fails in live and cold exports.",
+            "Inherited-only and external-only missing-local-log cases succeed without weakening local ownership checks.",
+            "A descendant gaining an unavailable child during the live flush fails before archive publication.",
+            "An available selected subtree exports despite missing ancestry, with the same bytes after a separate cold CLI.",
+            "The previously red V3 missing-child assertion is unchanged and now passes; all eight V3 tree cases preserve source bytes, mtimes and file set.",
+            "Existing 16 historical migration/refusal cases and two fork encoding cases still pass. Plain encoding remains explicitly configured, rather than the default product CLI."
+          ],
+          "sourceProofs": [
+            {
+              "path": "packages/session/session-persistence/src/handle.ts",
+              "url": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/session/session-persistence/src/handle.ts",
+              "gitBlobSha1": "b6a194c87d14b787df55452e50f0008b3f56337a",
+              "sha256": "2fd8b5c5188ffdf5adee78a260b3dd0a9be97e5eb9fcdb5aafae5a8ed5471a31"
+            },
+            {
+              "path": "packages/subagent/subagent/src/catalog.ts",
+              "url": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/subagent/subagent/src/catalog.ts",
+              "gitBlobSha1": "416625c59468bd661d8c68628c9d5694fc1bab52",
+              "sha256": "1e6344acbe543f494a5adc4f8e8af9be50333ea1fa18be391e43f8fc4005f776"
+            }
+          ],
+          "proofs": [
+            {
+              "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/historical-tree-proof.json",
+              "completedAt": "2026-11-08T18:36:26.468Z",
+              "case": "historical-tree",
+              "sourceFormat": 3,
+              "exportedFormat": 4,
+              "sourceCompression": "zstd",
+              "actualColdCli": true,
+              "sourceBytesMtimesAndFileSetUnchanged": true,
+              "noSuccessorGenerationPublished": true,
+              "separateColdProcessEntriesIdentical": true,
+              "modelOrLiveAgentMounted": false,
+              "entryNames": [
+                "session.v4.jsonl",
+                "subagents/a-child/session.v4.jsonl",
+                "subagents/grandchild/session.v4.jsonl",
+                "subagents/z-child/session.v4.jsonl",
+                "media/sha256:64573d0bf4823c2a9928649c9511dc3f88969a5327a3ebbf077378b8cbf72794.png",
+                "files/e9/e9894303057ddb1406840e7ed526d679fe1c235b9d94d070b4dd9561ab6c80a5/history.txt"
+              ],
+              "productSynced": false,
+              "deterministicCatalogOrder": true,
+              "attachmentDedupe": {
+                "image": 1,
+                "file": 1
+              },
+              "logs": 4
+            },
+            {
+              "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/historical-subtree-proof.json",
+              "completedAt": "2026-11-08T18:36:26.865Z",
+              "case": "historical-subtree",
+              "sourceFormat": 3,
+              "exportedFormat": 4,
+              "sourceCompression": "zstd",
+              "actualColdCli": true,
+              "sourceBytesMtimesAndFileSetUnchanged": true,
+              "noSuccessorGenerationPublished": true,
+              "separateColdProcessEntriesIdentical": true,
+              "modelOrLiveAgentMounted": false,
+              "entryNames": [
+                "session.v4.jsonl",
+                "subagents/grandchild/session.v4.jsonl",
+                "media/sha256:64573d0bf4823c2a9928649c9511dc3f88969a5327a3ebbf077378b8cbf72794.png",
+                "files/e9/e9894303057ddb1406840e7ed526d679fe1c235b9d94d070b4dd9561ab6c80a5/history.txt"
+              ],
+              "productSynced": false,
+              "subtreeOnly": true
+            },
+            {
+              "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/historical-fork-proof.json",
+              "completedAt": "2026-11-08T18:36:27.237Z",
+              "case": "historical-fork",
+              "sourceFormat": 3,
+              "exportedFormat": 4,
+              "sourceCompression": "zstd",
+              "actualColdCli": true,
+              "sourceBytesMtimesAndFileSetUnchanged": true,
+              "noSuccessorGenerationPublished": true,
+              "separateColdProcessEntriesIdentical": true,
+              "modelOrLiveAgentMounted": false,
+              "entryNames": [
+                "session.v4.jsonl",
+                "subagents/fork-child/session.v4.jsonl",
+                "media/sha256:64573d0bf4823c2a9928649c9511dc3f88969a5327a3ebbf077378b8cbf72794.png",
+                "files/e9/e9894303057ddb1406840e7ed526d679fe1c235b9d94d070b4dd9561ab6c80a5/history.txt"
+              ],
+              "productSynced": false,
+              "ownDescriptorAfterInheritedCut": true
+            },
+            {
+              "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/historical-catalog-conflict-proof.json",
+              "completedAt": "2026-11-08T18:36:27.501Z",
+              "case": "historical-catalog-conflict",
+              "expectedRefusal": true,
+              "diagnosis": "Session child (raw log: D:\\projectGithub\\lolicode-harness-audit-20261108\\src-tauri\\target\\audit-logs\\1109-early\\history-tree-fixture-Qu8VSt\\home\\sessions\\_no-cwd\\child\\session.v3.jsonl.zstd) conflicts with its parent catalog; source v3 artifact remains unchanged (raw log: D:\\projectGithub\\lolicode-harness-audit-20261108\\src-tauri\\target\\audit-logs\\1109-early\\history-tree-fixture-Qu8VSt\\home\\sessions\\_no-cwd\\root\\session.v3.jsonl.zstd)",
+              "sourceFormat": 3,
+              "sourceCompression": "zstd",
+              "actualColdCli": true,
+              "sourceBytesMtimesAndFileSetUnchanged": true,
+              "noSuccessorGenerationPublished": true,
+              "noArchiveCreated": true,
+              "modelOrLiveAgentMounted": false,
+              "productSynced": false
+            },
+            {
+              "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/historical-missing-child-proof.json",
+              "completedAt": "2026-11-08T18:36:27.774Z",
+              "case": "historical-missing-child",
+              "expectedRefusal": true,
+              "diagnosis": "LOLICODE_SESSION_LOG_UNREADABLE",
+              "sourceFormat": 3,
+              "sourceCompression": "zstd",
+              "actualColdCli": true,
+              "sourceBytesMtimesAndFileSetUnchanged": true,
+              "noSuccessorGenerationPublished": true,
+              "noArchiveCreated": true,
+              "modelOrLiveAgentMounted": false,
+              "productSynced": false
+            },
+            {
+              "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/historical-corrupt-child-proof.json",
+              "completedAt": "2026-11-08T18:36:28.118Z",
+              "case": "historical-corrupt-child",
+              "expectedRefusal": true,
+              "diagnosis": "LOLICODE_SESSION_LOG_UNREADABLE",
+              "sourceFormat": 3,
+              "sourceCompression": "zstd",
+              "actualColdCli": true,
+              "sourceBytesMtimesAndFileSetUnchanged": true,
+              "noSuccessorGenerationPublished": true,
+              "noArchiveCreated": true,
+              "modelOrLiveAgentMounted": false,
+              "productSynced": false
+            },
+            {
+              "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/historical-missing-attachment-proof.json",
+              "completedAt": "2026-11-08T18:36:28.574Z",
+              "case": "historical-missing-attachment",
+              "expectedRefusal": true,
+              "diagnosis": "LOLICODE_SESSION_LOG_UNREADABLE",
+              "sourceFormat": 3,
+              "sourceCompression": "zstd",
+              "actualColdCli": true,
+              "sourceBytesMtimesAndFileSetUnchanged": true,
+              "noSuccessorGenerationPublished": true,
+              "noArchiveCreated": true,
+              "modelOrLiveAgentMounted": false,
+              "productSynced": false
+            },
+            {
+              "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/historical-corrupt-attachment-proof.json",
+              "completedAt": "2026-11-08T18:36:29.013Z",
+              "case": "historical-corrupt-attachment",
+              "expectedRefusal": true,
+              "diagnosis": "LOLICODE_SESSION_LOG_UNREADABLE",
+              "sourceFormat": 3,
+              "sourceCompression": "zstd",
+              "actualColdCli": true,
+              "sourceBytesMtimesAndFileSetUnchanged": true,
+              "noSuccessorGenerationPublished": true,
+              "noArchiveCreated": true,
+              "modelOrLiveAgentMounted": false,
+              "productSynced": false
+            }
+          ],
+          "repeat": [
+            "node --test packages/lolicode-harness-runtime/tests/host-operations.test.mjs",
+            "node --test D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/history-tree.test.mjs D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/history-zip.test.mjs D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/zip-fork.test.mjs"
+          ],
+          "logs": [
+            "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/full-sdk.log",
+            "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/history-regression.log",
+            "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/catalog-sdk.log",
+            "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/prepare-runtime.log",
+            "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/typecheck.log",
+            "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/bundle-runtime.log",
+            "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/bundle-cli.log"
+          ],
+          "patch": "D:\\projectGithub\\lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/catalog-completeness-fix.patch",
+          "patchSha256": "79943491fef0b96f8130045faa8a840f095bbaaa72de53c426082b7254e6c131",
+          "baseline": {
+            "manifest": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/audit-preflight.json",
+            "sourceCopies": [
+              "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/host-session-archive.before.mjs",
+              "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/host-operations.before.test.mjs",
+              "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/runtime-README.before.md"
+            ],
+            "note": "This correction depends on the retained ZIP candidate; its patch is not a standalone patch for product dev, which does not yet contain that candidate."
+          },
+          "fixtureNotes": "The first new SDK-only fixture did not explicitly flush empty sessions and put createdAt outside creation meta. Corrected fixture persistence/metadata through the public APIs; the initial log is retained. Production assertions were not relaxed.",
+          "nativeBuildContainsCurrentGuard": false,
+          "nativeAcceptancePerformed": false,
+          "remaining": [
+            "Freshly rebuild the current Windows native candidate and complete real Save As/save/cancel plus the normal, background jobs, Goal/plan, dock and secretary website gates.",
+            "Retained elevated desktop restrictions are unchanged; do not treat SDK acceptance or older native proofs as current native acceptance.",
+            "Remote carriers, /export UI, unsupported historical shapes and v1.0.6 installer overwrite compatibility remain separate incomplete capabilities."
+          ],
+          "productSynced": false,
+          "bundledCliTests": 8,
+          "bundledAssetContainsCurrentGuard": true,
+          "bundledCli": {
+            "result": "passed-command-line-only",
+            "tests": 8,
+            "sourceProof": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/bundle-source-proof.json",
+            "sourceSha256": "e0b2f2feb0c0dd64cc84e2efc9cfdbce6623e2e71eccab41535c092efcd81865",
+            "bundledNodeSha256": "3602f2bb1a10f2cbab4c36886218a33c1ab3db87290e73b033c46c77147d0237",
+            "missingChildProof": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/bundled-cli/historical-missing-child-proof.json",
+            "repeat": "node --test D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/bundled-cli/history-tree-bundled.test.mjs",
+            "note": "Independent cold subprocesses use the actually prepared bundled node.exe, archive adapter and official packages. These command-line tests do not establish native Save As or full desktop acceptance."
+          }
+        }
       },
       "remaining": [
-        "Complete actual native save and cancellation in an accessible Windows desktop.",
-        "Validate fork-specific archived history and alternate persistence generations.",
-        "Validate remote-carrier ZIP export and upstream human-command UI separately."
+        "Complete real native Windows ZIP save/cancel in a verified non-elevated interactive context; both attempted shell brokers retained elevation and the helper refused to run.",
+        "The global automatic target-project mapping is implemented and partly verified in isolation. Complete its browser-interaction and desktop gates before promoting any candidate.",
+        "Complete browser inspection gates and all current-base native regressions; recheck dev HEAD and source hashes before synchronization.",
+        "The catalog completeness guard is SDK-verified only. Freshly rebuild and complete actual native ZIP save/cancel and current-base desktop regressions before synchronizing. Remote carriers, /export and broader historical/installer compatibility remain separate gaps."
       ]
     },
     {
@@ -1217,6 +2094,58 @@
         "pnpm exec vitest run tests/components/AgentOperationsPanel.test.tsx"
       ],
       "note": "宿主负责跨 SDK 进程的持久调度和逐项管理。官方批量清理结束任务仍无入口。"
+    },
+    {
+      "id": "global-native-cwd-preview",
+      "label": "总秘书原生跨项目派工的网页预览",
+      "status": "isolated-validation-pending",
+      "upstream": [
+        {
+          "package": "@deepseek-ai/dsh-tool-subagent",
+          "version": "0.2.2-rc.1",
+          "source": "https://github.com/deepseek-ai/deepseek-harness/tree/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/subagent/tool-subagent",
+          "localReference": "packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-tool-subagent/README.md"
+        },
+        {
+          "package": "@deepseek-ai/dsh-working-directory",
+          "version": "0.2.2-rc.1",
+          "source": "https://github.com/deepseek-ai/deepseek-harness/tree/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/session/working-directory",
+          "localReference": "packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-working-directory/README.md",
+          "note": "The Session projection exposes the effective directory; the header retains the original project."
+        }
+      ],
+      "lolicode": [
+        "packages/lolicode-harness-runtime/host-operations.mjs",
+        "src-tauri/src/services/harness_secretary.rs",
+        "src-tauri/src/services/harness_desktop.rs",
+        "scripts/tests/harness-desktop-renderer.mjs",
+        "packages/lolicode-harness-runtime/tests/host-operations.test.mjs"
+      ],
+      "acceptance": [
+        "node --test packages/lolicode-harness-runtime/tests/host-operations.test.mjs packages/lolicode-harness-runtime/tests/sdk-smoke.test.mjs",
+        "cargo test --manifest-path src-tauri/Cargo.toml --lib harness_secretary::tests",
+        "node scripts/tests/harness-desktop-acceptance.mjs",
+        "Use the global secretary entry, dispatch a website through SDK subagent cwd to a second known project, verify the file and ready report, admitted worker directory, and automatic native right-sidebar preview, then restart."
+      ],
+      "note": "The host now observes the SDK's effective working-directory/change event. Only direct children of the local global secretary can bind once to a registered canonical project; manual, nested, worktree and already-bound scopes remain fixed and permissions are preserved. Current native run produced a completed ready worker, correct admitted project, automatic native guest and verified HTTP page content. Native page interaction and the full desktop gate remain blocked by the elevated test environment; this is not synchronized product support.",
+      "verification": {
+        "checkedAt": "2026-11-08T01:07:14.812Z",
+        "sdkTests": 28,
+        "rustTests": 7,
+        "sdkDiagnostic": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-morning/sdk-directory-diagnostic.json",
+        "nativeProof": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-morning/native-proof.json",
+        "nativeGuestReady": true,
+        "httpContentVerified": true,
+        "interactionVerified": false,
+        "synchronized": false,
+        "patch": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-morning/global-cwd-fix.patch",
+        "patchAppliesToDevWithoutZip": true
+      },
+      "implementationLocation": "D:/projectGithub/lolicode-harness-audit-20261108",
+      "remaining": [
+        "Run in a verified non-elevated interactive Windows context and complete actual browser interaction, restart and all required desktop regressions before applying the independent host fix.",
+        "Keep unknown project paths and nested/manual scope expansion rejected; admit only registered local targets for this native initial-cwd flow."
+      ]
     }
   ],
   "releaseItemIndex": [
@@ -1329,14 +2258,21 @@
       ],
       "trace": {
         "upstream": [
-          "https://github.com/deepseek-ai/deepseek-harness/tree/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/client/ui-chat"
+          "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/client/ui-chat/src/chat-settings.ts",
+          "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/client/ui-chat/src/client/contract/turn-process.ts",
+          "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/client/ui-chat/src/client/presentation-policy.ts",
+          "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/client/ui-chat/src/client/chat/ChatNodeSeat.tsx"
         ],
         "lolicode": [
           "src/features/agent/AgentTranscript.tsx",
-          "tests/components/AgentTranscript.test.tsx"
+          "tests/components/AgentTranscript.test.tsx",
+          "src/types/agent.ts",
+          "src/features/agent/AgentDisclosure.tsx",
+          "src-tauri/src/services/harness_snapshot.rs"
         ],
-        "note": "Collapsed steps keep assistant text. The final-answer-only preference still needs a product entry.",
-        "reviewedAt": "2026-11-06T12:39:10.849Z"
+        "note": "Source audit confirms Host-backed independent preferences and native Turn-process semantics. The message view lacks authoritative per-Turn membership/reason. Keep partial status; native projection, UI wiring and actual acceptance are still required.",
+        "reviewedAt": "2026-11-09T00:40:38.860Z",
+        "evidence": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-morning/display-contract-proof.json"
       }
     },
     {
@@ -4054,12 +4990,13 @@
     "unitTests": 3901
   },
   "next": [
-    "Complete real Windows ZIP save/cancel and cold/child export acceptance before synchronizing the isolated candidate.",
+    "Complete actual non-elevated native browser and restart acceptance for the isolated global-secretary directory mapping. The independently applicable host fix is not promoted yet.",
+    "Finish real non-elevated Windows ZIP save/cancel and remaining browser gates, then recheck dev before any product synchronization.",
     "Implement atomic live chat quotes with persisted draft ranges and the existing plain Markdown wire format.",
     "Implement context-only secretary notes and durable one-level parent report relay.",
     "Follow the remaining ZIP limits, Trajectory, plugin, language and platform capability entries."
   ],
-  "lastUpdatedAt": "2026-11-07T07:10:20.886Z",
+  "lastUpdatedAt": "2026-11-09T00:40:38.860Z",
   "checks": [
     {
       "checkedAt": "2026-11-06T00:18:59.550Z",
@@ -4844,6 +5781,2242 @@
           "file": "tests/components/AgentSessionMenu.test.tsx",
           "sha256": "8752ab8be49cdb706f2124485eb42556bf370fd527671a689d800f34ab68b596"
         }
+      ]
+    },
+    {
+      "checkedAt": "2026-11-07T12:31:11.761Z",
+      "completedAt": "2026-11-07T12:42:37.606Z",
+      "version": "0.2.2-rc.1",
+      "newer": [],
+      "upstreamCommit": "66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db",
+      "superagentHead": "8c32a9dc5d72c033816c6a8110b37f40cf94fba4",
+      "artifactIntegrityVerified": true,
+      "localBranch": "dev",
+      "localCommit": "a1545fc4c3737c6005baaa95f0c612aebd1da1ae",
+      "sourceHashesVerified": 126,
+      "newTraceCount": 0,
+      "remainingTraceCount": 0,
+      "sdkOnly": {
+        "completedAt": "2026-11-07T12:42:37.606Z",
+        "result": "passed-sdk-only",
+        "tests": 2,
+        "installedVersion": "0.2.2-rc.1",
+        "isolatedCandidateBase": "83119678bc97a5a04354d610214ab14b7d52aac3",
+        "testSource": "D:/projectGithub/lolicode-harness-audit-20261106/src-tauri/target/audit-logs/1107-evening/zip-fork.test.mjs",
+        "testSourceSha256": "f811601c714c83d807ba566c5d820840b79512ceac3c95b786d50626cf5816fd",
+        "log": "D:/projectGithub/lolicode-harness-audit-20261106/src-tauri/target/audit-logs/1107-evening/zip-fork.log",
+        "repeat": "node --test D:/projectGithub/lolicode-harness-audit-20261106/src-tauri/target/audit-logs/1107-evening/zip-fork.test.mjs",
+        "covered": [
+          "Public SessionStore.fork at an inclusive event boundary, with SDK-created open-step and turn closers.",
+          "Exact inherited prefix appears once; parent suffix, independent fork, and unrelated source worker are excluded.",
+          "The selected fork's actual subagent is included; shared file and image bytes are each stored once.",
+          "Live and separate restarted-process logical ZIP entries match; source bytes and modification times are unchanged.",
+          "Zstandard and plain JSONL encodings both export canonical session.v4.jsonl logs."
+        ],
+        "proofs": [
+          {
+            "file": "D:/projectGithub/lolicode-harness-audit-20261106/src-tauri/target/audit-logs/1107-evening/zip-fork-zstd-proof.json",
+            "checkedAt": "2026-11-07T12:37:30.729Z",
+            "scope": "SDK-only, no product UI or model",
+            "compression": "zstd",
+            "inheritedEventCount": 3,
+            "eventCount": 7,
+            "entries": [
+              "files/15/15a68314ea67bd0199b48fac82ae724c6756c88dc7a91c42ccbaef0a6e7efeb3/inherited.txt",
+              "media/sha256:64573d0bf4823c2a9928649c9511dc3f88969a5327a3ebbf077378b8cbf72794.png",
+              "session.v4.jsonl",
+              "subagents/fork-worker/session.v4.jsonl"
+            ],
+            "liveAndRestartedLogicalEntriesIdentical": true,
+            "sourceBytesAndMtimesUnchanged": true,
+            "sharedFileAndImageBytesVerified": true,
+            "archiveSha256": "a6ab540559125f80c492e0e53b4b6c2964587fedc18c42390b20c18a2c9bca47"
+          },
+          {
+            "file": "D:/projectGithub/lolicode-harness-audit-20261106/src-tauri/target/audit-logs/1107-evening/zip-fork-none-proof.json",
+            "checkedAt": "2026-11-07T12:37:31.114Z",
+            "scope": "SDK-only, no product UI or model",
+            "compression": "none",
+            "inheritedEventCount": 3,
+            "eventCount": 7,
+            "entries": [
+              "files/15/15a68314ea67bd0199b48fac82ae724c6756c88dc7a91c42ccbaef0a6e7efeb3/inherited.txt",
+              "media/sha256:64573d0bf4823c2a9928649c9511dc3f88969a5327a3ebbf077378b8cbf72794.png",
+              "session.v4.jsonl",
+              "subagents/fork-worker/session.v4.jsonl"
+            ],
+            "liveAndRestartedLogicalEntriesIdentical": true,
+            "sourceBytesAndMtimesUnchanged": true,
+            "sharedFileAndImageBytesVerified": true,
+            "archiveSha256": "8d84537b0d7e095c91cf24966354faa15251e03efc960ec25ddb6afbcf23d2ba"
+          }
+        ],
+        "fixtureCorrection": {
+          "log": "D:/projectGithub/lolicode-harness-audit-20261106/src-tauri/target/audit-logs/1107-evening/zip-fork-setup-failure.log",
+          "detail": "SessionQuery requires SessionStore. Mount an empty store in the cold process, matching the real cold adapter; no model or live Session is mounted."
+        },
+        "limitations": [
+          "This exercises the isolated SDK archive adapter on the prior candidate, not the latest dev frontend or native host.",
+          "Physical compression encodings do not establish compatibility with historical Session format generations.",
+          "Native save/cancel, current-dev fork/menu integration, remote transport and /export command UI remain unverified."
+        ]
+      },
+      "productCodeChanged": false,
+      "productSynced": false,
+      "desktopValidationPerformed": false,
+      "runtimePreparationPerformed": false,
+      "typecheckPerformed": false,
+      "nativeZipVerified": false,
+      "concurrentSourceWorkObserved": true,
+      "action": "No eligible newer version. Preserved active dev work; retained ZIP candidate and added isolated SDK fork evidence only.",
+      "validationLogs": [
+        "D:/projectGithub/lolicode-harness-audit-20261106/src-tauri/target/audit-logs/1107-evening/upstream.json",
+        "D:/projectGithub/lolicode-harness-audit-20261106/src-tauri/target/audit-logs/1107-evening/zip-fork.log",
+        "D:/projectGithub/lolicode-harness-audit-20261106/src-tauri/target/audit-logs/1107-evening/audit-preflight.json"
+      ],
+      "scope": "No upgrade or product wiring this run. Prior Windows evidence belongs to an older candidate, not current dev. No app release, push, merge, installer overwrite or branch switch."
+    },
+    {
+      "checkedAt": "2026-11-07T18:34:19.032Z",
+      "completedAt": "2026-11-07T18:59:09.258Z",
+      "version": "0.2.2-rc.1",
+      "newer": [],
+      "localBranch": "dev",
+      "localCommit": "ab870bc7f0939936fcb274a5f8659ca232f7221d",
+      "upstreamCommit": "66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db",
+      "superagentHead": "8c32a9dc5d72c033816c6a8110b37f40cf94fba4",
+      "artifactIntegrityVerified": true,
+      "sourceHashesVerified": 126,
+      "newTraceCount": 0,
+      "remainingTraceCount": 0,
+      "isolatedWorktree": "D:/projectGithub/lolicode-harness-audit-20261108",
+      "isolatedBaseCommit": "ab870bc7f0939936fcb274a5f8659ca232f7221d",
+      "runtimePrepared": true,
+      "runtimeBundled": true,
+      "bundleSourceMatch": {
+        "checkedAt": "2026-11-07T18:44:05.160Z",
+        "sourceWorktree": "D:/projectGithub/lolicode-harness-audit-20261108",
+        "files": [
+          {
+            "file": "host-session-archive.mjs",
+            "source": "f924e54a5a6cc6699720091390dc42713d1cfc10b7a9cd0102819bccddbbd221",
+            "bundle": "f924e54a5a6cc6699720091390dc42713d1cfc10b7a9cd0102819bccddbbd221"
+          },
+          {
+            "file": "host-operations.mjs",
+            "source": "dbe3dfa476200b3a0e1d1b08a7a8a5be3f54cf2cabe3b75abb98296276725943",
+            "bundle": "dbe3dfa476200b3a0e1d1b08a7a8a5be3f54cf2cabe3b75abb98296276725943"
+          }
+        ]
+      },
+      "sdkTests": 28,
+      "sdkFork": {
+        "completedAt": "2026-11-07T18:59:09.258Z",
+        "result": "passed-sdk-only-on-current-base",
+        "tests": 2,
+        "worktree": "D:/projectGithub/lolicode-harness-audit-20261108",
+        "baseCommit": "ab870bc7f0939936fcb274a5f8659ca232f7221d",
+        "proofs": [
+          {
+            "file": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-early/zip-fork-zstd-proof.json",
+            "checkedAt": "2026-11-07T18:37:45.686Z",
+            "scope": "SDK-only, no product UI or model",
+            "compression": "zstd",
+            "inheritedEventCount": 3,
+            "eventCount": 7,
+            "entries": [
+              "files/15/15a68314ea67bd0199b48fac82ae724c6756c88dc7a91c42ccbaef0a6e7efeb3/inherited.txt",
+              "media/sha256:64573d0bf4823c2a9928649c9511dc3f88969a5327a3ebbf077378b8cbf72794.png",
+              "session.v4.jsonl",
+              "subagents/fork-worker/session.v4.jsonl"
+            ],
+            "liveAndRestartedLogicalEntriesIdentical": true,
+            "sourceBytesAndMtimesUnchanged": true,
+            "sharedFileAndImageBytesVerified": true,
+            "archiveSha256": "3ca342bb00c2d562eff198a50c92a1e8bf9d760ce9e47fd9de9779866cbe23db"
+          },
+          {
+            "file": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-early/zip-fork-none-proof.json",
+            "checkedAt": "2026-11-07T18:37:46.037Z",
+            "scope": "SDK-only, no product UI or model",
+            "compression": "none",
+            "inheritedEventCount": 3,
+            "eventCount": 7,
+            "entries": [
+              "files/15/15a68314ea67bd0199b48fac82ae724c6756c88dc7a91c42ccbaef0a6e7efeb3/inherited.txt",
+              "media/sha256:64573d0bf4823c2a9928649c9511dc3f88969a5327a3ebbf077378b8cbf72794.png",
+              "session.v4.jsonl",
+              "subagents/fork-worker/session.v4.jsonl"
+            ],
+            "liveAndRestartedLogicalEntriesIdentical": true,
+            "sourceBytesAndMtimesUnchanged": true,
+            "sharedFileAndImageBytesVerified": true,
+            "archiveSha256": "56ad92d7af3ddeec626a92d07fbfe2b01d9d896b098054fc95ab0bce62197cd0"
+          }
+        ],
+        "repeat": "node --test D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-early/zip-fork.test.mjs",
+        "log": "D:/projectGithub/lolicode-harness-audit-20261106/src-tauri/target/audit-logs/1108-early/zip-fork.log",
+        "note": "Exact SDK fork prefix, closers, subtree and shared attachments match after a separate cold-process export with source bytes and mtimes unchanged. Zstandard and plain encodings are not historical format generations."
+      },
+      "frontendTests": 242,
+      "typecheck": true,
+      "desktop": [
+        {
+          "name": "full",
+          "code": 1,
+          "startedAt": "2026-11-07T18:43:04.657Z",
+          "completedAt": "2026-11-07T18:45:39.153Z",
+          "log": "D:/projectGithub/lolicode-harness-audit-20261106/src-tauri/target/audit-logs/1108-early/native-full.log",
+          "report": "D:\\projectGithub\\lolicode-harness-audit-20261106\\src-tauri\\target\\audit-logs\\1108-early\\run-temp\\lolicode-harness-desktop-jUJkpO\\report.ndjson",
+          "phases": [
+            {
+              "result": "passed",
+              "phase": "initial",
+              "sessionId": "lc:5157d192-46fe-406c-83d7-244f1f3f6182",
+              "keyboardSteering": true,
+              "sendScrollFollow": true,
+              "hidden": true
+            },
+            {
+              "result": "failed",
+              "phase": "restart",
+              "message": "Timed out waiting for the migrated secretary in the original project's session list"
+            }
+          ]
+        },
+        {
+          "name": "background-jobs",
+          "code": 0,
+          "startedAt": "2026-11-07T18:45:39.153Z",
+          "completedAt": "2026-11-07T18:45:53.348Z",
+          "log": "D:/projectGithub/lolicode-harness-audit-20261106/src-tauri/target/audit-logs/1108-early/native-background-jobs.log",
+          "report": "D:\\projectGithub\\lolicode-harness-audit-20261106\\src-tauri\\target\\audit-logs\\1108-early\\run-temp\\lolicode-harness-desktop-xUFGLJ\\report.ndjson",
+          "phases": [
+            {
+              "result": "passed",
+              "phase": "background-jobs",
+              "backgroundJobs": true,
+              "sessionId": "lc:bb1c1100-6009-4ee3-b330-4bb113e79e83",
+              "hidden": true
+            }
+          ]
+        },
+        {
+          "name": "native-modes",
+          "code": 0,
+          "startedAt": "2026-11-07T18:45:53.349Z",
+          "completedAt": "2026-11-07T18:46:08.637Z",
+          "log": "D:/projectGithub/lolicode-harness-audit-20261106/src-tauri/target/audit-logs/1108-early/native-native-modes.log",
+          "report": "D:\\projectGithub\\lolicode-harness-audit-20261106\\src-tauri\\target\\audit-logs\\1108-early\\run-temp\\lolicode-harness-desktop-qiH0D8\\report.ndjson",
+          "phases": [
+            {
+              "result": "passed",
+              "phase": "native-modes",
+              "sessionId": "lc:f608179f-4733-4b91-86d5-658d9bb9c47f",
+              "nativePlan": true,
+              "nativeGoal": true,
+              "occupiedProxyRecovered": false,
+              "hidden": true
+            },
+            {
+              "result": "passed",
+              "phase": "native-modes-restart",
+              "sessionId": "lc:f608179f-4733-4b91-86d5-658d9bb9c47f",
+              "nativeModesRestored": true,
+              "hidden": true
+            }
+          ]
+        },
+        {
+          "name": "dock-tools",
+          "code": 1,
+          "startedAt": "2026-11-07T18:46:08.637Z",
+          "completedAt": "2026-11-07T18:46:33.607Z",
+          "log": "D:/projectGithub/lolicode-harness-audit-20261106/src-tauri/target/audit-logs/1108-early/native-dock-tools.log",
+          "report": "D:\\projectGithub\\lolicode-harness-audit-20261106\\src-tauri\\target\\audit-logs\\1108-early\\run-temp\\lolicode-harness-desktop-kx7PgS\\report.ndjson",
+          "phases": [
+            {
+              "result": "failed",
+              "phase": "dock-tools",
+              "message": "Cannot inspect fixture WebView2 at C:\\Users\\admin\\AppData\\Local\\art.treasuregrove.lolicode-harness-f775cd11e6564411802cf45d680f1b25\\agent-link-preview-webview. Run the acceptance script from a non-elevated shell."
+            }
+          ]
+        },
+        {
+          "name": "output-links",
+          "code": 1,
+          "startedAt": "2026-11-07T18:46:33.607Z",
+          "completedAt": "2026-11-07T18:46:57.300Z",
+          "log": "D:/projectGithub/lolicode-harness-audit-20261106/src-tauri/target/audit-logs/1108-early/native-output-links.log",
+          "report": "D:\\projectGithub\\lolicode-harness-audit-20261106\\src-tauri\\target\\audit-logs\\1108-early\\run-temp\\lolicode-harness-desktop-JlozZD\\report.ndjson",
+          "phases": [
+            {
+              "result": "failed",
+              "phase": "output-links",
+              "message": "Cannot inspect fixture WebView2 at C:\\Users\\admin\\AppData\\Local\\art.treasuregrove.lolicode-harness-f775cd11e6564411802cf45d680f1b25\\agent-link-preview-webview. Run the acceptance script from a non-elevated shell."
+            }
+          ]
+        },
+        {
+          "name": "switching",
+          "code": 0,
+          "startedAt": "2026-11-07T18:46:57.300Z",
+          "completedAt": "2026-11-07T18:47:08.876Z",
+          "log": "D:/projectGithub/lolicode-harness-audit-20261106/src-tauri/target/audit-logs/1108-early/native-switching.log",
+          "report": "D:\\projectGithub\\lolicode-harness-audit-20261106\\src-tauri\\target\\audit-logs\\1108-early\\run-temp\\lolicode-harness-desktop-ccI8bV\\report.ndjson",
+          "phases": [
+            {
+              "result": "passed",
+              "phase": "switching",
+              "source": "seeded-harness-desktop-snapshots",
+              "turnsPerSession": 160,
+              "baseline": false,
+              "initialArticles": 40,
+              "documentHidden": false,
+              "reducedMotion": false,
+              "longTaskSupported": true,
+              "sessionSwitches": [
+                {
+                  "name": "cold B",
+                  "milliseconds": 37.8,
+                  "navigationFrame": 1,
+                  "navigationMilliseconds": 31.3,
+                  "contentFrame": 1,
+                  "contentMilliseconds": 31.5,
+                  "attachmentReadTransactions": 1,
+                  "snapshotReadMs": [],
+                  "pendingPrefetchMs": [],
+                  "longTasks": 0,
+                  "maxLongTask": 0
+                },
+                {
+                  "name": "warm A 1",
+                  "milliseconds": 33.6,
+                  "navigationFrame": 1,
+                  "navigationMilliseconds": 23.9,
+                  "contentFrame": 1,
+                  "contentMilliseconds": 23.9,
+                  "attachmentReadTransactions": 0,
+                  "snapshotReadMs": [],
+                  "pendingPrefetchMs": [],
+                  "longTasks": 0,
+                  "maxLongTask": 0
+                },
+                {
+                  "name": "warm B 1",
+                  "milliseconds": 34.2,
+                  "navigationFrame": 1,
+                  "navigationMilliseconds": 24.1,
+                  "contentFrame": 1,
+                  "contentMilliseconds": 24.2,
+                  "attachmentReadTransactions": 0,
+                  "snapshotReadMs": [],
+                  "pendingPrefetchMs": [],
+                  "longTasks": 0,
+                  "maxLongTask": 0
+                },
+                {
+                  "name": "warm A 2",
+                  "milliseconds": 33.9,
+                  "navigationFrame": 1,
+                  "navigationMilliseconds": 23.3,
+                  "contentFrame": 1,
+                  "contentMilliseconds": 23.4,
+                  "attachmentReadTransactions": 0,
+                  "snapshotReadMs": [],
+                  "pendingPrefetchMs": [],
+                  "longTasks": 0,
+                  "maxLongTask": 0
+                },
+                {
+                  "name": "warm B 2",
+                  "milliseconds": 33.8,
+                  "navigationFrame": 1,
+                  "navigationMilliseconds": 26.1,
+                  "contentFrame": 1,
+                  "contentMilliseconds": 26.2,
+                  "attachmentReadTransactions": 0,
+                  "snapshotReadMs": [],
+                  "pendingPrefetchMs": [],
+                  "longTasks": 0,
+                  "maxLongTask": 0
+                },
+                {
+                  "name": "warm A 3",
+                  "milliseconds": 36.2,
+                  "navigationFrame": 1,
+                  "navigationMilliseconds": 24,
+                  "contentFrame": 1,
+                  "contentMilliseconds": 24.1,
+                  "attachmentReadTransactions": 0,
+                  "snapshotReadMs": [],
+                  "pendingPrefetchMs": [],
+                  "longTasks": 0,
+                  "maxLongTask": 0
+                },
+                {
+                  "name": "warm B 3",
+                  "milliseconds": 33.5,
+                  "navigationFrame": 1,
+                  "navigationMilliseconds": 22.4,
+                  "contentFrame": 1,
+                  "contentMilliseconds": 22.5,
+                  "attachmentReadTransactions": 0,
+                  "snapshotReadMs": [],
+                  "pendingPrefetchMs": [],
+                  "longTasks": 0,
+                  "maxLongTask": 0
+                },
+                {
+                  "name": "warm A 4",
+                  "milliseconds": 34,
+                  "navigationFrame": 1,
+                  "navigationMilliseconds": 21.4,
+                  "contentFrame": 1,
+                  "contentMilliseconds": 21.5,
+                  "attachmentReadTransactions": 0,
+                  "snapshotReadMs": [],
+                  "pendingPrefetchMs": [],
+                  "longTasks": 0,
+                  "maxLongTask": 0
+                },
+                {
+                  "name": "warm B 4",
+                  "milliseconds": 33.9,
+                  "navigationFrame": 1,
+                  "navigationMilliseconds": 21.9,
+                  "contentFrame": 1,
+                  "contentMilliseconds": 22,
+                  "attachmentReadTransactions": 0,
+                  "snapshotReadMs": [],
+                  "pendingPrefetchMs": [],
+                  "longTasks": 0,
+                  "maxLongTask": 0
+                },
+                {
+                  "name": "warm A before mode switches",
+                  "milliseconds": 34.1,
+                  "navigationFrame": 1,
+                  "navigationMilliseconds": 22.6,
+                  "contentFrame": 1,
+                  "contentMilliseconds": 22.7,
+                  "attachmentReadTransactions": 0,
+                  "snapshotReadMs": [],
+                  "pendingPrefetchMs": [],
+                  "longTasks": 0,
+                  "maxLongTask": 0
+                },
+                {
+                  "name": "first visit C",
+                  "milliseconds": 34.3,
+                  "navigationFrame": 1,
+                  "navigationMilliseconds": 29.2,
+                  "contentFrame": 1,
+                  "contentMilliseconds": 29.3,
+                  "attachmentReadTransactions": 1,
+                  "snapshotReadMs": [],
+                  "pendingPrefetchMs": [],
+                  "longTasks": 0,
+                  "maxLongTask": 0
+                },
+                {
+                  "name": "first visit E outside recent set",
+                  "milliseconds": 51.1,
+                  "navigationFrame": 1,
+                  "navigationMilliseconds": 17.4,
+                  "contentFrame": 2,
+                  "contentMilliseconds": 39.3,
+                  "attachmentReadTransactions": 1,
+                  "snapshotReadMs": [
+                    14.3
+                  ],
+                  "pendingPrefetchMs": [],
+                  "longTasks": 0,
+                  "maxLongTask": 0
+                },
+                {
+                  "name": "warm A before rapid switch",
+                  "milliseconds": 34.3,
+                  "navigationFrame": 1,
+                  "navigationMilliseconds": 25.1,
+                  "contentFrame": 1,
+                  "contentMilliseconds": 25.2,
+                  "attachmentReadTransactions": 0,
+                  "snapshotReadMs": [],
+                  "pendingPrefetchMs": [],
+                  "longTasks": 0,
+                  "maxLongTask": 0
+                },
+                {
+                  "name": "Agent with pending snapshot",
+                  "milliseconds": 68.1,
+                  "navigationFrame": 1,
+                  "navigationMilliseconds": 17.3,
+                  "contentFrame": 3,
+                  "contentMilliseconds": 56.1,
+                  "attachmentReadTransactions": 1,
+                  "snapshotReadMs": [
+                    26.9
+                  ],
+                  "pendingPrefetchMs": [],
+                  "longTasks": 0,
+                  "maxLongTask": 0
+                },
+                {
+                  "name": "Agent after pending snapshot",
+                  "milliseconds": 33.8,
+                  "navigationFrame": 1,
+                  "navigationMilliseconds": 23.8,
+                  "contentFrame": 1,
+                  "contentMilliseconds": 23.9,
+                  "attachmentReadTransactions": 0,
+                  "snapshotReadMs": [],
+                  "pendingPrefetchMs": [],
+                  "longTasks": 0,
+                  "maxLongTask": 0
+                }
+              ],
+              "modeSwitches": [
+                {
+                  "name": "cold Tavern",
+                  "milliseconds": 34.2,
+                  "navigationFrame": 1,
+                  "navigationMilliseconds": 27.4,
+                  "animations": {
+                    "view": "tavern",
+                    "sidebarAnimations": [],
+                    "background": "rgb(33, 30, 34)",
+                    "opacity": 0.94,
+                    "onlyDestination": true,
+                    "workspace": true
+                  },
+                  "attachmentReadTransactions": 0,
+                  "snapshotReadMs": [],
+                  "longTasks": 0,
+                  "maxLongTask": 0
+                },
+                {
+                  "name": "warm Agent 1",
+                  "milliseconds": 33.9,
+                  "navigationFrame": 1,
+                  "navigationMilliseconds": 28.1,
+                  "contentFrame": 1,
+                  "contentMilliseconds": 28.2,
+                  "animations": {
+                    "view": "agent",
+                    "sidebarAnimations": [],
+                    "background": "rgb(33, 30, 34)",
+                    "opacity": 0.94,
+                    "onlyDestination": true,
+                    "workspace": true
+                  },
+                  "attachmentReadTransactions": 0,
+                  "snapshotReadMs": [],
+                  "longTasks": 0,
+                  "maxLongTask": 0
+                },
+                {
+                  "name": "warm Tavern 2",
+                  "milliseconds": 52.6,
+                  "navigationFrame": 1,
+                  "navigationMilliseconds": 26.3,
+                  "animations": {
+                    "view": "tavern",
+                    "sidebarAnimations": [],
+                    "background": "rgb(33, 30, 34)",
+                    "opacity": 0.94,
+                    "onlyDestination": true,
+                    "workspace": true
+                  },
+                  "attachmentReadTransactions": 0,
+                  "snapshotReadMs": [],
+                  "longTasks": 0,
+                  "maxLongTask": 0
+                },
+                {
+                  "name": "warm Agent 2",
+                  "milliseconds": 27,
+                  "navigationFrame": 1,
+                  "navigationMilliseconds": 24.7,
+                  "contentFrame": 1,
+                  "contentMilliseconds": 24.7,
+                  "animations": {
+                    "view": "agent",
+                    "sidebarAnimations": [],
+                    "background": "rgb(33, 30, 34)",
+                    "opacity": 0.94,
+                    "onlyDestination": true,
+                    "workspace": true
+                  },
+                  "attachmentReadTransactions": 0,
+                  "snapshotReadMs": [],
+                  "longTasks": 0,
+                  "maxLongTask": 0
+                },
+                {
+                  "name": "warm Tavern 3",
+                  "milliseconds": 33.5,
+                  "navigationFrame": 1,
+                  "navigationMilliseconds": 21.7,
+                  "animations": {
+                    "view": "tavern",
+                    "sidebarAnimations": [],
+                    "background": "rgb(33, 30, 34)",
+                    "opacity": 0.94,
+                    "onlyDestination": true,
+                    "workspace": true
+                  },
+                  "attachmentReadTransactions": 0,
+                  "snapshotReadMs": [],
+                  "longTasks": 0,
+                  "maxLongTask": 0
+                },
+                {
+                  "name": "warm Agent 3",
+                  "milliseconds": 33.9,
+                  "navigationFrame": 1,
+                  "navigationMilliseconds": 26.2,
+                  "contentFrame": 1,
+                  "contentMilliseconds": 26.3,
+                  "animations": {
+                    "view": "agent",
+                    "sidebarAnimations": [],
+                    "background": "rgb(33, 30, 34)",
+                    "opacity": 0.94,
+                    "onlyDestination": true,
+                    "workspace": true
+                  },
+                  "attachmentReadTransactions": 0,
+                  "snapshotReadMs": [],
+                  "longTasks": 0,
+                  "maxLongTask": 0
+                },
+                {
+                  "name": "warm Tavern 4",
+                  "milliseconds": 34,
+                  "navigationFrame": 1,
+                  "navigationMilliseconds": 21.5,
+                  "animations": {
+                    "view": "tavern",
+                    "sidebarAnimations": [],
+                    "background": "rgb(33, 30, 34)",
+                    "opacity": 0.94,
+                    "onlyDestination": true,
+                    "workspace": true
+                  },
+                  "attachmentReadTransactions": 0,
+                  "snapshotReadMs": [],
+                  "longTasks": 0,
+                  "maxLongTask": 0
+                },
+                {
+                  "name": "warm Agent 4",
+                  "milliseconds": 33.6,
+                  "navigationFrame": 1,
+                  "navigationMilliseconds": 27.3,
+                  "contentFrame": 1,
+                  "contentMilliseconds": 27.4,
+                  "animations": {
+                    "view": "agent",
+                    "sidebarAnimations": [],
+                    "background": "rgb(33, 30, 34)",
+                    "opacity": 0.94,
+                    "onlyDestination": true,
+                    "workspace": true
+                  },
+                  "attachmentReadTransactions": 0,
+                  "snapshotReadMs": [],
+                  "longTasks": 0,
+                  "maxLongTask": 0
+                },
+                {
+                  "name": "warm Tavern 5",
+                  "milliseconds": 33.5,
+                  "navigationFrame": 1,
+                  "navigationMilliseconds": 22.7,
+                  "animations": {
+                    "view": "tavern",
+                    "sidebarAnimations": [],
+                    "background": "rgb(33, 30, 34)",
+                    "opacity": 0.94,
+                    "onlyDestination": true,
+                    "workspace": true
+                  },
+                  "attachmentReadTransactions": 0,
+                  "snapshotReadMs": [],
+                  "longTasks": 0,
+                  "maxLongTask": 0
+                },
+                {
+                  "name": "warm Agent 5",
+                  "milliseconds": 33.6,
+                  "navigationFrame": 1,
+                  "navigationMilliseconds": 24.8,
+                  "contentFrame": 1,
+                  "contentMilliseconds": 24.9,
+                  "animations": {
+                    "view": "agent",
+                    "sidebarAnimations": [],
+                    "background": "rgb(33, 30, 34)",
+                    "opacity": 0.94,
+                    "onlyDestination": true,
+                    "workspace": true
+                  },
+                  "attachmentReadTransactions": 0,
+                  "snapshotReadMs": [],
+                  "longTasks": 0,
+                  "maxLongTask": 0
+                },
+                {
+                  "name": "Tavern with pending snapshot",
+                  "milliseconds": 67.6,
+                  "navigationFrame": 1,
+                  "navigationMilliseconds": 31.7,
+                  "animations": {
+                    "view": "tavern",
+                    "sidebarAnimations": [],
+                    "background": "rgb(33, 30, 34)",
+                    "opacity": 0.94,
+                    "onlyDestination": true,
+                    "workspace": true
+                  },
+                  "attachmentReadTransactions": 0,
+                  "snapshotReadMs": [],
+                  "longTasks": 0,
+                  "maxLongTask": 0
+                },
+                {
+                  "name": "Agent after pending Tavern snapshot",
+                  "milliseconds": 34,
+                  "navigationFrame": 1,
+                  "navigationMilliseconds": 25,
+                  "contentFrame": 1,
+                  "contentMilliseconds": 25.1,
+                  "animations": {
+                    "view": "agent",
+                    "sidebarAnimations": [],
+                    "background": "rgb(33, 30, 34)",
+                    "opacity": 0.94,
+                    "onlyDestination": true,
+                    "workspace": true
+                  },
+                  "attachmentReadTransactions": 0,
+                  "snapshotReadMs": [],
+                  "longTasks": 0,
+                  "maxLongTask": 0
+                },
+                {
+                  "name": "Tavern before opening models",
+                  "milliseconds": 33.7,
+                  "navigationFrame": 1,
+                  "navigationMilliseconds": 21,
+                  "animations": {
+                    "view": "tavern",
+                    "sidebarAnimations": [],
+                    "background": "rgb(33, 30, 34)",
+                    "opacity": 0.94,
+                    "onlyDestination": true,
+                    "workspace": true
+                  },
+                  "attachmentReadTransactions": 0,
+                  "snapshotReadMs": [],
+                  "longTasks": 0,
+                  "maxLongTask": 0
+                },
+                {
+                  "name": "Model channels from Tavern",
+                  "milliseconds": 89.8,
+                  "navigationFrame": 1,
+                  "navigationMilliseconds": 75.3,
+                  "animations": {
+                    "view": "channels",
+                    "sidebarAnimations": [],
+                    "background": "rgb(33, 30, 34)",
+                    "opacity": 0.94,
+                    "onlyDestination": true,
+                    "workspace": true
+                  },
+                  "attachmentReadTransactions": 0,
+                  "snapshotReadMs": [],
+                  "longTasks": 1,
+                  "maxLongTask": 73
+                },
+                {
+                  "name": "Tavern from model channels",
+                  "milliseconds": 33.5,
+                  "navigationFrame": 1,
+                  "navigationMilliseconds": 18.2,
+                  "animations": {
+                    "view": "tavern",
+                    "sidebarAnimations": [],
+                    "background": "rgb(33, 30, 34)",
+                    "opacity": 0.94,
+                    "onlyDestination": true,
+                    "workspace": true
+                  },
+                  "attachmentReadTransactions": 0,
+                  "snapshotReadMs": [],
+                  "longTasks": 0,
+                  "maxLongTask": 0
+                },
+                {
+                  "name": "Agent after opening models",
+                  "milliseconds": 33.8,
+                  "navigationFrame": 1,
+                  "navigationMilliseconds": 23.8,
+                  "contentFrame": 1,
+                  "contentMilliseconds": 23.8,
+                  "animations": {
+                    "view": "agent",
+                    "sidebarAnimations": [],
+                    "background": "rgb(33, 30, 34)",
+                    "opacity": 0.94,
+                    "onlyDestination": true,
+                    "workspace": true
+                  },
+                  "attachmentReadTransactions": 0,
+                  "snapshotReadMs": [],
+                  "longTasks": 0,
+                  "maxLongTask": 0
+                }
+              ],
+              "checks": {
+                "noGoalCreationControl": true,
+                "historyWindowed": true,
+                "olderMessagesLoaded": true,
+                "draftPreserved": true,
+                "tavernDraftPreserved": true,
+                "readingPositionPreserved": true,
+                "toolExpansionPreserved": true,
+                "firstFrameNavigation": true,
+                "firstFrameSessionTitle": true,
+                "sidebarModeHasNoAnimation": true,
+                "sidebarStaysMounted": true,
+                "sidebarBoundsStable": true,
+                "workspaceSurfacePainted": true,
+                "darkViewportApplied": true,
+                "workspaceModeMotion": true,
+                "inactiveWorkspaceNotPainted": true,
+                "reducedMotionPreferenceApplied": true,
+                "firstVisitFollowsTail": true,
+                "rapidSwitchKeepsLastSelection": true,
+                "pendingTranscriptPainted": true,
+                "pendingTavernPainted": true,
+                "loadedTranscriptMotion": true,
+                "windowsDragUsesTauri": true,
+                "sessionIdSearch": true,
+                "workspacePathSuffixes": true
+              },
+              "hidden": true
+            }
+          ]
+        },
+        {
+          "name": "session-export",
+          "code": 0,
+          "startedAt": "2026-11-07T18:47:08.876Z",
+          "completedAt": "2026-11-07T18:48:19.381Z",
+          "log": "D:/projectGithub/lolicode-harness-audit-20261106/src-tauri/target/audit-logs/1108-early/native-session-export.log",
+          "report": "D:\\projectGithub\\lolicode-harness-audit-20261106\\src-tauri\\target\\audit-logs\\1108-early\\run-temp\\lolicode-harness-desktop-J6zteC\\report.ndjson",
+          "phases": [
+            {
+              "result": "passed",
+              "phase": "session-export",
+              "sessionExport": true,
+              "cold": false,
+              "sessionExportState": {
+                "rootId": "lc:ff79c94f-e7c4-4020-908b-879db27e0002",
+                "emptyId": "lc:20da74be-6cc0-45a5-8193-906328b9da26",
+                "chiefId": "lc:798a4cca-efa5-4cdd-8e7e-a50ad83ac238",
+                "workerId": "lc:3030c7df-8fc0-4e22-a161-e23782cf9d01"
+              },
+              "hidden": true
+            },
+            {
+              "result": "passed",
+              "phase": "session-export-restart",
+              "sessionExport": true,
+              "cold": true,
+              "sessionExportState": {
+                "rootId": "lc:ff79c94f-e7c4-4020-908b-879db27e0002",
+                "emptyId": "lc:20da74be-6cc0-45a5-8193-906328b9da26",
+                "chiefId": "lc:798a4cca-efa5-4cdd-8e7e-a50ad83ac238",
+                "workerId": "lc:3030c7df-8fc0-4e22-a161-e23782cf9d01"
+              },
+              "hidden": true
+            }
+          ]
+        }
+      ],
+      "followup": [
+        {
+          "name": "full-followup",
+          "code": 1,
+          "startedAt": "2026-11-07T18:50:54.776Z",
+          "completedAt": "2026-11-07T18:53:32.226Z",
+          "log": "D:/projectGithub/lolicode-harness-audit-20261106/src-tauri/target/audit-logs/1108-early/native-full-followup.log",
+          "report": "D:\\projectGithub\\lolicode-harness-audit-20261106\\src-tauri\\target\\audit-logs\\1108-early\\run-temp\\lolicode-harness-desktop-3TTROF\\report.ndjson",
+          "phases": [
+            {
+              "result": "passed",
+              "phase": "initial",
+              "sessionId": "lc:c64d3fc2-05eb-43a9-b8d4-ba30d34dbaca",
+              "keyboardSteering": true,
+              "sendScrollFollow": true,
+              "hidden": true
+            },
+            {
+              "result": "failed",
+              "phase": "restart",
+              "message": "Timed out waiting for secretary's completed live preview"
+            }
+          ]
+        }
+      ],
+      "nativeZipVerified": false,
+      "uiBlocker": {
+        "checkedAt": "2026-11-07T18:42:15.750Z",
+        "result": "blocked",
+        "scope": "Fresh isolated candidate based on dev ab870bc7f0939936fcb274a5f8659ca232f7221d",
+        "phase": "native-zip",
+        "step": "warm-root",
+        "dialogObserved": true,
+        "observedWindowId": 463196,
+        "source": "mcp__cua_repl Windows native UI",
+        "appExecutable": "D:/projectGithub/lolicode-harness-audit-20261106/src-tauri/target/acceptance/debug/lolicode.exe",
+        "errors": [
+          "Accessibility state unavailable for window 463196.",
+          "FrameArrived timed out: timed out waiting on channel",
+          "GetCursorPos failed: 拒绝访问。 (0x80070005)"
+        ],
+        "saved": false,
+        "cancelVerified": false,
+        "productSynced": false
+      },
+      "uiBlockerLog": "D:/projectGithub/lolicode-harness-audit-20261106/src-tauri/target/audit-logs/1108-early/native-zip-ui-blocker.json",
+      "browserInspectionBlocker": {
+        "elevatedShellConfirmed": true,
+        "affected": [
+          "dock-tools",
+          "output-links"
+        ],
+        "message": "WebView2 debugging endpoint unavailable; acceptance requires a non-elevated shell.",
+        "reducedPrivilegeLaunchAttempt": "D:/projectGithub/lolicode-harness-audit-20261106/src-tauri/target/audit-logs/1108-early/launch-context-proof.json",
+        "securitySettingsChanged": false
+      },
+      "globalWebsiteGap": {
+        "proof": "D:/projectGithub/lolicode-harness-audit-20261106/src-tauri/target/audit-logs/1108-early/global-website-proof.json",
+        "result": "reproduced-host-admission-gap",
+        "workerCompleted": true,
+        "htmlVerified": true,
+        "reportReady": true,
+        "hostDirectoryAdmitted": false,
+        "parentPreviewReceived": false,
+        "followupReport": "D:\\projectGithub\\lolicode-harness-audit-20261106\\src-tauri\\target\\audit-logs\\1108-early\\run-temp\\lolicode-harness-desktop-3TTROF\\report.ndjson"
+      },
+      "fixtureCorrections": [
+        "Resolved the ZIP menu merge while retaining current onDialogOpenChange callbacks.",
+        "The first full desktop run expected a legacy secretary in ordinary project chats, contrary to committed dev behavior. The isolated follow-up asserts that it stays hidden and uses the global secretary entry.",
+        "The global website fixture selects its target through the official subagent cwd argument and keeps manual worktree tasks scoped to the actual project. It now reproduces missing host admission rather than passing through an obsolete legacy entry."
+      ],
+      "productCodeChanged": false,
+      "productSynced": false,
+      "action": "No newer official installable version. Ported ZIP to a fresh current-dev worktree; withheld product synchronization after incomplete native gates and a reproduced global cross-project website-preview gap.",
+      "scope": "Synthetic channel and disposable profiles only. No user data copied, package upgrade, installer overwrite, push, merge, branch switch, or application release.",
+      "validationLogs": [
+        "D:/projectGithub/lolicode-harness-audit-20261106/src-tauri/target/audit-logs/1108-early/runtime.log",
+        "D:/projectGithub/lolicode-harness-audit-20261106/src-tauri/target/audit-logs/1108-early/bundle.log",
+        "D:/projectGithub/lolicode-harness-audit-20261106/src-tauri/target/audit-logs/1108-early/sdk.log",
+        "D:/projectGithub/lolicode-harness-audit-20261106/src-tauri/target/audit-logs/1108-early/frontend.log",
+        "D:/projectGithub/lolicode-harness-audit-20261106/src-tauri/target/audit-logs/1108-early/typecheck.log",
+        "D:/projectGithub/lolicode-harness-audit-20261106/src-tauri/target/audit-logs/1108-early/native-zip.log",
+        "D:/projectGithub/lolicode-harness-audit-20261106/src-tauri/target/audit-logs/1108-early/native-gates.json",
+        "D:/projectGithub/lolicode-harness-audit-20261106/src-tauri/target/audit-logs/1108-early/native-followup-gates.json"
+      ],
+      "isolatedCandidateFiles": [
+        {
+          "file": "docs/architecture/harness-session-markdown.md",
+          "sha256": "a9d6f5a4cac6a06eb5eab38ee60d844d771371df2fdaf9850804f69e6dae528b"
+        },
+        {
+          "file": "packages/lolicode-harness-runtime/README.md",
+          "sha256": "fa01f4f819607d58f5f083c9bb9fe9c04d667ad3e5b0df9c37f6bc2156781d1b"
+        },
+        {
+          "file": "packages/lolicode-harness-runtime/host-operations.mjs",
+          "sha256": "dbe3dfa476200b3a0e1d1b08a7a8a5be3f54cf2cabe3b75abb98296276725943"
+        },
+        {
+          "file": "packages/lolicode-harness-runtime/host-session-archive.mjs",
+          "sha256": "f924e54a5a6cc6699720091390dc42713d1cfc10b7a9cd0102819bccddbbd221"
+        },
+        {
+          "file": "packages/lolicode-harness-runtime/tests/host-operations.test.mjs",
+          "sha256": "a927269546637a0eaadd3ac8cf3647819280e495e9da983bf002dac518dd6130"
+        },
+        {
+          "file": "scripts/tests/harness-desktop-acceptance.mjs",
+          "sha256": "81db703204a70afb327dd7f2b95db063f0e53bbd2d04471a0236314a41195e04"
+        },
+        {
+          "file": "scripts/tests/harness-desktop-session-export.mjs",
+          "sha256": "eecb7d6ed1b287d405dde580b890985a34352d8bfeeb69632bbe76e8a91e462b"
+        },
+        {
+          "file": "src-tauri/src/commands/agent_dispatch.rs",
+          "sha256": "fbe65dad310f65d6d19172241db48902fb3f343ca0140dcc040eb1ff8a42e783"
+        },
+        {
+          "file": "src-tauri/src/lib.rs",
+          "sha256": "15eed0cd84c7502ddfee27fb365dacf757bb0905ff3af8c3db8471111249877d"
+        },
+        {
+          "file": "src-tauri/src/services/harness_desktop.rs",
+          "sha256": "e6ef460047f8f184547f078ce64e432a6d099eb88b806d61b24cf38a962ec259"
+        },
+        {
+          "file": "src-tauri/src/services/harness_paths.rs",
+          "sha256": "a1440f9aa6142a9d48fe86d9341f55bd17913b601e019fbeaf60a2eddd4ab5e9"
+        },
+        {
+          "file": "src-tauri/src/services/harness_runtime.rs",
+          "sha256": "f541aeb9f8560ba951d797fd71357927518a920651ed799c1dea8adab37bf91a"
+        },
+        {
+          "file": "src/features/agent/AgentSessionMenu.tsx",
+          "sha256": "139823332221b05292342fcd12c6746655130dde5530b8870180be8181359981"
+        },
+        {
+          "file": "src/features/agent/useAgentSessionZipExport.ts",
+          "sha256": "17e374dc6d573df1deb4bcdcfbe5c5557dbff0957d2eba1fc8bc1f3708e81a0e"
+        },
+        {
+          "file": "src/lib/api/agent.ts",
+          "sha256": "221132bc2cfec8931f0e8aef612259209f48103d903feb0eded7c697e5f50261"
+        },
+        {
+          "file": "tests/components/AgentSessionMenu.test.tsx",
+          "sha256": "8752ab8be49cdb706f2124485eb42556bf370fd527671a689d800f34ab68b596"
+        },
+        {
+          "file": "scripts/tests/harness-desktop-renderer.mjs",
+          "sha256": "d042e9171c23a0c00b3251d25f1a804cec16863e6ab6e8e0cd8faf3c9964a949"
+        }
+      ]
+    },
+    {
+      "checkedAt": "2026-11-08T00:31:24.098Z",
+      "completedAt": "2026-11-08T01:07:14.812Z",
+      "localBranch": "dev",
+      "localCommit": "ab870bc7f0939936fcb274a5f8659ca232f7221d",
+      "version": "0.2.2-rc.1",
+      "newer": [],
+      "upstreamCommit": "66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db",
+      "superagentHead": "8c32a9dc5d72c033816c6a8110b37f40cf94fba4",
+      "artifactIntegrityVerified": true,
+      "sourceHashesVerified": 126,
+      "newTraceCount": 0,
+      "remainingTraceCount": 0,
+      "worktree": "D:/projectGithub/lolicode-harness-audit-20261108",
+      "runtimePrepared": true,
+      "runtimeBundled": true,
+      "sdkTests": 28,
+      "rustSecretaryTests": 7,
+      "typecheck": true,
+      "frontendRetainedEvidence": {
+        "tests": 242,
+        "previousCheckedAt": "2026-11-07T18:34:19.032Z",
+        "productionFrontendUnchanged": true,
+        "files": [
+          {
+            "file": "src/features/agent/AgentSessionMenu.tsx",
+            "sha256": "139823332221b05292342fcd12c6746655130dde5530b8870180be8181359981"
+          },
+          {
+            "file": "src/features/agent/useAgentSessionZipExport.ts",
+            "sha256": "17e374dc6d573df1deb4bcdcfbe5c5557dbff0957d2eba1fc8bc1f3708e81a0e"
+          },
+          {
+            "file": "src/lib/api/agent.ts",
+            "sha256": "221132bc2cfec8931f0e8aef612259209f48103d903feb0eded7c697e5f50261"
+          },
+          {
+            "file": "tests/components/AgentSessionMenu.test.tsx",
+            "sha256": "8752ab8be49cdb706f2124485eb42556bf370fd527671a689d800f34ab68b596"
+          }
+        ],
+        "log": "D:/projectGithub/lolicode-harness-audit-20261106/src-tauri/target/audit-logs/1108-early/frontend.log",
+        "note": "No production frontend changes in this round; existing passing coverage is retained, not counted as a fresh run."
+      },
+      "native": {
+        "checkedAt": "2026-11-08T01:03:43.188Z",
+        "sourceBase": "ab870bc7f0939936fcb274a5f8659ca232f7221d",
+        "report": "D:\\projectGithub\\lolicode-harness-audit-20261108\\src-tauri\\target\\audit-logs\\1108-morning\\run-temp\\lolicode-harness-desktop-tZsMUI\\report.ndjson",
+        "overlay": "D:\\projectGithub\\lolicode-harness-audit-20261108\\src-tauri\\target\\audit-logs\\1108-morning\\run-temp\\lolicode-harness-desktop-tZsMUI/tauri.overlay.json",
+        "phases": [
+          {
+            "result": "passed",
+            "phase": "initial",
+            "sessionId": "lc:707d0aaf-4458-477e-a964-2e8b164f3ae2",
+            "keyboardSteering": true,
+            "sendScrollFollow": true,
+            "hidden": true
+          },
+          {
+            "result": "in-progress",
+            "event": "global-preview-prepared",
+            "phase": "restart",
+            "sessionId": "lc:cc699740-b2e0-428d-924a-63186f8121ff",
+            "workerSessionId": "lc:3cf93ef1-4ba4-44b3-8e76-d2c514935f8b",
+            "workerProjectPath": "D:\\projectGithub\\lolicode-harness-audit-20261108\\src-tauri\\target\\audit-logs\\1108-morning\\run-temp\\lolicode-harness-desktop-tZsMUI\\project",
+            "previewUrl": "http://127.0.0.1:62262/__lolicode_preview/bb7f9793438a41d3b12656481fc534fc/index.html",
+            "nativeGuestReady": true,
+            "actualPageInteractionVerified": false,
+            "legacyChiefNotListed": true,
+            "websiteFromGlobalSecretary": true,
+            "httpContentVerified": true
+          },
+          {
+            "result": "failed",
+            "phase": "restart",
+            "message": "Cannot inspect fixture WebView2 at C:\\Users\\admin\\AppData\\Local\\art.treasuregrove.lolicode-harness-f775cd11e6564411802cf45d680f1b25\\agent-preview-webview. Run the acceptance script from a non-elevated shell."
+          }
+        ],
+        "prepared": {
+          "result": "in-progress",
+          "event": "global-preview-prepared",
+          "phase": "restart",
+          "sessionId": "lc:cc699740-b2e0-428d-924a-63186f8121ff",
+          "workerSessionId": "lc:3cf93ef1-4ba4-44b3-8e76-d2c514935f8b",
+          "workerProjectPath": "D:\\projectGithub\\lolicode-harness-audit-20261108\\src-tauri\\target\\audit-logs\\1108-morning\\run-temp\\lolicode-harness-desktop-tZsMUI\\project",
+          "previewUrl": "http://127.0.0.1:62262/__lolicode_preview/bb7f9793438a41d3b12656481fc534fc/index.html",
+          "nativeGuestReady": true,
+          "actualPageInteractionVerified": false,
+          "legacyChiefNotListed": true,
+          "websiteFromGlobalSecretary": true,
+          "httpContentVerified": true
+        },
+        "state": {
+          "parent": {
+            "id": "lc:cc699740-b2e0-428d-924a-63186f8121ff",
+            "project": "D:\\projectGithub\\lolicode-harness-audit-20261108\\src-tauri\\target\\audit-logs\\1108-morning\\run-temp\\lolicode-harness-desktop-tZsMUI\\.lolicode-dev\\agent\\standalone-workspace",
+            "permissionMode": "full_access",
+            "hasFileReceipt": true
+          },
+          "worker": {
+            "id": "lc:3cf93ef1-4ba4-44b3-8e76-d2c514935f8b",
+            "project": "D:\\projectGithub\\lolicode-harness-audit-20261108\\src-tauri\\target\\audit-logs\\1108-morning\\run-temp\\lolicode-harness-desktop-tZsMUI\\project",
+            "directory": "\\\\?\\D:\\projectGithub\\lolicode-harness-audit-20261108\\src-tauri\\target\\audit-logs\\1108-morning\\run-temp\\lolicode-harness-desktop-tZsMUI\\project",
+            "projectAssigned": true,
+            "permissionMode": "full_access",
+            "status": "completed",
+            "report": "ready"
+          }
+        },
+        "nativeInteractionVerified": false,
+        "completeDesktopPassed": false,
+        "elevatedShell": true,
+        "preparationSerialized": true,
+        "proof": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-morning/native-proof.json",
+        "log": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-morning/native-full.log"
+      },
+      "sdkDirectoryDiagnostic": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-morning/sdk-directory-diagnostic.json",
+      "independentPatch": {
+        "checkedAt": "2026-11-08T00:57:04.824Z",
+        "files": [
+          "src-tauri/src/services/harness_desktop.rs",
+          "src-tauri/src/services/harness_secretary.rs",
+          "packages/lolicode-harness-runtime/tests/host-operations.test.mjs"
+        ],
+        "bytes": 14443,
+        "appliesToDevWithoutZip": true,
+        "message": "",
+        "applied": false
+      },
+      "setupCorrections": [
+        {
+          "issue": "Tauri's default beforeDevCommand does not wait. Resource preparation raced Cargo and failed with EBUSY copying the test asset manifest.",
+          "resolvedInTestFixture": true,
+          "waitForPreparation": true,
+          "source": "scripts/tests/harness-desktop-acceptance.mjs",
+          "firstFailure": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-morning/native-full-preparation-failure.log"
+        }
+      ],
+      "rejectedCandidate": {
+        "scope": "Admission from the immutable initial Session header only",
+        "result": "failed-native-preview",
+        "log": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-morning/native-header-only-candidate.log",
+        "correction": "The initial header retains the original project. Bind registered target roots from the authoritative working-directory/change event as well; do not rewrite the SDK log or relax path checks."
+      },
+      "validationLogs": [
+        "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-morning/runtime.log",
+        "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-morning/sdk.log",
+        "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-morning/rust-secretary.log",
+        "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-morning/typecheck.log",
+        "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-morning/native-full.log",
+        "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-morning/native-proof.json"
+      ],
+      "productCodeChanged": false,
+      "productSynced": false,
+      "nativeZipVerified": false,
+      "action": "No eligible newer release. Implemented and partly verified the global-secretary effective-directory mapping in isolation; retained the current product because native interaction and full desktop gates remain incomplete.",
+      "scope": "Official SDK unchanged. Synthetic model channel and isolated D: profiles. No version upgrade, user-data migration, installer overwrite, push, merge, branch switch or release.",
+      "isolatedCandidateFiles": [
+        {
+          "file": "docs/architecture/harness-session-markdown.md",
+          "sha256": "a9d6f5a4cac6a06eb5eab38ee60d844d771371df2fdaf9850804f69e6dae528b"
+        },
+        {
+          "file": "packages/lolicode-harness-runtime/README.md",
+          "sha256": "fa01f4f819607d58f5f083c9bb9fe9c04d667ad3e5b0df9c37f6bc2156781d1b"
+        },
+        {
+          "file": "packages/lolicode-harness-runtime/host-operations.mjs",
+          "sha256": "dbe3dfa476200b3a0e1d1b08a7a8a5be3f54cf2cabe3b75abb98296276725943"
+        },
+        {
+          "file": "packages/lolicode-harness-runtime/host-session-archive.mjs",
+          "sha256": "f924e54a5a6cc6699720091390dc42713d1cfc10b7a9cd0102819bccddbbd221"
+        },
+        {
+          "file": "packages/lolicode-harness-runtime/tests/host-operations.test.mjs",
+          "sha256": "3d4c30277b38500da42ee6e34dbf53e8bffc58bcd8c83be288412cdd535f1ef2"
+        },
+        {
+          "file": "scripts/tests/harness-desktop-acceptance.mjs",
+          "sha256": "af88cc339614525387f66055fec5ddfe5b8adba0ee3a8d5d758c9f3f636cd6db"
+        },
+        {
+          "file": "scripts/tests/harness-desktop-session-export.mjs",
+          "sha256": "eecb7d6ed1b287d405dde580b890985a34352d8bfeeb69632bbe76e8a91e462b"
+        },
+        {
+          "file": "src-tauri/src/commands/agent_dispatch.rs",
+          "sha256": "fbe65dad310f65d6d19172241db48902fb3f343ca0140dcc040eb1ff8a42e783"
+        },
+        {
+          "file": "src-tauri/src/lib.rs",
+          "sha256": "15eed0cd84c7502ddfee27fb365dacf757bb0905ff3af8c3db8471111249877d"
+        },
+        {
+          "file": "src-tauri/src/services/harness_desktop.rs",
+          "sha256": "c896b39123e9bbf0985c462cbbb563a3cd66ef9276e5b6ca4f8f57ae66479a5d"
+        },
+        {
+          "file": "src-tauri/src/services/harness_paths.rs",
+          "sha256": "a1440f9aa6142a9d48fe86d9341f55bd17913b601e019fbeaf60a2eddd4ab5e9"
+        },
+        {
+          "file": "src-tauri/src/services/harness_runtime.rs",
+          "sha256": "f541aeb9f8560ba951d797fd71357927518a920651ed799c1dea8adab37bf91a"
+        },
+        {
+          "file": "src/features/agent/AgentSessionMenu.tsx",
+          "sha256": "139823332221b05292342fcd12c6746655130dde5530b8870180be8181359981"
+        },
+        {
+          "file": "src/features/agent/useAgentSessionZipExport.ts",
+          "sha256": "17e374dc6d573df1deb4bcdcfbe5c5557dbff0957d2eba1fc8bc1f3708e81a0e"
+        },
+        {
+          "file": "src/lib/api/agent.ts",
+          "sha256": "221132bc2cfec8931f0e8aef612259209f48103d903feb0eded7c697e5f50261"
+        },
+        {
+          "file": "tests/components/AgentSessionMenu.test.tsx",
+          "sha256": "8752ab8be49cdb706f2124485eb42556bf370fd527671a689d800f34ab68b596"
+        },
+        {
+          "file": "scripts/tests/harness-desktop-renderer.mjs",
+          "sha256": "2bfed616d25e34abc7d35889b5cf3b1636a8157f7bd3053cde9559b8adcd9421"
+        },
+        {
+          "file": "src-tauri/src/services/harness_secretary.rs",
+          "sha256": "c549296f2d48f35f953df538b0d90a6f7cc120c4759bc345669a9dd8eab8cfed"
+        }
+      ]
+    },
+    {
+      "checkedAt": "2026-11-08T06:29:22.651Z",
+      "completedAt": "2026-11-08T06:44:14.358Z",
+      "localBranch": "dev",
+      "localCommit": "ab870bc7f0939936fcb274a5f8659ca232f7221d",
+      "version": "0.2.2-rc.1",
+      "newer": [],
+      "upstreamCommit": "66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db",
+      "superagentHead": "8c32a9dc5d72c033816c6a8110b37f40cf94fba4",
+      "artifactIntegrityVerified": true,
+      "sourceHashesVerified": 126,
+      "newTraceCount": 0,
+      "remainingTraceCount": 0,
+      "sdkOnly": {
+        "checkedAt": "2026-11-08T06:44:14.358Z",
+        "result": "passed-sdk-only",
+        "tests": 16,
+        "successfulExports": 10,
+        "expectedRefusals": 6,
+        "scope": "Selected upstream V0/V1 packed/seeded corpus and frozen-codec-derived V2/V3; V3 interrupted-turn recovery. Both Zstandard and plain encodings. Not blanket compatibility for all historical logs.",
+        "actualColdCliCases": 8,
+        "explicitPlainLoaderCases": 8,
+        "entrypointDifference": "Zstandard invokes the actual cold archive CLI. Plain encoding uses an explicitly configured SDK context in a separate process; the product cold CLI defaults to Zstandard.",
+        "sourceImmutability": "All tests verify source bytes, mtimes and file set after export/refusal and after a separate cold-process run; no current-format successor is published.",
+        "semanticChecks": [
+          "Inherited prefix and compacted historical messages survive once.",
+          "Packed assistant stream becomes one assistant message.",
+          "Command and title references still point to the intended user messages.",
+          "Interrupted V3 turn gains the official logical closer and remapped title reference, without rewriting the source."
+        ],
+        "unsupportedShape": "The official released-v0-real-shapes corpus contains a model-visible surface before its first step. The published migration refuses to insert a system head without changing chronology. V0/V1 and derived V2 are explicitly rejected with no archive or source mutation.",
+        "refusalOwnership": "Inherited official SDK migration contract; do not rewrite the log or bypass its validation to claim compatibility.",
+        "remaining": [
+          "Historical attachments and multi-session subagent catalog migrations were not covered.",
+          "Actual Windows ZIP menu/save/cancel and current-dev complete desktop acceptance remain pending.",
+          "These upstream-format checks do not establish v1.0.6 Rust-engine installer overwrite compatibility."
+        ],
+        "sourceProofs": [
+          {
+            "path": "packages/session/session-persistence-jsonl/tests/fixtures/released-v0-real-shapes.jsonl",
+            "url": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/session/session-persistence-jsonl/tests/fixtures/released-v0-real-shapes.jsonl",
+            "gitBlobSha1": "73df660d9eb766be2d64197a7f2284703874ec39",
+            "sha256": "79f44919a664f867c22d91eb42f97b3de1c88df1a66bd79c0aa3945926873668"
+          },
+          {
+            "path": "packages/session/session-persistence-jsonl/tests/multi-edge-publication.spec.ts",
+            "url": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/session/session-persistence-jsonl/tests/multi-edge-publication.spec.ts",
+            "gitBlobSha1": "162395fdefca1f76bcd050849411ab01fa3e332d",
+            "sha256": "da63e48efb4ef12dc36e28c2d85a4b8603c5118b7527cf4925487ec4b3695bef"
+          },
+          {
+            "path": "packages/session/session-persistence-jsonl/tests/v3-restart-migration.spec.ts",
+            "url": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/session/session-persistence-jsonl/tests/v3-restart-migration.spec.ts",
+            "gitBlobSha1": "941175498ce210a9bfc6f6f6928a0205d78fad99",
+            "sha256": "a46be02cfc949db6d008de82b75960286603764bb34a60626097e54c926c5625"
+          }
+        ],
+        "proofs": [
+          {
+            "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-afternoon/history-0-none-proof.json",
+            "completedAt": "2026-11-08T06:38:40.055Z",
+            "physicalVersion": 0,
+            "case": 0,
+            "compression": "none",
+            "fixtureOrigin": "Official multi-edge historicalRows; V1 shared layout, V2/V3 produced by public frozen codecs",
+            "exportedVersion": 4,
+            "canonicalEventCount": 23,
+            "sourceBytesMtimesAndFileSetUnchanged": true,
+            "noSuccessorGenerationPublished": true,
+            "separateColdProcessEntriesIdentical": true,
+            "modelOrLiveAgentMounted": false,
+            "coldPath": "explicit plain-encoding SDK context"
+          },
+          {
+            "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-afternoon/history-0-zstd-proof.json",
+            "completedAt": "2026-11-08T06:38:38.234Z",
+            "physicalVersion": 0,
+            "case": 0,
+            "compression": "zstd",
+            "fixtureOrigin": "Official multi-edge historicalRows; V1 shared layout, V2/V3 produced by public frozen codecs",
+            "exportedVersion": 4,
+            "canonicalEventCount": 23,
+            "sourceBytesMtimesAndFileSetUnchanged": true,
+            "noSuccessorGenerationPublished": true,
+            "separateColdProcessEntriesIdentical": true,
+            "modelOrLiveAgentMounted": false,
+            "coldPath": "actual host-session-archive CLI"
+          },
+          {
+            "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-afternoon/history-1-none-proof.json",
+            "completedAt": "2026-11-08T06:38:40.285Z",
+            "physicalVersion": 1,
+            "case": 1,
+            "compression": "none",
+            "fixtureOrigin": "Official multi-edge historicalRows; V1 shared layout, V2/V3 produced by public frozen codecs",
+            "exportedVersion": 4,
+            "canonicalEventCount": 23,
+            "sourceBytesMtimesAndFileSetUnchanged": true,
+            "noSuccessorGenerationPublished": true,
+            "separateColdProcessEntriesIdentical": true,
+            "modelOrLiveAgentMounted": false,
+            "coldPath": "explicit plain-encoding SDK context"
+          },
+          {
+            "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-afternoon/history-1-zstd-proof.json",
+            "completedAt": "2026-11-08T06:38:38.461Z",
+            "physicalVersion": 1,
+            "case": 1,
+            "compression": "zstd",
+            "fixtureOrigin": "Official multi-edge historicalRows; V1 shared layout, V2/V3 produced by public frozen codecs",
+            "exportedVersion": 4,
+            "canonicalEventCount": 23,
+            "sourceBytesMtimesAndFileSetUnchanged": true,
+            "noSuccessorGenerationPublished": true,
+            "separateColdProcessEntriesIdentical": true,
+            "modelOrLiveAgentMounted": false,
+            "coldPath": "actual host-session-archive CLI"
+          },
+          {
+            "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-afternoon/history-2-none-proof.json",
+            "completedAt": "2026-11-08T06:38:40.517Z",
+            "physicalVersion": 2,
+            "case": 2,
+            "compression": "none",
+            "fixtureOrigin": "Official multi-edge historicalRows; V1 shared layout, V2/V3 produced by public frozen codecs",
+            "exportedVersion": 4,
+            "canonicalEventCount": 23,
+            "sourceBytesMtimesAndFileSetUnchanged": true,
+            "noSuccessorGenerationPublished": true,
+            "separateColdProcessEntriesIdentical": true,
+            "modelOrLiveAgentMounted": false,
+            "coldPath": "explicit plain-encoding SDK context"
+          },
+          {
+            "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-afternoon/history-2-zstd-proof.json",
+            "completedAt": "2026-11-08T06:38:38.731Z",
+            "physicalVersion": 2,
+            "case": 2,
+            "compression": "zstd",
+            "fixtureOrigin": "Official multi-edge historicalRows; V1 shared layout, V2/V3 produced by public frozen codecs",
+            "exportedVersion": 4,
+            "canonicalEventCount": 23,
+            "sourceBytesMtimesAndFileSetUnchanged": true,
+            "noSuccessorGenerationPublished": true,
+            "separateColdProcessEntriesIdentical": true,
+            "modelOrLiveAgentMounted": false,
+            "coldPath": "actual host-session-archive CLI"
+          },
+          {
+            "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-afternoon/history-3-interrupted-none-proof.json",
+            "completedAt": "2026-11-08T06:38:41.038Z",
+            "physicalVersion": 3,
+            "case": "3-interrupted",
+            "compression": "none",
+            "fixtureOrigin": "Official V3 interrupted-turn test rows",
+            "exportedVersion": 4,
+            "canonicalEventCount": 9,
+            "sourceBytesMtimesAndFileSetUnchanged": true,
+            "noSuccessorGenerationPublished": true,
+            "separateColdProcessEntriesIdentical": true,
+            "modelOrLiveAgentMounted": false,
+            "coldPath": "explicit plain-encoding SDK context"
+          },
+          {
+            "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-afternoon/history-3-interrupted-zstd-proof.json",
+            "completedAt": "2026-11-08T06:38:39.178Z",
+            "physicalVersion": 3,
+            "case": "3-interrupted",
+            "compression": "zstd",
+            "fixtureOrigin": "Official V3 interrupted-turn test rows",
+            "exportedVersion": 4,
+            "canonicalEventCount": 9,
+            "sourceBytesMtimesAndFileSetUnchanged": true,
+            "noSuccessorGenerationPublished": true,
+            "separateColdProcessEntriesIdentical": true,
+            "modelOrLiveAgentMounted": false,
+            "coldPath": "actual host-session-archive CLI"
+          },
+          {
+            "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-afternoon/history-3-none-proof.json",
+            "completedAt": "2026-11-08T06:38:40.812Z",
+            "physicalVersion": 3,
+            "case": 3,
+            "compression": "none",
+            "fixtureOrigin": "Official multi-edge historicalRows; V1 shared layout, V2/V3 produced by public frozen codecs",
+            "exportedVersion": 4,
+            "canonicalEventCount": 23,
+            "sourceBytesMtimesAndFileSetUnchanged": true,
+            "noSuccessorGenerationPublished": true,
+            "separateColdProcessEntriesIdentical": true,
+            "modelOrLiveAgentMounted": false,
+            "coldPath": "explicit plain-encoding SDK context"
+          },
+          {
+            "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-afternoon/history-3-zstd-proof.json",
+            "completedAt": "2026-11-08T06:38:38.958Z",
+            "physicalVersion": 3,
+            "case": 3,
+            "compression": "zstd",
+            "fixtureOrigin": "Official multi-edge historicalRows; V1 shared layout, V2/V3 produced by public frozen codecs",
+            "exportedVersion": 4,
+            "canonicalEventCount": 23,
+            "sourceBytesMtimesAndFileSetUnchanged": true,
+            "noSuccessorGenerationPublished": true,
+            "separateColdProcessEntriesIdentical": true,
+            "modelOrLiveAgentMounted": false,
+            "coldPath": "actual host-session-archive CLI"
+          },
+          {
+            "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-afternoon/history-refusal-0-none-proof.json",
+            "completedAt": "2026-11-08T06:38:41.244Z",
+            "physicalVersion": 0,
+            "compression": "none",
+            "fixtureOrigin": "Official released V0 real-shapes fixture (V1 shared layout, V2 frozen codec)",
+            "expectedUpstreamRefusal": "Surface before first step cannot acquire a system head without changing chronology",
+            "noArchiveCreated": true,
+            "sourceBytesMtimesAndFileSetUnchanged": true,
+            "noSuccessorGenerationPublished": true,
+            "coldPath": "explicit plain-encoding SDK context"
+          },
+          {
+            "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-afternoon/history-refusal-0-zstd-proof.json",
+            "completedAt": "2026-11-08T06:38:39.379Z",
+            "physicalVersion": 0,
+            "compression": "zstd",
+            "fixtureOrigin": "Official released V0 real-shapes fixture (V1 shared layout, V2 frozen codec)",
+            "expectedUpstreamRefusal": "Surface before first step cannot acquire a system head without changing chronology",
+            "noArchiveCreated": true,
+            "sourceBytesMtimesAndFileSetUnchanged": true,
+            "noSuccessorGenerationPublished": true,
+            "coldPath": "actual host-session-archive CLI"
+          },
+          {
+            "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-afternoon/history-refusal-1-none-proof.json",
+            "completedAt": "2026-11-08T06:38:41.445Z",
+            "physicalVersion": 1,
+            "compression": "none",
+            "fixtureOrigin": "Official released V0 real-shapes fixture (V1 shared layout, V2 frozen codec)",
+            "expectedUpstreamRefusal": "Surface before first step cannot acquire a system head without changing chronology",
+            "noArchiveCreated": true,
+            "sourceBytesMtimesAndFileSetUnchanged": true,
+            "noSuccessorGenerationPublished": true,
+            "coldPath": "explicit plain-encoding SDK context"
+          },
+          {
+            "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-afternoon/history-refusal-1-zstd-proof.json",
+            "completedAt": "2026-11-08T06:38:39.600Z",
+            "physicalVersion": 1,
+            "compression": "zstd",
+            "fixtureOrigin": "Official released V0 real-shapes fixture (V1 shared layout, V2 frozen codec)",
+            "expectedUpstreamRefusal": "Surface before first step cannot acquire a system head without changing chronology",
+            "noArchiveCreated": true,
+            "sourceBytesMtimesAndFileSetUnchanged": true,
+            "noSuccessorGenerationPublished": true,
+            "coldPath": "actual host-session-archive CLI"
+          },
+          {
+            "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-afternoon/history-refusal-2-none-proof.json",
+            "completedAt": "2026-11-08T06:38:41.672Z",
+            "physicalVersion": 2,
+            "compression": "none",
+            "fixtureOrigin": "Official released V0 real-shapes fixture (V1 shared layout, V2 frozen codec)",
+            "expectedUpstreamRefusal": "Surface before first step cannot acquire a system head without changing chronology",
+            "noArchiveCreated": true,
+            "sourceBytesMtimesAndFileSetUnchanged": true,
+            "noSuccessorGenerationPublished": true,
+            "coldPath": "explicit plain-encoding SDK context"
+          },
+          {
+            "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-afternoon/history-refusal-2-zstd-proof.json",
+            "completedAt": "2026-11-08T06:38:39.823Z",
+            "physicalVersion": 2,
+            "compression": "zstd",
+            "fixtureOrigin": "Official released V0 real-shapes fixture (V1 shared layout, V2 frozen codec)",
+            "expectedUpstreamRefusal": "Surface before first step cannot acquire a system head without changing chronology",
+            "noArchiveCreated": true,
+            "sourceBytesMtimesAndFileSetUnchanged": true,
+            "noSuccessorGenerationPublished": true,
+            "coldPath": "actual host-session-archive CLI"
+          }
+        ],
+        "testSource": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-afternoon/history-zip.test.mjs",
+        "testSourceSha256": "8fcd666461526b208296d8efe68bf58ccb86a5ba5f133852fab63a2c41ed85aa",
+        "repeat": "node --test D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-afternoon/history-zip.test.mjs",
+        "log": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-afternoon/history-zip.log",
+        "investigationLogs": [
+          "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-afternoon/history-corpus-probe-failure.log",
+          "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-afternoon/history-framing-probe-failure.log"
+        ],
+        "fixtureNotes": "The first corpus probe revealed the documented chronology refusal. Positive coverage uses the official supported packed/seeded corpus; the original real-shapes corpus remains a negative test. Corrected test-only Zstandard framing to keep its header in an independent first frame.",
+        "productSynced": false
+      },
+      "historicalArchiveTests": 16,
+      "runtimePreparationPerformed": false,
+      "fullSdkRegressionPerformed": false,
+      "typecheckPerformed": false,
+      "desktopValidationPerformed": false,
+      "desktopPreconditionChanged": false,
+      "elevatedShell": true,
+      "nativeZipVerified": false,
+      "productCodeChanged": false,
+      "isolatedProductCodeChanged": false,
+      "productSynced": false,
+      "scope": "Read-only SDK experiment against the existing unmodified isolated archive adapter. No package upgrade or product wiring this round. Existing elevated Windows blockers were not repeated.",
+      "action": "No eligible newer release. Added scoped historical archive and refusal evidence; retained the current SDK and all isolated production candidates.",
+      "validationLogs": [
+        "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-afternoon/upstream.json",
+        "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-afternoon/history-zip.log",
+        "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-afternoon/official-history-sources.json",
+        "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-afternoon/audit-preflight.json"
+      ]
+    },
+    {
+      "checkedAt": "2026-11-08T12:38:06.741Z",
+      "completedAt": "2026-11-08T12:55:59.350Z",
+      "localBranch": "dev",
+      "localCommit": "ab870bc7f0939936fcb274a5f8659ca232f7221d",
+      "version": "0.2.2-rc.1",
+      "newer": [],
+      "upstreamCommit": "66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db",
+      "superagentHead": "8c32a9dc5d72c033816c6a8110b37f40cf94fba4",
+      "artifactIntegrityVerified": true,
+      "sourceHashesVerified": 126,
+      "newTraceCount": 0,
+      "remainingTraceCount": 0,
+      "sdkOnly": {
+        "checkedAt": "2026-11-08T12:55:59.350Z",
+        "result": "failed-sdk-only-completeness-gate",
+        "tests": 8,
+        "passed": 7,
+        "failed": 1,
+        "successfulExports": 3,
+        "expectedRefusalsPassed": 4,
+        "unexpectedOmissions": 1,
+        "scope": "Synthetic V3 Zstandard multi-session corpus, using pinned official catalog/descriptor contracts and public persistence/query/export APIs; no user history or live Agent/model.",
+        "actualColdCliCases": 8,
+        "passedChecks": [
+          "Parent catalogs backfill deterministically by createdAt then ID; four nested logs export as V4 with dense coordinates.",
+          "Shared historical image/file references survive migration; each attachment is included once with identical bytes.",
+          "Child-root export includes only that subtree; fork catalog backfill uses the own descriptor after the inherited cut.",
+          "Known descriptor conflicts, a complete-frame checksum failure, missing files and same-size corrupted files refuse publication atomically."
+        ],
+        "failure": {
+          "id": "cataloged-local-child-absent-from-corpus",
+          "result": "unresolved",
+          "proof": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-evening/historical-missing-child-limitation.json",
+          "description": "A parent contains an owned local subagent/catalog fact, but the child log is absent. Official traceSession reports complete=true with no descendants; the official ZIP producer uses that corpus trace and successfully publishes only the parent. The same omission occurs in the actual cold CLI.",
+          "ownership": "Inherited known-corpus behavior in official query/export APIs; treat complete=true as ancestry/corpus completeness, not a guarantee that every owned catalog child is available.",
+          "userDataObserved": false,
+          "productCodeSynced": false,
+          "next": "Add an isolated completeness check or explicit partial-export result through public SDK interfaces. Respect inherited catalog entries and external-carrier entries, child-root archives and intentionally missing ancestry. Keep strict refusal acceptance red until implemented and validated; do not patch official packages."
+        },
+        "sourceImmutability": "All eight cases preserve source bytes, mtimes and file set, including independent cold-process exports/refusals; no V4 successor is published.",
+        "sourceProofs": [
+          {
+            "path": "packages/session/session-format-v3-to-v4/tests/catalog-completion.spec.ts",
+            "url": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/session/session-format-v3-to-v4/tests/catalog-completion.spec.ts",
+            "gitBlobSha1": "455535ed792bce47831779f9ba43359acf12a895",
+            "sha256": "9678f6a372da91add6aff6e945ba3c0286ff8fafaeaa037ea2c339c8f362496a",
+            "retainedAt": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-evening/catalog-completion.spec.ts"
+          },
+          {
+            "path": "packages/session-query/session-log-export/src/archive.ts",
+            "url": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/session-query/session-log-export/src/archive.ts",
+            "gitBlobSha1": "9ff6416689a6b43c635e6279235c9c84bf149713",
+            "sha256": "258cf53c50cfec9995fca90f98300c8f23860e3ade7774bd39bbf1c3aabc65d7",
+            "retainedAt": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-evening/archive.ts"
+          },
+          {
+            "path": "packages/session-query/session-query/src/tracing.ts",
+            "url": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/session-query/session-query/src/tracing.ts",
+            "gitBlobSha1": "0cd3fccfbb8e5f740bd88014d36b52bf23a4740a",
+            "sha256": "f63d528f4e31bbf7bb79c9add03095885e87f1ecf71c6aeaee01d509639ea60a",
+            "retainedAt": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-evening/tracing.ts"
+          }
+        ],
+        "proofs": [
+          {
+            "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-evening/historical-tree-proof.json",
+            "completedAt": "2026-11-08T12:50:20.214Z",
+            "case": "historical-tree",
+            "sourceFormat": 3,
+            "exportedFormat": 4,
+            "sourceCompression": "zstd",
+            "actualColdCli": true,
+            "sourceBytesMtimesAndFileSetUnchanged": true,
+            "noSuccessorGenerationPublished": true,
+            "separateColdProcessEntriesIdentical": true,
+            "modelOrLiveAgentMounted": false,
+            "entryNames": [
+              "session.v4.jsonl",
+              "subagents/a-child/session.v4.jsonl",
+              "subagents/grandchild/session.v4.jsonl",
+              "subagents/z-child/session.v4.jsonl",
+              "media/sha256:64573d0bf4823c2a9928649c9511dc3f88969a5327a3ebbf077378b8cbf72794.png",
+              "files/e9/e9894303057ddb1406840e7ed526d679fe1c235b9d94d070b4dd9561ab6c80a5/history.txt"
+            ],
+            "productSynced": false,
+            "deterministicCatalogOrder": true,
+            "attachmentDedupe": {
+              "image": 1,
+              "file": 1
+            },
+            "logs": 4
+          },
+          {
+            "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-evening/historical-subtree-proof.json",
+            "completedAt": "2026-11-08T12:50:20.592Z",
+            "case": "historical-subtree",
+            "sourceFormat": 3,
+            "exportedFormat": 4,
+            "sourceCompression": "zstd",
+            "actualColdCli": true,
+            "sourceBytesMtimesAndFileSetUnchanged": true,
+            "noSuccessorGenerationPublished": true,
+            "separateColdProcessEntriesIdentical": true,
+            "modelOrLiveAgentMounted": false,
+            "entryNames": [
+              "session.v4.jsonl",
+              "subagents/grandchild/session.v4.jsonl",
+              "media/sha256:64573d0bf4823c2a9928649c9511dc3f88969a5327a3ebbf077378b8cbf72794.png",
+              "files/e9/e9894303057ddb1406840e7ed526d679fe1c235b9d94d070b4dd9561ab6c80a5/history.txt"
+            ],
+            "productSynced": false,
+            "subtreeOnly": true
+          },
+          {
+            "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-evening/historical-fork-proof.json",
+            "completedAt": "2026-11-08T12:50:20.908Z",
+            "case": "historical-fork",
+            "sourceFormat": 3,
+            "exportedFormat": 4,
+            "sourceCompression": "zstd",
+            "actualColdCli": true,
+            "sourceBytesMtimesAndFileSetUnchanged": true,
+            "noSuccessorGenerationPublished": true,
+            "separateColdProcessEntriesIdentical": true,
+            "modelOrLiveAgentMounted": false,
+            "entryNames": [
+              "session.v4.jsonl",
+              "subagents/fork-child/session.v4.jsonl",
+              "media/sha256:64573d0bf4823c2a9928649c9511dc3f88969a5327a3ebbf077378b8cbf72794.png",
+              "files/e9/e9894303057ddb1406840e7ed526d679fe1c235b9d94d070b4dd9561ab6c80a5/history.txt"
+            ],
+            "productSynced": false,
+            "ownDescriptorAfterInheritedCut": true
+          },
+          {
+            "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-evening/historical-catalog-conflict-proof.json",
+            "completedAt": "2026-11-08T12:50:21.141Z",
+            "case": "historical-catalog-conflict",
+            "expectedRefusal": true,
+            "diagnosis": "Session child (raw log: D:\\projectGithub\\lolicode-harness-audit-20261108\\src-tauri\\target\\audit-logs\\1108-evening\\history-tree-fixture-kVCh1j\\home\\sessions\\_no-cwd\\child\\session.v3.jsonl.zstd) conflicts with its parent catalog; source v3 artifact remains unchanged (raw log: D:\\projectGithub\\lolicode-harness-audit-20261108\\src-tauri\\target\\audit-logs\\1108-evening\\history-tree-fixture-kVCh1j\\home\\sessions\\_no-cwd\\root\\session.v3.jsonl.zstd)",
+            "sourceFormat": 3,
+            "sourceCompression": "zstd",
+            "actualColdCli": true,
+            "sourceBytesMtimesAndFileSetUnchanged": true,
+            "noSuccessorGenerationPublished": true,
+            "noArchiveCreated": true,
+            "modelOrLiveAgentMounted": false,
+            "productSynced": false
+          },
+          {
+            "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-evening/historical-corrupt-child-proof.json",
+            "completedAt": "2026-11-08T12:50:21.729Z",
+            "case": "historical-corrupt-child",
+            "expectedRefusal": true,
+            "diagnosis": "LOLICODE_SESSION_LOG_UNREADABLE",
+            "sourceFormat": 3,
+            "sourceCompression": "zstd",
+            "actualColdCli": true,
+            "sourceBytesMtimesAndFileSetUnchanged": true,
+            "noSuccessorGenerationPublished": true,
+            "noArchiveCreated": true,
+            "modelOrLiveAgentMounted": false,
+            "productSynced": false
+          },
+          {
+            "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-evening/historical-missing-attachment-proof.json",
+            "completedAt": "2026-11-08T12:50:22.015Z",
+            "case": "historical-missing-attachment",
+            "expectedRefusal": true,
+            "diagnosis": "LOLICODE_SESSION_LOG_UNREADABLE",
+            "sourceFormat": 3,
+            "sourceCompression": "zstd",
+            "actualColdCli": true,
+            "sourceBytesMtimesAndFileSetUnchanged": true,
+            "noSuccessorGenerationPublished": true,
+            "noArchiveCreated": true,
+            "modelOrLiveAgentMounted": false,
+            "productSynced": false
+          },
+          {
+            "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-evening/historical-corrupt-attachment-proof.json",
+            "completedAt": "2026-11-08T12:50:22.305Z",
+            "case": "historical-corrupt-attachment",
+            "expectedRefusal": true,
+            "diagnosis": "LOLICODE_SESSION_LOG_UNREADABLE",
+            "sourceFormat": 3,
+            "sourceCompression": "zstd",
+            "actualColdCli": true,
+            "sourceBytesMtimesAndFileSetUnchanged": true,
+            "noSuccessorGenerationPublished": true,
+            "noArchiveCreated": true,
+            "modelOrLiveAgentMounted": false,
+            "productSynced": false
+          }
+        ],
+        "testSource": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-evening/history-tree.test.mjs",
+        "testSourceSha256": "783f5abb0de4427795c2c0176e65732518a7fb3365f722ae37347418b5a415f0",
+        "repeat": "node --test D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-evening/history-tree.test.mjs",
+        "log": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-evening/history-tree.log",
+        "investigationLogs": [
+          "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-evening/history-tree-initial-probe.log"
+        ],
+        "fixtureCorrections": "Initial probe truncated the last Zstandard frame (recoverable tail, not confirmed corruption) and tried writing a read-only published attachment. Final checks flip a complete-frame checksum and replace only the disposable attachment before fingerprinting. The strict missing-child completeness assertion was retained as a failing gate.",
+        "remaining": [
+          "Implement and validate a clear missing-owned-child completeness policy before accepting ZIP wiring.",
+          "Other historical generations and real-world attachment/catalog shapes are not covered by these V3 samples.",
+          "Actual native Windows ZIP save/cancel, current-dev desktop gates, remote-carrier export and /export UI remain pending.",
+          "These upstream SDK-format checks do not establish v1.0.6 installer overwrite compatibility."
+        ],
+        "productSynced": false
+      },
+      "historicalTreeTests": 8,
+      "passed": 7,
+      "failed": 1,
+      "runtimePreparationPerformed": false,
+      "fullSdkRegressionPerformed": false,
+      "typecheckPerformed": false,
+      "desktopValidationPerformed": false,
+      "desktopPreconditionChanged": false,
+      "elevatedShell": true,
+      "nativeContextProbe": {
+        "readOnly": true,
+        "elevationType": 1,
+        "elevated": true,
+        "linkedAvailable": false,
+        "linkedError": 1312,
+        "log": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-evening/context-probe.json",
+        "conclusion": "Current token is elevated/default with no linked token (1312); no process launched, no token modified, no persistent security or account changes."
+      },
+      "nativeZipVerified": false,
+      "productCodeChanged": false,
+      "isolatedProductCodeChanged": false,
+      "productSynced": false,
+      "scope": "No package upgrade or product wiring. Scoped SDK-only historical-tree tests found a new missing-cataloged-child export completeness gap. Existing native UI blockers were not repeated.",
+      "action": "No eligible newer release. Keep original version and all product candidates isolated: strict historical ZIP completeness gate failed (7/8 passed).",
+      "validationLogs": [
+        "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-evening/upstream.json",
+        "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-evening/history-tree.log",
+        "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-evening/historical-missing-child-limitation.json",
+        "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-evening/catalog-source-meta.json",
+        "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-evening/tree-source-metas.json",
+        "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-evening/context-probe.json",
+        "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-evening/audit-preflight.json"
+      ]
+    },
+    {
+      "checkedAt": "2026-11-08T18:30:27.824Z",
+      "completedAt": "2026-11-08T18:45:22.220Z",
+      "localBranch": "dev",
+      "localCommit": "ab870bc7f0939936fcb274a5f8659ca232f7221d",
+      "version": "0.2.2-rc.1",
+      "newer": [],
+      "upstreamCommit": "66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db",
+      "superagentHead": "8c32a9dc5d72c033816c6a8110b37f40cf94fba4",
+      "artifactIntegrityVerified": true,
+      "sourceHashesVerified": 126,
+      "newTraceCount": 0,
+      "remainingTraceCount": 0,
+      "sdkOnly": {
+        "checkedAt": "2026-11-08T18:41:41.481Z",
+        "result": "passed-sdk-only-awaiting-native-acceptance",
+        "fullSdkRegressionTests": 31,
+        "historicalArchiveRegressionTests": 26,
+        "failed": 0,
+        "historicalBreakdown": {
+          "v3Tree": 8,
+          "selectedV0ToV3Formats": 16,
+          "currentForkEncodings": 2
+        },
+        "changedFiles": [
+          "packages/lolicode-harness-runtime/README.md",
+          "packages/lolicode-harness-runtime/host-session-archive.mjs",
+          "packages/lolicode-harness-runtime/tests/host-operations.test.mjs"
+        ],
+        "fixedGap": {
+          "id": "cataloged-local-child-absent-from-corpus",
+          "status": "fixed-in-isolation-sdk-verified",
+          "previousFailure": {
+            "id": "cataloged-local-child-absent-from-corpus",
+            "proof": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-evening/historical-missing-child-limitation.json",
+            "repeat": "node --test D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1108-evening/history-tree.test.mjs",
+            "result": "failed"
+          },
+          "currentProof": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/historical-missing-child-proof.json",
+          "behavior": "Reject with LOLICODE_SESSION_LOG_UNREADABLE and publish no ZIP when an exported own local catalog child is missing or has mismatched identity in the exact upstream lineage observation.",
+          "implementation": "A scoped persistence read-handle facade inspects the same logical slices serialized by official readSessionLogText. It uses public inheritedEventCount and compares owned local catalog identities to the official ZIP lineage. Official streamSessionLogZip still owns archive production, attachment verification, backpressure and cancellation; no extra log reads or package edits.",
+          "boundaries": [
+            "Ignore fork-inherited catalog facts using the public inherited cut.",
+            "External catalog carriers do not require local logs; this is not verification of remote-carrier ZIP delivery.",
+            "Missing ancestors do not prevent exporting an available subtree.",
+            "Validate descendant catalogs after live flush; a new child outside the observation refuses publication and can be retried."
+          ],
+          "nativeProductVerified": false,
+          "productSynced": false
+        },
+        "meaningfulChecks": [
+          "Current format one-shot, continuable and unknown missing-child facts fail; mismatched creation date or parent fails in live and cold exports.",
+          "Inherited-only and external-only missing-local-log cases succeed without weakening local ownership checks.",
+          "A descendant gaining an unavailable child during the live flush fails before archive publication.",
+          "An available selected subtree exports despite missing ancestry, with the same bytes after a separate cold CLI.",
+          "The previously red V3 missing-child assertion is unchanged and now passes; all eight V3 tree cases preserve source bytes, mtimes and file set.",
+          "Existing 16 historical migration/refusal cases and two fork encoding cases still pass. Plain encoding remains explicitly configured, rather than the default product CLI."
+        ],
+        "sourceProofs": [
+          {
+            "path": "packages/session/session-persistence/src/handle.ts",
+            "url": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/session/session-persistence/src/handle.ts",
+            "gitBlobSha1": "b6a194c87d14b787df55452e50f0008b3f56337a",
+            "sha256": "2fd8b5c5188ffdf5adee78a260b3dd0a9be97e5eb9fcdb5aafae5a8ed5471a31"
+          },
+          {
+            "path": "packages/subagent/subagent/src/catalog.ts",
+            "url": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/subagent/subagent/src/catalog.ts",
+            "gitBlobSha1": "416625c59468bd661d8c68628c9d5694fc1bab52",
+            "sha256": "1e6344acbe543f494a5adc4f8e8af9be50333ea1fa18be391e43f8fc4005f776"
+          }
+        ],
+        "proofs": [
+          {
+            "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/historical-tree-proof.json",
+            "completedAt": "2026-11-08T18:36:26.468Z",
+            "case": "historical-tree",
+            "sourceFormat": 3,
+            "exportedFormat": 4,
+            "sourceCompression": "zstd",
+            "actualColdCli": true,
+            "sourceBytesMtimesAndFileSetUnchanged": true,
+            "noSuccessorGenerationPublished": true,
+            "separateColdProcessEntriesIdentical": true,
+            "modelOrLiveAgentMounted": false,
+            "entryNames": [
+              "session.v4.jsonl",
+              "subagents/a-child/session.v4.jsonl",
+              "subagents/grandchild/session.v4.jsonl",
+              "subagents/z-child/session.v4.jsonl",
+              "media/sha256:64573d0bf4823c2a9928649c9511dc3f88969a5327a3ebbf077378b8cbf72794.png",
+              "files/e9/e9894303057ddb1406840e7ed526d679fe1c235b9d94d070b4dd9561ab6c80a5/history.txt"
+            ],
+            "productSynced": false,
+            "deterministicCatalogOrder": true,
+            "attachmentDedupe": {
+              "image": 1,
+              "file": 1
+            },
+            "logs": 4
+          },
+          {
+            "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/historical-subtree-proof.json",
+            "completedAt": "2026-11-08T18:36:26.865Z",
+            "case": "historical-subtree",
+            "sourceFormat": 3,
+            "exportedFormat": 4,
+            "sourceCompression": "zstd",
+            "actualColdCli": true,
+            "sourceBytesMtimesAndFileSetUnchanged": true,
+            "noSuccessorGenerationPublished": true,
+            "separateColdProcessEntriesIdentical": true,
+            "modelOrLiveAgentMounted": false,
+            "entryNames": [
+              "session.v4.jsonl",
+              "subagents/grandchild/session.v4.jsonl",
+              "media/sha256:64573d0bf4823c2a9928649c9511dc3f88969a5327a3ebbf077378b8cbf72794.png",
+              "files/e9/e9894303057ddb1406840e7ed526d679fe1c235b9d94d070b4dd9561ab6c80a5/history.txt"
+            ],
+            "productSynced": false,
+            "subtreeOnly": true
+          },
+          {
+            "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/historical-fork-proof.json",
+            "completedAt": "2026-11-08T18:36:27.237Z",
+            "case": "historical-fork",
+            "sourceFormat": 3,
+            "exportedFormat": 4,
+            "sourceCompression": "zstd",
+            "actualColdCli": true,
+            "sourceBytesMtimesAndFileSetUnchanged": true,
+            "noSuccessorGenerationPublished": true,
+            "separateColdProcessEntriesIdentical": true,
+            "modelOrLiveAgentMounted": false,
+            "entryNames": [
+              "session.v4.jsonl",
+              "subagents/fork-child/session.v4.jsonl",
+              "media/sha256:64573d0bf4823c2a9928649c9511dc3f88969a5327a3ebbf077378b8cbf72794.png",
+              "files/e9/e9894303057ddb1406840e7ed526d679fe1c235b9d94d070b4dd9561ab6c80a5/history.txt"
+            ],
+            "productSynced": false,
+            "ownDescriptorAfterInheritedCut": true
+          },
+          {
+            "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/historical-catalog-conflict-proof.json",
+            "completedAt": "2026-11-08T18:36:27.501Z",
+            "case": "historical-catalog-conflict",
+            "expectedRefusal": true,
+            "diagnosis": "Session child (raw log: D:\\projectGithub\\lolicode-harness-audit-20261108\\src-tauri\\target\\audit-logs\\1109-early\\history-tree-fixture-Qu8VSt\\home\\sessions\\_no-cwd\\child\\session.v3.jsonl.zstd) conflicts with its parent catalog; source v3 artifact remains unchanged (raw log: D:\\projectGithub\\lolicode-harness-audit-20261108\\src-tauri\\target\\audit-logs\\1109-early\\history-tree-fixture-Qu8VSt\\home\\sessions\\_no-cwd\\root\\session.v3.jsonl.zstd)",
+            "sourceFormat": 3,
+            "sourceCompression": "zstd",
+            "actualColdCli": true,
+            "sourceBytesMtimesAndFileSetUnchanged": true,
+            "noSuccessorGenerationPublished": true,
+            "noArchiveCreated": true,
+            "modelOrLiveAgentMounted": false,
+            "productSynced": false
+          },
+          {
+            "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/historical-missing-child-proof.json",
+            "completedAt": "2026-11-08T18:36:27.774Z",
+            "case": "historical-missing-child",
+            "expectedRefusal": true,
+            "diagnosis": "LOLICODE_SESSION_LOG_UNREADABLE",
+            "sourceFormat": 3,
+            "sourceCompression": "zstd",
+            "actualColdCli": true,
+            "sourceBytesMtimesAndFileSetUnchanged": true,
+            "noSuccessorGenerationPublished": true,
+            "noArchiveCreated": true,
+            "modelOrLiveAgentMounted": false,
+            "productSynced": false
+          },
+          {
+            "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/historical-corrupt-child-proof.json",
+            "completedAt": "2026-11-08T18:36:28.118Z",
+            "case": "historical-corrupt-child",
+            "expectedRefusal": true,
+            "diagnosis": "LOLICODE_SESSION_LOG_UNREADABLE",
+            "sourceFormat": 3,
+            "sourceCompression": "zstd",
+            "actualColdCli": true,
+            "sourceBytesMtimesAndFileSetUnchanged": true,
+            "noSuccessorGenerationPublished": true,
+            "noArchiveCreated": true,
+            "modelOrLiveAgentMounted": false,
+            "productSynced": false
+          },
+          {
+            "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/historical-missing-attachment-proof.json",
+            "completedAt": "2026-11-08T18:36:28.574Z",
+            "case": "historical-missing-attachment",
+            "expectedRefusal": true,
+            "diagnosis": "LOLICODE_SESSION_LOG_UNREADABLE",
+            "sourceFormat": 3,
+            "sourceCompression": "zstd",
+            "actualColdCli": true,
+            "sourceBytesMtimesAndFileSetUnchanged": true,
+            "noSuccessorGenerationPublished": true,
+            "noArchiveCreated": true,
+            "modelOrLiveAgentMounted": false,
+            "productSynced": false
+          },
+          {
+            "path": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/historical-corrupt-attachment-proof.json",
+            "completedAt": "2026-11-08T18:36:29.013Z",
+            "case": "historical-corrupt-attachment",
+            "expectedRefusal": true,
+            "diagnosis": "LOLICODE_SESSION_LOG_UNREADABLE",
+            "sourceFormat": 3,
+            "sourceCompression": "zstd",
+            "actualColdCli": true,
+            "sourceBytesMtimesAndFileSetUnchanged": true,
+            "noSuccessorGenerationPublished": true,
+            "noArchiveCreated": true,
+            "modelOrLiveAgentMounted": false,
+            "productSynced": false
+          }
+        ],
+        "repeat": [
+          "node --test packages/lolicode-harness-runtime/tests/host-operations.test.mjs",
+          "node --test D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/history-tree.test.mjs D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/history-zip.test.mjs D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/zip-fork.test.mjs"
+        ],
+        "logs": [
+          "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/full-sdk.log",
+          "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/history-regression.log",
+          "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/catalog-sdk.log",
+          "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/prepare-runtime.log",
+          "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/typecheck.log",
+          "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/bundle-runtime.log",
+          "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/bundle-cli.log"
+        ],
+        "patch": "D:\\projectGithub\\lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/catalog-completeness-fix.patch",
+        "patchSha256": "79943491fef0b96f8130045faa8a840f095bbaaa72de53c426082b7254e6c131",
+        "baseline": {
+          "manifest": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/audit-preflight.json",
+          "sourceCopies": [
+            "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/host-session-archive.before.mjs",
+            "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/host-operations.before.test.mjs",
+            "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/runtime-README.before.md"
+          ],
+          "note": "This correction depends on the retained ZIP candidate; its patch is not a standalone patch for product dev, which does not yet contain that candidate."
+        },
+        "fixtureNotes": "The first new SDK-only fixture did not explicitly flush empty sessions and put createdAt outside creation meta. Corrected fixture persistence/metadata through the public APIs; the initial log is retained. Production assertions were not relaxed.",
+        "nativeBuildContainsCurrentGuard": false,
+        "nativeAcceptancePerformed": false,
+        "remaining": [
+          "Freshly rebuild the current Windows native candidate and complete real Save As/save/cancel plus the normal, background jobs, Goal/plan, dock and secretary website gates.",
+          "Retained elevated desktop restrictions are unchanged; do not treat SDK acceptance or older native proofs as current native acceptance.",
+          "Remote carriers, /export UI, unsupported historical shapes and v1.0.6 installer overwrite compatibility remain separate incomplete capabilities."
+        ],
+        "productSynced": false,
+        "bundledCliTests": 8,
+        "bundledAssetContainsCurrentGuard": true,
+        "bundledCli": {
+          "result": "passed-command-line-only",
+          "tests": 8,
+          "sourceProof": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/bundle-source-proof.json",
+          "sourceSha256": "e0b2f2feb0c0dd64cc84e2efc9cfdbce6623e2e71eccab41535c092efcd81865",
+          "bundledNodeSha256": "3602f2bb1a10f2cbab4c36886218a33c1ab3db87290e73b033c46c77147d0237",
+          "missingChildProof": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/bundled-cli/historical-missing-child-proof.json",
+          "repeat": "node --test D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/bundled-cli/history-tree-bundled.test.mjs",
+          "note": "Independent cold subprocesses use the actually prepared bundled node.exe, archive adapter and official packages. These command-line tests do not establish native Save As or full desktop acceptance."
+        }
+      },
+      "runtimePreparationPerformed": true,
+      "fullSdkRegressionPerformed": true,
+      "typecheckPerformed": true,
+      "desktopValidationPerformed": false,
+      "desktopPreconditionChanged": false,
+      "elevatedShell": true,
+      "nativeContextProbe": {
+        "readOnly": true,
+        "elevationType": 1,
+        "elevated": true,
+        "linkedAvailable": false,
+        "linkedError": 1312,
+        "log": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/context-probe.json"
+      },
+      "nativeZipVerified": false,
+      "productCodeChanged": false,
+      "isolatedProductCodeChanged": true,
+      "productSynced": false,
+      "action": "No eligible newer release. Fixed the historical ZIP owned-child completeness failure in the isolated host adapter. SDK 31 and archive 26 tests pass; retain the candidate until actual Windows acceptance is available.",
+      "scope": "Official packages, pinned version and lock unchanged. Only three isolated candidate files changed; no product changes synchronized. Existing elevated native UI gates were not repeated.",
+      "validationLogs": [
+        "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/upstream.json",
+        "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/full-sdk.log",
+        "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/history-regression.log",
+        "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/catalog-sdk.log",
+        "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/prepare-runtime.log",
+        "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/typecheck.log",
+        "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/context-probe.json",
+        "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/candidate-current.json",
+        "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/audit-preflight.json",
+        "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/bundle-runtime.log",
+        "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/bundle-cli.log",
+        "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-early/bundle-source-proof.json"
+      ],
+      "runtimeBundlePreparationPerformed": true
+    },
+    {
+      "checkedAt": "2026-11-09T00:32:55.687Z",
+      "completedAt": "2026-11-09T00:40:38.860Z",
+      "localBranch": "dev",
+      "localCommit": "ab870bc7f0939936fcb274a5f8659ca232f7221d",
+      "version": "0.2.2-rc.1",
+      "newer": [],
+      "upstreamCommit": "66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db",
+      "superagentHead": "8c32a9dc5d72c033816c6a8110b37f40cf94fba4",
+      "artifactIntegrityVerified": true,
+      "sourceHashesVerified": 126,
+      "newTraceCount": 0,
+      "updatedTraceCount": 1,
+      "remainingTraceCount": 0,
+      "sourceAudit": {
+        "checkedAt": "2026-11-09T00:40:38.860Z",
+        "result": "source-contract-verified-product-wiring-missing",
+        "clientContractTests": 5,
+        "upstreamSourceProofs": [
+          {
+            "path": "packages/client/ui-chat/src/chat-settings.ts",
+            "url": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/client/ui-chat/src/chat-settings.ts",
+            "gitBlobSha1": "ae9333ba37a7eb330019d10df5ff9d84b43c7f26",
+            "sha256": "60e3ccc9a1e550fa5c00d079b38f89ebd9e7f2b94a4ffc82958bba10b5903e60"
+          },
+          {
+            "path": "packages/client/ui-chat/src/client/contract/turn-process.ts",
+            "url": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/client/ui-chat/src/client/contract/turn-process.ts",
+            "gitBlobSha1": "a1f232e851abece81f25408e9bc577202dda3946",
+            "sha256": "dce44841b376607f143df8c990b4f9e54579655a2d6adc8fead2fe7112efe7ef"
+          },
+          {
+            "path": "packages/client/ui-chat/src/client/presentation-policy.ts",
+            "url": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/client/ui-chat/src/client/presentation-policy.ts",
+            "gitBlobSha1": "e1ff9ac04293c78965a6c9b068aaee63234665cd",
+            "sha256": "320f3a5d7c564f3374e98610ab77cfdb9141d3c81f7d1ddde3947ae86c1be4fd"
+          },
+          {
+            "path": "packages/client/ui-chat/src/client/chat/ChatNodeSeat.tsx",
+            "url": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/client/ui-chat/src/client/chat/ChatNodeSeat.tsx",
+            "gitBlobSha1": "4efdb94142b591fea37e5be720dbe23d44135ba8",
+            "sha256": "e3184a591fb0e2d71f6cf64031a36a4a6599edc90c15dd9ed55357d16e7ea754"
+          }
+        ],
+        "localSourceProofs": [
+          {
+            "file": "src/types/agent.ts",
+            "sha256": "3f70ab7af36c8cd872579fb061f8b36d979cd1acecb5a7486d233409f2500b1b"
+          },
+          {
+            "file": "src/features/agent/AgentTranscript.tsx",
+            "sha256": "46bdefdc5d4d3b8c061b1bc2352dc321a9b9f73dfcb3f7ddd309766752806815"
+          },
+          {
+            "file": "src/features/agent/AgentDisclosure.tsx",
+            "sha256": "99201c3c063eed80c72b823722651e302556d09d29641cd286042eb2db44b6d0"
+          },
+          {
+            "file": "src-tauri/src/services/harness_snapshot.rs",
+            "sha256": "916e46890c78793683cc83d4c2008de12b16f4353d003d0a293b43026f3ea02d"
+          }
+        ],
+        "findings": [
+          {
+            "kind": "upstream-contract",
+            "detail": "Host-backed ui-chat settings independently store transcriptView (compact/standard/detailed/verbose), collapseTiming (completion/next-input) and foldedReplies (all/final). The default keeps all replies; legacy normal/expanded detail values remain accepted."
+          },
+          {
+            "kind": "upstream-contract",
+            "detail": "Final-only controls visibility inside a completed native Turn process. It does not remove messages from history/model input. Verbose mode does not fold; open/stopped/interrupted/error Turns stay open. Interleaved input also disables whole-Turn folding; partial history can become eligible from a loaded end without its start."
+          },
+          {
+            "kind": "local-source-fact",
+            "detail": "AgentMessage exposes id/role/createdAt/completedAt/parts, without native Turn/Step/seq membership. harness_snapshot::assistant_message forwards only the nested message and time; turn/start/end update global status/error instead of retaining per-Turn presentation metadata. AgentTranscript groups text and activity boundaries without a native Turn-process projection."
+          },
+          {
+            "kind": "inference",
+            "detail": "A final-only checkbox that filters to the last assistant text between visible user messages would lose native boundaries for background or Goal continuations, interleaved steering, interrupted Turns and partial history. The flattened message contract alone cannot establish upstream-equivalent final-answer selection."
+          }
+        ],
+        "nextImplementation": [
+          "Project authoritative native Turn/Step/seq, final answer boundary and per-Turn lifecycle/reason into a compatible view sidecar for both live frames and read-only history replay; preserve old message IDs and user data.",
+          "Reuse upstream public presentation/Turn-process contracts where possible, with independent durable preferences and proper legacy/default handling. Keep all replies as the default.",
+          "Apply final-only to a completed process disclosure; expanding restores intermediate replies. Keep active/failed/interrupted and interleaved-input processes visible; preserve tool/error/question/automation surfaces.",
+          "Verify live-to-settled replacement, separate background/Goal Turns without extra user bubbles, two user inputs in one Turn, empty-answer/tool-only Turns, paged partial history, search reveal and scroll anchors, session switching and restart. Compare complete export and actual model request bytes before/after the preference."
+        ],
+        "repeat": "node --test D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-morning/display-contract.test.mjs",
+        "testSourceSha256": "769a1f4516c65282ca8d4a2e6c968e0c7241247f1bc83ca0363bd8f42d8c7802",
+        "log": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-morning/display-contract.log",
+        "proof": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-morning/display-contract-proof.json",
+        "scope": "Exact pinned upstream pure TypeScript contracts executed with Node type stripping; only schemastery dependency resolution adapted. React ChatNodeSeat inspected as source. No product renderer, native UI, model, Agent, user settings or user data exercised.",
+        "productFeatureImplemented": false,
+        "productSynced": false
+      },
+      "upstreamClientContractTests": 5,
+      "runtimePreparationPerformed": false,
+      "fullSdkRegressionPerformed": false,
+      "typecheckPerformed": false,
+      "desktopValidationPerformed": false,
+      "desktopPreconditionChanged": false,
+      "nativeContextProbe": {
+        "readOnly": true,
+        "elevationType": 1,
+        "elevated": true,
+        "linkedAvailable": false,
+        "linkedError": 1312,
+        "log": "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-morning/context-probe.json"
+      },
+      "nativeZipVerified": false,
+      "productCodeChanged": false,
+      "isolatedProductCodeChanged": false,
+      "productSynced": false,
+      "scope": "Source audit and pure upstream display contracts only. No candidate production source changed. Prior SDK/archive/bundle evidence is retained by its original timestamp; not rerun or relabelled as current native acceptance.",
+      "action": "No eligible newer release. Refined the display-modes gap to native Turn-process projection and host-backed preference wiring; kept the SDK version and all product candidates unchanged.",
+      "validationLogs": [
+        "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-morning/upstream.json",
+        "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-morning/display-contract.log",
+        "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-morning/display-contract-proof.json",
+        "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-morning/display-source-metas.json",
+        "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-morning/local-display-source-hashes.json",
+        "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-morning/context-probe.json",
+        "D:/projectGithub/lolicode-harness-audit-20261108/src-tauri/target/audit-logs/1109-morning/audit-preflight.json"
       ]
     }
   ]
