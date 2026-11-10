@@ -96,7 +96,7 @@ async function fixture(t, onModelCall, onHostRequest) {
     home,
     project,
     get modelError() { return modelError; },
-    async start({ userQuestions = false, pluginBundles = [] } = {}) {
+    async start({ userQuestions = false, pluginBundles = [], patchFiles = [], initialize = true } = {}) {
       const env = Object.fromEntries(Object.entries(process.env).filter(([key]) =>
         /^(PATH|HOME|USERPROFILE|SYSTEMROOT|SYSTEMDRIVE|WINDIR|TEMP|TMP|TMPDIR)$/i.test(key)));
       const child = spawn(process.execPath, [
@@ -105,6 +105,7 @@ async function fixture(t, onModelCall, onHostRequest) {
         ...pluginBundles.flatMap((name) => [
           "--patch", path.join(root, "node_modules", "@deepseek-ai", name, "cordis.patch.yml"),
         ]),
+        ...patchFiles.flatMap(file => ["--patch", file]),
         "--patch", path.join(root, "profile.cordis.patch.yml"),
         "--patch", path.join(root, "host-operations.cordis.patch.yml"),
         "--patch", gateway,
@@ -144,8 +145,10 @@ async function fixture(t, onModelCall, onHostRequest) {
           throw error;
         }
       }
-      const ready = await request("initialize", { cwd: project, provider, model, approvalRequests: true, capabilities: { userQuestions } });
-      assert.equal(ready.serverInfo.name, "deepseek-harness-sdk-runtime");
+      if (initialize) {
+        const ready = await request("initialize", { cwd: project, provider, model, approvalRequests: true, capabilities: { userQuestions } });
+        assert.equal(ready.serverInfo.name, "deepseek-harness-sdk-runtime");
+      }
       return {
         request,
         notifications,
@@ -357,6 +360,80 @@ test("a native watch opened during the first model response retains the official
     assert.ok(JSON.stringify(committed.frame.event.data.message).includes("First attempt prefix before viewer plus the suffix"));
     assert.ok(committed.frame.event.data.stream.length > 0);
     assert.equal(modelCalls, 1);
+  } finally {
+    if (output && !output.writableEnded) output.destroy();
+    await client.request("lolicode/session/unfollow-native", { subscriptionId }).catch(() => {});
+    await client.shutdown();
+  }
+});
+
+test("runtime preparation creates no Agent, model request or history and preserves the first native stream prefix", { timeout: 60_000 }, async (t) => {
+  const sessionId = "prepared-runtime-first-root";
+  const subscriptionId = "prepared-runtime-first-watch";
+  const ready = Promise.withResolvers();
+  let modelCalls = 0;
+  let output;
+  const runtime = await fixture(t, (_body, response) => {
+    modelCalls++;
+    response.writeHead(200, { "Content-Type": "text/event-stream" });
+    writeModelChunk(response, { role: "assistant" });
+    writeModelChunk(response, { content: "Prepared runtime stream prefix" });
+    output = response;
+    ready.resolve();
+  });
+  const monitor = path.join(runtime.home, "preparation-counts.json");
+  const plugin = path.join(runtime.home, "preparation-monitor.mjs");
+  const patch = path.join(runtime.home, "preparation-monitor.json");
+  await writeFile(plugin, `import { writeFileSync } from "node:fs";\nexport const inject = ["agents", "sessions"];\nexport function apply(ctx) { let createdAgents = 0, createdSessions = 0; const report = () => writeFileSync(${JSON.stringify(monitor)}, JSON.stringify({ agents: ctx.agents.list().length, sessions: ctx.sessions.list().length, createdAgents, createdSessions })); ctx.on("agent/created", () => { createdAgents++; report(); }); ctx.on("session/created", () => { createdSessions++; report(); }); report(); }\n`);
+  await writeFile(patch, JSON.stringify([{ insert: [{ id: "fixture-preparation-monitor", name: plugin }] }]));
+  const client = await runtime.start({ patchFiles: [patch], initialize: false });
+  const method = "lolicode/runtime/prepare";
+  const counts = async () => JSON.parse(await readFile(monitor, "utf8"));
+  const journals = async () => (await readdir(runtime.home, { recursive: true })).filter(entry =>
+    entry.split(path.sep).includes("sessions") || /\.jsonl(?:\.zstd)?$/.test(entry)).sort();
+  try {
+    await assert.rejects(client.request(method, {}), /not initialized/);
+    await client.request("initialize", { cwd: runtime.project, provider, model, approvalRequests: true, capabilities: { userQuestions: true } });
+    assert.deepEqual(await counts(), { agents: 0, sessions: 0, createdAgents: 0, createdSessions: 0 });
+    const before = await journals();
+    // The official carrier canonicalizes non-object params to {} before
+    // dispatch. The private method accepts no session, activation or route.
+    for (const params of [{ sessionId }, { activate: true }, { provider }]) {
+      await assert.rejects(client.request(method, params), /Invalid LoliCode runtime preparation/);
+    }
+    const firstAt = performance.now();
+    assert.deepEqual(await client.request(method, {}), {});
+    const firstMs = performance.now() - firstAt;
+    const repeatAt = performance.now();
+    const repeats = await Promise.all(Array.from({ length: 4 }, () => client.request(method, {})));
+    const repeatedMs = performance.now() - repeatAt;
+    assert.deepEqual(repeats, [{}, {}, {}, {}]);
+    assert.deepEqual(await counts(), { agents: 0, sessions: 0, createdAgents: 0, createdSessions: 0 });
+    assert.deepEqual(await journals(), before);
+    assert.equal(modelCalls, 0);
+    assert.equal(client.notifications.filter(({ method }) => method === "session.event").length, 0);
+    t.diagnostic(`runtime prepare first=${firstMs.toFixed(1)}ms, four cached RPCs=${repeatedMs.toFixed(1)}ms`);
+    await client.open(sessionId);
+    assert.equal((await counts()).agents, 1);
+    await client.prompt(sessionId, "Start only after runtime preparation completes.");
+    await ready.promise;
+    await fixtureNotice(client, "lolicode/session.assistant-stream", notice => notice.sessionId === sessionId &&
+      JSON.stringify(notice).includes("Prepared runtime stream prefix"));
+    await client.request("lolicode/session/follow-native", { sessionId, subscriptionId, maxMessages: 12 });
+    const opening = await fixtureNotice(client, "lolicode/session.native-follow", notice =>
+      notice.subscriptionId === subscriptionId && notice.frame?.type === "snapshot");
+    assert.ok(opening.frame.assistantStream.activeAttempt);
+    assert.ok(JSON.stringify(opening.frame.assistantStream).includes("Prepared runtime stream prefix"));
+    writeModelChunk(output, { content: " and committed suffix" });
+    writeModelChunk(output, {}, "stop");
+    output.end("data: [DONE]\n\n");
+    await client.wait(sessionId);
+    const committed = await fixtureNotice(client, "lolicode/session.native-follow", notice =>
+      notice.subscriptionId === subscriptionId && notice.frame?.event?.type === "assistant/message");
+    assert.ok(JSON.stringify(committed.frame.event.data.message).includes("Prepared runtime stream prefix and committed suffix"));
+    assert.ok(committed.frame.event.data.stream.length > 0);
+    assert.equal(modelCalls, 1);
+    assert.equal(runtime.modelError, undefined);
   } finally {
     if (output && !output.writableEnded) output.destroy();
     await client.request("lolicode/session/unfollow-native", { subscriptionId }).catch(() => {});
@@ -1190,6 +1267,263 @@ test("cancellation aborts the selected owned root and leaves the other root runn
   await client.wait(second);
   await client.wait(first);
   await client.shutdown();
+});
+
+test("warm roots park durably across turns and changed one-time configuration requires a fresh process", { timeout: 60_000 }, async (t) => {
+  const sessionId = "warm-configuration-root";
+  const bodies = [];
+  const runtime = await fixture(t, (body, response) => {
+    bodies.push(body);
+    modelReply(response, `Warm fixture answer ${bodies.length}`);
+  });
+  const tools = version => [{ function: {
+    name: `fixture_warm_${version}`, description: `Product ${version}`,
+    parameters: { type: "object", properties: {} },
+  } }];
+  const mcp = version => [{ function: {
+    name: `mcp_warm_${version}`, description: `MCP ${version}`,
+    parameters: { type: "object", properties: {} },
+  } }];
+  const workspace = version => ({
+    policy: "workspace", memory: `WARM_MEMORY_${version}`,
+    skills: [{ name: "warm-fixture", description: `WARM_SKILL_${version}`, content: `# Skill ${version}` }],
+  });
+  async function configure(client, version) {
+    assert.deepEqual(await client.request("lolicode/session/configure-workspace", { sessionId, workspace: workspace(version) }), { registered: 1 });
+    assert.deepEqual(await client.request("lolicode/session/configure-tools", { sessionId, tools: tools(version) }), { registered: 1 });
+    assert.deepEqual(await client.request("lolicode/session/configure-mcp", { sessionId, tools: mcp(version) }), { registered: 1 });
+  }
+  const park = client => client.request("lolicode/session/park", { sessionId });
+  const read = client => client.request("lolicode/session/read-native", { sessionId, maxMessages: 200 });
+  const client = await runtime.start();
+  let second;
+  const receipts = [];
+  try {
+    await assert.rejects(client.request("lolicode/session/park", { sessionId: "unowned" }), /not an open root/);
+    await assert.rejects(client.request("lolicode/session/park", { sessionId, activate: true }), /Invalid/);
+    await client.open(sessionId);
+    assert.deepEqual(await park(client), { parked: false });
+    await configure(client, "V1");
+    receipts.push(await client.prompt(sessionId, "WARM_ROUND_ONE"));
+    await client.wait(sessionId);
+    assert.deepEqual(await park(client), { parked: true });
+    const first = await read(client);
+    const cold = await execFileAsync(process.execPath, [
+      path.join(root, "host-session-native.mjs"), path.join(runtime.home, "sessions"), sessionId,
+      JSON.stringify({ maxMessages: 200, throughSeq: first.page.cursor }),
+    ], { env: {}, windowsHide: true, timeout: 30_000 });
+    const persisted = JSON.parse(cold.stdout);
+    assert.deepEqual(persisted.page, first.page);
+    assert.deepEqual(persisted.projections, first.projections);
+    assert.equal(persisted.page.records.filter(({ event }) => event.type === "turn/end").at(-1).event.data.reason.kind, "completed");
+    await client.open(sessionId);
+    await assert.rejects(client.request("session/resume", { sessionId }), /already open/);
+    receipts.push(await client.prompt(sessionId, "WARM_ROUND_TWO"));
+    await client.wait(sessionId);
+    assert.deepEqual(await park(client), { parked: true });
+    const native = await read(client);
+    const events = native.page.records.map(record => record.event);
+    assert.equal(new Set(events.map(event => event.seq)).size, events.length);
+    assert.deepEqual(events.filter(event => event.type === "user/message" && event.data.source.kind === "user").map(event => event.data.id), receipts.map(receipt => receipt.messageId));
+    const notifications = client.notifications.filter(({ method, params }) => method === "session.event" && params.sessionId === sessionId).map(({ params }) => params.event);
+    assert.equal(new Set(notifications.map(event => event.seq)).size, notifications.length);
+    for (const body of bodies) {
+      const prompt = JSON.stringify(body.messages);
+      assert.ok(prompt.includes("WARM_MEMORY_V1"));
+      assert.ok(prompt.includes("WARM_SKILL_V1"));
+      assert.equal(body.tools.filter(tool => tool.function.name === "fixture_warm_V1").length, 1);
+      assert.equal(body.tools.filter(tool => tool.function.name === "mcp_warm_V1").length, 1);
+    }
+    for (const method of ["configure-tools", "configure-mcp"]) {
+      await assert.rejects(client.request(`lolicode/session/${method}`, { sessionId, tools: [] }), /repeated/);
+    }
+    await assert.rejects(client.request("lolicode/session/configure-workspace", { sessionId, workspace: workspace("V2") }), /already registered/);
+    await client.shutdown();
+    second = await runtime.start();
+    await second.request("session/resume", { sessionId });
+    await configure(second, "V2");
+    receipts.push(await second.prompt(sessionId, "WARM_ROUND_THREE_NEW_CONFIGURATION"));
+    await second.wait(sessionId);
+    assert.deepEqual(await park(second), { parked: true });
+    const refreshed = bodies.at(-1);
+    const prompt = JSON.stringify(refreshed.messages);
+    assert.ok(prompt.includes("WARM_MEMORY_V2"));
+    assert.ok(prompt.includes("WARM_SKILL_V2"));
+    assert.ok(!prompt.includes("WARM_MEMORY_V1"));
+    // Official history retains the previous skill-catalog notice. The new
+    // admission must advertise the updated catalog after that historical one.
+    assert.ok(prompt.lastIndexOf("WARM_SKILL_V2") > prompt.lastIndexOf("WARM_SKILL_V1"));
+    const names = refreshed.tools.map(tool => tool.function.name);
+    assert.ok(names.includes("fixture_warm_V2") && names.includes("mcp_warm_V2"));
+    assert.ok(!names.includes("fixture_warm_V1") && !names.includes("mcp_warm_V1"));
+    const final = await read(second);
+    assert.deepEqual(final.page.records.filter(({ event }) => event.type === "user/message" && event.data.source.kind === "user").map(({ event }) => event.data.id), receipts.map(receipt => receipt.messageId));
+    assert.equal(bodies.length, 3);
+  } finally {
+    if (second) await second.shutdown();
+    else await client.shutdown().catch(() => {});
+  }
+});
+
+test("warm cancellation preserves queued identities and park refuses activity without interrupting it", { timeout: 45_000 }, async (t) => {
+  const sessionId = "warm-cancellation-root";
+  const waiting = Promise.withResolvers();
+  const seen = [];
+  const runtime = await fixture(t, (body, response) => {
+    const markers = ["WARM_CANCEL_ONE", "WARM_CANCEL_TWO", "WARM_CANCEL_THREE"];
+    const marker = body.messages.filter(message => message.role === "user").reverse()
+      .map(message => markers.find(value => JSON.stringify(message.content).includes(value))).find(Boolean);
+    assert.ok(marker);
+    seen.push(marker);
+    if (marker === "WARM_CANCEL_TWO") {
+      response.writeHead(200, { "Content-Type": "text/event-stream" });
+      writeModelChunk(response, { role: "assistant" });
+      writeModelChunk(response, { content: "Cancelled warm prefix" });
+      waiting.resolve(response);
+    } else modelReply(response, `Completed ${marker}`);
+  });
+  const client = await runtime.start();
+  const park = () => client.request("lolicode/session/park", { sessionId });
+  let response;
+  try {
+    await client.open(sessionId);
+    await client.request("lolicode/session/configure-workspace", { sessionId, workspace: { policy: "workspace", skills: [], memory: "" } });
+    const first = await client.prompt(sessionId, "WARM_CANCEL_ONE");
+    await client.wait(sessionId);
+    assert.equal(runtime.modelError, undefined);
+    assert.deepEqual(await park(), { parked: true });
+    const second = await client.prompt(sessionId, "WARM_CANCEL_TWO");
+    response = await waiting.promise;
+    assert.deepEqual(await park(), { parked: false });
+    assert.equal(response.destroyed, false);
+    const queued = await client.prompt(sessionId, "OLD_QUEUED_WARM_INPUT");
+    assert.deepEqual(await park(), { parked: false });
+    assert.equal(response.destroyed, false);
+    const closed = new Promise(resolve => response.once("close", resolve));
+    await client.request(cancelMethod, { sessionId });
+    await closed;
+    await client.wait(sessionId);
+    assert.deepEqual(await park(), { parked: false });
+    const pending = await client.request("lolicode/session/read-native", { sessionId, maxMessages: 200 });
+    assert.deepEqual(pending.projections.values.inbox["next-turn"].map(message => message.id), [queued.messageId]);
+    assert.deepEqual(await client.request("lolicode/session/queued-action", { sessionId, messageId: queued.messageId, action: "remove" }), { messageId: queued.messageId, status: "removed" });
+    assert.deepEqual(await park(), { parked: false }, "a cancelled turn remains ineligible after its inbox clears");
+    const third = await client.prompt(sessionId, "WARM_CANCEL_THREE");
+    await client.wait(sessionId);
+    assert.deepEqual(await park(), { parked: true });
+    const native = await client.request("lolicode/session/read-native", { sessionId, maxMessages: 200 });
+    const events = native.page.records.map(record => record.event);
+    assert.equal(new Set(events.map(event => event.seq)).size, events.length);
+    assert.deepEqual(events.filter(event => event.type === "user/message" && event.data.source.kind === "user").map(event => event.data.id), [first.messageId, second.messageId, third.messageId]);
+    assert.deepEqual(events.filter(event => event.type === "turn/end").map(event => event.data.reason.kind), ["completed", "aborted", "completed"]);
+    assert.deepEqual(seen, ["WARM_CANCEL_ONE", "WARM_CANCEL_TWO", "WARM_CANCEL_THREE"]);
+  } finally {
+    if (response && !response.writableEnded) response.destroy();
+    await client.shutdown();
+  }
+});
+
+test("park refuses a live child without cancelling it or changing its completed parent's state", { timeout: 45_000 }, async (t) => {
+  const sessionId = "park-child-root";
+  const childStarted = Promise.withResolvers();
+  const runtime = await fixture(t, (body, response) => {
+    const input = JSON.stringify(body.messages.filter(message => message.role === "user"));
+    if (input.includes("PARK_CHILD_WORK")) return childStarted.resolve(response);
+    if (!body.messages.some(message => message.role === "tool" && message.tool_call_id === "park-child")) {
+      return fixtureTool(response, "park-child", "subagent", { description: "Parking child fixture", prompt: "PARK_CHILD_WORK" });
+    }
+    modelReply(response, "The parent settled without interrupting its child.");
+  });
+  const client = await runtime.start();
+  let response;
+  try {
+    await client.open(sessionId);
+    await client.request("lolicode/session/configure-workspace", { sessionId, workspace: { policy: "workspace", skills: [], memory: "" } });
+    await client.prompt(sessionId, "Start the independent parking fixture child.");
+    response = await childStarted.promise;
+    await fixtureNotice(client, "session.event", notice => notice.sessionId === sessionId && notice.event.type === "turn/end");
+    const before = await client.request("lolicode/session/read-native", { sessionId, maxMessages: 200 });
+    assert.equal(before.state.running, false);
+    assert.deepEqual(await client.request("lolicode/session/park", { sessionId }), { parked: false });
+    assert.equal(response.destroyed, false);
+    const after = await client.request("lolicode/session/read-native", { sessionId, maxMessages: 200 });
+    assert.deepEqual(after.page, before.page);
+    modelReply(response, "The child completed after the rejected park request.");
+    await client.wait(sessionId);
+    assert.deepEqual(await client.request("lolicode/session/park", { sessionId }), { parked: false });
+    assert.equal(runtime.modelError, undefined);
+  } finally {
+    if (response && !response.writableEnded) response.destroy();
+    await client.shutdown();
+  }
+});
+
+test("a failing official session flush rejects park and leaves the root usable", { timeout: 45_000 }, async (t) => {
+  const sessionId = "park-flush-failure-root";
+  const runtime = await fixture(t, (_body, response) => modelReply(response, "Durable parking fixture."));
+  const marker = path.join(runtime.home, "fail-flush");
+  const plugin = path.join(runtime.home, "flush-fault.mjs");
+  const patch = path.join(runtime.home, "flush-fault.json");
+  await writeFile(plugin, `import { existsSync } from "node:fs";\nexport default function(ctx) { ctx.on("session/flush", () => { if (existsSync(${JSON.stringify(marker)})) throw new Error("fixture park flush failed"); }); }\n`);
+  await writeFile(patch, JSON.stringify([{ insert: [{ id: "fixture-flush-fault", name: plugin }] }]));
+  const client = await runtime.start({ patchFiles: [patch] });
+  try {
+    await client.open(sessionId);
+    await client.request("lolicode/session/configure-workspace", { sessionId, workspace: { policy: "workspace", skills: [], memory: "" } });
+    await client.prompt(sessionId, "Complete before injecting the durability failure.");
+    await client.wait(sessionId);
+    await writeFile(marker, "fail");
+    await assert.rejects(client.request("lolicode/session/park", { sessionId }), /fixture park flush failed/);
+    await rm(marker);
+    const before = await client.request("lolicode/session/read-native", { sessionId, maxMessages: 200 });
+    assert.equal(before.state.running, false);
+    await client.prompt(sessionId, "The same root can continue after the rejected park.");
+    await client.wait(sessionId);
+    assert.deepEqual(await client.request("lolicode/session/park", { sessionId }), { parked: true });
+    const after = await client.request("lolicode/session/read-native", { sessionId, maxMessages: 200 });
+    assert.equal(after.projections.values.turnOutline.length, 2);
+    assert.equal(runtime.modelError, undefined);
+  } finally {
+    await client.shutdown();
+  }
+});
+
+test("a parked first-prompt title provider does not request another title on the next warm turn", { timeout: 45_000 }, async (t) => {
+  const sessionId = "warm-first-title-root";
+  const calls = [];
+  const runtime = await fixture(t, (body, response) => {
+    const title = JSON.stringify(body.messages).includes("Create a concise title for an AI coding-assistant session");
+    calls.push(title ? "title" : "main");
+    modelReply(response, title ? "Warm Session Title" : "The warm main turn completed.");
+  });
+  const patch = path.join(runtime.home, "enable-first-title.json");
+  await writeFile(patch, JSON.stringify([{ id: "session-title-llm", disabled: false }]));
+  const client = await runtime.start({ patchFiles: [patch] });
+  try {
+    await client.open(sessionId);
+    await client.request("lolicode/session/configure-workspace", { sessionId, workspace: { policy: "workspace", skills: [], memory: "" } });
+    await client.prompt(sessionId, "FIRST_WARM_TITLE_PROMPT");
+    await client.wait(sessionId);
+    await fixtureNotice(client, "session.event", notice => notice.sessionId === sessionId &&
+      notice.event.type === "session/title" && notice.event.data.source.kind === "provider" &&
+      notice.event.data.title === "Warm Session Title");
+    assert.deepEqual(calls.slice().sort(), ["main", "title"]);
+    assert.deepEqual(await client.request("lolicode/session/park", { sessionId }), { parked: true });
+    const before = await client.request("lolicode/session/read-native", { sessionId, maxMessages: 200 });
+    await client.prompt(sessionId, "SECOND_WARM_TITLE_PROMPT");
+    await client.wait(sessionId);
+    assert.deepEqual(await client.request("lolicode/session/park", { sessionId }), { parked: true });
+    assert.equal(runtime.modelError, undefined);
+    assert.equal(calls.filter(call => call === "title").length, 1);
+    assert.equal(calls.filter(call => call === "main").length, 2);
+    assert.equal(calls.length, 3);
+    const after = await client.request("lolicode/session/read-native", { sessionId, maxMessages: 200 });
+    assert.equal(after.projections.values.title, "Warm Session Title");
+    assert.deepEqual(after.page.records.filter(({ event }) => event.type === "session/title"),
+      before.page.records.filter(({ event }) => event.type === "session/title"));
+  } finally {
+    await client.shutdown();
+  }
 });
 
 test("the queue removes or steers the original SDK message without cancelling the active turn", { timeout: 45_000 }, async (t) => {

@@ -1650,7 +1650,12 @@ export function AgentPage({
               } else if (current.stopRequested) {
                 // Admission has now been proven after the earlier Stop. Repeat it
                 // in that order before accepting an idle snapshot as settlement.
-                await dispatchAgentStop(id, agentApi.interruptSession, true);
+                await dispatchAgentStop(
+                  id,
+                  (target) =>
+                    agentApi.interruptSession(target, current.requestId),
+                  true,
+                );
                 updateAgentSubmission(
                   next.session.projectPath,
                   id,
@@ -1870,6 +1875,38 @@ export function AgentPage({
     },
   );
   const nativeSessionRef = useRef(nativeSession);
+  const preparingSession =
+    snapshot?.session.id === sessionId
+      ? snapshot.session
+      : sessions.find((session) => session.id === sessionId);
+  const preparationKey = preparingSession
+    ? JSON.stringify([
+        preparingSession.model,
+        preparingSession.mode,
+        preparingSession.permissionMode,
+        preparingSession.reasoningEffort,
+        preparingSession.contextLimit,
+      ])
+    : "";
+  useEffect(() => {
+    if (!isActive || !usesNativeTranscript || !sessionId) return;
+    if (
+      snapshot?.session.id === sessionId &&
+      snapshot.status !== "idle" &&
+      snapshot.status !== "error"
+    )
+      return;
+    // Only initialize a private official SDK host. No Agent or model turn is
+    // created here; normal sending still owns admission and request identity.
+    void agentApi.prepareSession(sessionId).catch(() => {});
+  }, [
+    isActive,
+    usesNativeTranscript,
+    sessionId,
+    preparationKey,
+    snapshot?.status,
+    desktopActivityRevision,
+  ]);
   nativeSessionRef.current = nativeSession;
   const loadNativeEarlier = useCallback(() => {
     void nativeSessionRef.current.loadOlder();
@@ -3913,7 +3950,11 @@ export function AgentPage({
           updateAgentSubmission(projectPath, id, requestId, {
             stopAcknowledged: false,
           });
-          await dispatchAgentStop(id, agentApi.interruptSession, true);
+          await dispatchAgentStop(
+            id,
+            (target) => agentApi.interruptSession(target, requestId),
+            true,
+          );
           updateAgentSubmission(projectPath, id, requestId, {
             stopAcknowledged: true,
           });
@@ -4010,7 +4051,12 @@ export function AgentPage({
     setStopping(stoppingRef.current);
     setError(null);
     try {
-      await dispatchAgentStop(id, agentApi.interruptSession);
+      await dispatchAgentStop(
+        id,
+        submitted
+          ? (target) => agentApi.interruptSession(target, submitted.requestId)
+          : agentApi.interruptSession,
+      );
       if (submitted)
         updateAgentSubmission(projectPath!, id, submitted.requestId, {
           stopAcknowledged: true,

@@ -413,6 +413,27 @@ pub async fn read_agent_session_markdown(
 }
 
 #[tauri::command(rename_all = "camelCase")]
+pub async fn prepare_agent_session(
+    app: AppHandle,
+    session_id: String,
+    wait_for_ready: Option<bool>,
+) -> Result<(), String> {
+    if legacy_id(&session_id)? {
+        return Ok(());
+    }
+    let carrier = app.state::<InprocessAgentState>();
+    carrier.ensure_started(&app).await?;
+    carrier
+        .harness
+        .prepare_session(&app, &carrier, &session_id)
+        .await?;
+    if wait_for_ready == Some(true) {
+        carrier.harness.wait_for_preparation(&session_id).await?;
+    }
+    Ok(())
+}
+
+#[tauri::command(rename_all = "camelCase")]
 pub async fn read_agent_session_native(
     app: AppHandle,
     session_id: String,
@@ -912,14 +933,18 @@ pub async fn query_agent_command(
     Ok(command_receipt(&result, &session_id, &request_id))
 }
 #[tauri::command(rename_all = "camelCase")]
-pub async fn interrupt_agent_session(app: AppHandle, session_id: String) -> Result<(), String> {
+pub async fn interrupt_agent_session(
+    app: AppHandle,
+    session_id: String,
+    expected_request_id: Option<String>,
+) -> Result<(), String> {
     if legacy_id(&session_id)? {
         return historical_read_only();
     }
     native(
         &app,
         "interruptSession",
-        json!({"sessionId":session_id}),
+        json!({"sessionId":session_id,"expectedRequestId":expected_request_id}),
         false,
     )
     .await

@@ -1378,6 +1378,10 @@ async function run(fixture) {
   if (tray !== null)
     await invoke("plugin:tray|set_visible", { rid: tray, visible: false }).catch(() => {});
   if (fixture.phase === "output-links") return verifyOutputLinks(fixture);
+  if (fixture.phase === "warm-session") {
+    const { verifyWarmSession } = await import("./warm-session.mjs");
+    return { ...await verifyWarmSession(fixture, { check, configureFixtureChannel, invoke, waitFor }), build };
+  }
   if (fixture.phase === "dock-tools" || fixture.phase === "dock-tools-restart")
     return verifyDockTools(fixture);
   if (fixture.phase === "compact") return verifyNativeCompaction(fixture);

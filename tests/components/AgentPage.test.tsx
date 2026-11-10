@@ -94,6 +94,7 @@ vi.mock("@/lib/api/agent", () => ({
     automation: vi.fn(),
     getSession: vi.fn(),
     readSessionNative: vi.fn(),
+    prepareSession: vi.fn(),
     watchSessionNative: vi.fn(),
     stopSessionNative: vi.fn(),
     readNativeMessageAliases: vi.fn(),
@@ -391,6 +392,7 @@ beforeEach(() => {
       },
     });
   vi.mocked(agentApi.watchSessionNative).mockReset().mockResolvedValue(false);
+  vi.mocked(agentApi.prepareSession).mockReset().mockResolvedValue();
   vi.mocked(agentApi.stopSessionNative).mockReset().mockResolvedValue();
   vi.mocked(agentApi.readNativeMessageAliases)
     .mockReset()
@@ -526,6 +528,20 @@ describe("AgentPage", () => {
     });
     return nativeSession;
   }
+
+  it("prepares a selected native host in the background without sending a message", async () => {
+    const current = openNativeFixture();
+    const page = render(<AgentPage initialProjectPath={project} />);
+    await flush();
+    await tick(80);
+    expect(agentApi.prepareSession).toHaveBeenCalledWith(current.id);
+    expect(agentApi.sendMessage).not.toHaveBeenCalled();
+    const prepared = vi.mocked(agentApi.prepareSession).mock.calls.length;
+    page.rerender(<AgentPage initialProjectPath={project} isActive={false} />);
+    await flush();
+    expect(agentApi.prepareSession).toHaveBeenCalledTimes(prepared);
+    expect(agentApi.sendMessage).not.toHaveBeenCalled();
+  });
 
   it.each(["before", "after"])(
     "does not reread cold history when the first idle controls resolve %s the native read",
@@ -6573,6 +6589,116 @@ describe("AgentPage", () => {
     snapshot.status = "idle";
     await tick();
     expect(screen.queryByText("正在停止…")).not.toBeInTheDocument();
+  });
+
+  it("keeps a warm native observer while a later turn receives its own request and Stop", async () => {
+    const current = openNativeFixture();
+    snapshot.messages = [];
+    let accept!: (message: AgentNativeSessionWatchMessage) => void;
+    let subscriptionId = "";
+    vi.mocked(agentApi.watchSessionNative).mockImplementation(
+      (_session, id, onMessage) => {
+        subscriptionId = id;
+        accept = onMessage;
+        return new Promise<boolean>(() => {});
+      },
+    );
+    render(<AgentPage initialProjectPath={project} />);
+    await flush();
+    await tick(80);
+    act(() => accept({
+      subscriptionId,
+      frame: {
+        type: "snapshot",
+        header: {
+          version: 4,
+          id: current.id.slice(3) as Extract<
+            Extract<AgentNativeSessionWatchMessage, { frame: unknown }>["frame"],
+            { type: "snapshot" }
+          >["header"]["id"],
+          createdAt: 1,
+          isSeeded: false,
+        },
+        records: [],
+        cursor: -1,
+        hasMore: false,
+        projections: { asOfSeq: -1, values: {} },
+        assistantStream: { revision: 0 },
+      },
+    }));
+    fill("第一轮任务");
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+    await flush();
+    const firstRequest = vi.mocked(agentApi.sendMessage).mock.calls[0][2];
+    snapshot.status = "running";
+    snapshot.messages = [{
+      id: firstRequest,
+      role: "user",
+      createdAt: 3,
+      parts: [{ type: "text", text: "第一轮任务" }],
+    }];
+    await tick();
+    snapshot.status = "idle";
+    snapshot.messages.push({
+      id: "first-turn-result",
+      role: "assistant",
+      createdAt: 4,
+      completedAt: 5,
+      parts: [{ type: "text", text: "第一轮完成" }],
+    });
+    await tick();
+    expect(readAgentSubmission(project, current.id)).toBeNull();
+    expect(screen.queryByRole("button", { name: "停止" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "模型" })).toBeEnabled();
+    expect(agentApi.watchSessionNative).toHaveBeenCalledTimes(1);
+    expect(agentApi.stopSessionNative).not.toHaveBeenCalled();
+
+    let acknowledge!: () => void;
+    vi.mocked(agentApi.sendMessage).mockReturnValueOnce(new Promise<void>((resolve) => {
+      acknowledge = resolve;
+    }));
+    fill("第二轮任务");
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+    await flush();
+    const secondRequest = vi.mocked(agentApi.sendMessage).mock.calls[1][2];
+    expect(secondRequest).not.toBe(firstRequest);
+    expect(readAgentSubmission(project, current.id)).toMatchObject({
+      requestId: secondRequest,
+      stopRequested: false,
+    });
+    const stop = screen.getByRole("button", { name: "停止" });
+    fireEvent.click(stop);
+    fireEvent.click(stop);
+    await flush();
+    await tick();
+    expect(agentApi.interruptSession).toHaveBeenCalledTimes(1);
+    expect(readAgentSubmission(project, current.id)).toMatchObject({
+      requestId: secondRequest,
+      phase: "submitting",
+      stopRequested: true,
+    });
+    expect(screen.getByText("正在停止…")).toBeInTheDocument();
+    await act(async () => acknowledge());
+    await flush();
+    expect(agentApi.interruptSession).toHaveBeenCalledTimes(2);
+    expect(agentApi.interruptSession).toHaveBeenNthCalledWith(1, current.id, secondRequest);
+    expect(agentApi.interruptSession).toHaveBeenNthCalledWith(2, current.id, secondRequest);
+    await tick();
+    expect(readAgentSubmission(project, current.id)).toBeNull();
+    expect(screen.queryByText("正在停止…")).not.toBeInTheDocument();
+
+    fill("第三轮任务");
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+    await flush();
+    const thirdRequest = vi.mocked(agentApi.sendMessage).mock.calls[2][2];
+    expect([firstRequest, secondRequest]).not.toContain(thirdRequest);
+    expect(readAgentSubmission(project, current.id)).toMatchObject({
+      requestId: thirdRequest,
+      stopRequested: false,
+    });
+    expect(agentApi.interruptSession).toHaveBeenCalledTimes(2);
+    expect(agentApi.watchSessionNative).toHaveBeenCalledTimes(1);
+    expect(agentApi.stopSessionNative).not.toHaveBeenCalled();
   });
 
   it("does not put Stop behind a pending model configuration IPC", async () => {

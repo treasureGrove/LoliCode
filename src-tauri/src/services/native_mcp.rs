@@ -352,6 +352,13 @@ impl NativeMcpTools {
         drop(connections);
         Self::close_owned_connections(previous).await
     }
+
+    pub(super) fn configuration_fingerprint(&self) -> Option<String> {
+        self.configuration
+            .read()
+            .ok()
+            .map(|config| config.fingerprint.clone())
+    }
     async fn close_owned_connections(
         connections: HashMap<(String, String, String), Arc<Connection>>,
     ) -> Result<(), String> {

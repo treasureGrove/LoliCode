@@ -140,6 +140,8 @@ export const agentApi = {
     invoke<Record<string, string>>("read_agent_native_message_aliases", {
       sessionId,
     }),
+  prepareSession: (sessionId: string) =>
+    invoke<void>("prepare_agent_session", { sessionId }),
   readSessionMarkdown: (sessionId: string) =>
     invoke<string>("read_agent_session_markdown", { sessionId }),
   syncSessions: (direction: AgentSessionSyncDirection = "both") =>
@@ -418,8 +420,11 @@ export const agentApi = {
       status: "unknown" | "accepted" | "rejected" | "failed";
       message?: string;
     }>("query_agent_command", { sessionId, requestId }),
-  interruptSession: (sessionId: string) =>
-    invoke<void>("interrupt_agent_session", { sessionId }),
+  interruptSession: (sessionId: string, expectedRequestId?: string) =>
+    invoke<void>("interrupt_agent_session", {
+      sessionId,
+      ...(expectedRequestId && { expectedRequestId }),
+    }),
   replyPermission: (
     sessionId: string,
     requestId: string,

@@ -520,6 +520,7 @@ impl InprocessAgentState {
                 .await
                 .query_command(id()?, argument(args, "requestId")?),
             "renameSession" | "setSessionMetadata" | "updateSession" => {
+                self.harness.retire_idle(Some(id()?)).await?;
                 let catalog =
                     channel_center::agent_catalog(&state.db).map_err(|error| error.to_string())?;
                 encode(sessions.write().await.update(method, args, &catalog)?)
@@ -528,6 +529,7 @@ impl InprocessAgentState {
                 if self.harness.session_busy(id()?).await {
                     return Err("请先结束此会话的任务".into());
                 }
+                self.harness.retire_idle(Some(id()?)).await?;
                 sessions.write().await.delete(id()?)?;
                 Ok(Value::Null)
             }
@@ -539,6 +541,7 @@ impl InprocessAgentState {
                 if self.harness.busy().await {
                     return Err("请等当前会话结束后再同步".into());
                 }
+                self.harness.retire_idle(None).await?;
                 let peer_root = Path::new(argument(args, "peerRoot")?);
                 let peer = peer_root
                     .parent()
@@ -743,6 +746,7 @@ impl InprocessAgentState {
         if self.harness.busy().await {
             return Err("还有 Harness 任务正在运行，请先结束任务".into());
         }
+        self.harness.retire_idle(None).await?;
         Ok(NativeUpdateLease { _guard: guard })
     }
     pub(crate) async fn acquire_idle_for_navigation(&self) -> Result<MutexGuard<'_, ()>, String> {
@@ -750,6 +754,7 @@ impl InprocessAgentState {
         if self.busy().await? {
             return Err("还有任务或授权等待处理，请先结束任务".into());
         }
+        self.harness.retire_idle(None).await?;
         Ok(guard)
     }
     pub async fn close_project(&self) -> Result<(), String> {

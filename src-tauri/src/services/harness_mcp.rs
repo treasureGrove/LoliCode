@@ -72,6 +72,23 @@ pub(super) struct ToolReply {
 }
 
 impl HarnessMcp {
+    /// The SDK registrations are immutable. Changed configuration gets a new
+    /// process rather than retaining stale instructions or tool schemas.
+    pub(super) fn reuse_configuration(&self) -> Value {
+        match &self.host {
+            ToolHost::Local(local) => json!({
+                "kind": "local", "project": self.project, "readOnly": local.read_only,
+                "memoryRoot": local.memory_root, "tools": local.application_schemas,
+                "mcp": local.mcp_schemas,
+                "mcpConfiguration": local.mcp.as_ref().map(|host| host.configuration_fingerprint()),
+            }),
+            ToolHost::Remote(remote) => json!({
+                "kind": "remote", "project": self.project,
+                "tools": remote.tools, "location": remote.location,
+            }),
+        }
+    }
+
     pub(super) async fn prepare_local(
         mcp: Option<Arc<NativeMcpTools>>,
         applications: Arc<dyn ApplicationTools>,
@@ -126,7 +143,7 @@ impl HarnessMcp {
         &self,
         client: &HarnessClient,
         session_id: &str,
-    ) -> Result<(), String> {
+    ) -> Result<bool, String> {
         match &self.host {
             ToolHost::Remote(remote) => {
                 let result = client
@@ -162,10 +179,11 @@ impl HarnessMcp {
                         .is_err()
                 {
                     log::warn!("本轮未加载 MCP 工具");
+                    return Ok(false);
                 }
             }
         }
-        Ok(())
+        Ok(true)
     }
 
     pub(super) async fn inspect(&self, request: &Value) -> Result<McpCall, String> {

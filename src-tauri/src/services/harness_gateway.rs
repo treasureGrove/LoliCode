@@ -11,6 +11,7 @@ use axum::{
     Json, Router,
 };
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use std::{
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -28,6 +29,8 @@ pub(super) struct HarnessGateway {
     pub model: String,
     pub profile_patch: Value,
     pub token: String,
+    /// Stable private route identity; never includes the disposable listener.
+    pub reuse_fingerprint: String,
     active: Arc<AtomicBool>,
     task: JoinHandle<()>,
 }
@@ -109,6 +112,20 @@ impl HarnessGateway {
             .build()
             .map_err(|_| "无法创建 Harness 渠道客户端")?;
         let profile_patch = profile_patch(&base_url, &model.id, selected, model);
+        let reuse_fingerprint = format!(
+            "{:x}",
+            Sha256::digest(
+                serde_json::to_vec(&json!({
+                    "revision": binding.catalog.revision,
+                    "route": selected.model_id,
+                    "model": selected_model,
+                    "upstream": upstream.as_str(),
+                    "bearer": binding.bearer_token,
+                    "accounts": accounts,
+                }))
+                .map_err(|_| "无法校验 Harness 渠道配置")?
+            )
+        );
         let active = Arc::new(AtomicBool::new(true));
         let lease = Arc::new(Lease {
             token: token.clone(),
@@ -133,6 +150,7 @@ impl HarnessGateway {
             model: model.id.clone(),
             profile_patch,
             token,
+            reuse_fingerprint,
             active,
             task,
         })

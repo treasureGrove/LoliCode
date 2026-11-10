@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Writable } from "node:stream";
 import { notifyNativeSessionFrame, readNativeSession } from "../host-session-native.mjs";
+import { prepareRuntime } from "../host-runtime-prepare.mjs";
 
 test("native notifications stop adding frames when the shared SDK output is backed up", () => {
   let release;
@@ -60,6 +61,44 @@ test("a failed native reader installation releases its scope and can be retried"
   assert.equal(disposed, 1);
   await assert.rejects(readNativeSession(host, "fixture"), (error) => error === invoked);
   await assert.rejects(readNativeSession(host, "fixture"), (error) => error === invoked);
+  assert.equal(installations, 2);
+  assert.equal(peers, 2);
+  assert.equal(disposed, 1);
+});
+
+test("runtime preparation shares one context promise and retries after a failed reader installation", async () => {
+  const failure = new Error("fixture runtime preparation failed");
+  let installations = 0;
+  let peers = 0;
+  let disposed = 0;
+  const host = {
+    get: () => true,
+    typert: { getPackage: () => true },
+    plugin() {
+      installations++;
+      return {
+        await: async () => {},
+        dispose: async () => { disposed++; },
+        ctx: {
+          plugin: () => ({ await: async () => {} }),
+          get: () => ({ createPeer() {
+            if (++peers === 1) throw failure;
+            return {};
+          } }),
+        },
+      };
+    },
+  };
+  host.root = host;
+  const initial = await Promise.allSettled([prepareRuntime(host), prepareRuntime(host)]);
+  for (const result of initial) {
+    assert.equal(result.status, "rejected");
+    assert.equal(result.reason, failure);
+  }
+  assert.equal(installations, 1);
+  assert.equal(disposed, 1);
+  await Promise.all([prepareRuntime(host), prepareRuntime(host)]);
+  await prepareRuntime(host);
   assert.equal(installations, 2);
   assert.equal(peers, 2);
   assert.equal(disposed, 1);

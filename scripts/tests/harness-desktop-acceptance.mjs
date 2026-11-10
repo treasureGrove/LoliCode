@@ -1,6 +1,7 @@
 // Runs a hidden Windows development build with a disposable profile and model.
 // Run from a non-elevated shell so WebView2 honors the fixture debugging port.
-// Usage: node scripts/tests/harness-desktop-acceptance.mjs [--permissions | --output-links | --compact | --dock-tools | --background-jobs | --native-modes | --switching | --session-export | --titles]
+// Usage: node scripts/tests/harness-desktop-acceptance.mjs [--permissions | --output-links | --compact | --dock-tools | --background-jobs | --native-modes | --switching | --session-export | --titles | --warm-session]
+// Add --prepare-session to --warm-session to await real background SDK readiness before sending.
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
@@ -21,6 +22,8 @@ import path from "node:path";
 import { finished } from "node:stream/promises";
 import { fileURLToPath } from "node:url";
 import { createServer as createViteServer } from "vite";
+import { readFixtureSdkProcesses, readFixtureSdkProcessesAsync } from "./harness-desktop-processes.mjs";
+import { warmRequestPrompt } from "./harness-desktop-warm.mjs";
 import {
   buildEnvironment,
   targetDirectory,
@@ -39,6 +42,22 @@ const switchingReducedMotion = switchingOnly && process.env.LOLICODE_HARNESS_DES
 const switchingProfileScale = switchingOnly && process.env.LOLICODE_HARNESS_DESKTOP_PROFILE_SCALE === "1";
 const sessionExportOnly = process.argv.includes("--session-export");
 const titlesOnly = process.argv.includes("--titles");
+const warmSessionOnly = process.argv.includes("--warm-session");
+const prepareSession = process.argv.includes("--prepare-session");
+assert.ok(!prepareSession || warmSessionOnly, "--prepare-session requires --warm-session");
+const warmSession = {
+  prepare: prepareSession,
+  turns: ["first", "second", "cancel", "recover", "configured"].map((name) => ({
+    requestId: `desktop-warm-${name}`,
+    prompt: `HARNESS_DESKTOP_WARM_${name.toUpperCase()}`,
+    answer: `Warm desktop ${name} completed.`,
+    hold: name === "cancel",
+  })),
+};
+const warmRequests = [];
+const warmReceivedAt = new Map();
+const observedWarmProcesses = new Map();
+let warmReplyHeld = false;
 const titles = {
   firstPrompt: "请整理故障排查顺序，并列出需要复核的检查项。",
   firstAnswer: "已经整理排查顺序和复核检查项。",
@@ -439,6 +458,7 @@ function findToolValue(value, predicate) {
 }
 
 const modelServer = createServer(async (request, response) => {
+  const receivedAt = Date.now();
   try {
     if (request.method === "GET" && request.url === "/browser-cross-origin-probe") {
       blockedBrowserRequests++;
@@ -469,6 +489,7 @@ const modelServer = createServer(async (request, response) => {
       body.tools?.some((tool) => tool.function.name === name);
     const secretaryPrompt = "You are the user's LoliCode secretary";
     if (allMessages.includes("Create a concise title for an AI coding-assistant session from the supplied human messages.")) {
+      assert.ok(!warmSessionOnly, "A title job must not keep the warm acceptance SDK alive");
       assert.equal(body.tools?.length ?? 0, 0);
       assert.ok(userMessages.includes("Generate the session title from this JSON array of human messages:"));
       if (sessionExportOnly) sessionExportRequests++;
@@ -491,6 +512,34 @@ const modelServer = createServer(async (request, response) => {
         }
       } else {
         await reply(response, { content: "桌面验收会话" }, "stop");
+      }
+      return;
+    }
+    if (warmSessionOnly) {
+      const turn = warmSession.turns[warmRequests.length];
+      const matched = warmRequestPrompt(body.messages);
+      const summary = { index: warmRequests.length + 1, expected: turn?.prompt, matched,
+        roles: body.messages.map(message => message.role),
+        userTail: body.messages.filter(message => message.role === "user").slice(-3)
+          .map(message => JSON.stringify(message.content ?? "").slice(-280)) };
+      await appendFile(path.join(temporary, "warm-model-requests.ndjson"), `${JSON.stringify(summary)}\n`);
+      assert.ok(turn && matched === turn.prompt,
+        `The warm fixture received a duplicate or unexpected model request: ${JSON.stringify(summary)}`);
+      warmReceivedAt.set(turn.requestId, receivedAt);
+      warmRequests.push(turn.requestId);
+      if (turn.hold) {
+        warmReplyHeld = true;
+        // A real open SSE request remains cancellable; no artificial SDK hook.
+        response.writeHead(200, { "Content-Type": "text/event-stream" });
+        response.write(`data: ${JSON.stringify({ id: "warm-held", created: 1, object: "chat.completion.chunk", model,
+          choices: [{ index: 0, delta: { role: "assistant" }, finish_reason: null }] })}\n\n`);
+        try {
+          await once(response, "close");
+        } finally {
+          warmReplyHeld = false;
+        }
+      } else {
+        await reply(response, { content: turn.answer }, "stop");
       }
       return;
     }
@@ -1260,6 +1309,32 @@ const vitePlugin = {
       } else if (switchingOnly && request.url === `${namespace}/switching.mjs`) {
         response.setHeader("Content-Type", "text/javascript");
         response.end(await readFile(new URL("./harness-desktop-switching.mjs", import.meta.url)));
+      } else if (warmSessionOnly && request.url === `${namespace}/warm-session.mjs`) {
+        response.setHeader("Content-Type", "text/javascript");
+        response.end(await readFile(new URL("./harness-desktop-warm.mjs", import.meta.url)));
+      } else if (warmSessionOnly && request.method === "GET" && request.url?.startsWith(`${namespace}/warm-session-proof?`)) {
+        try {
+          const sessionId = new URL(request.url, "http://127.0.0.1").searchParams.get("sessionId");
+          assert.match(sessionId ?? "", /^lc:[a-f0-9-]{36}$/);
+          const { processes, processQueryMs } = await readFixtureSdkProcessesAsync(profile);
+          assert.ok(processes.every((process) => process.sessionId === sessionId),
+            "The warm fixture started an SDK for an unexpected conversation");
+          for (const process of processes)
+            observedWarmProcesses.set(`${process.pid}:${process.createdAt}`, process);
+          const saved = JSON.parse(await readFile(path.join(profile, "agent/harness-desktop",
+            sessionId.slice(3), "desktop.json"), "utf8").catch((error) => {
+              if (error.code === "ENOENT") return "{}";
+              throw error;
+            }));
+          response.setHeader("Content-Type", "application/json");
+          response.setHeader("Cache-Control", "no-store");
+          response.end(JSON.stringify({ processes, processQueryMs, held: warmReplyHeld, requests: warmRequests,
+            receivedAt: Object.fromEntries(warmReceivedAt),
+            receipts: Object.fromEntries(Object.entries(saved.receipts ?? {})
+              .map(([id, receipt]) => [id, receipt.status])) }));
+        } catch (error) {
+          response.writeHead(500).end(error.message);
+        }
       } else if (titlesOnly && request.method === "POST" && request.url?.startsWith(`${namespace}/titles-release/`)) {
         const number = Number(request.url.slice(request.url.lastIndexOf("/") + 1));
         if (!Number.isInteger(number) || number < 1 || number > titleRequests) {
@@ -1617,6 +1692,7 @@ try {
     backgroundJobs,
     nativeModes,
     titles: titlesOnly ? titles : undefined,
+    warmSession: warmSessionOnly ? warmSession : undefined,
     sessionExport: sessionExportOnly ? sessionExport : undefined,
     switching: switchingOnly ? await seedSwitchingHistory() : undefined,
     workerFollowup,
@@ -1642,7 +1718,7 @@ try {
     }),
   );
   console.log(`Isolated desktop acceptance reports: ${reportPath}`);
-  if (!permissionsOnly && !outputLinksOnly && !compactOnly && !backgroundJobsOnly && !dockToolsOnly && !nativeModesOnly && !switchingOnly && !sessionExportOnly && !titlesOnly) {
+  if (!permissionsOnly && !outputLinksOnly && !compactOnly && !backgroundJobsOnly && !dockToolsOnly && !nativeModesOnly && !switchingOnly && !sessionExportOnly && !titlesOnly && !warmSessionOnly) {
     const first = await launch(env, "initial");
     assert.equal(first.sendScrollFollow, true);
     assert.ok(observed.image && observed.approved && observed.rejected);
@@ -1681,7 +1757,26 @@ try {
     await assert.rejects(readFile(path.join(project, "manual-worker.txt")), { code: "ENOENT" });
     for (const [file, contents] of legacyFiles) assert.equal(await readFile(file, "utf8"), contents);
   }
-  if (dockToolsOnly) {
+  if (warmSessionOnly) {
+    const result = await launch(env, "warm-session");
+    assert.ok(result.warmSession && result.warmReuse && result.stopIsolated &&
+      result.configurationRestart && result.projectClosed && result.nativeHistoryVerified);
+    assert.equal(Boolean(result.preparedSession), prepareSession);
+    assert.equal(result.preparationCancelled, prepareSession);
+    assert.equal(result.preparationSendStopped, prepareSession);
+    assert.equal(result.turnTimings.length, warmSession.turns.length);
+    assert.deepEqual(warmRequests, warmSession.turns.map((turn) => turn.requestId));
+    assert.equal(observedWarmProcesses.size, 3,
+      "Expected the original, post-Stop, and changed-configuration SDK identities");
+    assert.deepEqual(readFixtureSdkProcesses(profile), [],
+      "The isolated desktop exited with a fixture SDK still running");
+    await appendFile(reportPath, `${JSON.stringify({ result: "passed", phase: "warm-session-exit",
+      sdkProcesses: [...observedWarmProcesses.values()], requests: warmRequests,
+      preparedSession: result.preparedSession, preparationCancelled: result.preparationCancelled,
+      preparationSendStopped: result.preparationSendStopped,
+      prepareMs: result.prepareMs, nativeReadMs: result.nativeReadMs,
+      turnTimings: result.turnTimings })}\n`);
+  } else if (dockToolsOnly) {
     const dock = await launch(env, "dock-tools");
     assert.ok(dock.splitDock && dock.projectTree && dock.interactiveTerminal && dock.foldRetainsTools &&
       dock.terminalClose && dock.sharedSidebar);

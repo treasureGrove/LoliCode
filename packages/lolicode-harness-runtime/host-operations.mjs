@@ -5,6 +5,7 @@ import { Config, HarnessSdkJsonRpcServer } from "@deepseek-ai/dsh-sdk-jsonrpc-se
 import { JsonRpcLineTransport } from "@deepseek-ai/dsh-sdk-protocol";
 import { installHostMcp } from "./host-mcp.mjs";
 import { installHostRemote } from "./host-remote.mjs";
+import { prepareRuntime } from "./host-runtime-prepare.mjs";
 import { installSecretaryReport, reportToolName } from "./host-secretary-report.mjs";
 import {
   formatBoundedSessionMarkdown, logCold, logMissing, materializedSessionPath, sessionMarkdownError,
@@ -95,6 +96,7 @@ class LoliCodeSdkServer extends HarnessSdkJsonRpcServer {
   #parkedWorkerInputs = new Map();
   #nativeFollows = new Map();
   #nativeOutput;
+  #completedTurns = new WeakMap();
 
   constructor(ctx, transport, options, output) {
     super(ctx, transport, options);
@@ -117,6 +119,8 @@ class LoliCodeSdkServer extends HarnessSdkJsonRpcServer {
     ctx.on("goal/changed", ({ agent }) => this.#publishMode(agent.session.id));
     ctx.on("goal/activation-changed", ({ sessionId }) => this.#publishMode(sessionId));
     ctx.on("session/event", (session, event) => {
+      if (event.type === "turn/start") this.#completedTurns.set(session, false);
+      if (event.type === "turn/end") this.#completedTurns.set(session, event.data.reason.kind === "completed");
       const agent = this.#roots.get(session.id);
       if (agent && (event.type === "plan/mode" ||
           (event.type === "user/message" && event.data.source.kind === "goal") ||
@@ -149,6 +153,14 @@ class LoliCodeSdkServer extends HarnessSdkJsonRpcServer {
   }
 
   async handleRequest(method, params) {
+    if (method === "lolicode/runtime/prepare") {
+      if (!this.initialized) throw new Error("SDK server is not initialized");
+      if (!params || typeof params !== "object" || Array.isArray(params) || Object.keys(params).length !== 0) {
+        throw new Error("Invalid LoliCode runtime preparation parameters");
+      }
+      await prepareRuntime(this.#ctx);
+      return {};
+    }
     if (method === "lolicode/session/follow-native") return this.#followNativeSession(params);
     if (method === "lolicode/session/unfollow-native") {
       if (!params || !validSessionId(params.subscriptionId) || Object.keys(params).some((key) => key !== "subscriptionId")) {
@@ -173,6 +185,18 @@ class LoliCodeSdkServer extends HarnessSdkJsonRpcServer {
       this.#rootPolicies.set(id, params.workspace.policy);
       this.#publishMode(id);
       return result;
+    }
+    if (method === "lolicode/session/park") {
+      const agent = this.#ownedRoot(readSessionId(params));
+      if (!this.#canPark(agent)) return { parked: false };
+      const seq = agent.session.seq;
+      // A turn-end notification can precede the persistence batching deadline.
+      // This official barrier drains the live writer and fsyncs its journal.
+      const flushed = await this.#ctx.sessions.flush(agent.session);
+      // RPCs and background activities may progress while the barrier awaits.
+      // Parking never cancels or changes their state; the host must retire a
+      // runtime whose activity changed rather than treating it as idle.
+      return { parked: flushed && agent.session.seq === seq && this.#canPark(agent) };
     }
     if (method === "lolicode/session/cancel") {
       const agent = this.#ownedRoot(readSessionId(params, "includeWorkers"));
@@ -298,6 +322,23 @@ class LoliCodeSdkServer extends HarnessSdkJsonRpcServer {
     if (this.#modeSignatures.get(sessionId) === signature) return;
     this.#modeSignatures.set(sessionId, signature);
     this.transport.notify("lolicode/session.mode", { sessionId, goal, plan });
+  }
+
+  #canPark(agent) {
+    if (this.#ctx.agents.get(agent.id) !== agent || agent.status !== "idle" ||
+        !this.#completedTurns.get(agent.session) || this.#secretaries.has(agent) ||
+        this.#prompts.has(agent.session.id) || this.#injections.has(agent.session.id) ||
+        agent.inbox.hasPending || this.#ctx.agents.list().some(candidate => candidate !== agent)) return false;
+    const jobs = this.#ctx.get("jobs");
+    const projections = this.#ctx.get("sessionProjections");
+    if (!jobs || !projections || jobs.list(agent.session.id).some(job => job.status === "running" || job.status === "stopping")) return false;
+    const goal = this.#ctx.get("goals")?.get(agent);
+    if (goal?.phase === "active" || goal?.activation === "armed") return false;
+    const { values } = projections.snapshot(agent.session, new Set(["userQuestions", "subagentCatalog"]));
+    // Continued human questions and external children can outlive the root's
+    // running turn. Read their authoritative official projections as well.
+    return Array.isArray(values.userQuestions?.active) && values.userQuestions.active.length === 0 &&
+      Array.isArray(values.subagentCatalog) && values.subagentCatalog.length === 0;
   }
 
   #ownedRoot(id) {

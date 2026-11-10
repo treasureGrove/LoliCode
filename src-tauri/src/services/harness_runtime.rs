@@ -24,6 +24,8 @@ use tokio::{
 };
 
 const RPC_TIMEOUT: Duration = Duration::from_secs(45);
+pub(super) const PREPARATION_CANCELLED: &str = "LOLICODE_HARNESS_PREPARATION_CANCELLED";
+pub(super) const PREPARATION_CLEANUP_FAILED: &str = "LOLICODE_HARNESS_PREPARATION_CLEANUP_FAILED";
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_FRAME: usize = 32 * 1024 * 1024;
 const EVENT_CAPACITY: usize = 256;
@@ -381,6 +383,17 @@ impl HarnessClient {
         let _ = timeout(SHUTDOWN_TIMEOUT, wait_stopped(&mut stopped)).await;
         Err("Harness 进程未能正常退出".into())
     }
+
+    /// A failed/crashed SDK is still safe to replace after its process tree
+    /// has actually been reaped. An unknown close must remain a hard error.
+    pub(super) async fn shutdown_for_reuse(&self) -> Result<(), String> {
+        let result = self.shutdown().await;
+        if self.stopped.borrow().is_some() {
+            Ok(())
+        } else {
+            result
+        }
+    }
 }
 
 fn validate_markdown(markdown: String) -> Result<String, String> {
@@ -604,6 +617,22 @@ async fn wait_stopped(
     }
 }
 
+async fn shutdown_preparation(client: &HarnessClient) -> Result<(), String> {
+    let result = client.shutdown().await;
+    // An uninitialized SDK may reject graceful shutdown. The transport still
+    // kills and reaps its process tree before publishing `stopped`; that is a
+    // confirmed cancellation, even when its exit result reports a wire error.
+    if client.stopped.borrow().is_some() {
+        return Ok(());
+    }
+    Err(format!(
+        "{PREPARATION_CLEANUP_FAILED}: {}",
+        result
+            .err()
+            .unwrap_or_else(|| "SDK termination was not confirmed".into())
+    ))
+}
+
 pub(super) struct HarnessRuntime {
     #[cfg(test)]
     client: HarnessClient,
@@ -620,8 +649,17 @@ impl HarnessRuntime {
         home: &Path,
         gateway: HarnessGateway,
     ) -> Result<Self, String> {
-        let (client, events) =
-            Self::launch(node, runtime_package, project, home, gateway, false, &[]).await?;
+        let (client, events) = Self::launch(
+            node,
+            runtime_package,
+            project,
+            home,
+            gateway,
+            false,
+            &[],
+            None,
+        )
+        .await?;
         Ok(Self { client, events })
     }
 
@@ -641,10 +679,39 @@ impl HarnessRuntime {
             gateway,
             true,
             plugin_patches,
+            None,
         )
         .await
     }
 
+    /// Cancellation owns and awaits child cleanup; dropping initialization is
+    /// insufficient because the transport task owns the process and gateway.
+    pub(super) async fn start_live_cancellable(
+        node: &Path,
+        runtime_package: &Path,
+        project: &Path,
+        home: &Path,
+        gateway: HarnessGateway,
+        plugin_patches: &[PathBuf],
+        cancel: watch::Receiver<bool>,
+    ) -> Result<(HarnessClient, mpsc::Receiver<HarnessEvent>), String> {
+        Self::launch(
+            node,
+            runtime_package,
+            project,
+            home,
+            gateway,
+            true,
+            plugin_patches,
+            Some(cancel),
+        )
+        .await
+    }
+
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Launch owns both SDK process configuration and optional preparation cancellation"
+    )]
     async fn launch(
         node: &Path,
         runtime_package: &Path,
@@ -653,7 +720,11 @@ impl HarnessRuntime {
         gateway: HarnessGateway,
         live: bool,
         plugin_patches: &[PathBuf],
+        mut cancel: Option<watch::Receiver<bool>>,
     ) -> Result<(HarnessClient, mpsc::Receiver<HarnessEvent>), String> {
+        if cancel.as_ref().is_some_and(|cancel| *cancel.borrow()) {
+            return Err(PREPARATION_CANCELLED.into());
+        }
         let entry = runtime_package.join("node_modules/@deepseek-ai/dsh/lib/bin.js");
         let profile = runtime_package.join("profile.cordis.patch.yml");
         let host_ops = runtime_package.join("host-operations.cordis.patch.yml");
@@ -770,9 +841,11 @@ impl HarnessRuntime {
                 Err(error) => Err(error),
             };
             drop(process_tree);
-            if outcome.is_err() {
-                let _ = child.kill().await;
-            }
+            let reaped = if outcome.is_err() {
+                child.kill().await.is_ok() || child.try_wait().ok().flatten().is_some()
+            } else {
+                true
+            };
             let failure = outcome
                 .clone()
                 .err()
@@ -782,18 +855,46 @@ impl HarnessRuntime {
             }
             drop(overlay);
             drop(gateway);
-            terminated.send_replace(Some(outcome));
+            if reaped {
+                terminated.send_replace(Some(outcome));
+            }
         });
-        let initialized = client
-            .request(
+        let initialized = {
+            let initialize = client.request(
                 "initialize",
                 json!({
                     "cwd": project, "provider": PROVIDER, "model": model,
                     "approvalRequests": true, "capabilities": {"userQuestions": live},
                 }),
-            )
-            .await?;
+            );
+            tokio::pin!(initialize);
+            if let Some(cancel) = &mut cancel {
+                tokio::select! {
+                    biased;
+                    _ = async {
+                        loop {
+                            if *cancel.borrow_and_update() { break; }
+                            if cancel.changed().await.is_err() { break; }
+                        }
+                    } => {
+                        shutdown_preparation(&client).await?;
+                        return Err(PREPARATION_CANCELLED.into());
+                    }
+                    result = &mut initialize => result,
+                }
+            } else {
+                initialize.await
+            }
+        };
+        let initialized = match initialized {
+            Ok(value) => value,
+            Err(error) => {
+                shutdown_preparation(&client).await?;
+                return Err(error);
+            }
+        };
         if initialized["serverInfo"]["name"] != "deepseek-harness-sdk-runtime" {
+            shutdown_preparation(&client).await?;
             return Err("DeepSeek Harness 握手身份不匹配".into());
         }
         Ok((client, events))

@@ -1,4 +1,11 @@
 //! Desktop host for the upstream Harness session process.
+#[path = "harness_prepare.rs"]
+mod prepare;
+#[path = "harness_warm.rs"]
+mod warm;
+#[cfg(test)]
+#[path = "harness_warm_tests.rs"]
+mod warm_tests;
 use super::{
     agent_browser::BrowserTools,
     agent_host::canonical_project,
@@ -56,6 +63,9 @@ pub(crate) struct HarnessDesktop(Arc<Mutex<DesktopState>>);
 #[derive(Default)]
 struct DesktopState {
     flights: HashMap<String, Flight>,
+    warm: warm::IdleCache,
+    preparing: HashMap<String, prepare::Preparation>,
+    early_stops: BTreeSet<(String, String)>,
     closing: bool,
 }
 
@@ -386,6 +396,7 @@ struct VerifiedSessionRead {
     sdk_id: String,
     child: Option<String>,
     controls: Option<mpsc::Sender<Control>>,
+    warm_reader: Option<HarnessClient>,
 }
 
 async fn verified_sessions_directory(
@@ -416,6 +427,42 @@ fn native_alias_context_error(error: String) -> String {
 }
 
 impl HarnessDesktop {
+    pub(crate) async fn prepare_session(
+        &self,
+        app: &AppHandle,
+        carrier: &InprocessAgentState,
+        id: &str,
+    ) -> Result<(), String> {
+        prepare::prepare(self, app, carrier, id).await
+    }
+
+    pub(crate) async fn wait_for_preparation(&self, id: &str) -> Result<(), String> {
+        prepare::wait_preparation(self, id).await?;
+        let state = self.0.lock().await;
+        if state.warm.has_ready(id) || state.flights.contains_key(id) {
+            Ok(())
+        } else {
+            Err("会话运行环境尚未准备完成".into())
+        }
+    }
+
+    /// Remove idle SDKs atomically, then wait for their write leases to close
+    /// outside the state lock. Active turns remain governed by `flights`.
+    pub(super) async fn retire_idle(&self, id: Option<&str>) -> Result<(), String> {
+        prepare::retire_preparations(self, id).await?;
+        let handles = {
+            let mut state = self.0.lock().await;
+            match id {
+                Some(id) => state.warm.remove(id).into_iter().collect(),
+                None => state.warm.drain(),
+            }
+        };
+        for handle in handles {
+            handle.retire().await?;
+        }
+        Ok(())
+    }
+
     pub(super) async fn busy(&self) -> bool {
         !self.0.lock().await.flights.is_empty()
     }
@@ -524,12 +571,18 @@ impl HarnessDesktop {
             crate::commands::agent_dispatch::check_project(app, &project)?;
             None
         };
+        let warm_reader = if controls.is_none() {
+            self.0.lock().await.warm.reader(&owner)
+        } else {
+            None
+        };
         Ok(VerifiedSessionRead {
             owner_id: owner,
             owner_root,
             sdk_id,
             child,
             controls,
+            warm_reader,
         })
     }
 
@@ -554,6 +607,18 @@ impl HarnessDesktop {
                 // The runtime can exit while the read is in flight. A nonresident
                 // child or finished root can still have a committed stored log.
                 Some(Ok(None)) | None => {}
+            }
+        }
+        if let Some(reader) = &context.warm_reader {
+            let owner = context
+                .owner_id
+                .strip_prefix("lc:")
+                .ok_or("无效的 Harness 会话归属")?;
+            if let Some(markdown) = reader
+                .read_session_markdown(owner, context.child.as_deref())
+                .await?
+            {
+                return Ok(markdown);
             }
         }
         let sessions = verified_sessions_directory(context.owner_root, MARKDOWN_MISSING).await?;
@@ -595,6 +660,20 @@ impl HarnessDesktop {
                 }
                 Some(Err(error)) => return Err(error),
                 Some(Ok(None)) | None => {}
+            }
+        }
+        if let Some(reader) = &context.warm_reader {
+            let owner = context
+                .owner_id
+                .strip_prefix("lc:")
+                .ok_or("无效的 Harness 会话归属")?;
+            if let Some(mut value) = reader
+                .read_session_native(owner, context.child.as_deref(), &request)
+                .await?
+            {
+                value["messageAliases"] =
+                    to_value(self.native_aliases_for_context(&context).await?)?;
+                return Ok(value);
             }
         }
         let sessions =
@@ -671,18 +750,32 @@ impl HarnessDesktop {
                 .verified_read_context(app, carrier, id)
                 .await
                 .map_err(native_context_error)?;
-            let Some(controls) = context.controls else {
-                return Ok(None);
-            };
-            forward_live_control(&controls, |reply| Control::FollowNative {
-                child: context.child,
-                id: subscription_id.to_owned(),
-                max_messages,
-                reply,
-            })
-            .await
-            .transpose()
-            .map(|result| result.flatten())
+            if let Some(controls) = context.controls {
+                forward_live_control(&controls, |reply| Control::FollowNative {
+                    child: context.child,
+                    id: subscription_id.to_owned(),
+                    max_messages,
+                    reply,
+                })
+                .await
+                .transpose()
+                .map(|result| result.flatten())
+            } else if let Some(reader) = context.warm_reader {
+                let owner = context
+                    .owner_id
+                    .strip_prefix("lc:")
+                    .ok_or("无效的 Harness 会话归属")?;
+                reader
+                    .follow_session_native(
+                        owner,
+                        context.child.as_deref(),
+                        subscription_id.to_owned(),
+                        max_messages,
+                    )
+                    .await
+            } else {
+                Ok(None)
+            }
         };
         let opened = tokio::select! {
             result = tokio::time::timeout(Duration::from_secs(55), open) => result.map_err(|_| "原生会话实时连接超时，请重试")??,
@@ -905,6 +998,7 @@ impl HarnessDesktop {
         if method == "updateSession" {
             if owner == id {
                 let _admission = carrier.lock_harness_admission().await;
+                self.retire_idle(Some(id)).await?;
                 let retiring =
                     self.0
                         .lock()
@@ -1272,7 +1366,7 @@ impl HarnessDesktop {
                 .await
                 .map(Some);
         }
-        if flight.is_none() && !file.is_file() {
+        if flight.is_none() && !file.is_file() && method != "interruptSession" {
             if method == "deleteSecretaryTask" && owner == id {
                 let task = args["taskId"].as_str().ok_or("无效的子任务编号")?;
                 let _admission = carrier.lock_harness_admission().await;
@@ -1417,7 +1511,43 @@ impl HarnessDesktop {
                 Ok(Some(json!({"results":results})))
             }
             "interruptSession" => {
+                // Stop must not wait behind admission's preparation barrier.
+                // Record an exact-ID intent before a not-yet-admitted send can
+                // acquire a runtime; never apply it to another request.
                 let expected_request = args["expectedRequestId"].as_str();
+                let flight = {
+                    let mut state = self.0.lock().await;
+                    let flight = state
+                        .flights
+                        .get(&owner)
+                        .map(|flight| (flight.record.clone(), flight.controls.clone()));
+                    if flight.is_none() && owner == id {
+                        if let Some(expected) = expected_request {
+                            request_id(&json!({"requestId":expected}))?;
+                            let known = if file.is_file() {
+                                load_record(&file, &owner)?.receipts.contains_key(expected)
+                            } else {
+                                false
+                            };
+                            if known {
+                                return Ok(Some(Value::Null));
+                            } else {
+                                let key = (owner.clone(), expected.to_owned());
+                                if state.early_stops.len() >= MAX_RECEIPTS
+                                    && !state.early_stops.contains(&key)
+                                {
+                                    return Err("待提交的取消请求过多，请稍后重试".into());
+                                }
+                                state.early_stops.insert(key);
+                            }
+                        }
+                    }
+                    flight
+                };
+                if flight.is_none() {
+                    self.retire_idle(Some(&owner)).await?;
+                    return Ok(Some(Value::Null));
+                }
                 if let Some(expected) = expected_request {
                     let desktop = self.0.lock().await;
                     if owner != id
@@ -1508,6 +1638,7 @@ impl HarnessDesktop {
         secretary: Option<SecretaryCommand>,
     ) -> Result<Value, String> {
         let id = native.session.id.clone();
+        prepare::wait_preparation(self, &id).await?;
         if args["sessionId"].as_str() != Some(id.as_str())
             || native.session.archived
             || matches!(
@@ -1649,6 +1780,28 @@ impl HarnessDesktop {
         if check_receipt(&record, &request_id, &fingerprint)? && !resume {
             return secretary_response(&record, &request_id, secretary.as_ref());
         }
+        let stop_key = (id.clone(), request_id.clone());
+        let stopped_before_admission = desktop.early_stops.contains(&stop_key);
+        if stopped_before_admission && secretary.is_none() {
+            if record.receipts.len() >= MAX_RECEIPTS {
+                return Err("此会话已达到请求记录上限，请新建会话".into());
+            }
+            record.receipts.insert(
+                request_id,
+                CommandReceipt {
+                    fingerprint,
+                    status: ReceiptStatus::Cancelled,
+                },
+            );
+            record.snapshot.status = AgentStatus::Idle;
+            record.snapshot.error = None;
+            save_record(&file, &record)?;
+            desktop.early_stops.remove(&stop_key);
+            drop(desktop);
+            notify_snapshot_changed(app, &id);
+            return Ok(Value::Null);
+        }
+        desktop.early_stops.remove(&stop_key);
         if automation_idle_only
             && (record.snapshot.queue_paused
                 || !record.queue.is_empty()
@@ -1776,6 +1929,10 @@ impl HarnessDesktop {
                 desktop: host.clone(),
             })
             .await;
+            let (result, idle_runtime) = match result {
+                Ok((status, runtime)) => (Ok(status), runtime),
+                Err(error) => (Err(error), None),
+            };
             let mut desktop = host.0.lock().await;
             let mut saved = record.lock().await;
             let outcome = match result {
@@ -1813,10 +1970,26 @@ impl HarnessDesktop {
             if let Err(error) = save_record(&file, &saved) {
                 log::warn!("{error}");
             }
+            // Publishing idle and lending the SDK to a later request share
+            // the same lock. A new send cannot borrow an entry being retired.
+            let (retired, discard) = match idle_runtime {
+                Some(runtime) if !desktop.closing && outcome == ReceiptStatus::Completed => {
+                    (desktop.warm.insert(id.clone(), runtime), None)
+                }
+                runtime => (Vec::new(), runtime),
+            };
             desktop.flights.remove(&id);
             drop(saved);
             drop(desktop);
             notify_snapshot_changed(&app, &id);
+            for handle in retired {
+                if let Err(error) = handle.retire().await {
+                    log::warn!("{error}");
+                }
+            }
+            if let Some(runtime) = discard {
+                let _ = runtime.client.shutdown().await;
+            }
             let _ = done.send(true);
         });
         Ok(result)
@@ -1835,6 +2008,9 @@ impl HarnessDesktop {
         for (controls, mut stopped) in flights {
             let _ = controls.send(Control::Shutdown).await;
             let _ = stopped.wait_for(|stopped| *stopped).await;
+        }
+        if let Err(error) = self.retire_idle(None).await {
+            log::warn!("{error}");
         }
     }
 }
@@ -3321,7 +3497,50 @@ struct Turn<'a> {
     desktop: HarnessDesktop,
 }
 
-async fn run_turn(mut turn: Turn<'_>) -> Result<ReceiptStatus, String> {
+fn warm_session_configuration(session: &AgentSession) -> Result<Value, String> {
+    let mut value = to_value(session)?;
+    let object = value.as_object_mut().ok_or("Harness 会话配置无效")?;
+    // Presentation metadata does not alter a running Agent's capabilities.
+    for key in ["title", "updatedAt", "activity", "pinned"] {
+        object.remove(key);
+    }
+    Ok(value)
+}
+
+fn warm_fingerprint(
+    session: &Value,
+    route: &str,
+    version: &str,
+    plugins: &Option<PluginSelection>,
+    workspace: &Value,
+    tools: &Value,
+) -> Result<String, String> {
+    let bytes = serde_json::to_vec(&json!({
+        "session": session, "route": route, "version": version,
+        "plugins": plugins, "workspace": workspace, "tools": tools,
+    }))
+    .map_err(|_| "无法校验 Harness 运行配置")?;
+    Ok(format!("{:x}", Sha256::digest(bytes)))
+}
+
+fn can_keep_warm(record: &SessionRecord) -> bool {
+    record.snapshot.session.coordination.is_none()
+        && record.snapshot.permissions.is_empty()
+        && record.snapshot.questions.is_empty()
+        && record.snapshot.background_jobs == 0
+        && !record.snapshot.title_pending
+        && !record.snapshot.compacting
+        && !has_live_goal(&record.snapshot)
+        && record.queue.is_empty()
+        && record.withdrawn.is_empty()
+        && record.snapshot.queued_messages.is_empty()
+        && record.worker_queues.is_empty()
+}
+
+async fn run_turn(
+    mut turn: Turn<'_>,
+) -> Result<(ReceiptStatus, Option<warm::WarmRuntime>), String> {
+    let preparing_since = tokio::time::Instant::now();
     let migration = HarnessMigration::new(&turn.profile)?;
     let committed = migration
         .receipt(turn.id)?
@@ -3348,6 +3567,7 @@ async fn run_turn(mut turn: Turn<'_>) -> Result<ReceiptStatus, String> {
         .ok_or("无效的 Harness 会话编号")?;
     let mut gateway =
         HarnessGateway::open(&turn.state, &turn.model, turn.id, &turn.accounts).await?;
+    log::info!(target: "lolicode::harness_prepare", "stage=gateway elapsed_ms={}", preparing_since.elapsed().as_millis());
     if turn.auto_title {
         // The pinned SDK profile disables the title provider that Desktop uses.
         gateway
@@ -3378,14 +3598,6 @@ async fn run_turn(mut turn: Turn<'_>) -> Result<ReceiptStatus, String> {
         .plugins
         .as_ref()
         .map_or_else(Vec::new, |plugins| plugins.patches(&turn.paths));
-    let runtime = HarnessRuntime::start_live(
-        &turn.paths.node,
-        &turn.paths.package,
-        &turn.project,
-        &home,
-        gateway,
-        &plugin_patches,
-    );
     // Disk-backed context and local tool discovery are independent of the
     // child handshake. Complete them before applying the policy and prompting.
     let prepare_workspace = async {
@@ -3416,20 +3628,141 @@ async fn run_turn(mut turn: Turn<'_>) -> Result<ReceiptStatus, String> {
         )
         .await
     };
-    let (runtime, memory, bridge) = tokio::join!(runtime, prepare_workspace, prepare_tools);
-    let (client, mut events) = runtime?;
+    let mut configuration = warm_session_configuration(&turn.record.lock().await.snapshot.session)?;
+    configuration["automaticTitle"] = json!(turn.auto_title);
+    let route = gateway.reuse_fingerprint.clone();
+    let candidate = turn.desktop.0.lock().await.warm.take(turn.id);
+    let reuse_allowed =
+        turn.local_interactive && !turn.compact && !turn.mode_command && turn.worker.is_none();
+    let candidate = if reuse_allowed {
+        candidate
+    } else {
+        if let Some(candidate) = candidate {
+            candidate.retire().await?;
+        }
+        None
+    };
+    let mut host_reused = false;
+    let (runtime, memory, bridge, reused) = if let Some(candidate) = candidate {
+        let (memory, bridge) = tokio::join!(prepare_workspace, prepare_tools);
+        let workspace = json!({"policy":turn.policy,"skills":turn.skills,"memory":memory});
+        let fingerprint = warm_fingerprint(
+            &configuration,
+            &route,
+            &turn.paths.version,
+            &turn.plugins,
+            &workspace,
+            &bridge.reuse_configuration(),
+        )?;
+        let boot_fingerprint =
+            prepare::boot_fingerprint(&configuration, &route, &turn.paths.version, &turn.plugins)?;
+        if let Some(runtime) = candidate
+            .take_any(&[fingerprint.clone(), boot_fingerprint])
+            .await?
+        {
+            drop(gateway);
+            host_reused = true;
+            let configured = runtime.configured;
+            (runtime, memory, bridge, configured)
+        } else {
+            let born_at = tokio::time::Instant::now();
+            let (client, events) = HarnessRuntime::start_live(
+                &turn.paths.node,
+                &turn.paths.package,
+                &turn.project,
+                &home,
+                gateway,
+                &plugin_patches,
+            )
+            .await?;
+            (
+                warm::WarmRuntime {
+                    client,
+                    events,
+                    born_at,
+                    fingerprint,
+                    configured: false,
+                },
+                memory,
+                bridge,
+                false,
+            )
+        }
+    } else {
+        let born_at = tokio::time::Instant::now();
+        let (runtime, memory, bridge) = tokio::join!(
+            HarnessRuntime::start_live(
+                &turn.paths.node,
+                &turn.paths.package,
+                &turn.project,
+                &home,
+                gateway,
+                &plugin_patches
+            ),
+            prepare_workspace,
+            prepare_tools
+        );
+        let (client, events) = runtime?;
+        let workspace = json!({"policy":turn.policy,"skills":turn.skills,"memory":memory});
+        let fingerprint = warm_fingerprint(
+            &configuration,
+            &route,
+            &turn.paths.version,
+            &turn.plugins,
+            &workspace,
+            &bridge.reuse_configuration(),
+        )?;
+        (
+            warm::WarmRuntime {
+                client,
+                events,
+                born_at,
+                fingerprint,
+                configured: false,
+            },
+            memory,
+            bridge,
+            false,
+        )
+    };
+    let warm::WarmRuntime {
+        client,
+        mut events,
+        born_at,
+        ..
+    } = runtime;
+    let mut completed_configuration = configuration.clone();
+    // The official title provider is first-human-prompt-only. Once that title
+    // has settled it is safe to reuse its process for ordinary later turns.
+    // A process created without it (e.g. image-only input) still misses when a
+    // later text prompt actually needs the provider for the first time.
+    completed_configuration["automaticTitle"] = json!(false);
+    let completed_fingerprint = warm_fingerprint(
+        &completed_configuration,
+        &route,
+        &turn.paths.version,
+        &turn.plugins,
+        &json!({"policy":turn.policy,"skills":turn.skills,"memory":memory}),
+        &bridge.reuse_configuration(),
+    )?;
+    let mut configured = reused;
+    log::info!(target: "lolicode::harness_prepare", "stage=runtime_ready elapsed_ms={} host_reused={} session_ready={}", preparing_since.elapsed().as_millis(), host_reused, reused);
     let outcome = async {
         turn.record.lock().await.secretary.reset_live_projection();
         let exists = turn.record.lock().await.root_created;
         let session = json!({"sessionId": sdk_id});
-        if exists {
+        if reused {
+            // This Agent is already owned by this connection. SDK resume and
+            // tool registrations are one-time operations, not per-turn hooks.
+        } else if exists {
             client.request("session/resume", session.clone()).await?;
         } else {
             client
                 .request("session/working-directory/get", session.clone())
                 .await?;
         }
-        if let Some(context) = context.filter(|text| !text.trim().is_empty()) {
+        log::info!(target: "lolicode::harness_prepare", "stage=session_open elapsed_ms={}", preparing_since.elapsed().as_millis());
+        if let Some(context) = context.filter(|text| !reused && !text.trim().is_empty()) {
             client
                 .request(
                     "lolicode/session/inject-legacy-context",
@@ -3446,12 +3779,14 @@ async fn run_turn(mut turn: Turn<'_>) -> Result<ReceiptStatus, String> {
             migration.commit(receipt)?;
         }
         let workspace = json!({"policy":turn.policy,"skills":turn.skills,"memory":memory});
-        client
-            .request(
-                "lolicode/session/configure-workspace",
-                json!({"sessionId": sdk_id, "workspace": workspace}),
-            )
-            .await?;
+        if !reused {
+            client
+                .request(
+                    "lolicode/session/configure-workspace",
+                    json!({"sessionId": sdk_id, "workspace": workspace}),
+                )
+                .await?;
+        }
         if turn
             .record
             .lock()
@@ -3498,7 +3833,11 @@ async fn run_turn(mut turn: Turn<'_>) -> Result<ReceiptStatus, String> {
                     .await?;
             }
         }
-        bridge.configure(&client, sdk_id).await?;
+        log::info!(target: "lolicode::harness_prepare", "stage=workspace_ready elapsed_ms={}", preparing_since.elapsed().as_millis());
+        if !reused {
+            configured = bridge.configure(&client, sdk_id).await?;
+        }
+        log::info!(target: "lolicode::harness_prepare", "stage=tools_ready elapsed_ms={}", preparing_since.elapsed().as_millis());
         let mcp = Some(bridge);
         let mut early_controls = VecDeque::new();
         // Check every control already waiting for startup so that a Stop can
@@ -3609,6 +3948,7 @@ async fn run_turn(mut turn: Turn<'_>) -> Result<ReceiptStatus, String> {
                 .ok_or("Harness 缺少消息回执")?
                 .into()
         };
+        log::info!(target: "lolicode::harness_prepare", "stage=prompt_accepted elapsed_ms={}", preparing_since.elapsed().as_millis());
         if worker.is_none() && !turn.mode_command {
             let mut saved = turn.record.lock().await;
             remember_native_message_alias(&mut saved, &message_id, turn.request_id);
@@ -3629,13 +3969,46 @@ async fn run_turn(mut turn: Turn<'_>) -> Result<ReceiptStatus, String> {
         .await
     }
     .await;
+    let eligible = outcome == Ok(ReceiptStatus::Completed)
+        && configured
+        && !turn.compact
+        && !turn.mode_command
+        && turn.local_interactive
+        && turn.inbox.is_empty()
+        && receipt.is_none()
+        && can_keep_warm(&*turn.record.lock().await);
+    if eligible {
+        // session/wait is not a persistence flush. Park must confirm official
+        // quiescence and fsync before the desktop publishes an idle cache entry.
+        let parked = client
+            .request("lolicode/session/park", json!({"sessionId": sdk_id}))
+            .await;
+        if matches!(parked, Ok(ref value) if value["parked"] == true)
+            && turn.inbox.is_empty()
+            && can_keep_warm(&*turn.record.lock().await)
+        {
+            if outcome == Ok(ReceiptStatus::Completed) {
+                publish_web_preview(&turn).await;
+            }
+            return Ok((
+                ReceiptStatus::Completed,
+                Some(warm::WarmRuntime {
+                    client,
+                    events,
+                    born_at,
+                    fingerprint: completed_fingerprint,
+                    configured: true,
+                }),
+            ));
+        }
+    }
     let cleanup = client.shutdown().await;
     let outcome = outcome?;
     cleanup?;
     if outcome == ReceiptStatus::Completed {
         publish_web_preview(&turn).await;
     }
-    Ok(outcome)
+    Ok((outcome, None))
 }
 
 #[derive(Deserialize)]
@@ -5298,6 +5671,7 @@ mod native_message_alias_tests {
             sdk_id: owner.trim_start_matches("lc:").to_owned(),
             child: None,
             controls: None,
+            warm_reader: None,
         };
         let desktop = HarnessDesktop::default();
         assert!(record.native_message_aliases.is_empty());
