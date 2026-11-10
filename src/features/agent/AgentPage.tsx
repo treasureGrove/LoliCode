@@ -1817,6 +1817,8 @@ export function AgentPage({
   );
   const {
     snapshot,
+    activityRevision: desktopActivityRevision,
+    snapshotActivityRevision,
     error: snapshotError,
     loading: snapshotLoading,
     prefetch: prefetchSession,
@@ -1827,11 +1829,44 @@ export function AgentPage({
     onSnapshot,
     nativeTranscript: usesNativeTranscript,
   });
+  const nativeActivity = useRef<{
+    sessionId: string | null;
+    signature: string | null;
+    revision: number;
+    snapshotRevision: number;
+  }>({ sessionId: null, signature: null, revision: 0, snapshotRevision: -1 });
+  if (nativeActivity.current.sessionId !== sessionId)
+    nativeActivity.current = {
+      sessionId,
+      signature: null,
+      revision: 0,
+      snapshotRevision: -1,
+    };
+  if (usesNativeTranscript && snapshot?.session.id === sessionId) {
+    const signature = `${snapshot.status}:${snapshot.messages.length}`;
+    if (signature !== nativeActivity.current.signature) {
+      // The first completed desktop snapshot initializes the controls; it is
+      // not evidence that a concurrent native history read became obsolete.
+      // A snapshot read for a notification already covered by the desktop
+      // revision must not wake the reader again. Poll-only changes still do.
+      if (
+        nativeActivity.current.signature !== null
+          ? snapshotActivityRevision === nativeActivity.current.snapshotRevision
+          : desktopActivityRevision === 0 &&
+            (snapshot.status !== "idle" ||
+              snapshot.titlePending ||
+              snapshot.compacting)
+      )
+        nativeActivity.current.revision++;
+      nativeActivity.current.signature = signature;
+    }
+    nativeActivity.current.snapshotRevision = snapshotActivityRevision;
+  }
   const nativeSession = useAgentNativeSession(
     usesNativeTranscript ? sessionId : null,
     {
       enabled: isActive,
-      activityRevision: `${snapshot?.status ?? ""}:${snapshot?.messages.length ?? 0}:${refresh}:${Boolean(sessionId && pending[sessionId])}`,
+      activityRevision: `${nativeActivity.current.revision}:${desktopActivityRevision}:${refresh}:${Boolean(sessionId && pending[sessionId])}`,
     },
   );
   const nativeSessionRef = useRef(nativeSession);

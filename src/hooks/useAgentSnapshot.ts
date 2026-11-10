@@ -237,6 +237,7 @@ export function useAgentSnapshot(
         else entry.revision += 1;
       } else {
         entry.revision += 1;
+        if (selected) setRevision((value) => value + 1);
         selected?.invalidate();
       }
     },
@@ -298,7 +299,10 @@ export function useAgentSnapshot(
           entry.tail = null;
         }
         const changed =
-          shared !== cached || entry.tail !== oldTail || entry.error !== null;
+          shared !== cached ||
+          entry.tail !== oldTail ||
+          entry.error !== null ||
+          entry.readRevision !== requestedRevision;
         entry.snapshot = shared;
         entry.error = null;
         entry.lastRead = Date.now();
@@ -372,6 +376,8 @@ export function useAgentSnapshot(
 
   return {
     snapshot: displayed,
+    activityRevision: cached?.revision ?? 0,
+    snapshotActivityRevision: cached?.readRevision ?? -1,
     error,
     loading: Boolean(sessionId && !snapshot && !error),
     prefetch,

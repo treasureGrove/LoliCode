@@ -55,6 +55,8 @@ it("keeps desktop controls authoritative without merging converted tails into a 
     }),
   );
   await act(async () => {});
+  expect(result.current.activityRevision).toBe(0);
+  expect(result.current.snapshotActivityRevision).toBe(0);
   act(() =>
     emitTauriEvent("agent-session-update", {
       type: "tail",
@@ -69,14 +71,20 @@ it("keeps desktop controls authoritative without merging converted tails into a 
     }),
   );
   expect(result.current.snapshot?.messages).toEqual(stored.messages);
+  expect(result.current.activityRevision).toBe(0);
   act(() =>
     emitTauriEvent("agent-session-update", {
       type: "changed",
       sessionId: stored.session.id,
     }),
   );
+  expect(result.current.activityRevision).toBe(1);
+  expect(result.current.snapshotActivityRevision).toBe(0);
   await act(async () => vi.advanceTimersByTimeAsync(40));
   expect(read).toHaveBeenCalledTimes(2);
+  expect(result.current.snapshot).toBe(stored);
+  expect(result.current.activityRevision).toBe(1);
+  expect(result.current.snapshotActivityRevision).toBe(1);
 });
 
 it("shows only the selected session's stream tail before polling and preserves it across a stale read", async () => {

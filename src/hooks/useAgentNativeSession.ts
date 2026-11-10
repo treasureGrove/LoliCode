@@ -128,7 +128,10 @@ function retainNativePrefix(
     hasMore: previous.hasMore,
   };
 }
-const hasOpenTurn = (events: readonly SessionWireEvent[]) => {
+const hasOpenTurn = (
+  events: readonly SessionWireEvent[],
+  pendingInput = true,
+) => {
   for (let index = events.length - 1; index >= 0; index--) {
     if (events[index].type === "turn/start") return true;
     if (events[index].type === "turn/end") return false;
@@ -143,6 +146,7 @@ const hasOpenTurn = (events: readonly SessionWireEvent[]) => {
     // start; closing that connection is not a confirmed completed turn.
     const data = events[index].data;
     if (
+      pendingInput &&
       events[index].type === "user/message" &&
       data !== null &&
       typeof data === "object" &&
@@ -202,6 +206,13 @@ export function useAgentNativeSession(
     value: options.activityRevision,
   });
   const retryAfterOpening = useRef(false);
+  const retriedClosedRead = useRef(false);
+  const [retryRevision, setRetryRevision] = useState(0);
+  const scheduleOpeningRetry = useCallback(() => {
+    if (retryAfterOpening.current) return;
+    retryAfterOpening.current = true;
+    setRetryRevision((revision) => revision + 1);
+  }, []);
   const cache = useRef(new Map<string, NativeSessionView>());
   const [view, setView] = useState(() => empty(sessionId));
   const viewRef = useRef(view);
@@ -456,6 +467,19 @@ export function useAgentNativeSession(
             return;
           }
           subscription.current = null;
+          if (
+            !live &&
+            !retriedClosedRead.current &&
+            (viewRef.current.read?.state.active ||
+              viewRef.current.read?.state.running ||
+              hasOpenTurn(viewRef.current.events, false))
+          ) {
+            // The writer may have exited between the unary read and follow.
+            // Read the now-cold log once to catch its final committed events;
+            // an old interrupted journal must not cause an endless retry loop.
+            retriedClosedRead.current = true;
+            scheduleOpeningRetry();
+          }
           const completed =
             active.opened && !hasOpenTurn(viewRef.current.events);
           publish({
@@ -492,7 +516,7 @@ export function useAgentNativeSession(
         },
       );
     },
-    [publish, stop],
+    [publish, stop, scheduleOpeningRetry],
   );
 
   const load = useCallback(
@@ -636,6 +660,7 @@ export function useAgentNativeSession(
     generation.current++;
     stop();
     retryAfterOpening.current = false;
+    retriedClosedRead.current = false;
     observedActivity.current = { sessionId, value: activity.current };
     const previous = viewRef.current;
     const basis =
@@ -668,13 +693,20 @@ export function useAgentNativeSession(
     )
       return;
     const current = viewRef.current;
+    retriedClosedRead.current = false;
     if (current.realtime === "live" || current.realtime === "paused") return;
     if (current.loading || current.realtime === "connecting") {
-      retryAfterOpening.current = true;
+      scheduleOpeningRetry();
       return;
     }
     void load(false, true);
-  }, [sessionId, enabled, options.activityRevision, load]);
+  }, [
+    sessionId,
+    enabled,
+    options.activityRevision,
+    load,
+    scheduleOpeningRetry,
+  ]);
 
   useEffect(() => {
     if (
@@ -688,7 +720,7 @@ export function useAgentNativeSession(
     retryAfterOpening.current = false;
     if (view.realtime !== "live" && view.realtime !== "paused")
       void load(false, true);
-  }, [sessionId, enabled, view.loading, view.realtime, load]);
+  }, [sessionId, enabled, view.loading, view.realtime, retryRevision, load]);
 
   const visible =
     view.sessionId === sessionId
@@ -696,7 +728,10 @@ export function useAgentNativeSession(
       : (sessionId && cache.current.get(sessionId)) || empty(sessionId);
   return {
     ...visible,
-    refresh: () => load(false),
+    refresh: () => {
+      retriedClosedRead.current = false;
+      return load(false);
+    },
     loadOlder: () => load(true),
     pauseRealtime: () => {
       generation.current++;

@@ -1,6 +1,6 @@
 # Harness 原生会话与聊天模块复用推进方案
 
-状态：2026-11-09，原生 Harness 会话的默认聊天已直接读取官方事件并接收临时 Assistant 流；独立“原生会话预览”入口已删除。完整官方 UI Chat 插件和 Web Host 尚未挂载，桌面业务兼容投影仍保留。
+状态：2026-11-10，原生 Harness 会话的默认聊天已直接读取官方事件并接收临时 Assistant 流；独立“原生会话预览”入口已删除。冷历史读取已改用官方服务的只读组合。完整官方 UI Chat 插件和 Web Host 尚未挂载，桌面业务兼容投影仍保留。
 
 ## 目标与当前判断
 
@@ -104,6 +104,12 @@ pnpm exec vitest run tests/hooks/useAgentNativeSession.test.tsx tests/hooks/useA
 ### 官方实时记录与临时 Assistant 流
 
 默认聊天先读取历史，然后尝试 `watch_agent_session_native` → `lolicode/session/follow-native` → 官方 Gateway `session/follow`。仅对已有运行时与归属明确的驻留会话建立订阅；冷会话按需读取已有日志，不启动额外长期监听进程，也不轮询文件。新请求使运行时可用后，桌面活动通知会触发重新读取和订阅。
+
+冷历史 helper 不再启动整个 SDK profile，而通过 `host-native-reader-context.mjs` 组合官方 Cordis 服务，仍按顺序调用同一 Gateway 的 events、projections 和 state。保留全部 19 项官方 wire 投影，不复制 reducer；无模型 provider、声明式 Agent 或 SDK 启动插件。权限投影需要的 shell/sandbox 服务只作惰性注册。临时 HOME、凭据与缓存隔离，原日志仍由官方 read handle 读取，Rust 的并发限制、超时与进程回收继续生效。顺序读取有意保留：官方 prepared Session 缓存不合并并发初始化，并行三读可能重复加载完整日志。
+
+首次 idle 桌面快照只初始化控制状态，不再被当成新活动而重复冷读。真实桌面会话变更通知仍携带独立 revision，运行状态、发送和手动刷新继续唤醒读取。若运行时在读取与订阅之间退出，则对尚未闭合的执行或曾活动的 state 至多补读一次；真实新活动和显式重试重置该预算，避免中断历史形成循环读取。
+
+2026-11-10 在本机一份 951,347 字节的已结束压缩日志上作只读对照，固定同一历史 cut、最近 12 条消息：旧安装包 helper 为 2.665 秒，精简 helper 为 1.678 秒；79 个事件、全部投影和 state 逐值一致，原日志 SHA256 与 mtime 不变。这是单份历史的 helper 耗时，不等于所有会话或端到端界面的性能保证。
 
 官方发布的客户端 `SessionEventStream` 会设置 `activate: true` 与 `assistantStream: true`。当前接入使用同一个官方 Gateway follow，设置 `assistantStream: true` 接收即时回复，同时不传 `activate`，因此观察本身不会恢复 Agent。传输原样保留官方快照、提交事件和临时帧，不声称完整复用了官方客户端的自动重连或 UI Chat。
 

@@ -1080,6 +1080,53 @@ it("does not let late startup restore a paused subscription", async () => {
   });
 });
 
+it("reads the authoritative cold log once if the active writer vanishes before follow opens", async () => {
+  const active = {
+    ...response([event(0)], false, 0),
+    state: { ...response([], false, 0).state, active: true, running: true },
+  };
+  const ended: SessionWireEvent = {
+    seq: 1,
+    time: 2,
+    type: "turn/end",
+    data: { turn: 1, reason: { kind: "completed" } },
+  };
+  vi.mocked(agentApi.readSessionNative)
+    .mockResolvedValueOnce(active)
+    .mockResolvedValue(response([event(0), ended], false, 1));
+  const { result } = renderHook(() => useAgentNativeSession("lc:first"));
+  await act(async () => {});
+  expect(agentApi.readSessionNative).toHaveBeenCalledTimes(2);
+  expect(result.current.events.at(-1)).toBe(ended);
+  expect(result.current.realtime).toBe("history");
+});
+
+it("bounds cold catch-up for an interrupted journal and re-enables it for real activity and refresh", async () => {
+  const started: SessionWireEvent = {
+    seq: 0,
+    time: 1,
+    type: "turn/start",
+    data: { turn: 1 },
+  };
+  vi.mocked(agentApi.readSessionNative).mockResolvedValue(
+    response([started], false, 0),
+  );
+  const { result, rerender } = renderHook(
+    ({ revision }) =>
+      useAgentNativeSession("lc:first", { activityRevision: revision }),
+    { initialProps: { revision: 0 } },
+  );
+  await act(async () => {});
+  expect(agentApi.readSessionNative).toHaveBeenCalledTimes(2);
+  rerender({ revision: 1 });
+  await act(async () => {});
+  expect(agentApi.readSessionNative).toHaveBeenCalledTimes(4);
+  await act(async () => {
+    await result.current.refresh();
+  });
+  expect(agentApi.readSessionNative).toHaveBeenCalledTimes(6);
+});
+
 it("keeps a cold false result as static history without polling or prompting", async () => {
   vi.mocked(agentApi.readSessionNative).mockResolvedValue(
     response([event(0)], false, 0),
