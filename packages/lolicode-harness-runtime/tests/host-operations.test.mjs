@@ -211,7 +211,7 @@ test("native history crosses the official Gateway without flattening events or a
   const restored = JSON.parse(cold.stdout);
   assert.deepEqual(restored.page, live.page);
   assert.equal(restored.state.active, false);
-  assert.equal(restored.projections.values.turnOutline.length, 1);
+  assert.deepEqual(restored.projections, live.projections);
   assert.deepEqual(await readFile(journalPath), bytesBefore);
   assert.equal((await stat(journalPath)).mtimeMs, mtimeBefore);
   assert.deepEqual((await readdir(runtime.home, { recursive: true })).sort(), filesBefore);

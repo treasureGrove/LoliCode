@@ -151,37 +151,23 @@ async function readColdNative(sessions, sessionId, request, suppliedHome) {
     throw new Error(logUnreadable);
   }
   const pagination = nativePagination(request);
-  const [{ mkdtemp, writeFile, rm }, os] = await Promise.all([import("node:fs/promises"), import("node:os")]);
+  const [{ mkdtemp, rm }, os] = await Promise.all([import("node:fs/promises"), import("node:os")]);
   const parent = path.resolve(os.tmpdir());
   if (suppliedHome !== undefined && !path.isAbsolute(suppliedHome)) throw new Error(logUnreadable);
   const home = suppliedHome ?? await mkdtemp(path.join(parent, "lolicode-native-read-"));
-  let runtime;
+  let ctx;
   try {
     // The original sessions directory is only a read backend. Profiles,
     // credentials and disposable caches belong to a fresh helper HOME.
     process.env.DSH_HOME = home;
     process.env.DSH_TELEMETRY_DISABLED = "1";
     process.chdir(home);
-    const patch = path.join(home, "read-only.json");
-    await writeFile(patch, JSON.stringify([
-      { id: "sdk-app-startup", disabled: true },
-      { id: "sdk-jsonrpc-server", disabled: true },
-      { id: "session-persistence-jsonl", config: { root: sessions } },
-      { id: "session-telemetry-otel", disabled: true },
-      { id: "plugin-manager", disabled: true },
-    ]));
-    const [{ runProfile }, { createLaunchEnvironmentSnapshot }] = await Promise.all([
-      import("@deepseek-ai/dsh/lib/profile-boot.js"),
-      import("@deepseek-ai/dsh-launch-environment"),
-    ]);
-    runtime = await runProfile({
-      profile: "sdk", patchFiles: [patch], args: [],
-      environment: createLaunchEnvironmentSnapshot([{ source: "process", values: process.env }]),
-    });
-    return await readNativeSession(runtime.ctx, sessionId, pagination);
+    const { createNativeReaderContext } = await import("./host-native-reader-context.mjs");
+    ctx = await createNativeReaderContext(home, sessions);
+    return await readNativeSession(ctx, sessionId, pagination);
   } finally {
     try {
-      if (runtime) await runtime.shutdown.shutdown(0);
+      if (ctx) await ctx.fiber.dispose();
     } finally {
       // Rust owns supplied directories, including timeout/forced-exit cleanup.
       // A standalone CLI still owns and cleans up its own disposable HOME.
