@@ -57,6 +57,11 @@ pub fn require_stable_updates() -> Result<(), String> {
     }
 }
 
+/// The 4.0 and 4.1 build numbers preceded the unified release series.
+pub(crate) fn is_app_update(current: &semver::Version, available: &semver::Version) -> bool {
+    !(available.major == 4 && available.minor <= 1) && available.cmp_precedence(current).is_gt()
+}
+
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BuildInfo {
@@ -100,6 +105,23 @@ pub fn get_build_info() -> BuildInfo {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unified_updater_ignores_retired_builds_and_accepts_newer_releases() {
+        let current = "1.1.0".parse().unwrap();
+        for version in ["4.0.22", "4.1.6", "4.1.7", "1.1.0", "1.1.0+rebuild"] {
+            assert!(
+                !is_app_update(&current, &version.parse().unwrap()),
+                "{version}"
+            );
+        }
+        for version in ["1.1.1", "2.0.0"] {
+            assert!(
+                is_app_update(&current, &version.parse().unwrap()),
+                "{version}"
+            );
+        }
+    }
 
     #[test]
     fn development_identity_keeps_profile_port_and_updates_separate() {

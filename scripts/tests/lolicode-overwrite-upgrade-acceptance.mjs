@@ -1,5 +1,5 @@
 // Run from an elevated Windows shell using Node 24:
-// node scripts/tests/lolicode-overwrite-upgrade-acceptance.mjs <published-1.0.6.exe> [<local-4.1.7-setup.exe> <source-snapshot.json> <verified-candidate-sha256>]
+// node scripts/tests/lolicode-overwrite-upgrade-acceptance.mjs <published-1.0.6.exe> [<local-1.1.0-setup.exe> <source-snapshot.json> <verified-candidate-sha256>]
 // A baseline-only run rehearses the released installer and old transcript creation.
 // Upgrade runs restart/resume, then reinstall the identical candidate and resume
 // again, all in the same disposable account/profile with fresh prompts/request IDs.
@@ -29,7 +29,7 @@ function parseAcceptanceArgs(args, platform) {
         !/^[a-f0-9]{64}$/i.test(expectedCandidateSha256 ?? "")))
   ) {
     throw new Error(
-      "Usage (Windows): node lolicode-overwrite-upgrade-acceptance.mjs <published-v1.0.6.exe> [<candidate-4.1.7.exe> <source-snapshot.json> <independently-verified-64-hex-candidate-sha256>]",
+      "Usage (Windows): node lolicode-overwrite-upgrade-acceptance.mjs <published-v1.0.6.exe> [<candidate-1.1.0.exe> <source-snapshot.json> <independently-verified-64-hex-candidate-sha256>]",
     );
   }
   return { baseline, candidate, sourceSnapshotPath, expectedCandidateSha256 };
@@ -41,8 +41,8 @@ const sourceSnapshot =
   candidate && JSON.parse(await readFile(sourceSnapshotPath, "utf8"));
 if (sourceSnapshot) {
   assert.equal(sourceSnapshot.product, "LoliCode");
-  assert.equal(sourceSnapshot.productVersion, "1.0.7");
-  assert.equal(sourceSnapshot.buildVersion, "4.1.7");
+  assert.equal(sourceSnapshot.productVersion, "1.1.0");
+  assert.equal(sourceSnapshot.buildVersion, "1.1.0");
   for (const key of ["sourceCommit", "sourceTree", "parentCommit"])
     assert.match(sourceSnapshot[key], /^[a-f0-9]{40}$/);
   assert.match(sourceSnapshot.sourceArchiveSha256, /^[a-f0-9]{64}$/);
@@ -785,7 +785,7 @@ try {
     path.join(stage, "plan.json"),
     JSON.stringify({
       upgrade: Boolean(candidate),
-      candidateVersion: "4.1.7",
+      candidateVersion: sourceSnapshot?.buildVersion,
       candidateSha256: candidateHash || undefined,
       expectedHarnessVersion,
       debugPorts: {

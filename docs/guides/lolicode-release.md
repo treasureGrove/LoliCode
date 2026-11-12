@@ -6,7 +6,7 @@
 
 当前正式产品版本为 **v1.0.6**、原生更新版本为 **4.1.6**，见[本次交付记录](lolicode-v1.0.6-delivery.md)。本轮公开分发 **Windows x64 NSIS 安装版与便携 ZIP**，Android 保留既有 **0.1.0-alpha.4** 测试包；macOS 和 Linux 是产品目标，尚未发布对应安装包。真实发布结果记录在每版交付文档中，不能用待发布清单替代发布证据。
 
-`product-release.json` 区分展示版本和原生构建版本，`scripts/release/lolicode-product-version.mjs` 负责映射。Cargo、package、Tauri 和 feed.version 继续使用递增的 4.1.6；官网、GitHub tag、下载文件名和目录使用 1.0.6，feed.productVersion 用于展示，不能把 updater 版本回退成产品版本号。维护者可使用 `$lolicode-release` skill。
+下一版从 **1.1.0** 开始统一版本号。`product-release.json` 中的两个版本字段，以及 Cargo、package、Tauri、更新清单、GitHub tag 和下载路径都使用同一个版本。发布工具允许从旧的 `4.0.x` 或 `4.1.x` 更新清单切换到新序列。已经安装旧版的用户需要手动下载安装 1.1.0 一次，之后由新版检查后续更新。历史包沿用其原有版本和下载路径。维护者可使用 `$lolicode-release` skill。
 
 当前源码冻结与便携包验收入口为 `scripts/dev/lolicode-build-snapshot.mjs`、`scripts/build/lolicode-portable.mjs`。前者在独立 index 和审计 ref 中保存源树并导出构建目录，保留用户分支和 index；后者从真实本轮可执行文件组装 ZIP、逐文件核对并执行离线自检。
 
@@ -35,12 +35,12 @@ v1.0.2 及后续安装包使用 `src-tauri/nsis/installer.nsi` 自定义模板�
 
 发版前执行 `node --test scripts/tests/lolicode-nsis-overwrite-upgrade.test.mjs`。此测试通过本机已安装的 Tauri CLI 和真实 NSIS 编译器打包隔离程序，实际验证旧 publisher 项缺失、中文/空格路径、重复覆盖、应用内更新、旧程序名缺失、数据保留、禁止降级策略与异常目录拒绝；使用唯一测试注册项，不操作真实用户安装。升级 Tauri CLI 时同步复核自定义模板和上游差异。
 
-Harness 迁移可用下面的命令复现真实覆盖安装。先取得临时标准 Windows 测试账户、其测试目录 ACL 以及必要时关闭 LoliCode 的授权，再在管理员 PowerShell 中运行。传入已发布的 v1.0.6 NSIS 安装器、已独立完成签名与载荷核验的本地 4.1.7 候选、该候选冻结时的 `source-snapshot.json` 和已核验的候选完整 SHA256。执行者还须独立核对 `source.tar` SHA256、冻结 commit/tree 及其与候选源码的对应关系；本脚本只记录并绑定传入的已核验回执，不独立证明源码到产物的映射。缺少参数、SHA 格式错误或版本不符时会在创建测试目录、账户及修改 ACL 前拒绝；本脚本不代替安装器签名验签。
+Harness 迁移可用下面的命令复现真实覆盖安装。先取得临时标准 Windows 测试账户、其测试目录 ACL 以及必要时关闭 LoliCode 的授权，再在管理员 PowerShell 中运行。传入已发布的 v1.0.6 NSIS 安装器、已独立完成签名与载荷核验的本地 1.1.0 候选、该候选冻结时的 `source-snapshot.json` 和已核验的候选完整 SHA256。执行者还须独立核对 `source.tar` SHA256、冻结 commit/tree 及其与候选源码的对应关系；本脚本只记录并绑定传入的已核验回执，不独立证明源码到产物的映射。缺少参数、SHA 格式错误或版本不符时会在创建测试目录、账户及修改 ACL 前拒绝；本脚本不代替安装器签名验签。
 
 ```powershell
 node scripts/tests/lolicode-overwrite-upgrade-acceptance.mjs `
   "<published-v1.0.6-setup.exe>" `
-  "<local-4.1.7-setup.exe>" `
+  "<local-1.1.0-setup.exe>" `
   "<candidate-freeze>\source-snapshot.json" `
   "<independently-verified-64-hex-candidate-sha256>"
 
@@ -108,7 +108,7 @@ https://tools.treasuregrove.art/lolicode/releases/<version>/<installer>.exe
 
 ## 每次发布
 
-1. 选取严格递增的 SemVer，同步配置和版本文件，完成测试并构建正式 NSIS 安装器。改变 `+build` 元数据不算版本递增。构建负责人提供 `.exe` 和匹配的 `.exe.sig`，不要用便携主程序代替安装器。
+1. 从 1.1.0 起选取严格递增的 SemVer，同步配置和版本文件，完成测试并构建正式 NSIS 安装器。改变 `+build` 元数据不算版本递增。构建负责人提供 `.exe` 和匹配的 `.exe.sig`，不要用便携主程序代替安装器。
 2. 验证安装器包含正确的应用、默认技能及许可证。迁移到 DeepSeek Harness 的构建将固定版本的 Harness、Node.js、锁定依赖和许可证放在 `agent/harness-runtime`。安装版与便携版都从该目录启动 Agent。提取实际主程序运行 `--check-agent-runtime`，验证包内运行时、模型网关、读写工具和会话恢复。安装器签名验证与这项资源自检分别运行。
 3. 用以下命令准备一个新版本目录。所有参数都明确指向本轮产物和公钥；`--notes-file` 仅接受 Markdown 文件。
 

@@ -1,5 +1,5 @@
 {
-  "version": "4.1.7",
+  "version": "1.1.0",
   "items": [
     {
       "type": "new",
@@ -17,10 +17,10 @@
     },
     {
       "type": "improve",
-      "zh": "加快本地会话历史显示，改进标题、侧栏和输入框，合并头像与更多菜单",
-      "zh-TW": "加快本機對話歷史顯示，改善標題、側欄和輸入框，合併頭像與更多選單",
-      "en": "Show local history sooner, improve titles, sidebar and composer, and combine avatar and More menus",
-      "ja": "ローカル履歴を早く表示し、タイトル・サイドバー・入力欄を改善、アバターとその他を統合"
+      "zh": "加快本地会话历史显示，新会话直接进入欢迎页",
+      "zh-TW": "加快本機對話歷史顯示，新對話直接進入歡迎頁",
+      "en": "Show local history sooner and open new conversations on the welcome screen",
+      "ja": "ローカル履歴を早く表示し、新規会話では歓迎画面を表示"
     },
     {
       "type": "fix",

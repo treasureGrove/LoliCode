@@ -52,6 +52,8 @@ jobs:
           $packageVersion = (Get-Content -Raw package.json | ConvertFrom-Json).version
           $tauriVersion = (Get-Content -Raw src-tauri/tauri.conf.json | ConvertFrom-Json).version
           if ($packageVersion -ne $env:RELEASE_VERSION -or $tauriVersion -ne $env:RELEASE_VERSION) { throw 'Commit the release version before running this workflow.' }
+          $release = Get-Content -Raw product-release.json | ConvertFrom-Json
+          if ($release.productVersion -ne $env:RELEASE_VERSION -or $release.buildVersion -ne $env:RELEASE_VERSION -or $productVersion -ne $env:RELEASE_VERSION) { throw 'The public and build versions must match.' }
           if (-not (Test-Path "src/whats-new/$env:RELEASE_VERSION.json")) { throw 'Missing in-app release notes.' }
       - name: Install dependencies
         shell: pwsh

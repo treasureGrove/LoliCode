@@ -649,7 +649,13 @@ pub fn run() {
                 if !channel::is_development() {
                     if let Err(e) = app
                         .handle()
-                        .plugin(tauri_plugin_updater::Builder::new().build())
+                        .plugin(
+                            tauri_plugin_updater::Builder::new()
+                                .default_version_comparator(|current, release| {
+                                    channel::is_app_update(&current, &release.version)
+                                })
+                                .build(),
+                        )
                     {
                         // 若配置不完整（如缺少 pubkey），跳过 Updater 而不中断应用
                         log::warn!("初始化 Updater 插件失败，已跳过：{e}");

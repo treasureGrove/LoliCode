@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  WHATS_NEW_ENTRIES,
   changelogUrl,
   entriesSince,
   entriesUpTo,
@@ -65,6 +66,14 @@ describe("entriesUpTo", () => {
 });
 
 describe("seen version", () => {
+  it("shows the unified release notes even if a retired build was marked seen", () => {
+    expect(isNewerThanSeen("1.1.0", "4.1.7")).toBe(true);
+    expect(versions(entriesSince(WHATS_NEW_ENTRIES, "4.1.7", "1.1.0"))).toEqual(
+      ["1.1.0"],
+    );
+    expect(markSeen("4.1.7", "1.1.0")).toBe("1.1.0");
+  });
+
   it("only moves forward", () => {
     expect(markSeen(undefined, "4.0.2")).toBe("4.0.2");
     expect(markSeen("4.0.1", "4.0.2")).toBe("4.0.2");

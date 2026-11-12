@@ -375,6 +375,33 @@ test("previous published version and inherited upstream key both prevent acciden
 });
 
 
+test("the unified series replaces the old feed and refuses a switch back", async () => {
+  const f = fixture();
+  try {
+    const previous = path.join(f.root, "previous.json");
+    writeFileSync(previous, JSON.stringify({ version: "4.1.6", productVersion: "1.0.6" }));
+    await assert.rejects(
+      prepareRelease({ ...f.options, "current-version": "1.1.0" }),
+      /must increase/,
+    );
+    f.config.version = "1.1.0";
+    writeFileSync(f.configFile, JSON.stringify(f.config));
+    const prepared = await prepareRelease({
+      ...f.options,
+      version: "1.1.0",
+      "current-version": "4.1.6",
+      "previous-manifest": previous,
+    });
+    assert.equal(path.basename(prepared.directory), "1.1.0");
+    assert.equal(prepared.installer.name, "LoliCode-1.1.0-Windows-x64-Setup.exe");
+    const feed = JSON.parse(readFileSync(path.join(prepared.directory, "latest.json")));
+    assert.equal(feed.version, "1.1.0");
+    assert.equal(feed.productVersion, undefined);
+  } finally {
+    f.clean();
+  }
+});
+
 test("independent v1 public assets retain a higher native updater version", async () => {
   const f=fixture();
   try {

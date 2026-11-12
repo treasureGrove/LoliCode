@@ -42,6 +42,15 @@ def compare(a, b):
     return (len(ap) > len(bp)) - (len(ap) < len(bp))
 
 
+def compare_release_versions(a, b):
+    order = compare(a, b)
+    legacy_a = version(a)[0][:2] in ([4, 0], [4, 1])
+    legacy_b = version(b)[0][:2] in ([4, 0], [4, 1])
+    if legacy_a != legacy_b and compare(b if legacy_a else a, '1.1.0-0') >= 0:
+        return -1 if legacy_a else 1
+    return order
+
+
 def no_symlink(path):
     if path.is_symlink():
         raise ValueError('Refusing symlink inside the publishing namespace.')
@@ -78,8 +87,8 @@ def main(phase, spec):
     release_version = spec['version']
     public_version = spec.get('productVersion', release_version)
     build_core, build_pre = version(release_version)
-    expected_public = (f'{build_core[0]-3}.{build_core[1]-1}.{build_core[2]}'
-                       if build_core[0] >= 4 and build_core[1] >= 1 else release_version)
+    expected_public = (f'1.0.{build_core[2]}'
+                       if build_core[:2] == [4, 1] else release_version)
     if public_version != expected_public or version(public_version)[1]:
         raise ValueError('Product/build version mismatch.')
     if version(release_version)[1]:
@@ -118,7 +127,7 @@ def main(phase, spec):
     def no_downgrade():
         if latest.exists():
             published = json.loads(latest.read_text(encoding='utf8'))
-            if compare(published['version'], release_version) >= 0:
+            if compare_release_versions(published['version'], release_version) >= 0:
                 raise ValueError('Published latest version is equal or newer; refusing rollback/overwrite.')
 
     def verify_files(release_root):

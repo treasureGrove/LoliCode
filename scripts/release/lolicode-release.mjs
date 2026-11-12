@@ -91,6 +91,20 @@ export function compareVersions(a, b) {
   return 0;
 }
 
+// 1.1.0 starts the unified series after the old 4.0/4.1 build numbers.
+function compareReleaseVersions(a, b) {
+  const order = compareVersions(a, b);
+  const legacyA = /^4\.[01]\./.test(a);
+  const legacyB = /^4\.[01]\./.test(b);
+  if (
+    legacyA !== legacyB &&
+    compareVersions(legacyA ? b : a, "1.1.0-0") >= 0
+  ) {
+    return legacyA ? -1 : 1;
+  }
+  return order;
+}
+
 export function httpsURL(value) {
   if (
     typeof value !== "string" ||
@@ -235,11 +249,11 @@ export async function prepareRelease(options) {
   const version = parseVersion(options.version).value;
   const publicVersion = productVersion(version);
   const current = parseVersion(options["current-version"]).value;
-  if (compareVersions(version, current) <= 0)
+  if (compareReleaseVersions(version, current) <= 0)
     throw new Error("Release version must increase above current-version.");
   if (
     options["previous-manifest"] &&
-    compareVersions(version, readJSON(options["previous-manifest"]).version) <=
+    compareReleaseVersions(version, readJSON(options["previous-manifest"]).version) <=
       0
   )
     throw new Error(
@@ -450,7 +464,7 @@ export async function verifyRelease(options) {
     release.publicKeyFingerprintSha256 !== publicKey.fingerprint ||
     latest.version !== release.version ||
     config.version !== release.version ||
-    compareVersions(release.version, release.previousVersion) <= 0
+    compareReleaseVersions(release.version, release.previousVersion) <= 0
   )
     throw new Error("Release identity/version/public-key binding is invalid.");
   if (!Array.isArray(release.files) || ![3, 4].includes(release.files.length))

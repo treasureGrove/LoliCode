@@ -20,6 +20,9 @@ const root = path.resolve(
   "../..",
 );
 const templatePath = path.join(root, "src-tauri/nsis/installer.nsi");
+const releaseConfig = JSON.parse(
+  readFileSync(path.join(root, "src-tauri/tauri.conf.json"), "utf8"),
+);
 const hooksPath = path.join(
   root,
   "src-tauri/nsis/lolicode-installer-hooks.nsh",
@@ -58,10 +61,10 @@ function ps(source, env = {}) {
 }
 
 test("release configuration selects the reviewed overwrite-upgrade template", () => {
-  const config = JSON.parse(
-    readFileSync(path.join(root, "src-tauri/tauri.conf.json"), "utf8"),
+  assert.equal(
+    releaseConfig.bundle.windows.nsis.template,
+    "nsis/installer.nsi",
   );
-  assert.equal(config.bundle.windows.nsis.template, "nsis/installer.nsi");
   const template = readFileSync(templatePath, "utf8");
   assert.match(template, /tauri-cli-v2\.10\.1/);
   assert.doesNotMatch(
@@ -172,7 +175,8 @@ test(
     `);
       }
 
-      installers = ["4.1.2", "4.1.3"].map((version) => {
+      const versions = ["4.1.2", "4.1.3", releaseConfig.version];
+      installers = versions.map((version, index) => {
         const config = {
           productName: fixtureId,
           mainBinaryName: "LoliCode",
@@ -190,7 +194,10 @@ test(
               "long-version.txt": longResource,
             },
             windows: {
-              allowDowngrades: false,
+              allowDowngrades:
+                index === 2
+                  ? releaseConfig.bundle.windows.allowDowngrades
+                  : false,
               webviewInstallMode: { type: "skip" },
               nsis: {
                 installMode: "currentUser",
@@ -391,11 +398,15 @@ test(
       assert.equal(downgrade.status, 1);
       verify("4.1.3");
 
+      // Manually install the unified release over a numerically higher old build.
+      run(installers[2], ["/S", "/NS"]);
+      verify(releaseConfig.version);
+
       // An unusable registration must fail closed before copying any files.
       registration(
         `Remove-Item -LiteralPath $env:LOLICODE_FIXTURE_PUBLISHER_KEY -Force; Set-ItemProperty -LiteralPath $env:LOLICODE_FIXTURE_UNINSTALL_KEY -Name InstallLocation -Value 'C:\\'; Set-ItemProperty -LiteralPath $env:LOLICODE_FIXTURE_UNINSTALL_KEY -Name UninstallString -Value 'relative\\uninstall.exe'`,
       );
-      const invalid = spawnSync(installers[1], ["/S", "/NS"], {
+      const invalid = spawnSync(installers[2], ["/S", "/NS"], {
         windowsHide: true,
         timeout: 30000,
       });
@@ -403,7 +414,7 @@ test(
       assert.equal(invalid.status, 2);
       assert.equal(
         readFileSync(path.join(install, "version.txt"), "utf8"),
-        "4.1.3",
+        releaseConfig.version,
       );
       assert.equal(existsSync(marker), false);
     } finally {

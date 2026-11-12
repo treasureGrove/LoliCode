@@ -1,5 +1,6 @@
 import { compareVersions } from "@/lib/version";
 import { APP_CHANGELOG } from "@/lib/branding";
+import { isPreviousBuildSeries } from "@/lib/productVersion";
 
 /**
  * 更新摘要：每个版本一份 `src/whats-new/<version>.json`，构建时打进安装包。
@@ -28,18 +29,27 @@ const modules = import.meta.glob<WhatsNewEntry>("../whats-new/*.json", {
   import: "default",
 });
 
-/** 所有版本的摘要，新到旧 */
-export const WHATS_NEW_ENTRIES: WhatsNewEntry[] = Object.values(modules).sort(
-  (a, b) => compareVersions(b.version, a.version),
-);
+/** 新版本序列的摘要，新到旧。 */
+export const WHATS_NEW_ENTRIES: WhatsNewEntry[] = Object.values(modules)
+  .filter((entry) => !isPreviousBuildSeries(entry.version))
+  .sort((a, b) => compareVersions(b.version, a.version));
 
 /** 当前版本比记录的已看版本新（或从没记录过）：需要处理一次 */
 export function isNewerThanSeen(
   current: string,
   seen: string | undefined,
 ): boolean {
-  return !seen || compareVersions(current, seen) > 0;
+  return (
+    !seen ||
+    resetSeenVersion(current, seen) ||
+    compareVersions(current, seen) > 0
+  );
 }
+
+const resetSeenVersion = (current: string, seen: string) =>
+  !isPreviousBuildSeries(current) &&
+  compareVersions(current, "1.1.0-0") >= 0 &&
+  isPreviousBuildSeries(seen);
 
 /**
  * 启动弹窗要显示的版本：`(seen, current]` 里有内容的版本，新到旧。
@@ -52,7 +62,8 @@ export function entriesSince(
 ): WhatsNewEntry[] {
   return entries.filter((entry) => {
     if (entry.items.length === 0) return false;
-    if (!seen) return entry.version === current;
+    if (!seen || resetSeenVersion(current, seen))
+      return entry.version === current;
     return (
       compareVersions(entry.version, seen) > 0 &&
       compareVersions(entry.version, current) <= 0
@@ -80,7 +91,11 @@ export function markSeen(
   current: string | undefined,
 ): string | undefined {
   if (!current) return seen;
-  return seen && compareVersions(seen, current) > 0 ? seen : current;
+  return seen &&
+    !resetSeenVersion(current, seen) &&
+    compareVersions(seen, current) > 0
+    ? seen
+    : current;
 }
 
 export function resolveWhatsNewLanguage(language: string): WhatsNewLanguage {
