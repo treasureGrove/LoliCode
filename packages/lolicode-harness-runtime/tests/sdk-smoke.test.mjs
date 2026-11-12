@@ -6,9 +6,8 @@ import os from "node:os";
 import path from "node:path";
 import { createInterface } from "node:readline";
 import { test } from "node:test";
-import { fileURLToPath } from "node:url";
+import { runtimeRoot as root } from "./runtime-fixture.mjs";
 
-const root = fileURLToPath(new URL("../", import.meta.url));
 const png =
   "iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAIAAABvFaqvAAAAK0lEQVR4nGNkaGCgCmCijjEMowYRAUYDmzAYDSPCYDSMCIPRMCIMBl8YAQAWVACw3XqkiQAAAABJRU5ErkJggg==";
 const sessionId = "lolicode-sdk-fixture";

@@ -6,10 +6,10 @@ import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { importRuntime, runtimeFixtureEnvironment, runtimeRoot as root } from "./runtime-fixture.mjs";
 
 const execute = promisify(execFile);
 const file = fileURLToPath(import.meta.url);
-const root = fileURLToPath(new URL("../", import.meta.url));
 const terminalBundle = "dsh-experimental-terminal-bundle";
 const ralphBundle = "dsh-experimental-ralph-bundle";
 
@@ -47,8 +47,8 @@ async function inspectProfile(mode, home) {
   process.chdir(home);
   const [{ runProfile }, { createLaunchEnvironmentSnapshot }] =
     await Promise.all([
-      import("@deepseek-ai/dsh/lib/profile-boot.js"),
-      import("@deepseek-ai/dsh-launch-environment"),
+      importRuntime("@deepseek-ai/dsh/lib/profile-boot.js"),
+      importRuntime("@deepseek-ai/dsh-launch-environment"),
     ]);
   const selected =
     mode === "default"
@@ -182,6 +182,7 @@ if (process.argv[2] === "--inspect-profile") {
             cwd: root,
             env: {
               ...env,
+              ...runtimeFixtureEnvironment,
               DSH_HOME: home,
               DSH_TELEMETRY_DISABLED: "1",
               LOLICODE_TERMINAL_FIXTURE_TOKEN: "unused-fixture",

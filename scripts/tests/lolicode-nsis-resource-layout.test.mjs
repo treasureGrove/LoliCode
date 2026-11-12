@@ -58,6 +58,8 @@ const create = instruction('CreateDirectory "$LoliCodeResourceRoot\\');
 const copy = instruction('File /a "/oname=$LoliCodeResourceRoot\\');
 const remove = instruction('Delete "$LoliCodeResourceRoot\\');
 const removeDirectory = instruction('RMDir /REBOOTOK "$LoliCodeResourceRoot\\');
+const resourceDetailsBegin = instruction("SetDetailsPrint textonly");
+const resourceDetailsEnd = instruction("SetDetailsPrint lastused");
 function render(line, relative, source = "") {
   // The full Tauri bundler regression checks these exact rendered commands.
   // Handlebars consumes one source backslash immediately before an expression.
@@ -108,6 +110,17 @@ test("resource instructions use one separator without rewriting INSTDIR or main 
   assert(template.includes('File "${MAINBINARYSRCPATH}"'));
   assert(template.includes('Delete "$INSTDIR\\${MAINBINARYNAME}.exe"'));
   assert(template.includes('RMDir "$INSTDIR"'));
+  const resourceStart = template.indexOf(resourceDetailsBegin);
+  const resourceEnd = template.indexOf(resourceDetailsEnd);
+  assert(template.indexOf('File "${MAINBINARYSRCPATH}"') < resourceStart);
+  assert(resourceStart < template.indexOf(create));
+  assert(template.indexOf(copy) < resourceEnd);
+  assert(resourceEnd < template.indexOf("; Copy external binaries"));
+  assert.deepEqual(
+    template.slice(resourceStart, resourceEnd).match(/SetDetailsPrint[^\n]*/gu),
+    [resourceDetailsBegin],
+    "lastused must restore the mode from before resource extraction",
+  );
 });
 
 test(
@@ -258,6 +271,7 @@ test(
         '  !insertmacro CheckIfAppIsRunning "LoliCode.exe" "LoliCode"',
         `  File "/oname=LoliCode.exe" "${quote(payload)}"`,
         "  SetOverwrite on",
+        resourceDetailsBegin,
         ...[...directories].flatMap((directory) => [
           "  ClearErrors",
           render(create, directory),
@@ -272,6 +286,7 @@ test(
           "  SetErrorLevel 84",
           "  Quit",
         ]),
+        resourceDetailsEnd,
         '  SetOutPath "$INSTDIR\\alternate"',
         "  !insertmacro NSIS_HOOK_PREUNINSTALL",
         '  StrCmp $OUTDIR "$INSTDIR\\alternate" +3 0',

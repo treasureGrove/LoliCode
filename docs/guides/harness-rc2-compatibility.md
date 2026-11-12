@@ -27,6 +27,25 @@ Windows 源运行时实际 `node_modules` 文件数：已发布 1.1.1 对应的 
 因此 **rc.2 首次正式发包前，必须补齐旧 SDK 资源清理及 rc.1→rc.2 实际覆盖安装验收**；开发版空目录修复不能替代这项发布条件。
 验收须确认旧私有 Zod 不再遮蔽根依赖、会话与配置保留，且重复安装、失败恢复及未知文件保护符合预期。
 
+## 安装载荷继续精简
+
+同日进一步只裁剪发行副本中的外部 Source Map v3 调试映射，源码工作区的完整 npm 安装保持不变。
+规则同时检查代码/声明/CSS 映射后缀和实际 JSON 结构；未知 `.map` 数据保留，链接在删除前拒绝。
+上游合并代码后遗留的孤立映射也可移除，不要求存在同名编译文件。
+
+Windows 实际发行依赖从 **38,362 个文件降至 28,457 个**，减少 **9,905 个（25.8%）**；
+解压内容减少 **105,794,583 字节（100.89 MiB）**。
+保留的 28,457 个文件与完整 SDK 逐字节一致，包括全部 **8,605 个类型声明**、TS 源码、许可证、插件、运行代码和资源。
+此数字是文件数和未压缩载荷变化，不是安装包下载大小或已测得的安装耗时。
+移除映射影响源码级调试定位；正常执行仍使用原来的 JS，插件开发需要的声明和源码仍在。
+
+裁剪在隔离构建暂存区完成，通过后再替换旧 bundle；失败保留原运行时。
+发行策略有独立缓存键，规则变化会重建 bundle，不使完整源码 SDK 的缓存失效。
+运行时清单记录裁剪规则、文件数和字节数，后续桥接更新继续复用已验证的精简依赖。
+
+NSIS 原本已采用 LZMA solid 压缩；资源解包段改为 `SetDetailsPrint textonly`，保留当前进度但不逐文件追加详情列表，
+资源完成后恢复原显示模式。本轮不引入首次启动解压，正式覆盖升级仍须完成上面的旧 SDK 文件清理门槛。
+
 ## 验证
 
 - 去重后的官方 SDK 全套测试：46 项通过。
@@ -34,6 +53,9 @@ Windows 源运行时实际 `node_modules` 文件数：已发布 1.1.1 对应的 
 - 运行时缓存、载荷校验与替换恢复：11 项通过。
 - 另外使用已发布 1.1.1 的 rc.1 运行时创建真实主会话和子任务，在 rc.2 下只读检查原日志、继续主会话与原子任务，并验证总秘书收到子任务结果。去重前后均通过。
 - 真实根→子→孙任务重启用例验证只恢复根和孙时，父任务保持未激活；审批绑定孙任务，Plan 限制有效，其他根会话无法读取或操作该孙任务。
+- 本轮精简副本使用其中的 Node 执行 SDK 回归，48 项全部通过（无跳过），包括真实终端、Ralph、PTC 带类型代码调用 MCP 审批，以及 rc.1 主会话和子任务的跨版本续聊。
+- 裁剪、缓存和失败恢复回归 16 项通过；包含裁剪策略改变只失效发行缓存、删除中途 I/O 失败时原 bundle 和源码 SDK 保持完整。
+- 安装器隔离回归 13 项通过，包括真实覆盖安装和中文长路径资源；未生成或发布本轮正式安装包，未测量真实安装耗时。
 
 可重复运行：
 
@@ -41,6 +63,7 @@ Windows 源运行时实际 `node_modules` 文件数：已发布 1.1.1 对应的 
 pnpm prepare:harness-runtime
 node --test packages/lolicode-harness-runtime/tests/*.test.mjs
 node --test scripts/tests/prepare-harness-runtime-cache.test.mjs
+node --test scripts/tests/harness-distribution.test.mjs
 pnpm typecheck
 pnpm exec vitest run tests/components/AgentSecretaryTasks.test.tsx tests/components/AgentPage.test.tsx tests/components/AgentNativeTranscript.test.tsx tests/hooks/useAgentNativeSession.test.tsx tests/hooks/useSecretaryActivity.test.tsx
 ```
@@ -48,3 +71,8 @@ pnpm exec vitest run tests/components/AgentSecretaryTasks.test.tsx tests/compone
 开发版会核对编入程序的 SDK 版本，因此不能仅把 rc.2 资源复制给旧程序。
 在绑定源码的 `dev` 工作区执行 `pnpm build:dev`，或退出开发版后重新点击「LoliCode 开发版」，进行一次开发增量构建。
 此路径不生成 NSIS 安装器或发布签名包；沿用开发版独立数据目录。
+
+验证实际发行副本时，设置 `LOLICODE_TEST_RUNTIME_ROOT` 为该 `harness-runtime` 的绝对路径，
+并使用其中的 `node.exe` / `node` 执行 SDK 测试。测试会拒绝误用系统 Node，所有 SDK、宿主、冷读和 PTC 子进程绑定该副本，
+缺失依赖不能回退到源码 SDK。可选设置 `LOLICODE_TEST_BASELINE_RUNTIME_ROOT` 为已核验 rc.1 运行时，
+启用创建真实旧主会话/子任务、冷读保留原日志、恢复与续聊的跨版本用例。

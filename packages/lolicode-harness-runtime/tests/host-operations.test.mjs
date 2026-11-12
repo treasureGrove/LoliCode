@@ -5,13 +5,12 @@ import { createServer } from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { JsonRpcLineTransport } from "@deepseek-ai/dsh-sdk-protocol";
-import { formatBoundedSessionMarkdown } from "../host-session-markdown.mjs";
-import { boundedNativeSession, nativePagination } from "../host-session-native.mjs";
+import { importRuntime, runtimeRoot as root } from "./runtime-fixture.mjs";
 
-const root = fileURLToPath(new URL("../", import.meta.url));
+const { JsonRpcLineTransport } = await importRuntime("@deepseek-ai/dsh-sdk-protocol");
+const { formatBoundedSessionMarkdown } = await importRuntime("./host-session-markdown.mjs");
+const { boundedNativeSession, nativePagination } = await importRuntime("./host-session-native.mjs");
 const provider = "lolicode-gateway";
 const model = "lolicode-host-operations-fixture";
 const cancelMethod = "lolicode/session/cancel";
@@ -96,18 +95,18 @@ async function fixture(t, onModelCall, onHostRequest) {
     home,
     project,
     get modelError() { return modelError; },
-    async start({ userQuestions = false, pluginBundles = [], patchFiles = [], initialize = true } = {}) {
+    async start({ userQuestions = false, pluginBundles = [], patchFiles = [], initialize = true, launchRoot = root } = {}) {
       const env = Object.fromEntries(Object.entries(process.env).filter(([key]) =>
         /^(PATH|HOME|USERPROFILE|SYSTEMROOT|SYSTEMDRIVE|WINDIR|TEMP|TMP|TMPDIR)$/i.test(key)));
       const child = spawn(process.execPath, [
-        path.join(root, "node_modules/@deepseek-ai/dsh/lib/bin.js"),
+        path.join(launchRoot, "node_modules/@deepseek-ai/dsh/lib/bin.js"),
         "--profile", "sdk",
         ...pluginBundles.flatMap((name) => [
-          "--patch", path.join(root, "node_modules", "@deepseek-ai", name, "cordis.patch.yml"),
+          "--patch", path.join(launchRoot, "node_modules", "@deepseek-ai", name, "cordis.patch.yml"),
         ]),
         ...patchFiles.flatMap(file => ["--patch", file]),
-        "--patch", path.join(root, "profile.cordis.patch.yml"),
-        "--patch", path.join(root, "host-operations.cordis.patch.yml"),
+        "--patch", path.join(launchRoot, "profile.cordis.patch.yml"),
+        "--patch", path.join(launchRoot, "host-operations.cordis.patch.yml"),
         "--patch", gateway,
       ], {
         cwd: project,
@@ -2091,4 +2090,154 @@ test("selected upstream plugin bundles run a persistent terminal and a fresh Ral
   assert.equal(freshWorker, true);
   assert.match(ralphResult, /reported completion after 1 round/);
   assert.match(ralphResult, /isolated proof/);
+});
+
+test("PTC executes typed code and an approved MCP binding with the selected runtime", { timeout: 60_000 }, async (t) => {
+  const sessionId = "ptc-mcp-runtime-fixture";
+  const toolName = "mcp_fixture_ptc_lookup";
+  const calls = [];
+  let resultSeen = false;
+  const runtime = await fixture(t, (body, response) => {
+    const result = body.messages.find(message => message.role === "tool");
+    if (result) {
+      const content = JSON.stringify(result.content);
+      assert.match(content, /42/);
+      assert.match(content, /approved PTC host result/);
+      resultSeen = true;
+      modelReply(response, "Typed PTC and MCP fixture completed.");
+    } else {
+      assert.deepEqual(body.tools.map(tool => tool.function.name), ["run_code"]);
+      fixtureTool(response, "ptc-program", "run_code", {
+        description: "Run typed code and an approved fixture tool",
+        code: `const n: number = 41; const result = await tools.${toolName}({ query: "typed PTC query" }); return { answer: n + 1, result };`,
+      });
+    }
+  }, async (method, params) => {
+    assert.equal(method, "lolicode/mcp/approve-and-call");
+    calls.push(params);
+    return { content: [{ type: "text", text: "approved PTC host result" }] };
+  });
+  const launches = path.join(runtime.home, "ptc-launches.jsonl");
+  const observer = path.join(runtime.home, "ptc-launch-observer.mjs");
+  await writeFile(observer, `
+import { appendFileSync } from "node:fs";
+export const name = "ptc-launch-observer";
+export const inject = ["subprocess"];
+export function apply(ctx) {
+  const original = ctx.subprocess.spawn.bind(ctx.subprocess);
+  ctx.subprocess.spawn = spec => {
+    appendFileSync(${JSON.stringify(launches)}, JSON.stringify(spec.argv) + "\\n");
+    return original(spec);
+  };
+}
+`);
+  const patch = path.join(runtime.home, "ptc.json");
+  await writeFile(patch, JSON.stringify([
+    { id: "tool-executor-native", disabled: true },
+    { id: "tool-executor-ptc", disabled: false },
+    { id: "ptc-runtime", config: { executionMode: "per-call" } },
+    { insert: [{ id: "ptc-launch-observer", name: observer }] },
+  ]));
+  const client = await runtime.start({ patchFiles: [patch] });
+  try {
+    await client.open(sessionId);
+    await client.request("lolicode/session/configure-workspace", { sessionId, workspace: { policy: "workspace", skills: [], memory: "" } });
+    await client.request("lolicode/session/configure-mcp", { sessionId, tools: [{ function: {
+      name: toolName, description: "Read a fixture through host approval", parameters: {
+        type: "object", properties: { query: { type: "string" } }, required: ["query"], additionalProperties: false,
+      },
+    } }] });
+    await client.prompt(sessionId, "Run the typed PTC fixture.");
+    await client.wait(sessionId);
+    assert.equal(runtime.modelError, undefined);
+    assert.equal(resultSeen, true);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].sessionId, sessionId);
+    assert.equal(calls[0].toolName, toolName);
+    assert.deepEqual(calls[0].arguments, { query: "typed PTC query" });
+    assert.match(calls[0].callId, /^ptc-program:ptc:\d+$/);
+    const commands = (await readFile(launches, "utf8")).trim().split(/\r?\n/).map(line => JSON.parse(line));
+    const normalize = value => path.resolve(value).toLowerCase();
+    const bootstrap = path.join(root, "node_modules/@deepseek-ai/dsh-ptc-runtime-node/lib/process.js");
+    assert.ok(commands.some(argv => argv.some(arg => normalize(arg) === normalize(process.execPath)) &&
+      argv.some(arg => normalize(arg) === normalize(bootstrap))), "The real PTC subprocess must use the selected Node and compiled SDK bootstrap");
+  } finally {
+    await client.shutdown();
+  }
+});
+
+test("real rc.1 root and worker histories resume under the selected rc.2 runtime", {
+  timeout: 90_000, skip: !process.env.LOLICODE_TEST_BASELINE_RUNTIME_ROOT,
+}, async (t) => {
+  const baseline = process.env.LOLICODE_TEST_BASELINE_RUNTIME_ROOT;
+  assert.ok(path.isAbsolute(baseline));
+  const sdkVersion = async directory => JSON.parse(await readFile(path.join(directory, "node_modules/@deepseek-ai/dsh/package.json"), "utf8")).version;
+  assert.equal(await sdkVersion(baseline), "0.2.2-rc.1");
+  assert.equal(await sdkVersion(root), "0.2.2-rc.2");
+  const sessionId = "rc1-root-continued-in-rc2";
+  const childSessionId = "b643ecea-f069-454f-8f52-898cbbfd32d7";
+  const calls = [];
+  const runtime = await fixture(t, (body, response) => {
+    const input = JSON.stringify(body.messages);
+    if (input.includes("RC2_CHILD_CONTINUE")) {
+      assert.match(input, /RC1_CHILD_START/);
+      assert.match(input, /RC1_CHILD_ANSWER/);
+      calls.push("rc2-child");
+      return modelReply(response, "RC2_CHILD_ANSWER");
+    }
+    if (input.includes("RC2_ROOT_CONTINUE")) {
+      assert.match(input, /RC1_ROOT_START/);
+      assert.match(input, /RC1_ROOT_ANSWER/);
+      if (calls.includes("rc2-child")) {
+        assert.match(input, /RC2_CHILD_ANSWER/);
+        calls.push("rc2-root-notified");
+      } else calls.push("rc2-root");
+      return modelReply(response, "RC2_ROOT_ANSWER");
+    }
+    if (input.includes("RC1_CHILD_START")) {
+      calls.push("rc1-child");
+      return modelReply(response, "RC1_CHILD_ANSWER");
+    }
+    assert.match(input, /RC1_ROOT_START/);
+    calls.push("rc1-root");
+    modelReply(response, "RC1_ROOT_ANSWER");
+  });
+  const delegate = { sessionId, childSessionId, label: "Existing worker", workspacePolicy: "review", content: [{ type: "text", text: "RC1_CHILD_START" }] };
+  const first = await runtime.start({ launchRoot: baseline });
+  try {
+    await first.open(sessionId);
+    await first.request("lolicode/session/configure-secretary", { sessionId });
+    await first.prompt(sessionId, "RC1_ROOT_START");
+    await first.wait(sessionId);
+    await first.request("lolicode/secretary/delegate-worker", delegate);
+    await first.wait(sessionId);
+  } finally {
+    await first.shutdown();
+  }
+  assert.deepEqual(calls, ["rc1-root", "rc1-child"]);
+  const sessions = path.join(runtime.home, "sessions");
+  const logs = (await readdir(sessions, { recursive: true })).filter(name => /\.jsonl(?:\.zstd)?$/.test(name));
+  const original = await Promise.all(logs.map(async name => [name, await readFile(path.join(sessions, name))]));
+  const cold = await execFileAsync(process.execPath, [path.join(root, "host-session-native.mjs"), sessions, sessionId], { env: {}, windowsHide: true, timeout: 45_000 });
+  const result = JSON.parse(cold.stdout);
+  assert.equal(result.state.active, false);
+  assert.equal(result.projections.values.agentTeam.enabled, false);
+  for (const [name, bytes] of original) assert.deepEqual(await readFile(path.join(sessions, name)), bytes);
+  const second = await runtime.start();
+  try {
+    await second.request("session/resume", { sessionId });
+    await second.request("lolicode/session/configure-secretary", { sessionId });
+    assert.deepEqual(await second.request("lolicode/secretary/delegate-worker", delegate), { childSessionId });
+    await second.prompt(sessionId, "RC2_ROOT_CONTINUE");
+    await second.wait(sessionId);
+    await second.request("lolicode/secretary/prompt-worker", {
+      sessionId, childSessionId, requestId: "rc2-worker-followup", content: [{ type: "text", text: "RC2_CHILD_CONTINUE" }],
+    });
+    await second.wait(sessionId);
+  } finally {
+    await second.shutdown();
+  }
+  assert.equal(runtime.modelError, undefined);
+  assert.deepEqual(calls, ["rc1-root", "rc1-child", "rc2-root", "rc2-child", "rc2-root-notified"]);
+  t.diagnostic(`rc.1 root/worker logs continued under ${root}; Node ${process.execPath}; cold reads preserved original bytes.`);
 });

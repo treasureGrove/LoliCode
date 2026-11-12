@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Writable } from "node:stream";
-import { notifyNativeSessionFrame, readNativeSession } from "../host-session-native.mjs";
-import { prepareRuntime } from "../host-runtime-prepare.mjs";
+import { importRuntime } from "./runtime-fixture.mjs";
+
+const { notifyNativeSessionFrame, readNativeSession } = await importRuntime("./host-session-native.mjs");
+const { prepareRuntime } = await importRuntime("./host-runtime-prepare.mjs");
 
 test("native notifications stop adding frames when the shared SDK output is backed up", () => {
   let release;

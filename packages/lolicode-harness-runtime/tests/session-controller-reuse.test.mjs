@@ -3,11 +3,10 @@ import { spawn } from "node:child_process";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { test } from "node:test";
-import { JsonRpcLineTransport } from "@deepseek-ai/dsh-sdk-protocol";
+import { importRuntime, runtimeModuleUrl, runtimeRoot as root } from "./runtime-fixture.mjs";
 
-const root = fileURLToPath(new URL("../", import.meta.url));
+const { JsonRpcLineTransport } = await importRuntime("@deepseek-ai/dsh-sdk-protocol");
 const additions = [
   ["reuse-connection", "@deepseek-ai/dsh-client-connection"],
   ["reuse-file-uploads", "@deepseek-ai/dsh-client-file-upload"],
@@ -42,6 +41,13 @@ test("official Session Controller works beside the desktop SDK and reads hot/col
   const project = path.join(temporary, "project");
   await mkdir(home);
   await mkdir(project);
+  // The probe is test-only and is not shipped. Its one SDK import must still
+  // bind to the selected candidate instead of the checkout beside this test.
+  const probe = path.join(temporary, "session-controller-host.mjs");
+  const probeSource = await readFile(new URL("../probes/session-controller-host.mjs", import.meta.url), "utf8");
+  const dependency = '"@deepseek-ai/dsh-llm"';
+  assert.equal(probeSource.split(dependency).length, 2);
+  await writeFile(probe, probeSource.replace(dependency, JSON.stringify(runtimeModuleUrl("@deepseek-ai/dsh-llm"))));
   const patch = path.join(temporary, "probe.json");
   await writeFile(patch, JSON.stringify([{
     id: "llm-pi-ai",
@@ -51,7 +57,7 @@ test("official Session Controller works beside the desktop SDK and reads hot/col
     } } },
   }, { insert: [
     ...additions.map(([id, name]) => ({ id, name })),
-    { id: "reuse-probe", name: path.join(root, "probes/session-controller-host.mjs") },
+    { id: "reuse-probe", name: probe },
   ] }]));
 
   async function start() {

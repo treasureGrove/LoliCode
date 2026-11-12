@@ -17,6 +17,7 @@ import {
 } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { pruneHarnessSourceMaps } from "./harness-distribution.mjs";
 
 const runtime = fileURLToPath(
   new URL("../../packages/lolicode-harness-runtime/", import.meta.url),
@@ -58,7 +59,7 @@ const nodeName = process.platform === "win32" ? "node.exe" : "node";
 const sha = (bytes) => createHash("sha256").update(bytes).digest("hex");
 
 // Dependency payloads are immutable after npm ci. Bridge changes must not
-// reinstall the same pinned 70,000-file SDK tree on every desktop build.
+// reinstall the same pinned SDK tree on every desktop build.
 export function dependencyInputsHash(
   packageRoot = runtime,
   {
@@ -112,6 +113,18 @@ export function dependencyInventory(directory) {
   return hash.digest("hex");
 }
 
+// Distribution rules must invalidate bundled dependencies without touching the
+// complete SDK installation used by source development and type checking.
+export function bundledDependencyInputsHash(packageRoot = runtime) {
+  return sha(
+    JSON.stringify([
+      "harness-bundle-dependencies-v1",
+      dependencyInputsHash(packageRoot),
+      sha(readFileSync(new URL("./harness-distribution.mjs", import.meta.url))),
+    ]),
+  );
+}
+
 export function commitBundle(
   stage,
   directory,
@@ -143,7 +156,7 @@ export function commitBundle(
     }
     if (reuseDependencies) {
       // Both paths share the canonical parent/volume. Transfer the immutable
-      // SDK in O(1), rather than copying or recreating 70,000 file entries.
+      // SDK in O(1), rather than copying or recreating its file entries.
       rename(
         path.join(previous, "node_modules"),
         path.join(stage, "node_modules"),
@@ -559,7 +572,7 @@ export async function bundleHarness({
       ]),
     ]),
   );
-  const dependenciesHash = dependencyInputsHash(packageRoot);
+  const dependenciesHash = bundledDependencyInputsHash(packageRoot);
   if (bundleMatches(inputsHash, dependenciesHash, directory, identity)) {
     console.log(`Verified existing bundled Harness at ${directory}`);
     return;
@@ -607,6 +620,13 @@ export async function bundleHarness({
       copyFileSync(path.join(packageRoot, file), path.join(stage, file));
     if (!reuse) install(stage);
     if (!reuse) verifyPackageFiles(path.join(stage, "node_modules"));
+    const distribution = reuse
+      ? cached.distribution
+      : pruneHarnessSourceMaps(path.join(stage, "node_modules"));
+    if (!reuse)
+      console.log(
+        `Harness distribution: ${distribution.outputFiles}/${distribution.inputFiles} files; removed ${distribution.removedFiles} debug maps (${(distribution.removedBytes / 1048576).toFixed(1)} MiB).`,
+      );
     const entry = path.join(
       reuse ? directory : stage,
       "node_modules/@deepseek-ai/dsh/lib/bin.js",
@@ -620,6 +640,7 @@ export async function bundleHarness({
       arch: process.arch,
       inputsSha256: inputsHash,
       dependenciesInputsSha256: dependenciesHash,
+      distribution,
       packageFilesSha256: reuse
         ? cached.packageFilesSha256
         : dependencyInventory(path.join(stage, "node_modules")),

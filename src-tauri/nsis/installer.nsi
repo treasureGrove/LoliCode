@@ -755,12 +755,16 @@ Section Install
   File "${MAINBINARYSRCPATH}"
 
   ; Copy resources
+  ; Keep progress visible without adding thousands of dependency files to the
+  ; details list. This pair has no nested mode changes; restore the caller below.
+  SetDetailsPrint textonly
   {{#each resources_dirs}}
     CreateDirectory "$LoliCodeResourceRoot\\{{this}}"
   {{/each}}
   {{#each resources}}
     File /a "/oname=$LoliCodeResourceRoot\\{{this.[1]}}" "{{no-escape @key}}"
   {{/each}}
+  SetDetailsPrint lastused
 
   ; Copy external binaries
   {{#each binaries}}

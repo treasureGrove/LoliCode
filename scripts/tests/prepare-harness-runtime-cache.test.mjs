@@ -21,6 +21,7 @@ import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import {
   bundleHarness,
+  bundledDependencyInputsHash,
   commitBundle,
   dependencyInputsHash,
   dependencyInventory,
@@ -167,6 +168,154 @@ test("lock, target and install-policy changes invalidate the dependency key", as
   assert.equal(f.counters().installs, 2);
 });
 
+test("only the bundled stage is pruned and legacy unpruned cache keys are rejected", async (t) => {
+  const f = fixture(t);
+  const debugMap = JSON.stringify({
+    version: 3,
+    sources: ["index.ts"],
+    names: [],
+    mappings: "",
+  });
+  const sourceMap = "node_modules/fixture/sub/dependency.js.map";
+  put(f.packageRoot, sourceMap, debugMap);
+  const install = f.options.install;
+  f.options.install = (stage) => {
+    install(stage);
+    put(stage, sourceMap, debugMap);
+    put(
+      stage,
+      "node_modules/fixture/sub/dependency.d.ts",
+      "export declare const value: number;",
+    );
+  };
+  await bundleHarness(f.options);
+  assert.equal(
+    readFileSync(path.join(f.packageRoot, sourceMap), "utf8"),
+    debugMap,
+  );
+  assert(!existsSync(path.join(f.directory, sourceMap)));
+  assert(
+    existsSync(
+      path.join(f.directory, "node_modules/fixture/sub/dependency.d.ts"),
+    ),
+  );
+  const manifest = f.manifest();
+  assert.equal(manifest.distribution.removedFiles, 1);
+  assert.equal(manifest.distribution.removedBytes, Buffer.byteLength(debugMap));
+  assert.notEqual(
+    manifest.dependenciesInputsSha256,
+    dependencyInputsHash(f.packageRoot),
+  );
+  assert(
+    !reusableBundlePayload(
+      f.directory,
+      manifest,
+      dependencyInputsHash(f.packageRoot),
+      f.options.identity,
+    ),
+  );
+  put(f.packageRoot, "host.mjs", "changed bridge");
+  await bundleHarness(f.options);
+  assert.equal(f.counters().installs, 1);
+  assert.deepEqual(f.manifest().distribution, manifest.distribution);
+  assert(!existsSync(path.join(f.directory, sourceMap)));
+});
+
+test("a distribution policy change invalidates only bundled dependencies", async (t) => {
+  const f = fixture(t);
+  await bundleHarness(f.options);
+  const sourceKey = dependencyInputsHash(f.packageRoot);
+  const bundleKey = bundledDependencyInputsHash(f.packageRoot);
+  const originalRead = fs.readFileSync;
+  try {
+    fs.readFileSync = function (file, ...args) {
+      const bytes = originalRead.call(this, file, ...args);
+      if (
+        file instanceof URL &&
+        file.pathname.endsWith("/harness-distribution.mjs")
+      )
+        return Buffer.concat([
+          bytes,
+          Buffer.from("\n// changed distribution policy\n"),
+        ]);
+      return bytes;
+    };
+    syncBuiltinESMExports();
+    assert.equal(dependencyInputsHash(f.packageRoot), sourceKey);
+    assert.notEqual(bundledDependencyInputsHash(f.packageRoot), bundleKey);
+    await bundleHarness(f.options);
+    assert.equal(f.counters().installs, 2);
+    assert.equal(
+      f.manifest().dependenciesInputsSha256,
+      bundledDependencyInputsHash(f.packageRoot),
+    );
+  } finally {
+    fs.readFileSync = originalRead;
+    syncBuiltinESMExports();
+  }
+});
+
+test("a pruning I/O failure preserves the published bundle and source SDK", async (t) => {
+  const f = fixture(t);
+  await bundleHarness(f.options);
+  const originalManifest = readFileSync(
+    path.join(f.directory, "runtime-manifest.json"),
+  );
+  const originalSdk = readFileSync(path.join(f.directory, entry));
+  const debugMap = JSON.stringify({
+    version: 3,
+    sources: [],
+    names: [],
+    mappings: "",
+  });
+  const map = "node_modules/fixture/sub/dependency.js.map";
+  put(f.packageRoot, map, debugMap);
+  // A legitimate lock revision requires a new dependency stage.
+  put(
+    f.packageRoot,
+    "package-lock.json",
+    readFileSync(path.join(f.packageRoot, "package-lock.json"), "utf8") + "\n",
+  );
+  const install = f.options.install;
+  const originalUnlink = fs.unlinkSync;
+  let published = false;
+  let failedFile;
+  try {
+    fs.unlinkSync = function (file) {
+      if (String(file).endsWith("dependency.js.map")) {
+        failedFile = String(file);
+        throw new Error("fixture map removal failed");
+      }
+      return originalUnlink.call(this, file);
+    };
+    syncBuiltinESMExports();
+    await assert.rejects(
+      bundleHarness({
+        ...f.options,
+        install(stage) {
+          install(stage);
+          put(stage, map, debugMap);
+        },
+        publish() {
+          published = true;
+        },
+      }),
+      /map removal failed/,
+    );
+  } finally {
+    fs.unlinkSync = originalUnlink;
+    syncBuiltinESMExports();
+  }
+  assert(failedFile?.includes(`${path.sep}.harness-runtime-`));
+  assert.equal(published, false);
+  assert.deepEqual(
+    readFileSync(path.join(f.directory, "runtime-manifest.json")),
+    originalManifest,
+  );
+  assert.deepEqual(readFileSync(path.join(f.directory, entry)), originalSdk);
+  assert.equal(readFileSync(path.join(f.packageRoot, map), "utf8"), debugMap);
+});
+
 test("SDK corruption, additions and missing files cause a fresh pinned install", async (t) => {
   const f = fixture(t);
   await bundleHarness(f.options);
@@ -189,7 +338,7 @@ test("SDK corruption, additions and missing files cause a fresh pinned install",
 test("old manifests and changed Node/license bytes cannot seed dependency reuse", async (t) => {
   const f = fixture(t);
   await bundleHarness(f.options);
-  const key = dependencyInputsHash(f.packageRoot);
+  const key = bundledDependencyInputsHash(f.packageRoot);
   const manifest = f.manifest();
   assert(reusableBundlePayload(f.directory, manifest, key, f.options.identity));
   assert(

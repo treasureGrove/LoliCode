@@ -8,8 +8,8 @@ import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { importRuntime, runtimeFixtureEnvironment, runtimeRoot as root } from "./runtime-fixture.mjs";
 
-const root = fileURLToPath(new URL("../", import.meta.url));
 const execFile = promisify(childProcess.execFile);
 const projectionKeys = [
   "todos", "userQuestions", "tokenUsage", "contextPressure", "title", "goal", "plan",
@@ -31,9 +31,9 @@ async function temporaryDirectory(t, prefix) {
 
 async function seed(sessions, cwd, id, compression, teamMode) {
   const [{ Context }, session, projections, persistence, llm] = await Promise.all([
-    import("@deepseek-ai/cordis"), import("@deepseek-ai/dsh-session"),
-    import("@deepseek-ai/dsh-session-projection"), import("@deepseek-ai/dsh-session-persistence-jsonl"),
-    import("@deepseek-ai/dsh-llm"),
+    importRuntime("@deepseek-ai/cordis"), importRuntime("@deepseek-ai/dsh-session"),
+    importRuntime("@deepseek-ai/dsh-session-projection"), importRuntime("@deepseek-ai/dsh-session-persistence-jsonl"),
+    importRuntime("@deepseek-ai/dsh-llm"),
   ]);
   const ctx = new Context();
   try {
@@ -126,8 +126,8 @@ async function guardedComparison(temporary) {
     { id: "session-telemetry-otel", disabled: true }, { id: "plugin-manager", disabled: true },
   ]));
   const [{ runProfile }, { createLaunchEnvironmentSnapshot }, { readNativeSession }, { createNativeReaderContext }] = await Promise.all([
-    import("@deepseek-ai/dsh/lib/profile-boot.js"), import("@deepseek-ai/dsh-launch-environment"),
-    import("../host-session-native.mjs"), import("../host-native-reader-context.mjs"),
+    importRuntime("@deepseek-ai/dsh/lib/profile-boot.js"), importRuntime("@deepseek-ai/dsh-launch-environment"),
+    importRuntime("./host-session-native.mjs"), importRuntime("./host-native-reader-context.mjs"),
   ]);
   let full;
   let lean;
@@ -196,7 +196,7 @@ if (process.argv[2] === "guarded-comparison") {
   test("lean reader preserves full SDK Gateway state and saved Team modes without activation", { timeout: 60_000 }, async (t) => {
     const temporary = await temporaryDirectory(t, "lolicode-native-context-test-");
     const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => /^(SYSTEMROOT|SYSTEMDRIVE|WINDIR|TEMP|TMP|TMPDIR)$/i.test(key)));
-    const output = await execFile(process.execPath, [fileURLToPath(import.meta.url), "guarded-comparison", temporary], { env, cwd: root, windowsHide: true, timeout: 50_000 });
+    const output = await execFile(process.execPath, [fileURLToPath(import.meta.url), "guarded-comparison", temporary], { env: { ...env, ...runtimeFixtureEnvironment }, cwd: root, windowsHide: true, timeout: 50_000 });
     assert.equal(output.stdout, "");
   });
 
