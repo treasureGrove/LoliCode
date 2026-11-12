@@ -807,20 +807,31 @@ test(
         ),
       }),
     );
-    for (const name of ["LICENSE", "THIRD_PARTY_NOTICES.md"]) {
-      const notice = payload.files.find((file) => file.destination === name);
-      assert(notice, `Actual NSIS payload must include ${name}`);
+    for (const [destination, source] of [
+      ["LICENSE", "LICENSE"],
+      ["THIRD_PARTY_NOTICES.md", "THIRD_PARTY_NOTICES.md"],
+      ["licenses\\opencode-LICENSE", "third-party/notices/opencode-LICENSE"],
+      ["licenses\\litellm-LICENSE", "third-party/notices/litellm-LICENSE"],
+    ]) {
+      const notice = payload.files.find(
+        (file) => file.destination === destination,
+      );
+      assert(notice, `Actual NSIS payload must include ${destination}`);
+      const content = readFileSync(notice.source, "utf8").replace(
+        /\r\n/g,
+        "\n",
+      );
       assert.equal(
-        readFileSync(notice.source, "utf8").replace(/\r\n/g, "\n"),
-        readFileSync(path.join(boundary.sourceRoot, name), "utf8").replace(
+        content,
+        readFileSync(path.join(boundary.sourceRoot, source), "utf8").replace(
           /\r\n/g,
           "\n",
         ),
-        `Actual NSIS ${name} must preserve the frozen release notice`,
+        `Actual NSIS ${destination} must preserve the frozen release notice`,
       );
-      if (name === "THIRD_PARTY_NOTICES.md") {
-        const content = readFileSync(notice.source, "utf8");
+      if (destination === "THIRD_PARTY_NOTICES.md") {
         assert(content.includes("73aaf9e3daec8bb174accdf56ecade90b34c27c8"));
+      } else if (destination === "licenses\\litellm-LICENSE") {
         assert(content.includes("Copyright (c) 2023 Berri AI"));
       }
     }

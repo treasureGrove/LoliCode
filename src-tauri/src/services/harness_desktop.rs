@@ -5672,20 +5672,24 @@ mod native_message_alias_tests {
         let mut record = fixture();
         let owner = record.snapshot.session.id.clone();
         let file = directory.path().join("desktop.json");
-        let context = VerifiedSessionRead {
+        let context = |stored_aliases| VerifiedSessionRead {
             owner_id: owner.clone(),
             owner_root: directory.path().to_owned(),
             sdk_id: owner.trim_start_matches("lc:").to_owned(),
             child: None,
             controls: None,
             warm_reader: None,
+            stored_aliases,
         };
         let desktop = HarnessDesktop::default();
         assert!(record.native_message_aliases.is_empty());
         remember_native_message_alias(&mut record, "native-root", "ui-root");
         save_record(&file, &record).unwrap();
         assert_eq!(
-            desktop.native_aliases_for_context(&context).await.unwrap(),
+            desktop
+                .native_aliases_for_context(context(None))
+                .await
+                .unwrap(),
             record.native_message_aliases
         );
         let mut older = serde_json::to_value(&record).unwrap();
@@ -5695,10 +5699,17 @@ mod native_message_alias_tests {
             .remove("nativeMessageAliases");
         std::fs::write(&file, serde_json::to_vec(&older).unwrap()).unwrap();
         assert!(desktop
-            .native_aliases_for_context(&context)
+            .native_aliases_for_context(context(None))
             .await
             .unwrap()
             .is_empty());
+        assert_eq!(
+            desktop
+                .native_aliases_for_context(context(Some(record.native_message_aliases.clone())))
+                .await
+                .unwrap(),
+            record.native_message_aliases
+        );
     }
 }
 
