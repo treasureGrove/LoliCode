@@ -57,9 +57,11 @@ pub fn require_stable_updates() -> Result<(), String> {
     }
 }
 
-/// The 4.0 and 4.1 build numbers preceded the unified release series.
+/// Ignore old build numbers and the one-time offer served to those clients.
 pub(crate) fn is_app_update(current: &semver::Version, available: &semver::Version) -> bool {
-    !(available.major == 4 && available.minor <= 1) && available.cmp_precedence(current).is_gt()
+    let legacy = available.major == 4
+        && (available.minor <= 1 || (available.minor == 2 && available.patch == 0));
+    !legacy && available.cmp_precedence(current).is_gt()
 }
 
 #[derive(serde::Serialize)]
@@ -109,7 +111,14 @@ mod tests {
     #[test]
     fn unified_updater_ignores_retired_builds_and_accepts_newer_releases() {
         let current = "1.1.0".parse().unwrap();
-        for version in ["4.0.22", "4.1.6", "4.1.7", "1.1.0", "1.1.0+rebuild"] {
+        for version in [
+            "4.0.22",
+            "4.1.6",
+            "4.1.7",
+            "4.2.0",
+            "1.1.0",
+            "1.1.0+rebuild",
+        ] {
             assert!(
                 !is_app_update(&current, &version.parse().unwrap()),
                 "{version}"

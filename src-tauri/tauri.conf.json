@@ -82,7 +82,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEE4QzUyM0RFRjAwRDNBNkYKUldSdk9nM3czaVBGcUZ1RzBYRFJPRjV2cEduT1Z2LzR4NDg2ZU1vaEFvL1FTQjIwL3M3UW14SjAK",
       "endpoints": [
-        "https://tools.treasuregrove.art/lolicode/updates/latest.json"
+        "https://tools.treasuregrove.art/lolicode/updates/stable.json"
       ],
       "windows": {
         "installMode": "passive"

@@ -91,7 +91,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $installer = "src-tauri/target/release/bundle/nsis/LoliCode_$($env:RELEASE_VERSION)_x64-setup.exe"
           if (-not (Test-Path "$installer.sig")) { throw 'Missing updater signature.' }
-          node scripts/release/lolicode-release.mjs prepare --installer $installer --signature "$installer.sig" --public-key-file src-tauri/updater.pub --version "$env:RELEASE_VERSION" --current-version 0.0.0 --base-url https://tools.treasuregrove.art/lolicode/releases --latest-url https://tools.treasuregrove.art/lolicode/updates/latest.json --output-dir "$env:RUNNER_TEMP/lolicode-release"
+          $feed = (Get-Content -Raw src-tauri/tauri.conf.json | ConvertFrom-Json).plugins.updater.endpoints[0]
+          node scripts/release/lolicode-release.mjs prepare --installer $installer --signature "$installer.sig" --public-key-file src-tauri/updater.pub --version "$env:RELEASE_VERSION" --current-version 0.0.0 --base-url https://tools.treasuregrove.art/lolicode/releases --latest-url $feed --output-dir "$env:RUNNER_TEMP/lolicode-release"
           exit $LASTEXITCODE
       - uses: actions/upload-artifact@v7
         with:
