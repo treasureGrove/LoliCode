@@ -15,7 +15,7 @@ const projectionKeys = [
   "todos", "userQuestions", "tokenUsage", "contextPressure", "title", "goal", "plan",
   "modelSelection", "workingDirectory", "contextBreakdown", "inbox", "permissions",
   "subagentCatalog", "subagentTiming", "subagent", "sessionListMetadata", "imageLimits",
-  "sessionStats", "turnOutline",
+  "sessionStats", "turnOutline", "agentTeam", "conversationContinuation",
 ].sort();
 
 async function temporaryDirectory(t, prefix) {
@@ -29,7 +29,7 @@ async function temporaryDirectory(t, prefix) {
   return temporary;
 }
 
-async function seed(sessions, cwd, id, compression) {
+async function seed(sessions, cwd, id, compression, teamMode) {
   const [{ Context }, session, projections, persistence, llm] = await Promise.all([
     import("@deepseek-ai/cordis"), import("@deepseek-ai/dsh-session"),
     import("@deepseek-ai/dsh-session-projection"), import("@deepseek-ai/dsh-session-persistence-jsonl"),
@@ -71,6 +71,24 @@ async function seed(sessions, cwd, id, compression) {
     }, { surfaceOp: "append" });
     journal.append("step/end", { turn: 1, step: 1 });
     journal.append("turn/end", { turn: 1, reason: { kind: "completed" } });
+    if (teamMode !== undefined) {
+      // Persist the official rc.2 Team event vocabulary. Cold reads must
+      // reconstruct the task board, not merely supply an empty default view.
+      journal.append("team/mode", { enabled: true });
+      const first = {
+        id: "task-1", revision: 1, subject: "Read the stored history",
+        description: "Preserve the upstream task projection", status: "pending",
+        blockedBy: [], writeScopes: [],
+      };
+      journal.append("team/task", { version: 2, teamId: id, task: first });
+      journal.append("team/task", { version: 2, teamId: id, task: { ...first, revision: 2, status: "completed" } });
+      journal.append("team/task", { version: 2, teamId: id, task: {
+        id: "task-2", revision: 1, subject: "Review the stored task board",
+        description: "Derive readiness from the completed prerequisite", status: "pending",
+        blockedBy: ["task-1"], writeScopes: ["src/reader.ts"],
+      } });
+      if (!teamMode) journal.append("team/mode", { enabled: false });
+    }
     const handle = await ctx.sessionPersistence.create(journal.header);
     try { await handle.append(journal.snapshotEvents()); await handle.flush(); } finally { await handle.close(); }
   } finally {
@@ -95,7 +113,12 @@ async function guardedComparison(temporary) {
   process.env.DSH_HOME = fullHome;
   process.env.DSH_TELEMETRY_DISABLED = "1";
   process.chdir(fullHome);
-  await seed(sessions, fullHome, "compressed-fixture", "zstd");
+  const fixtures = [
+    ["compressed-fixture", undefined],
+    ["team-enabled-fixture", true],
+    ["team-disabled-fixture", false],
+  ];
+  for (const [id, teamMode] of fixtures) await seed(sessions, fullHome, id, "zstd", teamMode);
   const patch = path.join(fullHome, "read-only.json");
   await writeFile(patch, JSON.stringify([
     { id: "sdk-app-startup", disabled: true }, { id: "sdk-jsonrpc-server", disabled: true },
@@ -121,7 +144,7 @@ async function guardedComparison(temporary) {
     assert.equal(lean.agents.list().length, 0);
     assert.equal(lean.get("webServer"), undefined);
     assert.equal(lean.get("pluginManager"), undefined);
-    for (const id of ["compressed-fixture"]) {
+    for (const [id, teamMode] of fixtures) {
       const expected = await readNativeSession(full.ctx, id, { maxMessages: 200 });
       const actual = await readNativeSession(lean, id, { maxMessages: 200 });
       assert.deepEqual(actual, expected);
@@ -135,6 +158,19 @@ async function guardedComparison(temporary) {
       assert.equal(values.tokenUsage.outputTokens, 9);
       assert.equal(values.contextPressure.contextWindow, 8192);
       assert.ok(values.contextBreakdown.messageTokens > 0);
+      assert.equal(values.agentTeam.enabled, teamMode === true);
+      assert.equal(values.agentTeam.failure, undefined);
+      if (teamMode === undefined) {
+        assert.deepEqual(values.agentTeam.tasks, []);
+      } else {
+        assert.equal(values.agentTeam.tasks.length, 2);
+        assert.equal(values.agentTeam.tasks[0].revision, 2);
+        assert.equal(values.agentTeam.tasks[0].status, "completed");
+        assert.equal(values.agentTeam.tasks[1].subject, "Review the stored task board");
+        assert.deepEqual(values.agentTeam.tasks[1].blockedBy, ["task-1"]);
+        assert.deepEqual(values.agentTeam.tasks[1].writeScopes, ["src/reader.ts"]);
+        assert.equal(values.agentTeam.tasks[1].ready, true);
+      }
       assert.equal(lean.sessions.get(id), undefined);
     }
     assert.equal(lean.agents.list().length, 0);
@@ -157,7 +193,7 @@ async function guardedComparison(temporary) {
 if (process.argv[2] === "guarded-comparison") {
   await guardedComparison(process.argv[3]);
 } else {
-  test("lean reader preserves full SDK Gateway state for non-default history without activation", { timeout: 60_000 }, async (t) => {
+  test("lean reader preserves full SDK Gateway state and saved Team modes without activation", { timeout: 60_000 }, async (t) => {
     const temporary = await temporaryDirectory(t, "lolicode-native-context-test-");
     const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => /^(SYSTEMROOT|SYSTEMDRIVE|WINDIR|TEMP|TMP|TMPDIR)$/i.test(key)));
     const output = await execFile(process.execPath, [fileURLToPath(import.meta.url), "guarded-comparison", temporary], { env, cwd: root, windowsHide: true, timeout: 50_000 });

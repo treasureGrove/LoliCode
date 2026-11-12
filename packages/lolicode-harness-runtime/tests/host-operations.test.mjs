@@ -916,6 +916,17 @@ test("manual secretary work starts one native child and follows up after restart
   await client.shutdown();
 
   client = await runtime.start();
+  const foreignSecretary = "unrelated-manual-secretary";
+  await client.open(foreignSecretary);
+  await client.request("lolicode/session/configure-secretary", { sessionId: foreignSecretary });
+  const beforeForeignPrompt = await readColdMarkdown(path.join(runtime.home, "sessions"), childSessionId);
+  await assert.rejects(client.request("lolicode/secretary/prompt-worker", {
+    sessionId: foreignSecretary, childSessionId, requestId: "foreign-cold-worker-prompt",
+    workspacePolicy: "full", content: [{ type: "text", text: "UNAUTHORIZED_WORKER_INPUT" }],
+  }), /Invalid worker parent/);
+  assert.equal(modelCalls.length, 1);
+  assert.equal((await readColdMarkdown(path.join(runtime.home, "sessions"), childSessionId)).stdout, beforeForeignPrompt.stdout);
+  assert.ok(!client.notifications.some(({ params }) => params.sessionId === childSessionId || params.childSessionId === childSessionId));
   await client.request("session/resume", { sessionId });
   await client.request("lolicode/session/configure-secretary", { sessionId });
   assert.deepEqual(await client.request("lolicode/secretary/delegate-worker", delegate), { childSessionId });
@@ -1121,6 +1132,137 @@ test("automatic secretary writes require worker-scoped approval", { timeout: 60_
     method === "subagent.started" && ![reviewed, interactive].includes(params.childSessionId));
   assert.ok(nativeChild);
   assert.deepEqual(approvals, [reviewed, sessionId, nativeChild.params.childSessionId]);
+});
+
+test("secretary restores a grandchild with a cold creator while retaining ownership, review and reports", { timeout: 90_000 }, async (t) => {
+  const sessionId = "restored-grandchild-secretary";
+  const foreignRoot = "restored-grandchild-foreign";
+  const parentId = "8486c14d-29fd-4b4d-9ee7-3a03bc432c63";
+  const held = Promise.withResolvers();
+  const approvals = [];
+  const results = new Map();
+  let modelCalls = 0;
+  const runtime = await fixture(t, (body, response) => {
+    modelCalls += 1;
+    const userIndex = body.messages.findLastIndex(message => message.role === "user" &&
+      /NESTED_PARENT_CREATE|NESTED_GRANDCHILD_INITIAL|RESTORE_GRANDCHILD_(REVIEW|PLAN)/.test(JSON.stringify(message.content)));
+    assert.ok(userIndex >= 0, `Expected a nested task prompt: ${JSON.stringify(body.messages)}`);
+    const input = JSON.stringify(body.messages[userIndex].content);
+    const turn = body.messages.slice(userIndex + 1);
+    if (input.includes("NESTED_PARENT_CREATE")) {
+      if (turn.some(message => message.role === "tool")) {
+        results.set("delegation", JSON.stringify(turn.filter(message => message.role === "tool")));
+        modelReply(response, "Nested assignment finished.");
+      }
+      else fixtureTool(response, "nested_delegate", "subagent", {
+        description: "Nested continuity fixture", prompt: "NESTED_GRANDCHILD_INITIAL",
+      });
+      return;
+    }
+    assert.ok(body.tools.some(tool => tool.function.name === "report_task"), "Every admitted secretary descendant receives its own report tool");
+    if (input.includes("NESTED_GRANDCHILD_INITIAL")) {
+      modelReply(response, "Original grandchild result.");
+      return;
+    }
+    const mode = input.includes("RESTORE_GRANDCHILD_PLAN") ? "plan" : "review";
+    assert.ok(input.includes(`RESTORE_GRANDCHILD_${mode.toUpperCase()}`));
+    const writeResult = turn.find(message => message.role === "tool" && message.tool_call_id === `nested_write_${mode}`);
+    const reportResult = turn.find(message => message.role === "tool" && message.tool_call_id === `nested_report_${mode}`);
+    if (!writeResult) {
+      fixtureTool(response, `nested_write_${mode}`, "write", { file_path: `grandchild-${mode}.txt`, content: "must remain blocked" });
+    } else if (!reportResult) {
+      results.set(mode, JSON.stringify(writeResult.content));
+      fixtureTool(response, `nested_report_${mode}`, "report_task", { state: "ready", summary: `Restored grandchild ${mode} report` });
+    } else if (mode === "review") {
+      response.writeHead(200, { "Content-Type": "text/event-stream" });
+      writeModelChunk(response, { role: "assistant" });
+      writeModelChunk(response, { content: "Restored grandchild result." });
+      held.resolve(response);
+    } else modelReply(response, "Plan guard preserved.");
+  }, async (method, params) => {
+    assert.equal(method, "approval/request");
+    approvals.push(params.sessionId);
+    return { outcome: "rejected" };
+  });
+  const depthPatch = path.join(runtime.home, "nested-subagent-depth.json");
+  await writeFile(depthPatch, JSON.stringify([{ id: "subagent", config: { maxDepth: 2 } }]));
+  const first = await runtime.start({ patchFiles: [depthPatch] });
+  let childSessionId;
+  try {
+    await first.open(sessionId);
+    await first.request("lolicode/session/configure-secretary", { sessionId });
+    await first.request("lolicode/session/configure-workspace", { sessionId, workspace: { policy: "review", skills: [], memory: "" } });
+    await first.request("lolicode/secretary/delegate-worker", {
+      sessionId, childSessionId: parentId, label: "Nested parent", content: [{ type: "text", text: "NESTED_PARENT_CREATE" }],
+    });
+    await first.wait(sessionId);
+    childSessionId = first.notifications.find(({ method, params }) =>
+      method === "subagent.started" && params.parentSessionId === parentId)?.params.childSessionId;
+    assert.equal(runtime.modelError, undefined);
+    assert.ok(childSessionId, `The official native subagent tool created a real grandchild: ${results.get("delegation")}`);
+    const original = await readColdMarkdown(path.join(runtime.home, "sessions"), childSessionId);
+    assert.match(original.stdout, /Original grandchild result/);
+  } finally {
+    await first.shutdown();
+  }
+  const second = await runtime.start({ patchFiles: [depthPatch] });
+  let response;
+  const prompt = (owner, text, extra = {}) => second.request("lolicode/secretary/prompt-worker", {
+    sessionId: owner, childSessionId, requestId: text, content: [{ type: "text", text }], ...extra,
+  });
+  try {
+    await second.open(foreignRoot);
+    await second.request("lolicode/session/configure-secretary", { sessionId: foreignRoot });
+    const beforeForeign = modelCalls;
+    await assert.rejects(prompt(foreignRoot, "FOREIGN_COLD_PROMPT", { workspacePolicy: "full" }), /Invalid worker parent/);
+    assert.equal(modelCalls, beforeForeign);
+    await second.request("session/resume", { sessionId });
+    await second.request("lolicode/session/configure-secretary", { sessionId });
+    await second.request("lolicode/session/configure-workspace", { sessionId, workspace: { policy: "review", skills: [], memory: "" } });
+    await prompt(sessionId, "RESTORE_GRANDCHILD_REVIEW");
+    response = await held.promise;
+    assert.equal(await second.request("lolicode/session/read-native", { sessionId, childSessionId: parentId }), null);
+    assert.ok(!second.notifications.some(({ method, params }) => method === "subagent.started" && params.childSessionId === parentId),
+      "Restoring the grandchild must not activate its cold creator");
+    const parameters = { sessionId, childSessionId };
+    const native = await second.request("lolicode/session/read-native", parameters);
+    assert.ok(JSON.stringify(native.page.records).includes("Original grandchild result"));
+    assert.match(await second.request("lolicode/session/read-markdown", parameters), /RESTORE_GRANDCHILD_REVIEW/);
+    const subscriptionId = "restored-grandchild-watch";
+    await second.request("lolicode/session/follow-native", { ...parameters, subscriptionId });
+    const snapshot = await fixtureNotice(second, "lolicode/session.native-follow", notice =>
+      notice.subscriptionId === subscriptionId && notice.frame?.type === "snapshot");
+    assert.equal(snapshot.frame.header.id, childSessionId);
+    assert.equal(snapshot.frame.header.parentSession, parentId);
+    for (const method of ["lolicode/session/read-native", "lolicode/session/read-markdown", "lolicode/session/follow-native"]) {
+      await assert.rejects(second.request(method, {
+        sessionId: foreignRoot, childSessionId, ...(method.endsWith("follow-native") && { subscriptionId: "foreign-grandchild-watch" }),
+      }), /Worker is not owned/);
+    }
+    const beforeResidentForeign = modelCalls;
+    await assert.rejects(prompt(foreignRoot, "FOREIGN_LIVE_PROMPT", { workspacePolicy: "full" }), /Invalid worker parent/);
+    assert.equal(modelCalls, beforeResidentForeign);
+    await second.request("lolicode/session/unfollow-native", { subscriptionId });
+    writeModelChunk(response, {}, "stop");
+    response.end("data: [DONE]\n\n");
+    response = undefined;
+    await second.wait(sessionId);
+    await second.request("lolicode/session/configure-workspace", { sessionId, workspace: { policy: "plan", skills: [], memory: "" } });
+    await prompt(sessionId, "RESTORE_GRANDCHILD_PLAN", { workspacePolicy: "full" });
+    await second.wait(sessionId);
+    assert.equal(runtime.modelError, undefined);
+    assert.deepEqual(approvals, [childSessionId], "The resumed worker inherits root review; root plan cannot be overridden by full access");
+    assert.match(results.get("review"), /rejected|denied/i);
+    assert.match(results.get("plan"), /Plan mode allows read-only tools/);
+    for (const mode of ["review", "plan"]) {
+      await assert.rejects(access(path.join(runtime.project, `grandchild-${mode}.txt`)));
+      assert.ok(second.notifications.some(({ method, params }) => method === "lolicode/secretary.report" &&
+        params.sessionId === childSessionId && params.state === "ready" && params.summary === `Restored grandchild ${mode} report`));
+    }
+  } finally {
+    response?.end("data: [DONE]\n\n");
+    await second.shutdown();
+  }
 });
 
 test("desktop permission selection enforces one-shot review, workspace access, full access and plan mode", { timeout: 60_000 }, async (t) => {

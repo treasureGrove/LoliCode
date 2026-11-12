@@ -134,7 +134,6 @@ class LoliCodeSdkServer extends HarnessSdkJsonRpcServer {
         const parked = this.#parkedWorkerInputs.get(agent.session.id);
         if (parked) this.#detachWorkerInputs(agent, parked);
       }
-      this.#configureWorker(agent);
       const opening = this.#opening.getStore();
       if (
         opening && agent.id === opening.id && agent.session.id === opening.id &&
@@ -142,6 +141,13 @@ class LoliCodeSdkServer extends HarnessSdkJsonRpcServer {
       ) {
         opening.agent = agent;
       }
+    });
+    // rc.2 publishes ownership after agent/created and before delivering input.
+    // A restored descendant can have a cold creator, so configure its scope
+    // only once the official manager can resolve the live tree root.
+    ctx.on("subagent/start", ({ id, local }) => {
+      const agent = local && ctx.agents.get(id);
+      if (agent) this.#configureWorker(agent);
     });
     ctx.on("agent/disposed", ({ agent }) => {
       if (this.#roots.get(agent.id) === agent) {
@@ -351,13 +357,10 @@ class LoliCodeSdkServer extends HarnessSdkJsonRpcServer {
 
   #ownedWorker(root, id) {
     const child = this.#ctx.agents.get(id);
-    const visited = new Set();
-    for (let current = child; current && current !== root;) {
-      if (visited.has(current)) break;
-      visited.add(current);
-      current = this.#ctx.agents.get(current.session.header.parentSession);
-      if (current === root) return child;
-    }
+    if (!child || child === root) return undefined;
+    try {
+      if (this.#ctx.subagents.rootOf(child) === root) return child;
+    } catch { /* An unpublished or unmanaged Agent has no worker authority. */ }
     return undefined;
   }
 
@@ -468,23 +471,25 @@ class LoliCodeSdkServer extends HarnessSdkJsonRpcServer {
   }
 
   #policyFor(agent) {
+    const root = this.#ctx.subagents.rootOf(agent);
+    const rootPolicy = this.#rootPolicies.get(root.session.id);
+    if (rootPolicy === "plan" || this.#ctx.get("planMode")?.get(root)?.active) return "plan";
     let selected;
     const visited = new Set();
-    for (let current = agent; current; ) {
-      const id = current.session.id;
-      if (visited.has(id)) return undefined;
+    let current = agent;
+    for (let id = agent.session.id; id !== root.session.id && !visited.has(id); ) {
       visited.add(id);
-      if (this.#ctx.get("planMode")?.get(current)?.active) return "plan";
-      const parent = current.session.header.parentSession;
-      if (!parent) {
-        const root = this.#rootPolicies.get(id);
-        return root === "plan" ? root : selected ?? root;
-      }
+      if (current && this.#ctx.get("planMode")?.get(current)?.active) return "plan";
       const worker = this.#hostWorkers.get(id);
+      const parent = current?.session.header.parentSession ?? worker?.parent;
+      if (!parent) break;
       if (worker?.parent === parent) selected ??= worker.policy;
-      current = this.#ctx.agents.get(parent);
+      id = parent;
+      current = this.#ctx.agents.get(id);
     }
-    return selected;
+    // Missing resident creators do not cut off the root's current restrictions.
+    // Only host-authorized selections can override the inherited worker mode.
+    return selected ?? rootPolicy;
   }
 
   #configureWorker(agent) {
@@ -501,17 +506,13 @@ class LoliCodeSdkServer extends HarnessSdkJsonRpcServer {
 
   #enableSecretaryReports(agent) {
     if (this.#reportingWorkers.has(agent)) return;
-    const visited = new Set();
-    let id = agent.session.header.parentSession;
-    while (id && !visited.has(id)) {
-      visited.add(id);
-      const ancestor = this.#ctx.agents.get(id);
-      if (ancestor && this.#secretaries.has(ancestor)) {
-        installSecretaryReport(agent, this.transport);
-        this.#reportingWorkers.add(agent);
-        return;
-      }
-      id = ancestor?.session.header.parentSession;
+    if (!agent.session.header.parentSession) return;
+    let root;
+    try { root = this.#ctx.subagents.rootOf(agent); }
+    catch { return; } // A concurrent admission will be configured at subagent/start.
+    if (root !== agent && this.#secretaries.has(root)) {
+      installSecretaryReport(agent, this.transport);
+      this.#reportingWorkers.add(agent);
     }
   }
 
@@ -531,14 +532,29 @@ class LoliCodeSdkServer extends HarnessSdkJsonRpcServer {
     if (!this.#secretaries.has(agent)) throw new Error("Only a configured secretary owns worker operations");
     const resident = this.#ctx.agents.get(childSessionId);
     if (resident && !this.#ownedWorker(agent, childSessionId)) throw new Error("Invalid worker parent");
-    const parentSessionId = resident?.session.header.parentSession ?? sessionId;
+    const signal = new AbortController().signal;
+    // rc.2 resumes children through their own live tree root. Authorize cold
+    // targets against this secretary's durable catalog before changing policy
+    // or asking the SDK to restore them; a supplied parent id is not authority.
+    const catalog = !resident || delegate
+      ? await this.#ctx.subagents.listDescendants(sessionId, signal)
+      : [];
+    const published = catalog.find((child) => child.id === childSessionId);
+    if (published && (published.kind !== "child" || published.mode !== "continuable" ||
+        (delegate && (published.parentId !== sessionId || published.depth !== 1)))) {
+      throw new Error("Invalid worker parent or unavailable worker history");
+    }
+    if (!delegate && !resident && !published) throw new Error("Invalid worker parent");
+    if (delegate && resident && resident.session.header.parentSession !== sessionId) {
+      throw new Error("Invalid worker parent");
+    }
+    const parentSessionId = resident?.session.header.parentSession ?? published?.parentId ?? sessionId;
     // Persisting a new front-end selection never changes an in-flight call
     // or pending approval. A resident, idle worker can adopt it on admission.
     if (!resident || resident.status === "idle") {
       this.#hostWorkers.set(childSessionId, { parent: parentSessionId, policy: approvalRequired ? "review" : workspacePolicy });
       if (resident) this.#configureWorker(resident);
     }
-    const signal = new AbortController().signal;
     const parts = promptParts(content);
     if (!delegate) {
       if (!validSessionId(requestId)) throw new Error("Invalid LoliCode worker prompt identity");
@@ -551,7 +567,7 @@ class LoliCodeSdkServer extends HarnessSdkJsonRpcServer {
         message.source.kind === "user" && message.source.rpcId === requestId);
       if (pending || previous) return { messageId: pending?.id ?? previous.data.id };
       const result = await this.#ctx.subagents.prompt({
-        parentSessionId, childSessionId, mode: "continuable", delivery, requestId, content: parts,
+        childSessionId, delivery, requestId, content: parts,
       }, signal);
       const child = this.#ownedWorker(agent, childSessionId);
       if (child) await this.#ctx.sessions.flush(child.session);
@@ -563,7 +579,7 @@ class LoliCodeSdkServer extends HarnessSdkJsonRpcServer {
     }
     // The parent catalog is the authoritative publication receipt. A host
     // restart between SDK admission and saving the desktop receipt reuses it.
-    if ((await this.#ctx.subagents.listChildren(sessionId, signal)).some((child) => child.id === childSessionId)) {
+    if (published) {
       return { childSessionId };
     }
     const prompt = parts.some((part) => part.type === "image")
@@ -573,7 +589,10 @@ class LoliCodeSdkServer extends HarnessSdkJsonRpcServer {
       provider: "spawn",
       label,
       childId: childSessionId,
-      request: { parent: agent, prompt, ...(cwd && { cwd }), maxDepth: this.#ctx.subagents.resolveMaxDepth() },
+      parent: agent,
+      prompt,
+      ...(cwd && { cwd }),
+      maxDepth: this.#ctx.subagents.resolveMaxDepth(),
       signal,
       delivery: "caller",
     });

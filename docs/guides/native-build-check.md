@@ -28,7 +28,7 @@ gh workflow run native-build-check.yml --repo treasureGrove/LoliCode --ref <revi
 
 标签和架构依据 [GitHub 标准 runner 文档](https://docs.github.com/en/actions/reference/runners/github-hosted-runners) 核对（2026-11-07），不依赖 `macos-latest` 的隐含架构。每次运行再次断言 Node platform/arch 和 `rustc -vV` host；不做交叉编译，不产 universal 包。
 
-Node 版本来自 `.node-version`（本轮 24.19.0），Rust 来自 `rust-toolchain.toml`（本轮 1.95），pnpm 使用 packageManager 固定版本。每个 runner 各自执行 frozen-lockfile 安装、Harness 的独立 npm 安装和原生资源准备，绝不从 Windows 或其他架构复制 node_modules。当前 Harness 固定为 0.2.2-rc.1，捆绑 Node，不沿用旧版“默认不附 Node”的说明。
+Node 版本来自 `.node-version`（本轮 24.19.0），Rust 来自 `rust-toolchain.toml`（本轮 1.95），pnpm 使用 packageManager 固定版本。每个 runner 各自执行 frozen-lockfile 安装、Harness 的独立 npm 安装和原生资源准备，绝不从 Windows 或其他架构复制 node_modules。当前 Harness 固定为 0.2.2-rc.2，捆绑 Node，不沿用旧版“默认不附 Node”的说明。
 
 Linux 显式安装 WebKitGTK 4.1、GTK3、libsoup3、Ayatana AppIndicator、librsvg、libxdo、OpenSSL 和编译工具，不回退不兼容的 WebKitGTK 4.0。macOS 核查 runner 自带 Xcode/SDK/clang，不接受新许可或创建签名、公证凭据。依赖参考 [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/)。
 

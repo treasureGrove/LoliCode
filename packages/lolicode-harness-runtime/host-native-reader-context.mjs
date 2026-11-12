@@ -40,6 +40,10 @@ export async function createNativeReaderContext(home, sessions) {
     ["@deepseek-ai/dsh-session-title", { fallbackMaxWords: 5, fallbackMaxBytes: 40, maxTitleBytes: 80 }],
     ["@deepseek-ai/dsh-working-directory"],
     ["@deepseek-ai/dsh-subagent"],
+    // rc.2 publishes persisted Team mode/tasks through this official service,
+    // even when Team mode defaults off. Keep its projection without enabling
+    // new Teams, registering Team tools, or activating any Agent.
+    ["@deepseek-ai/dsh-agent-team", { defaultEnabled: false }],
     // The official permissions projection derives its view from these lazy
     // services. Registering them does not run a shell or provision a sandbox.
     ["@deepseek-ai/dsh-subprocess-local"],

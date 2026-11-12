@@ -28,3 +28,19 @@
 # Leaving the global SDK definitions active shadows host registration.
 - id: tool-web
   disabled: true
+
+# rc.2's optional terminal bundle targets the upstream Web terminal panel.
+# LoliCode's SDK carrier keeps its own dock, so reuse the official headless
+# shell backend. This overrides an existing opt-in group; it never inserts or
+# enables terminal tools when the user has not selected the terminal bundle.
+- id: optional-persistent-terminals
+  name: cordis:group
+  config:
+    - id: optional-terminal-registry
+      name: '@deepseek-ai/dsh-terminal'
+    - id: lolicode-terminal-shell
+      name: '@deepseek-ai/dsh-terminal-bash'
+      config:
+        shellDialect: !!js "process.platform === 'win32' ? 'pwsh' : 'bash'"
+    - id: optional-tool-terminal
+      name: '@deepseek-ai/dsh-tool-terminal'

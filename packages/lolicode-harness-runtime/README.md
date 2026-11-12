@@ -1,10 +1,17 @@
 # LoliCode Harness runtime
 
 This directory pins the official `@deepseek-ai/dsh` npm distribution to
-`0.2.2-rc.1`, whose upstream release tag resolves to
-`66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db`. The lock records the artifact
+`0.2.2-rc.2`, whose upstream release tag resolves to
+`ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c`. The lock records the artifact
 integrity and the complete npm dependency closure. This package is independent
 of the desktop app's pnpm workspace.
+
+The root also pins `zod` to `4.6.6`, matching the official rc.2 Harness
+packages. This lets npm share one compatible copy instead of installing a
+separate copy beneath each Harness component. Recheck the direct and peer
+dependency ranges when upgrading this pin. Keep the official package contents
+intact; the smaller runtime comes from lockfile dependency deduplication.
+See the [rc.2 host compatibility and validation record](../../docs/guides/harness-rc2-compatibility.md).
 
 Use Node.js 24.9 or newer with npm. From the repository root, run:
 
@@ -80,6 +87,14 @@ The bundled CLI runs the official SDK profile. LoliCode exposes it through
 its own desktop host and client. The upstream desktop and web clients use
 additional controllers and UI plugins, so each upgrade needs a separate
 coverage check for those features.
+
+When the user selects the optional terminal bundle, the LoliCode profile
+overlay uses the official `dsh-terminal-bash` backend (`pwsh` on Windows).
+Harness rc.2's stock bundle instead needs its Web terminal controller and panel,
+which are not part of LoliCode's SDK carrier. The overlay only replaces the
+selected bundle's group; default sessions and Ralph-only sessions gain no
+terminal tools. `terminal-compat.test.mjs` checks this selection boundary, while
+the host-operations test exercises persistent shell state and a fresh Ralph worker.
 
 Compare the accepted upstream commit with the candidate, including intervening
 release notes, profile and plugin registrations, tool schemas, SDK requests
