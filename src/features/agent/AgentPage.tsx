@@ -1890,6 +1890,8 @@ export function AgentPage({
     : "";
   useEffect(() => {
     if (!isActive || !usesNativeTranscript || !sessionId) return;
+    // Let the first history read finish before starting a second SDK process.
+    if (!nativeSession.ready && !nativeSession.error) return;
     if (
       snapshot?.session.id === sessionId &&
       snapshot.status !== "idle" &&
@@ -1905,6 +1907,8 @@ export function AgentPage({
     sessionId,
     preparationKey,
     snapshot?.status,
+    nativeSession.ready,
+    nativeSession.error,
     desktopActivityRevision,
   ]);
   nativeSessionRef.current = nativeSession;
@@ -5604,10 +5608,9 @@ export function AgentPage({
                       }
                       loadingLabel={t("common.loading")}
                       ready={
-                        Boolean(snapshot) &&
-                        (!usesNativeTranscript ||
-                          nativeSession.ready ||
-                          transcriptMessages.length > 0)
+                        usesNativeTranscript
+                          ? nativeSession.ready || transcriptMessages.length > 0
+                          : Boolean(snapshot)
                       }
                       prepared={preparedTranscripts}
                       onEvict={forgetTranscriptPosition}

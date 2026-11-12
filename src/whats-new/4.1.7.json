@@ -17,10 +17,10 @@
     },
     {
       "type": "improve",
-      "zh": "改进会话切换与标题、折叠侧栏入口和输入框，合并头像与更多菜单",
-      "zh-TW": "改善會話切換與標題、收合側欄入口和輸入框，合併頭像與更多選單",
-      "en": "Improve sessions, compact sidebar access and composers; combine avatar and More menus",
-      "ja": "会話切替・タイトル、折りたたみサイドバーと入力欄を改善し、アバターとその他を統合"
+      "zh": "加快本地会话历史显示，改进标题、侧栏和输入框，合并头像与更多菜单",
+      "zh-TW": "加快本機對話歷史顯示，改善標題、側欄和輸入框，合併頭像與更多選單",
+      "en": "Show local history sooner, improve titles, sidebar and composer, and combine avatar and More menus",
+      "ja": "ローカル履歴を早く表示し、タイトル・サイドバー・入力欄を改善、アバターとその他を統合"
     },
     {
       "type": "fix",

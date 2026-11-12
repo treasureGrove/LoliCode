@@ -397,6 +397,7 @@ struct VerifiedSessionRead {
     child: Option<String>,
     controls: Option<mpsc::Sender<Control>>,
     warm_reader: Option<HarnessClient>,
+    stored_aliases: Option<BTreeMap<String, String>>,
 }
 
 async fn verified_sessions_directory(
@@ -546,30 +547,31 @@ impl HarnessDesktop {
             .ok_or("无效的 Harness 会话编号")?
             .to_owned();
         let child = (owner != id).then(|| sdk_id.clone());
-        let controls = if let Some((record, controls)) = flight {
+        let (controls, stored_aliases) = if let Some((record, controls)) = flight {
             let project = markdown_session(&*record.lock().await, &owner, id)?
                 .project_path
                 .clone();
             crate::commands::agent_dispatch::check_project(app, &project)?;
-            Some(controls)
+            (Some(controls), None)
         } else {
             let id = id.to_owned();
             let owner_for_load = owner.clone();
-            let project = tokio::task::spawn_blocking(move || {
+            let (project, aliases) = tokio::task::spawn_blocking(move || {
                 if !record_file.is_file() {
                     return Err(MARKDOWN_MISSING.into());
                 }
                 let record = load_record(&record_file, &owner_for_load)?;
-                Ok::<_, String>(
+                Ok::<_, String>((
                     markdown_session(&record, &owner_for_load, &id)?
                         .project_path
                         .clone(),
-                )
+                    record.native_message_aliases,
+                ))
             })
             .await
             .map_err(|_| "无法读取 Harness 会话")??;
             crate::commands::agent_dispatch::check_project(app, &project)?;
-            None
+            (None, Some(aliases))
         };
         let warm_reader = if controls.is_none() {
             self.0.lock().await.warm.reader(&owner)
@@ -583,6 +585,7 @@ impl HarnessDesktop {
             child,
             controls,
             warm_reader,
+            stored_aliases,
         })
     }
 
@@ -655,7 +658,7 @@ impl HarnessDesktop {
             match response {
                 Some(Ok(Some(mut value))) => {
                     value["messageAliases"] =
-                        to_value(self.native_aliases_for_context(&context).await?)?;
+                        to_value(self.native_aliases_for_context(context).await?)?;
                     return Ok(value);
                 }
                 Some(Err(error)) => return Err(error),
@@ -672,7 +675,7 @@ impl HarnessDesktop {
                 .await?
             {
                 value["messageAliases"] =
-                    to_value(self.native_aliases_for_context(&context).await?)?;
+                    to_value(self.native_aliases_for_context(context).await?)?;
                 return Ok(value);
             }
         }
@@ -685,7 +688,7 @@ impl HarnessDesktop {
             &request,
         )
         .await?;
-        value["messageAliases"] = to_value(self.native_aliases_for_context(&context).await?)?;
+        value["messageAliases"] = to_value(self.native_aliases_for_context(context).await?)?;
         Ok(value)
     }
 
@@ -699,12 +702,12 @@ impl HarnessDesktop {
             .verified_read_context(app, carrier, id)
             .await
             .map_err(native_alias_context_error)?;
-        self.native_aliases_for_context(&context).await
+        self.native_aliases_for_context(context).await
     }
 
     async fn native_aliases_for_context(
         &self,
-        context: &VerifiedSessionRead,
+        context: VerifiedSessionRead,
     ) -> Result<BTreeMap<String, String>, String> {
         let live = self
             .0
@@ -716,7 +719,11 @@ impl HarnessDesktop {
         if let Some(record) = live {
             return Ok(record.lock().await.native_message_aliases.clone());
         }
-        let owner = context.owner_id.clone();
+        if let Some(aliases) = context.stored_aliases {
+            return Ok(aliases);
+        }
+        // The live turn may have ended while its history read was in flight.
+        let owner = context.owner_id;
         let file = context.owner_root.join("desktop.json");
         tokio::task::spawn_blocking(move || {
             load_record(&file, &owner).map(|record| record.native_message_aliases)

@@ -547,6 +547,18 @@ describe("AgentPage", () => {
     "does not reread cold history when the first idle controls resolve %s the native read",
     async (order) => {
       const current = openNativeFixture();
+      const event: SessionWireEvent = {
+        seq: 0,
+        time: 1,
+        type: "user/message",
+        surfaceOp: "append",
+        data: {
+          id: "cold-user",
+          role: "user",
+          source: { kind: "user" },
+          content: [{ type: "text", text: "先显示本地历史" }],
+        },
+      };
       let finishControls!: (value: AgentSnapshot) => void;
       let finishHistory!: (
         value: Awaited<ReturnType<typeof agentApi.readSessionNative>>,
@@ -562,10 +574,10 @@ describe("AgentPage", () => {
         }),
       );
       const history: Awaited<ReturnType<typeof agentApi.readSessionNative>> = {
-        page: { records: [], cursor: -1, hasMore: false },
-        projections: { kind: "sequenced", asOfSeq: -1, values: {} },
+        page: { records: [{ type: "event", event }], cursor: 0, hasMore: false },
+        projections: { kind: "sequenced", asOfSeq: 0, values: {} },
         state: {
-          cursor: -1,
+          cursor: 0,
           active: false,
           running: false,
           queue: null,
@@ -582,7 +594,9 @@ describe("AgentPage", () => {
       });
       if (order === "before")
         await act(async () => finishControls(structuredClone(snapshot)));
+      expect(agentApi.prepareSession).not.toHaveBeenCalled();
       await act(async () => finishHistory(history));
+      expect(screen.getByText("先显示本地历史")).toBeVisible();
       if (order === "after")
         await act(async () => finishControls(structuredClone(snapshot)));
       await flush();
