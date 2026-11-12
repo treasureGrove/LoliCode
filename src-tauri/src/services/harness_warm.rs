@@ -135,14 +135,6 @@ impl IdleCache {
                 .push(RetirementBarrier(lease.retired.clone()));
         }
     }
-
-    pub(super) fn len(&self) -> usize {
-        self.entries.entries.len()
-    }
-
-    pub(super) fn is_empty(&self) -> bool {
-        self.entries.entries.is_empty()
-    }
 }
 
 pub(super) struct IdleHandle {
@@ -157,6 +149,7 @@ struct RetirementBarrier(watch::Receiver<Option<Result<(), String>>>);
 
 impl IdleHandle {
     /// A miss waits for retirement, releasing the old session's write lease.
+    #[cfg(test)]
     pub(super) async fn take(self, fingerprint: &str) -> Result<Option<WarmRuntime>, String> {
         self.take_any(&[fingerprint.to_owned()]).await
     }

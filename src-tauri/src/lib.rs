@@ -131,8 +131,8 @@ pub mod agent_test_support {
     };
     pub use crate::services::resource_updates::{Envelope as ResourceEnvelope, ResourceStore};
     pub use crate::services::zhipu_login::acceptance_secret_read_only as glm_acceptance_secret;
-    pub use crate::services::{channel_center, UsageCache};
     pub use crate::services::{builtin_apps as builtin_apps_test, tavern as tavern_test};
+    pub use crate::services::{channel_center, UsageCache};
 }
 use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};

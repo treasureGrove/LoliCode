@@ -21,7 +21,13 @@ function remainingPercentage(remaining: number, limit: number) {
   return Math.max(0, Math.min(100, (remaining / limit) * 100));
 }
 
-export function LolicodeAllowancePage({ onBack, embedded = false }: { onBack?: () => void; embedded?: boolean }) {
+export function LolicodeAllowancePage({
+  onBack,
+  embedded = false,
+}: {
+  onBack?: () => void;
+  embedded?: boolean;
+}) {
   const { i18n } = useTranslation();
   const chinese = i18n.language.startsWith("zh");
   const text = (zh: string, en: string) => (chinese ? zh : en);
@@ -75,60 +81,69 @@ export function LolicodeAllowancePage({ onBack, embedded = false }: { onBack?: (
       : text("请检查网络连接后重试。", "Check your connection and try again.");
 
   return (
-    <div className={`lolicode-allowance-page${embedded ? " allowance-embedded" : ""}`}>
-      {!embedded && <header
-        className="allowance-topbar"
-        {...DRAG_REGION_ATTR}
-        style={DRAG_REGION_STYLE as React.CSSProperties}
-      >
-        <button
-          type="button"
-          className="allowance-back"
-          onClick={onBack}
-          aria-label={text("返回", "Back")}
-          style={NO_DRAG}
+    <div
+      className={`lolicode-allowance-page${embedded ? " allowance-embedded" : ""}`}
+    >
+      {!embedded && (
+        <header
+          className="allowance-topbar"
+          {...DRAG_REGION_ATTR}
+          style={DRAG_REGION_STYLE as React.CSSProperties}
         >
-          <ArrowLeft size={16} aria-hidden="true" />
-          {text("返回", "Back")}
-        </button>
-        {windowControls && <div style={NO_DRAG}>{windowControls}</div>}
-      </header>}
-      <main id={embedded ? undefined : "main-content"} className={embedded ? "allowance-embedded-content" : "allowance-scroll"}>
+          <button
+            type="button"
+            className="allowance-back"
+            onClick={onBack}
+            aria-label={text("返回", "Back")}
+            style={NO_DRAG}
+          >
+            <ArrowLeft size={16} aria-hidden="true" />
+            {text("返回", "Back")}
+          </button>
+          {windowControls && <div style={NO_DRAG}>{windowControls}</div>}
+        </header>
+      )}
+      <main
+        id={embedded ? undefined : "main-content"}
+        className={embedded ? "allowance-embedded-content" : "allowance-scroll"}
+      >
         <div className="allowance-content">
-          {!embedded && <div className="allowance-page-heading">
-            <div>
-              <h1>{text("账户额度", "Account allowance")}</h1>
-              <p>
-                {text(
-                  "查看你的每日免费 Credit 与各模型消耗费率。",
-                  "Your daily free Credit and each model's usage rates.",
-                )}
-              </p>
+          {!embedded && (
+            <div className="allowance-page-heading">
+              <div>
+                <h1>{text("账户额度", "Account allowance")}</h1>
+                <p>
+                  {text(
+                    "查看你的每日免费 Credit 与各模型消耗费率。",
+                    "Your daily free Credit and each model's usage rates.",
+                  )}
+                </p>
+              </div>
+              {accountId && (
+                <button
+                  type="button"
+                  className="allowance-action"
+                  onClick={() => void refresh()}
+                  disabled={query.isFetching || identity.isPending}
+                  aria-label={text(
+                    "刷新额度和模型",
+                    "Refresh allowance and models",
+                  )}
+                >
+                  <RefreshCw
+                    size={14}
+                    aria-hidden="true"
+                    className={
+                      query.isFetching ? "allowance-refreshing" : undefined
+                    }
+                  />
+                  {query.isFetching
+                    ? text("正在刷新…", "Refreshing…")
+                    : text("刷新", "Refresh")}
+                </button>
+              )}
             </div>
-            {accountId && (
-              <button
-                type="button"
-                className="allowance-action"
-                onClick={() => void refresh()}
-                disabled={query.isFetching || identity.isPending}
-                aria-label={text(
-                  "刷新额度和模型",
-                  "Refresh allowance and models",
-                )}
-              >
-                <RefreshCw
-                  size={14}
-                  aria-hidden="true"
-                  className={
-                    query.isFetching ? "allowance-refreshing" : undefined
-                  }
-                />
-                {query.isFetching
-                  ? text("正在刷新…", "Refreshing…")
-                  : text("刷新", "Refresh")}
-              </button>
-            )}
-          </div>}
+          )}
 
           {identity.isLoading || identity.isPending ? (
             <div className="allowance-state" role="status">

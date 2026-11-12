@@ -8,9 +8,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseVersion, verifyRelease } from "./lolicode-release.mjs";
 
-const LEGACY_FEED = "https://tools.treasuregrove.art/lolicode/updates/latest.json";
+const LEGACY_FEED =
+  "https://tools.treasuregrove.art/lolicode/updates/latest.json";
 const WEBSITE_FEED = "https://lolicode.com/downloads/updates/latest.json";
-const STABLE_FEED = "https://tools.treasuregrove.art/lolicode/updates/stable.json";
+const STABLE_FEED =
+  "https://tools.treasuregrove.art/lolicode/updates/stable.json";
 const R2 = "https://pub-250df9737586416fbd6e8cb0a843b249.r2.dev";
 const GITHUB =
   "https://github.com/treasureGrove/LoliCode-Releases/releases/download/lolicode-v";
@@ -137,7 +139,8 @@ export async function verifyDelivery(options) {
     artifacts: [],
     githubLatest: null,
   };
-  const toolsFeed = release.latestURL === STABLE_FEED ? STABLE_FEED : LEGACY_FEED;
+  const toolsFeed =
+    release.latestURL === STABLE_FEED ? STABLE_FEED : LEGACY_FEED;
   let stable;
   for (const url of [toolsFeed, WEBSITE_FEED]) {
     const result = await metadata(url);
@@ -164,10 +167,12 @@ export async function verifyDelivery(options) {
       sha256: legacy.sha256,
     };
   }
-  const github = (await metadata(
-    `${API}/releases/latest`,
-    process.env.LOLICODE_RELEASE_GITHUB_TOKEN,
-  )).value;
+  const github = (
+    await metadata(
+      `${API}/releases/latest`,
+      process.env.LOLICODE_RELEASE_GITHUB_TOKEN,
+    )
+  ).value;
   assert.equal(github.tag_name, `lolicode-v${publicVersion}`);
   assert.equal(github.draft, false);
   assert.equal(github.prerelease, false);

@@ -205,9 +205,7 @@ export function Sidebar(props: SidebarProps) {
                 (props.view !== "tavern" && isBuiltinApp(props.view)) ||
                 (props.view === "agent" && Boolean(props.activeAgentTool))
               }
-              navigationItems={
-                <NavigationItems {...props} />
-              }
+              navigationItems={<NavigationItems {...props} />}
               onOpenSettings={() => props.onSelectPage("settings")}
               onOpenUpdates={props.onOpenUpdates}
               onOpenAllowance={() => props.onSelectPage("usage")}
@@ -244,9 +242,25 @@ function MainDirectory({
             selected={false}
             icon={RefreshCw}
             selectionLayout={null}
-            label={view === "agent" ? (chinese ? "切换到对话" : "Switch to chat") : (chinese ? "切换到代理" : "Switch to Agent")}
+            label={
+              view === "agent"
+                ? chinese
+                  ? "切换到对话"
+                  : "Switch to chat"
+                : chinese
+                  ? "切换到代理"
+                  : "Switch to Agent"
+            }
             visibleLabel=""
-            title={view === "agent" ? (chinese ? "切换到对话" : "Switch to chat") : (chinese ? "切换到代理" : "Switch to Agent")}
+            title={
+              view === "agent"
+                ? chinese
+                  ? "切换到对话"
+                  : "Switch to chat"
+                : chinese
+                  ? "切换到代理"
+                  : "Switch to Agent"
+            }
             onClick={() => onSelectPage(view === "agent" ? "tavern" : "agent")}
           />
         ) : (

@@ -1089,7 +1089,8 @@ impl MobileCompanionState {
                         Ok(json!({"accepted":true,"requestId":request_id}))
                     }
                     "run.cancel" => {
-                        agent_dispatch::interrupt_agent_session(app.clone(), id.into(), None).await?;
+                        agent_dispatch::interrupt_agent_session(app.clone(), id.into(), None)
+                            .await?;
                         Ok(json!({"accepted":true}))
                     }
                     "permission.reply" => {
