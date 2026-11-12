@@ -74,19 +74,20 @@ export function reviewedRedirect(selected, next) {
   );
 }
 
-async function request(url) {
+async function request(url, timeout = 120_000, githubApiToken) {
   return fetch(url, {
     redirect: "manual",
-    signal: AbortSignal.timeout(120000),
+    signal: AbortSignal.timeout(timeout),
     headers: {
       "User-Agent": "LoliCode-Delivery-Verification/1",
       "Cache-Control": "no-cache",
+      ...(githubApiToken ? { Authorization: `Bearer ${githubApiToken}` } : {}),
     },
   });
 }
 
-async function metadata(url) {
-  const response = await request(url);
+async function metadata(url, githubApiToken) {
+  const response = await request(url, 120_000, githubApiToken);
   assert.equal(response.status, 200, "Metadata unavailable");
   const chunks = [];
   let bytes = 0;
@@ -163,7 +164,10 @@ export async function verifyDelivery(options) {
       sha256: legacy.sha256,
     };
   }
-  const github = (await metadata(`${API}/releases/latest`)).value;
+  const github = (await metadata(
+    `${API}/releases/latest`,
+    process.env.LOLICODE_RELEASE_GITHUB_TOKEN,
+  )).value;
   assert.equal(github.tag_name, `lolicode-v${publicVersion}`);
   assert.equal(github.draft, false);
   assert.equal(github.prerelease, false);
@@ -192,7 +196,7 @@ export async function verifyDelivery(options) {
         `${GITHUB}${publicVersion}/${name}`,
       ].includes(selected),
     );
-    let response = await request(selected);
+    let response = await request(selected, 600_000);
     if ([301, 302, 303, 307, 308].includes(response.status)) {
       const next = response.headers.get("location");
       assert(
@@ -200,7 +204,7 @@ export async function verifyDelivery(options) {
         "Unexpected download storage redirect",
       );
       await response.body?.cancel();
-      response = await request(next);
+      response = await request(next, 600_000);
     }
     assert.equal(response.status, 200);
     let bytes = 0;

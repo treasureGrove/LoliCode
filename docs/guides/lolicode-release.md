@@ -6,7 +6,7 @@
 
 当前正式产品版本为 **v1.0.6**、原生更新版本为 **4.1.6**，见[本次交付记录](lolicode-v1.0.6-delivery.md)。本轮公开分发 **Windows x64 NSIS 安装版与便携 ZIP**，Android 保留既有 **0.1.0-alpha.4** 测试包；macOS 和 Linux 是产品目标，尚未发布对应安装包。真实发布结果记录在每版交付文档中，不能用待发布清单替代发布证据。
 
-下一版从 **1.1.0** 开始统一版本号。`product-release.json` 中的两个版本字段，以及 Cargo、package、Tauri、正式更新清单、GitHub tag 和下载路径都使用同一个版本。新版检查 `/lolicode/updates/stable.json`，官网的下载清单也读取这个地址。旧版仍检查 `/lolicode/updates/latest.json`，该地址提供一次性迁移清单。它用旧客户端可识别的 `4.2.0` 作为比较值，界面显示 1.1.0，安装的也是同一份签名 1.1.0 安装器。已经安装新版的用户直接进入新更新通道。历史包沿用其原有版本和下载路径。维护者可使用 `$lolicode-release` skill。
+从 **1.1.0** 开始统一版本号。`product-release.json` 中的两个版本字段，以及 Cargo、package、Tauri、正式更新清单、GitHub tag 和下载路径都使用同一个版本。新版检查 `/lolicode/updates/stable.json`，官网和工具站的下载页也读取这个地址。旧版仍检查 `/lolicode/updates/latest.json`，该地址提供一次性迁移清单。它用旧客户端可识别的 `4.2.0` 作为比较值，界面显示 1.1.0，安装的也是同一份签名 1.1.0 安装器。已经安装新版的用户直接进入新更新通道。历史包沿用其原有版本和下载路径。维护者可使用 `$lolicode-release` skill。
 
 当前源码冻结与便携包验收入口为 `scripts/dev/lolicode-build-snapshot.mjs`、`scripts/build/lolicode-portable.mjs`。前者在独立 index 和审计 ref 中保存源树并导出构建目录，保留用户分支和 index；后者从真实本轮可执行文件组装 ZIP、逐文件核对并执行离线自检。
 
@@ -216,6 +216,8 @@ node scripts/release/lolicode-verify-delivery.mjs --release-dir <本轮准备目
 发布 1.1.0 时，先用旧版更新器从候选迁移清单完整下载并验签同一份 1.1.0 安装器。安装和会话恢复验证通过后，先启用新版正式清单和官网入口，再将旧地址切换到迁移清单。后续发布只更新 `stable.json`，让仍在旧版的用户始终能先安装已验证的 1.1.0，再由新版更新到最新版本。
 
 该检查会重新验本地实际包的签名、两个正式清单的版本与一致性、GitHub Latest 及文件 digest，并从官网入口完整下载安装器、签名和便携 ZIP 三份资产对比 SHA256／长度。另发的 `release-build.json` 第四附件需要独立匿名完整下载及发布端现场验真，不能用三安装资产结果代替。正式源仍旧、错版本、签名变化、错误镜像或网页入口失配均不能通过。它不会安装；仍要另行用官方 updater SDK 从上一版检查/下载/验签，并检查新版本自查无重复更新。首次安装、覆盖安装与数据迁移也需要各自独立的证据。
+
+GitHub API 匿名限额用尽时，可以向验证进程传入 `LOLICODE_RELEASE_GITHUB_TOKEN`。它仅用于读取 GitHub Latest 元数据，清单和附件继续匿名验证。
 
 `scripts/release/lolicode-download-router.py` 支持明确列出的多个稳定版本，每版仅安装器、签名和便携包；它不代理正文、不接受任意上游。部署时发布新配置与 Nginx exact 路由，保留旧版入口；短 HEAD 健康检查失败选同版本 GitHub，服务不可用时 Nginx 有固定 GitHub 兜底。运行中断后的跨来源续传仍不支持。
 
