@@ -537,8 +537,8 @@ mod tests {
 
     #[tokio::test]
     async fn expired_checkout_cannot_win_even_when_take_is_already_queued() {
-        let (resource, _send, shutdowns) = mock(Instant::now() - MAX_LIFETIME);
-        let lease = IdleLease::spawn(resource, IDLE_TTL, MAX_LIFETIME);
+        let (resource, _send, shutdowns) = mock(Instant::now());
+        let lease = IdleLease::spawn(resource, IDLE_TTL, Duration::ZERO);
         assert!(lease.take("same-owner-config").await.unwrap().is_none());
         assert_eq!(shutdowns.load(Ordering::SeqCst), 1);
     }
