@@ -4,7 +4,7 @@
 
 本指南用于 **LoliCode 正式版**的安装验收、签名和发布。普通 `pnpm build` / `pnpm build:dev` 生成 **LoliCode Dev**，在 Windows 自动注册「LoliCode 开发版」入口，使用独立数据目录并禁用正式更新；详见[开发指南](lolicode-development.md)。正式构建入口为 `pnpm build:release`，下文直接执行 `pnpm tauri build` 的命令同样属于正式打包。GitHub 的 **LoliCode Windows stable release** 与 **LoliCode Windows development** 是独立工作流，Development 产物不能作为正式发布验收凭据。
 
-当前正式产品版本为 **v1.0.6**、原生更新版本为 **4.1.6**，见[本次交付记录](lolicode-v1.0.6-delivery.md)。本轮公开分发 **Windows x64 NSIS 安装版与便携 ZIP**，Android 保留既有 **0.1.0-alpha.4** 测试包；macOS 和 Linux 是产品目标，尚未发布对应安装包。真实发布结果记录在每版交付文档中，不能用待发布清单替代发布证据。
+当前正式产品版本和原生更新版本均为 **v1.1.1**，见[本次交付记录](lolicode-v1.1.1-delivery.md)。本轮公开分发 **Windows x64 NSIS 安装版与便携 ZIP**，Android 保留既有 **0.1.0-alpha.4** 测试包；macOS 和 Linux 是产品目标，尚未发布对应安装包。真实发布结果记录在每版交付文档中，不能用待发布清单替代发布证据。
 
 从 **1.1.0** 开始统一版本号。`product-release.json` 中的两个版本字段，以及 Cargo、package、Tauri、正式更新清单、GitHub tag 和下载路径都使用同一个版本。新版检查 `/lolicode/updates/stable.json`，官网和工具站的下载页也读取这个地址。旧版仍检查 `/lolicode/updates/latest.json`，该地址提供一次性迁移清单。它用旧客户端可识别的 `4.2.0` 作为比较值，界面显示 1.1.0，安装的也是同一份签名 1.1.0 安装器。已经安装新版的用户直接进入新更新通道。历史包沿用其原有版本和下载路径。维护者可使用 `$lolicode-release` skill。
 
