@@ -6,7 +6,7 @@
 
 当前正式产品版本为 **v1.0.6**、原生更新版本为 **4.1.6**，见[本次交付记录](lolicode-v1.0.6-delivery.md)。本轮公开分发 **Windows x64 NSIS 安装版与便携 ZIP**，Android 保留既有 **0.1.0-alpha.4** 测试包；macOS 和 Linux 是产品目标，尚未发布对应安装包。真实发布结果记录在每版交付文档中，不能用待发布清单替代发布证据。
 
-下一版从 **1.1.0** 开始统一版本号。`product-release.json` 中的两个版本字段，以及 Cargo、package、Tauri、更新清单、GitHub tag 和下载路径都使用同一个版本。发布工具允许从旧的 `4.0.x` 或 `4.1.x` 更新清单切换到新序列。已经安装旧版的用户需要手动下载安装 1.1.0 一次，之后由新版检查后续更新。历史包沿用其原有版本和下载路径。维护者可使用 `$lolicode-release` skill。
+下一版从 **1.1.0** 开始统一版本号。`product-release.json` 中的两个版本字段，以及 Cargo、package、Tauri、正式更新清单、GitHub tag 和下载路径都使用同一个版本。新版检查 `/lolicode/updates/stable.json`，官网的下载清单也读取这个地址。旧版仍检查 `/lolicode/updates/latest.json`，该地址提供一次性迁移清单。它用旧客户端可识别的 `4.2.0` 作为比较值，界面显示 1.1.0，安装的也是同一份签名 1.1.0 安装器。已经安装新版的用户直接进入新更新通道。历史包沿用其原有版本和下载路径。维护者可使用 `$lolicode-release` skill。
 
 当前源码冻结与便携包验收入口为 `scripts/dev/lolicode-build-snapshot.mjs`、`scripts/build/lolicode-portable.mjs`。前者在独立 index 和审计 ref 中保存源树并导出构建目录，保留用户分支和 index；后者从真实本轮可执行文件组装 ZIP、逐文件核对并执行离线自检。
 
@@ -21,7 +21,7 @@ v1.0.0 本轮使用已验证的同版本 GitHub 下载通道，保留历史 R2 �
 - 产品下载：[lolicode.com](https://lolicode.com/)，工具站保留兼容入口。
 - 社区账户：[社区](https://lolicode.com/all)，独立于模型渠道授权。
 - 源码与发布记录：[treasureGrove/LoliCode](https://github.com/treasureGrove/LoliCode)。
-- 正式签名更新源：[updates/latest.json](https://tools.treasuregrove.art/lolicode/updates/latest.json)。
+- 新版正式签名更新源：[updates/stable.json](https://tools.treasuregrove.art/lolicode/updates/stable.json)。
 
 4.0.22 的安装器与便携包由 R2、公开 GitHub Releases 同时保存；官网和更新清单使用 `https://lolicode.com/downloads/releases/4.0.22/<文件名>`，旧版下载路由保留。服务器仅检查已知 R2 对象并返回跳转；R2 异常时选择同版本 GitHub 文件，下载字节不经过官网服务器。这是下载前选路，不会在客户端传输中断后自动接管连接。R2 当前使用临时公开开发地址，后续可替换上游而保持官网路径不变。具体限制和验收结果见交付记录。
 
@@ -100,7 +100,7 @@ pnpm exec tauri signer generate -w "<仓库外私有目录>\LoliCode.key"
 LoliCode 使用下面的独立分发路径。当前正式清单已在既有发布中上线；每一轮的新安装器、清单及真实公开访问仍须重新核验：
 
 ```text
-https://tools.treasuregrove.art/lolicode/updates/latest.json
+https://tools.treasuregrove.art/lolicode/updates/stable.json
 https://tools.treasuregrove.art/lolicode/releases/<version>/<installer>.exe
 ```
 
@@ -117,10 +117,10 @@ node scripts/release/lolicode-release.mjs prepare `
   --installer "<NSIS安装器绝对路径>.exe" `
   --signature "<NSIS安装器绝对路径>.exe.sig" `
   --public-key-file "<仓库外私有目录>\LoliCode.key.pub" `
-  --version "4.0.16" `
-  --current-version "4.0.15" `
+  --version "1.1.0" `
+  --current-version "4.1.6" `
   --base-url "https://tools.treasuregrove.art/lolicode/releases" `
-  --latest-url "https://tools.treasuregrove.art/lolicode/updates/latest.json" `
+  --latest-url "https://tools.treasuregrove.art/lolicode/updates/stable.json" `
   --output-dir "<本地发布暂存目录>" `
   --portable "<已完成资源与压缩完整性校验的便携包>.zip" `
   --notes-file "<本轮更新说明>.md"
@@ -212,6 +212,8 @@ GitHub 有新包不能单独作为交付完成依据。版本文件与源码冻�
 ```powershell
 node scripts/release/lolicode-verify-delivery.mjs --release-dir <本轮准备目录/version> --public-key-file src-tauri/updater.pub --tauri-config <冻结配置> --output <新的验收回执.json>
 ```
+
+发布 1.1.0 时，先用旧版更新器从候选迁移清单完整下载并验签同一份 1.1.0 安装器。安装和会话恢复验证通过后，先启用新版正式清单和官网入口，再将旧地址切换到迁移清单。后续发布只更新 `stable.json`，让仍在旧版的用户始终能先安装已验证的 1.1.0，再由新版更新到最新版本。
 
 该检查会重新验本地实际包的签名、两个正式清单的版本与一致性、GitHub Latest 及文件 digest，并从官网入口完整下载安装器、签名和便携 ZIP 三份资产对比 SHA256／长度。另发的 `release-build.json` 第四附件需要独立匿名完整下载及发布端现场验真，不能用三安装资产结果代替。正式源仍旧、错版本、签名变化、错误镜像或网页入口失配均不能通过。它不会安装；仍要另行用官方 updater SDK 从上一版检查/下载/验签，并检查新版本自查无重复更新。首次安装、覆盖安装与数据迁移也需要各自独立的证据。
 

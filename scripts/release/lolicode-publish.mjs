@@ -140,8 +140,9 @@ export async function preparePublishPlan(options) {
     throw new Error(
       "Stable latest.json cannot publish a prerelease; use a separate candidate feed.",
     );
+  const stable = release.latestURL === `${PUBLIC_NAMESPACE}/updates/stable.json`;
   if (
-    release.latestURL !== `${PUBLIC_NAMESPACE}/updates/latest.json` ||
+    (!stable && release.latestURL !== `${PUBLIC_NAMESPACE}/updates/latest.json`) ||
     release.releaseBaseURL.replace(/\/$/, "") !== `${PUBLIC_NAMESPACE}/releases`
   )
     throw new Error(
@@ -176,6 +177,7 @@ export async function preparePublishPlan(options) {
     namespace: REMOTE_NAMESPACE,
     stageId,
     version: checked.version,
+    ...(stable ? { feed: "stable.json" } : {}),
     ...(release.productVersion
       ? { productVersion: release.productVersion }
       : {}),

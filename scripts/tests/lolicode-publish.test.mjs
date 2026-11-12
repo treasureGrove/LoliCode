@@ -53,6 +53,7 @@ async function fixture(version = "4.0.13") {
   const encodedSignature = wrap(
     `untrusted comment: owned test\n${Buffer.concat([Buffer.from("ED"), keyId, signature]).toString("base64")}\ntrusted comment: ${comment}\n${sign(null, Buffer.concat([signature, Buffer.from(comment)]), privateKey).toString("base64")}\n`,
   );
+  const feed = version === "1.1.0" ? "stable.json" : "latest.json";
   const installer = path.join(root, "fixture.exe"),
     signatureFile = `${installer}.sig`,
     pub = path.join(root, "fixture.key.pub"),
@@ -69,7 +70,7 @@ async function fixture(version = "4.0.13") {
       plugins: {
         updater: {
           pubkey: encodedKey,
-          endpoints: [`${PUBLIC_NAMESPACE}/updates/latest.json`],
+          endpoints: [`${PUBLIC_NAMESPACE}/updates/${feed}`],
         },
       },
     }),
@@ -82,7 +83,7 @@ async function fixture(version = "4.0.13") {
     version,
     "current-version": "4.0.12",
     "base-url": `${PUBLIC_NAMESPACE}/releases`,
-    "latest-url": `${PUBLIC_NAMESPACE}/updates/latest.json`,
+    "latest-url": `${PUBLIC_NAMESPACE}/updates/${feed}`,
     "output-dir": path.join(root, "prepared"),
   });
   const options = {
@@ -376,7 +377,7 @@ test("actual remote Python lifecycle validates hashes, keeps version directories
   }
 });
 
-test("the first unified release replaces the legacy feed after artifacts are ready", async () => {
+test("the first unified release publishes a separate feed after artifacts are ready", async () => {
   const f = await fixture("1.1.0");
   try {
     const site = path.join(f.root, "lolicode");
@@ -408,7 +409,7 @@ test("the first unified release replaces the legacy feed after artifacts are rea
       program = fileURLToPath(
         new URL("../release/lolicode-publish-remote.py", import.meta.url),
       );
-    const wrapper = `import importlib.util,json,sys,shutil,uuid\nfrom pathlib import Path\nsys.dont_write_bytecode=True\nm=importlib.util.spec_from_file_location('owned_publish',sys.argv[1]);p=importlib.util.module_from_spec(m);m.loader.exec_module(p)\np.ROOT=Path(sys.argv[2])\nspec=json.loads(sys.stdin.read());spec['namespace']=str(p.ROOT)\nassert p.compare('4.0.13-rc.10','4.0.13-rc.2')==1\nlatest=p.ROOT/'updates/latest.json'\nlatest.parent.mkdir(parents=True)\nlatest.write_text(json.dumps({'version':'4.1.6','productVersion':'1.0.6'}))\nlegacy=latest.read_bytes()\nassert p.main('begin',spec)['artifactsReady']==False\nstage=p.ROOT/('.publish-stage-'+spec['stageId'])\nfor item in spec['files']:\n source=Path(sys.argv[3] if item['role']=='release' else sys.argv[4])/item['name'];target=stage/item['role']/item['name'];target.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(source,target)\nassert latest.read_bytes()==legacy\nassert p.main('commit-artifacts',spec)['remoteHashesAndBytesVerified']\nassert latest.read_bytes()==legacy\nassert p.main('finalize',spec)['latestPublishedLast']\nold=latest.read_bytes()\nassert json.loads(old)['version']=='1.1.0'\nassert p.compare_release_versions('4.1.7','1.1.0')==-1\nnextspec=dict(spec);nextspec['stageId']=str(uuid.uuid4())\ntry: p.main('begin',nextspec);raise AssertionError('equal version was published')\nexcept ValueError as e: assert 'equal or newer' in str(e)\np.main('abort',nextspec)\nassert (p.ROOT/'updates/latest.json').read_bytes()==old\n(p.ROOT/'updates/latest.json').write_text(json.dumps({'version':'9.0.0'}))\nnextspec['stageId']=str(uuid.uuid4())\ntry: p.main('begin',nextspec);raise AssertionError('newer version was rolled back')\nexcept ValueError as e: assert 'equal or newer' in str(e)\np.main('abort',nextspec)\nassert stage.exists()\nprint('PASS actual offline remote lifecycle')\n`;
+    const wrapper = `import importlib.util,json,sys,shutil,uuid\nfrom pathlib import Path\nsys.dont_write_bytecode=True\nm=importlib.util.spec_from_file_location('owned_publish',sys.argv[1]);p=importlib.util.module_from_spec(m);m.loader.exec_module(p)\np.ROOT=Path(sys.argv[2])\nspec=json.loads(sys.stdin.read());spec['namespace']=str(p.ROOT)\nassert p.compare('4.0.13-rc.10','4.0.13-rc.2')==1\nlatest=p.ROOT/'updates/latest.json'\nlatest.parent.mkdir(parents=True)\nlatest.write_text(json.dumps({'version':'4.1.6','productVersion':'1.0.6'}))\nlegacy=latest.read_bytes()\nstable=latest.with_name('stable.json')\nassert p.main('begin',spec)['artifactsReady']==False\nstage=p.ROOT/('.publish-stage-'+spec['stageId'])\nfor item in spec['files']:\n source=Path(sys.argv[3] if item['role']=='release' else sys.argv[4])/item['name'];target=stage/item['role']/item['name'];target.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(source,target)\nassert latest.read_bytes()==legacy and not stable.exists()\nassert p.main('commit-artifacts',spec)['remoteHashesAndBytesVerified']\nassert latest.read_bytes()==legacy and not stable.exists()\nassert p.main('finalize',spec)['latestPublishedLast']\nassert latest.read_bytes()==legacy\nold=stable.read_bytes()\nassert json.loads(old)['version']=='1.1.0'\nassert p.compare_release_versions('4.1.7','1.1.0')==-1\nnextspec=dict(spec);nextspec['stageId']=str(uuid.uuid4())\ntry: p.main('begin',nextspec);raise AssertionError('equal version was published')\nexcept ValueError as e: assert 'equal or newer' in str(e)\np.main('abort',nextspec)\nassert stable.read_bytes()==old\nstable.write_text(json.dumps({'version':'9.0.0'}))\nnextspec['stageId']=str(uuid.uuid4())\ntry: p.main('begin',nextspec);raise AssertionError('newer version was rolled back')\nexcept ValueError as e: assert 'equal or newer' in str(e)\np.main('abort',nextspec)\nassert stage.exists()\nprint('PASS actual offline remote lifecycle')\n`;
     const result = spawnSync(
       "python",
       [

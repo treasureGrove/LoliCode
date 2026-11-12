@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  legacyMigrationFeed,
   reviewedRedirect,
   validateStableFeed,
 } from "../release/lolicode-verify-delivery.mjs";
 
-function fixture() {
-  const version = "4.0.21";
+function fixture(version = "4.0.21") {
   const installer = `LoliCode-${version}-Windows-x64-Setup.exe`;
   const assets = {
     [installer]: { bytes: 100, sha256: "a".repeat(64) },
@@ -36,6 +36,18 @@ function fixture() {
   };
   return { local, feed };
 }
+
+test("the legacy offer changes only the reported versions of the signed 1.1.0 download", () => {
+  const { local, feed } = fixture("1.1.0");
+  validateStableFeed(feed, local);
+  const migration = legacyMigrationFeed(feed);
+  assert.equal(migration.version, "4.2.0");
+  assert.equal(migration.productVersion, "1.1.0");
+  assert.deepEqual(migration.platforms, feed.platforms);
+  assert.deepEqual(migration.downloads, feed.downloads);
+  assert.equal(feed.version, "1.1.0");
+  assert.throws(() => legacyMigrationFeed(fixture().feed), /must be 1.1.0/);
+});
 
 test("a public package with an old stable feed cannot pass delivery", () => {
   const { local, feed } = fixture();

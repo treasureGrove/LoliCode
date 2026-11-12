@@ -102,7 +102,10 @@ def main(phase, spec):
     owner = lock / 'owner'
     stage = no_symlink(ROOT / ('.publish-stage-' + stage_id))
     destination = no_symlink(ROOT / 'releases' / public_version)
-    latest = no_symlink(ROOT / 'updates' / 'latest.json')
+    feed = spec.get('feed', 'latest.json')
+    if feed not in ('latest.json', 'stable.json'):
+        raise ValueError('Unexpected LoliCode update feed.')
+    latest = no_symlink(ROOT / 'updates' / feed)
     content = {key: value for key, value in spec.items() if key != 'resume'}
     plan_hash = hashlib.sha256(json.dumps(content, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
     expected_release = {f'LoliCode-{public_version}-Windows-x64-Setup.exe',

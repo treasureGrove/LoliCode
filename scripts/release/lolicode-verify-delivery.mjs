@@ -8,10 +8,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseVersion, verifyRelease } from "./lolicode-release.mjs";
 
-const FEEDS = [
-  "https://tools.treasuregrove.art/lolicode/updates/latest.json",
-  "https://lolicode.com/downloads/updates/latest.json",
-];
+const LEGACY_FEED = "https://tools.treasuregrove.art/lolicode/updates/latest.json";
+const WEBSITE_FEED = "https://lolicode.com/downloads/updates/latest.json";
+const STABLE_FEED = "https://tools.treasuregrove.art/lolicode/updates/stable.json";
 const R2 = "https://pub-250df9737586416fbd6e8cb0a843b249.r2.dev";
 const GITHUB =
   "https://github.com/treasureGrove/LoliCode-Releases/releases/download/lolicode-v";
@@ -51,6 +50,12 @@ export function validateStableFeed(feed, local) {
     ...local.assets[installer],
     url: `${GITHUB}${publicVersion}/${installer}`,
   });
+}
+
+export function legacyMigrationFeed(stable) {
+  assert.equal(stable.version, "1.1.0", "Migration installer must be 1.1.0");
+  assert.equal(stable.productVersion ?? stable.version, "1.1.0");
+  return { ...stable, version: "4.2.0", productVersion: "1.1.0" };
 }
 
 export function reviewedRedirect(selected, next) {
@@ -131,9 +136,12 @@ export async function verifyDelivery(options) {
     artifacts: [],
     githubLatest: null,
   };
-  for (const url of FEEDS) {
+  const toolsFeed = release.latestURL === STABLE_FEED ? STABLE_FEED : LEGACY_FEED;
+  let stable;
+  for (const url of [toolsFeed, WEBSITE_FEED]) {
     const result = await metadata(url);
     validateStableFeed(result.value, local);
+    stable ??= result.value;
     proof.feeds.push({
       url,
       version: result.value.version,
@@ -145,6 +153,16 @@ export async function verifyDelivery(options) {
     proof.feeds[1].sha256,
     "Website and installed clients disagree",
   );
+  if (toolsFeed === STABLE_FEED && version === "1.1.0") {
+    const legacy = await metadata(LEGACY_FEED);
+    assert.deepEqual(legacy.value, legacyMigrationFeed(stable));
+    proof.legacyMigration = {
+      url: LEGACY_FEED,
+      offeredVersion: legacy.value.version,
+      installerVersion: version,
+      sha256: legacy.sha256,
+    };
+  }
   const github = (await metadata(`${API}/releases/latest`)).value;
   assert.equal(github.tag_name, `lolicode-v${publicVersion}`);
   assert.equal(github.draft, false);
