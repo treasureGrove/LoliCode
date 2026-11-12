@@ -227,11 +227,14 @@ if (!$ExpectedSid) {
             throw 'The isolated account worker exceeded the 30 minute timeout'
         }
         $workerRecord = Get-Content -LiteralPath (Join-Path $stage 'account-finished.json') -Raw | ConvertFrom-Json
-        if ($worker.ExitCode -ne 0 -or $workerRecord.pending -or !$workerRecord.persistedLegacySha256) {
-            $failure = Join-Path $stage 'failure.txt'
-            $message = Get-Content -LiteralPath $failure -Raw
-            if ($message) { throw $message }
-            throw "The isolated account worker exited with $($worker.ExitCode)"
+        $message = Get-Content -LiteralPath (Join-Path $stage 'failure.txt') -Raw
+        if ($message) { throw $message }
+        # An alternate-credential process can exit without exposing its exit code.
+        # Require the explicit completion record even when the exit code is available.
+        $exitCode = $worker.ExitCode
+        if (($null -ne $exitCode -and $exitCode -ne 0) -or $workerRecord.pending -or
+            $workerRecord.persistedLegacySha256 -notmatch '^[a-f0-9]{64}$') {
+            throw "The isolated account worker failed or did not report completion (exit code: $exitCode)"
         }
     } catch { $workerFailure = $_ } finally {
         if ($account) {

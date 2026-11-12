@@ -194,8 +194,10 @@ test("worker reports preserve controller ownership under CREATOR OWNER inheritan
   );
   assert.match(
     psSource,
-    /\$worker\.ExitCode -ne 0 -or \$workerRecord\.pending/,
+    /\(\$null -ne \$exitCode -and \$exitCode -ne 0\) -or \$workerRecord\.pending/,
   );
+  assert.match(psSource, /\$workerRecord\.persistedLegacySha256 -notmatch/);
+  assert.match(psSource, /if \(\$message\) \{ throw \$message \}/);
 });
 
 test("restart/reinstall require all earlier turns and reject a stale replay", () => {
