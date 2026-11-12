@@ -62,6 +62,37 @@ function Assert-DevelopmentAppClosed {
     }
 }
 
+function Remove-EmptyDevelopmentRuntimeDirectories([string]$Directory) {
+    $taskRoot = [IO.Path]::GetFullPath($Directory)
+    $taskRuntime = $taskRoot
+    foreach ($taskPart in @('', 'agent', 'harness-runtime', 'node_modules')) {
+        if ($taskPart) { $taskRuntime = Join-Path $taskRuntime $taskPart }
+        $taskEntry = Get-Item -LiteralPath $taskRuntime -Force -ErrorAction SilentlyContinue
+        if (-not $taskEntry) { return }
+        if (-not $taskEntry.PSIsContainer -or ($taskEntry.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+            throw 'Unsafe development runtime cleanup root.'
+        }
+    }
+    $null = Read-DevelopmentManifest (Join-Path $taskRoot 'development-build.json')
+    # A previous update may already have advanced its file-only manifest.
+    # Scan only npm dependencies, never application/user data or linked trees.
+    $taskPrune = {
+        param([IO.DirectoryInfo]$Current)
+        $Current.Refresh()
+        if (-not $Current.Exists -or ($Current.Attributes -band [IO.FileAttributes]::ReparsePoint)) { return }
+        foreach ($taskChild in $Current.GetDirectories()) {
+            if (-not ($taskChild.Attributes -band [IO.FileAttributes]::ReparsePoint)) { & $taskPrune $taskChild }
+        }
+        if ($Current.FullName -eq $taskRuntime -or @($Current.EnumerateFileSystemInfos()).Count -gt 0) { return }
+        $Current.Refresh()
+        if ($Current.Exists -and -not ($Current.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+            # Deliberately non-recursive: concurrent or unknown files are preserved.
+            [IO.Directory]::Delete($Current.FullName, $false)
+        }
+    }
+    & $taskPrune ([IO.DirectoryInfo]::new($taskRuntime))
+}
+
 function Development-ShortcutPaths([string]$ShortcutName) {
     if ([IO.Path]::GetFileName($ShortcutName) -ne $ShortcutName) { throw 'Invalid shortcut name.' }
     return @(
@@ -160,6 +191,7 @@ foreach ($taskRelativeFile in @($taskManifest.files) + @('development-build.json
         $taskRelativeFile -match 'node_modules[\\/]@deepseek-ai[\\/]dsh[\\/](lib[\\/]bin\.js|package\.json)$'
     if (Copy-DevelopmentFile $taskSourceFile $taskDestinationFile $taskVerifyHash) { $taskCopiedFiles++ }
 }
+Remove-EmptyDevelopmentRuntimeDirectories $taskInstallDirectory
 
 foreach ($taskShortcutPath in (Development-ShortcutPaths $taskManifest.shortcutName)) {
     $taskShortcut = $taskShell.CreateShortcut($taskShortcutPath)

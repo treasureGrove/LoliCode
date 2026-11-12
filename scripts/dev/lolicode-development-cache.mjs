@@ -4,7 +4,9 @@ import {
   existsSync,
   lstatSync,
   readFileSync,
+  readdirSync,
   renameSync,
+  rmdirSync,
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
@@ -108,6 +110,40 @@ function ownedFile(directory, relative) {
       throw new Error("Linked development cache payload.");
   }
   return file;
+}
+
+/** Old manifests record files only; an already removed package can leave a
+ * directory that shadows a hoisted npm dependency. Never remove files or links. */
+export function pruneEmptyDevelopmentRuntimeDirectories(directory) {
+  const root = path.resolve(directory);
+  let runtime = root;
+  for (const part of ["", "agent", "harness-runtime", "node_modules"]) {
+    runtime = path.join(runtime, part);
+    const entry = lstatSync(runtime, { throwIfNoEntry: false });
+    if (!entry) return;
+    if (entry.isSymbolicLink() || !entry.isDirectory())
+      throw new Error("Unsafe development runtime cleanup root.");
+  }
+  const manifest = JSON.parse(
+    readFileSync(path.join(root, manifestName), "utf8"),
+  );
+  if (manifest.identifier !== identifier || manifest.channel !== "development")
+    throw new Error("Unexpected development runtime cleanup ownership.");
+  const prune = (current) => {
+    const info = lstatSync(current, { throwIfNoEntry: false });
+    if (!info || info.isSymbolicLink() || !info.isDirectory()) return;
+    for (const entry of readdirSync(current, { withFileTypes: true })) {
+      if (entry.isDirectory() && !entry.isSymbolicLink())
+        prune(path.join(current, entry.name));
+    }
+    // Keep node_modules itself. Non-recursive removal also protects a file
+    // added after enumeration: the operation fails instead of deleting it.
+    if (current === runtime || readdirSync(current).length) return;
+    const beforeRemoval = lstatSync(current, { throwIfNoEntry: false });
+    if (beforeRemoval?.isDirectory() && !beforeRemoval.isSymbolicLink())
+      rmdirSync(current);
+  };
+  prune(runtime);
 }
 
 export const isDevelopmentCriticalFile = (file) =>

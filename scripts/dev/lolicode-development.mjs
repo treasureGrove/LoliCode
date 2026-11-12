@@ -22,6 +22,7 @@ import { nativeContract } from "../build/lolicode-renderer-pack.mjs";
 import {
   buildDevelopmentIncrementally,
   isDevelopmentCriticalFile,
+  pruneEmptyDevelopmentRuntimeDirectories,
 } from "./lolicode-development-cache.mjs";
 
 export const DEVELOPMENT_ID = "art.treasuregrove.lolicode.dev";
@@ -570,6 +571,7 @@ export function stageDevelopmentApp(env) {
   }
   mkdirSync(packageDirectory, { recursive: true });
   copyDevelopmentPayload(staging, packageDirectory);
+  pruneEmptyDevelopmentRuntimeDirectories(packageDirectory);
   const resolvedStage = path.resolve(staging);
   if (
     path.dirname(resolvedStage) !== targetDirectory ||
