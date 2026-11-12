@@ -513,34 +513,56 @@ it("retires abandoned transient output without inventing a successful Assistant 
   expect(result.current.realtime).toBe("live");
 });
 
-it("confirms an empty cold session without an error and retries only when its activity changes", async () => {
+it.each([false, "会话尚未形成原生 Harness 日志"])(
+  "confirms an empty cold session without an error when follow returns %s",
+  async (followResult) => {
+    vi.mocked(agentApi.readSessionNative)
+      .mockRejectedValueOnce(new Error("LOLICODE_SESSION_LOG_MISSING"))
+      .mockResolvedValue(response([event(0)], false, 0));
+    const subscriptions = liveSubscriptions();
+    if (followResult === false)
+      vi.mocked(agentApi.watchSessionNative).mockResolvedValueOnce(false);
+    else
+      vi.mocked(agentApi.watchSessionNative).mockRejectedValueOnce(
+        followResult,
+      );
+    const { result, rerender } = renderHook(
+      ({ revision }) =>
+        useAgentNativeSession("lc:first", { activityRevision: revision }),
+      { initialProps: { revision: "idle:0" } },
+    );
+    expect(result.current.ready).toBe(false);
+    await act(async () => {});
+    expect(result.current.ready).toBe(true);
+    expect(result.current.events).toEqual([]);
+    expect(result.current.error).toBeNull();
+    expect(result.current.realtime).toBe("history");
+    rerender({ revision: "idle:0" });
+    await act(async () => {});
+    expect(agentApi.readSessionNative).toHaveBeenCalledTimes(1);
+    rerender({ revision: "running:1" });
+    await act(async () => {});
+    expect(agentApi.readSessionNative).toHaveBeenCalledTimes(2);
+    act(() => subscriptions[0].send(snapshot("lc:first", [event(0)])));
+    rerender({ revision: "running:2" });
+    await act(async () => {});
+    expect(result.current.realtime).toBe("live");
+    expect(agentApi.readSessionNative).toHaveBeenCalledTimes(2);
+  },
+);
+
+it("shows a read error if an already loaded journal becomes unavailable", async () => {
   vi.mocked(agentApi.readSessionNative)
-    .mockRejectedValueOnce(new Error("LOLICODE_SESSION_LOG_MISSING"))
-    .mockResolvedValue(response([event(0)], false, 0));
-  const subscriptions = liveSubscriptions();
-  vi.mocked(agentApi.watchSessionNative).mockResolvedValueOnce(false);
-  const { result, rerender } = renderHook(
-    ({ revision }) =>
-      useAgentNativeSession("lc:first", { activityRevision: revision }),
-    { initialProps: { revision: "idle:0" } },
-  );
-  expect(result.current.ready).toBe(false);
+    .mockResolvedValueOnce(response([event(0)], false, 0))
+    .mockRejectedValueOnce("会话尚未形成原生 Harness 日志");
+  vi.mocked(agentApi.watchSessionNative)
+    .mockResolvedValueOnce(false)
+    .mockRejectedValueOnce("会话尚未形成原生 Harness 日志");
+  const { result } = renderHook(() => useAgentNativeSession("lc:first"));
   await act(async () => {});
-  expect(result.current.ready).toBe(true);
-  expect(result.current.events).toEqual([]);
-  expect(result.current.error).toBeNull();
-  expect(result.current.realtime).toBe("history");
-  rerender({ revision: "idle:0" });
-  await act(async () => {});
-  expect(agentApi.readSessionNative).toHaveBeenCalledTimes(1);
-  rerender({ revision: "running:1" });
-  await act(async () => {});
-  expect(agentApi.readSessionNative).toHaveBeenCalledTimes(2);
-  act(() => subscriptions[0].send(snapshot("lc:first", [event(0)])));
-  rerender({ revision: "running:2" });
-  await act(async () => {});
-  expect(result.current.realtime).toBe("live");
-  expect(agentApi.readSessionNative).toHaveBeenCalledTimes(2);
+  await act(async () => result.current.refresh());
+  expect(result.current.events).toEqual([event(0)]);
+  expect(result.current.error).toBe("这次会话还没有可读取的原生记录。");
 });
 
 it("keeps cached records while disabled and ignores late subscription frames", async () => {

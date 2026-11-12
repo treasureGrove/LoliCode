@@ -54,6 +54,9 @@ const empty = (sessionId: string | null): NativeSessionView => ({
 });
 const errorText = (cause: unknown) =>
   cause instanceof Error ? cause.message : String(cause ?? "");
+const nativeLogMissing = (error: string) =>
+  error.includes("LOLICODE_SESSION_LOG_MISSING") ||
+  error.includes("会话尚未形成原生 Harness 日志");
 const oversized = (cause: unknown) => {
   const text = errorText(cause);
   return (
@@ -181,11 +184,7 @@ export function nativeSessionReadError(cause: unknown): string {
   const error = errorText(cause);
   if (oversized(cause))
     return "会话中的单条记录过大，暂时无法完整显示。原始记录仍然保留。";
-  if (
-    error.includes("LOLICODE_SESSION_LOG_MISSING") ||
-    error.includes("会话尚未形成原生 Harness 日志")
-  )
-    return "这次会话还没有可读取的原生记录。";
+  if (nativeLogMissing(error)) return "这次会话还没有可读取的原生记录。";
   if (error.includes("LOLICODE_SESSION_LOG_COLD"))
     return "会话暂时不可读取，请稍后重试。";
   return error.trim().slice(0, 500) || "会话读取失败，请重试。";
@@ -248,7 +247,7 @@ export function useAgentNativeSession(
   }, []);
 
   const watch = useCallback(
-    (id: string, revision: number, maxMessages: number) => {
+    (id: string, revision: number, maxMessages: number, allowEmpty = false) => {
       const active: Subscription = {
         id: crypto.randomUUID(),
         revision,
@@ -263,6 +262,19 @@ export function useAgentNativeSession(
       const fail = (cause: unknown) => {
         if (!current()) return;
         stop();
+        if (
+          allowEmpty &&
+          !active.opened &&
+          nativeLogMissing(errorText(cause))
+        ) {
+          publish({
+            ...viewRef.current,
+            ready: true,
+            realtime: "history",
+            error: null,
+          });
+          return;
+        }
         publish({
           ...viewRef.current,
           realtime: "failed",
@@ -628,11 +640,7 @@ export function useAgentNativeSession(
           !enabledRef.current
         )
           return;
-        if (
-          !older &&
-          (errorText(cause).includes("LOLICODE_SESSION_LOG_MISSING") ||
-            errorText(cause).includes("会话尚未形成原生 Harness 日志"))
-        ) {
+        if (!older && nativeLogMissing(errorText(cause))) {
           publish({
             ...basis,
             loading: false,
@@ -641,7 +649,7 @@ export function useAgentNativeSession(
           });
           // An authorized resident root may already have a native in-memory
           // journal before its first prompt creates a JSONL file.
-          watch(id, revision, 12);
+          watch(id, revision, 12, basis.cursor === undefined);
           return;
         }
         const current = older ? viewRef.current : basis;
