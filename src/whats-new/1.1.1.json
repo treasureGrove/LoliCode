@@ -1,0 +1,12 @@
+{
+  "version": "1.1.1",
+  "items": [
+    {
+      "type": "fix",
+      "zh": "修复侧栏额度按钮的键盘和点击操作，方便打开额度预览",
+      "zh-TW": "修復側欄額度按鈕的鍵盤與點擊操作，方便開啟額度預覽",
+      "en": "Fix click and keyboard access to the sidebar quota preview",
+      "ja": "サイドバーの使用量プレビューをクリックやキーボードで開けるよう修正"
+    }
+  ]
+}

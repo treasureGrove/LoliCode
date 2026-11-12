@@ -154,7 +154,7 @@ describe("LoliCode sidebar account", () => {
     expect(mocks.login).not.toHaveBeenCalled();
   });
 
-  it("opens the allowance page directly from the signed-in ring without a modal", async () => {
+  it("opens usage from the signed-in allowance preview and dismisses it", async () => {
     mocks.account = account;
     const user = userEvent.setup();
     const { onOpenAllowance } = mount();
@@ -165,19 +165,28 @@ describe("LoliCode sidebar account", () => {
       screen.getByRole("meter", { name: "今日免费额度剩余" }),
     ).toHaveAttribute("aria-valuenow", "98");
     await user.click(allowance);
+    expect(
+      await screen.findByRole("dialog", { name: "免费额度" }),
+    ).toBeVisible();
+    expect(onOpenAllowance).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "管理用量" }));
     expect(onOpenAllowance).toHaveBeenCalledOnce();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(document.body.style.pointerEvents).not.toBe("none");
   });
 
-  it("opens the same allowance page from the account menu and dismisses the menu", async () => {
+  it("opens settings from the account menu without duplicating the allowance entry", async () => {
     mocks.account = account;
-    const { onOpenAllowance } = mount();
+    const { onOpenSettings, onOpenAllowance } = mount();
     await openMenu();
+    expect(
+      screen.queryByRole("menuitem", { name: "使用情况与额度" }),
+    ).not.toBeInTheDocument();
     await userEvent
       .setup()
-      .click(screen.getByRole("menuitem", { name: "使用情况与额度" }));
-    expect(onOpenAllowance).toHaveBeenCalledOnce();
+      .click(screen.getByRole("menuitem", { name: "设置" }));
+    expect(onOpenSettings).toHaveBeenCalledOnce();
+    expect(onOpenAllowance).not.toHaveBeenCalled();
     await waitFor(() =>
       expect(screen.queryByRole("menu")).not.toBeInTheDocument(),
     );
@@ -369,7 +378,6 @@ describe("LoliCode sidebar account", () => {
     await openMenu();
     expect(screen.getAllByRole("menu")).toHaveLength(1);
     for (const name of [
-      "使用情况与额度",
       "个人空间",
       "刷新账户资料",
       "社区网站",

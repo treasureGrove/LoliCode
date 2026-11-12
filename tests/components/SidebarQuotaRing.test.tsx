@@ -317,25 +317,48 @@ describe("sidebar free allowance ring", () => {
     expect(screen.getByRole("meter")).toHaveAttribute("aria-valuenow", "100");
   });
 
-  it("navigates directly to the allowance page on click without a modal", async () => {
+  it("keeps the allowance preview open on click until Manage usage is selected", async () => {
     const { onManage } = mount();
     await screen.findByRole("meter");
     await userEvent
       .setup()
       .click(screen.getByRole("button", { name: /免费额度 · 今日剩余/ }));
+    expect(
+      await screen.findByRole("dialog", { name: "免费额度" }),
+    ).toBeVisible();
+    expect(onManage).not.toHaveBeenCalled();
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "管理用量" }));
     expect(onManage).toHaveBeenCalledOnce();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("navigates directly to the allowance page using the keyboard", async () => {
-    const { onManage } = mount();
-    await screen.findByRole("meter");
-    const trigger = screen.getByRole("button", { name: /免费额度 · 今日剩余/ });
-    trigger.focus();
-    await userEvent.setup().keyboard("{Enter}");
-    expect(onManage).toHaveBeenCalledOnce();
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-  });
+  it.each(["{Enter}", " "])(
+    "opens the allowance preview using %s and lets the keyboard manage usage",
+    async (key) => {
+      const { onManage } = mount();
+      await screen.findByRole("meter");
+      const trigger = screen.getByRole("button", {
+        name: /免费额度 · 今日剩余/,
+      });
+      trigger.focus();
+      const user = userEvent.setup();
+      await user.keyboard(key);
+      expect(
+        await screen.findByRole("dialog", { name: "免费额度" }),
+      ).toBeVisible();
+      expect(onManage).not.toHaveBeenCalled();
+      expect(
+        screen.getByRole("button", { name: "刷新免费额度" }),
+      ).toHaveFocus();
+      await user.tab();
+      expect(screen.getByRole("button", { name: "管理用量" })).toHaveFocus();
+      await user.keyboard("{Enter}");
+      expect(onManage).toHaveBeenCalledOnce();
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    },
+  );
 
   it("stays closed after Escape restores keyboard focus to the ring", async () => {
     const user = userEvent.setup();

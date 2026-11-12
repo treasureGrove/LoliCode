@@ -279,8 +279,16 @@ describe("LoliCode product shell with retained native compatibility", () => {
     await user.click(
       screen.getByRole("button", { name: /^(头像与设置|nav\.profileMenu)$/ }),
     );
-    await user.click(screen.getByRole("menuitem", { name: /^nav.usage/ }));
-    expect(await screen.findByTestId("usage-page")).toBeInTheDocument();
+    await user.click(screen.getByRole("menuitem", { name: "设置" }));
+    await user.click(
+      screen.getByRole("button", { name: "settings.sections.usage" }),
+    );
+    expect(await screen.findByTestId("settings-page")).toHaveAttribute(
+      "data-section",
+      "usage",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "nav.back" }));
+    expect(await screen.findByTestId("channel-center")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "编程工作台" }));
     expect(await screen.findByTestId("agent-workspace")).toBeInTheDocument();
   });

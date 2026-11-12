@@ -183,6 +183,10 @@ pub async fn get_agent_secretary(
 }
 
 #[tauri::command(rename_all = "camelCase")]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "Tauri IPC exposes the existing payload fields as separate command arguments"
+)]
 pub async fn delegate_agent_secretary_task(
     app: AppHandle,
     session_id: String,

@@ -80,11 +80,10 @@ vi.mock("@/features/channels/ChannelCenterPanel", () => ({
     </div>
   ),
 }));
-vi.mock("@/features/usage/LolicodeAllowancePage", () => ({
-  LolicodeAllowancePage: ({ onBack }: { onBack: () => void }) => (
+vi.mock("@/features/usage/SimpleUsagePage", () => ({
+  SimpleUsagePage: () => (
     <section data-testid="allowance-page">
-      <h1>使用情况与额度</h1>
-      <button onClick={onBack}>返回上一页</button>
+      <h1>用量统计</h1>
     </section>
   ),
 }));
@@ -112,13 +111,16 @@ function mount() {
   );
 }
 
-describe("standalone allowance navigation", () => {
-  it("returns to its entry page through the back button or Escape", async () => {
+describe("legacy allowance navigation to combined usage", () => {
+  it("shows combined usage and returns to its entry page with Escape", async () => {
     mount();
     await screen.findByTestId("agent-workspace");
     fireEvent.click(screen.getByRole("button", { name: "使用情况与额度" }));
     expect(await screen.findByTestId("allowance-page")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "返回上一页" }));
+    expect(
+      screen.getByRole("heading", { name: "用量统计" }),
+    ).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: "Escape" });
     expect(await screen.findByTestId("agent-workspace")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "渠道" }));
@@ -140,7 +142,7 @@ describe("standalone allowance navigation", () => {
     expect(screen.getByTestId("settings-page")).toHaveTextContent("about");
     fireEvent.click(screen.getByRole("button", { name: "使用情况与额度" }));
     await screen.findByTestId("allowance-page");
-    fireEvent.click(screen.getByRole("button", { name: "返回上一页" }));
+    fireEvent.keyDown(window, { key: "Escape" });
     expect(await screen.findByTestId("settings-page")).toHaveTextContent(
       "about",
     );
@@ -152,7 +154,7 @@ describe("standalone allowance navigation", () => {
     localStorage.setItem("cc-switch-last-view", "allowance");
     mount();
     await screen.findByTestId("allowance-page");
-    fireEvent.click(screen.getByRole("button", { name: "返回上一页" }));
+    fireEvent.click(screen.getByRole("button", { name: "工作台" }));
     expect(await screen.findByTestId("agent-workspace")).toBeInTheDocument();
   });
 

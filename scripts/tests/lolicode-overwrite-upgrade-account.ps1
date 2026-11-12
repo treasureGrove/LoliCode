@@ -233,7 +233,7 @@ if (!$ExpectedSid) {
         # Require the explicit completion record even when the exit code is available.
         $exitCode = $worker.ExitCode
         if (($null -ne $exitCode -and $exitCode -ne 0) -or $workerRecord.pending -or
-            $workerRecord.persistedLegacySha256 -notmatch '^[a-f0-9]{64}$') {
+            $workerRecord.persistedConversationSha256 -notmatch '^[a-f0-9]{64}$') {
             throw "The isolated account worker failed or did not report completion (exit code: $exitCode)"
         }
     } catch { $workerFailure = $_ } finally {
@@ -247,10 +247,9 @@ if (!$ExpectedSid) {
     return
 }
 
-function Install-Product([string]$Installer, [string]$Version, [string[]]$Arguments) {
+function Install-Product([string]$Installer, [string]$Version, [string]$ExpectedHash, [string[]]$Arguments) {
     $installerHash = (Get-FileHash -LiteralPath $Installer).Hash.ToLowerInvariant()
-    $expectedHash = if ($Version -eq '4.1.6') { 'e21021377ea8284eb00f73d297700644db76dd41bc93de7d3290833678b018b9' } else { $plan.candidateSha256 }
-    if ($installerHash -cne $expectedHash) { throw 'Installer bytes changed before installation' }
+    if ($ExpectedHash -notmatch '^[a-f0-9]{64}$' -or $installerHash -cne $ExpectedHash) { throw 'Installer bytes changed before installation' }
     $install = Start-Process -FilePath $Installer -ArgumentList $Arguments -WindowStyle Hidden -Wait -PassThru
     if ($install.ExitCode -ne 0) { throw "NSIS $Version exited with $($install.ExitCode)" }
     $entry = Get-ItemProperty -LiteralPath 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\LoliCode'
@@ -294,6 +293,60 @@ function Start-InstalledApp([string]$Phase, $InstallProof) {
     }
 }
 
+# These files are read only. A Harness baseline is created through real Tauri
+# commands and model requests; it must never be represented by a fake legacy
+# migration receipt. Installer preservation is checked while the app is stopped.
+function Get-HarnessConversationFiles([string]$Profile, [string]$SessionId) {
+    if ($SessionId -cnotmatch '^lc:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$') {
+        throw 'Invalid persisted Harness session identity'
+    }
+    $nativeId = $SessionId.Substring(3)
+    $metadataPath = Join-Path $Profile "agent\harness-sessions\$nativeId.json"
+    $root = Join-Path $Profile "agent\harness-desktop\$nativeId"
+    $desktopPath = Join-Path $root 'desktop.json'
+    $metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json
+    $desktop = Get-Content -LiteralPath $desktopPath -Raw | ConvertFrom-Json
+    if ($metadata.session.id -cne $SessionId -or $metadata.deleted -or
+        $desktop.snapshot.session.id -cne $SessionId -or !$desktop.rootCreated) {
+        throw 'Persisted Harness session identity changed or has no real runtime history'
+    }
+    $queue = [Collections.Generic.Queue[string]]::new()
+    $queue.Enqueue((Join-Path $root 'home\sessions'))
+    $files = [Collections.Generic.List[string]]::new()
+    $files.Add($metadataPath)
+    $files.Add($desktopPath)
+    while ($queue.Count) {
+        $directory = Get-Item -LiteralPath $queue.Dequeue() -Force
+        if (!$directory.PSIsContainer -or $directory.Attributes.HasFlag([IO.FileAttributes]::ReparsePoint)) {
+            throw 'Harness session history directory is not a regular directory'
+        }
+        foreach ($entry in Get-ChildItem -LiteralPath $directory.FullName -Force) {
+            if ($entry.Attributes.HasFlag([IO.FileAttributes]::ReparsePoint)) { throw 'Harness history contains a reparse point' }
+            if ($entry.PSIsContainer) { $queue.Enqueue($entry.FullName) }
+            elseif ($entry.Name -match '\.jsonl(?:\.zstd)?$') { $files.Add($entry.FullName) }
+        }
+    }
+    if ($files.Count -le 2) { throw 'Harness baseline did not persist any native session log' }
+    foreach ($file in $files | Sort-Object) {
+        $entry = Get-Item -LiteralPath $file -Force
+        if ($entry.PSIsContainer -or $entry.Attributes.HasFlag([IO.FileAttributes]::ReparsePoint) -or !$entry.Length) {
+            throw 'Harness conversation file is not a nonempty regular file'
+        }
+        [pscustomobject]@{ path = $entry.FullName; bytes = $entry.Length; sha256 = (Get-FileHash -LiteralPath $file).Hash.ToLowerInvariant() }
+    }
+}
+
+function Assert-PreservedConversationFiles($Files) {
+    if (@($Files).Count -lt 3) { throw 'Missing Harness conversation preservation evidence' }
+    foreach ($before in $Files) {
+        $entry = Get-Item -LiteralPath $before.path -Force
+        if ($entry.PSIsContainer -or $entry.Attributes.HasFlag([IO.FileAttributes]::ReparsePoint) -or
+            $entry.Length -ne $before.bytes -or (Get-FileHash -LiteralPath $before.path).Hash.ToLowerInvariant() -cne $before.sha256) {
+            throw 'Installer modified or removed persisted Harness conversation bytes'
+        }
+    }
+}
+
 try {
     $profileRegistration = Join-Path $profileList $sid
     $accountHome = (Get-ItemProperty -LiteralPath $profileRegistration).ProfileImagePath
@@ -332,26 +385,38 @@ try {
         newLayoutNoticeConfirmed = $true
         language = 'zh'
     } | ConvertTo-Json -Compress | Set-Content -LiteralPath (Join-Path $appProfile 'settings.json') -Encoding ASCII
-    $old = Install-Product (Join-Path $stage 'baseline.exe') '4.1.6' @('/S', '/NS')
-    if ($old.executableSha256 -ne 'ac2e01426395a073db62ba1a476654533b46a146696fc48061b86a3df7d8d187') {
+    $legacy = $plan.baseline.engine -eq 'legacy'
+    if ($plan.baseline.engine -notin @('legacy', 'harness')) { throw 'Unknown baseline conversation engine' }
+    $old = Install-Product (Join-Path $stage 'baseline.exe') $plan.baseline.buildVersion $plan.baseline.installerSha256 @('/S', '/NS')
+    if ($old.executableSha256 -cne $plan.baseline.executableSha256) {
         throw 'The executable installed by the baseline does not match the published build'
     }
     Start-InstalledApp 'baseline' $old
-    $source = Get-ChildItem -LiteralPath (Join-Path $appProfile 'agent\native\sessions') -File -Filter '*.json'
-    if (@($source).Count -ne 1) { throw 'Expected exactly one old persisted Agent transcript' }
+    if ($legacy) {
+        $source = Get-ChildItem -LiteralPath (Join-Path $appProfile 'agent\native\sessions') -File -Filter '*.json'
+        if (@($source).Count -ne 1) { throw 'Expected exactly one old persisted Agent transcript' }
+        $baselineSessionId = "lc:$($source.BaseName)"
+    } else {
+        $metadata = Get-ChildItem -LiteralPath (Join-Path $appProfile 'agent\harness-sessions') -File -Filter '*.json'
+        if (@($metadata).Count -ne 1) { throw 'Expected exactly one real persisted Harness session' }
+        $baselineSessionId = "lc:$($metadata.BaseName)"
+        $baselineFiles = @(Get-HarnessConversationFiles $appProfile $baselineSessionId)
+        $source = Get-Item -LiteralPath (Join-Path $appProfile "agent\harness-desktop\$($metadata.BaseName)\desktop.json")
+    }
     $sourceHash = (Get-FileHash -LiteralPath $source.FullName).Hash
     if (!$plan.upgrade) {
-        Write-Phase 'account-finished' @{ persistedLegacySha256 = $sourceHash.ToLowerInvariant() }
+        Write-Phase 'account-finished' @{ persistedConversationSha256 = $sourceHash.ToLowerInvariant() }
         return
     }
     $installedMarker = Join-Path $installDirectory 'upgrade-preservation.txt'
     $sourceHash | Set-Content -LiteralPath $installedMarker -Encoding ASCII
-    $candidate = Install-Product (Join-Path $stage 'candidate.exe') $plan.candidateVersion @('/S', '/UPDATE', '/NS')
+    $candidate = Install-Product (Join-Path $stage 'candidate.exe') $plan.candidateVersion $plan.candidateSha256 @('/S', '/UPDATE', '/NS')
     if ($candidate.executableSha256 -eq $old.executableSha256) { throw 'Upgrade left the baseline executable in place' }
     if ((Get-Content -LiteralPath $installedMarker) -ne $sourceHash -or
         (Get-FileHash -LiteralPath $source.FullName).Hash -ne $sourceHash) {
-        throw 'Upgrade did not preserve the original install and old conversation files'
+        throw 'Upgrade did not preserve the original install and baseline conversation files'
     }
+    if (!$legacy) { Assert-PreservedConversationFiles $baselineFiles }
     $harness = Join-Path $installDirectory 'agent\harness-runtime'
     if (!(Test-Path -LiteralPath (Join-Path $harness 'node.exe'))) {
         throw 'The installed candidate lacks bundled Harness Node'
@@ -363,48 +428,73 @@ try {
         throw "Installed Harness version does not match $($plan.expectedHarnessVersion)"
     }
     Start-InstalledApp 'candidate' $candidate
-    if ((Get-FileHash -LiteralPath $source.FullName).Hash -ne $sourceHash) {
-        throw 'Resuming with Harness modified the original conversation file'
+    if ($legacy) {
+        if ((Get-FileHash -LiteralPath $source.FullName).Hash -ne $sourceHash) {
+            throw 'Resuming with Harness modified the original conversation file'
+        }
+        $sourceId = $source.BaseName
+        $receiptPath = Join-Path $appProfile "agent\harness-migration\$sourceId.committed.json"
+        $receipt = Get-Content -LiteralPath $receiptPath -Raw | ConvertFrom-Json
+        if ($receipt.loliSessionId -ne "lc:$sourceId" -or $receipt.sourceSha256 -ne $sourceHash -or
+            $receipt.harnessSessionId -notmatch '^[0-9a-f-]{36}$') {
+            throw 'Missing or invalid committed Harness migration receipt'
+        }
+        $receiptHash = (Get-FileHash -LiteralPath $receiptPath).Hash
     }
-    $sourceId = $source.BaseName
-    $receiptPath = Join-Path $appProfile "agent\harness-migration\$sourceId.committed.json"
-    $receipt = Get-Content -LiteralPath $receiptPath -Raw | ConvertFrom-Json
-    if ($receipt.loliSessionId -ne "lc:$sourceId" -or $receipt.sourceSha256 -ne $sourceHash -or
-        $receipt.harnessSessionId -notmatch '^[0-9a-f-]{36}$') {
-        throw 'Missing or invalid committed Harness migration receipt'
-    }
-    $receiptHash = (Get-FileHash -LiteralPath $receiptPath).Hash
     function Assert-PreservedUpgrade([string]$Phase) {
         if ((Get-Content -LiteralPath $installedMarker) -ne $sourceHash -or
-            (Get-FileHash -LiteralPath $source.FullName).Hash -ne $sourceHash -or
-            (Get-FileHash -LiteralPath $receiptPath).Hash -ne $receiptHash -or
             (Get-FileHash -LiteralPath $executable).Hash.ToLowerInvariant() -cne $candidate.executableSha256) {
-            throw "$Phase changed the install marker, legacy source, committed migration receipt, or candidate executable"
+            throw "$Phase changed the install marker or candidate executable"
+        }
+        if ($legacy) {
+            if ((Get-FileHash -LiteralPath $source.FullName).Hash -ne $sourceHash -or
+                (Get-FileHash -LiteralPath $receiptPath).Hash -ne $receiptHash) {
+                throw "$Phase changed the legacy source or committed migration receipt"
+            }
+        } else {
+            $null = @(Get-HarnessConversationFiles $appProfile $baselineSessionId)
+            if (Test-Path -LiteralPath (Join-Path $appProfile "agent\harness-migration\$($baselineSessionId.Substring(3)).committed.json")) {
+                throw 'A native Harness session unexpectedly acquired a legacy migration receipt'
+            }
         }
     }
     # Same Windows account, same profile, same session. The JS driver requires a
     # fresh model request containing every previous question/answer each time.
     Start-InstalledApp 'restart' $candidate
     Assert-PreservedUpgrade 'Restart'
-    $reinstalled = Install-Product (Join-Path $stage 'candidate.exe') $plan.candidateVersion @('/S', '/UPDATE', '/NS')
+    if (!$legacy) { $beforeReinstallFiles = @(Get-HarnessConversationFiles $appProfile $baselineSessionId) }
+    $reinstalled = Install-Product (Join-Path $stage 'candidate.exe') $plan.candidateVersion $plan.candidateSha256 @('/S', '/UPDATE', '/NS')
     if ($reinstalled.installerSha256 -cne $candidate.installerSha256 -or
         $reinstalled.executableSha256 -cne $candidate.executableSha256) {
         throw 'Repeated installation did not use the identical verified candidate'
     }
+    if (!$legacy) { Assert-PreservedConversationFiles $beforeReinstallFiles }
     Assert-PreservedUpgrade 'Repeated installation'
     Start-InstalledApp 'reinstall' $reinstalled
     Assert-PreservedUpgrade 'Post-reinstall conversation'
-    Write-Phase 'finished' @{
-        preservedLegacySha256 = $sourceHash.ToLowerInvariant()
-        harnessSessionId = $receipt.harnessSessionId
+    $finished = @{
+        baselineEngine = $plan.baseline.engine
+        baselineSessionId = $baselineSessionId
+        preservedBaselineConversationSha256 = $sourceHash.ToLowerInvariant()
         harnessVersion = $runtimePackage.version
         overwroteOriginalInstall = $true
         restartVerified = $true
         sameCandidateReinstalled = $true
         candidateSha256 = $candidate.installerSha256
-        migrationReceiptSha256 = $receiptHash.ToLowerInvariant()
     }
-    Write-Phase 'account-finished' @{ persistedLegacySha256 = $sourceHash.ToLowerInvariant() }
+    if ($legacy) {
+        $finished.preservedLegacySha256 = $sourceHash.ToLowerInvariant()
+        $finished.harnessSessionId = $receipt.harnessSessionId
+        $finished.migrationReceiptSha256 = $receiptHash.ToLowerInvariant()
+    } else {
+        $finished.harnessSessionId = $baselineSessionId.Substring(3)
+        $finished.harnessFilesPreservedByInstall = $true
+        $finished.harnessFilesPreservedByReinstall = $true
+        $finished.baselineFiles = $baselineFiles
+        $finished.beforeReinstallFiles = $beforeReinstallFiles
+    }
+    Write-Phase 'finished' $finished
+    Write-Phase 'account-finished' @{ persistedConversationSha256 = $sourceHash.ToLowerInvariant() }
 } catch {
     $_.Exception.Message | Set-Content -LiteralPath (Join-Path $stage 'failure.txt') -Encoding UTF8
     throw

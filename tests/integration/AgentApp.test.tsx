@@ -5,6 +5,7 @@ import { http, HttpResponse } from "msw";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "@/app/App";
 import type { AgentPageProps } from "@/features/agent/AgentPage";
+import type { SettingsSection } from "@/lib/navigation";
 import { builtinAppsKey } from "@/lib/api/builtin-apps";
 import { usageKeys } from "@/lib/query/usage";
 import { server } from "../msw/server";
@@ -14,7 +15,11 @@ vi.mock("@/contexts/UpdateContext", () => ({
   useUpdate: () => ({ hasUpdate: false, updateInfo: null }),
 }));
 vi.mock("@/features/settings/SettingsPage", () => ({
-  SettingsPage: () => <div>Settings</div>,
+  SettingsPage: ({ section }: { section: SettingsSection }) => (
+    <div data-testid="settings-page" data-section={section}>
+      Settings
+    </div>
+  ),
 }));
 vi.mock("@/features/agent/AgentPage", () => ({
   AgentPage: ({
@@ -132,7 +137,7 @@ describe("LoliCode desktop entry", () => {
     expect(screen.getByRole("navigation")).toBe(sidebar);
   });
 
-  it("reaches usage and applications through the unified sidebar profile menu", async () => {
+  it("reaches usage and memory through settings and applications through the profile menu", async () => {
     const user = userEvent.setup();
     render(
       <QueryClientProvider
@@ -148,18 +153,29 @@ describe("LoliCode desktop entry", () => {
       screen.getByRole("button", { name: /^(头像与设置|nav\.profileMenu)$/ }),
     );
     expect(
-      screen.getByRole("menuitem", { name: /^nav.usage/ }),
-    ).toBeInTheDocument();
-    expect(
       screen.getByRole("menuitem", { name: /^applications.title/ }),
     ).toBeInTheDocument();
-    await user.click(screen.getByRole("menuitem", { name: /^nav.usage/ }));
+    await user.click(screen.getByRole("menuitem", { name: "设置" }));
+    await user.click(
+      screen.getByRole("button", { name: "settings.sections.usage" }),
+    );
     expect(document.getElementById("content-area")).toHaveAttribute(
       "data-view",
+      "settings",
+    );
+    expect(screen.getByTestId("settings-page")).toHaveAttribute(
+      "data-section",
       "usage",
     );
+    await user.click(
+      screen.getByRole("button", { name: "settings.sections.memory" }),
+    );
+    expect(screen.getByTestId("settings-page")).toHaveAttribute(
+      "data-section",
+      "memory",
+    );
     expect(screen.getAllByRole("navigation")).toHaveLength(1);
-    await user.click(screen.getByRole("button", { name: "编程工作台" }));
+    await user.click(screen.getByRole("button", { name: "nav.back" }));
     expect(await screen.findByTestId("workspace-tree")).toBeInTheDocument();
     await user.click(
       screen.getByRole("button", { name: /^(头像与设置|nav\.profileMenu)$/ }),

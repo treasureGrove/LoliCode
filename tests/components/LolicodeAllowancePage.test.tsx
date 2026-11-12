@@ -203,7 +203,7 @@ describe("LoliCode allowance page", () => {
     mount();
     expect(await screen.findByText("GLM 5.3 Flash")).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "使用情况与额度" }),
+      screen.getByRole("heading", { name: "账户额度" }),
     ).toBeInTheDocument();
     expect(screen.getByText("free")).toHaveAttribute(
       "title",

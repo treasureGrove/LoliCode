@@ -93,6 +93,65 @@ test("upgrade arguments reject missing or malformed provenance before side effec
       source.indexOf("await mkdir(stage)"),
   );
 });
+test("published baseline bytes select legacy migration or real Harness preservation", () => {
+  const { publishedBaseline, validateCandidateVersion } = vm.runInThisContext(
+    `(function(assert) { ${marked("PURE RELEASE VALIDATION")}; return { publishedBaseline, validateCandidateVersion }; })`,
+  )(assert);
+  const legacy = publishedBaseline(
+    "e21021377ea8284eb00f73d297700644db76dd41bc93de7d3290833678b018b9",
+  );
+  const harness = publishedBaseline(
+    "f848959df4aca72a924b2fe2e276568bd4058f89f5d648027bbc800527c48a76",
+  );
+  assert.equal(legacy.engine, "legacy");
+  assert.equal(legacy.buildVersion, "4.1.6");
+  assert.equal(harness.engine, "harness");
+  assert.equal(harness.buildVersion, "1.1.0");
+  assert.throws(() => publishedBaseline("a".repeat(64)), /published/);
+  const snapshot = (version) => ({
+    product: "LoliCode",
+    productVersion: version,
+    buildVersion: version,
+  });
+  assert.doesNotThrow(() =>
+    validateCandidateVersion(snapshot("1.1.0"), legacy),
+  );
+  assert.doesNotThrow(() =>
+    validateCandidateVersion(snapshot("1.1.1"), legacy),
+  );
+  assert.doesNotThrow(() =>
+    validateCandidateVersion(snapshot("1.1.1"), harness),
+  );
+  assert.doesNotThrow(() =>
+    validateCandidateVersion(snapshot("1.10.0"), harness),
+  );
+  for (const version of [
+    "1.1.0",
+    "1.0.6",
+    "4.2.0",
+    "1.1.1-rc.1",
+    "1.01.1",
+    "1.1.9007199254740992",
+  ]) {
+    assert.throws(() => validateCandidateVersion(snapshot(version), harness));
+  }
+  assert.throws(() =>
+    validateCandidateVersion(
+      { ...snapshot("1.1.1"), buildVersion: "4.2.0" },
+      harness,
+    ),
+  );
+  assert.throws(() =>
+    validateCandidateVersion(
+      { ...snapshot("1.1.1"), product: "Other" },
+      harness,
+    ),
+  );
+  assert.ok(
+    source.indexOf("publishedBaseline(baselineHash)") <
+      source.indexOf("await mkdir(stage)"),
+  );
+});
 test("a pass requires matching identity, original DACL and every cleanup proof", () => {
   const { identity, record } = records();
   assert.equal(validate(record, identity, stage), record);
@@ -196,9 +255,104 @@ test("worker reports preserve controller ownership under CREATOR OWNER inheritan
     psSource,
     /\(\$null -ne \$exitCode -and \$exitCode -ne 0\) -or \$workerRecord\.pending/,
   );
-  assert.match(psSource, /\$workerRecord\.persistedLegacySha256 -notmatch/);
+  assert.match(
+    psSource,
+    /\$workerRecord\.persistedConversationSha256 -notmatch/,
+  );
   assert.match(psSource, /if \(\$message\) \{ throw \$message \}/);
 });
+
+test(
+  "Harness install preservation checks real persisted bytes with mocked OS reads",
+  { skip: process.platform !== "win32" },
+  () => {
+    const program = String.raw`
+$ErrorActionPreference = 'Stop'
+$tokens = $null; $parseErrors = $null
+$ast = [Management.Automation.Language.Parser]::ParseFile($env:LOLICODE_CLEANUP_SCRIPT, [ref]$tokens, [ref]$parseErrors)
+if ($parseErrors.Count) { throw ($parseErrors | Out-String) }
+foreach ($name in @('Get-HarnessConversationFiles', 'Assert-PreservedConversationFiles')) {
+    $function = $ast.Find({ param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name }, $true)
+    if (!$function) { throw "Missing $name" }
+    . ([scriptblock]::Create($function.Extent.Text))
+}
+$profile = 'C:\Users\fixture-only\.tai-switch'
+$sessionId = 'lc:12345678-1234-1234-1234-123456789abc'
+$root = Join-Path $profile 'agent\harness-desktop\12345678-1234-1234-1234-123456789abc'
+$logs = Join-Path $root 'home\sessions'
+$log = Join-Path $logs 'fixture.jsonl.zstd'
+$fixtureMetadataPath = Join-Path $profile 'agent\harness-sessions\12345678-1234-1234-1234-123456789abc.json'
+$fixtureDesktopPath = Join-Path $root 'desktop.json'
+function Get-Content { param($LiteralPath, [switch]$Raw)
+    $id = if ($script:scenario -eq 'wrong-id') { 'lc:other' } else { $sessionId }
+    if ($LiteralPath -eq $fixtureMetadataPath) { return (@{ session = @{ id = $id }; deleted = ($script:scenario -eq 'deleted') } | ConvertTo-Json -Depth 4) }
+    if ($LiteralPath -eq $fixtureDesktopPath) { return (@{ snapshot = @{ session = @{ id = $id } }; rootCreated = ($script:scenario -ne 'no-runtime') } | ConvertTo-Json -Depth 4) }
+    throw 'Unexpected content read'
+}
+function Get-Item { param($LiteralPath, [switch]$Force)
+    if ($LiteralPath -notin @($logs, $log, $fixtureMetadataPath, $fixtureDesktopPath)) { throw 'Unexpected file read' }
+    if ($script:scenario -eq 'missing' -and $LiteralPath -eq $log) { throw 'Missing log' }
+    $attributes = [IO.FileAttributes]::Normal
+    if ($script:scenario -eq 'reparse' -and $LiteralPath -eq $log) { $attributes = [IO.FileAttributes]::ReparsePoint }
+    [pscustomobject]@{ FullName = $LiteralPath; Name = (Split-Path -Leaf $LiteralPath); PSIsContainer = ($LiteralPath -eq $logs);
+        Attributes = $attributes; Length = $(if ($script:scenario -eq 'truncated' -and $LiteralPath -eq $log) { 99 } else { 100 }) }
+}
+function Get-ChildItem { param($LiteralPath, [switch]$Force)
+    if ($LiteralPath -ne $logs) { throw 'Unexpected directory read' }
+    if ($script:scenario -ne 'no-native-log') { Get-Item -LiteralPath $log }
+}
+function Get-FileHash { param($LiteralPath)
+    if ($LiteralPath -notin @($log, $fixtureMetadataPath, $fixtureDesktopPath)) { throw 'Unexpected hash read' }
+    [pscustomobject]@{ Hash = $(if ($script:scenario -eq 'changed' -and $LiteralPath -eq $log) { 'b' * 64 } else { 'a' * 64 }) }
+}
+$script:scenario = 'success'
+$files = @(Get-HarnessConversationFiles $profile $sessionId)
+if ($files.Count -ne 3) { throw 'Native log was not part of the preservation manifest' }
+Assert-PreservedConversationFiles $files
+foreach ($case in @('wrong-id', 'deleted', 'no-runtime', 'no-native-log', 'reparse', 'missing')) {
+    $script:scenario = $case; $failed = $false
+    try { $null = @(Get-HarnessConversationFiles $profile $sessionId) } catch { $failed = $true }
+    if (!$failed) { throw "Harness capture accepted $case" }
+}
+foreach ($case in @('changed', 'truncated', 'reparse', 'missing')) {
+    $script:scenario = $case; $failed = $false
+    try { Assert-PreservedConversationFiles $files } catch { $failed = $true }
+    if (!$failed) { throw "Installer preservation accepted $case" }
+}
+$failed = $false
+try { Assert-PreservedConversationFiles @() } catch { $failed = $true }
+if (!$failed) { throw 'Empty preservation evidence was accepted' }
+'preservation-verified'
+`;
+    const result = spawnSync(
+      "powershell.exe",
+      [
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-EncodedCommand",
+        Buffer.from(program, "utf16le").toString("base64"),
+      ],
+      {
+        windowsHide: true,
+        encoding: "utf8",
+        timeout: 60_000,
+        env: { ...process.env, LOLICODE_CLEANUP_SCRIPT: scriptPath },
+      },
+    );
+    assert.equal(result.error, undefined);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.match(result.stdout, /preservation-verified/);
+    assert.match(
+      psSource,
+      /if \(!\$legacy\) \{ Assert-PreservedConversationFiles \$baselineFiles \}/,
+    );
+    assert.match(
+      psSource,
+      /if \(!\$legacy\) \{ Assert-PreservedConversationFiles \$beforeReinstallFiles \}/,
+    );
+  },
+);
 
 test("restart/reinstall require all earlier turns and reject a stale replay", () => {
   const history = vm.runInThisContext(

@@ -35,12 +35,12 @@ v1.0.2 及后续安装包使用 `src-tauri/nsis/installer.nsi` 自定义模板�
 
 发版前执行 `node --test scripts/tests/lolicode-nsis-overwrite-upgrade.test.mjs`。此测试通过本机已安装的 Tauri CLI 和真实 NSIS 编译器打包隔离程序，实际验证旧 publisher 项缺失、中文/空格路径、重复覆盖、应用内更新、旧程序名缺失、数据保留、禁止降级策略与异常目录拒绝；使用唯一测试注册项，不操作真实用户安装。升级 Tauri CLI 时同步复核自定义模板和上游差异。
 
-Harness 迁移可用下面的命令复现真实覆盖安装。先取得临时标准 Windows 测试账户、其测试目录 ACL 以及必要时关闭 LoliCode 的授权，再在管理员 PowerShell 中运行。传入已发布的 v1.0.6 NSIS 安装器、已独立完成签名与载荷核验的本地 1.1.0 候选、该候选冻结时的 `source-snapshot.json` 和已核验的候选完整 SHA256。执行者还须独立核对 `source.tar` SHA256、冻结 commit/tree 及其与候选源码的对应关系；本脚本只记录并绑定传入的已核验回执，不独立证明源码到产物的映射。缺少参数、SHA 格式错误或版本不符时会在创建测试目录、账户及修改 ACL 前拒绝；本脚本不代替安装器签名验签。
+真实覆盖安装可用下面的命令复现。在用户已授权的安装与发布验收范围内，在管理员 PowerShell 中运行；测试会创建临时标准 Windows 账户并授予其专用测试目录 ACL，运行前须关闭现有 LoliCode 实例。传入已发布的 v1.1.0 NSIS 安装器、已独立完成签名与载荷核验的本地 1.1.1 候选、该候选冻结时的 `source-snapshot.json` 和已核验的候选完整 SHA256。脚本按已发布安装器与可执行文件的固定 SHA 白名单识别 v1.1.0 Harness 基线，也保留 v1.0.6（原生版本 4.1.6）迁移到 v1.1.0 或更新候选的模式。候选产品版本与原生版本必须一致、属于 1.x 且高于基线。执行者还须独立核对 `source.tar` SHA256、冻结 commit/tree 及其与候选源码的对应关系；本脚本只记录并绑定传入的已核验回执，不独立证明源码到产物的映射。缺少参数、SHA 格式错误、未知基线字节或版本不符时会在创建测试目录、账户及修改 ACL 前拒绝；本脚本不代替安装器签名验签。
 
 ```powershell
 node scripts/tests/lolicode-overwrite-upgrade-acceptance.mjs `
-  "<published-v1.0.6-setup.exe>" `
-  "<local-1.1.0-setup.exe>" `
+  "<published-v1.1.0-setup.exe>" `
+  "<local-1.1.1-setup.exe>" `
   "<candidate-freeze>\source-snapshot.json" `
   "<independently-verified-64-hex-candidate-sha256>"
 
@@ -48,7 +48,9 @@ node scripts/tests/lolicode-overwrite-upgrade-acceptance.mjs `
 node --test scripts/tests/lolicode-overwrite-upgrade-cleanup.test.mjs
 ```
 
-脚本在同一临时标准账户中从旧版桌面保存模拟渠道、实际生成旧会话，再依次验证候选原地覆盖、迁移后退出重启续聊、同一 SHA256 候选再次覆盖安装后续聊。每阶段使用独立新问题和 `requestId`，要求真实新增的本机模拟模型请求携带此前所有问答，并保留同一 profile、会话 ID、渠道、原始旧会话 SHA、安装目录标记与迁移回执。这验证合成测试数据的真实旧版迁移链路，不代表已验证真实用户的所有设置、OAuth 或远程项目。
+脚本在同一临时标准账户中从已发布桌面保存模拟渠道、实际生成基线会话，再依次验证候选原地覆盖、退出重启续聊、同一 SHA256 候选再次覆盖安装后续聊。每阶段使用独立新问题和 `requestId`，要求真实新增的本机模拟模型请求携带此前所有问答，并保留同一 profile、会话 ID、渠道与安装目录标记。
+
+v1.1.0 基线使用真实 Harness 会话，在应用停止时分别记录会话元数据、桌面快照和原生日志的路径、长度及 SHA，要求首次覆盖和重复安装均保留当时的全部会话字节；后续真实续聊可以正常追加历史。报告中的 `baselineHistoryResumed` 与 `harnessHistoryResumed` 需为 true，且不能生成旧引擎迁移回执。v1.0.6 基线则继续要求原始旧会话 SHA 和真实提交的迁移回执保持不变，报告 `legacyHistoryResumed: true`。两种模式验证合成测试数据的真实升级链路，不代表已验证真实用户的所有设置、OAuth 或远程项目。
 
 证据保留在脚本输出的 `LoliCodeUpgrade-*` 精确目录。报告分别记录产品冻结提交/tree/父提交及候选 SHA，和验收脚本自身 Git 提交、脏改状态及文件 SHA，不要求为测试脚本重新编译产品。授 ACL 前预建 worker 证据文件，避免 `CREATOR OWNER` 产生额外测试 SID 权限。`finally` 只撤回本轮 SID 的精确显式 Modify grant，不重置 ACL、不按名称批量删除账户、不关闭无关进程；独立验证该 SID 的账户、Profile/CIM、ProfileList 项、目录、进程及 stage 子项 ACL。profile 仍 Loaded、进程归属不可核实、残留或清理失败时明确失败并保留证据和未清现场，不递归兜底删除。成功后只删除测试复制的安装器，保留报告。
 

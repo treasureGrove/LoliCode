@@ -1,6 +1,7 @@
 // Run from an elevated Windows shell using Node 24:
-// node scripts/tests/lolicode-overwrite-upgrade-acceptance.mjs <published-1.0.6.exe> [<local-1.1.0-setup.exe> <source-snapshot.json> <verified-candidate-sha256>]
-// A baseline-only run rehearses the released installer and old transcript creation.
+// node scripts/tests/lolicode-overwrite-upgrade-acceptance.mjs <published-baseline.exe> [<candidate-setup.exe> <source-snapshot.json> <verified-candidate-sha256>]
+// Known baselines: 1.0.6 (native 4.1.6, legacy migration) and 1.1.0 (Harness).
+// A baseline-only run rehearses the released installer and real transcript creation.
 // Upgrade runs restart/resume, then reinstall the identical candidate and resume
 // again, all in the same disposable account/profile with fresh prompts/request IDs.
 // cleanup-identity.json records only SID/profile/ACL digests, never a password.
@@ -29,20 +30,69 @@ function parseAcceptanceArgs(args, platform) {
         !/^[a-f0-9]{64}$/i.test(expectedCandidateSha256 ?? "")))
   ) {
     throw new Error(
-      "Usage (Windows): node lolicode-overwrite-upgrade-acceptance.mjs <published-v1.0.6.exe> [<candidate-1.1.0.exe> <source-snapshot.json> <independently-verified-64-hex-candidate-sha256>]",
+      "Usage (Windows): node lolicode-overwrite-upgrade-acceptance.mjs <published-v1.0.6-or-v1.1.0.exe> [<candidate.exe> <source-snapshot.json> <independently-verified-64-hex-candidate-sha256>]",
     );
   }
   return { baseline, candidate, sourceSnapshotPath, expectedCandidateSha256 };
 }
 // END PURE ARGUMENT VALIDATION
+// BEGIN PURE RELEASE VALIDATION
+function publishedBaseline(sha256) {
+  const baselines = [
+    {
+      productVersion: "1.0.6",
+      buildVersion: "4.1.6",
+      engine: "legacy",
+      installerSha256:
+        "e21021377ea8284eb00f73d297700644db76dd41bc93de7d3290833678b018b9",
+      executableSha256:
+        "ac2e01426395a073db62ba1a476654533b46a146696fc48061b86a3df7d8d187",
+    },
+    {
+      productVersion: "1.1.0",
+      buildVersion: "1.1.0",
+      engine: "harness",
+      installerSha256:
+        "f848959df4aca72a924b2fe2e276568bd4058f89f5d648027bbc800527c48a76",
+      executableSha256:
+        "022b611053dbd4bef4af12b68a2c51aa158cc8aaf1c3a193c4ced321dc97b89b",
+    },
+  ];
+  const baseline = baselines.find((item) => item.installerSha256 === sha256);
+  assert.ok(
+    baseline,
+    "The baseline must be the published v1.0.6 or v1.1.0 installer",
+  );
+  return baseline;
+}
+
+function validateCandidateVersion(snapshot, baseline) {
+  assert.equal(snapshot.product, "LoliCode");
+  assert.match(snapshot.productVersion, /^1\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/);
+  assert.equal(snapshot.buildVersion, snapshot.productVersion);
+  const target = snapshot.productVersion.split(".").map(Number);
+  const previous = baseline.productVersion.split(".").map(Number);
+  assert.ok(
+    target.every(Number.isSafeInteger),
+    "Candidate version is not a safe integer",
+  );
+  const difference = target.findIndex(
+    (part, index) => part !== previous[index],
+  );
+  assert.ok(
+    difference >= 0 && target[difference] > previous[difference],
+    "Candidate must be newer than the published baseline",
+  );
+}
+// END PURE RELEASE VALIDATION
 const { baseline, candidate, sourceSnapshotPath, expectedCandidateSha256 } =
   parseAcceptanceArgs(process.argv.slice(2), process.platform);
+const baselineHash = await sha256(baseline);
+const baselineRelease = publishedBaseline(baselineHash);
 const sourceSnapshot =
   candidate && JSON.parse(await readFile(sourceSnapshotPath, "utf8"));
 if (sourceSnapshot) {
-  assert.equal(sourceSnapshot.product, "LoliCode");
-  assert.equal(sourceSnapshot.productVersion, "1.1.0");
-  assert.equal(sourceSnapshot.buildVersion, "1.1.0");
+  validateCandidateVersion(sourceSnapshot, baselineRelease);
   for (const key of ["sourceCommit", "sourceTree", "parentCommit"])
     assert.match(sourceSnapshot[key], /^[a-f0-9]{40}$/);
   assert.match(sourceSnapshot.sourceArchiveSha256, /^[a-f0-9]{64}$/);
@@ -139,14 +189,6 @@ async function sha256(file) {
   for await (const chunk of createReadStream(file)) digest.update(chunk);
   return digest.digest("hex");
 }
-const baselineHash =
-  "e21021377ea8284eb00f73d297700644db76dd41bc93de7d3290833678b018b9";
-assert.equal(
-  await sha256(baseline),
-  baselineHash,
-  "The baseline must be the published v1.0.6 installer",
-);
-
 const stage = path.join(
   knownFolders.stdout.trim(),
   `LoliCodeUpgrade-${randomUUID().replaceAll("-", "").slice(0, 10)}`,
@@ -187,6 +229,7 @@ if (candidate)
 console.log(`Isolated Windows upgrade evidence: ${stage}`);
 
 const fixture = {
+  baselineVersion: baselineRelease.productVersion,
   model: "upgrade-fixture-model",
   key: "lolicode-synthetic-upgrade-channel-key",
   channel: "upgrade-fixture-channel",
@@ -624,7 +667,7 @@ async function verifyRenderer(fixture, phase, expected, originalSessionId) {
     );
     const session = await invoke("create_agent_session", {
       projectPath: expected.project,
-      title: "Published v1.0.6 upgrade fixture",
+      title: `Published v${fixture.baselineVersion} upgrade fixture`,
       modelId: agentCatalog.defaultModel,
       mode: "build",
       permissionMode: "ask",
@@ -785,6 +828,7 @@ try {
     path.join(stage, "plan.json"),
     JSON.stringify({
       upgrade: Boolean(candidate),
+      baseline: baselineRelease,
       candidateVersion: sourceSnapshot?.buildVersion,
       candidateSha256: candidateHash || undefined,
       expectedHarnessVersion,
@@ -855,7 +899,7 @@ try {
   }
   await accountExit;
   const accountRecord = await readRecord("account-finished.json");
-  assert.match(accountRecord?.persistedLegacySha256, /^[a-f0-9]{64}$/);
+  assert.match(accountRecord?.persistedConversationSha256, /^[a-f0-9]{64}$/);
   const finished = candidate && (await readRecord("finished.json"));
   if (candidate) {
     assert.equal(finished?.overwroteOriginalInstall, true);
@@ -863,15 +907,35 @@ try {
     assert.equal(finished?.restartVerified, true);
     assert.equal(finished?.sameCandidateReinstalled, true);
     assert.equal(finished?.candidateSha256, candidateHash);
+    assert.equal(finished?.baselineEngine, baselineRelease.engine);
+    assert.equal(finished?.baselineSessionId, old.sessionId);
+    if (baselineRelease.engine === "legacy") {
+      assert.match(finished?.migrationReceiptSha256, /^[a-f0-9]{64}$/);
+      assert.equal(
+        finished?.preservedLegacySha256,
+        accountRecord.persistedConversationSha256,
+      );
+    } else {
+      assert.equal(finished?.harnessFilesPreservedByInstall, true);
+      assert.equal(finished?.harnessFilesPreservedByReinstall, true);
+      assert.equal(finished?.migrationReceiptSha256, undefined);
+    }
   }
   evidence = {
     baseline: old,
+    baselineRelease,
     candidate: upgrade,
     restart,
     reinstall,
     finished: finished || undefined,
     persistedChannelUsed: Boolean(upgrade && modelCalls.candidate),
-    legacyHistoryResumed: Boolean(upgrade && modelCalls.candidate),
+    baselineHistoryResumed: Boolean(upgrade && modelCalls.candidate),
+    legacyHistoryResumed: Boolean(
+      baselineRelease.engine === "legacy" && upgrade && modelCalls.candidate,
+    ),
+    harnessHistoryResumed: Boolean(
+      baselineRelease.engine === "harness" && upgrade && modelCalls.candidate,
+    ),
     restartedHistoryResumed: Boolean(restart && modelCalls.restart),
     reinstalledHistoryResumed: Boolean(reinstall && modelCalls.reinstall),
     modelCalls,
@@ -879,7 +943,7 @@ try {
     candidateSha256: candidateHash || undefined,
     acceptanceScripts: scriptProvenance,
     isolatedStandardAccount: true,
-    baselineConversationSha256: accountRecord.persistedLegacySha256,
+    baselineConversationSha256: accountRecord.persistedConversationSha256,
   };
 } catch (error) {
   acceptanceError = error;

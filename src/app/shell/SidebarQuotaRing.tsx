@@ -119,6 +119,8 @@ export function SidebarQuotaRing({
           onClick={(event) => {
             event.preventDefault();
             event.stopPropagation();
+            openedByPointer.current = event.detail > 0;
+            openDetails();
           }}
         >
           <svg
