@@ -2086,12 +2086,43 @@
   color: var(--wb-accent);
 }
 .wb-agent-modes {
+  display: grid;
+  gap: 8px;
+  max-width: 840px;
+  margin: 0 auto 10px;
+}
+.wb-agent-goal-card,
+.wb-agent-plan-summary {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 4px 12px;
-  margin-bottom: 4px;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--wb-border);
+  border-radius: 14px;
+  background: var(--wb-panel);
+}
+.wb-agent-goal-card {
+  flex-wrap: wrap;
+}
+.wb-agent-plan-summary {
+  border-color: color-mix(in srgb, var(--wb-accent) 25%, var(--wb-border));
+  background: color-mix(in srgb, var(--wb-accent) 5%, var(--wb-panel));
+}
+.wb-agent-plan-summary > svg,
+.wb-agent-mode-icon {
+  flex-shrink: 0;
+  color: var(--wb-accent);
+}
+.wb-agent-plan-summary > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  font-size: 12px;
+}
+.wb-agent-plan-summary small,
+.wb-agent-mode-label {
+  color: var(--wb-muted);
+  font-size: 11px;
 }
 .wb-agent-goal-summary {
   display: grid;
@@ -2113,6 +2144,54 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 4px;
+}
+.wb-command-menu {
+  margin: 8px 8px 0;
+  padding: 5px;
+  border: 1px solid var(--wb-border);
+  border-radius: 15px;
+  background: var(--wb-panel);
+}
+.wb-command-menu-heading {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+  padding: 6px 9px;
+  color: var(--wb-muted);
+  font-size: 11px;
+}
+.wb-command-menu [role="option"] {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  padding: 10px;
+  border-radius: 10px;
+  text-align: left;
+}
+.wb-command-menu [role="option"][aria-selected="true"] {
+  background: var(--wb-accent-soft);
+}
+.wb-command-menu [role="option"] > svg {
+  flex-shrink: 0;
+  color: var(--wb-accent);
+}
+.wb-command-menu [role="option"] > span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.wb-command-menu strong {
+  font-size: 12px;
+}
+.wb-command-menu strong > span {
+  margin-left: 8px;
+  font-weight: 400;
+}
+.wb-command-menu [role="option"] small {
+  color: var(--wb-muted);
+  font-size: 11px;
 }
 .wb-composer-meta {
   display: flex;

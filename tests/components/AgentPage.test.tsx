@@ -5355,7 +5355,7 @@ describe("AgentPage", () => {
     );
   });
 
-  it("keeps planning controls out of the composer and shows the configured execution permission", async () => {
+  it("shows native planning status without changing the configured execution permission", async () => {
     snapshot.session.mode = "plan";
     snapshot.session.permissionMode = "full_access";
     snapshot.plan = { active: true };
@@ -5366,8 +5366,73 @@ describe("AgentPage", () => {
     );
     const select = composerPermissionSelect();
     expect(select).toHaveValue("full_access");
-    expect(screen.queryByText(/计划模式/)).not.toBeInTheDocument();
+    expect(screen.getByText("计划模式")).toBeVisible();
+    expect(
+      screen.getByText(
+        "先分析并提出方案，确认后推进执行；执行权限由对话设置控制。",
+      ),
+    ).toBeVisible();
     expect(agentApi.updateSession).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [false, true, "即将进入计划模式"],
+    [true, false, "即将退出计划模式"],
+  ] as const)(
+    "shows plan transition %s → %s without inventing an approval",
+    async (active, pending, label) => {
+      snapshot.plan = { active, pending };
+      render(<AgentPage />);
+      await flush();
+      expect(screen.getByText(label)).toBeVisible();
+      expect(screen.queryByText("计划等待审批")).not.toBeInTheDocument();
+    },
+  );
+
+  it("shows plan approval only for an actual current-session plan review question", async () => {
+    snapshot.plan = { active: true };
+    snapshot.questions = [
+      {
+        id: "plan-review",
+        sessionId: session.id,
+        title: "Approve this plan?",
+        planReview: { approve: "Approve", revise: "Revise" },
+        fields: [
+          {
+            key: "review",
+            type: "string",
+            description: "# Implementation plan",
+          },
+        ],
+      },
+    ];
+    render(<AgentPage />);
+    await flush();
+    expect(screen.getByText("计划等待审批")).toBeVisible();
+    expect(
+      screen.getByText("请在计划审批卡中批准执行，或提出修改意见。"),
+    ).toBeVisible();
+  });
+
+  it("fills a slash command before sending and dispatches mixed-case /Plan as a native command", async () => {
+    render(<AgentPage />);
+    await flush();
+    const input = screen.getByLabelText("发送给 Agent 的消息");
+    fireEvent.focus(input);
+    fill("/PL");
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(input).toHaveValue("/plan ");
+    expect(agentApi.sendMessage).not.toHaveBeenCalled();
+    fill("/Plan Review MyAPI");
+    fireEvent.keyDown(input, { key: "Enter" });
+    await flush();
+    expect(agentApi.sendMessage).toHaveBeenCalledWith(
+      session.id,
+      "/plan Review MyAPI",
+      expect.stringMatching(/^msg_/),
+      [],
+      [],
+    );
   });
 
   it.each(["none", "complete"] as const)(

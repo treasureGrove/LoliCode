@@ -139,6 +139,10 @@ import { AgentChanges } from "./AgentChanges";
 import { AgentPermissionCard } from "./AgentPermissionCard";
 import { AgentQuestionCard } from "./AgentQuestionCard";
 import { AgentSessionModes } from "./AgentSessionModes";
+import {
+  AgentCommandTextarea,
+  normalizeAgentCommand,
+} from "./AgentCommandTextarea";
 import { AgentActivityStatus } from "./AgentActivityStatus";
 import { AgentModelPicker } from "./AgentModelPicker";
 import { AgentReasoningPicker } from "./AgentReasoningPicker";
@@ -3446,7 +3450,7 @@ export function AgentPage({
     const id = sessionId;
     const projectPath = workspace.path;
     const storageKey = key;
-    const text = draft.trim();
+    const text = normalizeAgentCommand(draft.trim());
     const images = composerImagesRef.current[id] || [];
     const documents = composerDocumentsRef.current[id] || [];
     if (!text && !images.length && !documents.length) return;
@@ -3733,7 +3737,7 @@ export function AgentPage({
     const outgoingDocuments =
       retry?.documents ??
       (sessionId ? composerDocumentsRef.current[sessionId] || [] : []);
-    const text = retry?.text.trim() ?? draft.trim();
+    const text = normalizeAgentCommand(retry?.text.trim() ?? draft.trim());
     if (
       mutation.current ||
       (retryLoading && !retry) ||
@@ -5802,11 +5806,23 @@ export function AgentPage({
               <div className="wb-composer-area">
                 {sessionId &&
                   snapshot?.session.id === sessionId &&
-                  snapshot.goal &&
+                  (snapshot.goal ||
+                    snapshot.plan?.active ||
+                    snapshot.plan?.pending !== undefined ||
+                    snapshot.questions.some(
+                      (question) =>
+                        question.sessionId === sessionId && question.planReview,
+                    )) &&
                   !configurationReadOnly && (
                     <AgentSessionModes
                       key={sessionId}
                       goal={snapshot.goal}
+                      plan={snapshot.plan}
+                      planReviewPending={snapshot.questions.some(
+                        (question) =>
+                          question.sessionId === sessionId &&
+                          Boolean(question.planReview),
+                      )}
                       disabled={Boolean(busy) || stoppingHere || uncertainHere}
                       onEditGoal={() => {
                         if (!key) return;
@@ -5990,15 +6006,20 @@ export function AgentPage({
                   <label htmlFor="agent-message" className="sr-only">
                     发送给 Agent 的消息
                   </label>
-                  <textarea
+                  <AgentCommandTextarea
+                    key={sessionId}
                     ref={composerRef}
                     id="agent-message"
                     rows={1}
-                    placeholder="描述任务，或继续追问…"
+                    placeholder="描述任务，或输入 / 查看计划、目标等命令…"
                     title="Enter 发送 · Shift + Enter 换行；任务运行时默认排队，Ctrl/⌘ + Enter 引导当前任务"
                     value={draft}
                     disabled={readOnlySession || recallingHere}
                     onChange={(event) => writeDraft(key, event.target.value)}
+                    onSelectCommand={(value) => {
+                      writeDraft(key, value);
+                      composerInputRef.current?.focus();
+                    }}
                     onPaste={(event) => {
                       const files = Array.from(event.clipboardData.items)
                         .filter(

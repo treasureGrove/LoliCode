@@ -411,7 +411,11 @@ export interface AgentSnapshot {
     revision: number;
     blockedReason?: { code: string; message: string } | null;
   };
-  plan?: { active: boolean; pending?: boolean };
+  plan?: {
+    active: boolean;
+    /** Selected mode awaiting the next accepted step (false means exit), not an approval. */
+    pending?: boolean;
+  };
   /** Host-verified reveal from this conversation or one of its workers. */
   preview?: AgentPreviewHint | null;
   error?: string | null;
