@@ -800,6 +800,7 @@ test("a remote root and its genuine child use only remote host tools", { timeout
   const calls = [];
   let readReturned = false;
   let localCallDenied = false;
+  let waitReturned = false;
   const schemas = [
     { name: "mcp_remote_read_file", properties: { path: { type: "string" } }, required: ["path"] },
     { name: "mcp_remote_write_file", properties: {
@@ -819,6 +820,7 @@ test("a remote root and its genuine child use only remote host tools", { timeout
     const toolNames = body.tools.map(tool => tool.function.name);
     assert.ok(toolNames.includes("mcp_remote_read_file"));
     assert.ok(toolNames.includes("mcp_remote_write_file"));
+    assert.ok(toolNames.includes("wait_agent"), "Remote agents retain the official inbox wait tool");
     assert.ok(!toolNames.includes("write"));
     assert.ok(!toolNames.includes("read"));
     assert.ok(!toolNames.includes("bash"));
@@ -841,6 +843,9 @@ test("a remote root and its genuine child use only remote host tools", { timeout
     if (!hasResult("fixture_subagent")) {
       return toolCall(response, "subagent", { description: "Remote read fixture", prompt: workerPrompt });
     }
+    if (!hasResult("fixture_wait_agent")) return toolCall(response, "wait_agent", { timeout_ms: 10_000 });
+    assert.match(JSON.stringify(hasResult("fixture_wait_agent").content), /timedOut/);
+    waitReturned = true;
     return modelReply(response, "The remote task is delegated.");
   }, async (method, params) => {
     assert.equal(method, "lolicode/mcp/approve-and-call");
@@ -857,6 +862,7 @@ test("a remote root and its genuine child use only remote host tools", { timeout
     await client.wait(sessionId);
     if (runtime.modelError) throw runtime.modelError;
     assert.ok(localCallDenied);
+    assert.ok(waitReturned);
     assert.ok(readReturned, JSON.stringify(client.notifications.filter(event =>
       ["subagent.started", "subagent.finished", "lolicode/session.assistant-stream"].includes(event.method)
     )));
@@ -1131,6 +1137,63 @@ test("automatic secretary writes require worker-scoped approval", { timeout: 60_
     method === "subagent.started" && ![reviewed, interactive].includes(params.childSessionId));
   assert.ok(nativeChild);
   assert.deepEqual(approvals, [reviewed, sessionId, nativeChild.params.childSessionId]);
+});
+
+test("review mode admits official subagent coordination while keeping worker writes subject to approval", { timeout: 60_000 }, async (t) => {
+  const sessionId = "review-coordination";
+  const childSessionId = "review-coordination-child";
+  const approvals = [];
+  const results = new Map();
+  const runtime = await fixture(t, (body, response) => {
+    const rootPrompt = body.messages.some(message => message.role === "user" &&
+      JSON.stringify(message.content).includes("REVIEW_COORDINATION_ROOT"));
+    const toolCall = (name, args) => modelReply(response, {
+      tool_calls: [{ index: 0, id: `review_${name}`, type: "function", function: {
+        name, arguments: JSON.stringify(args),
+      } }],
+    }, "tool_calls");
+    const result = name => body.messages.find(message => message.role === "tool" &&
+      message.tool_call_id === `review_${name}`);
+    if (!rootPrompt) {
+      if (!JSON.stringify(body.messages).includes("REVIEW_COORDINATION_FOLLOWUP")) {
+        return modelReply(response, "Worker ready for follow-up.");
+      }
+      if (!result("write")) return toolCall("write", { file_path: "review-coordination.txt", content: "requires approval" });
+      results.set("write", JSON.stringify(result("write").content));
+      return modelReply(response, "Worker respected the write decision.");
+    }
+    if (!result("send_message")) {
+      return toolCall("send_message", { agent: childSessionId, message: "REVIEW_COORDINATION_FOLLOWUP" });
+    }
+    results.set("send_message", JSON.stringify(result("send_message").content));
+    return modelReply(response, "Coordination completed.");
+  }, async (method, params) => {
+    assert.equal(method, "approval/request");
+    approvals.push({ sessionId: params.sessionId, toolName: params.toolName });
+    return { outcome: "rejected" };
+  });
+  const client = await runtime.start();
+  try {
+    await client.open(sessionId);
+    await client.request("lolicode/session/configure-secretary", { sessionId });
+    await client.request("lolicode/session/configure-workspace", {
+      sessionId, workspace: { policy: "review", skills: [], memory: "" },
+    });
+    await client.request("lolicode/secretary/delegate-worker", {
+      sessionId, childSessionId, label: "Review coordination fixture",
+      content: [{ type: "text", text: "REVIEW_COORDINATION_WORKER" }],
+    });
+    await client.wait(sessionId);
+    await client.prompt(sessionId, "REVIEW_COORDINATION_ROOT");
+    await client.wait(sessionId);
+    if (runtime.modelError) throw runtime.modelError;
+    assert.match(results.get("send_message") ?? "", /message delivered to agent/);
+    assert.deepEqual(approvals, [{ sessionId: childSessionId, toolName: "write" }]);
+    assert.match(results.get("write") ?? "", /rejected|denied/i);
+    await assert.rejects(access(path.join(runtime.project, "review-coordination.txt")), { code: "ENOENT" });
+  } finally {
+    await client.shutdown();
+  }
 });
 
 test("secretary restores a grandchild with a cold creator while retaining ownership, review and reports", { timeout: 90_000 }, async (t) => {

@@ -263,6 +263,10 @@ fn finish_turn(snapshot: &mut AgentSnapshot, reason: &Value) -> bool {
         "blocked" => Some("本轮请求被阻止".into()),
         "max-tokens" => Some("本轮达到模型输出上限".into()),
         "interrupted" => Some("上次任务中断，可继续会话".into()),
+        "error" if reason["error"]["code"] == "AUTH" => Some(
+            "模型服务认证失败（AUTH），请检查当前渠道的 API Key 或登录状态后重试；会话已保留"
+                .into(),
+        ),
         // Error text may originate in a provider or its response body. Show
         // the structured code without passing that raw body into the renderer.
         "error" => Some(

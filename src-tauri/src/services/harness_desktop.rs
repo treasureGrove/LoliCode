@@ -4700,12 +4700,12 @@ async fn observe_turn(
                 } else if let Some(child) = worker_id {
                     Ok(worker_receipt(&outcome, child, message_id, stop_requested))
                 } else {
-                    match outcome.turn_outcome(sdk_id, message_id) {
-                        Some(HarnessTurnOutcome::Completed) => Ok(ReceiptStatus::Completed),
-                        Some(HarnessTurnOutcome::Ended(reason)) => Err(turn.record.lock().await.snapshot.error.clone()
-                            .unwrap_or_else(|| format!("Harness 本轮结束：{reason}"))),
-                        None => Err("Harness 未确认本轮结果，已保留会话".into()),
-                    }
+                    prompt_receipt(
+                        &outcome,
+                        sdk_id,
+                        message_id,
+                        turn.record.lock().await.snapshot.error.as_deref(),
+                    )
                 };
                 if stop_requested {
                     return status;
@@ -4727,6 +4727,28 @@ async fn observe_turn(
     } }.await;
     host_tools.cancel_and_join().await;
     result
+}
+
+fn prompt_receipt(
+    outcome: &HarnessEvents,
+    session: &str,
+    message: &str,
+    error: Option<&str>,
+) -> Result<ReceiptStatus, String> {
+    match outcome.turn_outcome(session, message) {
+        Some(HarnessTurnOutcome::Completed) => Ok(ReceiptStatus::Completed),
+        Some(HarnessTurnOutcome::Ended(reason)) => {
+            Err(error.map_or_else(|| format!("Harness 本轮结束：{reason}"), str::to_owned))
+        }
+        // A resumed turn can fail before the newly admitted prompt reaches
+        // user/message (or even before its first step). Preserve the root's
+        // sanitized terminal error instead of hiding it behind a missing receipt.
+        // Neither session/wait nor another prompt's success confirms this one.
+        None => Err(error.map_or_else(
+            || "Harness 未确认本轮结果，已保留会话".into(),
+            str::to_owned,
+        )),
+    }
 }
 
 fn native_command_completion(
@@ -5416,6 +5438,111 @@ async fn apply_event(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod prompt_receipt_tests {
+    use super::*;
+
+    fn observe(
+        outcome: &mut HarnessEvents,
+        snapshot: &mut AgentSnapshot,
+        projection: &mut HarnessSnapshotProjection,
+        seq: u64,
+        kind: &str,
+        data: Value,
+    ) {
+        let notification = json!({
+            "jsonrpc":"2.0", "method":"session.event",
+            "params":{"sessionId":"root", "event":{
+                "seq":seq,"time":seq,"type":kind,"data":data
+            }}
+        });
+        outcome.apply(&notification).unwrap();
+        projection.apply(snapshot, &notification);
+    }
+
+    #[test]
+    fn resumed_turn_failure_preserves_the_sanitized_error_for_a_waiting_prompt() {
+        let mut snapshot: AgentSnapshot = serde_json::from_value(json!({
+            "session":{"id":"root","title":"Fixture","projectPath":"fixture",
+                "mode":"build","permissionMode":"ask","model":null,"createdAt":1,"updatedAt":1},
+            "status":"running","messages":[],"permissions":[],"questions":[],
+            "diffs":[],"streamConnected":true,"streamGap":false
+        }))
+        .unwrap();
+        let mut projection = HarnessSnapshotProjection::default();
+        let mut outcome = HarnessEvents::new("root");
+        observe(
+            &mut outcome,
+            &mut snapshot,
+            &mut projection,
+            1,
+            "turn/start",
+            json!({"turn":2}),
+        );
+        observe(
+            &mut outcome,
+            &mut snapshot,
+            &mut projection,
+            2,
+            "user/message",
+            json!({
+                "id":"restored-prompt","role":"user","source":{"kind":"user"},"content":[]
+            }),
+        );
+        observe(
+            &mut outcome,
+            &mut snapshot,
+            &mut projection,
+            3,
+            "turn/end",
+            json!({
+                "turn":2,"reason":{"kind":"error","error":{"code":"AUTH","message":"private provider response"}}
+            }),
+        );
+        let error = prompt_receipt(&outcome, "root", "new-prompt", snapshot.error.as_deref())
+            .err()
+            .expect("waiting prompt must fail with the root's terminal error");
+        assert!(error.contains("认证失败"));
+        assert!(!error.contains("private provider response"));
+        assert!(!error.contains("未确认"));
+        assert_eq!(outcome.turn_outcome("root", "new-prompt"), None);
+    }
+
+    #[test]
+    fn another_completed_prompt_does_not_confirm_a_waiting_prompt() {
+        let mut outcome = HarnessEvents::new("root");
+        for (seq, kind, data) in [
+            (1, "turn/start", json!({"turn":1})),
+            (
+                2,
+                "user/message",
+                json!({"id":"previous","role":"user","source":{"kind":"user"},"content":[]}),
+            ),
+            (
+                3,
+                "turn/end",
+                json!({"turn":1,"reason":{"kind":"completed"}}),
+            ),
+        ] {
+            outcome
+                .apply(&json!({"jsonrpc":"2.0","method":"session.event","params":{
+                    "sessionId":"root","event":{"seq":seq,"time":seq,"type":kind,"data":data}
+                }}))
+                .unwrap();
+        }
+        assert!(matches!(
+            prompt_receipt(&outcome, "root", "previous", None),
+            Ok(ReceiptStatus::Completed)
+        ));
+        assert_eq!(
+            prompt_receipt(&outcome, "root", "waiting", None)
+                .err()
+                .as_deref(),
+            Some("Harness 未确认本轮结果，已保留会话")
+        );
+    }
 }
 
 #[cfg(test)]

@@ -1,6 +1,6 @@
 import { installHostMcp } from "./host-mcp.mjs";
 
-const controls = new Set(["ask_user_question", "subagent", "send_message", "list_agents", "interrupt_agent"]);
+const controls = new Set(["ask_user_question", "subagent", "send_message", "list_agents", "interrupt_agent", "wait_agent"]);
 const remoteName = /^mcp_remote_(read_file|view_image|list_files|search_files|write_file|apply_patch|run_command|open_preview)$/;
 
 export function installHostRemote(ctx, transport) {

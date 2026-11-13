@@ -1,5 +1,5 @@
-//! A short-lived, single-route lease for the Harness child. The existing channel
-//! gateway keeps the upstream credentials and performs protocol translation.
+//! A single-route lease owned by the Harness child's transport lifetime. The
+//! existing channel gateway keeps upstream credentials and translates protocols.
 use super::{agent_host, channel_center};
 use crate::store::AppState;
 use axum::{
@@ -19,11 +19,10 @@ use std::{
     },
     time::Duration,
 };
-use tokio::{net::TcpListener, task::JoinHandle, time::Instant};
+use tokio::{net::TcpListener, task::JoinHandle};
 
 pub(super) const PROVIDER: &str = "lolicode-gateway";
 pub(super) const TOKEN_ENV: &str = "DSH_LOLICODE_GATEWAY_TOKEN";
-const LEASE_DURATION: Duration = Duration::from_secs(60 * 60);
 
 pub(super) struct HarnessGateway {
     pub model: String,
@@ -45,7 +44,6 @@ impl Drop for HarnessGateway {
 struct Lease {
     token: String,
     active: Arc<AtomicBool>,
-    expires_at: Instant,
     model: String,
     route: String,
     upstream: reqwest::Url,
@@ -130,22 +128,13 @@ impl HarnessGateway {
         let lease = Arc::new(Lease {
             token: token.clone(),
             active: active.clone(),
-            expires_at: Instant::now() + LEASE_DURATION,
             model: model.id.clone(),
             route: selected.model_id.clone(),
             upstream,
             gateway_bearer: binding.bearer_token,
             client,
         });
-        let task = tokio::spawn(async move {
-            let router = Router::new()
-                .route("/v1/chat/completions", post(complete))
-                .layer(DefaultBodyLimit::max(
-                    channel_center::MAX_MODEL_REQUEST_BYTES as usize,
-                ))
-                .with_state(lease);
-            let _ = axum::serve(listener, router).await;
-        });
+        let task = serve_lease(listener, lease);
         Ok(Self {
             model: model.id.clone(),
             profile_patch,
@@ -155,6 +144,18 @@ impl HarnessGateway {
             task,
         })
     }
+}
+
+fn serve_lease(listener: TcpListener, lease: Arc<Lease>) -> JoinHandle<()> {
+    tokio::spawn(async move {
+        let router = Router::new()
+            .route("/v1/chat/completions", post(complete))
+            .layer(DefaultBodyLimit::max(
+                channel_center::MAX_MODEL_REQUEST_BYTES as usize,
+            ))
+            .with_state(lease);
+        let _ = axum::serve(listener, router).await;
+    })
 }
 
 fn profile_patch(
@@ -199,7 +200,10 @@ async fn complete(
                 lease.token.as_bytes(),
             )
         });
-    if !authorized || !lease.active.load(Ordering::Acquire) || Instant::now() >= lease.expires_at {
+    // The transport task owns HarnessGateway until the child stops. A long
+    // active turn can outlive any fixed TTL; revocation belongs to owner Drop,
+    // including requests arriving on already accepted keep-alive connections.
+    if !authorized || !lease.active.load(Ordering::Acquire) {
         return StatusCode::UNAUTHORIZED.into_response();
     }
     if body.get("model").and_then(Value::as_str) != Some(lease.model.as_str()) {
@@ -227,3 +231,7 @@ async fn complete(
     }
     response
 }
+
+#[cfg(test)]
+#[path = "harness_gateway_tests.rs"]
+mod tests;

@@ -149,6 +149,7 @@ strip = "symbols"
 opt-level = 3
 
 [dev-dependencies]
+tokio = { version = "1", features = ["test-util"] }
 lolicode-agent = { path = "../crates/lolicode-agent", default-features = false, features = ["legacy-native-tests"] }
 serial_test = "3"
 tempfile = "3"

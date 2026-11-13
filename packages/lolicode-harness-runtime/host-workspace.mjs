@@ -4,7 +4,9 @@ const readTools = new Set([
   "read", "read_image", "grep", "glob", "list_directory", "list_files", "search_files",
   "skill", "ask_user_question", "todo", "list_agents", "session_query", "exit_plan_mode", "get_goal",
 ]);
-const coordinationTools = new Set(["subagent", "present", "wait_agent", "send_input", "close_agent", "create_goal", "update_goal"]);
+// Keep the names aligned with the pinned official subagent-control tools.
+// Their lineage checks and each worker's own mutating-tool approvals still run.
+const coordinationTools = new Set(["subagent", "present", "wait_agent", "send_message", "create_goal", "update_goal"]);
 const escalationTools = new Set(["write", "edit", "apply_patch", "bash", "pwsh"]);
 export const workspacePolicies = ["workspace", "review", "full", "plan"];
 
