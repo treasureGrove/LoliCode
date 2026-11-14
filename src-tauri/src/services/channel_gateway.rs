@@ -140,10 +140,7 @@ pub async fn check(state: &AppState) -> Result<GatewayStatus, AppError> {
         .json()
         .await
         .map_err(|_| AppError::Message("Gateway 模型目录响应无效".into()))?;
-    if !body["data"]
-        .as_array()
-        .is_some_and(|models| !models.is_empty())
-    {
+    if body["data"].as_array().is_none_or(Vec::is_empty) {
         return Err(AppError::Message(
             "Gateway 没有可用模型，请更新渠道后重新启动".into(),
         ));
