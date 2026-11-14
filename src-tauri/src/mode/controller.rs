@@ -2605,7 +2605,7 @@ mod mode_tests {
         assert!(report.requires_background);
         let written = settings();
         let base = written["env"]["ANTHROPIC_BASE_URL"].as_str().unwrap();
-        assert!(base.ends_with("/tai/catalogs/1"), "{base}");
+        assert!(base.ends_with("/tai/catalogs/1/clients/claude"), "{base}");
         assert_ne!(base, "http://127.0.0.1:4100");
         assert!(written["env"]["ANTHROPIC_MODEL"]
             .as_str()
