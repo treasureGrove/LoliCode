@@ -1493,7 +1493,7 @@ fn managed_provider(id: String, name: String, settings: Value, protocol: &str) -
     provider
 }
 
-fn aggregate_source(
+pub(super) fn aggregate_source(
     snapshot: &ChannelCenterSnapshot,
     base_url: &str,
     token: &str,
@@ -1532,6 +1532,19 @@ fn aggregate_source(
         models,
         enabled: true,
     }
+}
+
+/// Native logins and built-in public quota cannot be used by external clients.
+pub(super) fn claude_gateway_source(
+    snapshot: &ChannelCenterSnapshot,
+    base_url: &str,
+    token: &str,
+) -> ChannelSource {
+    let mut external = snapshot.clone();
+    external.channels.retain(|source| {
+        native_auth_target(&source.auth_kind).is_none() && source.auth_kind != "lolicode_account"
+    });
+    aggregate_source(&external, base_url, token, "anthropic")
 }
 
 pub(crate) fn gateway_provider(
@@ -2288,6 +2301,57 @@ async fn prepare_agent_binding_with(
     })
 }
 
+/// Publish an external client's catalog on the persistent public listener.
+/// Unlike embedded clients, an external CLI must never receive an ephemeral
+/// fallback URL that cannot survive an application restart.
+pub(super) async fn prepare_external_gateway_binding(
+    state: &AppState,
+    expected_revision: Option<u64>,
+) -> Result<(), AppError> {
+    let _guard = apply_lock().lock().await;
+    let snapshot = agent_source_snapshot(state.db.as_ref())?;
+    if expected_revision.is_some_and(|expected| expected != snapshot.revision) {
+        return Err(AppError::Conflict(
+            "渠道已修改，请刷新后重新启动 Gateway".into(),
+        ));
+    }
+    let api = api_catalog_snapshot(&snapshot);
+    if claude_gateway_source(&api, "", "").models.is_empty() {
+        return Err(AppError::InvalidInput(
+            "请先添加并启用可通过 Gateway 调用的模型；官方原生订阅仅供对应工具使用".into(),
+        ));
+    }
+    for channel in api
+        .channels
+        .iter()
+        .filter(|channel| channel.enabled && channel.models.iter().any(|model| model.available()))
+    {
+        if channel.auth_kind == "api_key" {
+            validated_url(&channel.base_url)?;
+            if channel.api_key.trim().is_empty() {
+                return Err(AppError::InvalidInput(
+                    "已启用的渠道缺少 API Key，请先补齐".into(),
+                ));
+            }
+        }
+    }
+    let mut preparation = prepare_agent_gateway_write(state.db.as_ref(), &api)?;
+    let info = state
+        .proxy_service
+        .start()
+        .await
+        .map_err(AppError::Message)?;
+    crate::proxy::channel_gateway::gateway_catalog_base_url(
+        &info.address,
+        info.port,
+        api.revision,
+    )?;
+    gateway_token(state.db.as_ref())?;
+    super::channel_gateway::record_revision(state, api.revision)?;
+    preparation.committed = true;
+    Ok(())
+}
+
 fn native_selection_for<'a>(
     snapshot: &'a ChannelCenterSnapshot,
     app: &AppType,
@@ -3025,6 +3089,21 @@ pub(super) async fn apply_to(
                 "openai_chat"
             };
             let mut source = aggregate_source(&api_snapshot, base, token, protocol);
+            if app == AppType::Claude {
+                let base = crate::proxy::channel_gateway::catalog_client_base_url(base, "claude")?;
+                source = claude_gateway_source(&api_snapshot, &base, token);
+                configured_count = source.models.len();
+                if source.models.is_empty() {
+                    report.results.push(ChannelApplyResult {
+                        app: target.clone(),
+                        status: "skipped".into(),
+                        message:
+                            "没有可供 Claude Code 使用的 Gateway 模型；公益模型仅在 LoliCode 内使用"
+                                .into(),
+                    });
+                    continue;
+                }
+            }
             if app == AppType::Gemini {
                 let native_ids: HashSet<String> = api_models
                     .iter()
@@ -3118,7 +3197,13 @@ pub(super) async fn apply_to(
                         snapshot.revision,
                     )
                     .await
-                    .and_then(|_| commit_applied(state.db.as_ref(), &api_snapshot));
+                    .and_then(|_| {
+                        commit_applied(state.db.as_ref(), &api_snapshot)?;
+                        if app == AppType::Claude {
+                            super::channel_gateway::record_revision(state, snapshot.revision)?;
+                        }
+                        Ok(())
+                    });
                     if let Err(error) = healthy {
                         report.results.push(ChannelApplyResult {
                             app: target.clone(),

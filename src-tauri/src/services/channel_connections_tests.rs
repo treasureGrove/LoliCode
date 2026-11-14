@@ -279,3 +279,226 @@ async fn reapplying_claude_route_removes_the_old_catalog_minimum_without_losing_
     );
     state.proxy_service.stop().await.unwrap();
 }
+
+#[tokio::test]
+#[serial]
+async fn gateway_publishes_private_claude_catalogs_and_restores_the_listener_without_writing_tools()
+{
+    use crate::services::channel_gateway as gateway;
+    let _home = Home::new();
+    let state = state().await;
+    assert!(!gateway::status(&state).await.unwrap().running);
+    assert!(gateway::claude_config(&state).await.is_err());
+    assert!(gateway::start(&state, Some(0)).await.is_err());
+    assert!(!state.proxy_service.is_running().await);
+    let started = gateway::start(&state, Some(1)).await.unwrap();
+    assert!(started.running);
+    assert_eq!(started.model_count, 1);
+    let base = started.base_url.unwrap();
+    assert!(base.ends_with("/tai/catalogs/1/clients/claude"));
+    assert!(!crate::config::get_claude_settings_path().exists());
+    assert!(!crate::codex_config::get_codex_config_path().exists());
+    assert!(state
+        .db
+        .get_provider_by_id(ROUTE_ID, "claude")
+        .unwrap()
+        .is_none());
+    let config = gateway::claude_config(&state).await.unwrap();
+    let token = config["env"]["ANTHROPIC_AUTH_TOKEN"].as_str().unwrap();
+    assert_ne!(token, "synthetic-only");
+    let safe = serde_json::to_string(&gateway::check(&state).await.unwrap()).unwrap();
+    assert!(!safe.contains(token));
+    assert!(!safe.contains("synthetic-only"));
+    let client = reqwest::Client::builder().no_proxy().build().unwrap();
+    assert_eq!(
+        client
+            .get(format!("{base}/v1/models"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        401
+    );
+    let models: Value = client
+        .get(format!("{base}/v1/models"))
+        .bearer_auth(token)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(models["has_more"], false);
+    assert_eq!(models["data"][0]["type"], "model");
+    assert_eq!(models["data"][0]["display_name"], "Offline fixture · model");
+    assert_eq!(models["data"][0]["id"], config["env"]["ANTHROPIC_MODEL"]);
+    assert_eq!(models["first_id"], models["data"][0]["id"]);
+    assert!(!models.to_string().contains("synthetic-only"));
+    let mut updated = channel_center::load(state.db.as_ref()).unwrap();
+    updated.channels[0].models[0].id = "new-model".into();
+    updated.default_model = Some("fixture/new-model".into());
+    channel_center::save(state.db.as_ref(), updated).unwrap();
+    assert_eq!(gateway::status(&state).await.unwrap().saved_revision, 2);
+    assert_eq!(gateway::claude_config(&state).await.unwrap(), config);
+    assert!(gateway::start(&state, Some(1)).await.is_err());
+    assert_eq!(
+        gateway::start(&state, Some(2)).await.unwrap().revision,
+        Some(2)
+    );
+    // Already-generated client URLs keep their original immutable catalog.
+    let previous: Value = client
+        .get(format!("{base}/v1/models"))
+        .bearer_auth(token)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(previous, models);
+    let new_base = gateway::status(&state).await.unwrap().base_url.unwrap();
+    state.proxy_service.stop().await.unwrap();
+    assert!(gateway::check(&state).await.is_err());
+    channel_center::restore_gateway(&state).await.unwrap();
+    assert_eq!(
+        gateway::check(&state).await.unwrap().base_url.unwrap(),
+        new_base
+    );
+    state.proxy_service.stop().await.unwrap();
+}
+
+#[tokio::test]
+#[serial]
+async fn gateway_claude_streams_openai_tool_calls_and_accepts_tool_results_with_private_auth() {
+    use crate::services::channel_gateway as gateway;
+    use axum::{extract::Json, http::HeaderMap, routing::post, Router};
+    let _home = Home::new();
+    let captured = Arc::new(tokio::sync::Mutex::new(Vec::<Value>::new()));
+    let requests = captured.clone();
+    let upstream = Router::new().route("/v1/chat/completions", post(move |headers: HeaderMap, Json(body): Json<Value>| {
+        let requests = requests.clone();
+        async move {
+            assert_eq!(headers["authorization"], "Bearer synthetic-only");
+            assert!(!headers.contains_key("x-api-key"));
+            assert_eq!(body["model"], "model");
+            let continued = body["messages"].as_array().unwrap().iter().any(|message| message["role"] == "tool");
+            requests.lock().await.push(body);
+            let delta = if continued { json!({"content":"Read the file successfully."}) } else {
+                json!({"tool_calls":[{"index":0,"id":"call_read","type":"function","function":{"name":"read_file","arguments":"{\"path\":\"hello.txt\"}"}}]})
+            };
+            let first = json!({"id":"chatcmpl-fixture","object":"chat.completion.chunk","model":"model","choices":[{"index":0,"delta":delta,"finish_reason":null}]});
+            let last = json!({"id":"chatcmpl-fixture","object":"chat.completion.chunk","model":"model","choices":[{"index":0,"delta":{},"finish_reason":if continued {"stop"} else {"tool_calls"}}],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}});
+            ([("content-type", "text/event-stream")], format!("data: {first}\n\ndata: {last}\n\ndata: [DONE]\n\n"))
+        }
+    }));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let task = tokio::spawn(async move {
+        axum::serve(listener, upstream).await.unwrap();
+    });
+    let state = state().await;
+    let mut snapshot = channel_center::load(state.db.as_ref()).unwrap();
+    snapshot.channels[0].base_url = format!("http://{address}/v1");
+    channel_center::save(state.db.as_ref(), snapshot).unwrap();
+    gateway::start(&state, Some(2)).await.unwrap();
+    let config = gateway::claude_config(&state).await.unwrap();
+    let env = &config["env"];
+    let mut request = json!({"model":env["ANTHROPIC_MODEL"],"max_tokens":1024,"stream":true,
+        "messages":[{"role":"user","content":"Read hello.txt"}],
+        "tools":[{"name":"read_file","description":"Read a file","input_schema":{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}}]});
+    let client = reqwest::Client::builder().no_proxy().build().unwrap();
+    for continued in [false, true] {
+        let response = client
+            .post(format!(
+                "{}/v1/messages",
+                env["ANTHROPIC_BASE_URL"].as_str().unwrap()
+            ))
+            .bearer_auth(env["ANTHROPIC_AUTH_TOKEN"].as_str().unwrap())
+            .header("anthropic-version", "2023-06-01")
+            .json(&request)
+            .send()
+            .await
+            .unwrap();
+        assert!(response.status().is_success(), "{}", response.status());
+        let stream = response.text().await.unwrap();
+        assert!(stream.contains("event: message_start"), "{stream}");
+        assert!(stream.contains("event: message_stop"), "{stream}");
+        assert!(!stream.contains("synthetic-only"));
+        if continued {
+            assert!(stream.contains("Read the file successfully."), "{stream}");
+        } else {
+            assert!(
+                stream.contains("tool_use") && stream.contains("read_file"),
+                "{stream}"
+            );
+            request["messages"].as_array_mut().unwrap().extend([
+                json!({"role":"assistant","content":[{"type":"tool_use","id":"call_read","name":"read_file","input":{"path":"hello.txt"}}]}),
+                json!({"role":"user","content":[{"type":"tool_result","tool_use_id":"call_read","content":"Hello from the fixture"}]})]);
+        }
+    }
+    let requests = captured.lock().await;
+    assert_eq!(requests.len(), 2);
+    let tool = requests[1]["messages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|message| message["role"] == "tool")
+        .unwrap();
+    assert_eq!(tool["tool_call_id"], "call_read");
+    assert_eq!(tool["content"], "Hello from the fixture");
+    drop(requests);
+    state.proxy_service.stop().await.unwrap();
+    task.abort();
+}
+
+#[tokio::test]
+#[serial]
+async fn gateway_excludes_built_in_public_quota_and_native_logins_from_claude_models() {
+    use crate::services::{channel_gateway as gateway, lolicode_relay};
+    let _home = Home::new();
+    let state = state().await;
+    let mut snapshot = channel_center::load(state.db.as_ref()).unwrap();
+    let mut public = snapshot.channels[0].clone();
+    public.id = lolicode_relay::CHANNEL_ID.into();
+    public.base_url = lolicode_relay::BASE_URL.into();
+    public.auth_kind = "lolicode_account".into();
+    public.account_id = Some("fixture-account".into());
+    public.api_key.clear();
+    snapshot.default_model = Some(format!("{}/model", public.id));
+    snapshot.channels.push(public);
+    snapshot
+        .channels
+        .push(channel_center::native_subscription_channel("claude").unwrap());
+    snapshot.channels[0].models[0].context_limit = Some(1_000_000);
+    channel_center::save(state.db.as_ref(), snapshot).unwrap();
+    assert_eq!(
+        gateway::start(&state, Some(2)).await.unwrap().model_count,
+        1
+    );
+    let config = gateway::claude_config(&state).await.unwrap();
+    let selected = config["env"]["ANTHROPIC_MODEL"].as_str().unwrap();
+    assert!(selected.ends_with("[1M]"));
+    let response: Value = reqwest::Client::builder()
+        .no_proxy()
+        .build()
+        .unwrap()
+        .get(format!(
+            "{}/v1/models",
+            config["env"]["ANTHROPIC_BASE_URL"].as_str().unwrap()
+        ))
+        .bearer_auth(config["env"]["ANTHROPIC_AUTH_TOKEN"].as_str().unwrap())
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(response["data"].as_array().unwrap().len(), 1);
+    assert_eq!(response["data"][0]["id"], selected);
+    let mut snapshot = channel_center::load(state.db.as_ref()).unwrap();
+    snapshot.channels[0].enabled = false;
+    channel_center::save(state.db.as_ref(), snapshot).unwrap();
+    assert!(gateway::start(&state, Some(3)).await.is_err());
+    assert_eq!(gateway::status(&state).await.unwrap().revision, Some(2));
+    state.proxy_service.stop().await.unwrap();
+}

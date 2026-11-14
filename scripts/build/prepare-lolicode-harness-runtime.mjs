@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import { gzipSync } from "node:zlib";
 import {
   chmodSync,
   copyFileSync,
@@ -464,6 +465,22 @@ function readBundleManifest(directory = destination) {
   }
 }
 
+function writeInstallerFileInventory(stage, modules) {
+  const files = readdirSync(modules, { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) =>
+      "node_modules/" +
+      path.relative(modules, path.join(entry.parentPath, entry.name))
+        .split(path.sep)
+        .join("/"),
+    )
+    .sort();
+  writeFileSync(
+    path.join(stage, "installer-files.gz"),
+    gzipSync(files.join("\n") + "\n"),
+  );
+}
+
 function runtimeIdentity() {
   return {
     platform: process.platform,
@@ -626,6 +643,11 @@ export async function bundleHarness({
     if (!reuse)
       console.log(
         `Harness distribution: ${distribution.outputFiles}/${distribution.inputFiles} files; removed ${distribution.removedFiles} debug maps (${(distribution.removedBytes / 1048576).toFixed(1)} MiB).`,
+      );
+    if (process.platform === "win32")
+      writeInstallerFileInventory(
+        stage,
+        path.join(reuse ? directory : stage, "node_modules"),
       );
     const entry = path.join(
       reuse ? directory : stage,

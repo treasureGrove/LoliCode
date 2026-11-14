@@ -427,6 +427,15 @@ try {
         $runtimePackage.version -cne $plan.expectedHarnessVersion) {
         throw "Installed Harness version does not match $($plan.expectedHarnessVersion)"
     }
+    if (Test-Path -LiteralPath (Join-Path $harness 'installer-files.gz')) {
+        $resolveZod = "const r=require('node:module').createRequire(process.argv[1]); process.stdout.write(r.resolve('zod/package.json'));"
+        $agentManifest = Join-Path $harness 'node_modules\@deepseek-ai\dsh-agent\package.json'
+        $expectedZod = Join-Path $harness 'node_modules\zod\package.json'
+        $resolvedZod = & (Join-Path $harness 'node.exe') -e $resolveZod $agentManifest
+        if ($LASTEXITCODE -ne 0 -or $resolvedZod -ne $expectedZod) {
+            throw 'The installed Harness still resolves a stale private Zod dependency'
+        }
+    }
     Start-InstalledApp 'candidate' $candidate
     if ($legacy) {
         if ((Get-FileHash -LiteralPath $source.FullName).Hash -ne $sourceHash) {

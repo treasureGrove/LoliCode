@@ -1,6 +1,25 @@
 ; Keep process checks scoped to the executable in this install directory.
 ; Tauri's default CheckIfAppIsRunning macro matches by image name alone.
 !define LoliCodeProcessGuardPath "${__FILEDIR__}\lolicode-process-guard.ps1"
+!define LoliCodeHarnessUpgradePath "${__FILEDIR__}\lolicode-harness-upgrade.mjs"
+!define LoliCodeHarnessLegacyPath "${__FILEDIR__}\lolicode-harness-legacy.gz"
+
+!macro LOLICODE_RECONCILE_HARNESS
+  ${If} ${FileExists} "$LoliCodeResourceRoot\agent\harness-runtime\installer-files.gz"
+    InitPluginsDir
+    File "/oname=$PLUGINSDIR\lolicode-harness-upgrade.mjs" "${LoliCodeHarnessUpgradePath}"
+    File "/oname=$PLUGINSDIR\lolicode-harness-legacy.gz" "${LoliCodeHarnessLegacyPath}"
+    ; Do not let an inherited Node configuration change the migration script.
+    System::Call 'kernel32::SetEnvironmentVariableW(w "NODE_OPTIONS", p 0)'
+    System::Call 'kernel32::SetEnvironmentVariableW(w "NODE_PATH", p 0)'
+    nsExec::ExecToLog '"$LoliCodeResourceRoot\agent\harness-runtime\node.exe" "$PLUGINSDIR\lolicode-harness-upgrade.mjs" "$LoliCodeResourceRoot\agent\harness-runtime" "$PLUGINSDIR\lolicode-harness-legacy.gz"'
+    Pop $0
+    ${If} $0 != 0
+      SetErrorLevel 1
+      Abort "Unable to finish upgrading the bundled Harness runtime. Close LoliCode and retry the installation."
+    ${EndIf}
+  ${EndIf}
+!macroend
 
 !macro LoliCodePrepareProcessGuard
   InitPluginsDir

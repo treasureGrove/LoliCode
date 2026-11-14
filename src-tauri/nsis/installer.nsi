@@ -771,6 +771,10 @@ Section Install
     File /a "/oname={{this}}" "{{no-escape @key}}"
   {{/each}}
 
+  !ifmacrodef LOLICODE_RECONCILE_HARNESS
+    !insertmacro LOLICODE_RECONCILE_HARNESS
+  !endif
+
   ; Create file associations
   {{#each file_associations as |association| ~}}
     {{#each association.ext as |ext| ~}}

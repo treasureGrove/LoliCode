@@ -5469,7 +5469,10 @@ describe("AgentPage", () => {
     };
     render(<AgentPage />);
     await flush();
-    const goal = within(screen.getByRole("region", { name: "Agent 会话模式" }));
+    const modes = screen.getByRole("region", { name: "Agent 会话模式" });
+    const input = screen.getByLabelText("发送给 Agent 的消息");
+    expect(modes.nextElementSibling).toBe(input.closest(".wb-composer-area"));
+    const goal = within(modes);
     expect(goal.getByText("验证当前目标")).toBeVisible();
     expect(goal.getByRole("status")).toHaveTextContent("推进中 · 1/5 轮");
     expect(goal.queryByRole("button", { name: "设置目标" })).toBeNull();

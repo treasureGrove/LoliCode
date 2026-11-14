@@ -1,6 +1,6 @@
 // Run from an elevated Windows shell using Node 24:
 // node scripts/tests/lolicode-overwrite-upgrade-acceptance.mjs <published-baseline.exe> [<candidate-setup.exe> <source-snapshot.json> <verified-candidate-sha256>]
-// Known baselines: 1.0.6 (native 4.1.6, legacy migration) and 1.1.0 (Harness).
+// Known baselines: 1.0.6 (native 4.1.6, legacy migration), 1.1.0 and 1.1.1 (Harness).
 // A baseline-only run rehearses the released installer and real transcript creation.
 // Upgrade runs restart/resume, then reinstall the identical candidate and resume
 // again, all in the same disposable account/profile with fresh prompts/request IDs.
@@ -30,7 +30,7 @@ function parseAcceptanceArgs(args, platform) {
         !/^[a-f0-9]{64}$/i.test(expectedCandidateSha256 ?? "")))
   ) {
     throw new Error(
-      "Usage (Windows): node lolicode-overwrite-upgrade-acceptance.mjs <published-v1.0.6-or-v1.1.0.exe> [<candidate.exe> <source-snapshot.json> <independently-verified-64-hex-candidate-sha256>]",
+      "Usage (Windows): node lolicode-overwrite-upgrade-acceptance.mjs <published-v1.0.6-or-v1.1.0-or-v1.1.1.exe> [<candidate.exe> <source-snapshot.json> <independently-verified-64-hex-candidate-sha256>]",
     );
   }
   return { baseline, candidate, sourceSnapshotPath, expectedCandidateSha256 };
@@ -57,11 +57,20 @@ function publishedBaseline(sha256) {
       executableSha256:
         "022b611053dbd4bef4af12b68a2c51aa158cc8aaf1c3a193c4ced321dc97b89b",
     },
+    {
+      productVersion: "1.1.1",
+      buildVersion: "1.1.1",
+      engine: "harness",
+      installerSha256:
+        "1afc8fdfa91e54f7ab1e45a593b975fdbf31e1f5183391ac8558de329d9deb2f",
+      executableSha256:
+        "f9bc8dd2f7296bcbdf2838a7a039bc3b064d080e3aa2d882b1a1078a4a5ea89d",
+    },
   ];
   const baseline = baselines.find((item) => item.installerSha256 === sha256);
   assert.ok(
     baseline,
-    "The baseline must be the published v1.0.6 or v1.1.0 installer",
+    "The baseline must be a known published installer",
   );
   return baseline;
 }

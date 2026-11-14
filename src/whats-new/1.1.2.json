@@ -1,0 +1,33 @@
+{
+  "version": "1.1.2",
+  "items": [
+    {
+      "type": "fix",
+      "zh": "修复长任务执行超过一小时后中断的问题，并保留恢复失败时的具体错误",
+      "zh-TW": "修正長任務執行超過一小時後中斷的問題，並保留恢復失敗時的具體錯誤",
+      "en": "Keep long Agent runs connected and preserve actionable errors when resuming",
+      "ja": "長時間のエージェント処理の中断を修正し、再開時のエラー内容を表示"
+    },
+    {
+      "type": "new",
+      "zh": "在输入框用斜杠打开计划、目标和压缩命令，并在输入框上方显示会话状态",
+      "zh-TW": "在輸入框用斜線開啟計畫、目標和壓縮指令，並在輸入框上方顯示工作階段狀態",
+      "en": "Open Plan, Goal, and Compact commands from the composer and see session status above it",
+      "ja": "入力欄で計画・目標・圧縮のコマンドを開き、入力欄の上で状態を確認"
+    },
+    {
+      "type": "new",
+      "zh": "在渠道中心配置 Claude Code 等工具使用的本地 API 网关",
+      "zh-TW": "在渠道中心設定供 Claude Code 等工具使用的本機 API 閘道",
+      "en": "Configure the local API gateway for Claude Code and other tools in Channels",
+      "ja": "チャネル設定で Claude Code などが使うローカル API ゲートウェイを設定"
+    },
+    {
+      "type": "improve",
+      "zh": "更新 DeepSeek Harness，改善子任务恢复，减少安装包内重复依赖",
+      "zh-TW": "更新 DeepSeek Harness，改善子任務恢復，減少安裝套件內的重複依賴",
+      "en": "Update DeepSeek Harness, improve worker recovery, and trim duplicate dependencies",
+      "ja": "DeepSeek Harness を更新し、子タスクの再開を改善して重複依存を削減"
+    }
+  ]
+}

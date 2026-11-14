@@ -2087,8 +2087,10 @@
 }
 .wb-agent-modes {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  flex: 0 0 auto;
   gap: 8px;
-  max-width: 840px;
+  width: min(840px, calc(100% - 32px));
   margin: 0 auto 10px;
 }
 .wb-agent-goal-card,
@@ -2103,6 +2105,14 @@
 }
 .wb-agent-goal-card {
   flex-wrap: wrap;
+  justify-self: center;
+  width: fit-content;
+  max-width: min(100%, 680px);
+  gap: 6px 10px;
+  padding: 8px 12px;
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--wb-accent) 5%, var(--wb-panel));
+  box-shadow: 0 4px 16px rgb(0 0 0 / 8%);
 }
 .wb-agent-plan-summary {
   border-color: color-mix(in srgb, var(--wb-accent) 25%, var(--wb-border));
@@ -2112,6 +2122,13 @@
 .wb-agent-mode-icon {
   flex-shrink: 0;
   color: var(--wb-accent);
+}
+.wb-agent-goal-card .wb-agent-mode-icon {
+  width: 30px;
+  height: 30px;
+  padding: 6px;
+  border-radius: 50%;
+  background: var(--wb-accent-soft);
 }
 .wb-agent-plan-summary > div {
   display: grid;
@@ -2144,6 +2161,10 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 4px;
+}
+.wb-agent-mode-actions > button {
+  padding-inline: 8px;
+  font-size: 12px;
 }
 .wb-command-menu {
   margin: 8px 8px 0;
@@ -2210,6 +2231,10 @@
 .wb-hint-divider {
   padding-inline: 4px;
   opacity: 0.5;
+}
+.wb-scroll-latest-anchor {
+  position: relative;
+  flex: 0 0 auto;
 }
 .wb-scroll-latest {
   position: absolute;

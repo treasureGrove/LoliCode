@@ -5803,44 +5803,74 @@ export function AgentPage({
                 </div>
                 <AgentChanges key={sessionId} diffs={snapshot?.diffs || []} />
               </AgentFileActionsContext.Provider>
-              <div className="wb-composer-area">
-                {sessionId &&
-                  snapshot?.session.id === sessionId &&
-                  (snapshot.goal ||
-                    snapshot.plan?.active ||
-                    snapshot.plan?.pending !== undefined ||
-                    snapshot.questions.some(
+              {showScrollToBottom && (
+                <div className="wb-scroll-latest-anchor">
+                  <button
+                    type="button"
+                    className="wb-scroll-latest"
+                    onClick={() => {
+                      const scroll = scrollRef.current;
+                      if (!scroll) return;
+                      pinChatTail();
+                      const reduced = window.matchMedia(
+                        "(prefers-reduced-motion: reduce)",
+                      ).matches;
+                      smoothChatTarget.current = reduced
+                        ? null
+                        : Math.max(
+                            0,
+                            scroll.scrollHeight - scroll.clientHeight,
+                          );
+                      scroll.scrollTo({
+                        top: scroll.scrollHeight,
+                        behavior: reduced ? "instant" : "smooth",
+                      });
+                      if (reduced) followedScrollTop.current = scroll.scrollTop;
+                    }}
+                  >
+                    <ArrowDown aria-hidden="true" />
+                    回到最新
+                  </button>
+                </div>
+              )}
+              {sessionId &&
+                snapshot?.session.id === sessionId &&
+                (snapshot.goal ||
+                  snapshot.plan?.active ||
+                  snapshot.plan?.pending !== undefined ||
+                  snapshot.questions.some(
+                    (question) =>
+                      question.sessionId === sessionId && question.planReview,
+                  )) &&
+                !configurationReadOnly && (
+                  <AgentSessionModes
+                    key={sessionId}
+                    goal={snapshot.goal}
+                    plan={snapshot.plan}
+                    planReviewPending={snapshot.questions.some(
                       (question) =>
-                        question.sessionId === sessionId && question.planReview,
-                    )) &&
-                  !configurationReadOnly && (
-                    <AgentSessionModes
-                      key={sessionId}
-                      goal={snapshot.goal}
-                      plan={snapshot.plan}
-                      planReviewPending={snapshot.questions.some(
-                        (question) =>
-                          question.sessionId === sessionId &&
-                          Boolean(question.planReview),
-                      )}
-                      disabled={Boolean(busy) || stoppingHere || uncertainHere}
-                      onEditGoal={() => {
-                        if (!key) return;
-                        if (!draft.trimStart().startsWith("/goal "))
-                          writeDraft(key, "/goal edit " + draft);
-                        composerInputRef.current?.focus();
-                      }}
-                      onCommand={(command) =>
-                        refreshAfter(() =>
-                          agentApi.sendMessage(
-                            sessionId,
-                            command,
-                            `mode_${crypto.randomUUID().replace(/-/g, "")}`,
-                          ),
-                        )
-                      }
-                    />
-                  )}
+                        question.sessionId === sessionId &&
+                        Boolean(question.planReview),
+                    )}
+                    disabled={Boolean(busy) || stoppingHere || uncertainHere}
+                    onEditGoal={() => {
+                      if (!key) return;
+                      if (!draft.trimStart().startsWith("/goal "))
+                        writeDraft(key, "/goal edit " + draft);
+                      composerInputRef.current?.focus();
+                    }}
+                    onCommand={(command) =>
+                      refreshAfter(() =>
+                        agentApi.sendMessage(
+                          sessionId,
+                          command,
+                          `mode_${crypto.randomUUID().replace(/-/g, "")}`,
+                        ),
+                      )
+                    }
+                  />
+                )}
+              <div className="wb-composer-area">
                 {snapshot &&
                   snapshot.session.id === sessionId &&
                   !readOnlySession &&
@@ -5896,34 +5926,6 @@ export function AgentPage({
                   onRecall={(id) => void manageQueuedMessage(id, "recall")}
                   onRemove={(id) => void manageQueuedMessage(id, "remove")}
                 />
-                {showScrollToBottom && (
-                  <button
-                    type="button"
-                    className="wb-scroll-latest"
-                    onClick={() => {
-                      const scroll = scrollRef.current;
-                      if (!scroll) return;
-                      pinChatTail();
-                      const reduced = window.matchMedia(
-                        "(prefers-reduced-motion: reduce)",
-                      ).matches;
-                      smoothChatTarget.current = reduced
-                        ? null
-                        : Math.max(
-                            0,
-                            scroll.scrollHeight - scroll.clientHeight,
-                          );
-                      scroll.scrollTo({
-                        top: scroll.scrollHeight,
-                        behavior: reduced ? "instant" : "smooth",
-                      });
-                      if (reduced) followedScrollTop.current = scroll.scrollTop;
-                    }}
-                  >
-                    <ArrowDown aria-hidden="true" />
-                    回到最新
-                  </button>
-                )}
                 <form
                   ref={composerFormRef}
                   className="wb-composer"
