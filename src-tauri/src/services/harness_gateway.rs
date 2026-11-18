@@ -1,7 +1,7 @@
 //! A single-route lease owned by the Harness child's transport lifetime. The
 //! existing channel gateway keeps upstream credentials and translates protocols.
 use super::{agent_host, channel_center};
-use crate::store::AppState;
+use crate::{proxy::request_attribution, store::AppState};
 use axum::{
     body::Body,
     extract::{DefaultBodyLimit, State},
@@ -102,11 +102,18 @@ impl HarnessGateway {
             .no_proxy()
             .redirect(reqwest::redirect::Policy::none())
             .connect_timeout(Duration::from_secs(5))
-            .default_headers(HeaderMap::from_iter([(
-                header::HeaderName::from_static("x-lolicode-session-id"),
-                header::HeaderValue::from_str(&format!("lc:{session_uuid}"))
-                    .map_err(|_| "无效的 LoliCode 会话编号")?,
-            )]))
+            .user_agent(request_attribution::USER_AGENT)
+            .default_headers(HeaderMap::from_iter([
+                (
+                    header::HeaderName::from_static(request_attribution::CLIENT_HEADER),
+                    header::HeaderValue::from_static(request_attribution::CLIENT_NAME),
+                ),
+                (
+                    header::HeaderName::from_static("x-lolicode-session-id"),
+                    header::HeaderValue::from_str(&format!("lc:{session_uuid}"))
+                        .map_err(|_| "无效的 LoliCode 会话编号")?,
+                ),
+            ]))
             .build()
             .map_err(|_| "无法创建 Harness 渠道客户端")?;
         let profile_patch = profile_patch(&base_url, &model.id, selected, model);
