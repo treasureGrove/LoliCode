@@ -583,9 +583,9 @@ fn parse_semver(raw: &str) -> Option<ParsedSemver> {
     })
 }
 
-fn parse_partial_tuple(
-    raw: &str,
-) -> Option<(Option<u64>, Option<u64>, Option<u64>, Vec<PreIdent>)> {
+type PartialSemver = (Option<u64>, Option<u64>, Option<u64>, Vec<PreIdent>);
+
+fn parse_partial_tuple(raw: &str) -> Option<PartialSemver> {
     let s = raw.trim().trim_start_matches(['v', '=']);
     if s.is_empty() || s == "*" || s.eq_ignore_ascii_case("x") {
         return Some((None, None, None, Vec::new()));
@@ -1291,10 +1291,8 @@ fn copy_or_hardlink_dir(src: &Path, dst: &Path, depth: usize) -> Result<(), Stri
         let target_path = dst.join(entry.file_name());
         if file_type.is_dir() {
             copy_or_hardlink_dir(&entry.path(), &target_path, depth + 1)?;
-        } else if file_type.is_file() {
-            if fs::hard_link(entry.path(), &target_path).is_err() {
-                fs::copy(entry.path(), &target_path).map_err(|_| "无法同步插件文件到会话环境")?;
-            }
+        } else if file_type.is_file() && fs::hard_link(entry.path(), &target_path).is_err() {
+            fs::copy(entry.path(), &target_path).map_err(|_| "无法同步插件文件到会话环境")?;
         }
     }
     Ok(())
@@ -1516,7 +1514,7 @@ pub async fn query(query: MarketplaceQuery) -> Result<MarketplacePage, String> {
         });
     }
 
-    let sort_kind = query.sort.as_deref().unwrap_or_else(|| {
+    let sort_kind = query.sort.as_deref().unwrap_or({
         if query_terms.is_empty() {
             "index"
         } else {
@@ -2214,21 +2212,20 @@ fn unpack_npm_tgz(tgz_bytes: &[u8], destination: &Path) -> Result<(), String> {
     Ok(())
 }
 
+type BundleManifest = (
+    String,
+    String,
+    bool,
+    bool,
+    Vec<String>,
+    Option<Value>,
+    Option<Value>,
+);
+
 fn inspect_bundle_manifest(
     pkg_dir: &Path,
     expected_name: Option<&str>,
-) -> Result<
-    (
-        String,
-        String,
-        bool,
-        bool,
-        Vec<String>,
-        Option<Value>,
-        Option<Value>,
-    ),
-    String,
-> {
+) -> Result<BundleManifest, String> {
     let manifest_path = pkg_dir.join("package.json");
     let bytes = fs::read(&manifest_path).map_err(|_| "插件目录缺少有效的 package.json")?;
     let manifest: Value =
@@ -2252,10 +2249,8 @@ fn inspect_bundle_manifest(
     let patch_val = &manifest["dsh"]["bundle"]["patch"];
     let mut patch_files = Vec::new();
     match patch_val {
-        Value::String(single) => {
-            if sanitize_bundle_patch_path(pkg_dir, single).is_some() {
-                patch_files.push(single.clone());
-            }
+        Value::String(single) if sanitize_bundle_patch_path(pkg_dir, single).is_some() => {
+            patch_files.push(single.clone());
         }
         Value::Array(list) => {
             for item in list {
@@ -2302,16 +2297,24 @@ fn sanitize_bundle_patch_path(pkg_dir: &Path, relative: &str) -> Option<PathBuf>
     full.is_file().then_some(full)
 }
 
+struct InstallRuntime<'a> {
+    version: &'a str,
+    modules_dir: Option<&'a Path>,
+}
+
 async fn install_npm_package_tree(
     modules_dir: &Path,
     name: &str,
     version_or_range: Option<&str>,
     preferred_registry: Option<&str>,
-    runtime_version: &str,
-    runtime_modules_dir: Option<&Path>,
+    runtime: InstallRuntime<'_>,
     accept_incompatible: bool,
     exemptions: &mut BTreeMap<String, Vec<String>>,
 ) -> Result<(String, Value), String> {
+    let InstallRuntime {
+        version: runtime_version,
+        modules_dir: runtime_modules_dir,
+    } = runtime;
     let mut visited: BTreeSet<String> = BTreeSet::new();
     let mut queue: VecDeque<(String, Option<String>, Option<String>, bool)> = VecDeque::new();
     queue.push_back((
@@ -2561,8 +2564,10 @@ pub async fn install_plugin(
             &pkg_name,
             target_ver.as_deref(),
             preferred_reg.as_deref(),
-            &runtime_version,
-            runtime_modules.as_deref(),
+            InstallRuntime {
+                version: &runtime_version,
+                modules_dir: runtime_modules.as_deref(),
+            },
             req.accept_incompatible,
             &mut state.exemptions,
         )
