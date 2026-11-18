@@ -8,6 +8,14 @@
     "copyLink": "リンクをコピー",
     "copyPath": "パスをコピー"
   },
+  "agentMarketplace": {
+    "name": "プラグイン市場",
+    "open": "プラグイン市場を開く"
+  },
+  "agentAutomation": {
+    "name": "自動化",
+    "open": "自動化を開く"
+  },
   "agentSecretary": {
     "companion": {
       "unknown": "作業状態を確認できていません",
@@ -5215,8 +5223,8 @@
     "add": "追加",
     "retained": "アプリはここから開けます。無効にしても物語、キャラクター、プロジェクトの記録は保持されます。",
     "tavern": {
-      "title": "酒場",
-      "description": "キャラクターカードとワールドブックを読み込み、共通モデルで会話できます。"
+      "title": "DeepSeek チャット",
+      "description": "オープンソース chat-demo ベースの軽量チャット。メッセージ分岐、深い思考、Web検索、音声入力・読み上げ、KaTeX/Mermaid、ZIP履歴バックアップに対応。"
     },
     "unreal": {
       "title": "UEBox · Unreal ワークスペース",

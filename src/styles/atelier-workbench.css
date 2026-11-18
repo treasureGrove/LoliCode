@@ -467,7 +467,6 @@
 }
 .lolicode-workbench .wb-chat {
   padding: 30px clamp(18px, 3vw, 42px) 24px;
-  scrollbar-gutter: stable both-edges;
 }
 .lolicode-workbench .wb-chat-content:not(:empty) {
   padding: 0;

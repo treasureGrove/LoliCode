@@ -946,6 +946,40 @@ describe("quiet companion activities", () => {
     fireEvent.loadedData(idle);
   }
 
+  it("takes a short step during the curious clip without replacing the saved position", () => {
+    vi.spyOn(Math, "random").mockReturnValue(0.999999);
+    vi.spyOn(document, "hidden", "get").mockReturnValue(false);
+    const { container, root } = mount();
+    const anchor = Number.parseFloat(root.style.left);
+    const top = root.style.top;
+    const saved = readCompanionState().position;
+    settleCurrentClip(container);
+    act(() => vi.advanceTimersByTime(60_000));
+    expect(root).toHaveAttribute("data-roaming", "true");
+    expect(root.style.left).toBe(`${anchor + 40}px`);
+    expect(root.style.top).toBe(top);
+    expect(readCompanionState().position).toEqual(saved);
+    act(() => vi.advanceTimersByTime(650));
+    expect(root).not.toHaveAttribute("data-roaming");
+  });
+
+  it("leaves the companion in place while editing", () => {
+    vi.spyOn(Math, "random").mockReturnValue(0.999999);
+    vi.spyOn(document, "hidden", "get").mockReturnValue(false);
+    const { root } = mount();
+    const editor = document.createElement("textarea");
+    document.body.append(editor);
+    try {
+      editor.focus();
+      const left = root.style.left;
+      act(() => vi.advanceTimersByTime(60_000));
+      expect(root.style.left).toBe(left);
+      expect(root).not.toHaveAttribute("data-roaming");
+    } finally {
+      editor.remove();
+    }
+  });
+
   it("waits at least 35 seconds and alternates the two quiet activities without changing care state", () => {
     vi.spyOn(Math, "random").mockReturnValue(0);
     vi.spyOn(document, "hidden", "get").mockReturnValue(false);

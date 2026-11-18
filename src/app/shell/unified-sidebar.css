@@ -1,22 +1,35 @@
 .lolicode-unified-sidebar {
-  --sidebar-surface: var(--bg-sidebar);
-  --sidebar-foreground: var(--text-1);
-  --sidebar-line: hsl(var(--border));
-  --sidebar-accent: var(--action-text);
-  --sidebar-muted: var(--text-3);
-  --sidebar-selected: var(--action-soft);
-  --sidebar-hover: var(--bg-subtle);
-  --wb-sidebar: var(--sidebar-surface);
-  --wb-input: var(--bg-card);
+  --sidebar-surface: linear-gradient(
+    180deg,
+    #741d35 0%,
+    #61152b 54%,
+    #4c0f21 100%
+  );
+  --sidebar-foreground: #fff6f2;
+  --sidebar-line: rgb(255 224 226 / 16%);
+  --sidebar-accent: #fff8f4;
+  --sidebar-muted: rgb(252 222 230 / 70%);
+  --sidebar-selected: rgb(255 246 242 / 20%);
+  --sidebar-hover: rgb(255 246 242 / 10%);
+  --sidebar-pill-bg: #fff9f3;
+  --sidebar-pill-fg: #6b1931;
+  --sidebar-gold: #e6c387;
+  --text-1: #fff6f2;
+  --text-2: rgb(255 242 238 / 88%);
+  --text-3: rgb(252 222 230 / 70%);
+  --bg-subtle: rgb(255 246 242 / 10%);
+  --bg-selected: rgb(255 246 242 / 20%);
+  --wb-sidebar: #61152b;
+  --wb-input: rgb(32 5 14 / 34%);
   --wb-text: var(--sidebar-foreground);
   --wb-muted: var(--sidebar-muted);
   --wb-border: var(--sidebar-line);
   --wb-hover: var(--sidebar-hover);
   --wb-selected: var(--sidebar-selected);
-  --wb-selected-text: var(--sidebar-accent);
-  --wb-selected-muted: var(--sidebar-muted);
-  --wb-selected-ring: var(--sidebar-accent);
-  --wb-selected-hover: var(--sidebar-hover);
+  --wb-selected-text: #fff9f4;
+  --wb-selected-muted: rgb(252 222 230 / 78%);
+  --wb-selected-ring: var(--sidebar-gold);
+  --wb-selected-hover: rgb(255 246 242 / 24%);
   --wb-section-text: var(--sidebar-muted);
   --wb-accent: var(--sidebar-accent);
   --wb-accent-soft: var(--sidebar-selected);
@@ -29,10 +42,25 @@
   height: 100%;
   min-height: 0;
   padding: 0 16px;
-  border-inline-end: 1px solid var(--sidebar-line);
+  border-inline-end: 1px solid rgb(255 224 226 / 14%);
   background: var(--sidebar-surface);
-  color: var(--text-1);
+  color: var(--sidebar-foreground);
   font-size: var(--workspace-label);
+}
+
+:root.dark .lolicode-unified-sidebar {
+  --sidebar-surface: linear-gradient(
+    180deg,
+    #431122 0%,
+    #310b19 56%,
+    #220712 100%
+  );
+  --sidebar-line: rgb(255 232 238 / 11%);
+  --sidebar-pill-bg: linear-gradient(180deg, #a82d52 0%, #861f3f 100%);
+  --sidebar-pill-fg: #fff8fa;
+  --sidebar-selected: rgb(255 240 245 / 13%);
+  --sidebar-hover: rgb(255 240 245 / 7%);
+  --wb-sidebar: #310b19;
 }
 
 .lolicode-unified-sidebar[data-embedded="true"] {
@@ -145,6 +173,38 @@
   height: 28px;
 }
 
+.lolicode-unified-sidebar[data-sidebar-compact="true"]
+  .wb-nav-marketplace
+  > .wb-nav-marketplace-label,
+.lolicode-unified-sidebar[data-sidebar-compact="true"]
+  .wb-nav-automation
+  > .wb-nav-automation-label {
+  display: none;
+}
+
+.lolicode-unified-sidebar .wb-nav-button[data-nav-active="true"] {
+  color: var(--sidebar-accent);
+  background: var(--sidebar-selected);
+  box-shadow: inset 0 0 0 1px rgb(230 195 135 / 42%);
+}
+
+.lolicode-unified-sidebar
+  .wb-nav-marketplace[aria-pressed="true"]
+  .wb-nav-marketplace-icon,
+.lolicode-unified-sidebar
+  .wb-nav-automation[aria-pressed="true"]
+  .wb-nav-automation-icon {
+  color: var(--sidebar-gold, #e6c387);
+  opacity: 1;
+}
+
+.lolicode-sidebar-shortcuts--top {
+  margin-top: 4px;
+  padding: 0;
+  border-top: 0;
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .lolicode-compact-sessions {
   width: 38px;
   min-height: 38px;
@@ -155,7 +215,9 @@
   height: min(520px, var(--radix-popover-content-available-height));
   padding: 8px;
   overflow: hidden;
-  background: var(--bg-sidebar);
+  background: #5a1428;
+  color: #fff6f2;
+  border-color: rgb(255 224 226 / 18%);
 }
 
 :root .lolicode-workbench.lolicode-compact-sessions-popover > .wb-sidebar {
@@ -256,14 +318,16 @@
 }
 
 .lolicode-sidebar-segments {
+  position: relative;
+  isolation: isolate;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   flex-shrink: 0;
   gap: 3px;
   padding: 4px;
-  border: 0;
+  border: 1px solid rgb(255 224 220 / 14%);
   border-radius: 15px;
-  background: color-mix(in srgb, var(--action-bg) 13%, var(--sidebar-surface));
+  background: rgb(30 4 12 / 34%);
 }
 
 .lolicode-unified-sidebar .lolicode-sidebar-nav-item {
@@ -295,6 +359,8 @@
 }
 
 .lolicode-sidebar-nav-label {
+  position: relative;
+  z-index: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -325,6 +391,8 @@
 }
 
 .lolicode-sidebar-nav-icon {
+  position: relative;
+  z-index: 1;
   flex: 0 0 20px;
   width: 20px;
   height: 20px;
@@ -335,22 +403,77 @@
 .lolicode-unified-sidebar
   .lolicode-sidebar-segments
   .lolicode-sidebar-nav-item {
+  position: relative;
+  z-index: 1;
   justify-content: center;
   min-height: 35px;
   gap: 8px;
   padding: 6px;
   border-radius: 11px;
-  transition: none;
+  transition:
+    color 180ms cubic-bezier(0.32, 0.72, 0, 1),
+    transform 120ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.lolicode-unified-sidebar
+  .lolicode-sidebar-segments
+  .lolicode-sidebar-nav-item:not([aria-current="page"]) {
+  color: rgb(255 241 236 / 86%);
+}
+
+.lolicode-unified-sidebar
+  .lolicode-sidebar-segments
+  .lolicode-sidebar-nav-item:not([aria-current="page"]):hover {
+  color: #fffaf5;
+  background: rgb(255 246 242 / 7%);
 }
 
 .lolicode-sidebar-segments .lolicode-sidebar-nav-item:active:not(:disabled) {
-  transform: none;
+  transform: scale(0.97);
 }
 
-.lolicode-sidebar-segments .lolicode-sidebar-nav-item[aria-current="page"] {
-  color: var(--action-fg);
-  background: var(--action-bg);
-  box-shadow: 0 2px 5px rgb(98 50 69 / 13%);
+.lolicode-unified-sidebar
+  .lolicode-sidebar-segments
+  .lolicode-sidebar-nav-item[aria-current="page"],
+.lolicode-unified-sidebar
+  .lolicode-sidebar-segments
+  .lolicode-sidebar-nav-item[aria-current="page"]:hover {
+  color: #6b1931;
+  background: transparent;
+  font-weight: 600;
+}
+
+.lolicode-unified-sidebar
+  .lolicode-sidebar-segments
+  .lolicode-sidebar-segments-thumb {
+  z-index: 0;
+  border-radius: 11px;
+  background: #fff9f3;
+  box-shadow: 0 2px 8px rgb(28 4 12 / 24%);
+}
+
+:root.dark
+  .lolicode-unified-sidebar
+  .lolicode-sidebar-segments
+  .lolicode-sidebar-nav-item[aria-current="page"],
+:root.dark
+  .lolicode-unified-sidebar
+  .lolicode-sidebar-segments
+  .lolicode-sidebar-nav-item[aria-current="page"]:hover {
+  color: #fff8fa;
+  background: transparent;
+}
+
+:root.dark
+  .lolicode-unified-sidebar
+  .lolicode-sidebar-segments
+  .lolicode-sidebar-segments-thumb {
+  z-index: 0;
+  border-radius: 11px;
+  background: rgb(255 242 246 / 14%);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 16%),
+    0 2px 8px rgb(0 0 0 / 32%);
 }
 
 .lolicode-sidebar-status,
@@ -666,24 +789,25 @@
 
 .lolicode-sidebar-wordmark > span {
   font-weight: 350;
+  color: var(--sidebar-gold, #e6c387);
 }
 .lolicode-sidebar-wordmark > i {
   width: 5px;
   height: 5px;
   margin-left: 3px;
   border-radius: 50%;
-  background: currentColor;
+  background: var(--sidebar-gold, #e6c387);
 }
 .lolicode-sidebar-segments .lolicode-sidebar-nav-icon {
   color: inherit;
 }
 .lolicode-sidebar-segments
   .lolicode-sidebar-nav-item:not([aria-current="page"]) {
-  color: var(--sidebar-accent);
+  color: rgb(255 241 236 / 84%);
 }
 .lolicode-unified-sidebar .lolicode-sidebar-new-chat {
   font-size: var(--workspace-label);
-  font-weight: 500;
+  font-weight: 600;
 }
 .lolicode-sidebar-new-chat > svg {
   width: 20px;
@@ -691,16 +815,17 @@
   stroke-width: 1.8;
 }
 
-/* Keep workspace slots on the same surface despite legacy workbench rules. */
+/* Main-site cream pill primary CTA inside the cherry burgundy sidebar. */
 :root
   .lolicode-workbench.wb-unified
   .wb-sidebar
   .lolicode-unified-sidebar
   .wb-create-task {
   overflow: hidden;
-  border-radius: 8px;
-  color: var(--sidebar-accent);
-  background: transparent;
+  border-radius: 12px;
+  color: var(--sidebar-pill-fg, #6b1931);
+  background: var(--sidebar-pill-bg, #fff9f3);
+  box-shadow: 0 4px 12px rgb(34 6 14 / 22%);
 }
 
 :root
@@ -720,7 +845,17 @@
   .lolicode-unified-sidebar
   .wb-create-task
   > button:hover:not(:disabled) {
-  background: var(--sidebar-selected);
+  background: #f8ebef;
+  box-shadow: none;
+}
+
+:root.dark
+  .lolicode-workbench.wb-unified
+  .wb-sidebar
+  .lolicode-unified-sidebar
+  .wb-create-task
+  > button:hover:not(:disabled) {
+  background: #9e2a4d;
   box-shadow: none;
 }
 
@@ -730,7 +865,7 @@
   .lolicode-unified-sidebar
   .wb-create-task
   > button:focus-visible {
-  outline-color: var(--sidebar-accent);
+  outline-color: var(--sidebar-gold, #e6c387);
   outline-offset: -3px;
 }
 
@@ -743,9 +878,9 @@
   margin: 0 0 17px;
   padding: 8px 10px;
   border-color: var(--sidebar-line);
-  border-radius: 7px;
+  border-radius: 10px;
   color: var(--sidebar-muted);
-  background: color-mix(in srgb, var(--bg-card) 65%, transparent);
+  background: rgb(30 4 12 / 34%);
 }
 
 :root
@@ -753,8 +888,8 @@
   .wb-sidebar
   .lolicode-unified-sidebar
   .wb-search:focus-within {
-  border-color: var(--sidebar-accent);
-  box-shadow: 0 0 0 2px var(--sidebar-selected);
+  border-color: var(--sidebar-gold, #e6c387);
+  box-shadow: 0 0 0 2px rgb(230 195 135 / 24%);
 }
 
 :root
@@ -847,9 +982,10 @@
   .wb-session-row {
   min-height: 36px;
   padding: 8px 28px 8px 10px;
+  border-radius: 9px;
   font-size: var(--workspace-label);
   font-weight: 400;
-  color: var(--text-2);
+  color: rgb(255 242 238 / 84%);
   transition:
     color var(--motion-fast, 160ms) var(--motion-ease, ease),
     background-color var(--motion-fast, 160ms) var(--motion-ease, ease),
@@ -863,7 +999,7 @@
   .wb-session-row[aria-pressed="true"] {
   color: var(--sidebar-accent);
   background: var(--sidebar-selected);
-  box-shadow: none;
+  box-shadow: inset 0 0 0 1px rgb(255 232 224 / 24%);
 }
 
 :root
@@ -873,7 +1009,118 @@
   .wb-session-row[aria-pressed="true"]
   ~ .wb-session-menu {
   color: var(--sidebar-accent);
+  background: rgb(255 246 242 / 20%);
+}
+
+/* Tavern character list & primary add button inside cherry wineberry sidebar */
+.lolicode-tavern-friend {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 46px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--sidebar-foreground);
+  text-align: left;
+  font-size: var(--workspace-label);
+  transition:
+    background-color 150ms ease,
+    color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.lolicode-tavern-friend:hover {
+  background: var(--sidebar-hover);
+}
+
+.lolicode-tavern-friend[aria-current="page"] {
   background: var(--sidebar-selected);
+  color: #fff9f4;
+  font-weight: 600;
+  box-shadow: inset 0 0 0 1px rgb(230 195 135 / 42%);
+}
+
+.lolicode-tavern-friend-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  overflow: hidden;
+  border-radius: 50%;
+  border: 1px solid rgb(255 232 224 / 24%);
+  background: rgb(255 246 242 / 14%);
+  color: #fff9f4;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.lolicode-tavern-friend[aria-current="page"] .lolicode-tavern-friend-avatar {
+  border-color: var(--sidebar-gold, #e6c387);
+  box-shadow: 0 0 0 2px rgb(230 195 135 / 22%);
+}
+
+.lolicode-tavern-friend-sub {
+  display: block;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--sidebar-muted);
+}
+
+.lolicode-tavern-add-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 40px;
+  margin-top: 8px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--sidebar-pill-bg, #fff9f3);
+  color: var(--sidebar-pill-fg, #6b1931);
+  font-size: var(--workspace-label);
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgb(34 6 14 / 22%);
+  transition:
+    background-color 180ms cubic-bezier(0.32, 0.72, 0, 1),
+    box-shadow 180ms cubic-bezier(0.32, 0.72, 0, 1),
+    transform 120ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.lolicode-tavern-add-btn:hover {
+  background: #f8ebef;
+}
+
+.lolicode-tavern-add-btn:active:not(:disabled) {
+  transform: scale(0.975);
+}
+
+:root.dark .lolicode-tavern-add-btn {
+  border: 1px solid rgb(255 212 225 / 22%);
+  box-shadow:
+    inset 0 1px 0 rgb(255 240 245 / 22%),
+    0 4px 14px rgb(10 2 6 / 40%);
+}
+
+:root.dark .lolicode-tavern-add-btn:hover {
+  background: linear-gradient(180deg, #b8335b 0%, #962447 100%);
+}
+
+.lolicode-unified-sidebar[data-sidebar-compact="true"] .lolicode-tavern-friend {
+  justify-content: center;
+  padding-inline: 6px;
+}
+
+.lolicode-unified-sidebar[data-sidebar-compact="true"]
+  .lolicode-tavern-add-btn {
+  padding-inline: 0;
+  border-radius: 12px;
 }
 
 :root
@@ -947,4 +1194,34 @@
     color: HighlightText;
     background: Highlight;
   }
+}
+
+/* Sleek macOS-style overlay scrollbars tuned for the cherry burgundy sidebar */
+.lolicode-unified-sidebar ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.lolicode-unified-sidebar ::-webkit-scrollbar-track,
+.lolicode-unified-sidebar ::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.lolicode-unified-sidebar ::-webkit-scrollbar-thumb {
+  border: 1.5px solid transparent;
+  border-radius: 9999px;
+  background-clip: padding-box;
+  background-color: rgb(255 228 235 / 16%);
+}
+
+.lolicode-unified-sidebar:hover ::-webkit-scrollbar-thumb {
+  background-color: rgb(255 228 235 / 26%);
+}
+
+.lolicode-unified-sidebar ::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(255 228 235 / 48%);
+}
+
+.lolicode-unified-sidebar ::-webkit-scrollbar-thumb:active {
+  background-color: rgb(255 228 235 / 62%);
 }

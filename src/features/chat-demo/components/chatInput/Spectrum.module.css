@@ -1,0 +1,28 @@
+/*
+ * 覆盖输入区，左右边距与正文一致。
+ * 纵向居中于「输入框上沿到工具栏按钮」之间：工具栏上方还有 4px 外边距 + 12px 内边距。
+ */
+.spectrum {
+  position: absolute;
+  top: calc(50% + 8px);
+  translate: 0 -50%;
+  left: 16px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  height: 36px;
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.bar {
+  flex-shrink: 0;
+  width: 2px;
+  height: 5px;
+  border-radius: 1px;
+  background-color: var(--dsw-alias-button-info-hover, #679efe);
+  transform-origin: center;
+  will-change: transform;
+}

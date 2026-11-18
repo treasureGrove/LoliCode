@@ -247,7 +247,7 @@ describe("LoliCode desktop entry", () => {
     expect(client.isFetching({ queryKey: usageKey })).toBe(0);
   });
 
-  it("opens automation and plugins without creating a second navigation, and returns to chat", async () => {
+  it("opens automation and skills without creating a second navigation, and returns to chat", async () => {
     render(
       <QueryClientProvider
         client={
@@ -258,28 +258,20 @@ describe("LoliCode desktop entry", () => {
       </QueryClientProvider>,
     );
     await screen.findByTestId("agent-workspace");
-    fireEvent.click(screen.getByRole("button", { name: "自动化" }));
+    expect(
+      screen.queryByRole("button", { name: "插件" }),
+    ).not.toBeInTheDocument();
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: /^头像与设置$/ }));
+    await user.click(screen.getByRole("menuitem", { name: "工作流与自动化" }));
     expect(screen.getByTestId("active-agent-tool")).toHaveTextContent(
       "workflows",
     );
-    expect(screen.getByTestId("active-agent-tool")).toHaveAttribute(
-      "data-initial-tab",
-      "automation",
-    );
-    expect(screen.getByRole("button", { name: "自动化" })).toHaveAttribute(
-      "aria-current",
-      "page",
-    );
-    fireEvent.click(screen.getByRole("button", { name: "插件" }));
+
+    await user.click(screen.getByRole("button", { name: /^头像与设置$/ }));
+    await user.click(screen.getByRole("menuitem", { name: "技能" }));
     expect(screen.getByTestId("active-agent-tool")).toHaveTextContent("skills");
-    expect(screen.getByTestId("active-agent-tool")).toHaveAttribute(
-      "data-initial-tab",
-      "plugins",
-    );
-    expect(screen.getByRole("button", { name: "插件" })).toHaveAttribute(
-      "aria-current",
-      "page",
-    );
     expect(screen.getAllByRole("navigation")).toHaveLength(1);
     fireEvent.click(screen.getByRole("button", { name: "编程工作台" }));
     expect(screen.queryByTestId("active-agent-tool")).not.toBeInTheDocument();

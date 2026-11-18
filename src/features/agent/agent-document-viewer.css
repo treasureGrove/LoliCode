@@ -346,8 +346,6 @@
   padding: 24px 32px 40px;
   overflow: auto;
   overscroll-behavior: contain;
-  scrollbar-width: thin;
-  scrollbar-color: #bbc2cc transparent;
   background: var(--document-canvas);
 }
 .agent-document-word-layout {
@@ -449,7 +447,6 @@
 .agent-document-grid-scroll {
   max-height: 650px;
   overflow: auto;
-  scrollbar-width: thin;
 }
 .agent-document-grid-scroll table {
   min-width: 100%;
@@ -493,7 +490,6 @@
   overflow: auto;
   border-right: 1px solid #d5dbe3;
   background: #f4f5f7;
-  scrollbar-width: thin;
 }
 .agent-document-viewer .agent-document-slide-nav > button {
   display: flex;

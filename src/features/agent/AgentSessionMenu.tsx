@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import {
   Archive,
   ArchiveRestore,
@@ -27,7 +27,7 @@ import { agentErrorMessage } from "@/hooks/useAgentSnapshot";
 import type { AgentSession } from "@/types/agent";
 import { useAgentSessionMarkdownCopy } from "./useAgentSessionMarkdownCopy";
 
-export function AgentSessionMenu({
+export const AgentSessionMenu = memo(function AgentSessionMenu({
   session,
   disabled,
   active,
@@ -138,69 +138,73 @@ export function AgentSessionMenu({
           {error}
         </p>
       )}
-      <Dialog
-        open={Boolean(dialog)}
-        onOpenChange={(open) => {
-          if (!open && !busy) setDialog(null);
-        }}
-      >
-        <DialogContent
-          className="wb-extensions p-5"
-          onEscapeKeyDown={(event) => {
-            if (busy) event.preventDefault();
+      {dialog && (
+        <Dialog
+          open
+          onOpenChange={(open) => {
+            if (!open && !busy) setDialog(null);
           }}
         >
-          <DialogHeader>
-            <DialogTitle>
-              {dialog === "rename" ? "重命名会话" : "删除会话"}
-            </DialogTitle>
-            <DialogDescription>
-              {dialog === "rename"
-                ? "给这次任务一个容易找到的名字。"
-                : `删除“${session.title}”的会话记录。项目文件会保留。`}
-            </DialogDescription>
-          </DialogHeader>
-          {dialog === "rename" && (
-            <input
-              aria-label="会话名称"
-              className="rounded border border-border bg-surface p-2"
-              value={title}
-              disabled={busy}
-              onChange={(event) => setTitle(event.target.value)}
-              autoFocus
-            />
-          )}
-          {error && (
-            <p role="alert" className="text-caption text-danger-text">
-              {error}
-            </p>
-          )}
-          <div className="mt-4 flex justify-end gap-2">
-            <button
-              className="wb-mode-button"
-              disabled={busy}
-              onClick={() => setDialog(null)}
-            >
-              取消
-            </button>
-            <button
-              className="wb-primary"
-              disabled={busy || (dialog === "rename" && !title.trim())}
-              onClick={() =>
-                void run(
-                  dialog === "rename" ? () => onRename(title.trim()) : onDelete,
-                )
-              }
-            >
-              {busy
-                ? "正在保存…"
-                : dialog === "rename"
-                  ? "保存名称"
-                  : "确认删除"}
-            </button>
-          </div>
-        </DialogContent>
-      </Dialog>
+          <DialogContent
+            className="wb-extensions p-5"
+            onEscapeKeyDown={(event) => {
+              if (busy) event.preventDefault();
+            }}
+          >
+            <DialogHeader>
+              <DialogTitle>
+                {dialog === "rename" ? "重命名会话" : "删除会话"}
+              </DialogTitle>
+              <DialogDescription>
+                {dialog === "rename"
+                  ? "给这次任务一个容易找到的名字。"
+                  : `删除“${session.title}”的会话记录。项目文件会保留。`}
+              </DialogDescription>
+            </DialogHeader>
+            {dialog === "rename" && (
+              <input
+                aria-label="会话名称"
+                className="rounded border border-border bg-surface p-2"
+                value={title}
+                disabled={busy}
+                onChange={(event) => setTitle(event.target.value)}
+                autoFocus
+              />
+            )}
+            {error && (
+              <p role="alert" className="text-caption text-danger-text">
+                {error}
+              </p>
+            )}
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                className="wb-mode-button"
+                disabled={busy}
+                onClick={() => setDialog(null)}
+              >
+                取消
+              </button>
+              <button
+                className="wb-primary"
+                disabled={busy || (dialog === "rename" && !title.trim())}
+                onClick={() =>
+                  void run(
+                    dialog === "rename"
+                      ? () => onRename(title.trim())
+                      : onDelete,
+                  )
+                }
+              >
+                {busy
+                  ? "正在保存…"
+                  : dialog === "rename"
+                    ? "保存名称"
+                    : "确认删除"}
+              </button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </>
   );
-}
+});

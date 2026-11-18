@@ -1,0 +1,33 @@
+{
+  "version": "1.1.3",
+  "items": [
+    {
+      "type": "improve",
+      "zh": "压缩桌面素材并精简 Harness，缩小 Windows 下载包。",
+      "zh-TW": "壓縮桌面素材並精簡 Harness，縮小 Windows 下載套件。",
+      "en": "Shrink Windows downloads by compressing desktop assets and trimming the Harness runtime.",
+      "ja": "デスクトップ素材と Harness を圧縮し、Windows 版を小型化。"
+    },
+    {
+      "type": "new",
+      "zh": "工作台新增 DeepSeek Harness 插件市场。",
+      "zh-TW": "工作台新增 DeepSeek Harness 外掛程式市集。",
+      "en": "Browse the DeepSeek Harness plugin marketplace from the workspace.",
+      "ja": "ワークスペースに DeepSeek Harness プラグインマーケットを追加。"
+    },
+    {
+      "type": "improve",
+      "zh": "更新酒馆聊天、消息渲染和 Claude 渠道网关。",
+      "zh-TW": "更新酒館聊天、訊息呈現和 Claude 渠道閘道。",
+      "en": "Update Tavern chat, message rendering, and the Claude channel gateway.",
+      "ja": "Tavern のチャット、メッセージ表示、Claude チャンネルゲートウェイを更新。"
+    },
+    {
+      "type": "improve",
+      "zh": "改进会话、项目切换和桌面伙伴交互。",
+      "zh-TW": "改善工作階段、專案切換與桌面夥伴操作。",
+      "en": "Improve session controls, project switching, and interactions with the desktop companion.",
+      "ja": "セッション、プロジェクト切り替え、デスクトップコンパニオンの操作を改善。"
+    }
+  ]
+}

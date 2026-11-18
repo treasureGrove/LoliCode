@@ -19,6 +19,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
+import { gunzipSync } from "node:zlib";
 import {
   bundleHarness,
   bundledDependencyInputsHash,
@@ -219,6 +220,71 @@ test("only the bundled stage is pruned and legacy unpruned cache keys are reject
   assert.equal(f.counters().installs, 1);
   assert.deepEqual(f.manifest().distribution, manifest.distribution);
   assert(!existsSync(path.join(f.directory, sourceMap)));
+});
+
+test("bundled stage prunes redundant WASM/PDB/arch assets without altering source SDK", async (t) => {
+  const f = fixture(t);
+  const target = `${process.platform}-${process.arch}`;
+  const supportsNativeKit =
+    process.platform === "win32" || process.platform === "darwin";
+  const wasmFile =
+    "node_modules/@deepseek-ai/libreoffice-kit-wasm/dsoffice.wasm";
+  const pdbFile = "node_modules/node-pty/prebuilds/win32-x64/conpty.pdb";
+  const nativePkg = `node_modules/@deepseek-ai/libreoffice-kit-${target}/package.json`;
+  const nativePrebuilds = `node_modules/@deepseek-ai/libreoffice-kit-${target}/prebuilds.json`;
+  const nativeBin = `node_modules/@deepseek-ai/libreoffice-kit-${target}/bin/dsoffice`;
+  put(f.packageRoot, wasmFile, "wasm-source");
+  put(f.packageRoot, pdbFile, "pdb-source");
+  const install = f.options.install;
+  f.options.install = (stage) => {
+    install(stage);
+    if (supportsNativeKit) {
+      put(stage, nativePkg, "{}");
+      put(stage, nativePrebuilds, "{}");
+      put(stage, nativeBin, "exe");
+    }
+    put(stage, wasmFile, "wasm");
+    put(stage, pdbFile, "pdb");
+  };
+  await bundleHarness(f.options);
+  assert(existsSync(path.join(f.packageRoot, wasmFile)));
+  assert(existsSync(path.join(f.packageRoot, pdbFile)));
+  assert(!existsSync(path.join(f.directory, pdbFile)));
+  if (process.platform === "win32") {
+    const inventory = gunzipSync(
+      readFileSync(path.join(f.directory, "installer-files.gz")),
+    )
+      .toString("utf8")
+      .trimEnd()
+      .split("\n");
+    assert.deepEqual(
+      inventory,
+      [
+        entry,
+        "node_modules/@deepseek-ai/dsh/package.json",
+        nativeBin,
+        nativePkg,
+        nativePrebuilds,
+        "node_modules/fixture/sub/dependency.js",
+      ].sort(),
+    );
+  }
+  if (supportsNativeKit) {
+    assert(existsSync(path.join(f.directory, nativeBin)));
+    assert(!existsSync(path.join(f.directory, wasmFile)));
+    assert.equal(f.manifest().redundantAssets.removedFiles, 2);
+  } else {
+    assert(existsSync(path.join(f.directory, wasmFile)));
+    assert.equal(f.manifest().redundantAssets.removedFiles, 1);
+  }
+  assert(
+    !reusableBundlePayload(
+      f.directory,
+      { ...f.manifest(), redundantAssets: undefined },
+      bundledDependencyInputsHash(f.packageRoot),
+      f.options.identity,
+    ),
+  );
 });
 
 test("a distribution policy change invalidates only bundled dependencies", async (t) => {

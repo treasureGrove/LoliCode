@@ -1,0 +1,20 @@
+.switcher {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 28px;
+}
+
+.previous svg {
+  transform: rotate(180deg);
+}
+
+.count {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 15px;
+  line-height: 18px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  user-select: none;
+}

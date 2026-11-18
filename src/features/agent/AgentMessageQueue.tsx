@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { memo, useId } from "react";
 import {
   CornerDownRight,
   ListEnd,
@@ -33,7 +33,7 @@ export interface AgentMessageQueueProps {
 }
 
 /** Pending messages stay separate from the transcript until submitted. */
-export function AgentMessageQueue({
+export const AgentMessageQueue = memo(function AgentMessageQueue({
   items,
   busyId,
   disabled = false,
@@ -196,4 +196,4 @@ export function AgentMessageQueue({
       </ol>
     </section>
   );
-}
+});

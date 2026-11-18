@@ -1,0 +1,1503 @@
+.wb-market-shell {
+  --apple-ease: cubic-bezier(0.32, 0.72, 0, 1);
+  --apple-bounce: cubic-bezier(0.22, 1.15, 0.36, 1);
+  container-type: inline-size;
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.wb-market-stage {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+@keyframes wb-market-stage-in {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes wb-market-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Unified Editorial Studio Masthead (Hero + docked Ribbon in one frame) */
+.wb-market-masthead {
+  overflow: hidden;
+  border: 1px solid rgb(216 178 122 / 42%);
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 10px 28px rgb(92 22 44 / 10%);
+}
+
+:root.dark .wb-market-masthead {
+  border-color: rgb(255 236 244 / 10%);
+  background: #171117;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 6%),
+    0 14px 36px rgb(4 1 6 / 52%);
+}
+
+.wb-market-hero {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 18px 22px 16px;
+  background: linear-gradient(128deg, #6e1b33 0%, #8c2240 55%, #5b1328 100%);
+  color: #fffaf3;
+  overflow: hidden;
+}
+
+:root.dark .wb-market-hero {
+  background: linear-gradient(132deg, #431224 0%, #5b1831 54%, #2d0b18 100%);
+}
+
+.wb-market-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 88% 36%, rgb(246 214 148 / 20%), transparent 46%),
+    radial-gradient(circle at 12% 100%, rgb(255 224 226 / 8%), transparent 44%);
+  pointer-events: none;
+}
+
+:root.dark .wb-market-hero::before {
+  background:
+    radial-gradient(circle at 88% 36%, rgb(244 176 198 / 16%), transparent 48%),
+    radial-gradient(circle at 14% 96%, rgb(230 195 135 / 8%), transparent 44%);
+}
+
+.wb-market-hero-copy {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.wb-market-hero-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  width: fit-content;
+  max-width: 100%;
+  color: #f3dbb0;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  opacity: 0.92;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+:root.dark .wb-market-hero-eyebrow {
+  color: #e7c998;
+}
+
+.wb-market-hero-title {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: #fffaf3;
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.2;
+}
+
+.wb-market-hero-title-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1px solid rgb(235 203 142 / 36%);
+  background: rgb(255 248 242 / 11%);
+  color: #f8e9c9;
+  font-size: 11px;
+  font-weight: 550;
+  letter-spacing: 0.01em;
+}
+
+:root.dark .wb-market-hero-title-tag {
+  border-color: rgb(255 224 235 / 22%);
+  background: rgb(255 244 248 / 10%);
+  color: #fceaf0;
+}
+
+.wb-market-hero-pill.is-gold {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid rgb(255 244 238 / 22%);
+  background: rgb(24 5 11 / 28%);
+  color: #f7ead7;
+  font-family: var(--font-mono, monospace);
+  font-size: 10.5px;
+  font-weight: 500;
+}
+
+:root.dark .wb-market-hero-pill.is-gold {
+  border-color: rgb(235 203 142 / 26%);
+  background: rgb(16 6 12 / 44%);
+  color: #ecd1a3;
+}
+
+.wb-market-hero-subtitle {
+  margin: 2px 0 0;
+  max-width: 680px;
+  color: rgb(255 244 238 / 86%);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.wb-market-hero-emblem {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.wb-market-hero-medallion {
+  display: grid;
+  place-items: center;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  border: 1.5px solid rgb(235 203 142 / 60%);
+  background: radial-gradient(circle at 30% 26%, #fffdf8 0%, #f5e6cf 100%);
+  color: #6e1b33;
+  box-shadow:
+    0 0 0 4px rgb(255 246 242 / 10%),
+    0 6px 16px rgb(34 6 14 / 26%);
+}
+
+:root.dark .wb-market-hero-medallion {
+  background: radial-gradient(
+    circle at 30% 26%,
+    rgb(255 242 246 / 16%) 0%,
+    rgb(32 10 19 / 86%) 100%
+  );
+  border-color: rgb(255 224 235 / 26%);
+  color: #f7d9e4;
+  box-shadow:
+    0 0 0 4px rgb(255 236 244 / 6%),
+    0 8px 20px rgb(6 1 5 / 42%);
+}
+
+.wb-market-hero-caption {
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid rgb(230 195 135 / 35%);
+  background: rgb(24 4 11 / 46%);
+  color: #f4dfb4;
+  font-size: 8.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+:root.dark .wb-market-hero-caption {
+  border-color: rgb(255 232 238 / 18%);
+  background: rgb(14 4 9 / 56%);
+  color: #ebd1a3;
+}
+
+@container (max-width: 520px) {
+  .wb-market-hero {
+    padding: 15px 18px 14px;
+  }
+
+  .wb-market-hero-emblem {
+    display: none;
+  }
+
+  .wb-market-ribbon {
+    padding: 9px 18px;
+  }
+}
+
+/* Docked champagne studio ticker inside Masthead */
+.wb-market-ribbon {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 14px;
+  padding: 9px 22px;
+  border-top: 1px solid rgb(224 190 140 / 45%);
+  background: #fbf2e4;
+  color: #7c5124;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+:root.dark .wb-market-ribbon {
+  border-top-color: rgb(255 236 244 / 8%);
+  background: #171117;
+  color: #cabbc3;
+}
+
+.wb-market-ribbon-items {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  min-width: 0;
+}
+
+.wb-market-ribbon-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.wb-market-ribbon-item.is-brand {
+  font-weight: 650;
+  letter-spacing: 0.05em;
+}
+
+:root.dark .wb-market-ribbon-item.is-brand {
+  color: #e6c690;
+}
+
+.wb-market-ribbon-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 11px;
+  border: 1px solid #e1c8a9;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #7d203b;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 180ms var(--apple-ease),
+    border-color 180ms var(--apple-ease),
+    color 180ms var(--apple-ease),
+    transform 220ms var(--apple-bounce);
+}
+
+.wb-market-ribbon-action:hover {
+  background: #fdf6f8;
+  border-color: #c991a0;
+}
+
+.wb-market-ribbon-action:active {
+  transform: scale(0.96);
+  transition-duration: 90ms;
+}
+
+:root.dark .wb-market-ribbon-action {
+  border-color: rgb(255 236 244 / 12%);
+  background: rgb(255 244 248 / 7%);
+  color: #f5e6ec;
+}
+
+:root.dark .wb-market-ribbon-action:hover {
+  background: rgb(255 244 248 / 13%);
+  border-color: rgb(243 166 191 / 34%);
+}
+
+.wb-market-panel {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.wb-market-topbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.wb-market-topbar > .wb-market-controls > .wb-market-btn-secondary {
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+}
+
+/* Segmented Control with Framer Motion gliding SegmentThumb */
+.wb-market-panel .wb-market-topbar .wb-extension-tabs {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
+  padding: 4px;
+  gap: 4px;
+  border: 1px solid #e6d7c4;
+  border-radius: 12px;
+  background: #efe4d5;
+  box-shadow: inset 0 1px 2px rgb(92 22 44 / 4%);
+}
+
+:root.dark .wb-market-panel .wb-market-topbar .wb-extension-tabs {
+  border-color: rgb(255 236 244 / 8%);
+  background: #19141a;
+  box-shadow: inset 0 1px 2px rgb(0 0 0 / 35%);
+}
+
+.wb-market-panel .wb-market-topbar .wb-market-tabs-thumb {
+  border-radius: 8px;
+  border: 1px solid rgb(92 22 44 / 7%);
+  background: #ffffff;
+  box-shadow:
+    0 2px 8px rgb(92 22 44 / 10%),
+    0 1px 2px rgb(92 22 44 / 6%);
+  transition: opacity 180ms var(--apple-ease);
+}
+
+.wb-market-panel
+  .wb-market-topbar
+  .wb-extension-tabs[data-in-detail="true"]
+  .wb-market-tabs-thumb {
+  opacity: 0.65;
+}
+
+:root.dark .wb-market-panel .wb-market-topbar .wb-market-tabs-thumb {
+  border-color: rgb(255 236 244 / 11%);
+  background: #2d222c;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 11%),
+    0 2px 10px rgb(0 0 0 / 40%);
+}
+
+.wb-market-panel .wb-market-topbar .wb-extension-tabs button {
+  position: relative;
+  z-index: 1;
+  min-width: 88px;
+  padding: 6px 14px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: #6b4c57;
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    color 200ms var(--apple-ease),
+    transform 180ms var(--apple-bounce);
+}
+
+.wb-market-panel
+  .wb-market-topbar
+  .wb-extension-tabs:has(.wb-market-tabs-thumb)
+  :is(button, button[aria-selected="true"]) {
+  background: transparent;
+}
+
+.wb-market-panel
+  .wb-market-topbar
+  .wb-extension-tabs
+  button:active:not(:disabled) {
+  transform: scale(0.965);
+}
+
+.wb-market-panel .wb-market-topbar .wb-extension-tabs button:hover {
+  color: #2d1920;
+}
+
+:root.dark .wb-market-panel .wb-market-topbar .wb-extension-tabs button {
+  color: #a6949e;
+}
+
+:root.dark .wb-market-panel .wb-market-topbar .wb-extension-tabs button:hover {
+  color: #f5eef2;
+}
+
+.wb-market-panel
+  .wb-market-topbar
+  .wb-extension-tabs:not(:has(.wb-market-tabs-thumb))
+  :is(button[aria-selected="true"], button.is-active) {
+  background: #ffffff;
+  box-shadow: 0 2px 6px rgb(92 22 44 / 9%);
+}
+
+:root.dark
+  .wb-market-panel
+  .wb-market-topbar
+  .wb-extension-tabs:not(:has(.wb-market-tabs-thumb))
+  :is(button[aria-selected="true"], button.is-active) {
+  border-color: rgb(255 236 244 / 11%);
+  background: #2d222c;
+  box-shadow: 0 2px 10px rgb(0 0 0 / 35%);
+}
+
+.wb-market-panel
+  .wb-market-topbar
+  .wb-extension-tabs
+  :is(button[aria-selected="true"], button.is-active) {
+  color: #7d203b;
+  font-weight: 600;
+}
+
+:root.dark
+  .wb-market-panel
+  .wb-market-topbar
+  .wb-extension-tabs
+  :is(button[aria-selected="true"], button.is-active) {
+  color: #fff6fa;
+}
+
+/* Unified rose alert banner */
+.wb-market-alert {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border: 1px solid #f0c9d3;
+  border-radius: 12px;
+  background: #fdf0f3;
+  color: #8f2240;
+  font-size: 12.5px;
+  line-height: 1.5;
+  animation: wb-market-pop-in 200ms var(--apple-ease);
+}
+
+:root.dark .wb-market-alert {
+  border-color: rgb(244 114 148 / 26%);
+  background: rgb(180 49 88 / 15%);
+  color: #f9bfd0;
+}
+
+/* Clean utility toolbar */
+.wb-market-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+}
+
+.wb-market-search {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex: 1 1 230px;
+  min-width: 0;
+  height: 36px;
+  padding: 0 13px;
+  border: 1px solid #e6d6c3;
+  border-radius: 11px;
+  background: #ffffff;
+  color: #887079;
+  box-shadow: 0 1px 3px rgb(92 22 44 / 4%);
+  transition:
+    border-color 180ms var(--apple-ease),
+    box-shadow 180ms var(--apple-ease),
+    background-color 180ms var(--apple-ease);
+}
+
+:root.dark .wb-market-search {
+  border-color: rgb(255 236 244 / 9%);
+  background: #1b161c;
+  color: #96838d;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 3%);
+}
+
+.wb-market-search:focus-within {
+  border-color: #8a2340;
+  box-shadow: 0 0 0 3px rgb(126 34 61 / 11%);
+}
+
+:root.dark .wb-market-search:focus-within {
+  border-color: rgb(243 166 191 / 46%);
+  background: #211a22;
+  box-shadow: 0 0 0 3px rgb(180 49 88 / 22%);
+}
+
+.wb-market-search input {
+  width: 100%;
+  min-width: 0;
+  background: transparent;
+  color: var(--wb-text);
+  font-size: 12.5px;
+}
+
+.wb-market-search input::placeholder {
+  color: var(--wb-muted);
+  opacity: 0.85;
+}
+
+.wb-market-search input:focus {
+  outline: none;
+}
+
+.wb-market-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+}
+
+.wb-market-select {
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid #e6d6c3;
+  border-radius: 11px;
+  background: #ffffff;
+  color: #664a54;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgb(92 22 44 / 3%);
+  transition:
+    border-color 180ms var(--apple-ease),
+    background-color 180ms var(--apple-ease),
+    color 180ms var(--apple-ease);
+}
+
+.wb-market-select option {
+  background: var(--wb-panel);
+  color: var(--wb-text);
+}
+
+:root.dark .wb-market-select {
+  border-color: rgb(255 236 244 / 9%);
+  background: #1b161c;
+  color: #d6c8d0;
+  box-shadow: none;
+}
+
+:root.dark .wb-market-select:hover {
+  border-color: rgb(255 236 244 / 18%);
+  background: #221b23;
+}
+
+.wb-market-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid #e6d6c3;
+  border-radius: 11px;
+  background: #ffffff;
+  color: #664a54;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 180ms var(--apple-ease),
+    border-color 180ms var(--apple-ease),
+    color 180ms var(--apple-ease),
+    transform 220ms var(--apple-bounce);
+}
+
+.wb-market-chip:active:not(:disabled) {
+  transform: scale(0.96);
+  transition-duration: 90ms;
+}
+
+:root.dark .wb-market-chip {
+  border-color: rgb(255 236 244 / 9%);
+  background: #1b161c;
+  color: #cbbbc4;
+}
+
+.wb-market-chip:hover:not(:disabled) {
+  border-color: #d6a979;
+  color: #2d1920;
+  background: #fdf6e9;
+}
+
+:root.dark .wb-market-chip:hover:not(:disabled) {
+  border-color: rgb(255 236 244 / 18%);
+  color: #f5eef2;
+  background: #241d26;
+}
+
+.wb-market-chip[aria-pressed="true"] {
+  border-color: #e6c387;
+  background: #fef3d4;
+  color: #855312;
+  font-weight: 600;
+}
+
+:root.dark .wb-market-chip[aria-pressed="true"] {
+  border-color: rgb(243 166 191 / 34%);
+  background: rgb(180 49 88 / 22%);
+  color: #f7c7d8;
+}
+
+/* Typographic Ghost Category Strip */
+.wb-market-categories {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+}
+
+.wb-market-categories .wb-market-chip {
+  height: 30px;
+  padding: 0 11px;
+  border-color: transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: #745b64;
+  box-shadow: none;
+}
+
+:root.dark .wb-market-categories .wb-market-chip {
+  color: #9b8993;
+  border-color: transparent;
+  background: transparent;
+}
+
+.wb-market-categories .wb-market-chip:hover:not(:disabled) {
+  background: #efe4d6;
+  border-color: transparent;
+  color: #2d1920;
+}
+
+:root.dark .wb-market-categories .wb-market-chip:hover:not(:disabled) {
+  background: rgb(255 240 245 / 7%);
+  border-color: transparent;
+  color: #f5eef2;
+}
+
+.wb-market-categories .wb-market-chip[aria-pressed="true"] {
+  border-color: #e5c48a;
+  background: #fef3d4;
+  color: #804f10;
+}
+
+:root.dark .wb-market-categories .wb-market-chip[aria-pressed="true"] {
+  border-color: rgb(243 166 191 / 28%);
+  background: rgb(180 49 88 / 22%);
+  color: #f9d1df;
+}
+
+.wb-market-status-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 2px;
+  color: #856d75;
+  font-size: 11.5px;
+}
+
+:root.dark .wb-market-status-bar {
+  color: #92808a;
+}
+
+.wb-market-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 318px), 1fr));
+  gap: 14px;
+}
+
+/* Streamlined 3-zone Editorial Card with Apple lift & press physics */
+.wb-market-card {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  padding: 16px 18px;
+  min-width: 0;
+  border: 1px solid #eadcd0;
+  border-radius: 15px;
+  background: #ffffff;
+  box-shadow: 0 2px 10px rgb(92 22 44 / 4%);
+  transition:
+    border-color 240ms var(--apple-ease),
+    background-color 240ms var(--apple-ease),
+    box-shadow 260ms var(--apple-ease),
+    transform 260ms var(--apple-ease);
+}
+
+.wb-market-card:hover {
+  border-color: #d6abb6;
+  box-shadow: 0 12px 28px rgb(92 22 44 / 9%);
+  transform: translateY(-2px);
+}
+
+.wb-market-card:active {
+  transform: translateY(0) scale(0.994);
+  transition-duration: 110ms;
+}
+
+:root.dark .wb-market-card {
+  border-color: rgb(255 236 244 / 8%);
+  background: #1b161c;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 4%),
+    0 4px 14px rgb(0 0 0 / 22%);
+}
+
+:root.dark .wb-market-card:hover {
+  border-color: rgb(243 166 191 / 26%);
+  background: #211b23;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 7%),
+    0 14px 32px rgb(4 1 6 / 46%);
+}
+
+.wb-market-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.wb-market-artwork {
+  display: grid;
+  place-items: center;
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  overflow: hidden;
+  border-radius: 11px;
+  border: 1px solid #ecd9c4;
+  background: #fbf1e2;
+  color: #824d18;
+  transition: transform 240ms var(--apple-bounce);
+}
+
+.wb-market-card:hover .wb-market-artwork {
+  transform: scale(1.04);
+}
+
+.wb-market-artwork[data-tone="rose"] {
+  border-color: #edd0d9;
+  background: #fae8ee;
+  color: #7d203b;
+}
+
+.wb-market-artwork[data-tone="plum"] {
+  border-color: #e4d6ea;
+  background: #f3ebf6;
+  color: #6b3f7d;
+}
+
+.wb-market-artwork[data-tone="sage"] {
+  border-color: #cfe0d8;
+  background: #e9f3ee;
+  color: #2f6951;
+}
+
+:root.dark .wb-market-artwork {
+  border-color: rgb(235 203 142 / 20%);
+  background: rgb(235 203 142 / 10%);
+  color: #e9cc99;
+}
+
+:root.dark .wb-market-artwork[data-tone="rose"] {
+  border-color: rgb(243 166 191 / 22%);
+  background: rgb(180 49 88 / 18%);
+  color: #f4b2c7;
+}
+
+:root.dark .wb-market-artwork[data-tone="plum"] {
+  border-color: rgb(206 168 220 / 22%);
+  background: rgb(154 114 176 / 16%);
+  color: #dcc2ea;
+}
+
+:root.dark .wb-market-artwork[data-tone="sage"] {
+  border-color: rgb(140 206 178 / 22%);
+  background: rgb(74 158 124 / 15%);
+  color: #a6dfc5;
+}
+
+.wb-market-artwork img {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+}
+
+.wb-market-card-titles {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.wb-market-card-status {
+  flex-shrink: 0;
+  padding-top: 1px;
+}
+
+.wb-market-card-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.wb-market-card-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--wb-text);
+  font-size: 14.5px;
+  font-weight: 620;
+  letter-spacing: -0.01em;
+  text-align: left;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+  transition: color 160ms var(--apple-ease);
+}
+
+.wb-market-card-link:hover {
+  color: #7d203b;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+:root.dark .wb-market-card-link:hover {
+  color: #f4b0c5;
+}
+
+.wb-market-pkg-id {
+  color: var(--wb-muted);
+  font-size: 11px;
+  font-family: var(--font-mono, monospace);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wb-market-card-desc {
+  color: #5d464f;
+  font-size: 12.5px;
+  line-height: 1.55;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+:root.dark .wb-market-card-desc {
+  color: #c5b6bf;
+}
+
+.wb-market-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.wb-market-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid #ead8c6;
+  background: #fbf3e8;
+  color: #6b525b;
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 1.45;
+  white-space: nowrap;
+}
+
+:root.dark .wb-market-badge {
+  border-color: rgb(255 236 244 / 10%);
+  background: rgb(255 244 248 / 6%);
+  color: #ccbdc5;
+}
+
+.wb-market-badge.is-gold {
+  border-color: #ecd094;
+  background: #fef3d4;
+  color: #885613;
+  font-weight: 600;
+}
+
+:root.dark .wb-market-badge.is-gold {
+  border-color: rgb(235 203 142 / 28%);
+  background: rgb(235 203 142 / 13%);
+  color: #ebd1a3;
+}
+
+.wb-market-badge.is-accent {
+  border-color: #e6c3cd;
+  background: #faebf0;
+  color: #7d203b;
+  font-weight: 550;
+}
+
+:root.dark .wb-market-badge.is-accent {
+  border-color: rgb(243 166 191 / 24%);
+  background: rgb(180 49 88 / 18%);
+  color: #f4b2c7;
+}
+
+.wb-market-badge.is-success {
+  border-color: rgb(34 197 94 / 28%);
+  background: rgb(34 197 94 / 10%);
+  color: #15803d;
+  font-weight: 600;
+}
+
+:root.dark .wb-market-badge.is-success {
+  border-color: rgb(110 231 183 / 24%);
+  background: rgb(52 211 153 / 12%);
+  color: #93ecc0;
+}
+
+.wb-market-badge.is-warning {
+  border-color: rgb(217 119 6 / 30%);
+  background: rgb(245 158 11 / 11%);
+  color: #a94f08;
+}
+
+:root.dark .wb-market-badge.is-warning {
+  border-color: rgb(251 191 36 / 26%);
+  background: rgb(245 158 11 / 13%);
+  color: #f6cf70;
+}
+
+/* Single-row balanced card footer */
+.wb-market-card-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid #f2e6d9;
+}
+
+:root.dark .wb-market-card-footer {
+  border-top-color: rgb(255 236 244 / 7%);
+}
+
+.wb-market-card-meta {
+  display: flex;
+  flex: 1 1 120px;
+  align-items: center;
+  min-width: 0;
+  color: var(--wb-muted);
+  font-size: 11px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.wb-market-card-meta > span + span::before {
+  content: "·";
+  margin-inline: 5px;
+  opacity: 0.55;
+}
+
+.wb-market-meta-cat {
+  color: #87592a;
+  font-weight: 550;
+  flex-shrink: 0;
+}
+
+:root.dark .wb-market-meta-cat {
+  color: #e4c48f;
+}
+
+.wb-market-meta-author,
+.wb-market-meta-detail {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wb-market-card-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+}
+
+.wb-market-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 29px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 9px;
+  background: linear-gradient(180deg, #872340 0%, #711b34 100%);
+  color: #fff9f4;
+  font-size: 12px;
+  font-weight: 550;
+  box-shadow: 0 2px 8px rgb(113 27 52 / 20%);
+  cursor: pointer;
+  transition:
+    filter 160ms var(--apple-ease),
+    box-shadow 160ms var(--apple-ease),
+    transform 220ms var(--apple-bounce);
+}
+
+:root.dark .wb-market-btn-primary {
+  background: linear-gradient(180deg, #b8345b 0%, #962547 100%);
+  border: 1px solid rgb(255 214 228 / 22%);
+  box-shadow:
+    inset 0 1px 0 rgb(255 240 245 / 18%),
+    0 3px 10px rgb(6 1 5 / 38%);
+}
+
+.wb-market-btn-primary:hover:not(:disabled) {
+  filter: brightness(1.07);
+}
+
+.wb-market-btn-primary:active:not(:disabled) {
+  transform: scale(0.955);
+  transition-duration: 90ms;
+}
+
+.wb-market-btn-primary:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.wb-market-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 29px;
+  padding: 0 11px;
+  border: 1px solid #e6d6c4;
+  border-radius: 9px;
+  background: #ffffff;
+  color: #5b2234;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background-color 180ms var(--apple-ease),
+    border-color 180ms var(--apple-ease),
+    color 180ms var(--apple-ease),
+    transform 220ms var(--apple-bounce);
+}
+
+:root.dark .wb-market-btn-secondary {
+  border-color: rgb(255 236 244 / 10%);
+  background: #251e27;
+  color: #eee2e8;
+}
+
+.wb-market-btn-secondary:hover:not(:disabled) {
+  background: #faf0e4;
+  border-color: #d6afb7;
+}
+
+:root.dark .wb-market-btn-secondary:hover:not(:disabled) {
+  background: #302733;
+  border-color: rgb(255 236 244 / 20%);
+}
+
+.wb-market-btn-secondary:active:not(:disabled) {
+  transform: scale(0.955);
+  transition-duration: 90ms;
+}
+
+.wb-market-btn-secondary:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* Official & Installed Extension Card polish inside Marketplace */
+.wb-market-panel .wb-skills-grid .wb-extension-card {
+  border: 1px solid #eadcd0;
+  border-radius: 15px;
+  background: #ffffff;
+  box-shadow: 0 2px 10px rgb(92 22 44 / 4%);
+  transition:
+    border-color 240ms var(--apple-ease),
+    background-color 240ms var(--apple-ease),
+    box-shadow 260ms var(--apple-ease),
+    transform 260ms var(--apple-ease);
+}
+
+.wb-market-panel .wb-skills-grid .wb-extension-card:hover {
+  border-color: #d6abb6;
+  box-shadow: 0 10px 26px rgb(92 22 44 / 8%);
+  transform: translateY(-2px);
+}
+
+:root.dark .wb-market-panel .wb-skills-grid .wb-extension-card {
+  border-color: rgb(255 236 244 / 8%);
+  background: #1b161c;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 4%),
+    0 4px 14px rgb(0 0 0 / 22%);
+}
+
+:root.dark .wb-market-panel .wb-skills-grid .wb-extension-card:hover {
+  border-color: rgb(243 166 191 / 26%);
+  background: #211b23;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 7%),
+    0 14px 32px rgb(4 1 6 / 46%);
+}
+
+/* Apple UISwitch sliding toggle with authentic thumb stretch physics */
+.wb-market-switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 38px;
+  height: 22px;
+  margin-left: auto;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.wb-market-switch-input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.wb-market-switch-track {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 38px;
+  height: 22px;
+  padding: 2px;
+  border-radius: 999px;
+  border: 1px solid #dccbb9;
+  background: #e9ddd0;
+  box-shadow: inset 0 1px 2px rgb(46 9 20 / 8%);
+  transition:
+    background-color 280ms var(--apple-ease),
+    border-color 280ms var(--apple-ease),
+    box-shadow 220ms var(--apple-ease);
+}
+
+.wb-market-switch-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: #ffffff;
+  box-shadow:
+    0 2px 5px rgb(46 9 20 / 20%),
+    0 1px 2px rgb(46 9 20 / 12%);
+  transform: translateX(0);
+  transition:
+    transform 300ms cubic-bezier(0.22, 1.12, 0.36, 1),
+    width 200ms var(--apple-ease),
+    background-color 200ms ease;
+}
+
+.wb-market-switch-input:not(:disabled):active
+  + .wb-market-switch-track
+  .wb-market-switch-thumb {
+  width: 21px;
+}
+
+.wb-market-switch-input:checked + .wb-market-switch-track {
+  border-color: #7d203b;
+  background: #7d203b;
+  box-shadow: inset 0 1px 2px rgb(34 4 14 / 20%);
+}
+
+.wb-market-switch-input:checked
+  + .wb-market-switch-track
+  .wb-market-switch-thumb {
+  transform: translateX(16px);
+}
+
+.wb-market-switch-input:checked:not(:disabled):active
+  + .wb-market-switch-track
+  .wb-market-switch-thumb {
+  width: 21px;
+  transform: translateX(11px);
+}
+
+.wb-market-switch-input:focus-visible + .wb-market-switch-track {
+  outline: 2px solid #8a2340;
+  outline-offset: 2px;
+}
+
+.wb-market-switch-input:disabled + .wb-market-switch-track {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+:root.dark .wb-market-switch-track {
+  border-color: rgb(255 255 255 / 12%);
+  background: rgb(255 255 255 / 15%);
+  box-shadow: inset 0 1px 2px rgb(0 0 0 / 32%);
+}
+
+:root.dark .wb-market-switch-thumb {
+  background: #ffffff;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 45%);
+}
+
+:root.dark .wb-market-switch-input:checked + .wb-market-switch-track {
+  border-color: rgb(255 186 210 / 28%);
+  background: #b43158;
+  box-shadow: inset 0 1px 2px rgb(20 2 8 / 28%);
+}
+
+:root.dark
+  .wb-market-switch-input:checked
+  + .wb-market-switch-track
+  .wb-market-switch-thumb {
+  background: #ffffff;
+}
+
+:root.dark .wb-market-switch-input:focus-visible + .wb-market-switch-track {
+  outline-color: #f3a6bf;
+}
+
+:root.dark .wb-market-panel .wb-extension-reload {
+  border-color: rgb(243 166 191 / 22%);
+  background: rgb(180 49 88 / 14%);
+  color: #f4e6ea;
+}
+
+.wb-market-load-more {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 4px;
+}
+
+.wb-market-manual-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  padding: 15px 16px;
+  border: 1px solid #ebddcf;
+  border-radius: 15px;
+  background: #ffffff;
+  box-shadow: 0 2px 10px rgb(92 22 44 / 4%);
+}
+
+:root.dark .wb-market-manual-form {
+  border-color: rgb(255 236 244 / 8%);
+  background: #1b161c;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 4%);
+}
+
+.wb-market-manual-form input {
+  flex: 1 1 260px;
+  min-width: 0;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid #e6d6c4;
+  border-radius: 10px;
+  background: #fbf6ee;
+  color: var(--wb-text);
+  font-size: 12.5px;
+  transition:
+    border-color 180ms var(--apple-ease),
+    box-shadow 180ms var(--apple-ease);
+}
+
+:root.dark .wb-market-manual-form input {
+  border-color: rgb(255 236 244 / 9%);
+  background: #130f14;
+}
+
+:root.dark .wb-market-manual-form input:focus {
+  outline: none;
+  border-color: rgb(243 166 191 / 42%);
+  box-shadow: 0 0 0 3px rgb(180 49 88 / 18%);
+}
+
+.wb-market-detail {
+  display: grid;
+  gap: 18px;
+}
+
+.wb-market-detail-hero {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px;
+  border: 1px solid #ebddcf;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 2px 12px rgb(92 22 44 / 5%);
+}
+
+:root.dark .wb-market-detail-hero {
+  border-color: rgb(255 236 244 / 9%);
+  background: #1b161c;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 4%);
+}
+
+.wb-market-detail-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 18px;
+  align-items: start;
+}
+
+@media (max-width: 920px) {
+  .wb-market-detail-main {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.wb-market-detail-card {
+  padding: 18px 20px;
+  border: 1px solid #ebddcf;
+  border-radius: 16px;
+  background: #ffffff;
+  min-width: 0;
+  box-shadow: 0 2px 10px rgb(92 22 44 / 4%);
+}
+
+:root.dark .wb-market-detail-card {
+  border-color: rgb(255 236 244 / 8%);
+  background: #1b161c;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 4%);
+}
+
+.wb-market-facts {
+  display: grid;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.wb-market-facts > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid color-mix(in srgb, var(--wb-border) 55%, transparent);
+}
+
+.wb-market-facts dt {
+  color: var(--wb-muted);
+  flex-shrink: 0;
+}
+
+.wb-market-facts dd {
+  color: var(--wb-text);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.wb-market-versions {
+  display: grid;
+  gap: 8px;
+  max-height: 280px;
+  overflow-y: auto;
+  margin-top: 10px;
+}
+
+.wb-market-version-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid #ebddcf;
+  border-radius: 10px;
+  background: #fbf6ee;
+  font-size: 12px;
+}
+
+:root.dark .wb-market-version-row {
+  border-color: rgb(255 236 244 / 8%);
+  background: #231d25;
+}
+
+.wb-market-sources-panel {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid #e6c387;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 2px 12px rgb(92 22 44 / 5%);
+  animation: wb-market-pop-in 220ms var(--apple-ease);
+}
+
+:root.dark .wb-market-sources-panel {
+  border-color: rgb(243 166 191 / 20%);
+  background: #1b161c;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 5%),
+    0 8px 24px rgb(0 0 0 / 35%);
+}
+
+.wb-market-source-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid #ebddcf;
+  border-radius: 12px;
+  background: #fbf6ee;
+}
+
+:root.dark .wb-market-source-row {
+  border-color: rgb(255 236 244 / 8%);
+  background: #231d25;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wb-market-card,
+  .wb-market-artwork,
+  .wb-market-switch-track,
+  .wb-market-switch-thumb,
+  .wb-market-btn-primary,
+  .wb-market-btn-secondary,
+  .wb-market-ribbon-action,
+  .wb-market-chip,
+  .wb-market-panel .wb-market-topbar .wb-extension-tabs button {
+    transition: none;
+  }
+
+  .wb-market-card:hover,
+  .wb-market-panel .wb-skills-grid .wb-extension-card:hover,
+  .wb-market-card:active,
+  .wb-market-btn-primary:active:not(:disabled),
+  .wb-market-btn-secondary:active:not(:disabled),
+  .wb-market-chip:active:not(:disabled) {
+    transform: none;
+  }
+
+  .wb-market-alert,
+  .wb-market-sources-panel {
+    animation: none;
+  }
+}

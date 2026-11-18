@@ -1,4 +1,10 @@
 import { useEffect, useId, useRef, useState } from "react";
+import { MotionSurface } from "@/components/motion/MotionSurface";
+import {
+  SegmentThumb,
+  useSlidingIndicator,
+} from "@/components/ui/sliding-indicator";
+import { useNavigationDirection } from "@/lib/motion";
 import {
   Blocks,
   FolderOpen,
@@ -6,6 +12,7 @@ import {
   RefreshCw,
   Search,
   Sparkles,
+  Store,
   Trash2,
 } from "lucide-react";
 import { AgentToolPanel } from "./AgentToolPanel";
@@ -67,6 +74,27 @@ const HARNESS_PLUGIN_LABELS: Record<
     name: "Ralph",
     description: "用会话目标持续跟进任务，直到满足完成条件。",
   },
+  "session-search": {
+    name: "历史会话检索",
+    description:
+      "允许 Agent 使用 SQLite 全文索引检索与阅读当前工作区的历史会话。",
+  },
+  "session-titles": {
+    name: "动态会话标题",
+    description: "随着用户多轮提问推进，自动刷新与概括当前会话标题。",
+  },
+  "badge-skill": {
+    name: "徽章标记技能",
+    description: "为生成的文档、PR 与交付物添加 Powered by DSH 徽章。",
+  },
+  worktree: {
+    name: "Git 工作树工具",
+    description: "允许模型创建并切换独立的 Git Worktree 隔离开发分支。",
+  },
+  "auto-review": {
+    name: "工具自动安全审查",
+    description: "在自动权限预设下对每次工具调用执行 LLM 逐项安全授权审查。",
+  },
 };
 const BUNDLED_SKILL_LABELS: Record<string, { name: string; summary: string }> =
   {
@@ -92,6 +120,7 @@ export function AgentExtensionsPanel({
   projectOpen = true,
   projectPath,
   initialTab,
+  onOpenMarketplace,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -101,6 +130,7 @@ export function AgentExtensionsPanel({
   projectOpen?: boolean;
   projectPath?: string;
   initialTab?: "skills" | "plugins" | "mcp";
+  onOpenMarketplace?: () => void;
 }) {
   const [catalog, setCatalog] = useState<AgentExtensions | null>(null);
   const [pluginStore, setPluginStore] = useState<AgentPluginStore | null>(null);
@@ -348,6 +378,16 @@ export function AgentExtensionsPanel({
         )
       );
     }) ?? [];
+  const {
+    ref: tabsRef,
+    rect: tabThumbRect,
+    animate: tabThumbAnimate,
+  } = useSlidingIndicator<HTMLDivElement>(
+    'button[aria-selected="true"]',
+    `${visible}:${tab}`,
+  );
+  const tabRank = tab === "skills" ? 0 : tab === "plugins" ? 1 : 2;
+  const tabDirection = useNavigationDirection(tabRank, tab);
   return (
     <AgentToolPanel
       open={visible}
@@ -359,6 +399,7 @@ export function AgentExtensionsPanel({
     >
       <div className="wb-skills-panel">
         <div
+          ref={tabsRef}
           className="wb-extension-tabs"
           role="tablist"
           aria-label="扩展类型"
@@ -376,6 +417,7 @@ export function AgentExtensionsPanel({
             document.getElementById(`${panelId}-${tabs[index]}`)?.focus();
           }}
         >
+          <SegmentThumb rect={tabThumbRect} animate={tabThumbAnimate} />
           {(
             [
               ["skills", "技能"],
@@ -418,7 +460,9 @@ export function AgentExtensionsPanel({
             重新读取
           </button>
         )}
-        <div
+        <MotionSurface
+          motionKey={tab}
+          direction={tabDirection}
           className="wb-extension-list"
           role="tabpanel"
           id={`${panelId}-${tab}-panel`}
@@ -632,17 +676,29 @@ export function AgentExtensionsPanel({
                       交互会话提供的可选能力。
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    className="wb-mode-button"
-                    aria-label="刷新插件"
-                    title="刷新插件"
-                    disabled={busy}
-                    onClick={() => void readCatalog(generation.current)}
-                  >
-                    <RefreshCw size={14} aria-hidden="true" />
-                    刷新
-                  </button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {onOpenMarketplace && (
+                      <button
+                        type="button"
+                        className="wb-mode-button"
+                        onClick={onOpenMarketplace}
+                      >
+                        <Store size={14} aria-hidden="true" />
+                        插件市场
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="wb-mode-button"
+                      aria-label="刷新插件"
+                      title="刷新插件"
+                      disabled={busy}
+                      onClick={() => void readCatalog(generation.current)}
+                    >
+                      <RefreshCw size={14} aria-hidden="true" />
+                      刷新
+                    </button>
+                  </div>
                 </div>
                 {harnessPluginError && (
                   <p role="alert" className="text-caption text-danger-text">
@@ -925,7 +981,7 @@ export function AgentExtensionsPanel({
               </form>
             </>
           )}
-        </div>
+        </MotionSurface>
         {needsReload && (
           <div className="wb-extension-reload">
             <p>

@@ -9,6 +9,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type MutableRefObject,
   type ReactNode,
 } from "react";
@@ -53,6 +54,8 @@ import {
   RefreshCw,
   Info,
   ListChecks,
+  Store,
+  Clock3,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Notice } from "@/components/ui/notice";
@@ -65,6 +68,7 @@ import {
   FullScreenPanelHostContext,
   FullScreenPanelNavigationContext,
 } from "@/components/common/FullScreenPanel";
+import { animateHeightReveal } from "@/lib/motion";
 import { settingsApi } from "@/lib/api";
 import { APP_NAME, APP_UPDATES_ENABLED } from "@/lib/branding";
 import { BuildChannelBadge } from "@/app/shell/BuildChannelBadge";
@@ -190,6 +194,7 @@ import { AgentProjectMenu } from "./AgentProjectMenu";
 import { AgentSessionSyncButton } from "./AgentSessionSyncButton";
 import { AgentSecretaryTasks } from "./AgentSecretaryTasks";
 import { AgentAttachmentImage } from "./AgentAttachmentImage";
+import { AgentDeepSeekMarketplacePanel } from "./AgentDeepSeekMarketplacePanel";
 import { AgentExtensionsPanel } from "./AgentExtensionsPanel";
 import { AgentMemoryPanel } from "./AgentMemoryPanel";
 import { AgentOperationsPanel } from "./AgentOperationsPanel";
@@ -222,6 +227,7 @@ const EMPTY_CATALOG: AgentCatalog = {
   excludedSources: [],
 };
 const EMPTY_MESSAGES: AgentSnapshot["messages"] = [];
+const EMPTY_DIFFS: AgentSnapshot["diffs"] = [];
 const EMPTY_NATIVE_ALIASES: Record<string, string> = {};
 const EMPTY_QUEUED_MESSAGES: AgentQueuedMessage[] = [];
 
@@ -740,6 +746,199 @@ function AgentHelpMenu({
   );
 }
 
+function AgentComposerDraftInput({
+  storageKey,
+  subscribe,
+  getDraft,
+  composerInputRef,
+  disabled,
+  onWriteDraft,
+  onPasteImages,
+  onSteerOrSubmit,
+}: {
+  storageKey: string;
+  subscribe: (listener: () => void) => () => void;
+  getDraft: (key: string) => string;
+  composerInputRef: MutableRefObject<HTMLTextAreaElement | null>;
+  disabled: boolean;
+  onWriteDraft: (value: string) => void;
+  onPasteImages: (files: File[]) => void;
+  onSteerOrSubmit: (steer: boolean) => void;
+}) {
+  const draft = useSyncExternalStore(subscribe, () => getDraft(storageKey));
+  const textareaRef = useAgentAutoSizeTextarea(draft);
+  const composerRef = useCallback(
+    (node: HTMLTextAreaElement | null) => {
+      composerInputRef.current = node;
+      textareaRef(node);
+    },
+    [composerInputRef, textareaRef],
+  );
+  return (
+    <AgentCommandTextarea
+      ref={composerRef}
+      id="agent-message"
+      rows={1}
+      placeholder="描述任务，或输入 / 查看计划、目标等命令…"
+      title="Enter 发送 · Shift + Enter 换行；任务运行时默认排队，Ctrl/⌘ + Enter 引导当前任务"
+      value={draft}
+      disabled={disabled}
+      onChange={(event) => onWriteDraft(event.target.value)}
+      onSelectCommand={(value) => {
+        onWriteDraft(value);
+        composerInputRef.current?.focus();
+      }}
+      onPaste={(event) => {
+        const files = Array.from(event.clipboardData.items)
+          .filter(
+            (item) => item.kind === "file" && item.type.startsWith("image/"),
+          )
+          .map((item) => item.getAsFile())
+          .filter((file): file is File => file !== null);
+        if (!files.length) return;
+        event.preventDefault();
+        onPasteImages(files);
+      }}
+      onKeyDown={(event) => {
+        if (
+          event.key === "Enter" &&
+          !event.shiftKey &&
+          !event.nativeEvent.isComposing
+        ) {
+          event.preventDefault();
+          onSteerOrSubmit(Boolean(event.ctrlKey || event.metaKey));
+        }
+      }}
+    />
+  );
+}
+
+function AgentComposerSubmitAction({
+  storageKey,
+  subscribe,
+  getDraft,
+  baseSendDisabled,
+  hasAttachments,
+  readOnlySession,
+  runningHere,
+  queuedHere,
+  uncertainHere,
+  stoppingHere,
+  submittingHere,
+  queueMode,
+  queuePaused,
+  uncertainSubmission,
+  onStop,
+}: {
+  storageKey: string;
+  subscribe: (listener: () => void) => () => void;
+  getDraft: (key: string) => string;
+  baseSendDisabled: boolean;
+  hasAttachments: boolean;
+  readOnlySession: boolean;
+  runningHere: boolean;
+  queuedHere: boolean;
+  uncertainHere: boolean;
+  stoppingHere: boolean;
+  submittingHere: boolean;
+  queueMode: boolean;
+  queuePaused?: boolean;
+  uncertainSubmission: AgentSubmission | null;
+  onStop: () => void;
+}) {
+  const draft = useSyncExternalStore(subscribe, () => getDraft(storageKey));
+  const sendDisabled = baseSendDisabled || (!draft.trim() && !hasAttachments);
+  const canRetryUncertain = Boolean(
+    !queueMode &&
+      uncertainSubmission &&
+      !uncertainSubmission.stopRequested &&
+      uncertainSubmission.text === draft.trim() &&
+      uncertainSubmission.draft.key === storageKey,
+  );
+  const stopPrimary =
+    !readOnlySession &&
+    (runningHere || queuedHere || uncertainHere || stoppingHere) &&
+    (sendDisabled || (uncertainHere && !canRetryUncertain));
+  return (
+    <button
+      type={stopPrimary ? "button" : "submit"}
+      data-composer-action={stopPrimary ? "stop" : "send"}
+      className={`wb-primary wb-send-button${!stopPrimary && submittingHere ? " wb-send-pending" : ""}`}
+      disabled={stopPrimary ? stoppingHere : sendDisabled}
+      title={
+        stopPrimary
+          ? "停止当前任务，保留排队消息"
+          : queueMode
+            ? queuePaused
+              ? "发送消息 · 当前队列已暂停"
+              : "发送并排队 · 当前任务结束后依次发送"
+            : "Enter 发送 · Shift + Enter 换行"
+      }
+      onClick={
+        stopPrimary
+          ? (event) => {
+              if (event.detail < 2) onStop();
+            }
+          : undefined
+      }
+      onKeyDown={(event) => {
+        if (event.repeat && (event.key === "Enter" || event.key === " "))
+          event.preventDefault();
+      }}
+    >
+      {stopPrimary ? (
+        <Square size={16} aria-hidden="true" />
+      ) : submittingHere ? (
+        <LoaderCircle
+          className="wb-send-spinner"
+          size={20}
+          aria-hidden="true"
+        />
+      ) : (
+        <ArrowUp size={20} aria-hidden="true" />
+      )}
+      <span>
+        {stopPrimary
+          ? stoppingHere
+            ? "停止中…"
+            : "停止"
+          : submittingHere
+            ? "正在发送…"
+            : "发送"}
+      </span>
+    </button>
+  );
+}
+
+function WorkspaceSessionsDrawer({
+  id,
+  className,
+  ariaLabel,
+  children,
+}: {
+  id: string;
+  className: string;
+  ariaLabel: string;
+  children: ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  useLayoutEffect(
+    () => animateHeightReveal(ref.current, { durationMs: 250 }),
+    [],
+  );
+  return (
+    <div
+      ref={ref}
+      className={className}
+      id={id}
+      role="group"
+      aria-label={ariaLabel}
+    >
+      {children}
+    </div>
+  );
+}
+
 export function AgentPage({
   isActive = true,
   sidebarCompact = false,
@@ -1087,7 +1286,39 @@ export function AgentPage({
     Record<string, boolean>
   >({});
   const workspaceSessionLoads = useRef(new Map<string, object>());
-  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const draftsStore = useRef<{
+    values: Record<string, string>;
+    listeners: Set<() => void>;
+  }>({ values: {}, listeners: new Set() });
+  const subscribeDrafts = useCallback((listener: () => void) => {
+    draftsStore.current.listeners.add(listener);
+    return () => {
+      draftsStore.current.listeners.delete(listener);
+    };
+  }, []);
+  const setDrafts = useCallback(
+    (
+      updater:
+        | Record<string, string>
+        | ((old: Record<string, string>) => Record<string, string>),
+    ) => {
+      const prev = draftsStore.current.values;
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      if (next === prev) return;
+      draftsStore.current.values = next;
+      for (const listener of draftsStore.current.listeners) listener();
+    },
+    [],
+  );
+  const readCurrentDraft = useCallback(
+    (storageKey: string) =>
+      storageKey
+        ? (draftsStore.current.values[storageKey] ??
+          readDraft(storageKey) ??
+          "")
+        : "",
+    [],
+  );
   const [composerImagesBySession, setComposerImagesBySession] = useState<
     Record<string, AgentImageAttachment[]>
   >({});
@@ -2560,7 +2791,6 @@ export function AgentPage({
     workspace && sessionId
       ? readAgentQueueRecall(workspace.path, sessionId)
       : null;
-  const draft = key ? (drafts[key] ?? readDraft(key) ?? "") : "";
   useEffect(() => {
     if (!queueRecovery) return;
     if (restoreAgentDraft(queueRecovery.draft))
@@ -2605,14 +2835,6 @@ export function AgentPage({
   const composerDocuments = sessionId
     ? composerDocumentsBySession[sessionId] || []
     : [];
-  const textareaRef = useAgentAutoSizeTextarea(draft);
-  const composerRef = useCallback(
-    (node: HTMLTextAreaElement | null) => {
-      composerInputRef.current = node;
-      textareaRef(node);
-    },
-    [textareaRef],
-  );
   const localPaneLayout = useAgentPaneLayout({
     isActive: isActive && !sharedPaneLayout,
     sidebarVisible: !sidebarCollapsed,
@@ -2642,6 +2864,7 @@ export function AgentPage({
   };
   const insertStarter = (text: string) => {
     if (!key || readOnlySession) return;
+    const draft = readCurrentDraft(key);
     writeDraft(key, draft.trim() ? `${draft}\n\n${text}` : text);
     composerInputRef.current?.focus();
   };
@@ -3450,6 +3673,7 @@ export function AgentPage({
     const id = sessionId;
     const projectPath = workspace.path;
     const storageKey = key;
+    const draft = readCurrentDraft(storageKey);
     const text = normalizeAgentCommand(draft.trim());
     const images = composerImagesRef.current[id] || [];
     const documents = composerDocumentsRef.current[id] || [];
@@ -3593,6 +3817,7 @@ export function AgentPage({
       return;
     const id = sessionId;
     const storageKey = key;
+    const draft = readCurrentDraft(storageKey);
     if (
       action === "recall" &&
       (draft.trim() || composerImages.length || composerDocuments.length)
@@ -3731,6 +3956,7 @@ export function AgentPage({
     else void send();
   };
   const send = async (retry?: AgentRetryInput) => {
+    const draft = readCurrentDraft(key);
     const outgoingImages =
       retry?.images ??
       (sessionId ? composerImagesRef.current[sessionId] || [] : []);
@@ -4432,24 +4658,19 @@ export function AgentPage({
     runningHere || snapshot?.queuedMessages?.length || queueRecovery,
   );
   const recallingHere = busy === "queue-recall" && busySessionId === sessionId;
-  const sendDisabled =
+  const baseSendDisabled =
     readOnlySession ||
     retryLoading ||
     Boolean(busy) ||
     !snapshot ||
-    (!draft.trim() && !composerImages.length && !composerDocuments.length) ||
     (queuedHere && !runningHere) ||
     stoppingHere;
-  const canRetryUncertain =
-    !queueMode &&
-    uncertainSubmission &&
-    !uncertainSubmission.stopRequested &&
-    uncertainSubmission.text === draft.trim() &&
-    uncertainSubmission.draft.key === key;
-  const stopPrimary =
-    !readOnlySession &&
-    (runningHere || queuedHere || uncertainHere || stoppingHere) &&
-    (sendDisabled || (uncertainHere && !canRetryUncertain));
+  const hasComposerAttachments = Boolean(
+    composerImages.length || composerDocuments.length,
+  );
+  const isSendDisabled = () =>
+    baseSendDisabled ||
+    (!readCurrentDraft(key).trim() && !hasComposerAttachments);
   const submittingHere = sendingHere || steeringHere || enqueuingHere;
   const sessionQuery = sessionSearch.trim().toLocaleLowerCase();
   const visibleWorkspaceSessions = useMemo(
@@ -4655,6 +4876,12 @@ export function AgentPage({
         <PanelLeftOpen />
       </button>
     ) : null;
+  const marketNavActive = isActive && activeTool === "market";
+  const automationNavActive = isActive && operationsOpen;
+  const secretaryNavActive =
+    !marketNavActive &&
+    !automationNavActive &&
+    Boolean(secretarySessionId && workspace?.standalone);
   const sidebarActions = (
     <nav className="wb-nav" aria-label="工作台操作">
       <div className="wb-create-task">
@@ -4725,6 +4952,7 @@ export function AgentPage({
         })}
         title={t("agentSecretary.open", { defaultValue: "打开 Loli 秘书" })}
         aria-pressed={Boolean(secretarySessionId && workspace?.standalone)}
+        data-nav-active={secretaryNavActive || undefined}
         disabled={
           initializing ||
           Boolean(busy) ||
@@ -4740,6 +4968,68 @@ export function AgentPage({
         ) : (
           <UsersRound aria-hidden="true" />
         )}
+      </button>
+      <button
+        type="button"
+        className="wb-nav-button wb-nav-marketplace"
+        aria-pressed={marketNavActive}
+        data-nav-active={marketNavActive || undefined}
+        aria-label={t("agentMarketplace.open", {
+          defaultValue: "打开插件市场",
+        })}
+        title={t("agentMarketplace.open", {
+          defaultValue: "打开插件市场",
+        })}
+        onClick={() =>
+          navigateWorkspace(() => {
+            if (isActive && activeTool === "market") {
+              setActiveTool(null);
+            } else {
+              setExtensionsOpen(false);
+              setOperationsOpen(false);
+              setActiveTool("market");
+            }
+          })
+        }
+      >
+        <Store className="wb-nav-marketplace-icon" aria-hidden="true" />
+        <span className="wb-nav-marketplace-label">
+          {t("agentMarketplace.name", {
+            defaultValue: "插件市场",
+          })}
+        </span>
+      </button>
+      <button
+        type="button"
+        className="wb-nav-button wb-nav-automation"
+        aria-pressed={automationNavActive}
+        aria-current={automationNavActive ? "page" : undefined}
+        data-nav-active={automationNavActive || undefined}
+        aria-label={t("agentAutomation.name", {
+          defaultValue: "自动化",
+        })}
+        title={t("agentAutomation.open", {
+          defaultValue: "打开自动化",
+        })}
+        onClick={() =>
+          navigateWorkspace(() => {
+            if (isActive && operationsOpen) {
+              setOperationsOpen(false);
+            } else {
+              setExtensionsOpen(false);
+              setActiveTool(null);
+              setOperationsTab("automation");
+              setOperationsOpen(true);
+            }
+          })
+        }
+      >
+        <Clock3 className="wb-nav-automation-icon" aria-hidden="true" />
+        <span className="wb-nav-automation-label">
+          {t("agentAutomation.name", {
+            defaultValue: "自动化",
+          })}
+        </span>
       </button>
       {IS_DEVELOPMENT_BUILD && (
         <AgentSessionSyncButton
@@ -4865,7 +5155,7 @@ export function AgentPage({
                   disabled={initializing || Boolean(busy)}
                   onClick={() => toggleWorkspace(project.path, expanded)}
                 >
-                  {expanded ? <ChevronDown /> : <ChevronRight />}
+                  <ChevronRight aria-hidden="true" />
                 </button>
                 {isCurrentWorkspace ? (
                   <>
@@ -4913,13 +5203,12 @@ export function AgentPage({
                 />
               </div>
               {expanded && (
-                <div
+                <WorkspaceSessionsDrawer
                   className={`wb-workspace-sessions${
                     isCurrentWorkspace ? " wb-current-workspace-sessions" : ""
                   }`}
                   id={taskListId}
-                  role="group"
-                  aria-label={`${accessibleName} 的任务`}
+                  ariaLabel={`${accessibleName} 的任务`}
                 >
                   {isCurrentWorkspace ? (
                     matchingTasks.length ? (
@@ -5064,7 +5353,7 @@ export function AgentPage({
                         : "此工作区还没有任务。"}
                     </p>
                   )}
-                </div>
+                </WorkspaceSessionsDrawer>
               )}
             </div>
           );
@@ -5801,7 +6090,10 @@ export function AgentPage({
                     )}
                   </div>
                 </div>
-                <AgentChanges key={sessionId} diffs={snapshot?.diffs || []} />
+                <AgentChanges
+                  key={sessionId}
+                  diffs={snapshot?.diffs || EMPTY_DIFFS}
+                />
               </AgentFileActionsContext.Provider>
               {showScrollToBottom && (
                 <div className="wb-scroll-latest-anchor">
@@ -5855,6 +6147,7 @@ export function AgentPage({
                     disabled={Boolean(busy) || stoppingHere || uncertainHere}
                     onEditGoal={() => {
                       if (!key) return;
+                      const draft = readCurrentDraft(key);
                       if (!draft.trimStart().startsWith("/goal "))
                         writeDraft(key, "/goal edit " + draft);
                       composerInputRef.current?.focus();
@@ -5954,7 +6247,7 @@ export function AgentPage({
                   }}
                   onSubmit={(event) => {
                     event.preventDefault();
-                    if (sendDisabled) return;
+                    if (isSendDisabled()) return;
                     submitComposer();
                     composerInputRef.current?.focus({ preventScroll: true });
                   }}
@@ -6008,45 +6301,19 @@ export function AgentPage({
                   <label htmlFor="agent-message" className="sr-only">
                     发送给 Agent 的消息
                   </label>
-                  <AgentCommandTextarea
+                  <AgentComposerDraftInput
                     key={sessionId}
-                    ref={composerRef}
-                    id="agent-message"
-                    rows={1}
-                    placeholder="描述任务，或输入 / 查看计划、目标等命令…"
-                    title="Enter 发送 · Shift + Enter 换行；任务运行时默认排队，Ctrl/⌘ + Enter 引导当前任务"
-                    value={draft}
+                    storageKey={key}
+                    subscribe={subscribeDrafts}
+                    getDraft={readCurrentDraft}
+                    composerInputRef={composerInputRef}
                     disabled={readOnlySession || recallingHere}
-                    onChange={(event) => writeDraft(key, event.target.value)}
-                    onSelectCommand={(value) => {
-                      writeDraft(key, value);
-                      composerInputRef.current?.focus();
-                    }}
-                    onPaste={(event) => {
-                      const files = Array.from(event.clipboardData.items)
-                        .filter(
-                          (item) =>
-                            item.kind === "file" &&
-                            item.type.startsWith("image/"),
-                        )
-                        .map((item) => item.getAsFile())
-                        .filter((file): file is File => file !== null);
-                      if (!files.length) return;
-                      event.preventDefault();
-                      void addComposerImages(files);
-                    }}
-                    onKeyDown={(event) => {
-                      if (
-                        event.key === "Enter" &&
-                        !event.shiftKey &&
-                        !event.nativeEvent.isComposing
-                      ) {
-                        event.preventDefault();
-                        if (!sendDisabled) {
-                          if ((event.ctrlKey || event.metaKey) && runningHere)
-                            void enqueueDraft("steer");
-                          else submitComposer();
-                        }
+                    onWriteDraft={(value) => writeDraft(key, value)}
+                    onPasteImages={(files) => void addComposerImages(files)}
+                    onSteerOrSubmit={(steer) => {
+                      if (!isSendDisabled()) {
+                        if (steer && runningHere) void enqueueDraft("steer");
+                        else submitComposer();
                       }
                     }}
                   />
@@ -6207,56 +6474,23 @@ export function AgentPage({
                         snapshot?.compacting
                       }
                     />
-                    <button
-                      type={stopPrimary ? "button" : "submit"}
-                      data-composer-action={stopPrimary ? "stop" : "send"}
-                      className={`wb-primary wb-send-button${!stopPrimary && submittingHere ? " wb-send-pending" : ""}`}
-                      disabled={stopPrimary ? stoppingHere : sendDisabled}
-                      title={
-                        stopPrimary
-                          ? "停止当前任务，保留排队消息"
-                          : queueMode
-                            ? snapshot?.queuePaused
-                              ? "发送消息 · 当前队列已暂停"
-                              : "发送并排队 · 当前任务结束后依次发送"
-                            : "Enter 发送 · Shift + Enter 换行"
-                      }
-                      onClick={
-                        stopPrimary
-                          ? (event) => {
-                              if (event.detail < 2) void stop();
-                            }
-                          : undefined
-                      }
-                      onKeyDown={(event) => {
-                        if (
-                          event.repeat &&
-                          (event.key === "Enter" || event.key === " ")
-                        )
-                          event.preventDefault();
-                      }}
-                    >
-                      {stopPrimary ? (
-                        <Square size={16} aria-hidden="true" />
-                      ) : submittingHere ? (
-                        <LoaderCircle
-                          className="wb-send-spinner"
-                          size={20}
-                          aria-hidden="true"
-                        />
-                      ) : (
-                        <ArrowUp size={20} aria-hidden="true" />
-                      )}
-                      <span>
-                        {stopPrimary
-                          ? stoppingHere
-                            ? "停止中…"
-                            : "停止"
-                          : submittingHere
-                            ? "正在发送…"
-                            : "发送"}
-                      </span>
-                    </button>
+                    <AgentComposerSubmitAction
+                      storageKey={key}
+                      subscribe={subscribeDrafts}
+                      getDraft={readCurrentDraft}
+                      baseSendDisabled={baseSendDisabled}
+                      hasAttachments={hasComposerAttachments}
+                      readOnlySession={readOnlySession}
+                      runningHere={Boolean(runningHere)}
+                      queuedHere={queuedHere}
+                      uncertainHere={uncertainHere}
+                      stoppingHere={stoppingHere}
+                      submittingHere={submittingHere}
+                      queueMode={queueMode}
+                      queuePaused={snapshot?.queuePaused}
+                      uncertainSubmission={uncertainSubmission}
+                      onStop={() => void stop()}
+                    />
                   </div>
                 </form>
               </div>
@@ -6539,6 +6773,7 @@ export function AgentPage({
               }}
               onCompose={(text) => {
                 if (key && !readOnlySession) {
+                  const draft = readCurrentDraft(key);
                   writeDraft(
                     key,
                     `${draft}${draft && !draft.endsWith("\n") ? "\n" : ""}${text}\n`,
@@ -6593,9 +6828,15 @@ export function AgentPage({
               onReload={async () => {
                 await refreshCatalog(true);
               }}
+              onOpenMarketplace={() => {
+                setExtensionsOpen(false);
+                setOperationsOpen(false);
+                setActiveTool("market");
+              }}
               onUseSkill={
                 key && !readOnlySession
                   ? (skill) => {
+                      const draft = readCurrentDraft(key);
                       writeDraft(
                         key,
                         `${draft}${draft && !draft.endsWith("\n") ? "\n" : ""}请使用 ${skill.name} 技能完成这个任务。\n`,
@@ -6618,6 +6859,17 @@ export function AgentPage({
                 <AgentMemoryPanel embedded projectPath={workspace?.path} />
               )}
             </AgentToolPanel>
+            <AgentDeepSeekMarketplacePanel
+              open={isActive && activeTool === "market"}
+              onClose={() => setActiveTool(null)}
+              projectPath={workspace?.path}
+              working={working}
+              onOpenExtensions={(tab) => {
+                setExtensionsInitialTab(tab ?? "skills");
+                setActiveTool(null);
+                setExtensionsOpen(true);
+              }}
+            />
           </AgentToolDraftsContext.Provider>
         </FullScreenPanelHostContext.Provider>
       </FullScreenPanelNavigationContext.Provider>

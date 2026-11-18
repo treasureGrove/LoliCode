@@ -1,0 +1,812 @@
+{
+  "schemaVersion": 1,
+  "kind": "upstream-optional-bundle-capability-inventory",
+  "upstream": {
+    "version": "0.2.2-rc.1",
+    "commit": "66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db",
+    "checkedAt": "2026-11-10T18:45:53.764Z",
+    "sourceProofs": [
+      {
+        "path": "packages/util/official-bundles/src/bundles.ts",
+        "url": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/util/official-bundles/src/bundles.ts",
+        "gitBlobSha1": "0ba7f2323519053088c265f57a709636af298b7c",
+        "sha256": "f756990817b152b67af8df317e53859706d05217c8daee3523148a05dbfe1da8"
+      },
+      {
+        "path": "packages/util/official-bundles/src/plugin-manager.ts",
+        "url": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/util/official-bundles/src/plugin-manager.ts",
+        "gitBlobSha1": "510c85699f6c059109c5ba4decc82412113dc49f",
+        "sha256": "85d98ba3581f01e046c39f8c3961fa7148987b02d05e7152b93c8276318dde50"
+      },
+      {
+        "path": "packages/util/official-bundles/src/catalog.generated.ts",
+        "url": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/util/official-bundles/src/catalog.generated.ts",
+        "gitBlobSha1": "3a494f90e6968a2e408728675db60e2b97b48179",
+        "sha256": "e99573b479f736afa04493b1c5f91e2b881e64e53533205d5fca1e071f90e69c"
+      }
+    ]
+  },
+  "lolicode": {
+    "branch": "feature/repository-organization",
+    "commit": "08b87015494bcb6bd5edc1ae1ffa1d22e1684f75",
+    "sourceSnapshot": "D:/projectGithub/lolicode-harness-audit-20261110",
+    "sourcePreflight": "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1111-early/audit-preflight.json"
+  },
+  "catalogSummary": {
+    "optional": 15,
+    "onDemand": 3,
+    "total": 18,
+    "existingHostEntries": 2,
+    "hostWiringGaps": 15,
+    "platformRestricted": 1,
+    "runtimeActivationVerified": false,
+    "fullParity": false,
+    "metadataRepeat": "node D:\\projectGithub\\lolicode-harness-audit-20261110\\src-tauri\\target\\audit-logs\\1111-early/audit-bundles.mjs",
+    "metadataAuditSha256": "c075a33d81778d29452d8774b1c42b48aee488a2d6b659290535e819e0e3ea94"
+  },
+  "scope": "data-only-official-catalog-and-static-host-registration-audit",
+  "limitations": [
+    "Direct YAML name inspection is not full bundle expansion or service-graph resolution. No provider patch is evaluated.",
+    "Stock SDK template selection does not reveal a user-enabled profile, active bundle, model route or live service.",
+    "Declared platforms and offline discoverability are metadata only. Actual platform/service/runtime limits must be verified, not guessed from names.",
+    "The two existing host entries do not establish terminal/Ralph native acceptance in this audit. The other entries are explicit wiring/activation gaps, not SDK-inherited product capabilities."
+  ],
+  "stockSdkTemplate": [
+    "@deepseek-ai/dsh-base",
+    "@deepseek-ai/dsh-sdk-app"
+  ],
+  "retiredBundles": [
+    "@deepseek-ai/dsh-experimental-schedule-bundle"
+  ],
+  "capabilities": [
+    {
+      "package": "@deepseek-ai/dsh-personalized-recommendations",
+      "version": "0.2.2-rc.1",
+      "kind": "shipped-optional",
+      "installedPackagePresent": true,
+      "selectedByStockSdkTemplate": false,
+      "upstreamExperimentalBadge": true,
+      "hiddenByUpstreamPluginPage": false,
+      "listedByDefault": true,
+      "platformDeclaration": null,
+      "auditHostPlatform": "win32",
+      "declaredPlatformBlocked": false,
+      "platformRuntimeVerified": false,
+      "lolicodeHostEntry": null,
+      "status": "needs-host-or-client-wiring-and-activation-verification",
+      "upstream": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/experimental/personalized-recommendations/README.md",
+      "manifest": {
+        "path": "D:\\projectGithub\\lolicode-harness-audit-20261110/packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-personalized-recommendations/package.json",
+        "sha256": "e361ab66dcd44c48d54fc4830338e3a6318a95b9a6657da5803e2dbc5cd4bd0a",
+        "description": "Personalized pages and built-in plugin recommendations offered as cards below answers"
+      },
+      "patch": {
+        "path": "D:\\projectGithub\\lolicode-harness-audit-20261110\\packages\\lolicode-harness-runtime\\node_modules\\@deepseek-ai\\dsh-personalized-recommendations\\cordis.patch.yml",
+        "sha256": "9bf10e1a62bbe40effa87c139638f3278ec4e4ea755f6e99045e3b5fb7712154",
+        "directDeclaredPluginNames": [
+          "@deepseek-ai/dsh-action-cards",
+          "@deepseek-ai/dsh-client-ui-action-cards",
+          "@deepseek-ai/dsh-creation-recommendations",
+          "@deepseek-ai/dsh-client-ui-creation-recommendations",
+          "@deepseek-ai/dsh-plugin-recommendations",
+          "@deepseek-ai/dsh-client-ui-plugin-recommendations"
+        ],
+        "directlyMentionsClientModule": true
+      },
+      "lolicode": [
+        "src-tauri/src/services/harness_plugins.rs",
+        "src/features/agent/AgentExtensionsPanel.tsx",
+        "packages/lolicode-harness-runtime/profile.cordis.patch.yml"
+      ],
+      "acceptance": [
+        "Inspect this official patch and its transitive Host/Client service requirements before adding a product selector; package presence alone cannot set enabled or active.",
+        "In an isolated dev snapshot, wire the required official Host/Client environment, use the official activation/install interface and observe real service readiness or the concrete platform/service blocker.",
+        "Expose and exercise the actual @deepseek-ai/dsh-personalized-recommendations user flow, verify restart/settings/permissions and current Windows desktop regressions before promoting."
+      ],
+      "currentUserSelectionRead": false,
+      "activationOrUserFlowVerified": false
+    },
+    {
+      "package": "@deepseek-ai/dsh-experimental-session-search",
+      "version": "0.2.2-rc.1",
+      "kind": "shipped-optional",
+      "installedPackagePresent": true,
+      "selectedByStockSdkTemplate": false,
+      "upstreamExperimentalBadge": true,
+      "hiddenByUpstreamPluginPage": false,
+      "listedByDefault": false,
+      "platformDeclaration": null,
+      "auditHostPlatform": "win32",
+      "declaredPlatformBlocked": false,
+      "platformRuntimeVerified": false,
+      "lolicodeHostEntry": null,
+      "status": "needs-host-or-client-wiring-and-activation-verification",
+      "upstream": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/experimental/session-search/README.md",
+      "manifest": {
+        "path": "D:\\projectGithub\\lolicode-harness-audit-20261110/packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-experimental-session-search/package.json",
+        "sha256": "717232a2cb29019bf1c39f35e0fc04ceeba2d661f3f6b8c110fb33565580eb27",
+        "description": "Give agents tools to search and read earlier sessions from the current workspace."
+      },
+      "patch": {
+        "path": "D:\\projectGithub\\lolicode-harness-audit-20261110\\packages\\lolicode-harness-runtime\\node_modules\\@deepseek-ai\\dsh-experimental-session-search\\cordis.patch.yml",
+        "sha256": "a6eb3a40b4319396403e9cdbe503401b3785c5d3c066e58b4a931c0027dc7f35",
+        "directDeclaredPluginNames": [
+          "@deepseek-ai/dsh-session-query-sqlite",
+          "@deepseek-ai/dsh-tool-session-query"
+        ],
+        "directlyMentionsClientModule": false
+      },
+      "lolicode": [
+        "src-tauri/src/services/harness_plugins.rs",
+        "src/features/agent/AgentExtensionsPanel.tsx",
+        "packages/lolicode-harness-runtime/profile.cordis.patch.yml"
+      ],
+      "acceptance": [
+        "Inspect this official patch and its transitive Host/Client service requirements before adding a product selector; package presence alone cannot set enabled or active.",
+        "In an isolated dev snapshot, wire the required official Host/Client environment, use the official activation/install interface and observe real service readiness or the concrete platform/service blocker.",
+        "Expose and exercise the actual @deepseek-ai/dsh-experimental-session-search user flow, verify restart/settings/permissions and current Windows desktop regressions before promoting."
+      ],
+      "currentUserSelectionRead": false,
+      "activationOrUserFlowVerified": false
+    },
+    {
+      "package": "@deepseek-ai/dsh-experimental-ralph-bundle",
+      "version": "0.2.2-rc.1",
+      "kind": "shipped-optional",
+      "installedPackagePresent": true,
+      "selectedByStockSdkTemplate": false,
+      "upstreamExperimentalBadge": true,
+      "hiddenByUpstreamPluginPage": false,
+      "listedByDefault": false,
+      "platformDeclaration": null,
+      "auditHostPlatform": "win32",
+      "declaredPlatformBlocked": false,
+      "platformRuntimeVerified": false,
+      "lolicodeHostEntry": "ralph",
+      "status": "host-entry-present-not-accepted-by-this-audit",
+      "upstream": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/experimental/ralph-bundle/README.md",
+      "manifest": {
+        "path": "D:\\projectGithub\\lolicode-harness-audit-20261110/packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-experimental-ralph-bundle/package.json",
+        "sha256": "799b3c4a8f61b8dffe662114d2df64679e2702e75de63e56f2ef38d53336bb5a",
+        "description": "Run explicitly requested repeated work with fresh agents."
+      },
+      "patch": {
+        "path": "D:\\projectGithub\\lolicode-harness-audit-20261110\\packages\\lolicode-harness-runtime\\node_modules\\@deepseek-ai\\dsh-experimental-ralph-bundle\\cordis.patch.yml",
+        "sha256": "5c637e02d89b65bc83423dc075e354fb9ab1d85689c11815ca7605ae144dea45",
+        "directDeclaredPluginNames": [
+          "@deepseek-ai/dsh-workflow-ptc",
+          "@deepseek-ai/dsh-tool-ralph"
+        ],
+        "directlyMentionsClientModule": false
+      },
+      "lolicode": [
+        "src-tauri/src/services/harness_plugins.rs",
+        "src/features/agent/AgentExtensionsPanel.tsx",
+        "packages/lolicode-harness-runtime/profile.cordis.patch.yml"
+      ],
+      "acceptance": [
+        "In an isolated dev snapshot, exercise the existing ralph plugin selector, verify it persists the selected layer and restarts the owning SDK context.",
+        "Read actual loader/service state and execute the relevant terminal/Goal behavior; complete current native desktop/restart gates."
+      ],
+      "currentUserSelectionRead": false,
+      "activationOrUserFlowVerified": false
+    },
+    {
+      "package": "@deepseek-ai/dsh-experimental-terminal-bundle",
+      "version": "0.2.2-rc.1",
+      "kind": "shipped-optional",
+      "installedPackagePresent": true,
+      "selectedByStockSdkTemplate": false,
+      "upstreamExperimentalBadge": false,
+      "hiddenByUpstreamPluginPage": true,
+      "listedByDefault": true,
+      "platformDeclaration": null,
+      "auditHostPlatform": "win32",
+      "declaredPlatformBlocked": false,
+      "platformRuntimeVerified": false,
+      "lolicodeHostEntry": "terminal",
+      "status": "host-entry-present-not-accepted-by-this-audit",
+      "upstream": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/experimental/terminal-bundle/README.md",
+      "manifest": {
+        "path": "D:\\projectGithub\\lolicode-harness-audit-20261110/packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-experimental-terminal-bundle/package.json",
+        "sha256": "b64f4c81d8096f6785d5574e9e5884e559f32ee3728f94d9902e022ee7170b39",
+        "description": "Keep shell processes alive across tool calls."
+      },
+      "patch": {
+        "path": "D:\\projectGithub\\lolicode-harness-audit-20261110\\packages\\lolicode-harness-runtime\\node_modules\\@deepseek-ai\\dsh-experimental-terminal-bundle\\cordis.patch.yml",
+        "sha256": "e366d7ab279db61277d74687c2e2c1e77839b9d681bff6c6d1a3f634157d2765",
+        "directDeclaredPluginNames": [
+          "@deepseek-ai/dsh-terminal",
+          "@deepseek-ai/dsh-terminal-bash",
+          "@deepseek-ai/dsh-terminal-bash",
+          "@deepseek-ai/dsh-tool-terminal"
+        ],
+        "directlyMentionsClientModule": false
+      },
+      "lolicode": [
+        "src-tauri/src/services/harness_plugins.rs",
+        "src/features/agent/AgentExtensionsPanel.tsx",
+        "packages/lolicode-harness-runtime/profile.cordis.patch.yml"
+      ],
+      "acceptance": [
+        "In an isolated dev snapshot, exercise the existing terminal plugin selector, verify it persists the selected layer and restarts the owning SDK context.",
+        "Read actual loader/service state and execute the relevant terminal/Goal behavior; complete current native desktop/restart gates."
+      ],
+      "currentUserSelectionRead": false,
+      "activationOrUserFlowVerified": false
+    },
+    {
+      "package": "@deepseek-ai/dsh-experimental-badge-skill-bundle",
+      "version": "0.2.2-rc.1",
+      "kind": "shipped-optional",
+      "installedPackagePresent": true,
+      "selectedByStockSdkTemplate": false,
+      "upstreamExperimentalBadge": true,
+      "hiddenByUpstreamPluginPage": false,
+      "listedByDefault": true,
+      "platformDeclaration": null,
+      "auditHostPlatform": "win32",
+      "declaredPlatformBlocked": false,
+      "platformRuntimeVerified": false,
+      "lolicodeHostEntry": null,
+      "status": "needs-host-or-client-wiring-and-activation-verification",
+      "upstream": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/experimental/badge-skill-bundle/README.md",
+      "manifest": {
+        "path": "D:\\projectGithub\\lolicode-harness-audit-20261110/packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-experimental-badge-skill-bundle/package.json",
+        "sha256": "8e054b07a279f293427d86f4d40cd456ae7e16f9ac7ac5ee21c6dab5910a005c",
+        "description": "Let agents add a “powered by dsh” badge to documents, pull requests, and other outputs."
+      },
+      "patch": {
+        "path": "D:\\projectGithub\\lolicode-harness-audit-20261110\\packages\\lolicode-harness-runtime\\node_modules\\@deepseek-ai\\dsh-experimental-badge-skill-bundle\\cordis.patch.yml",
+        "sha256": "e039b0d413e33ed1294dbe03dd84176d0d52e96dffa856d612d74631cb023c87",
+        "directDeclaredPluginNames": [
+          "@deepseek-ai/dsh-skill-badge"
+        ],
+        "directlyMentionsClientModule": false
+      },
+      "lolicode": [
+        "src-tauri/src/services/harness_plugins.rs",
+        "src/features/agent/AgentExtensionsPanel.tsx",
+        "packages/lolicode-harness-runtime/profile.cordis.patch.yml"
+      ],
+      "acceptance": [
+        "Inspect this official patch and its transitive Host/Client service requirements before adding a product selector; package presence alone cannot set enabled or active.",
+        "In an isolated dev snapshot, wire the required official Host/Client environment, use the official activation/install interface and observe real service readiness or the concrete platform/service blocker.",
+        "Expose and exercise the actual @deepseek-ai/dsh-experimental-badge-skill-bundle user flow, verify restart/settings/permissions and current Windows desktop regressions before promoting."
+      ],
+      "currentUserSelectionRead": false,
+      "activationOrUserFlowVerified": false
+    },
+    {
+      "package": "@deepseek-ai/dsh-experimental-session-titles-bundle",
+      "version": "0.2.2-rc.1",
+      "kind": "shipped-optional",
+      "installedPackagePresent": true,
+      "selectedByStockSdkTemplate": false,
+      "upstreamExperimentalBadge": true,
+      "hiddenByUpstreamPluginPage": false,
+      "listedByDefault": true,
+      "platformDeclaration": null,
+      "auditHostPlatform": "win32",
+      "declaredPlatformBlocked": false,
+      "platformRuntimeVerified": false,
+      "lolicodeHostEntry": null,
+      "status": "needs-host-or-client-wiring-and-activation-verification",
+      "upstream": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/experimental/session-titles-bundle/README.md",
+      "manifest": {
+        "path": "D:\\projectGithub\\lolicode-harness-audit-20261110/packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-experimental-session-titles-bundle/package.json",
+        "sha256": "248920cec6131537b947f5f876bffb19fb8c618691130173726b650792f196ce",
+        "description": "Refresh session titles as new human prompts arrive."
+      },
+      "patch": {
+        "path": "D:\\projectGithub\\lolicode-harness-audit-20261110\\packages\\lolicode-harness-runtime\\node_modules\\@deepseek-ai\\dsh-experimental-session-titles-bundle\\cordis.patch.yml",
+        "sha256": "e55d7862ad2c8ebc47845b40975adc69c8ea96f76bb8bd3e097aaf39cfe20c11",
+        "directDeclaredPluginNames": [
+          "@deepseek-ai/dsh-session-title-all-prompts-llm"
+        ],
+        "directlyMentionsClientModule": false
+      },
+      "lolicode": [
+        "src-tauri/src/services/harness_plugins.rs",
+        "src/features/agent/AgentExtensionsPanel.tsx",
+        "packages/lolicode-harness-runtime/profile.cordis.patch.yml"
+      ],
+      "acceptance": [
+        "Inspect this official patch and its transitive Host/Client service requirements before adding a product selector; package presence alone cannot set enabled or active.",
+        "In an isolated dev snapshot, wire the required official Host/Client environment, use the official activation/install interface and observe real service readiness or the concrete platform/service blocker.",
+        "Expose and exercise the actual @deepseek-ai/dsh-experimental-session-titles-bundle user flow, verify restart/settings/permissions and current Windows desktop regressions before promoting."
+      ],
+      "currentUserSelectionRead": false,
+      "activationOrUserFlowVerified": false
+    },
+    {
+      "package": "@deepseek-ai/dsh-experimental-agent-team-profile",
+      "version": "0.2.2-rc.1",
+      "kind": "shipped-optional",
+      "installedPackagePresent": true,
+      "selectedByStockSdkTemplate": false,
+      "upstreamExperimentalBadge": true,
+      "hiddenByUpstreamPluginPage": false,
+      "listedByDefault": true,
+      "platformDeclaration": null,
+      "auditHostPlatform": "win32",
+      "declaredPlatformBlocked": false,
+      "platformRuntimeVerified": false,
+      "lolicodeHostEntry": null,
+      "status": "needs-host-or-client-wiring-and-activation-verification",
+      "upstream": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/experimental/agent-team-profile/README.md",
+      "manifest": {
+        "path": "D:\\projectGithub\\lolicode-harness-audit-20261110/packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-experimental-agent-team-profile/package.json",
+        "sha256": "e479f8f94b28790bc34b5e1fdf7e165e419f866ef0f5d9deaff147822a570ad0",
+        "description": "Agent Teams collaboration, tools, and Web UI in one experimental bundle"
+      },
+      "patch": {
+        "path": "D:\\projectGithub\\lolicode-harness-audit-20261110\\packages\\lolicode-harness-runtime\\node_modules\\@deepseek-ai\\dsh-experimental-agent-team-profile\\cordis.patch.yml",
+        "sha256": "54e60f7895fce1fc0b61e78c957ed53bea5ffe19ee575a4bde97f78e13a711fe",
+        "directDeclaredPluginNames": [
+          "@deepseek-ai/dsh-experimental-agent-team",
+          "@deepseek-ai/dsh-experimental-tool-agent-team",
+          "@deepseek-ai/dsh-experimental-client-ui-agent-team"
+        ],
+        "directlyMentionsClientModule": false
+      },
+      "lolicode": [
+        "src-tauri/src/services/harness_plugins.rs",
+        "src/features/agent/AgentExtensionsPanel.tsx",
+        "packages/lolicode-harness-runtime/profile.cordis.patch.yml"
+      ],
+      "acceptance": [
+        "Inspect this official patch and its transitive Host/Client service requirements before adding a product selector; package presence alone cannot set enabled or active.",
+        "In an isolated dev snapshot, wire the required official Host/Client environment, use the official activation/install interface and observe real service readiness or the concrete platform/service blocker.",
+        "Expose and exercise the actual @deepseek-ai/dsh-experimental-agent-team-profile user flow, verify restart/settings/permissions and current Windows desktop regressions before promoting."
+      ],
+      "currentUserSelectionRead": false,
+      "activationOrUserFlowVerified": false
+    },
+    {
+      "package": "@deepseek-ai/dsh-experimental-voice-input-bundle",
+      "version": "0.2.2-rc.1",
+      "kind": "shipped-optional",
+      "installedPackagePresent": true,
+      "selectedByStockSdkTemplate": false,
+      "upstreamExperimentalBadge": true,
+      "hiddenByUpstreamPluginPage": false,
+      "listedByDefault": true,
+      "platformDeclaration": null,
+      "auditHostPlatform": "win32",
+      "declaredPlatformBlocked": false,
+      "platformRuntimeVerified": false,
+      "lolicodeHostEntry": null,
+      "status": "needs-host-or-client-wiring-and-activation-verification",
+      "upstream": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/experimental/voice-input-bundle/README.md",
+      "manifest": {
+        "path": "D:\\projectGithub\\lolicode-harness-audit-20261110/packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-experimental-voice-input-bundle/package.json",
+        "sha256": "7389ccfe5907bdddd0b616be9f346f4a7640dd650fe854f5febf6d00ba8eaf15",
+        "description": "Experimental voice input with local SenseVoice; downloads its runtime on first use"
+      },
+      "patch": {
+        "path": "D:\\projectGithub\\lolicode-harness-audit-20261110\\packages\\lolicode-harness-runtime\\node_modules\\@deepseek-ai\\dsh-experimental-voice-input-bundle\\cordis.patch.yml",
+        "sha256": "3f13611403e1c7611b9a9609c0407b30064d1c889c65147dc27d70145e085e57",
+        "directDeclaredPluginNames": [
+          "@deepseek-ai/dsh-experimental-speech-to-text",
+          "@deepseek-ai/dsh-experimental-speech-to-text-sensevoice",
+          "@deepseek-ai/dsh-experimental-api-speech-to-text",
+          "@deepseek-ai/dsh-experimental-client-ui-voice-input"
+        ],
+        "directlyMentionsClientModule": false
+      },
+      "lolicode": [
+        "src-tauri/src/services/harness_plugins.rs",
+        "src/features/agent/AgentExtensionsPanel.tsx",
+        "packages/lolicode-harness-runtime/profile.cordis.patch.yml"
+      ],
+      "acceptance": [
+        "Inspect this official patch and its transitive Host/Client service requirements before adding a product selector; package presence alone cannot set enabled or active.",
+        "In an isolated dev snapshot, wire the required official Host/Client environment, use the official activation/install interface and observe real service readiness or the concrete platform/service blocker.",
+        "Expose and exercise the actual @deepseek-ai/dsh-experimental-voice-input-bundle user flow, verify restart/settings/permissions and current Windows desktop regressions before promoting."
+      ],
+      "currentUserSelectionRead": false,
+      "activationOrUserFlowVerified": false
+    },
+    {
+      "package": "@deepseek-ai/dsh-experimental-cot-translation-bundle",
+      "version": "0.2.2-rc.1",
+      "kind": "shipped-optional",
+      "installedPackagePresent": true,
+      "selectedByStockSdkTemplate": false,
+      "upstreamExperimentalBadge": true,
+      "hiddenByUpstreamPluginPage": false,
+      "listedByDefault": true,
+      "platformDeclaration": null,
+      "auditHostPlatform": "win32",
+      "declaredPlatformBlocked": false,
+      "platformRuntimeVerified": false,
+      "lolicodeHostEntry": null,
+      "status": "needs-host-or-client-wiring-and-activation-verification",
+      "upstream": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/experimental/cot-translation-bundle/README.md",
+      "manifest": {
+        "path": "D:\\projectGithub\\lolicode-harness-audit-20261110/packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-experimental-cot-translation-bundle/package.json",
+        "sha256": "5117a57d1353917d85d431cdc999ecc74df67d1a107b1c5cb1604e6f8d203e6b",
+        "description": "Experimental machine translation of expanded reasoning"
+      },
+      "patch": {
+        "path": "D:\\projectGithub\\lolicode-harness-audit-20261110\\packages\\lolicode-harness-runtime\\node_modules\\@deepseek-ai\\dsh-experimental-cot-translation-bundle\\cordis.patch.yml",
+        "sha256": "b3f6e9180283e0e954c23e84025f44c2ffcd829bae382f0114f2badc874a972f",
+        "directDeclaredPluginNames": [
+          "@deepseek-ai/dsh-experimental-translator",
+          "@deepseek-ai/dsh-experimental-client-ui-cot-translation"
+        ],
+        "directlyMentionsClientModule": false
+      },
+      "lolicode": [
+        "src-tauri/src/services/harness_plugins.rs",
+        "src/features/agent/AgentExtensionsPanel.tsx",
+        "packages/lolicode-harness-runtime/profile.cordis.patch.yml"
+      ],
+      "acceptance": [
+        "Inspect this official patch and its transitive Host/Client service requirements before adding a product selector; package presence alone cannot set enabled or active.",
+        "In an isolated dev snapshot, wire the required official Host/Client environment, use the official activation/install interface and observe real service readiness or the concrete platform/service blocker.",
+        "Expose and exercise the actual @deepseek-ai/dsh-experimental-cot-translation-bundle user flow, verify restart/settings/permissions and current Windows desktop regressions before promoting."
+      ],
+      "currentUserSelectionRead": false,
+      "activationOrUserFlowVerified": false
+    },
+    {
+      "package": "@deepseek-ai/dsh-experimental-auto-review",
+      "version": "0.2.2-rc.1",
+      "kind": "shipped-optional",
+      "installedPackagePresent": true,
+      "selectedByStockSdkTemplate": false,
+      "upstreamExperimentalBadge": true,
+      "hiddenByUpstreamPluginPage": false,
+      "listedByDefault": true,
+      "platformDeclaration": null,
+      "auditHostPlatform": "win32",
+      "declaredPlatformBlocked": false,
+      "platformRuntimeVerified": false,
+      "lolicodeHostEntry": null,
+      "status": "needs-host-or-client-wiring-and-activation-verification",
+      "upstream": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/experimental/auto-review/README.md",
+      "manifest": {
+        "path": "D:\\projectGithub\\lolicode-harness-audit-20261110/packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-experimental-auto-review/package.json",
+        "sha256": "aa825c59dab46f8b75abdc6d1668da7775799166ed82d54b8b62f3102dc140eb",
+        "description": "Per-tool LLM authorization review for the DeepSeek Harness Auto permission preset"
+      },
+      "patch": {
+        "path": "D:\\projectGithub\\lolicode-harness-audit-20261110\\packages\\lolicode-harness-runtime\\node_modules\\@deepseek-ai\\dsh-experimental-auto-review\\cordis.patch.yml",
+        "sha256": "21d456d0053b3d52ca8ad4ceef60e4cd5618e8c850ab8fe9e6377dfcdcb3bc2a",
+        "directDeclaredPluginNames": [
+          "@deepseek-ai/dsh-experimental-auto-review"
+        ],
+        "directlyMentionsClientModule": false
+      },
+      "lolicode": [
+        "src-tauri/src/services/harness_plugins.rs",
+        "src/features/agent/AgentExtensionsPanel.tsx",
+        "packages/lolicode-harness-runtime/profile.cordis.patch.yml"
+      ],
+      "acceptance": [
+        "Inspect this official patch and its transitive Host/Client service requirements before adding a product selector; package presence alone cannot set enabled or active.",
+        "In an isolated dev snapshot, wire the required official Host/Client environment, use the official activation/install interface and observe real service readiness or the concrete platform/service blocker.",
+        "Expose and exercise the actual @deepseek-ai/dsh-experimental-auto-review user flow, verify restart/settings/permissions and current Windows desktop regressions before promoting."
+      ],
+      "currentUserSelectionRead": false,
+      "activationOrUserFlowVerified": false
+    },
+    {
+      "package": "@deepseek-ai/dsh-experimental-inspector-profile",
+      "version": "0.2.2-rc.1",
+      "kind": "shipped-optional",
+      "installedPackagePresent": true,
+      "selectedByStockSdkTemplate": false,
+      "upstreamExperimentalBadge": true,
+      "hiddenByUpstreamPluginPage": false,
+      "listedByDefault": true,
+      "platformDeclaration": null,
+      "auditHostPlatform": "win32",
+      "declaredPlatformBlocked": false,
+      "platformRuntimeVerified": false,
+      "lolicodeHostEntry": null,
+      "status": "needs-host-or-client-wiring-and-activation-verification",
+      "upstream": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/experimental/inspector-profile/README.md",
+      "manifest": {
+        "path": "D:\\projectGithub\\lolicode-harness-audit-20261110/packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-experimental-inspector-profile/package.json",
+        "sha256": "5f9546a50639cedad12e8768f1eb834c8710b24627244b91f9a272b2c68641c6",
+        "description": "Optional Web bundle for raw Session logs and Chat node inspection"
+      },
+      "patch": {
+        "path": "D:\\projectGithub\\lolicode-harness-audit-20261110\\packages\\lolicode-harness-runtime\\node_modules\\@deepseek-ai\\dsh-experimental-inspector-profile\\cordis.patch.yml",
+        "sha256": "a1d5e9bb9c98c872f2dcc7e710d5bba0799d6d2f31d0e724af435b96c09b7335",
+        "directDeclaredPluginNames": [
+          "@deepseek-ai/dsh-experimental-inspector",
+          "@deepseek-ai/dsh-experimental-session-inspector",
+          "@deepseek-ai/dsh-experimental-client-ui-stats"
+        ],
+        "directlyMentionsClientModule": false
+      },
+      "lolicode": [
+        "src-tauri/src/services/harness_plugins.rs",
+        "src/features/agent/AgentExtensionsPanel.tsx",
+        "packages/lolicode-harness-runtime/profile.cordis.patch.yml"
+      ],
+      "acceptance": [
+        "Inspect this official patch and its transitive Host/Client service requirements before adding a product selector; package presence alone cannot set enabled or active.",
+        "In an isolated dev snapshot, wire the required official Host/Client environment, use the official activation/install interface and observe real service readiness or the concrete platform/service blocker.",
+        "Expose and exercise the actual @deepseek-ai/dsh-experimental-inspector-profile user flow, verify restart/settings/permissions and current Windows desktop regressions before promoting."
+      ],
+      "currentUserSelectionRead": false,
+      "activationOrUserFlowVerified": false
+    },
+    {
+      "package": "@deepseek-ai/dsh-experimental-liveshare",
+      "version": "0.2.2-rc.1",
+      "kind": "shipped-optional",
+      "installedPackagePresent": true,
+      "selectedByStockSdkTemplate": false,
+      "upstreamExperimentalBadge": true,
+      "hiddenByUpstreamPluginPage": false,
+      "listedByDefault": false,
+      "platformDeclaration": null,
+      "auditHostPlatform": "win32",
+      "declaredPlatformBlocked": false,
+      "platformRuntimeVerified": false,
+      "lolicodeHostEntry": null,
+      "status": "needs-host-or-client-wiring-and-activation-verification",
+      "upstream": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/experimental/liveshare/README.md",
+      "manifest": {
+        "path": "D:\\projectGithub\\lolicode-harness-audit-20261110/packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-experimental-liveshare/package.json",
+        "sha256": "c154cf57e3a8dc13ec84db7bfd8a66b3f352d1ba2f9660159d21515d7136e373",
+        "description": "Opt-in LiveShare host bundle: share a Session through a separate Relay at the view or bounded-write tier, with forking and attachment uploads as independent switches"
+      },
+      "patch": {
+        "path": "D:\\projectGithub\\lolicode-harness-audit-20261110\\packages\\lolicode-harness-runtime\\node_modules\\@deepseek-ai\\dsh-experimental-liveshare\\cordis.patch.yml",
+        "sha256": "d2482d27930cd6fc7bae5adebeeb09e9bc4a479e6a3a282b10fd166309b89dc5",
+        "directDeclaredPluginNames": [
+          "@deepseek-ai/dsh-experimental-liveshare",
+          "@deepseek-ai/dsh-experimental-liveshare"
+        ],
+        "directlyMentionsClientModule": false
+      },
+      "lolicode": [
+        "src-tauri/src/services/harness_plugins.rs",
+        "src/features/agent/AgentExtensionsPanel.tsx",
+        "packages/lolicode-harness-runtime/profile.cordis.patch.yml"
+      ],
+      "acceptance": [
+        "Inspect this official patch and its transitive Host/Client service requirements before adding a product selector; package presence alone cannot set enabled or active.",
+        "In an isolated dev snapshot, wire the required official Host/Client environment, use the official activation/install interface and observe real service readiness or the concrete platform/service blocker.",
+        "Expose and exercise the actual @deepseek-ai/dsh-experimental-liveshare user flow, verify restart/settings/permissions and current Windows desktop regressions before promoting."
+      ],
+      "currentUserSelectionRead": false,
+      "activationOrUserFlowVerified": false
+    },
+    {
+      "package": "@deepseek-ai/dsh-experimental-plugin-market-bundle",
+      "version": "0.2.2-rc.1",
+      "kind": "shipped-optional",
+      "installedPackagePresent": true,
+      "selectedByStockSdkTemplate": false,
+      "upstreamExperimentalBadge": true,
+      "hiddenByUpstreamPluginPage": false,
+      "listedByDefault": true,
+      "platformDeclaration": null,
+      "auditHostPlatform": "win32",
+      "declaredPlatformBlocked": false,
+      "platformRuntimeVerified": false,
+      "lolicodeHostEntry": null,
+      "status": "needs-host-or-client-wiring-and-activation-verification",
+      "upstream": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/experimental/plugin-market-bundle/README.md",
+      "manifest": {
+        "path": "D:\\projectGithub\\lolicode-harness-audit-20261110/packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-experimental-plugin-market-bundle/package.json",
+        "sha256": "faef98b5d2dfb3f2b93e153783d33b297d0abd31acca6606103e27703835248d",
+        "description": "Experimental custom plugin indexes: a Discover tab that browses and installs bundles from plugin indexes"
+      },
+      "patch": {
+        "path": "D:\\projectGithub\\lolicode-harness-audit-20261110\\packages\\lolicode-harness-runtime\\node_modules\\@deepseek-ai\\dsh-experimental-plugin-market-bundle\\cordis.patch.yml",
+        "sha256": "bf99572c619c1fdcdb8251273b715eaba6a990c380d0ab5385fca6566ddb7f7e",
+        "directDeclaredPluginNames": [
+          "@deepseek-ai/dsh-plugin-market",
+          "@deepseek-ai/dsh-client-ui-plugin-market"
+        ],
+        "directlyMentionsClientModule": true
+      },
+      "lolicode": [
+        "src-tauri/src/services/harness_plugins.rs",
+        "src/features/agent/AgentExtensionsPanel.tsx",
+        "packages/lolicode-harness-runtime/profile.cordis.patch.yml"
+      ],
+      "acceptance": [
+        "Inspect this official patch and its transitive Host/Client service requirements before adding a product selector; package presence alone cannot set enabled or active.",
+        "In an isolated dev snapshot, wire the required official Host/Client environment, use the official activation/install interface and observe real service readiness or the concrete platform/service blocker.",
+        "Expose and exercise the actual @deepseek-ai/dsh-experimental-plugin-market-bundle user flow, verify restart/settings/permissions and current Windows desktop regressions before promoting."
+      ],
+      "currentUserSelectionRead": false,
+      "activationOrUserFlowVerified": false
+    },
+    {
+      "package": "@deepseek-ai/dsh-experimental-tool-worktree",
+      "version": "0.2.2-rc.1",
+      "kind": "shipped-optional",
+      "installedPackagePresent": true,
+      "selectedByStockSdkTemplate": false,
+      "upstreamExperimentalBadge": true,
+      "hiddenByUpstreamPluginPage": true,
+      "listedByDefault": true,
+      "platformDeclaration": null,
+      "auditHostPlatform": "win32",
+      "declaredPlatformBlocked": false,
+      "platformRuntimeVerified": false,
+      "lolicodeHostEntry": null,
+      "status": "needs-host-or-client-wiring-and-activation-verification",
+      "upstream": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/experimental/tool-worktree/README.md",
+      "manifest": {
+        "path": "D:\\projectGithub\\lolicode-harness-audit-20261110/packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-experimental-tool-worktree/package.json",
+        "sha256": "d916072555a545b1484e0de7b912d1cab5450d434b1f1e36a6ac49f7d3133177",
+        "description": "Model tool that creates and enters a new Git worktree"
+      },
+      "patch": {
+        "path": "D:\\projectGithub\\lolicode-harness-audit-20261110\\packages\\lolicode-harness-runtime\\node_modules\\@deepseek-ai\\dsh-experimental-tool-worktree\\cordis.patch.yml",
+        "sha256": "ee73ef8384eaa10ede0f4d6173d45ded3bfcb7322aea93df64edf1593454b7ec",
+        "directDeclaredPluginNames": [
+          "@deepseek-ai/dsh-experimental-worktree",
+          "@deepseek-ai/dsh-experimental-tool-worktree"
+        ],
+        "directlyMentionsClientModule": false
+      },
+      "lolicode": [
+        "src-tauri/src/services/harness_plugins.rs",
+        "src/features/agent/AgentExtensionsPanel.tsx",
+        "packages/lolicode-harness-runtime/profile.cordis.patch.yml"
+      ],
+      "acceptance": [
+        "Inspect this official patch and its transitive Host/Client service requirements before adding a product selector; package presence alone cannot set enabled or active.",
+        "In an isolated dev snapshot, wire the required official Host/Client environment, use the official activation/install interface and observe real service readiness or the concrete platform/service blocker.",
+        "Expose and exercise the actual @deepseek-ai/dsh-experimental-tool-worktree user flow, verify restart/settings/permissions and current Windows desktop regressions before promoting."
+      ],
+      "currentUserSelectionRead": false,
+      "activationOrUserFlowVerified": false
+    },
+    {
+      "package": "@deepseek-ai/dsh-experimental-forge-bundle",
+      "version": "0.2.2-rc.1",
+      "kind": "shipped-optional",
+      "installedPackagePresent": true,
+      "selectedByStockSdkTemplate": false,
+      "upstreamExperimentalBadge": true,
+      "hiddenByUpstreamPluginPage": false,
+      "listedByDefault": true,
+      "platformDeclaration": null,
+      "auditHostPlatform": "win32",
+      "declaredPlatformBlocked": false,
+      "platformRuntimeVerified": false,
+      "lolicodeHostEntry": null,
+      "status": "needs-host-or-client-wiring-and-activation-verification",
+      "upstream": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/experimental/forge-bundle/README.md",
+      "manifest": {
+        "path": "D:\\projectGithub\\lolicode-harness-audit-20261110/packages/lolicode-harness-runtime/node_modules/@deepseek-ai/dsh-experimental-forge-bundle/package.json",
+        "sha256": "a45151a7f081db4c8131a8589a80c04dfc8533800d5b93d4a1f37f33f80b1a89",
+        "description": "Experimental change request panel and worktree option for Sessions in Git repositories"
+      },
+      "patch": {
+        "path": "D:\\projectGithub\\lolicode-harness-audit-20261110\\packages\\lolicode-harness-runtime\\node_modules\\@deepseek-ai\\dsh-experimental-forge-bundle\\cordis.patch.yml",
+        "sha256": "2b296b825e7e1b7a12056735a2d69e97c0b8b433f058bcc77739e237573f59ed",
+        "directDeclaredPluginNames": [
+          "@deepseek-ai/dsh-experimental-worktree",
+          "@deepseek-ai/dsh-experimental-tool-worktree",
+          "@deepseek-ai/dsh-experimental-forge",
+          "@deepseek-ai/dsh-experimental-forge-github",
+          "@deepseek-ai/dsh-experimental-forge-session",
+          "@deepseek-ai/dsh-experimental-worktree",
+          "@deepseek-ai/dsh-experimental-client-ui-forge"
+        ],
+        "directlyMentionsClientModule": false
+      },
+      "lolicode": [
+        "src-tauri/src/services/harness_plugins.rs",
+        "src/features/agent/AgentExtensionsPanel.tsx",
+        "packages/lolicode-harness-runtime/profile.cordis.patch.yml"
+      ],
+      "acceptance": [
+        "Inspect this official patch and its transitive Host/Client service requirements before adding a product selector; package presence alone cannot set enabled or active.",
+        "In an isolated dev snapshot, wire the required official Host/Client environment, use the official activation/install interface and observe real service readiness or the concrete platform/service blocker.",
+        "Expose and exercise the actual @deepseek-ai/dsh-experimental-forge-bundle user flow, verify restart/settings/permissions and current Windows desktop regressions before promoting."
+      ],
+      "currentUserSelectionRead": false,
+      "activationOrUserFlowVerified": false
+    },
+    {
+      "package": "@deepseek-ai/dsh-subagent-claude-code",
+      "version": "0.2.2-rc.1",
+      "kind": "official-on-demand",
+      "installedPackagePresent": false,
+      "selectedByStockSdkTemplate": false,
+      "upstreamExperimentalBadge": false,
+      "hiddenByUpstreamPluginPage": false,
+      "listedByDefault": true,
+      "platformDeclaration": null,
+      "auditHostPlatform": "win32",
+      "declaredPlatformBlocked": false,
+      "platformRuntimeVerified": false,
+      "lolicodeHostEntry": null,
+      "status": "needs-host-or-client-wiring-and-activation-verification",
+      "upstream": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/util/official-bundles/src/catalog.generated.ts",
+      "manifest": null,
+      "patch": null,
+      "lolicode": [
+        "src-tauri/src/services/harness_plugins.rs",
+        "src/features/agent/AgentExtensionsPanel.tsx",
+        "packages/lolicode-harness-runtime/profile.cordis.patch.yml"
+      ],
+      "acceptance": [
+        "Inspect this official patch and its transitive Host/Client service requirements before adding a product selector; package presence alone cannot set enabled or active.",
+        "In an isolated dev snapshot, wire the required official Host/Client environment, use the official activation/install interface and observe real service readiness or the concrete platform/service blocker.",
+        "Expose and exercise the actual @deepseek-ai/dsh-subagent-claude-code user flow, verify restart/settings/permissions and current Windows desktop regressions before promoting."
+      ],
+      "currentUserSelectionRead": false,
+      "activationOrUserFlowVerified": false
+    },
+    {
+      "package": "@deepseek-ai/dsh-subagent-codex",
+      "version": "0.2.2-rc.1",
+      "kind": "official-on-demand",
+      "installedPackagePresent": false,
+      "selectedByStockSdkTemplate": false,
+      "upstreamExperimentalBadge": false,
+      "hiddenByUpstreamPluginPage": false,
+      "listedByDefault": true,
+      "platformDeclaration": null,
+      "auditHostPlatform": "win32",
+      "declaredPlatformBlocked": false,
+      "platformRuntimeVerified": false,
+      "lolicodeHostEntry": null,
+      "status": "needs-host-or-client-wiring-and-activation-verification",
+      "upstream": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/util/official-bundles/src/catalog.generated.ts",
+      "manifest": null,
+      "patch": null,
+      "lolicode": [
+        "src-tauri/src/services/harness_plugins.rs",
+        "src/features/agent/AgentExtensionsPanel.tsx",
+        "packages/lolicode-harness-runtime/profile.cordis.patch.yml"
+      ],
+      "acceptance": [
+        "Inspect this official patch and its transitive Host/Client service requirements before adding a product selector; package presence alone cannot set enabled or active.",
+        "In an isolated dev snapshot, wire the required official Host/Client environment, use the official activation/install interface and observe real service readiness or the concrete platform/service blocker.",
+        "Expose and exercise the actual @deepseek-ai/dsh-subagent-codex user flow, verify restart/settings/permissions and current Windows desktop regressions before promoting."
+      ],
+      "currentUserSelectionRead": false,
+      "activationOrUserFlowVerified": false
+    },
+    {
+      "package": "@deepseek-ai/dsh-cua-bundle",
+      "version": "0.2.2-rc.1",
+      "kind": "official-on-demand",
+      "installedPackagePresent": false,
+      "selectedByStockSdkTemplate": false,
+      "upstreamExperimentalBadge": true,
+      "hiddenByUpstreamPluginPage": false,
+      "listedByDefault": false,
+      "platformDeclaration": [
+        "darwin"
+      ],
+      "auditHostPlatform": "win32",
+      "declaredPlatformBlocked": true,
+      "platformRuntimeVerified": false,
+      "lolicodeHostEntry": null,
+      "status": "upstream-platform-restricted",
+      "upstream": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/util/official-bundles/src/catalog.generated.ts",
+      "manifest": null,
+      "patch": null,
+      "lolicode": [
+        "src-tauri/src/services/harness_plugins.rs",
+        "src/features/agent/AgentExtensionsPanel.tsx",
+        "packages/lolicode-harness-runtime/profile.cordis.patch.yml"
+      ],
+      "acceptance": [
+        "Retain the official declared platform restriction on win32; do not bypass the catalog admission check or count this capability as synchronized.",
+        "Verify the actual official installation and user flow only on a declared platform. A separately implemented host equivalent requires its own independent acceptance."
+      ],
+      "currentUserSelectionRead": false,
+      "activationOrUserFlowVerified": false
+    }
+  ]
+}

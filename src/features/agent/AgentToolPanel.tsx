@@ -3,7 +3,7 @@ import { FolderOpen, type LucideIcon } from "lucide-react";
 import { FullScreenPanel } from "@/components/common/FullScreenPanel";
 import "./agent-tool-panels.css";
 
-export type AgentTool = "skills" | "workflows" | "memory";
+export type AgentTool = "skills" | "workflows" | "memory" | "market";
 export type AgentToolTab = "plugins" | "automation";
 
 /** A workspace tool replaces the chat surface while keeping its navigation usable. */
@@ -14,6 +14,7 @@ export function AgentToolPanel({
   description,
   icon: Icon,
   projectPath,
+  hideIntro = false,
   actions,
   children,
 }: {
@@ -23,6 +24,7 @@ export function AgentToolPanel({
   description: string;
   icon: LucideIcon;
   projectPath?: string;
+  hideIntro?: boolean;
   actions?: ReactNode;
   children: ReactNode;
 }) {
@@ -42,19 +44,21 @@ export function AgentToolPanel({
       contentClassName="wb-tool-panel-content space-y-0 p-0"
     >
       <div className="wb-extensions wb-tool-panel">
-        <header className="wb-tool-panel-intro">
-          <span className="wb-tool-panel-icon" aria-hidden="true">
-            <Icon size={25} strokeWidth={1.5} />
-          </span>
-          <div className="wb-tool-panel-copy">
-            <h2>{title}</h2>
-            <p>{description}</p>
-          </div>
-          <span className="wb-tool-panel-project" title={projectPath}>
-            <FolderOpen size={14} aria-hidden="true" />
-            <span>{projectName || "未打开项目"}</span>
-          </span>
-        </header>
+        {!hideIntro && (
+          <header className="wb-tool-panel-intro">
+            <span className="wb-tool-panel-icon" aria-hidden="true">
+              <Icon size={25} strokeWidth={1.5} />
+            </span>
+            <div className="wb-tool-panel-copy">
+              <h2>{title}</h2>
+              <p>{description}</p>
+            </div>
+            <span className="wb-tool-panel-project" title={projectPath}>
+              <FolderOpen size={14} aria-hidden="true" />
+              <span>{projectName || "未打开项目"}</span>
+            </span>
+          </header>
+        )}
         {children}
       </div>
     </FullScreenPanel>

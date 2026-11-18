@@ -70,6 +70,17 @@ async function handleConfigLoadError(
 
 /** Initialize the renderer before mounting recovery or the application. */
 export async function bootstrap() {
+  if (
+    import.meta.env.DEV &&
+    import.meta.env.MODE !== "test" &&
+    typeof window !== "undefined" &&
+    !("__TAURI_INTERNALS__" in window)
+  ) {
+    const { installDevBrowserPreviewBridge } = await import(
+      "@/lib/devPreviewBridge"
+    );
+    installDevBrowserPreviewBridge();
+  }
   installGlobalErrorHandlers();
   document.title = APP_WINDOW_TITLE;
   applyInterfaceAppearance(

@@ -1,0 +1,11 @@
+.card {
+  position: fixed;
+  z-index: 950;
+  box-sizing: border-box;
+  max-width: 355px;
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid var(--dsw-alias-border-inverted);
+  background: var(--dsw-specific-menu);
+  box-shadow: var(--dsw-shadow-lv3);
+}

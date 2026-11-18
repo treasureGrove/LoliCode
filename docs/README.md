@@ -18,6 +18,7 @@ LoliCode is a simple, extensible desktop Agent with an anime-inspired identity. 
 - [内置 Agent 的实际能力与限制](guides/lolicode-inprocess-agent.md)。
 - [Agent 交互约定](guides/lolicode-agent-interactions.md)。
 - [渠道中心与模型配置](CHANNEL_CENTER.md)。
+- [通过 LoliCode Gateway 使用 Claude Code](guides/lolicode-claude-gateway.md)。
 - [本机记忆](architecture/agent-memory.md)、[外部模型接入](architecture/external-model-config.md)与[本机用量](guides/local-agent-usage.md)。
 - [工作流、闲时任务与 CLI 市场](guides/agent-workflows-cli-adapter.md)。
 - [原生 Agent 的实际 GLM 验收](architecture/native-agent-live-acceptance.md)。

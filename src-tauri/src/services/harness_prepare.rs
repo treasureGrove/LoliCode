@@ -158,6 +158,9 @@ pub(super) async fn prepare(
             };
             log::info!(target: "lolicode::harness_prepare", "background_stage=gateway elapsed_ms={}", started.elapsed().as_millis());
             let home = prepare_home(&profile, &root)?;
+            if let Some(ref plugins) = plugins {
+                plugins.sync_home(&profile, &home)?;
+            }
             if automatic_title {
                 gateway
                     .profile_patch

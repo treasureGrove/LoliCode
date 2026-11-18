@@ -1,0 +1,205 @@
+{
+  "schemaVersion": 1,
+  "kind": "harness-release-capability-audit",
+  "checkedAt": "2026-11-13T18:04:42.024Z",
+  "lastCheckedAt": "2026-11-14T18:15:08.735Z",
+  "version": "0.2.2-rc.3",
+  "upstreamCommit": "38a6a5c965aa99ab525161efb7cc5cf1fe62fced",
+  "release": {
+    "tag": "dsh-v0.2.2-rc.3",
+    "url": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.3"
+  },
+  "currentPin": {
+    "version": "0.2.2-rc.2",
+    "upstreamCommit": "ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c"
+  },
+  "status": "isolated-validation-pending",
+  "eligibility": {
+    "officialRelease": true,
+    "officialSourceTagVerified": true,
+    "exactNpmAvailable": true,
+    "integrityVerified": true
+  },
+  "npm": {
+    "checkedAt": "2026-11-13T18:04:31.275Z",
+    "registry": "https://registry.npmjs.org/@deepseek-ai%2fdsh",
+    "version": "0.2.2-rc.3",
+    "metadataStatus": 200,
+    "exactVersionStatus": 200,
+    "packageName": "@deepseek-ai/dsh",
+    "indexListsVersion": true,
+    "exactVersionMatches": true,
+    "distIntegrity": "sha512-S+4oUYVKWuc1SCMMp1mpUa2llxVy0o9gIgp7TDg/Ea7PuvXVkAfnykqSH1/oDXVB+y5VzEm0QIJulo1LIB3qRg==",
+    "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh/-/dsh-0.2.2-rc.3.tgz",
+    "exactVersionError": null,
+    "distTags": {
+      "alpha": "0.2.2-alpha.3",
+      "latest": "0.2.2-rc.1",
+      "next": "0.2.2-rc.3"
+    }
+  },
+  "sourceComparison": {
+    "ahead": 6,
+    "behind": 0,
+    "mergeBase": "ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c",
+    "commits": [
+      {
+        "sha": "68f83cc9926892010f439383b469657c6f1f6510",
+        "subject": "fix(ci): cache the verified bubblewrap archive and bound its download"
+      },
+      {
+        "sha": "bbad94f927abec6ea0a28f4d33739a2168db3cfe",
+        "subject": "Merge pull request #8383 from deepseek-harness/release-0.2.2-ci-bubblewrap-cache"
+      },
+      {
+        "sha": "ac904e118e3718f3e055cde85767662712a2f3a8",
+        "subject": "Merge pull request #8385 from deepseek-harness/fix/release-0.2.2-restart-status-cwd"
+      },
+      {
+        "sha": "b8c33a150423197729cdac73e420b00f2a9ffa6d",
+        "subject": "feat(experimental): 导入 DeepSeek 官网对话导出为会话 (#8342)"
+      },
+      {
+        "sha": "4c1cf20cb1fa6dd021a6988454df1df853209f63",
+        "subject": "release(dsh): 0.2.2-rc.3"
+      },
+      {
+        "sha": "38a6a5c965aa99ab525161efb7cc5cf1fe62fced",
+        "subject": "Merge pull request #8397 from deepseek-harness/worktree-release-dsh-0.2.2-rc.3"
+      }
+    ],
+    "reportedFileRows": 300,
+    "surfaceEvidence": "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1114-night/rc3-installed-sources-proof.json"
+  },
+  "releaseItemIndex": [
+    {
+      "label": "DeepSeek chat export import",
+      "status": "upstream-route-verified-needs-host-ui",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/38a6a5c965aa99ab525161efb7cc5cf1fe62fced/packages/experimental/deepseek-chat-import/README.md",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/38a6a5c965aa99ab525161efb7cc5cf1fe62fced/packages/experimental/deepseek-chat-import/package.json",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/38a6a5c965aa99ab525161efb7cc5cf1fe62fced/packages/experimental/deepseek-chat-import/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/38a6a5c965aa99ab525161efb7cc5cf1fe62fced/packages/experimental/deepseek-chat-import/src/importer.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/38a6a5c965aa99ab525161efb7cc5cf1fe62fced/packages/experimental/deepseek-chat-import/src/client/mount.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/38a6a5c965aa99ab525161efb7cc5cf1fe62fced/packages/util/official-bundles/src/bundles.ts"
+      ],
+      "lolicode": [
+        "src/features/agent/AgentPage.tsx",
+        "src/lib/api/agent.ts",
+        "src-tauri/src/services/harness_desktop.rs"
+      ],
+      "findings": [
+        "Official npm ships the optional plugin switched off. It is absent from stock SDK and Web profile rows. The upstream UI contribution is Web-only.",
+        "The packaged plugin imported one synthetic ZIP through the official owner route. Stored history reopened without starting a live Agent.",
+        "LoliCode still needs an explicit desktop import entry, registered workspace routing, native list refresh, and resume acceptance. The test did not mount a desktop entry.",
+        "2026-11-15: repeated the package's owner route against an unknown workspace and a malformed archive. Both rejected the request. The valid synthetic ZIP imported and reopened without starting an Agent."
+      ],
+      "acceptance": "Use an isolated desktop workspace and a synthetic DeepSeek export. Check the bounded upload, workspace admission, partial-error handling and list refresh, then open and continue the imported conversation.",
+      "log": "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1114-night/import-probe-proof.json",
+      "ordinal": 1,
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.3",
+      "sourceTextSha256": "d7f12ba3a2c06f249826a2c5a8ba9646cc50337538876e51ae8e67c085bdbf66",
+      "productFlowValidated": false
+    },
+    {
+      "label": "Windows updater restart",
+      "status": "separate-desktop-path-native-validation-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/38a6a5c965aa99ab525161efb7cc5cf1fe62fced/apps/desktop/installer/restart-status.h",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/38a6a5c965aa99ab525161efb7cc5cf1fe62fced/apps/desktop/tests/windows-restart-status.ps1"
+      ],
+      "lolicode": [
+        "src-tauri/src/commands/settings.rs",
+        "src-tauri/nsis/installer.nsi",
+        "src/contexts/UpdateContext.tsx"
+      ],
+      "findings": [
+        "The change is in the upstream Windows restart status helper working directory. LoliCode uses its Tauri updater and local NSIS installer path."
+      ],
+      "acceptance": "Run the existing isolated Windows update and relaunch acceptance with the candidate installer path and verify post-update process and retained user state. Do not publish to run this check.",
+      "ordinal": 2,
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.3",
+      "sourceTextSha256": "45a0cfb22fa2382eae959a8f4ef560362d906252c54ed7a285b5d30925a9706a",
+      "productFlowValidated": false
+    }
+  ],
+  "validation": {
+    "runtimePrepared": true,
+    "bundle": true,
+    "sdk": {
+      "passed": 49,
+      "failed": 0,
+      "baseline": "rc.1 synthetic root and worker"
+    },
+    "typecheck": true,
+    "frontend": {
+      "passed": 225
+    },
+    "desktop": {
+      "performed": false,
+      "log": "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1114-night/desktop-context.json"
+    },
+    "realUserDataUsed": false,
+    "latestImportProbe": {
+      "officialOwnerRoute": true,
+      "invalidArchiveRejected": true,
+      "unknownWorkspaceRejected": true,
+      "imported": 1,
+      "storedHistoryReopened": true,
+      "agentsStarted": 0,
+      "desktopEntryTested": false,
+      "checkedAt": "2026-11-14T18:15:08.735Z",
+      "evidence": "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1115-night/import-probe-proof.json"
+    },
+    "hostAdmissionGap": "Main and worker sessions use per-root SDK homes and LoliCode session metadata, while the upstream importer writes to one SDK workspace. Desktop adoption of imported IDs, history, permissions and attachments remains open."
+  },
+  "localCandidate": {
+    "root": "D:/lc-dsh-1114-rc3",
+    "baseCommit": "ef27ea9b1b3b55a97bd3d13b1fe82a8e65c4c501",
+    "files": [
+      {
+        "file": "THIRD_PARTY_NOTICES.md",
+        "candidateSha256": "6d772923213be757cddd92e38303c8d5cfb6aa98aaf0e5733f9b860ae2220934",
+        "currentSha256": "65d6277abc75132ae4f7c085d95322af749ad80d66b3130c5a479a25ebcfd9b6"
+      },
+      {
+        "file": "docs/guides/native-build-check.md",
+        "candidateSha256": "c5bad35c43f28443982aa644990630ea9bfeb9586b8be243bc549fb7f7798953",
+        "currentSha256": "b7fbb297c7537bf2ef733338d1b8736c2933337817aa05b9e59984ef425e2361"
+      },
+      {
+        "file": "packages/lolicode-harness-runtime/README.md",
+        "candidateSha256": "2f71fbd23096ff911140fcbd91839b59d3e7b89464fda0432b8ddfb2cd8028d0",
+        "currentSha256": "f5688a9792fcfa2841d2819f3b31a8c78488aa7fd8ded92e179601f007d79744"
+      },
+      {
+        "file": "packages/lolicode-harness-runtime/package.json",
+        "candidateSha256": "b84acf2cddbe248d3e4ead0f784311460acbedc8ad48834a4ae11e3b092537fc",
+        "currentSha256": "02aaaf94de20fa8142c1dd7105258f672f2dbc039514d9a2027d11127a714b1a"
+      },
+      {
+        "file": "packages/lolicode-harness-runtime/package-lock.json",
+        "candidateSha256": "7bef24be0c08cad20d7c5bb4f0b6fd2d080588027e2f230b5b1d07ac0c192184",
+        "currentSha256": "3b1c7a82332f4be070b2c5a5fadc2d14983819993da4f686049c0cba9a2b58fe"
+      },
+      {
+        "file": "scripts/build/prepare-lolicode-harness-runtime.mjs",
+        "candidateSha256": "f7831914d999e26b1c5b1e0756513db97d76df3ffed627b8b3c22442b5ca3f2d",
+        "currentSha256": "d6271f94eee0a60873f49ce6d5d243357c73bdde6a495bb1271ac237aa1d7929"
+      },
+      {
+        "file": "packages/lolicode-harness-runtime/tests/host-operations.test.mjs",
+        "candidateSha256": "0b061073b3d7d326a928f82288101c5a0c550c25b3cdf956bcc00131f5e92e60",
+        "currentSha256": "d71a09c7a2a317d09990a9ec74cf052d16c76b66b61e0ab7aa97fe99fa5d574f"
+      }
+    ],
+    "officialPackageModified": false
+  },
+  "blockedBy": [
+    "Desktop import entry and data/permission acceptance pending.",
+    "Required non-elevated WebView2 desktop acceptance unavailable in current elevated session."
+  ],
+  "productSynced": false,
+  "syncedFiles": [],
+  "fullParity": false
+}

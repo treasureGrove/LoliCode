@@ -2213,6 +2213,22 @@ fn unsettled(status: &AgentStatus) -> bool {
     )
 }
 
+fn sidebar_from_record(record: &SessionRecord) -> Arc<SessionSidebar> {
+    let id = &record.snapshot.session.id;
+    let status = if unsettled(&record.snapshot.status) {
+        AgentStatus::Error
+    } else {
+        record.snapshot.status.clone()
+    };
+    let secretary = super::harness_sessions::role(&record.snapshot.session, "secretary")
+        .then(|| record.secretary.sidebar(id, true));
+    Arc::new(SessionSidebar {
+        updated_at: record.snapshot.session.updated_at,
+        status,
+        secretary,
+    })
+}
+
 fn load_sidebar(profile: &Path, id: &str) -> Result<Option<Arc<SessionSidebar>>, String> {
     let Some(root) = private_root(profile, id) else {
         return Ok(None);
@@ -2230,18 +2246,7 @@ fn load_sidebar(profile: &Path, id: &str) -> Result<Option<Arc<SessionSidebar>>,
     }
     let loaded = if file.is_file() {
         let record = load_record(&file, id)?;
-        let status = if unsettled(&record.snapshot.status) {
-            AgentStatus::Error
-        } else {
-            record.snapshot.status
-        };
-        let secretary = super::harness_sessions::role(&record.snapshot.session, "secretary")
-            .then(|| record.secretary.sidebar(id, true));
-        Some(Arc::new(SessionSidebar {
-            updated_at: record.snapshot.session.updated_at,
-            status,
-            secretary,
-        }))
+        Some(sidebar_from_record(&record))
     } else {
         None
     };
@@ -2304,16 +2309,18 @@ fn park_worker_queues(record: &mut SessionRecord) {
 }
 
 fn save_record(file: &Path, record: &SessionRecord) -> Result<(), String> {
-    config::write_json_file_private(file, record)
+    let bytes =
+        serde_json::to_vec(record).map_err(|_| "无法保存 Harness 会话，原记录已保留")?;
+    config::atomic_write_private(file, &bytes)
         .map_err(|_| "无法保存 Harness 会话，原记录已保留")?;
-    if let Some(cache) = SIDEBAR_CACHE.get() {
-        // A reader already loading the old record may finish its current
-        // request, but it can only fill the now-detached cache entry.
-        cache
-            .lock()
-            .unwrap_or_else(|error| error.into_inner())
-            .remove(file);
-    }
+    // A reader already loading the old record may finish its current
+    // request, but it can only fill the now-detached cache entry.
+    let entry = Arc::new(OnceLock::from(Some(sidebar_from_record(record))));
+    SIDEBAR_CACHE
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .insert(file.to_path_buf(), entry);
     Ok(())
 }
 
@@ -3601,6 +3608,9 @@ async fn run_turn(
             );
     }
     let home = turn.root.join("home");
+    if let Some(ref plugins) = turn.plugins {
+        plugins.sync_home(&turn.profile, &home)?;
+    }
     let plugin_patches = turn
         .plugins
         .as_ref()

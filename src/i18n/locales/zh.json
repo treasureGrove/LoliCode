@@ -8,6 +8,14 @@
     "copyLink": "复制链接",
     "copyPath": "复制路径"
   },
+  "agentMarketplace": {
+    "name": "插件市场",
+    "open": "打开插件市场"
+  },
+  "agentAutomation": {
+    "name": "自动化",
+    "open": "打开自动化"
+  },
   "agentSecretary": {
     "companion": {
       "unknown": "工作状态暂未确认",
@@ -5268,8 +5276,8 @@
     "add": "添加应用",
     "retained": "应用从这里统一打开。停用后，已有故事、角色和工程记录仍会保留。",
     "tavern": {
-      "title": "酒馆",
-      "description": "导入角色卡，管理故事与世界书，使用统一渠道展开角色对话。"
+      "title": "DeepSeek 对话",
+      "description": "基于开源 chat-demo 的轻量级对话端，支持多会话与消息分支、深度思考、联网搜索与链接阅读、语音输入与朗读、KaTeX/Mermaid 渲染及 ZIP 历史导入导出。"
     },
     "unreal": {
       "title": "UEBox · 虚幻工作台",

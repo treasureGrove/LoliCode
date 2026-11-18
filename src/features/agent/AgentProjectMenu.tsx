@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import {
   FolderMinus,
   MoreHorizontal,
@@ -26,7 +26,7 @@ import {
 import { agentErrorMessage } from "@/hooks/useAgentSnapshot";
 
 /** Portal positioning keeps workspace actions clear of the scrollable sidebar. */
-export function AgentProjectMenu({
+export const AgentProjectMenu = memo(function AgentProjectMenu({
   name,
   standalone = false,
   pinned,
@@ -134,67 +134,69 @@ export function AgentProjectMenu({
           </p>
         </DropdownMenuContent>
       </DropdownMenu>
-      <Dialog
-        open={renaming}
-        onOpenChange={(open) => {
-          if (!saving) setRenaming(open);
-        }}
-      >
-        <DialogContent
-          className="wb-extensions p-5"
-          onEscapeKeyDown={(event) => {
-            if (saving) event.preventDefault();
+      {renaming && (
+        <Dialog
+          open
+          onOpenChange={(open) => {
+            if (!saving) setRenaming(open);
           }}
         >
-          <DialogHeader>
-            <DialogTitle>重命名项目</DialogTitle>
-            <DialogDescription>
-              修改工作台中的显示名称，项目文件夹与会话保留。
-            </DialogDescription>
-          </DialogHeader>
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              void saveName();
+          <DialogContent
+            className="wb-extensions p-5"
+            onEscapeKeyDown={(event) => {
+              if (saving) event.preventDefault();
             }}
           >
-            <label className="text-caption">
-              项目名称
-              <input
-                aria-label="项目名称"
-                className="mt-2 w-full rounded border border-border bg-surface p-2 text-body"
-                value={nextName}
-                maxLength={128}
-                disabled={saving}
-                onChange={(event) => setNextName(event.target.value)}
-                autoFocus
-              />
-            </label>
-            {error && (
-              <p role="alert" className="mt-2 text-caption text-danger-text">
-                {error}
-              </p>
-            )}
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                className="wb-mode-button"
-                type="button"
-                disabled={saving}
-                onClick={() => setRenaming(false)}
-              >
-                取消
-              </button>
-              <button
-                className="wb-primary"
-                type="submit"
-                disabled={saving || !nextName.trim()}
-              >
-                {saving ? "正在保存…" : "保存名称"}
-              </button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
+            <DialogHeader>
+              <DialogTitle>重命名项目</DialogTitle>
+              <DialogDescription>
+                修改工作台中的显示名称，项目文件夹与会话保留。
+              </DialogDescription>
+            </DialogHeader>
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                void saveName();
+              }}
+            >
+              <label className="text-caption">
+                项目名称
+                <input
+                  aria-label="项目名称"
+                  className="mt-2 w-full rounded border border-border bg-surface p-2 text-body"
+                  value={nextName}
+                  maxLength={128}
+                  disabled={saving}
+                  onChange={(event) => setNextName(event.target.value)}
+                  autoFocus
+                />
+              </label>
+              {error && (
+                <p role="alert" className="mt-2 text-caption text-danger-text">
+                  {error}
+                </p>
+              )}
+              <div className="mt-4 flex justify-end gap-2">
+                <button
+                  className="wb-mode-button"
+                  type="button"
+                  disabled={saving}
+                  onClick={() => setRenaming(false)}
+                >
+                  取消
+                </button>
+                <button
+                  className="wb-primary"
+                  type="submit"
+                  disabled={saving || !nextName.trim()}
+                >
+                  {saving ? "正在保存…" : "保存名称"}
+                </button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
+      )}
     </>
   );
-}
+});

@@ -1,5 +1,13 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
+import { animateHeightReveal } from "@/lib/motion";
 import {
   ArrowUpRight,
   ChevronDown,
@@ -467,6 +475,12 @@ export function AgentSecretaryTasks({
     );
   };
 
+  const tasksDrawerRef = useRef<HTMLDivElement | null>(null);
+  useLayoutEffect(() => {
+    if (!expanded) return;
+    return animateHeightReveal(tasksDrawerRef.current, { durationMs: 260 });
+  }, [expanded, sessionId]);
+
   return (
     <section className="wb-secretary" aria-label={label("tasks", "工作任务")}>
       <div className="wb-secretary-bar">
@@ -592,11 +606,7 @@ export function AgentSecretaryTasks({
                 aria-label={label("loading", "正在读取任务")}
               />
             )}
-            {expanded ? (
-              <ChevronDown aria-hidden="true" />
-            ) : (
-              <ChevronRight aria-hidden="true" />
-            )}
+            <ChevronRight aria-hidden="true" />
           </button>
           {!workerTaskId && !projectChoices && (
             <button
@@ -718,7 +728,13 @@ export function AgentSecretaryTasks({
         </div>
       )}
       {expanded && (
-        <div id={tasksId} className="wb-secretary-content">
+        <div
+          id={tasksId}
+          ref={(node) => {
+            tasksDrawerRef.current = node;
+          }}
+          className="wb-secretary-content"
+        >
           {(runningCount > 0 ||
             queuedCount > 0 ||
             needsAttention.length > 0) && (

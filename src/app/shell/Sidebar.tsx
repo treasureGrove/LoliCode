@@ -36,6 +36,10 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { HoverTip } from "@/components/ui/hover-tip";
+import {
+  SegmentThumb,
+  useSlidingIndicator,
+} from "@/components/ui/sliding-indicator";
 import { DRAG_REGION_ATTR, DRAG_REGION_STYLE, isMac } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { motionTokens } from "@/lib/motion";
@@ -55,9 +59,6 @@ const ChatGlyph: IconComponent = (props) => (
 );
 const AutomationGlyph: IconComponent = (props) => (
   <WorkspaceGlyph kind="automation" {...props} />
-);
-const PluginsGlyph: IconComponent = (props) => (
-  <WorkspaceGlyph kind="plugins" {...props} />
 );
 
 interface SidebarProps {
@@ -230,13 +231,29 @@ function MainDirectory({
   const { i18n } = useTranslation();
   const chinese = i18n.language.startsWith("zh");
   const agent = view === "agent";
+  const {
+    ref: segmentsRef,
+    rect: segmentRect,
+    animate: segmentAnimate,
+  } = useSlidingIndicator<HTMLDivElement>(
+    'button[aria-current="page"]',
+    `${view}:${compact}:${chinese}`,
+  );
   return (
     <>
       <div
+        ref={segmentsRef}
         role="group"
         aria-label={chinese ? "主要导航" : "Main navigation"}
         className="lolicode-sidebar-segments"
       >
+        {!(compact && (view === "agent" || view === "tavern")) && (
+          <SegmentThumb
+            rect={segmentRect}
+            animate={segmentAnimate}
+            className="lolicode-sidebar-segments-thumb"
+          />
+        )}
         {compact && (view === "agent" || view === "tavern") ? (
           <NavItem
             selected={false}
@@ -291,17 +308,38 @@ function MainDirectory({
             className="lolicode-sidebar-actions"
             hidden={!agent}
           >
-            {!workspaceSlots &&
-              (workspaceActions ?? (
-                <button
-                  type="button"
-                  className="lolicode-sidebar-new-chat"
-                  onClick={() => onSelectPage("agent")}
-                >
-                  <Plus aria-hidden="true" />
-                  {chinese ? "开始对话" : "Start a chat"}
-                </button>
-              ))}
+            {!workspaceSlots && (
+              <>
+                {workspaceActions ?? (
+                  <button
+                    type="button"
+                    className="lolicode-sidebar-new-chat"
+                    onClick={() => onSelectPage("agent")}
+                  >
+                    <Plus aria-hidden="true" />
+                    {chinese ? "开始对话" : "Start a chat"}
+                  </button>
+                )}
+                {agent && (
+                  <div
+                    className="lolicode-sidebar-shortcuts lolicode-sidebar-shortcuts--top"
+                    role="group"
+                    aria-label={chinese ? "工作台工具" : "Workspace tools"}
+                  >
+                    <NavItem
+                      selected={agent && activeAgentTool === "workflows"}
+                      icon={AutomationGlyph}
+                      label={chinese ? "自动化" : "Automation"}
+                      title={chinese ? "自动化" : "Automation"}
+                      disabled={!onOpenAgentTool}
+                      onClick={() =>
+                        onOpenAgentTool?.("workflows", "automation")
+                      }
+                    />
+                  </div>
+                )}
+              </>
+            )}
           </div>
           <div
             ref={workspaceSlots?.content}
@@ -311,30 +349,6 @@ function MainDirectory({
             {!workspaceSlots && workspaceContent}
           </div>
         </>
-      )}
-      {view === "agent" && (
-        <div
-          className="lolicode-sidebar-shortcuts"
-          role="group"
-          aria-label={chinese ? "工作台工具" : "Workspace tools"}
-        >
-          <NavItem
-            selected={view === "agent" && activeAgentTool === "workflows"}
-            icon={AutomationGlyph}
-            label={chinese ? "自动化" : "Automation"}
-            title={chinese ? "自动化" : "Automation"}
-            disabled={!onOpenAgentTool}
-            onClick={() => onOpenAgentTool?.("workflows", "automation")}
-          />
-          <NavItem
-            selected={view === "agent" && activeAgentTool === "skills"}
-            icon={PluginsGlyph}
-            label={chinese ? "插件" : "Plugins"}
-            title={chinese ? "插件" : "Plugins"}
-            disabled={!onOpenAgentTool}
-            onClick={() => onOpenAgentTool?.("skills", "plugins")}
-          />
-        </div>
       )}
     </>
   );

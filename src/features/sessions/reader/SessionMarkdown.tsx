@@ -9,6 +9,7 @@ import {
   type ReactNode,
   useContext,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
@@ -106,8 +107,13 @@ const LITERAL_LINK_OPTIONS: TraversalOptions = {
   literalNodes: LINK_SYNTAX_NODES,
 };
 
-// 折叠预览、可见匹配检测与渲染会在同一次渲染流程中连续解析同一段内容，
-// 缓存最近一次解析结果即可覆盖这种访问模式。
+// 折叠预览、可见匹配检测与多消息渲染会重复解析 Markdown，
+// 使用有界 LRU 缓存避免流式输出和同屏多块内容反复重跑解析器。
+const PARSE_CACHE_LIMIT = 128;
+const parseCache = new Map<
+  string,
+  ReturnType<typeof markdownLanguage.parser.parse>
+>();
 let lastParse: {
   content: string;
   outputLinks: boolean;
@@ -188,11 +194,28 @@ const outputMarkdownParser = markdown({
 }).language.parser;
 
 const parseMarkdown = (content: string, outputLinks = false) => {
-  if (lastParse?.content !== content || lastParse.outputLinks !== outputLinks) {
-    const parser = outputLinks ? outputMarkdownParser : markdownLanguage.parser;
-    lastParse = { content, outputLinks, tree: parser.parse(content) };
+  if (lastParse?.content === content && lastParse.outputLinks === outputLinks) {
+    return lastParse.tree;
   }
-  return lastParse.tree;
+  const cacheKey = `${outputLinks ? "1:" : "0:"}${content}`;
+  const cached = parseCache.get(cacheKey);
+  if (cached) {
+    parseCache.delete(cacheKey);
+    parseCache.set(cacheKey, cached);
+    lastParse = { content, outputLinks, tree: cached };
+    return cached;
+  }
+  const parser = outputLinks ? outputMarkdownParser : markdownLanguage.parser;
+  const tree = parser.parse(content);
+  lastParse = { content, outputLinks, tree };
+  if (content.length <= MARKDOWN_PARSE_LIMIT) {
+    parseCache.set(cacheKey, tree);
+    if (parseCache.size > PARSE_CACHE_LIMIT) {
+      const oldest = parseCache.keys().next().value;
+      if (oldest !== undefined) parseCache.delete(oldest);
+    }
+  }
+  return tree;
 };
 
 // `[docs](<https://example.com/page>)` 是合法 Markdown，但 lezer 的 URL 节点
@@ -1517,6 +1540,10 @@ const MarkdownTree = memo(function MarkdownTree({
   SessionMarkdownProps,
   "content" | "searchQuery" | "projectDir" | "outputLinks"
 >) {
+  const blockCacheRef = useRef<{
+    contextKey: string;
+    nodes: Map<string, ReactNode>;
+  }>({ contextKey: "", nodes: new Map() });
   const tree = useMemo(
     () => parseMarkdown(content, outputLinks),
     [content, outputLinks],
@@ -1525,16 +1552,59 @@ const MarkdownTree = memo(function MarkdownTree({
     () => collectLinkReferences(tree.topNode, content, outputLinks),
     [content, outputLinks, tree],
   );
-  const rendered = useMemo(
-    () =>
-      renderNode(tree.topNode, content, {
-        searchQuery,
-        linkReferences,
-        projectDir,
-        outputLinks,
-      }),
-    [content, linkReferences, projectDir, searchQuery, outputLinks, tree],
-  );
+  const rendered = useMemo(() => {
+    const ctx: RenderContext = {
+      searchQuery,
+      linkReferences,
+      projectDir,
+      outputLinks,
+    };
+    if (linkReferences.size > 0) {
+      blockCacheRef.current = { contextKey: "", nodes: new Map() };
+      return renderNode(tree.topNode, content, ctx);
+    }
+    const contextKey = `${searchQuery ?? ""}\0${projectDir ?? ""}\0${outputLinks ? 1 : 0}`;
+    const prevCache =
+      blockCacheRef.current.contextKey === contextKey
+        ? blockCacheRef.current.nodes
+        : new Map<string, ReactNode>();
+    const nextCache = new Map<string, ReactNode>();
+    const root = tree.topNode;
+    const result: ReactNode[] = [];
+    let cursor = root.from;
+    childNodesWithin(root, root.from, root.to).forEach((child, index) => {
+      if (child.from > cursor) {
+        result.push(
+          <Fragment key={`text-${cursor}`}>
+            {renderText(content.slice(cursor, child.from), searchQuery)}
+          </Fragment>,
+        );
+      }
+      if (!MARKER_NODES.has(child.name)) {
+        const blockKey = `${child.name}-${child.from}-${index}\0${content.slice(child.from, child.to)}`;
+        let element = prevCache.get(blockKey);
+        if (element === undefined) {
+          element = (
+            <Fragment key={`${child.name}-${child.from}-${index}`}>
+              {renderNode(child, content, ctx)}
+            </Fragment>
+          );
+        }
+        nextCache.set(blockKey, element);
+        result.push(element);
+      }
+      cursor = child.to;
+    });
+    if (cursor < root.to) {
+      result.push(
+        <Fragment key={`text-${cursor}`}>
+          {renderText(content.slice(cursor, root.to), searchQuery)}
+        </Fragment>,
+      );
+    }
+    blockCacheRef.current = { contextKey, nodes: nextCache };
+    return <>{result}</>;
+  }, [content, linkReferences, projectDir, searchQuery, outputLinks, tree]);
   return <>{rendered}</>;
 });
 

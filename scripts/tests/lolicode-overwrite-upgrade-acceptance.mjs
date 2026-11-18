@@ -1,6 +1,6 @@
 // Run from an elevated Windows shell using Node 24:
 // node scripts/tests/lolicode-overwrite-upgrade-acceptance.mjs <published-baseline.exe> [<candidate-setup.exe> <source-snapshot.json> <verified-candidate-sha256>]
-// Known baselines: 1.0.6 (native 4.1.6, legacy migration), 1.1.0 and 1.1.1 (Harness).
+// Known baselines: 1.0.6 (native 4.1.6, legacy migration), 1.1.0 through 1.1.2 (Harness).
 // A baseline-only run rehearses the released installer and real transcript creation.
 // Upgrade runs restart/resume, then reinstall the identical candidate and resume
 // again, all in the same disposable account/profile with fresh prompts/request IDs.
@@ -30,7 +30,7 @@ function parseAcceptanceArgs(args, platform) {
         !/^[a-f0-9]{64}$/i.test(expectedCandidateSha256 ?? "")))
   ) {
     throw new Error(
-      "Usage (Windows): node lolicode-overwrite-upgrade-acceptance.mjs <published-v1.0.6-or-v1.1.0-or-v1.1.1.exe> [<candidate.exe> <source-snapshot.json> <independently-verified-64-hex-candidate-sha256>]",
+      "Usage (Windows): node lolicode-overwrite-upgrade-acceptance.mjs <published-baseline.exe> [<candidate.exe> <source-snapshot.json> <independently-verified-64-hex-candidate-sha256>]",
     );
   }
   return { baseline, candidate, sourceSnapshotPath, expectedCandidateSha256 };
@@ -65,6 +65,15 @@ function publishedBaseline(sha256) {
         "1afc8fdfa91e54f7ab1e45a593b975fdbf31e1f5183391ac8558de329d9deb2f",
       executableSha256:
         "f9bc8dd2f7296bcbdf2838a7a039bc3b064d080e3aa2d882b1a1078a4a5ea89d",
+    },
+    {
+      productVersion: "1.1.2",
+      buildVersion: "1.1.2",
+      engine: "harness",
+      installerSha256:
+        "65148951a01f35489ca62db09604fece14686b926d7fde610b45b3c93453927e",
+      executableSha256:
+        "f401314f309fdadaa817335c79a7192c27b81e21a112067617aed33e802395ad",
     },
   ];
   const baseline = baselines.find((item) => item.installerSha256 === sha256);

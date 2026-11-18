@@ -8,6 +8,14 @@
     "copyLink": "複製連結",
     "copyPath": "複製路徑"
   },
+  "agentMarketplace": {
+    "name": "外掛市場",
+    "open": "開啟外掛市場"
+  },
+  "agentAutomation": {
+    "name": "自動化",
+    "open": "開啟自動化"
+  },
   "agentSecretary": {
     "companion": {
       "unknown": "工作狀態暫未確認",

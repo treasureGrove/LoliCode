@@ -99,7 +99,9 @@ describe("unified workspace navigation", () => {
       screen.getByRole("button", { name: "编程工作台" }),
     ).toHaveTextContent("代理");
     expect(screen.getByRole("button", { name: "自动化" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "插件" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "插件" }),
+    ).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "编程工作台" })).toHaveAttribute(
       "aria-current",
       "page",
@@ -170,7 +172,7 @@ describe("unified workspace navigation", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("opens automation and plugins directly while retaining chat as their parent destination", async () => {
+  it("opens automation from top shortcuts while retaining agent as its parent destination", async () => {
     const onOpenAgentTool = vi.fn();
     const values = props({
       view: "agent",
@@ -189,12 +191,13 @@ describe("unified workspace navigation", () => {
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "自动化" }));
     expect(onOpenAgentTool).toHaveBeenLastCalledWith("workflows", "automation");
-    await user.click(screen.getByRole("button", { name: "插件" }));
-    expect(onOpenAgentTool).toHaveBeenLastCalledWith("skills", "plugins");
+    expect(
+      screen.queryByRole("button", { name: "插件" }),
+    ).not.toBeInTheDocument();
     expect(values.onSelectPage).not.toHaveBeenCalled();
   });
 
-  it("embeds the actual workspace actions and tree without duplicating task creation", () => {
+  it("embeds the actual workspace actions and tree without duplicating task creation or bottom shortcuts", () => {
     const onCollapse = vi.fn();
     const onCreate = vi.fn();
     mount(
@@ -214,19 +217,15 @@ describe("unified workspace navigation", () => {
     const tree = screen.getByLabelText("项目列表");
     const tools = screen.getByRole("group", { name: "工作台工具" });
     expect(
-      tree.compareDocumentPosition(tools) & Node.DOCUMENT_POSITION_FOLLOWING,
+      tools.compareDocumentPosition(tree) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(
-      tools.compareDocumentPosition(profileButton()) &
+      tree.compareDocumentPosition(profileButton()) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(
-      within(tools).getByRole("button", { name: "插件" }),
-    ).toHaveTextContent("插件");
-    expect(within(tools).getByRole("button", { name: "插件" })).toHaveAttribute(
-      "title",
-      "插件",
-    );
+      screen.queryByRole("button", { name: "插件" }),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "开始对话" }),
     ).not.toBeInTheDocument();

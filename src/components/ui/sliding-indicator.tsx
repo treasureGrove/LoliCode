@@ -52,7 +52,11 @@ export function useSlidingIndicator<T extends HTMLElement>(
     if (typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(measure);
     observer.observe(container);
-    for (const child of Array.from(container.children)) observer.observe(child);
+    for (const child of Array.from(container.children)) {
+      if (!child.classList.contains("tai-segment-thumb")) {
+        observer.observe(child);
+      }
+    }
     return () => observer.disconnect();
   }, [selector, value]);
 
@@ -65,7 +69,7 @@ export function useSlidingIndicator<T extends HTMLElement>(
   return { ref, rect, animate };
 }
 
-/** One spring follows the latest selection; text never moves with the thumb. */
+/** Smooth segmented indicator follows the latest selection in lockstep with view transitions. */
 export function SegmentThumb({
   rect,
   animate,
@@ -92,7 +96,7 @@ export function SegmentThumb({
         width: rect.width,
         height: rect.height,
       }}
-      transition={animate && !reduced ? motionTokens.spring : { duration: 0 }}
+      transition={animate && !reduced ? motionTokens.segment : { duration: 0 }}
     />
   );
 }

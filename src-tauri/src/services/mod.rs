@@ -23,6 +23,7 @@ pub mod coding_plan;
 pub mod config;
 pub mod copilot_billing;
 pub mod discovery;
+pub(crate) mod dsh_marketplace;
 pub mod env_checker;
 pub mod env_manager;
 pub mod external_agent_config;

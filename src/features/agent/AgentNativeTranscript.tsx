@@ -329,91 +329,33 @@ export function hasNativeTranscriptContent(
   );
 }
 
-/** Native event references are the display source; no intermediate AgentMessage history. */
-export const AgentNativeTranscript = memo(function AgentNativeTranscript({
-  events,
-  activeAttempt,
+const EMPTY_IMAGE_ATTACHMENTS: readonly AgentImageAttachment[] = [];
+const EMPTY_DOCUMENT_ATTACHMENTS: readonly AgentDocumentAttachment[] = [];
+
+const NativeTranscriptRows = memo(function NativeTranscriptRows({
+  rows,
+  start,
+  tools,
   projectPath,
   sessionId,
-  imageAttachmentsByMessage = {},
-  documentAttachmentsByMessage = {},
-  messageAliases = {},
+  imageAttachmentsByMessage,
+  documentAttachmentsByMessage,
+  messageAliases,
   userIdentity,
-  onLoadEarlier,
-  onLoadOlder,
-  hasMore = false,
-  loadingEarlier = false,
-}: AgentNativeTranscriptProps) {
-  const { rows, tools } = useMemo(() => nativeRows(events), [events]);
-  const identity = `${projectPath}\0${sessionId || ""}`;
-  const [window, setWindow] = useState(() => ({
-    identity,
-    first: rows[Math.max(0, rows.length - 40)]?.event.seq,
-  }));
-  const loadBefore = useRef<{ identity: string; seq: number }>();
-  let start =
-    window.identity === identity
-      ? rows.findIndex((row) => row.event.seq === window.first)
-      : -1;
-  if (loadBefore.current?.identity !== identity) loadBefore.current = undefined;
-  if (
-    loadBefore.current &&
-    rows.length &&
-    rows[0].event.seq < loadBefore.current.seq
-  ) {
-    loadBefore.current = undefined;
-    start = 0;
-    setWindow({ identity, first: rows[0].event.seq });
-  }
-  if (start < 0) {
-    start = Math.max(0, rows.length - 40);
-    const first = rows[start]?.event.seq;
-    if (window.identity !== identity || window.first !== first)
-      setWindow({ identity, first });
-  }
-  const anchor = useRef<{ row: Element; top: number; scroll: HTMLElement }>();
-  useLayoutEffect(() => {
-    if (loadingEarlier) return;
-    const saved = anchor.current;
-    anchor.current = undefined;
-    loadBefore.current = undefined;
-    if (saved?.row.isConnected)
-      saved.scroll.scrollTop +=
-        saved.row.getBoundingClientRect().top - saved.top;
-  }, [window, events, loadingEarlier]);
+}: {
+  rows: readonly Row[];
+  start: number;
+  tools: ReadonlyMap<string, ToolEvents>;
+  projectPath: string;
+  sessionId?: string;
+  imageAttachmentsByMessage: Record<string, AgentImageAttachment[]>;
+  documentAttachmentsByMessage: Record<string, AgentDocumentAttachment[]>;
+  messageAliases: Readonly<Record<string, string>>;
+  userIdentity?: AgentMessageIdentity;
+}) {
   const contentProps = { tools, projectPath, sessionId };
   return (
     <>
-      {(start > 0 || hasMore) && (
-        <button
-          type="button"
-          className="wb-history-earlier"
-          disabled={loadingEarlier || (start === 0 && !onLoadOlder)}
-          onClick={(event) => {
-            const row = event.currentTarget.nextElementSibling;
-            const scroll = event.currentTarget.closest<HTMLElement>(".wb-chat");
-            if (row && scroll)
-              anchor.current = {
-                row,
-                top: row.getBoundingClientRect().top,
-                scroll,
-              };
-            onLoadEarlier?.();
-            if (start > 0)
-              setWindow({
-                identity,
-                first: rows[Math.max(0, start - 40)].event.seq,
-              });
-            else {
-              if (rows[0])
-                loadBefore.current = { identity, seq: rows[0].event.seq };
-              onLoadOlder?.();
-            }
-          }}
-        >
-          {loadingEarlier ? "正在加载更早的消息…" : "加载更早的消息"}
-        </button>
-      )}
       {rows.slice(start).map(({ event, kind }) => {
         const data = object(event.data);
         const message = kind === "user" ? data : object(data.message);
@@ -422,12 +364,12 @@ export const AgentNativeTranscript = memo(function AgentNativeTranscript({
           imageAttachmentsByMessage[messageAliases[text(data.id)]] ||
           imageAttachmentsByMessage[text(data.id)] ||
           imageAttachmentsByMessage[text(source.rpcId)] ||
-          [];
+          EMPTY_IMAGE_ATTACHMENTS;
         const documents =
           documentAttachmentsByMessage[messageAliases[text(data.id)]] ||
           documentAttachmentsByMessage[text(data.id)] ||
           documentAttachmentsByMessage[text(source.rpcId)] ||
-          [];
+          EMPTY_DOCUMENT_ATTACHMENTS;
         const props = {
           "data-native-event-seq": event.seq,
           "data-native-turn":
@@ -558,6 +500,106 @@ export const AgentNativeTranscript = memo(function AgentNativeTranscript({
           </div>
         );
       })}
+    </>
+  );
+});
+
+/** Native event references are the display source; no intermediate AgentMessage history. */
+export const AgentNativeTranscript = memo(function AgentNativeTranscript({
+  events,
+  activeAttempt,
+  projectPath,
+  sessionId,
+  imageAttachmentsByMessage = {},
+  documentAttachmentsByMessage = {},
+  messageAliases = {},
+  userIdentity,
+  onLoadEarlier,
+  onLoadOlder,
+  hasMore = false,
+  loadingEarlier = false,
+}: AgentNativeTranscriptProps) {
+  const { rows, tools } = useMemo(() => nativeRows(events), [events]);
+  const identity = `${projectPath}\0${sessionId || ""}`;
+  const [window, setWindow] = useState(() => ({
+    identity,
+    first: rows[Math.max(0, rows.length - 40)]?.event.seq,
+  }));
+  const loadBefore = useRef<{ identity: string; seq: number }>();
+  let start =
+    window.identity === identity
+      ? rows.findIndex((row) => row.event.seq === window.first)
+      : -1;
+  if (loadBefore.current?.identity !== identity) loadBefore.current = undefined;
+  if (
+    loadBefore.current &&
+    rows.length &&
+    rows[0].event.seq < loadBefore.current.seq
+  ) {
+    loadBefore.current = undefined;
+    start = 0;
+    setWindow({ identity, first: rows[0].event.seq });
+  }
+  if (start < 0) {
+    start = Math.max(0, rows.length - 40);
+    const first = rows[start]?.event.seq;
+    if (window.identity !== identity || window.first !== first)
+      setWindow({ identity, first });
+  }
+  const anchor = useRef<{ row: Element; top: number; scroll: HTMLElement }>();
+  useLayoutEffect(() => {
+    if (loadingEarlier) return;
+    const saved = anchor.current;
+    anchor.current = undefined;
+    loadBefore.current = undefined;
+    if (saved?.row.isConnected)
+      saved.scroll.scrollTop +=
+        saved.row.getBoundingClientRect().top - saved.top;
+  }, [window, events, loadingEarlier]);
+  const contentProps = { tools, projectPath, sessionId };
+  return (
+    <>
+      {(start > 0 || hasMore) && (
+        <button
+          type="button"
+          className="wb-history-earlier"
+          disabled={loadingEarlier || (start === 0 && !onLoadOlder)}
+          onClick={(event) => {
+            const row = event.currentTarget.nextElementSibling;
+            const scroll = event.currentTarget.closest<HTMLElement>(".wb-chat");
+            if (row && scroll)
+              anchor.current = {
+                row,
+                top: row.getBoundingClientRect().top,
+                scroll,
+              };
+            onLoadEarlier?.();
+            if (start > 0)
+              setWindow({
+                identity,
+                first: rows[Math.max(0, start - 40)].event.seq,
+              });
+            else {
+              if (rows[0])
+                loadBefore.current = { identity, seq: rows[0].event.seq };
+              onLoadOlder?.();
+            }
+          }}
+        >
+          {loadingEarlier ? "正在加载更早的消息…" : "加载更早的消息"}
+        </button>
+      )}
+      <NativeTranscriptRows
+        rows={rows}
+        start={start}
+        tools={tools}
+        projectPath={projectPath}
+        sessionId={sessionId}
+        imageAttachmentsByMessage={imageAttachmentsByMessage}
+        documentAttachmentsByMessage={documentAttachmentsByMessage}
+        messageAliases={messageAliases}
+        userIdentity={userIdentity}
+      />
       {activeAttempt && (
         <div
           data-native-turn={activeAttempt.turn}

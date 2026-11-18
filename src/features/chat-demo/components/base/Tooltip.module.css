@@ -1,0 +1,25 @@
+.trigger {
+  display: contents;
+}
+
+.tooltip {
+  position: fixed;
+  z-index: 2000;
+  box-sizing: border-box;
+  max-width: calc(100vw - 28px);
+  padding: 4px 8px;
+  border-radius: 10px;
+  background-color: var(--dsw-alias-tooltip-bg);
+  color: var(--dsw-static-neutral-bluish-00);
+  font-size: 12px;
+  line-height: 1.5;
+  pointer-events: none;
+
+  [data-ds-dark-theme] & {
+    color: var(--dsw-alias-label-primary);
+    box-shadow:
+      0 6px 16px 0 rgba(0, 0, 0, 0.08),
+      0 3px 6px -4px rgba(0, 0, 0, 0.12),
+      0 9px 28px 8px rgba(0, 0, 0, 0.05);
+  }
+}

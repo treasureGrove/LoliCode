@@ -1,0 +1,24 @@
+{
+  "version": "0.2.2-rc.4",
+  "commit": "3f321d32bfe382212a8ed8785c1d47a5a300aa23",
+  "release": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.4",
+  "npmIntegrity": "sha512-DRJaTWIk4ObkDOHxld+XjFgHdKzX5UApE7PjzE/Espy44m1fT4pY7LRJCMDCFD+ArIJ+Gwl1FL9g1/UlMwNvpw==",
+  "artifactIntegrityVerified": true,
+  "capabilities": [
+    {
+      "upstream": "packages/llm/llm-deepseek/src/translate.ts",
+      "status": "pending SDK and host verification",
+      "acceptance": "Replay an unexpected response using the bundled runtime and confirm actionable terminal state and subsequent session recovery."
+    },
+    {
+      "upstream": "packages/experimental/liveshare/src/host/tunnel-worker.ts",
+      "status": "upstream Electron host change, LoliCode Tauri integration unverified",
+      "acceptance": "Verify share creation and explicit termination on the target desktop host."
+    },
+    {
+      "upstream": "packages/experimental/deepseek-chat-import",
+      "status": "prior rc.3 desktop host gap remains",
+      "acceptance": "Import a synthetic archive in a clean desktop profile, reopen and continue the imported session."
+    }
+  ]
+}
