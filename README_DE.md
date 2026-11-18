@@ -29,7 +29,7 @@ Windows, macOS und Linux sind Zielplattformen. Derzeit sind **Windows-x64-NSIS-I
 2. In der Modell- und Zugangsverwaltung einen Zugang hinzufügen und ein Modell auswählen.
 3. Im Arbeitsbereich einen Projektordner öffnen, eine Aufgabe beschreiben und Berechtigungen sowie Änderungen prüfen.
 
-Updates lassen sich über das Avatar-Menü unten links oder den Update-Eintrag prüfen. Die installierte Ausgabe verwendet das [signierte LoliCode-Update-Manifest](https://tools.treasuregrove.art/lolicode/updates/latest.json). Bei portablen Ausgaben die Programmdateien gemäß Downloadseite und Versionshinweisen ersetzen und die eigenen Daten behalten.
+Updates lassen sich über das Avatar-Menü unten links oder den Update-Eintrag prüfen. Die installierte Ausgabe verwendet das [signierte LoliCode-Update-Manifest](https://tools.treasuregrove.art/lolicode/updates/stable.json). Bei portablen Ausgaben die Programmdateien gemäß Downloadseite und Versionshinweisen ersetzen und die eigenen Daten behalten.
 
 LoliCode behält aus Kompatibilitätsgründen das historische Datenverzeichnis `~/.tai-switch` bei. Weitere Hinweise enthält die [Installationsanleitung](docs/user-manual/en/1-getting-started/1.2-installation.md).
 

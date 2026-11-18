@@ -29,7 +29,7 @@ Windows、macOS、Linux を対象としています。現在の公開パッケ�
 2. 接続先・モデル管理で接続先を追加し、モデルを選びます。
 3. ワークベンチでプロジェクトフォルダーを開き、依頼を入力して権限や変更内容を確認します。
 
-左下のアバターメニューまたは更新ボタンからソフトウェア更新を確認できます。インストール版は [LoliCode の署名付き更新マニフェスト](https://tools.treasuregrove.art/lolicode/updates/latest.json)を使用します。ポータブル版はダウンロードページとリリース手順に従って更新してください。
+左下のアバターメニューまたは更新ボタンからソフトウェア更新を確認できます。インストール版は [LoliCode の署名付き更新マニフェスト](https://tools.treasuregrove.art/lolicode/updates/stable.json)を使用します。ポータブル版はダウンロードページとリリース手順に従って更新してください。
 
 LoliCode は既存データとの互換性のため、保存先に歴史的な `~/.tai-switch` を引き続き使用します。[インストールガイド](docs/user-manual/ja/1-getting-started/1.2-installation.md)を参照してください。
 

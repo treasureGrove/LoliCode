@@ -29,7 +29,7 @@ Windows、macOS、Linux 都是产品目标。目前公开提供 **Windows x64 NS
 2. 在「渠道与模型」添加渠道并选择模型。
 3. 在「工作台」打开项目文件夹，描述任务，按需查看权限和文件变更。
 
-左下角头像菜单里的「软件更新」或更新入口可以检查新版。安装版使用 [LoliCode 签名更新源](https://tools.treasuregrove.art/lolicode/updates/latest.json)；便携版请按下载页及发布说明替换程序文件，并保留自己的数据。
+左下角头像菜单里的「软件更新」或更新入口可以检查新版。安装版使用 [LoliCode 签名更新源](https://tools.treasuregrove.art/lolicode/updates/stable.json)；便携版请按下载页及发布说明替换程序文件，并保留自己的数据。
 
 LoliCode 为兼容已有数据，继续使用历史目录 `~/.tai-switch`。迁移或替换安装前可查看[安装指南](docs/user-manual/zh/1-getting-started/1.2-installation.md)。
 

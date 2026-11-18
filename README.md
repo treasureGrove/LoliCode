@@ -29,7 +29,7 @@ Windows, macOS, and Linux are product targets. Current public packages are **Win
 2. Add a channel and select a model in **Channels and models**.
 3. Open a project folder in **Workbench**, describe a task, and review requested permissions and changes.
 
-Use **Software updates** from the lower-left avatar menu or the update entry to check for new versions. The installer update channel uses the [signed LoliCode update manifest](https://tools.treasuregrove.art/lolicode/updates/latest.json). For portable editions, follow the download page and release notes to replace the application files while retaining your data.
+Use **Software updates** from the lower-left avatar menu or the update entry to check for new versions. The installer update channel uses the [signed LoliCode update manifest](https://tools.treasuregrove.art/lolicode/updates/stable.json). For portable editions, follow the download page and release notes to replace the application files while retaining your data.
 
 LoliCode keeps the historical `~/.tai-switch` data directory for compatibility. See the [installation guide](docs/user-manual/en/1-getting-started/1.2-installation.md) before moving or replacing an existing installation.
 
