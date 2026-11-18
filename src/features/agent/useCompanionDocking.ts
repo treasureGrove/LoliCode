@@ -89,7 +89,7 @@ export function useCompanionDocking({
 
   useLayoutEffect(() => {
     refresh();
-  });
+  }, [enabled, dock, refresh]);
 
   useEffect(() => {
     if (!dock) return;
@@ -111,17 +111,23 @@ export function useCompanionDocking({
     )
       observer.observe(element);
     // Content above a message can move its edge without resizing the message.
-    const mutations = new MutationObserver(schedule);
-    mutations.observe(document.body, {
+    const mutations = new MutationObserver((records) => {
+      const relevant = records.some(
+        ({ target: node }) =>
+          !(node instanceof Element && node.closest(".lc-pet")),
+      );
+      if (relevant) schedule();
+    });
+    mutations.observe(dock.scope.isConnected ? dock.scope : document.body, {
       subtree: true,
       childList: true,
-      characterData: true,
       attributes: true,
       attributeFilter: [
         "class",
         "style",
         "hidden",
         "aria-hidden",
+        "inert",
         "data-companion-dock-id",
         "data-companion-rest",
       ],

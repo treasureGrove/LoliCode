@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from "react";
+import { memo, useEffect, useId, useState } from "react";
 import { Check, ChevronDown, Layers } from "lucide-react";
 import {
   Popover,
@@ -21,11 +21,11 @@ export const agentContextDefaultLimit = (model?: AgentModel) =>
     : (declaredWindows(model)[0] ?? DEFAULT_CONTEXT_LIMIT);
 const formatLimit = (value: number) =>
   `${value.toLocaleString("zh-CN")} tokens`;
-const compactLimit = (value: number) =>
-  new Intl.NumberFormat("en", {
-    notation: "compact",
-    maximumFractionDigits: 1,
-  }).format(value);
+const COMPACT_NUMBER_FORMAT = new Intl.NumberFormat("en", {
+  notation: "compact",
+  maximumFractionDigits: 1,
+});
+const compactLimit = (value: number) => COMPACT_NUMBER_FORMAT.format(value);
 const formatBytes = (value: number) =>
   value >= 1024 * 1024
     ? `${(value / (1024 * 1024)).toLocaleString("zh-CN", { maximumFractionDigits: 1 })} MiB`
@@ -34,7 +34,7 @@ const formatBytes = (value: number) =>
       : `${value.toLocaleString("zh-CN")} 字节`;
 
 /** Declared tiers stay exact; scalar-only models allow bounded local budgets. */
-export function AgentContextPicker({
+export const AgentContextPicker = memo(function AgentContextPicker({
   model,
   value,
   onSelect,
@@ -162,4 +162,4 @@ export function AgentContextPicker({
       </PopoverContent>
     </Popover>
   );
-}
+});

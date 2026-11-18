@@ -119,6 +119,13 @@ export function readCompanionDockTarget(
     element.closest('[hidden], [aria-hidden="true"], [inert]')
   )
     return null;
+  const geometry = companionDockGeometry(
+    element.getBoundingClientRect(),
+    kind,
+    contactX,
+    viewport(),
+  );
+  if (!geometry) return null;
   for (
     let ancestor: HTMLElement | null = element;
     ancestor;
@@ -133,13 +140,7 @@ export function readCompanionDockTarget(
     )
       return null;
   }
-  const geometry = companionDockGeometry(
-    element.getBoundingClientRect(),
-    kind,
-    contactX,
-    viewport(),
-  );
-  if (!geometry || !isExposed(element, geometry.contact)) return null;
+  if (!isExposed(element, geometry.contact)) return null;
   return {
     ...geometry,
     id,

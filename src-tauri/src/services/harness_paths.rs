@@ -16,7 +16,7 @@ pub(super) struct HarnessPaths {
     pub(super) version: String,
 }
 
-fn pinned_version() -> &'static str {
+pub(super) fn pinned_version() -> &'static str {
     static VERSION: OnceLock<String> = OnceLock::new();
     VERSION.get_or_init(|| {
         let package: serde_json::Value = serde_json::from_str(include_str!(concat!(

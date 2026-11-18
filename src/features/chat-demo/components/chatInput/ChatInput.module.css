@@ -1,0 +1,332 @@
+.wrapper {
+  --line-height: 24px;
+  --input-padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  width: 100%;
+  cursor: text;
+  font-size: 16px;
+  line-height: var(--line-height);
+  border-radius: 24px;
+  border: 1px solid var(--dsw-alias-border-l2-darkmode-thin);
+  background: var(--dsw-specific-input-major);
+  overflow: hidden;
+}
+
+.session {
+  box-shadow:
+    0 4px 10px rgba(0, 0, 0, 0.02),
+    0 2px 4px rgba(0, 0, 0, 0.04);
+}
+
+.home {
+  box-shadow:
+    0 4px 12px 0 rgba(0, 0, 0, 0.02),
+    0 2px 2px 0 rgba(72, 104, 178, 0.01),
+    0 30px 60px 0 rgba(72, 104, 178, 0.03);
+
+  [data-ds-dark-theme] & {
+    box-shadow: none;
+  }
+}
+
+.attachments {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  padding: 12px 12px 0;
+  overflow-x: auto;
+  cursor: default;
+}
+
+.attachment {
+  position: relative;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  width: 64px;
+  height: 64px;
+  border-radius: 16px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  overflow: hidden;
+  background-color: var(--dsw-alias-bg-skeleton);
+
+  img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  &:hover .remove {
+    opacity: 1;
+  }
+}
+
+.uploading {
+  position: absolute;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.3);
+
+  &::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 16px;
+    height: 16px;
+    margin: -10px 0 0 -10px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.4);
+    border-top-color: #fff;
+    animation: spin 0.8s linear infinite;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 上传失败：红色描边 + 暗色蒙层，可重试时中间为重试图标，原因写在图标下方 */
+.attachmentFailed {
+  border-color: var(--dsw-alias-state-error-primary);
+}
+
+.failed {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  padding: 0 3px;
+  cursor: pointer;
+  color: var(--dsw-static-neutral-bluish-00);
+  background-color: rgba(0, 0, 0, 0.48);
+
+  svg {
+    width: 18px;
+    height: 18px;
+  }
+}
+
+/* 不可重试：蒙层更浅，原因贴底 */
+.failedStatic {
+  justify-content: flex-end;
+  padding-bottom: 7px;
+  cursor: default;
+  background-color: rgba(0, 0, 0, 0.24);
+}
+
+.failedReason {
+  display: -webkit-box;
+  overflow: hidden;
+  max-width: 100%;
+  margin-top: 2px;
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 500;
+  text-align: center;
+  word-break: break-word;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.remove {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  color: var(--dsw-alias-label-primary-inverted);
+  background-color: var(--dsw-alias-button-contrast-fill);
+  filter: drop-shadow(0 0 0.5px rgba(0, 0, 0, 0.2));
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--ds-transition-duration) var(--ds-ease-in-out);
+}
+
+/* 不可重试时删除按钮常显，提示需要先删除 */
+.invalidRemove {
+  opacity: 1;
+  color: var(--dsw-alias-label-primary-foreground);
+  background-color: var(--dsw-alias-state-error-primary);
+}
+
+.textareaWrapper {
+  position: relative;
+  width: 100%;
+}
+
+.textarea,
+.mirror {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: calc(var(--line-height) * 2 + var(--input-padding-top));
+  margin: 0;
+  padding: var(--input-padding-top) 12px 0 16px;
+  border: none;
+  font: inherit;
+  line-height: inherit;
+  font-variant-ligatures: no-contextual;
+  word-break: break-word;
+  white-space: pre-wrap;
+  overflow: auto;
+}
+
+.textarea {
+  position: absolute;
+  height: 100%;
+  resize: none;
+  outline: none;
+  overscroll-behavior: contain;
+  background-color: transparent;
+  color: var(--dsw-alias-label-primary);
+  caret-color: var(--dsw-alias-brand-text);
+
+  &::placeholder {
+    color: var(--dsw-alias-label-caption);
+    user-select: none;
+  }
+}
+
+/* 录音中由频谱接管第一行，隐藏正文但保留高度 */
+.textareaHidden {
+  visibility: hidden;
+}
+
+@media not all and (min-width: 440px) {
+  .textarea,
+  .mirror {
+    min-height: calc(var(--line-height) * 1.25 + var(--input-padding-top));
+  }
+}
+
+.mirror {
+  visibility: hidden;
+  pointer-events: none;
+  max-height: 336px;
+}
+
+@media not all and (min-width: 768px) {
+  .wrapper {
+    flex-shrink: 0;
+    max-height: calc(var(--app-viewport-height, 100dvh) - 120px);
+  }
+
+  .textareaWrapper {
+    min-height: 0;
+  }
+
+  .attachments,
+  .functionRow {
+    flex-shrink: 0;
+  }
+}
+
+.functionRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 12px;
+}
+
+.toggles {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.collapsedToggles .toggleLabel {
+  display: none;
+}
+
+.toggle {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 18px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  background-color: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  transition-property: border, background;
+  transition-duration: 0.2s;
+
+  &:hover:not(:disabled) {
+    background-color: var(--dsw-alias-interactive-bg-hover);
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  &.selected {
+    background-color: var(--dsw-alias-button-ghost-active-fill);
+    color: var(--dsw-alias-brand-text);
+    border-color: var(--dsw-alias-button-ghost-active-border);
+
+    &:hover {
+      background-color: var(--dsw-alias-button-ghost-active-hover);
+    }
+  }
+}
+
+.right {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.sendButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  margin-left: 6px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--dsw-alias-button-primary-fill);
+  color: var(--dsw-static-neutral-bluish-00);
+  cursor: pointer;
+  transition: background 0.2s ease;
+
+  &:not(.disabled):hover {
+    background: var(--dsw-alias-button-primary-hover);
+  }
+
+  &.disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+}

@@ -19,7 +19,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { tavernApi, TAVERN_PRESETS_KEY } from "@/lib/api/tavern";
-import companion from "@/assets/atelier/companion.png";
+import companion from "@/assets/atelier/companion.png?inline";
 
 export function TavernPresetGallery({
   open,

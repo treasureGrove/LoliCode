@@ -1,0 +1,39 @@
+:root,
+.ds-chat-demo-root {
+  --message-list-max-width: 840px;
+  --message-list-padding-horizontal: 44px;
+  --scroll-color: rgba(0, 0, 0, 0.08);
+  --scroll-color-hover: rgba(0, 0, 0, 0.15);
+}
+
+@media (max-width: 1023px) {
+  :root,
+  .ds-chat-demo-root {
+    --message-list-max-width: 712px;
+    --message-list-padding-horizontal: 36px;
+  }
+}
+
+.ds-chat-demo-root {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  margin: 0;
+  word-break: break-word;
+  font-family: var(--dsw-font-family);
+  font-size: var(--ds-font-size-m);
+  color: var(--dsw-alias-label-primary);
+  background-color: var(--dsw-alias-bg-base);
+  -webkit-text-size-adjust: none;
+  -webkit-tap-highlight-color: transparent;
+  font-feature-settings: 'kern';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body[data-ds-dark-theme],
+.ds-chat-demo-root[data-ds-dark-theme] {
+  --scroll-color: rgba(255, 255, 255, 0.15);
+  --scroll-color-hover: rgba(255, 255, 255, 0.24);
+}

@@ -1,0 +1,3152 @@
+{
+  "schemaVersion": 1,
+  "kind": "release-candidate-source-preflight",
+  "checkedAt": "2026-11-11T12:55:27.515Z",
+  "version": "0.2.2-rc.2",
+  "upstreamCommit": "ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c",
+  "release": {
+    "tag": "dsh-v0.2.2-rc.2",
+    "url": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+    "publishedAt": "2026-11-11T11:33:06Z"
+  },
+  "currentPin": {
+    "version": "0.2.2-rc.2",
+    "upstreamCommit": "ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c"
+  },
+  "status": "current-local-pin-partial-acceptance",
+  "npm": {
+    "checkedAt": "2026-11-13T01:57:53.955Z",
+    "registry": "https://registry.npmjs.org/@deepseek-ai%2fdsh",
+    "version": "0.2.2-rc.2",
+    "metadataStatus": 200,
+    "exactVersionStatus": 200,
+    "packageName": "@deepseek-ai/dsh",
+    "indexListsVersion": true,
+    "exactVersionMatches": true,
+    "distIntegrity": "sha512-J727r2C471x2cYXGjqZ0D9T1ZyaYQDFH/Ynx8iq+85oslM4nky5YTBnbAuTtxMhW7nhY8wuAEfjjFCQ+K6Swgw==",
+    "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh/-/dsh-0.2.2-rc.2.tgz",
+    "exactVersionError": null,
+    "distTags": {
+      "alpha": "0.2.2-alpha.3",
+      "next": "0.2.2-rc.2",
+      "latest": "0.2.2-rc.1"
+    }
+  },
+  "sourceComparison": {
+    "url": "https://github.com/deepseek-ai/deepseek-harness/compare/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db...ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c",
+    "aheadBy": 1568,
+    "behindBy": 0,
+    "mergeBase": "66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db",
+    "fileRowsReturned": 300,
+    "scope": "Selected pinned source surfaces. GitHub returned 300 file rows and this is a preliminary release-note mapping."
+  },
+  "sourceEvidence": [
+    {
+      "id": "base-layer",
+      "path": "packages/bundle/base/cordis.patch.yml",
+      "candidateUrl": "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/base/cordis.patch.yml",
+      "candidateGitBlobSha1": "18286618f9467bd886db043438a7b71bf7ea53a9",
+      "previousUrl": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/bundle/base/cordis.patch.yml",
+      "previousSha256": "b65a86e55f02d863286bb6faac8ae292c18fffca3c8aa4491b600fa4dd6b48d0",
+      "candidateSha256": "026fa70d7746609549ea7607f5b60c76fd19476e13549729dc1171f0a1d96cc8",
+      "contentChanged": true
+    },
+    {
+      "id": "cli-package",
+      "path": "apps/cli/package.json",
+      "candidateUrl": "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/apps/cli/package.json",
+      "candidateGitBlobSha1": "0407a54d4835296a5632c2da075dd569c02467fd",
+      "previousUrl": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/apps/cli/package.json",
+      "previousSha256": "b33dc3ea6dcbdbcbd6f0023a8bbc033f0c25aed0773e79f2f62031ca0719268b",
+      "candidateSha256": "014a4d3ad8effd1317986652e27f60a3cb88c5eb2d8da953236d1b2d91fb8b9f",
+      "contentChanged": true
+    },
+    {
+      "id": "desktop",
+      "path": "apps/desktop/README.md",
+      "candidateUrl": "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/apps/desktop/README.md",
+      "candidateGitBlobSha1": "ffe4f5b5209d3b0a447a83a43f187dc30fe7bbe8",
+      "previousUrl": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/apps/desktop/README.md",
+      "previousSha256": "37888f2f0ed6a12eb53fff560bd6f7211bf458c306f475ba077b9897380f2c5a",
+      "candidateSha256": "e68f8ef8aaa143cc95c6c444295041864aaf45e8235eda7ba682e6b77be1fe4a",
+      "contentChanged": true
+    },
+    {
+      "id": "format-catalog",
+      "path": "packages/session/session-format-catalog/README.md",
+      "candidateUrl": "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/session/session-format-catalog/README.md",
+      "candidateGitBlobSha1": "5fad64d4218302d6e8dd315ce77bf8d59f55edb3",
+      "previousUrl": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/session/session-format-catalog/README.md",
+      "previousSha256": "4bfd1652a3f288ef543190333559e5268c538306aa03bdb27d78648637dadcfc",
+      "candidateSha256": "4bfd1652a3f288ef543190333559e5268c538306aa03bdb27d78648637dadcfc",
+      "contentChanged": false
+    },
+    {
+      "id": "format-current",
+      "path": "packages/session/session-format-catalog/src/current.ts",
+      "candidateUrl": "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/session/session-format-catalog/src/current.ts",
+      "candidateGitBlobSha1": "70fb574590dd685183be268ab65e3878b962759c",
+      "previousUrl": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/session/session-format-catalog/src/current.ts",
+      "previousSha256": "20e66609c38e3b6128dfd7be18423e86c4d7d5886d0c183f5e12d2a2dc62bb3a",
+      "candidateSha256": "20e66609c38e3b6128dfd7be18423e86c4d7d5886d0c183f5e12d2a2dc62bb3a",
+      "contentChanged": false
+    },
+    {
+      "id": "optional-catalog",
+      "path": "packages/util/official-bundles/src/catalog.generated.ts",
+      "candidateUrl": "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/util/official-bundles/src/catalog.generated.ts",
+      "candidateGitBlobSha1": "8a0cfb7579930badc56b44b0ec490203893bd634",
+      "previousUrl": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/util/official-bundles/src/catalog.generated.ts",
+      "previousSha256": "e99573b479f736afa04493b1c5f91e2b881e64e53533205d5fca1e071f90e69c",
+      "candidateSha256": "dff4aed1c7b1819395b45a2bc3ab86e8b6b398c49a8955f0771c83230e235fd4",
+      "contentChanged": true
+    },
+    {
+      "id": "sdk-app-entry",
+      "path": "packages/bundle/sdk-app/src/index.ts",
+      "candidateUrl": "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/sdk-app/src/index.ts",
+      "candidateGitBlobSha1": "fec847af53a28c29e95d8c3e26239a57693afce2",
+      "previousUrl": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/bundle/sdk-app/src/index.ts",
+      "previousSha256": "8a026c7c9e4e0468a3d107571f95bb5b627953ea99893a222e71f933207aea43",
+      "candidateSha256": "8a026c7c9e4e0468a3d107571f95bb5b627953ea99893a222e71f933207aea43",
+      "contentChanged": false
+    },
+    {
+      "id": "sdk-layer",
+      "path": "packages/bundle/sdk-app/cordis.patch.yml",
+      "candidateUrl": "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/sdk-app/cordis.patch.yml",
+      "candidateGitBlobSha1": "e53d193129251736d56e1180c546167517470394",
+      "previousUrl": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/bundle/sdk-app/cordis.patch.yml",
+      "previousSha256": "133e208048ecda173d5024fd663bf21c13f0fb78baa77dc0d0fadf6dc98db003",
+      "candidateSha256": "06e97f2f2cde6c7948a319a90f81df4f39c6de681680fea1e43c72c276252aea",
+      "contentChanged": true
+    },
+    {
+      "id": "sdk-protocol",
+      "path": "packages/sdk/protocol/README.md",
+      "candidateUrl": "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/sdk/protocol/README.md",
+      "candidateGitBlobSha1": "f4cc2e90a300685985b5ddf3b4aaab53594f0679",
+      "previousUrl": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/sdk/protocol/README.md",
+      "previousSha256": "d05b3dd87f9bf19dfaf4c1fd823724bced36e054f76ee04560033f4f42e219f7",
+      "candidateSha256": "d05b3dd87f9bf19dfaf4c1fd823724bced36e054f76ee04560033f4f42e219f7",
+      "contentChanged": false
+    },
+    {
+      "id": "sdk-types",
+      "path": "packages/sdk/protocol/src/types.ts",
+      "candidateUrl": "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/sdk/protocol/src/types.ts",
+      "candidateGitBlobSha1": "6bcd2de7045e58c0fab0e5bacf956724d1ff6e68",
+      "previousUrl": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/sdk/protocol/src/types.ts",
+      "previousSha256": "3101f0792bb3eb849e521d7e4ec0d715b2913e97f7dda722ecad31bdba1bf398",
+      "candidateSha256": "3101f0792bb3eb849e521d7e4ec0d715b2913e97f7dda722ecad31bdba1bf398",
+      "contentChanged": false
+    },
+    {
+      "id": "session-types",
+      "path": "packages/core/session/src/types.ts",
+      "candidateUrl": "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/core/session/src/types.ts",
+      "candidateGitBlobSha1": "0cf13c86a0313ba8869f36bb48004e61dc4cb685",
+      "previousUrl": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/core/session/src/types.ts",
+      "previousSha256": "e0f0c064295404ce33d69936fa940f9e6d024803bbf66337ff2d3c71acb80df1",
+      "candidateSha256": "1274e57822035991afd549ed9659a5dd4d66645d77171921d9b2601371911d2c",
+      "contentChanged": true
+    },
+    {
+      "id": "web-layer",
+      "path": "packages/bundle/web-app/cordis.patch.yml",
+      "candidateUrl": "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+      "candidateGitBlobSha1": "e842d8e3e1a5c5d4399d85aefc045531ac39c88b",
+      "previousUrl": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/bundle/web-app/cordis.patch.yml",
+      "previousSha256": "11c444b94936f8c645f49740b692fc8545898591f78af893d2cb1b7fed4c701c",
+      "candidateSha256": "58dffac57b73cd06b84fb81e6adcfcf3ba7175952e607c0753b5535712388afe",
+      "contentChanged": true
+    }
+  ],
+  "profileChanges": [
+    {
+      "id": "base-layer",
+      "addedIds": [
+        "agent-team",
+        "tool-agent-team"
+      ],
+      "removedIds": [],
+      "previousDistinctIds": 97,
+      "candidateDistinctIds": 99
+    },
+    {
+      "id": "sdk-layer",
+      "addedIds": [
+        "office-kit",
+        "tool-office"
+      ],
+      "removedIds": [],
+      "previousDistinctIds": 18,
+      "candidateDistinctIds": 20
+    },
+    {
+      "id": "web-layer",
+      "addedIds": [
+        "ui-account-notifications",
+        "mcp-manager",
+        "office-kit",
+        "workspace-dependencies",
+        "skill-office",
+        "ui-agent-team"
+      ],
+      "removedIds": [
+        "account-controller",
+        "office-to-pdf"
+      ],
+      "previousDistinctIds": 119,
+      "candidateDistinctIds": 123
+    }
+  ],
+  "observations": [
+    "The candidate CLI source manifest declares 0.2.2-rc.2. npm exact-version eligibility is pending.",
+    "The selected SDK protocol types and current format catalog source match the pinned release byte-for-byte. Session types add SessionEventInput and the release calls for shared-storage and wrapper qualification.",
+    "Base declares AgentTeam and its tool. Web declares MCP manager and a Team client row. Effective activation and SDK exposure require runtime validation.",
+    "The candidate generated on-demand catalog drops the previous CUA entry. Resolve candidate distribution and platform support before carrying forward the earlier platform classification."
+  ],
+  "optionalCatalogCua": {
+    "previousListed": true,
+    "candidateListed": false
+  },
+  "validationTracks": [
+    {
+      "id": "worktree-review",
+      "ordinals": [
+        1,
+        4,
+        31,
+        58
+      ],
+      "assessment": "host-and-client-integration",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/apps/desktop/README.md"
+      ],
+      "lolicode": [
+        "src-tauri/src/services/harness_desktop.rs",
+        "src/features/agent/AgentProjectFilesPanel.tsx"
+      ],
+      "acceptance": "Use a disposable Git repository to verify branch/commit review, viewed-file progress, and archive cleanup with a preserved branch and commits. Check the cleanup preference and Forge migration before enabling the workflow.",
+      "status": "product-acceptance-pending",
+      "mappingProvisional": true,
+      "productFlowValidated": false,
+      "runtimeEvidenceOrdinals": []
+    },
+    {
+      "id": "named-subagents-and-team",
+      "ordinals": [
+        2,
+        5,
+        35,
+        59,
+        60
+      ],
+      "assessment": "sdk-and-host-session-compatibility",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/base/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/sdk/protocol/src/types.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/core/session/src/types.ts"
+      ],
+      "lolicode": [
+        "packages/lolicode-harness-runtime/host-operations.mjs",
+        "src-tauri/src/services/harness_desktop.rs",
+        "src/features/agent/AgentNativeTranscript.tsx"
+      ],
+      "acceptance": "Verify named nested worker identity, one-time wakeup, ownership and persisted Team selection on resume. Exercise old logs in an isolated home and qualify every process that will share that home.",
+      "status": "sdk-verified-product-acceptance-pending",
+      "mappingProvisional": true,
+      "productFlowValidated": false,
+      "runtimeEvidenceOrdinals": [
+        2,
+        59,
+        60
+      ]
+    },
+    {
+      "id": "desktop-lifecycle-and-release",
+      "ordinals": [
+        3,
+        30,
+        45,
+        46,
+        47,
+        48,
+        75
+      ],
+      "assessment": "separate-desktop-shell-and-packaging",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/apps/desktop/README.md",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/apps/cli/package.json"
+      ],
+      "lolicode": [
+        "src-tauri/tauri.conf.json",
+        "src-tauri/src/lib.rs",
+        "scripts/build/prepare-lolicode-harness-runtime.mjs"
+      ],
+      "acceptance": "Verify update-channel defaults, progress, restart, startup recovery and upgrade on the supported native shell. Check the shipped resources and platform differences through the existing release fixture.",
+      "status": "sdk-verified-product-acceptance-pending",
+      "mappingProvisional": true,
+      "productFlowValidated": false,
+      "runtimeEvidenceOrdinals": [
+        75
+      ]
+    },
+    {
+      "id": "sidebar-menu-and-files",
+      "ordinals": [
+        6,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        36,
+        37
+      ],
+      "assessment": "client-integration",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/apps/desktop/README.md"
+      ],
+      "lolicode": [
+        "src/features/agent/AgentProjectFilesPanel.tsx",
+        "src/features/agent/AgentPreviewPanel.tsx",
+        "src/app/App.tsx"
+      ],
+      "acceptance": "Exercise narrow panes, long lists, zoom, special filenames, hidden files, exclusions and menu fallback. Check scroll and keyboard focus with the actual right dock and workspace sidebar.",
+      "status": "product-acceptance-pending",
+      "mappingProvisional": true,
+      "productFlowValidated": false,
+      "runtimeEvidenceOrdinals": []
+    },
+    {
+      "id": "theme-and-personalization",
+      "ordinals": [
+        7,
+        8,
+        18
+      ],
+      "assessment": "client-integration",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml"
+      ],
+      "lolicode": [
+        "src/app/App.tsx",
+        "src/features/agent/AgentPage.tsx"
+      ],
+      "acceptance": "Verify installed-page undo and restore, custom theme colors, and empty-session interaction across light/dark and narrow layouts.",
+      "status": "product-acceptance-pending",
+      "mappingProvisional": true,
+      "productFlowValidated": false,
+      "runtimeEvidenceOrdinals": []
+    },
+    {
+      "id": "conversation-and-history",
+      "ordinals": [
+        15,
+        16,
+        17,
+        19,
+        20,
+        38,
+        39,
+        40,
+        41,
+        49,
+        50,
+        62
+      ],
+      "assessment": "sdk-and-client-integration",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/sdk/protocol/src/types.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/session/session-format-catalog/src/current.ts"
+      ],
+      "lolicode": [
+        "src/features/agent/AgentNativeTranscript.tsx",
+        "src/hooks/useAgentNativeSession.ts",
+        "src/features/agent/AgentPage.tsx"
+      ],
+      "acceptance": "Compare long history anchoring and retry, resumed context, tool results and patch receipts. Verify math copy, code highlighting, renderer fallback and device behavior in the appropriate client.",
+      "status": "product-acceptance-pending",
+      "mappingProvisional": true,
+      "productFlowValidated": false,
+      "runtimeEvidenceOrdinals": []
+    },
+    {
+      "id": "attachments-and-submission",
+      "ordinals": [
+        21,
+        43
+      ],
+      "assessment": "sdk-and-client-idempotency",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/sdk/protocol/src/types.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml"
+      ],
+      "lolicode": [
+        "src/lib/agentInputLedger.ts",
+        "src/features/agent/AgentPage.tsx",
+        "packages/lolicode-harness-runtime/host-operations.mjs"
+      ],
+      "acceptance": "Use isolated text/image/file fixtures to check unfocused paste routing and a lost response followed by same-ID retry. Assert a single user message, preserved attachments, and a cold history read.",
+      "status": "product-acceptance-pending",
+      "mappingProvisional": true,
+      "productFlowValidated": false,
+      "runtimeEvidenceOrdinals": []
+    },
+    {
+      "id": "schedule-and-goal",
+      "ordinals": [
+        22,
+        23,
+        44
+      ],
+      "assessment": "host-and-client-integration",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/sdk/protocol/src/types.ts"
+      ],
+      "lolicode": [
+        "src/features/agent/AgentAutomationSettings.tsx",
+        "src/features/agent/AgentPage.tsx",
+        "packages/lolicode-harness-runtime/host-operations.mjs"
+      ],
+      "acceptance": "Check pause/resume under repeated input, Goal edit/clear/continue labels, persistence across turns and the existing native Goal and Plan gates.",
+      "status": "product-acceptance-pending",
+      "mappingProvisional": true,
+      "productFlowValidated": false,
+      "runtimeEvidenceOrdinals": []
+    },
+    {
+      "id": "provider-routing-and-retry",
+      "ordinals": [
+        24,
+        25,
+        26,
+        51,
+        52,
+        53,
+        54,
+        65,
+        66
+      ],
+      "assessment": "sdk-provider-and-channel-compatibility",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/base/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/sdk/protocol/src/types.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/sdk-app/cordis.patch.yml"
+      ],
+      "lolicode": [
+        "src-tauri/src/services/harness_runtime.rs",
+        "src-tauri/src/services/channel_connections.rs",
+        "src/features/channels/ChannelCenterPanel.tsx"
+      ],
+      "acceptance": "Use synthetic gateway fixtures for retry status, resume after compaction, tool replacement, Gemini discovery, profile User-Agent and masked credential replacement. Check existing saved-channel migration in the disposable profile.",
+      "status": "product-acceptance-pending",
+      "mappingProvisional": true,
+      "productFlowValidated": false,
+      "runtimeEvidenceOrdinals": []
+    },
+    {
+      "id": "search-and-fetch",
+      "ordinals": [
+        27,
+        57
+      ],
+      "assessment": "external-service-and-host-policy",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/base/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml"
+      ],
+      "lolicode": [
+        "packages/lolicode-harness-runtime/host-operations.mjs",
+        "src-tauri/src/services/harness_runtime.rs",
+        "src-tauri/src/services/harness_desktop.rs"
+      ],
+      "acceptance": "Map Search and Fetch routes, billing selection and provider migration before enabling. Exercise documented limits and failures with a local stub, then qualify the authorized service configuration.",
+      "status": "product-acceptance-pending",
+      "mappingProvisional": true,
+      "productFlowValidated": false,
+      "runtimeEvidenceOrdinals": []
+    },
+    {
+      "id": "terminal-and-windows-grants",
+      "ordinals": [
+        28,
+        73
+      ],
+      "assessment": "native-platform-and-permission-compatibility",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/base/cordis.patch.yml"
+      ],
+      "lolicode": [
+        "src/features/agent/AgentPreviewPanel.tsx",
+        "src-tauri/src/services/harness_desktop.rs",
+        "packages/lolicode-harness-runtime/host-operations.mjs"
+      ],
+      "acceptance": "Use an isolated Windows workspace to verify terminal takeover, history visibility, and that extra-directory grants have the documented boundaries across file tools, terminal and PTC.",
+      "status": "sdk-verified-product-acceptance-pending",
+      "mappingProvisional": true,
+      "productFlowValidated": false,
+      "runtimeEvidenceOrdinals": [
+        28
+      ]
+    },
+    {
+      "id": "tool-runtime-and-errors",
+      "ordinals": [
+        29,
+        42,
+        56,
+        68,
+        70
+      ],
+      "assessment": "sdk-and-host-regression",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/base/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/sdk/protocol/src/types.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/core/session/src/types.ts"
+      ],
+      "lolicode": [
+        "packages/lolicode-harness-runtime/host-operations.mjs",
+        "src-tauri/src/services/harness_runtime.rs",
+        "packages/lolicode-harness-runtime/tests/host-operations.test.mjs"
+      ],
+      "acceptance": "Verify ordered concurrent reads, cancellation and resource cleanup, bounded inspection and PTC limits, and stable typed error forwarding in fixture sessions.",
+      "status": "product-acceptance-pending",
+      "mappingProvisional": true,
+      "productFlowValidated": false,
+      "runtimeEvidenceOrdinals": []
+    },
+    {
+      "id": "plugin-and-mcp-management",
+      "ordinals": [
+        32,
+        33,
+        34,
+        61,
+        63,
+        64
+      ],
+      "assessment": "host-and-client-integration",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/util/official-bundles/src/catalog.generated.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/sdk-app/cordis.patch.yml"
+      ],
+      "lolicode": [
+        "src-tauri/src/services/harness_plugins.rs",
+        "src-tauri/src/services/harness_mcp.rs",
+        "src/features/agent/AgentExtensionsPanel.tsx"
+      ],
+      "acceptance": "Check optional versus required plugin failures, active-state reasons, local MCP registration/removal/status/restart, index metadata order and documented skill path migration. Use synthetic local server fixtures.",
+      "status": "product-acceptance-pending",
+      "mappingProvisional": true,
+      "productFlowValidated": false,
+      "runtimeEvidenceOrdinals": []
+    },
+    {
+      "id": "account-and-sharing",
+      "ordinals": [
+        67,
+        74
+      ],
+      "assessment": "external-service-and-permission-compatibility",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/base/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/apps/desktop/README.md"
+      ],
+      "lolicode": [
+        "src/features/channels/ChannelCenterPanel.tsx",
+        "packages/companion-relay/README.md"
+      ],
+      "acceptance": "Verify signed-in state and localized announcements with a disposable authorized profile. Requalify LiveShare permissions, isolation expectations and stored grants before enabling it.",
+      "status": "product-acceptance-pending",
+      "mappingProvisional": true,
+      "productFlowValidated": false,
+      "runtimeEvidenceOrdinals": []
+    },
+    {
+      "id": "pdf-and-office",
+      "ordinals": [
+        55,
+        72
+      ],
+      "assessment": "host-tool-and-document-ui-compatibility",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/base/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/apps/desktop/README.md"
+      ],
+      "lolicode": [
+        "src/features/agent/AgentPreviewPanel.tsx",
+        "src-tauri/src/services/harness_preview.rs",
+        "packages/lolicode-harness-runtime/host-operations.mjs"
+      ],
+      "acceptance": "Verify multi-page navigation and native office skills/tools with synthetic documents. Check old skill compatibility and the intended host parsing permission boundary.",
+      "status": "sdk-verified-product-acceptance-pending",
+      "mappingProvisional": true,
+      "productFlowValidated": false,
+      "runtimeEvidenceOrdinals": [
+        72
+      ]
+    },
+    {
+      "id": "computer-use-and-browser",
+      "ordinals": [
+        71,
+        76
+      ],
+      "assessment": "platform-and-host-availability-review",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/util/official-bundles/src/catalog.generated.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/apps/cli/package.json"
+      ],
+      "lolicode": [
+        "src/features/agent/AgentBrowserPreviewPanel.tsx",
+        "src-tauri/src/services/harness_preview.rs",
+        "packages/lolicode-harness-runtime/host-operations.mjs"
+      ],
+      "acceptance": "Resolve the current distribution and supported platforms, then verify actual helpers, authorization and browser extension discovery on the supported isolated host.",
+      "status": "product-acceptance-pending",
+      "mappingProvisional": true,
+      "productFlowValidated": false,
+      "runtimeEvidenceOrdinals": [
+        71
+      ]
+    },
+    {
+      "id": "session-storage",
+      "ordinals": [
+        69
+      ],
+      "assessment": "sdk-and-stored-session-compatibility",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/session/session-format-catalog/src/current.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/session/session-format-catalog/README.md",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/core/session/src/types.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/sdk/protocol/src/types.ts"
+      ],
+      "lolicode": [
+        "packages/lolicode-harness-runtime/host-session-native.mjs",
+        "packages/lolicode-harness-runtime/host-session-markdown.mjs",
+        "src-tauri/src/services/harness_runtime.rs"
+      ],
+      "acceptance": "Verify batched append order and persisted timestamps through wrappers, cold native history, paging, forks and archive export. Qualify supported historical data before accepting shared-storage migration.",
+      "status": "product-acceptance-pending",
+      "mappingProvisional": true,
+      "productFlowValidated": false,
+      "runtimeEvidenceOrdinals": []
+    }
+  ],
+  "releaseItemIndex": [
+    {
+      "ordinal": 1,
+      "section": "New Features",
+      "label": "Worktree review and viewed-file progress",
+      "sourceTextSha256": "7c888a3b5f5748173b938c41dab4b5abbf63747774f6ce930f4c884282cd5d1c",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "worktree-review",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/apps/desktop/README.md"
+      ],
+      "lolicode": [
+        "src-tauri/src/services/harness_desktop.rs",
+        "src/features/agent/AgentProjectFilesPanel.tsx"
+      ],
+      "acceptance": "Use a disposable Git repository to verify branch/commit review, viewed-file progress, and archive cleanup with a preserved branch and commits. Check the cleanup preference and Forge migration before enabling the workflow."
+    },
+    {
+      "ordinal": 2,
+      "section": "New Features",
+      "label": "Named subagents and per-session Team",
+      "sourceTextSha256": "09c6eb08383e6328f1023899111357b007bf0c768dff02116adea8ee9ec519e8",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "named-subagents-and-team",
+      "status": "sdk-verified-product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/base/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/sdk/protocol/src/types.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/core/session/src/types.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/team/agent-team/README.md",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/sdk/server/src/server.ts"
+      ],
+      "lolicode": [
+        "packages/lolicode-harness-runtime/host-operations.mjs",
+        "src-tauri/src/services/harness_desktop.rs",
+        "src/features/agent/AgentNativeTranscript.tsx"
+      ],
+      "acceptance": "Verify named nested worker identity, one-time wakeup, ownership and persisted Team selection on resume. Exercise old logs in an isolated home and qualify every process that will share that home.",
+      "compatibilityEvidence": "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1112-morning/team-compatibility-proof.json",
+      "runtimeEvidence": {
+        "status": "sdk-verified-product-acceptance-pending",
+        "note": "Official Team service active and secretary child paths regressions pass. User-facing Team toggle and board remain pending.",
+        "log": "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1112-evening/team-resume-result.json"
+      }
+    },
+    {
+      "ordinal": 3,
+      "section": "New Features",
+      "label": "Desktop update channel choice",
+      "sourceTextSha256": "2a9ef808266d91c0c58b2bf3f4dcb5bc756d3147cd9ac12c2ea6768ee332fddd",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "desktop-lifecycle-and-release",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/apps/desktop/README.md",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/apps/cli/package.json"
+      ],
+      "lolicode": [
+        "src-tauri/tauri.conf.json",
+        "src-tauri/src/lib.rs",
+        "scripts/build/prepare-lolicode-harness-runtime.mjs"
+      ],
+      "acceptance": "Verify update-channel defaults, progress, restart, startup recovery and upgrade on the supported native shell. Check the shipped resources and platform differences through the existing release fixture."
+    },
+    {
+      "ordinal": 4,
+      "section": "Improvements",
+      "label": "Worktree review performance and navigation",
+      "sourceTextSha256": "f577a3ffddb660055204c52267021641e51ca2bcc085475f72ed7379f2e58897",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "worktree-review",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/apps/desktop/README.md"
+      ],
+      "lolicode": [
+        "src-tauri/src/services/harness_desktop.rs",
+        "src/features/agent/AgentProjectFilesPanel.tsx"
+      ],
+      "acceptance": "Use a disposable Git repository to verify branch/commit review, viewed-file progress, and archive cleanup with a preserved branch and commits. Check the cleanup preference and Forge migration before enabling the workflow."
+    },
+    {
+      "ordinal": 5,
+      "section": "Improvements",
+      "label": "Nested subagent expansion and retry",
+      "sourceTextSha256": "31e082e497bf2a67f225bc74845e5ee4d8925a65960650194d70d50f01904351",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "named-subagents-and-team",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/base/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/sdk/protocol/src/types.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/core/session/src/types.ts"
+      ],
+      "lolicode": [
+        "packages/lolicode-harness-runtime/host-operations.mjs",
+        "src-tauri/src/services/harness_desktop.rs",
+        "src/features/agent/AgentNativeTranscript.tsx"
+      ],
+      "acceptance": "Verify named nested worker identity, one-time wakeup, ownership and persisted Team selection on resume. Exercise old logs in an isolated home and qualify every process that will share that home."
+    },
+    {
+      "ordinal": 6,
+      "section": "Improvements",
+      "label": "Sidebar plugin More ordering",
+      "sourceTextSha256": "1b96a4adb644637fcf5d6beabccb2eaa28b4efdc3024bf52c0fde14cc1e3faca",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "sidebar-menu-and-files",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/apps/desktop/README.md"
+      ],
+      "lolicode": [
+        "src/features/agent/AgentProjectFilesPanel.tsx",
+        "src/features/agent/AgentPreviewPanel.tsx",
+        "src/app/App.tsx"
+      ],
+      "acceptance": "Exercise narrow panes, long lists, zoom, special filenames, hidden files, exclusions and menu fallback. Check scroll and keyboard focus with the actual right dock and workspace sidebar."
+    },
+    {
+      "ordinal": 7,
+      "section": "Improvements",
+      "label": "Personalized-page undo and restore",
+      "sourceTextSha256": "9d7d17bd6ef2c49a9185279e4ac963092df6f617e8551d0dddf3c70be30877f9",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "theme-and-personalization",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml"
+      ],
+      "lolicode": [
+        "src/app/App.tsx",
+        "src/features/agent/AgentPage.tsx"
+      ],
+      "acceptance": "Verify installed-page undo and restore, custom theme colors, and empty-session interaction across light/dark and narrow layouts."
+    },
+    {
+      "ordinal": 8,
+      "section": "Improvements",
+      "label": "Theme colors",
+      "sourceTextSha256": "015cb3ab8c472fa7f244fd4b4229825e261b65141bad4b028b04b773dc7f3eb5",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "theme-and-personalization",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml"
+      ],
+      "lolicode": [
+        "src/app/App.tsx",
+        "src/features/agent/AgentPage.tsx"
+      ],
+      "acceptance": "Verify installed-page undo and restore, custom theme colors, and empty-session interaction across light/dark and narrow layouts."
+    },
+    {
+      "ordinal": 9,
+      "section": "Improvements",
+      "label": "Menu positioning API",
+      "sourceTextSha256": "f6346ba3b05eed0e25b255a211b7358ded49d004771c28835f92a762cd550b65",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "sidebar-menu-and-files",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/apps/desktop/README.md"
+      ],
+      "lolicode": [
+        "src/features/agent/AgentProjectFilesPanel.tsx",
+        "src/features/agent/AgentPreviewPanel.tsx",
+        "src/app/App.tsx"
+      ],
+      "acceptance": "Exercise narrow panes, long lists, zoom, special filenames, hidden files, exclusions and menu fallback. Check scroll and keyboard focus with the actual right dock and workspace sidebar."
+    },
+    {
+      "ordinal": 10,
+      "section": "Improvements",
+      "label": "Dark file tree",
+      "sourceTextSha256": "5d5d900156197b5782ca333cf26788da127d3d2799f3aaa9a5920a6733d60930",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "sidebar-menu-and-files",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/apps/desktop/README.md"
+      ],
+      "lolicode": [
+        "src/features/agent/AgentProjectFilesPanel.tsx",
+        "src/features/agent/AgentPreviewPanel.tsx",
+        "src/app/App.tsx"
+      ],
+      "acceptance": "Exercise narrow panes, long lists, zoom, special filenames, hidden files, exclusions and menu fallback. Check scroll and keyboard focus with the actual right dock and workspace sidebar."
+    },
+    {
+      "ordinal": 11,
+      "section": "Improvements",
+      "label": "Sidebar file search and exclusions",
+      "sourceTextSha256": "f3e723fc7897c35876467fffd9a90956b5336bd14376f6d400a5222afc5a099b",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "sidebar-menu-and-files",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/apps/desktop/README.md"
+      ],
+      "lolicode": [
+        "src/features/agent/AgentProjectFilesPanel.tsx",
+        "src/features/agent/AgentPreviewPanel.tsx",
+        "src/app/App.tsx"
+      ],
+      "acceptance": "Exercise narrow panes, long lists, zoom, special filenames, hidden files, exclusions and menu fallback. Check scroll and keyboard focus with the actual right dock and workspace sidebar."
+    },
+    {
+      "ordinal": 12,
+      "section": "Improvements",
+      "label": "Long sidebar lists",
+      "sourceTextSha256": "bbf1ea3ca708cdbeeca8c7e927c48bffc91747d5fd98e4da155ea8f4f513c640",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "sidebar-menu-and-files",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/apps/desktop/README.md"
+      ],
+      "lolicode": [
+        "src/features/agent/AgentProjectFilesPanel.tsx",
+        "src/features/agent/AgentPreviewPanel.tsx",
+        "src/app/App.tsx"
+      ],
+      "acceptance": "Exercise narrow panes, long lists, zoom, special filenames, hidden files, exclusions and menu fallback. Check scroll and keyboard focus with the actual right dock and workspace sidebar."
+    },
+    {
+      "ordinal": 13,
+      "section": "Improvements",
+      "label": "Open working directory menu",
+      "sourceTextSha256": "4d3a3200b6d023aedd9015a343234b6b98268215841ab1044b0d154a259797ba",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "sidebar-menu-and-files",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/apps/desktop/README.md"
+      ],
+      "lolicode": [
+        "src/features/agent/AgentProjectFilesPanel.tsx",
+        "src/features/agent/AgentPreviewPanel.tsx",
+        "src/app/App.tsx"
+      ],
+      "acceptance": "Exercise narrow panes, long lists, zoom, special filenames, hidden files, exclusions and menu fallback. Check scroll and keyboard focus with the actual right dock and workspace sidebar."
+    },
+    {
+      "ordinal": 14,
+      "section": "Improvements",
+      "label": "File menu default-app fallback",
+      "sourceTextSha256": "85ee808af050bb9a15fbbc94550b54d1653b148ca6807dfabcd40eed45a32f44",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "sidebar-menu-and-files",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/apps/desktop/README.md"
+      ],
+      "lolicode": [
+        "src/features/agent/AgentProjectFilesPanel.tsx",
+        "src/features/agent/AgentPreviewPanel.tsx",
+        "src/app/App.tsx"
+      ],
+      "acceptance": "Exercise narrow panes, long lists, zoom, special filenames, hidden files, exclusions and menu fallback. Check scroll and keyboard focus with the actual right dock and workspace sidebar."
+    },
+    {
+      "ordinal": 15,
+      "section": "Improvements",
+      "label": "Automatic earlier history loading",
+      "sourceTextSha256": "7be0539cab68a5d2d8e3a457cba47f3e48eeae1277f145d88431a7ca512c392c",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "conversation-and-history",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/sdk/protocol/src/types.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/session/session-format-catalog/src/current.ts"
+      ],
+      "lolicode": [
+        "src/features/agent/AgentNativeTranscript.tsx",
+        "src/hooks/useAgentNativeSession.ts",
+        "src/features/agent/AgentPage.tsx"
+      ],
+      "acceptance": "Compare long history anchoring and retry, resumed context, tool results and patch receipts. Verify math copy, code highlighting, renderer fallback and device behavior in the appropriate client."
+    },
+    {
+      "ordinal": 16,
+      "section": "Improvements",
+      "label": "Expandable model context",
+      "sourceTextSha256": "f8b849773fe30d601efb82ad55f255ed150c6e2c1bb1ab299db21a228ec91dd8",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "conversation-and-history",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/sdk/protocol/src/types.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/session/session-format-catalog/src/current.ts"
+      ],
+      "lolicode": [
+        "src/features/agent/AgentNativeTranscript.tsx",
+        "src/hooks/useAgentNativeSession.ts",
+        "src/features/agent/AgentPage.tsx"
+      ],
+      "acceptance": "Compare long history anchoring and retry, resumed context, tool results and patch receipts. Verify math copy, code highlighting, renderer fallback and device behavior in the appropriate client."
+    },
+    {
+      "ordinal": 17,
+      "section": "Improvements",
+      "label": "Patch receipt affected files",
+      "sourceTextSha256": "918452fd9573e414eff012c06f9804dcd834f48e37e64d951c1a0aadfacadcfe",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "conversation-and-history",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/sdk/protocol/src/types.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/session/session-format-catalog/src/current.ts"
+      ],
+      "lolicode": [
+        "src/features/agent/AgentNativeTranscript.tsx",
+        "src/hooks/useAgentNativeSession.ts",
+        "src/features/agent/AgentPage.tsx"
+      ],
+      "acceptance": "Compare long history anchoring and retry, resumed context, tool results and patch receipts. Verify math copy, code highlighting, renderer fallback and device behavior in the appropriate client."
+    },
+    {
+      "ordinal": 18,
+      "section": "Improvements",
+      "label": "Session home animation",
+      "sourceTextSha256": "c912bfdaa1d3504c4525baad8824ed82647d62151035777b5c679d751e63232e",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "theme-and-personalization",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml"
+      ],
+      "lolicode": [
+        "src/app/App.tsx",
+        "src/features/agent/AgentPage.tsx"
+      ],
+      "acceptance": "Verify installed-page undo and restore, custom theme colors, and empty-session interaction across light/dark and narrow layouts."
+    },
+    {
+      "ordinal": 19,
+      "section": "Improvements",
+      "label": "Resume and compaction context reminder",
+      "sourceTextSha256": "9978bb8a44ff1478a6f3bb803043d83644b5f13e4e9688b82b8f27bbbff92da9",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "conversation-and-history",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/sdk/protocol/src/types.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/session/session-format-catalog/src/current.ts"
+      ],
+      "lolicode": [
+        "src/features/agent/AgentNativeTranscript.tsx",
+        "src/hooks/useAgentNativeSession.ts",
+        "src/features/agent/AgentPage.tsx"
+      ],
+      "acceptance": "Compare long history anchoring and retry, resumed context, tool results and patch receipts. Verify math copy, code highlighting, renderer fallback and device behavior in the appropriate client."
+    },
+    {
+      "ordinal": 20,
+      "section": "Improvements",
+      "label": "Diff syntax highlighting",
+      "sourceTextSha256": "bb4ba2cc34f007ccc42e71659b1101c351114ee377f0bcc365d8b5e70096bf08",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "conversation-and-history",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/sdk/protocol/src/types.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/session/session-format-catalog/src/current.ts"
+      ],
+      "lolicode": [
+        "src/features/agent/AgentNativeTranscript.tsx",
+        "src/hooks/useAgentNativeSession.ts",
+        "src/features/agent/AgentPage.tsx"
+      ],
+      "acceptance": "Compare long history anchoring and retry, resumed context, tool results and patch receipts. Verify math copy, code highlighting, renderer fallback and device behavior in the appropriate client."
+    },
+    {
+      "ordinal": 21,
+      "section": "Improvements",
+      "label": "Paste without composer focus",
+      "sourceTextSha256": "806dc89ad1d13d60a47a7c64160437b4a0d6ce53e8e1b76a8017bd9a0c08801a",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "attachments-and-submission",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/sdk/protocol/src/types.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml"
+      ],
+      "lolicode": [
+        "src/lib/agentInputLedger.ts",
+        "src/features/agent/AgentPage.tsx",
+        "packages/lolicode-harness-runtime/host-operations.mjs"
+      ],
+      "acceptance": "Use isolated text/image/file fixtures to check unfocused paste routing and a lost response followed by same-ID retry. Assert a single user message, preserved attachments, and a cold history read."
+    },
+    {
+      "ordinal": 22,
+      "section": "Improvements",
+      "label": "Schedule pause/resume feedback",
+      "sourceTextSha256": "8daca0f856c94f32487d44b0251bad6e502b3174e3f2bc171bae67b6528f5bab",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "schedule-and-goal",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/sdk/protocol/src/types.ts"
+      ],
+      "lolicode": [
+        "src/features/agent/AgentAutomationSettings.tsx",
+        "src/features/agent/AgentPage.tsx",
+        "packages/lolicode-harness-runtime/host-operations.mjs"
+      ],
+      "acceptance": "Check pause/resume under repeated input, Goal edit/clear/continue labels, persistence across turns and the existing native Goal and Plan gates."
+    },
+    {
+      "ordinal": 23,
+      "section": "Improvements",
+      "label": "Goal action order",
+      "sourceTextSha256": "fc01f494b763a2b6ee325f0248534a1e89bdeb001b20445409d3e0db6e378e08",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "schedule-and-goal",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/sdk/protocol/src/types.ts"
+      ],
+      "lolicode": [
+        "src/features/agent/AgentAutomationSettings.tsx",
+        "src/features/agent/AgentPage.tsx",
+        "packages/lolicode-harness-runtime/host-operations.mjs"
+      ],
+      "acceptance": "Check pause/resume under repeated input, Goal edit/clear/continue labels, persistence across turns and the existing native Goal and Plan gates."
+    },
+    {
+      "ordinal": 24,
+      "section": "Improvements",
+      "label": "Retry settings",
+      "sourceTextSha256": "b672156cf69c3b884ecfca64c14a1a8443b5d802751194eeb37d09fa51c9fefe",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "provider-routing-and-retry",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/base/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/sdk/protocol/src/types.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/sdk-app/cordis.patch.yml"
+      ],
+      "lolicode": [
+        "src-tauri/src/services/harness_runtime.rs",
+        "src-tauri/src/services/channel_connections.rs",
+        "src/features/channels/ChannelCenterPanel.tsx"
+      ],
+      "acceptance": "Use synthetic gateway fixtures for retry status, resume after compaction, tool replacement, Gemini discovery, profile User-Agent and masked credential replacement. Check existing saved-channel migration in the disposable profile."
+    },
+    {
+      "ordinal": 25,
+      "section": "Improvements",
+      "label": "Continue generating after failure",
+      "sourceTextSha256": "9b24227d7d12d807ed5cc4da0008597a3d9de65d47faeb921ec4f2cf63505934",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "provider-routing-and-retry",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/base/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/sdk/protocol/src/types.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/sdk-app/cordis.patch.yml"
+      ],
+      "lolicode": [
+        "src-tauri/src/services/harness_runtime.rs",
+        "src-tauri/src/services/channel_connections.rs",
+        "src/features/channels/ChannelCenterPanel.tsx"
+      ],
+      "acceptance": "Use synthetic gateway fixtures for retry status, resume after compaction, tool replacement, Gemini discovery, profile User-Agent and masked credential replacement. Check existing saved-channel migration in the disposable profile."
+    },
+    {
+      "ordinal": 26,
+      "section": "Improvements",
+      "label": "Masked key replacement",
+      "sourceTextSha256": "9149185282fbd9b8e6df608b71fd9959cbdf68968ef54813c92d6480cb7451d7",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "provider-routing-and-retry",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/base/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/sdk/protocol/src/types.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/sdk-app/cordis.patch.yml"
+      ],
+      "lolicode": [
+        "src-tauri/src/services/harness_runtime.rs",
+        "src-tauri/src/services/channel_connections.rs",
+        "src/features/channels/ChannelCenterPanel.tsx"
+      ],
+      "acceptance": "Use synthetic gateway fixtures for retry status, resume after compaction, tool replacement, Gemini discovery, profile User-Agent and masked credential replacement. Check existing saved-channel migration in the disposable profile."
+    },
+    {
+      "ordinal": 27,
+      "section": "Improvements",
+      "label": "Search query and source limits",
+      "sourceTextSha256": "1df86d5ff4ef6e2871ab63ef019cfc51988c5d4e5226a56f8601dc28250b6413",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "search-and-fetch",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/base/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml"
+      ],
+      "lolicode": [
+        "packages/lolicode-harness-runtime/host-operations.mjs",
+        "src-tauri/src/services/harness_runtime.rs",
+        "src-tauri/src/services/harness_desktop.rs"
+      ],
+      "acceptance": "Map Search and Fetch routes, billing selection and provider migration before enabling. Exercise documented limits and failures with a local stub, then qualify the authorized service configuration."
+    },
+    {
+      "ordinal": 28,
+      "section": "Improvements",
+      "label": "Terminal visibility and takeover",
+      "sourceTextSha256": "1ad8e801aba87990de3c96461911013fd10e20625f26fa41dcca573d800d2d6a",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "terminal-and-windows-grants",
+      "status": "sdk-verified-product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/base/cordis.patch.yml"
+      ],
+      "lolicode": [
+        "src/features/agent/AgentPreviewPanel.tsx",
+        "src-tauri/src/services/harness_desktop.rs",
+        "packages/lolicode-harness-runtime/host-operations.mjs"
+      ],
+      "acceptance": "Use an isolated Windows workspace to verify terminal takeover, history visibility, and that extra-directory grants have the documented boundaries across file tools, terminal and PTC.",
+      "runtimeEvidence": {
+        "status": "sdk-verified-product-acceptance-pending",
+        "note": "Explicit terminal selection and persistent terminal tested with the bundled Node. Desktop takeover and history remain pending.",
+        "log": "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1112-evening/sdk-bundled.log"
+      }
+    },
+    {
+      "ordinal": 29,
+      "section": "Improvements",
+      "label": "Ordered concurrent reads",
+      "sourceTextSha256": "980ca7908de0e89599406bcd3d4b40ec6283a26157ffe7a993171f04d16f2405",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "tool-runtime-and-errors",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/base/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/sdk/protocol/src/types.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/core/session/src/types.ts"
+      ],
+      "lolicode": [
+        "packages/lolicode-harness-runtime/host-operations.mjs",
+        "src-tauri/src/services/harness_runtime.rs",
+        "packages/lolicode-harness-runtime/tests/host-operations.test.mjs"
+      ],
+      "acceptance": "Verify ordered concurrent reads, cancellation and resource cleanup, bounded inspection and PTC limits, and stable typed error forwarding in fixture sessions."
+    },
+    {
+      "ordinal": 30,
+      "section": "Improvements",
+      "label": "Desktop download progress",
+      "sourceTextSha256": "7822f385d9efa065a8e98e72c865265a367712dd294d86806c0b7036f7da85d8",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "desktop-lifecycle-and-release",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/apps/desktop/README.md",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/apps/cli/package.json"
+      ],
+      "lolicode": [
+        "src-tauri/tauri.conf.json",
+        "src-tauri/src/lib.rs",
+        "scripts/build/prepare-lolicode-harness-runtime.mjs"
+      ],
+      "acceptance": "Verify update-channel defaults, progress, restart, startup recovery and upgrade on the supported native shell. Check the shipped resources and platform differences through the existing release fixture."
+    },
+    {
+      "ordinal": 31,
+      "section": "Bug Fixes",
+      "label": "PR diff commit line alignment",
+      "sourceTextSha256": "da2425666dd43a3be86942ba5f07727756ae632e12fd3e5016da7ff1d3ce6ee5",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "worktree-review",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/apps/desktop/README.md"
+      ],
+      "lolicode": [
+        "src-tauri/src/services/harness_desktop.rs",
+        "src/features/agent/AgentProjectFilesPanel.tsx"
+      ],
+      "acceptance": "Use a disposable Git repository to verify branch/commit review, viewed-file progress, and archive cleanup with a preserved branch and commits. Check the cleanup preference and Forge migration before enabling the workflow."
+    },
+    {
+      "ordinal": 32,
+      "section": "Bug Fixes",
+      "label": "SSH-only plugin details",
+      "sourceTextSha256": "94eea14e17124561db68096bd2f0508a59e7f72e9d13031d49cf937ea8984b1f",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "plugin-and-mcp-management",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/util/official-bundles/src/catalog.generated.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/sdk-app/cordis.patch.yml"
+      ],
+      "lolicode": [
+        "src-tauri/src/services/harness_plugins.rs",
+        "src-tauri/src/services/harness_mcp.rs",
+        "src/features/agent/AgentExtensionsPanel.tsx"
+      ],
+      "acceptance": "Check optional versus required plugin failures, active-state reasons, local MCP registration/removal/status/restart, index metadata order and documented skill path migration. Use synthetic local server fixtures."
+    },
+    {
+      "ordinal": 33,
+      "section": "Bug Fixes",
+      "label": "Optional plugin startup failure",
+      "sourceTextSha256": "97dcac6f316005b2b42acc4975355670e5eacad5104ccef8ac8d1d86dbebc51a",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "plugin-and-mcp-management",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/util/official-bundles/src/catalog.generated.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/sdk-app/cordis.patch.yml"
+      ],
+      "lolicode": [
+        "src-tauri/src/services/harness_plugins.rs",
+        "src-tauri/src/services/harness_mcp.rs",
+        "src/features/agent/AgentExtensionsPanel.tsx"
+      ],
+      "acceptance": "Check optional versus required plugin failures, active-state reasons, local MCP registration/removal/status/restart, index metadata order and documented skill path migration. Use synthetic local server fixtures."
+    },
+    {
+      "ordinal": 34,
+      "section": "Bug Fixes",
+      "label": "Plugin active-state reasons",
+      "sourceTextSha256": "1bdb72dc4fd2575881cb19c65b3964a09f57c126fb4185841bf591d67f27c480",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "plugin-and-mcp-management",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/util/official-bundles/src/catalog.generated.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/sdk-app/cordis.patch.yml"
+      ],
+      "lolicode": [
+        "src-tauri/src/services/harness_plugins.rs",
+        "src-tauri/src/services/harness_mcp.rs",
+        "src/features/agent/AgentExtensionsPanel.tsx"
+      ],
+      "acceptance": "Check optional versus required plugin failures, active-state reasons, local MCP registration/removal/status/restart, index metadata order and documented skill path migration. Use synthetic local server fixtures."
+    },
+    {
+      "ordinal": 35,
+      "section": "Bug Fixes",
+      "label": "PTC subagent wakeup deduplication",
+      "sourceTextSha256": "2fe3d7ff75a33465ff052e3da2d8c5524d7620e87f8dcce757e17c6ddcd8f6fa",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "named-subagents-and-team",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/base/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/sdk/protocol/src/types.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/core/session/src/types.ts"
+      ],
+      "lolicode": [
+        "packages/lolicode-harness-runtime/host-operations.mjs",
+        "src-tauri/src/services/harness_desktop.rs",
+        "src/features/agent/AgentNativeTranscript.tsx"
+      ],
+      "acceptance": "Verify named nested worker identity, one-time wakeup, ownership and persisted Team selection on resume. Exercise old logs in an isolated home and qualify every process that will share that home."
+    },
+    {
+      "ordinal": 36,
+      "section": "Bug Fixes",
+      "label": "Special filename browsing",
+      "sourceTextSha256": "669e839f6e471e537ff82d976e5141a8161f1e7f7030e6ff81690103944839b7",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "sidebar-menu-and-files",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/apps/desktop/README.md"
+      ],
+      "lolicode": [
+        "src/features/agent/AgentProjectFilesPanel.tsx",
+        "src/features/agent/AgentPreviewPanel.tsx",
+        "src/app/App.tsx"
+      ],
+      "acceptance": "Exercise narrow panes, long lists, zoom, special filenames, hidden files, exclusions and menu fallback. Check scroll and keyboard focus with the actual right dock and workspace sidebar."
+    },
+    {
+      "ordinal": 37,
+      "section": "Bug Fixes",
+      "label": "Ungrouped session button",
+      "sourceTextSha256": "0924377a5a067d3e7dd89fdcbd909901577437249acfd0e1c14497cc2b309214",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "sidebar-menu-and-files",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/apps/desktop/README.md"
+      ],
+      "lolicode": [
+        "src/features/agent/AgentProjectFilesPanel.tsx",
+        "src/features/agent/AgentPreviewPanel.tsx",
+        "src/app/App.tsx"
+      ],
+      "acceptance": "Exercise narrow panes, long lists, zoom, special filenames, hidden files, exclusions and menu fallback. Check scroll and keyboard focus with the actual right dock and workspace sidebar."
+    },
+    {
+      "ordinal": 38,
+      "section": "Bug Fixes",
+      "label": "Formula copy",
+      "sourceTextSha256": "5d3a50bfde063b1f6a45e12fbe85b6512be615c8d0594b50cc2d65a8448baae6",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "conversation-and-history",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/sdk/protocol/src/types.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/session/session-format-catalog/src/current.ts"
+      ],
+      "lolicode": [
+        "src/features/agent/AgentNativeTranscript.tsx",
+        "src/hooks/useAgentNativeSession.ts",
+        "src/features/agent/AgentPage.tsx"
+      ],
+      "acceptance": "Compare long history anchoring and retry, resumed context, tool results and patch receipts. Verify math copy, code highlighting, renderer fallback and device behavior in the appropriate client."
+    },
+    {
+      "ordinal": 39,
+      "section": "Bug Fixes",
+      "label": "Perl highlighting",
+      "sourceTextSha256": "ce464860391d812798a5e950b56139d1ba593f4a8d4f686d3ee8926028bec8e2",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "conversation-and-history",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/sdk/protocol/src/types.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/session/session-format-catalog/src/current.ts"
+      ],
+      "lolicode": [
+        "src/features/agent/AgentNativeTranscript.tsx",
+        "src/hooks/useAgentNativeSession.ts",
+        "src/features/agent/AgentPage.tsx"
+      ],
+      "acceptance": "Compare long history anchoring and retry, resumed context, tool results and patch receipts. Verify math copy, code highlighting, renderer fallback and device behavior in the appropriate client."
+    },
+    {
+      "ordinal": 40,
+      "section": "Bug Fixes",
+      "label": "History error recovery",
+      "sourceTextSha256": "62e121db785ea652c4da82334e3d9d88a07ce3dc6d0f8b2dd2e06d318cb16347",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "conversation-and-history",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/sdk/protocol/src/types.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/session/session-format-catalog/src/current.ts"
+      ],
+      "lolicode": [
+        "src/features/agent/AgentNativeTranscript.tsx",
+        "src/hooks/useAgentNativeSession.ts",
+        "src/features/agent/AgentPage.tsx"
+      ],
+      "acceptance": "Compare long history anchoring and retry, resumed context, tool results and patch receipts. Verify math copy, code highlighting, renderer fallback and device behavior in the appropriate client."
+    },
+    {
+      "ordinal": 41,
+      "section": "Bug Fixes",
+      "label": "Branch title numbering",
+      "sourceTextSha256": "3e87a48e771bdba5eb1856652d8f43ab4d6653113935f66707becc8b675b0ff8",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "conversation-and-history",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/sdk/protocol/src/types.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/session/session-format-catalog/src/current.ts"
+      ],
+      "lolicode": [
+        "src/features/agent/AgentNativeTranscript.tsx",
+        "src/hooks/useAgentNativeSession.ts",
+        "src/features/agent/AgentPage.tsx"
+      ],
+      "acceptance": "Compare long history anchoring and retry, resumed context, tool results and patch receipts. Verify math copy, code highlighting, renderer fallback and device behavior in the appropriate client."
+    },
+    {
+      "ordinal": 42,
+      "section": "Bug Fixes",
+      "label": "Cancel/shutdown cleanup",
+      "sourceTextSha256": "27ade029046960542261889a5be3763f931fde3ddf0a9da7fd7c0a38d41a5ee1",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "tool-runtime-and-errors",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/base/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/sdk/protocol/src/types.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/core/session/src/types.ts"
+      ],
+      "lolicode": [
+        "packages/lolicode-harness-runtime/host-operations.mjs",
+        "src-tauri/src/services/harness_runtime.rs",
+        "packages/lolicode-harness-runtime/tests/host-operations.test.mjs"
+      ],
+      "acceptance": "Verify ordered concurrent reads, cancellation and resource cleanup, bounded inspection and PTC limits, and stable typed error forwarding in fixture sessions."
+    },
+    {
+      "ordinal": 43,
+      "section": "Bug Fixes",
+      "label": "Duplicate submission and attachment preparation",
+      "sourceTextSha256": "4ba3b5b66fcc75abd7d756cca0c86e132e9a9204a1b9440567820f727c4f32d9",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "attachments-and-submission",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/sdk/protocol/src/types.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml"
+      ],
+      "lolicode": [
+        "src/lib/agentInputLedger.ts",
+        "src/features/agent/AgentPage.tsx",
+        "packages/lolicode-harness-runtime/host-operations.mjs"
+      ],
+      "acceptance": "Use isolated text/image/file fixtures to check unfocused paste routing and a lost response followed by same-ID retry. Assert a single user message, preserved attachments, and a cold history read."
+    },
+    {
+      "ordinal": 44,
+      "section": "Bug Fixes",
+      "label": "Awaiting versus paused Goal labels",
+      "sourceTextSha256": "3aa09a3007c325a2fb7ee9e6629bc5f7a315af80216bfd945d785d58153cd4f8",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "schedule-and-goal",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/sdk/protocol/src/types.ts"
+      ],
+      "lolicode": [
+        "src/features/agent/AgentAutomationSettings.tsx",
+        "src/features/agent/AgentPage.tsx",
+        "packages/lolicode-harness-runtime/host-operations.mjs"
+      ],
+      "acceptance": "Check pause/resume under repeated input, Goal edit/clear/continue labels, persistence across turns and the existing native Goal and Plan gates."
+    },
+    {
+      "ordinal": 45,
+      "section": "Bug Fixes",
+      "label": "Desktop authentication startup recovery",
+      "sourceTextSha256": "38e12684a021721f2d81d34720a09e38d428c8f565c109bf270397d01a89f54d",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "desktop-lifecycle-and-release",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/apps/desktop/README.md",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/apps/cli/package.json"
+      ],
+      "lolicode": [
+        "src-tauri/tauri.conf.json",
+        "src-tauri/src/lib.rs",
+        "scripts/build/prepare-lolicode-harness-runtime.mjs"
+      ],
+      "acceptance": "Verify update-channel defaults, progress, restart, startup recovery and upgrade on the supported native shell. Check the shipped resources and platform differences through the existing release fixture."
+    },
+    {
+      "ordinal": 46,
+      "section": "Bug Fixes",
+      "label": "Windows short-path welcome persistence",
+      "sourceTextSha256": "0682fb401f4bb3d6db09334ab003275dcd413a476f9d8451b543fc589bf00c4d",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "desktop-lifecycle-and-release",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/apps/desktop/README.md",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/apps/cli/package.json"
+      ],
+      "lolicode": [
+        "src-tauri/tauri.conf.json",
+        "src-tauri/src/lib.rs",
+        "scripts/build/prepare-lolicode-harness-runtime.mjs"
+      ],
+      "acceptance": "Verify update-channel defaults, progress, restart, startup recovery and upgrade on the supported native shell. Check the shipped resources and platform differences through the existing release fixture."
+    },
+    {
+      "ordinal": 47,
+      "section": "Bug Fixes",
+      "label": "Desktop platform interaction and startup theme",
+      "sourceTextSha256": "898da0a5a56e476109285746a8742f2867ab6d42d5154c453ec6e1ef6cb11a8d",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "desktop-lifecycle-and-release",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/apps/desktop/README.md",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/apps/cli/package.json"
+      ],
+      "lolicode": [
+        "src-tauri/tauri.conf.json",
+        "src-tauri/src/lib.rs",
+        "scripts/build/prepare-lolicode-harness-runtime.mjs"
+      ],
+      "acceptance": "Verify update-channel defaults, progress, restart, startup recovery and upgrade on the supported native shell. Check the shipped resources and platform differences through the existing release fixture."
+    },
+    {
+      "ordinal": 48,
+      "section": "Bug Fixes",
+      "label": "Windows installation status",
+      "sourceTextSha256": "35a12656ae2762cb99f5be937615bb6d93259ded87174451c2b69645c160ab5e",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "desktop-lifecycle-and-release",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/apps/desktop/README.md",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/apps/cli/package.json"
+      ],
+      "lolicode": [
+        "src-tauri/tauri.conf.json",
+        "src-tauri/src/lib.rs",
+        "scripts/build/prepare-lolicode-harness-runtime.mjs"
+      ],
+      "acceptance": "Verify update-channel defaults, progress, restart, startup recovery and upgrade on the supported native shell. Check the shipped resources and platform differences through the existing release fixture."
+    },
+    {
+      "ordinal": 49,
+      "section": "Bug Fixes",
+      "label": "Mobile Safari text sizing",
+      "sourceTextSha256": "10e93f525e4560c5a3f063dc6e212f34a38d4fa3227d7f77252bd4c670027f9f",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "conversation-and-history",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/sdk/protocol/src/types.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/session/session-format-catalog/src/current.ts"
+      ],
+      "lolicode": [
+        "src/features/agent/AgentNativeTranscript.tsx",
+        "src/hooks/useAgentNativeSession.ts",
+        "src/features/agent/AgentPage.tsx"
+      ],
+      "acceptance": "Compare long history anchoring and retry, resumed context, tool results and patch receipts. Verify math copy, code highlighting, renderer fallback and device behavior in the appropriate client."
+    },
+    {
+      "ordinal": 50,
+      "section": "Bug Fixes",
+      "label": "Linux background-session latency",
+      "sourceTextSha256": "dd50bad96808f4cec7ee6c1eccfb0e47b24e3a491a0f62e0cf01d975e8ba058f",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "conversation-and-history",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/sdk/protocol/src/types.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/session/session-format-catalog/src/current.ts"
+      ],
+      "lolicode": [
+        "src/features/agent/AgentNativeTranscript.tsx",
+        "src/hooks/useAgentNativeSession.ts",
+        "src/features/agent/AgentPage.tsx"
+      ],
+      "acceptance": "Compare long history anchoring and retry, resumed context, tool results and patch receipts. Verify math copy, code highlighting, renderer fallback and device behavior in the appropriate client."
+    },
+    {
+      "ordinal": 51,
+      "section": "Bug Fixes",
+      "label": "Model requests after tool replacement",
+      "sourceTextSha256": "a39dd78555eccb86cdf47a7ebff8dd294b9a7a1e114ddbde05987c9f6897b948",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "provider-routing-and-retry",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/base/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/sdk/protocol/src/types.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/sdk-app/cordis.patch.yml"
+      ],
+      "lolicode": [
+        "src-tauri/src/services/harness_runtime.rs",
+        "src-tauri/src/services/channel_connections.rs",
+        "src/features/channels/ChannelCenterPanel.tsx"
+      ],
+      "acceptance": "Use synthetic gateway fixtures for retry status, resume after compaction, tool replacement, Gemini discovery, profile User-Agent and masked credential replacement. Check existing saved-channel migration in the disposable profile."
+    },
+    {
+      "ordinal": 52,
+      "section": "Bug Fixes",
+      "label": "Anthropic signed thinking after history changes",
+      "sourceTextSha256": "dbbecdbe6d3389fcb834b7357000ed8431815a34d52cc4f2a83b792f9762f43a",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "provider-routing-and-retry",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/base/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/sdk/protocol/src/types.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/sdk-app/cordis.patch.yml"
+      ],
+      "lolicode": [
+        "src-tauri/src/services/harness_runtime.rs",
+        "src-tauri/src/services/channel_connections.rs",
+        "src/features/channels/ChannelCenterPanel.tsx"
+      ],
+      "acceptance": "Use synthetic gateway fixtures for retry status, resume after compaction, tool replacement, Gemini discovery, profile User-Agent and masked credential replacement. Check existing saved-channel migration in the disposable profile."
+    },
+    {
+      "ordinal": 53,
+      "section": "Bug Fixes",
+      "label": "Gateway error classification",
+      "sourceTextSha256": "64860e203d049d42e2205a8279eee71479ab5f83eccead0e96a59a8e05de3e8b",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "provider-routing-and-retry",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/base/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/sdk/protocol/src/types.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/sdk-app/cordis.patch.yml"
+      ],
+      "lolicode": [
+        "src-tauri/src/services/harness_runtime.rs",
+        "src-tauri/src/services/channel_connections.rs",
+        "src/features/channels/ChannelCenterPanel.tsx"
+      ],
+      "acceptance": "Use synthetic gateway fixtures for retry status, resume after compaction, tool replacement, Gemini discovery, profile User-Agent and masked credential replacement. Check existing saved-channel migration in the disposable profile."
+    },
+    {
+      "ordinal": 54,
+      "section": "Bug Fixes",
+      "label": "DeepSeek endpoint configuration precedence",
+      "sourceTextSha256": "99b4d8710531d36c116d9ae4f8f53a34cbeb5abce9c73255198276e8b0d49372",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "provider-routing-and-retry",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/base/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/sdk/protocol/src/types.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/sdk-app/cordis.patch.yml"
+      ],
+      "lolicode": [
+        "src-tauri/src/services/harness_runtime.rs",
+        "src-tauri/src/services/channel_connections.rs",
+        "src/features/channels/ChannelCenterPanel.tsx"
+      ],
+      "acceptance": "Use synthetic gateway fixtures for retry status, resume after compaction, tool replacement, Gemini discovery, profile User-Agent and masked credential replacement. Check existing saved-channel migration in the disposable profile."
+    },
+    {
+      "ordinal": 55,
+      "section": "Bug Fixes",
+      "label": "Multi-page PDF responsiveness",
+      "sourceTextSha256": "5dc0b2f0f948beda7b23ea18f9d97a474d094202ccf7a44ff4364cd794728b34",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "pdf-and-office",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/base/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/apps/desktop/README.md"
+      ],
+      "lolicode": [
+        "src/features/agent/AgentPreviewPanel.tsx",
+        "src-tauri/src/services/harness_preview.rs",
+        "packages/lolicode-harness-runtime/host-operations.mjs"
+      ],
+      "acceptance": "Verify multi-page navigation and native office skills/tools with synthetic documents. Check old skill compatibility and the intended host parsing permission boundary.",
+      "runtimeEvidence": {
+        "log": "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1113-morning/document-viewer.log",
+        "note": "LoliCode document viewer passes 29 fixture tests. Native desktop performance and parity remain pending."
+      }
+    },
+    {
+      "ordinal": 56,
+      "section": "Bug Fixes",
+      "label": "Large Cordis inspection",
+      "sourceTextSha256": "03bfbdc48c807851c0f41ac25d8b4be029cffe5d598bff01d7d4f662ab237b7a",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "tool-runtime-and-errors",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/base/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/sdk/protocol/src/types.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/core/session/src/types.ts"
+      ],
+      "lolicode": [
+        "packages/lolicode-harness-runtime/host-operations.mjs",
+        "src-tauri/src/services/harness_runtime.rs",
+        "packages/lolicode-harness-runtime/tests/host-operations.test.mjs"
+      ],
+      "acceptance": "Verify ordered concurrent reads, cancellation and resource cleanup, bounded inspection and PTC limits, and stable typed error forwarding in fixture sessions."
+    },
+    {
+      "ordinal": 57,
+      "section": "Chores",
+      "label": "Search and Fetch provider migration",
+      "sourceTextSha256": "12666f3bb037789c1dbfe0bfdf02ff30b7d079a013cb50dccdfb7596d2b34888",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "search-and-fetch",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/base/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml"
+      ],
+      "lolicode": [
+        "packages/lolicode-harness-runtime/host-operations.mjs",
+        "src-tauri/src/services/harness_runtime.rs",
+        "src-tauri/src/services/harness_desktop.rs"
+      ],
+      "acceptance": "Map Search and Fetch routes, billing selection and provider migration before enabling. Exercise documented limits and failures with a local stub, then qualify the authorized service configuration."
+    },
+    {
+      "ordinal": 58,
+      "section": "Chores",
+      "label": "Archive worktree cleanup",
+      "sourceTextSha256": "62907d7b8d8da4e3a279bed3647c6ab0e7be59dd42f38be13f0b32511b7c45f3",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "worktree-review",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/apps/desktop/README.md"
+      ],
+      "lolicode": [
+        "src-tauri/src/services/harness_desktop.rs",
+        "src/features/agent/AgentProjectFilesPanel.tsx"
+      ],
+      "acceptance": "Use a disposable Git repository to verify branch/commit review, viewed-file progress, and archive cleanup with a preserved branch and commits. Check the cleanup preference and Forge migration before enabling the workflow."
+    },
+    {
+      "ordinal": 59,
+      "section": "Chores",
+      "label": "Named Team migration",
+      "sourceTextSha256": "dde3b55edddd8ba130256787e47251d404b7ae2144a681cffb5ba4e19ae3e9a2",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "named-subagents-and-team",
+      "status": "sdk-verified-product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/base/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/sdk/protocol/src/types.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/core/session/src/types.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/team/agent-team/README.md",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/team/agent-team/src/projection.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/util/official-bundles/src/bundles.ts"
+      ],
+      "lolicode": [
+        "packages/lolicode-harness-runtime/host-operations.mjs",
+        "src-tauri/src/services/harness_desktop.rs",
+        "src/features/agent/AgentNativeTranscript.tsx"
+      ],
+      "acceptance": "Verify named nested worker identity, one-time wakeup, ownership and persisted Team selection on resume. Exercise old logs in an isolated home and qualify every process that will share that home.",
+      "compatibilityEvidence": "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1112-morning/team-compatibility-proof.json",
+      "runtimeEvidence": {
+        "status": "sdk-verified-product-acceptance-pending",
+        "note": "Cold and active projections agree and persisted task-board fixtures replay. Desktop selection and historical mailbox product flow remain pending.",
+        "log": "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1112-evening/sdk-bundled.log"
+      }
+    },
+    {
+      "ordinal": 60,
+      "section": "Chores",
+      "label": "SDK default Team setting",
+      "sourceTextSha256": "510811545822c55deb02f16242be1cead0c39b9d713793e8c8fdc1605067b362",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "named-subagents-and-team",
+      "status": "sdk-verified-product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/base/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/sdk/protocol/src/types.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/core/session/src/types.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/team/agent-team/README.md",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/team/agent-team/src/index.ts"
+      ],
+      "lolicode": [
+        "packages/lolicode-harness-runtime/host-operations.mjs",
+        "src-tauri/src/services/harness_desktop.rs",
+        "src/features/agent/AgentNativeTranscript.tsx"
+      ],
+      "acceptance": "Verify named nested worker identity, one-time wakeup, ownership and persisted Team selection on resume. Exercise old logs in an isolated home and qualify every process that will share that home.",
+      "compatibilityEvidence": "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1112-morning/team-compatibility-proof.json",
+      "runtimeEvidence": {
+        "status": "sdk-verified-product-acceptance-pending",
+        "note": "Two SDK launches verified default off, new-root configured default, and persistence of explicit and unmarked old-root selections.",
+        "log": "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1112-evening/team-resume-result.json"
+      }
+    },
+    {
+      "ordinal": 61,
+      "section": "Chores",
+      "label": "Dynamic MCP server lifecycle",
+      "sourceTextSha256": "208c8c881cf3010fb5ad0416ca96ac3b3a8bf29c19b9f8acb1b3f6b4e2fcee58",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "plugin-and-mcp-management",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/util/official-bundles/src/catalog.generated.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/sdk-app/cordis.patch.yml"
+      ],
+      "lolicode": [
+        "src-tauri/src/services/harness_plugins.rs",
+        "src-tauri/src/services/harness_mcp.rs",
+        "src/features/agent/AgentExtensionsPanel.tsx"
+      ],
+      "acceptance": "Check optional versus required plugin failures, active-state reasons, local MCP registration/removal/status/restart, index metadata order and documented skill path migration. Use synthetic local server fixtures."
+    },
+    {
+      "ordinal": 62,
+      "section": "Chores",
+      "label": "Code-block renderer fallback",
+      "sourceTextSha256": "3708b87fcb27f9f70ccde423d2cd50387ef5efd5e886b64a80fea5f65e3046b2",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "conversation-and-history",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/sdk/protocol/src/types.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/session/session-format-catalog/src/current.ts"
+      ],
+      "lolicode": [
+        "src/features/agent/AgentNativeTranscript.tsx",
+        "src/hooks/useAgentNativeSession.ts",
+        "src/features/agent/AgentPage.tsx"
+      ],
+      "acceptance": "Compare long history anchoring and retry, resumed context, tool results and patch receipts. Verify math copy, code highlighting, renderer fallback and device behavior in the appropriate client."
+    },
+    {
+      "ordinal": 63,
+      "section": "Chores",
+      "label": "Plugin index metrics and ordering",
+      "sourceTextSha256": "74589dad31f221ab62d0d07a8a1e22ff22fe39b89196ac89a21383b37174f41f",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "plugin-and-mcp-management",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/util/official-bundles/src/catalog.generated.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/sdk-app/cordis.patch.yml"
+      ],
+      "lolicode": [
+        "src-tauri/src/services/harness_plugins.rs",
+        "src-tauri/src/services/harness_mcp.rs",
+        "src/features/agent/AgentExtensionsPanel.tsx"
+      ],
+      "acceptance": "Check optional versus required plugin failures, active-state reasons, local MCP registration/removal/status/restart, index metadata order and documented skill path migration. Use synthetic local server fixtures."
+    },
+    {
+      "ordinal": 64,
+      "section": "Chores",
+      "label": "Creator skill reference migration",
+      "sourceTextSha256": "1d43a1f7b03fa151b3b772b32cd91ff1a9fe3e3bc3f2b85bf1307b523c12a090",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "plugin-and-mcp-management",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/util/official-bundles/src/catalog.generated.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/sdk-app/cordis.patch.yml"
+      ],
+      "lolicode": [
+        "src-tauri/src/services/harness_plugins.rs",
+        "src-tauri/src/services/harness_mcp.rs",
+        "src/features/agent/AgentExtensionsPanel.tsx"
+      ],
+      "acceptance": "Check optional versus required plugin failures, active-state reasons, local MCP registration/removal/status/restart, index metadata order and documented skill path migration. Use synthetic local server fixtures."
+    },
+    {
+      "ordinal": 65,
+      "section": "Chores",
+      "label": "Native Gemini provider",
+      "sourceTextSha256": "948097db1e4d372f1fa7d8672848742be179c5abe2247ea3a21aaffa9a9e257d",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "provider-routing-and-retry",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/base/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/sdk/protocol/src/types.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/sdk-app/cordis.patch.yml"
+      ],
+      "lolicode": [
+        "src-tauri/src/services/harness_runtime.rs",
+        "src-tauri/src/services/channel_connections.rs",
+        "src/features/channels/ChannelCenterPanel.tsx"
+      ],
+      "acceptance": "Use synthetic gateway fixtures for retry status, resume after compaction, tool replacement, Gemini discovery, profile User-Agent and masked credential replacement. Check existing saved-channel migration in the disposable profile."
+    },
+    {
+      "ordinal": 66,
+      "section": "Chores",
+      "label": "Profile User-Agent",
+      "sourceTextSha256": "e07e129f8036f7b24f132c5aca450fc52c076b85d09a66e6528532b2365eefd0",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "provider-routing-and-retry",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/base/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/sdk/protocol/src/types.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/sdk-app/cordis.patch.yml"
+      ],
+      "lolicode": [
+        "src-tauri/src/services/harness_runtime.rs",
+        "src-tauri/src/services/channel_connections.rs",
+        "src/features/channels/ChannelCenterPanel.tsx"
+      ],
+      "acceptance": "Use synthetic gateway fixtures for retry status, resume after compaction, tool replacement, Gemini discovery, profile User-Agent and masked credential replacement. Check existing saved-channel migration in the disposable profile."
+    },
+    {
+      "ordinal": 67,
+      "section": "Chores",
+      "label": "Localized account announcements",
+      "sourceTextSha256": "ab4a210d2038c57ac2b4c038117c5b63b6e3134c0a658560582e67d3d2d634f7",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "account-and-sharing",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/base/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/apps/desktop/README.md"
+      ],
+      "lolicode": [
+        "src/features/channels/ChannelCenterPanel.tsx",
+        "packages/companion-relay/README.md"
+      ],
+      "acceptance": "Verify signed-in state and localized announcements with a disposable authorized profile. Requalify LiveShare permissions, isolation expectations and stored grants before enabling it."
+    },
+    {
+      "ordinal": 68,
+      "section": "Chores",
+      "label": "PTC tool-call budget",
+      "sourceTextSha256": "14133ec732858c4e199055d6811c360ac739479db38ac7fd50f90367bdcb8d8f",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "tool-runtime-and-errors",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/base/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/sdk/protocol/src/types.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/core/session/src/types.ts"
+      ],
+      "lolicode": [
+        "packages/lolicode-harness-runtime/host-operations.mjs",
+        "src-tauri/src/services/harness_runtime.rs",
+        "packages/lolicode-harness-runtime/tests/host-operations.test.mjs"
+      ],
+      "acceptance": "Verify ordered concurrent reads, cancellation and resource cleanup, bounded inspection and PTC limits, and stable typed error forwarding in fixture sessions."
+    },
+    {
+      "ordinal": 69,
+      "section": "Chores",
+      "label": "Batched session appends",
+      "sourceTextSha256": "1d65f07a536a4f175ad27f65dc5fe5fef3119b27938fcc77473133e8b8bd7066",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "session-storage",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/session/session-format-catalog/src/current.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/session/session-format-catalog/README.md",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/core/session/src/types.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/sdk/protocol/src/types.ts"
+      ],
+      "lolicode": [
+        "packages/lolicode-harness-runtime/host-session-native.mjs",
+        "packages/lolicode-harness-runtime/host-session-markdown.mjs",
+        "src-tauri/src/services/harness_runtime.rs"
+      ],
+      "acceptance": "Verify batched append order and persisted timestamps through wrappers, cold native history, paging, forks and archive export. Qualify supported historical data before accepting shared-storage migration."
+    },
+    {
+      "ordinal": 70,
+      "section": "Chores",
+      "label": "Typed tool errors",
+      "sourceTextSha256": "7a6a92a08589e1ded06aa0073ad1cabdef2afa5cd5ae2f5611b7be682043a861",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "tool-runtime-and-errors",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/base/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/sdk/protocol/src/types.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/core/session/src/types.ts"
+      ],
+      "lolicode": [
+        "packages/lolicode-harness-runtime/host-operations.mjs",
+        "src-tauri/src/services/harness_runtime.rs",
+        "packages/lolicode-harness-runtime/tests/host-operations.test.mjs"
+      ],
+      "acceptance": "Verify ordered concurrent reads, cancellation and resource cleanup, bounded inspection and PTC limits, and stable typed error forwarding in fixture sessions."
+    },
+    {
+      "ordinal": 71,
+      "section": "Chores",
+      "label": "Computer Use helper and authorization changes",
+      "sourceTextSha256": "427b6617fb6c18043d8c69b721d60a20e196bdc4183989b900b43860c0090a2e",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "computer-use-and-browser",
+      "status": "blocked-platform-service",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/util/official-bundles/src/catalog.generated.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/apps/cli/package.json",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/experimental/cua-bundle/package.json",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/experimental/cua-bundle/README.md"
+      ],
+      "lolicode": [
+        "src/features/agent/AgentBrowserPreviewPanel.tsx",
+        "src-tauri/src/services/harness_preview.rs",
+        "packages/lolicode-harness-runtime/host-operations.mjs"
+      ],
+      "acceptance": "Resolve the current distribution and supported platforms, then verify actual helpers, authorization and browser extension discovery on the supported isolated host.",
+      "platformRestriction": {
+        "target": "win32",
+        "status": "upstream-platform-restricted",
+        "supported": [
+          "darwin"
+        ],
+        "source": "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/experimental/cua-bundle/package.json"
+      },
+      "runtimeEvidence": {
+        "status": "blocked-platform-service",
+        "note": "The shipped optional Computer Use bundle declares darwin. Windows remains outside the official platform list.",
+        "log": "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1112-evening/installed-artifact-proof.json"
+      }
+    },
+    {
+      "ordinal": 72,
+      "section": "Chores",
+      "label": "Native Office tools and skills",
+      "sourceTextSha256": "fbe8e6517aa12571d6e26d5e2bdda9b05dec1dc2348801bca9db60daf35b8f82",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "pdf-and-office",
+      "status": "sdk-verified-product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/base/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/apps/desktop/README.md"
+      ],
+      "lolicode": [
+        "src/features/agent/AgentPreviewPanel.tsx",
+        "src-tauri/src/services/harness_preview.rs",
+        "packages/lolicode-harness-runtime/host-operations.mjs"
+      ],
+      "acceptance": "Verify multi-page navigation and native office skills/tools with synthetic documents. Check old skill compatibility and the intended host parsing permission boundary.",
+      "runtimeEvidence": {
+        "status": "sdk-verified-product-acceptance-pending",
+        "note": "The installed SDK activates Office tools after loading office-docx, converts a DOCX to PDF, and renders page 2 as an image. Recalculation is exposed but untested.",
+        "log": "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1113-morning/office-sdk.log"
+      }
+    },
+    {
+      "ordinal": 73,
+      "section": "Chores",
+      "label": "Windows extra-directory grants",
+      "sourceTextSha256": "9d99623ece8beac12040fc5dbec97b4370f36bd87071c562dd76860b94983496",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "terminal-and-windows-grants",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/base/cordis.patch.yml"
+      ],
+      "lolicode": [
+        "src/features/agent/AgentPreviewPanel.tsx",
+        "src-tauri/src/services/harness_desktop.rs",
+        "packages/lolicode-harness-runtime/host-operations.mjs"
+      ],
+      "acceptance": "Use an isolated Windows workspace to verify terminal takeover, history visibility, and that extra-directory grants have the documented boundaries across file tools, terminal and PTC."
+    },
+    {
+      "ordinal": 74,
+      "section": "Chores",
+      "label": "LiveShare grants",
+      "sourceTextSha256": "da6f7f0279a5ac9c3c7059e7022a7b2558b72657affebcd6dab78bb5d4ff3af1",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "account-and-sharing",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/base/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/apps/desktop/README.md"
+      ],
+      "lolicode": [
+        "src/features/channels/ChannelCenterPanel.tsx",
+        "packages/companion-relay/README.md"
+      ],
+      "acceptance": "Verify signed-in state and localized announcements with a disposable authorized profile. Requalify LiveShare permissions, isolation expectations and stored grants before enabling it."
+    },
+    {
+      "ordinal": 75,
+      "section": "Chores",
+      "label": "Bundled reference sources",
+      "sourceTextSha256": "7e3209496251d7845497da2901e4fe8a4b171d1464f8c3998f01dabc37727e9a",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "desktop-lifecycle-and-release",
+      "status": "sdk-verified-product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/apps/desktop/README.md",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/apps/cli/package.json"
+      ],
+      "lolicode": [
+        "src-tauri/tauri.conf.json",
+        "src-tauri/src/lib.rs",
+        "scripts/build/prepare-lolicode-harness-runtime.mjs"
+      ],
+      "acceptance": "Verify update-channel defaults, progress, restart, startup recovery and upgrade on the supported native shell. Check the shipped resources and platform differences through the existing release fixture.",
+      "runtimeEvidence": {
+        "status": "sdk-verified-product-acceptance-pending",
+        "note": "The verified npm and LoliCode bundle retain official CLI source and docs. No new installer acceptance.",
+        "log": "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1112-evening/installed-artifact-proof.json"
+      }
+    },
+    {
+      "ordinal": 76,
+      "section": "Chores",
+      "label": "Zod and Stagehand upgrades",
+      "sourceTextSha256": "e881c1a6d948d5878eea6358f85816df2d47f30ededdbed46ddd63d6dd3b56a2",
+      "releaseUrl": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2",
+      "validationTrack": "computer-use-and-browser",
+      "status": "product-acceptance-pending",
+      "upstream": [
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/util/official-bundles/src/catalog.generated.ts",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/web-app/cordis.patch.yml",
+        "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/apps/cli/package.json"
+      ],
+      "lolicode": [
+        "src/features/agent/AgentBrowserPreviewPanel.tsx",
+        "src-tauri/src/services/harness_preview.rs",
+        "packages/lolicode-harness-runtime/host-operations.mjs"
+      ],
+      "acceptance": "Resolve the current distribution and supported platforms, then verify actual helpers, authorization and browser extension discovery on the supported isolated host."
+    }
+  ],
+  "eligibility": {
+    "officialRelease": true,
+    "officialSourceTagVerified": true,
+    "exactNpmAvailable": true,
+    "integrityVerified": true
+  },
+  "validation": {
+    "sdk": true,
+    "typecheck": true,
+    "windows": false,
+    "userData": false,
+    "syntheticLegacySessions": true,
+    "verification": "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1112-evening/verification.json"
+  },
+  "productCodeChanged": false,
+  "syncedFiles": [],
+  "fullParity": false,
+  "repeat": [
+    "node D:\\projectGithub\\lolicode-harness-audit-20261110\\src-tauri\\target\\audit-logs\\1111-evening/check-rc2-registry.mjs",
+    "node D:\\projectGithub\\lolicode-harness-audit-20261110\\src-tauri\\target\\audit-logs\\1111-evening/audit-rc2-source.mjs"
+  ],
+  "lastCheckedAt": "2026-11-13T18:17:40.307Z",
+  "npmObservations": [
+    {
+      "checkedAt": "2026-11-11T12:55:27.427Z",
+      "registry": "https://registry.npmjs.org/@deepseek-ai%2fdsh",
+      "version": "0.2.2-rc.2",
+      "metadataStatus": 200,
+      "exactVersionStatus": 404,
+      "packageName": "@deepseek-ai/dsh",
+      "indexListsVersion": false,
+      "exactVersionMatches": false,
+      "distIntegrity": null,
+      "tarball": null,
+      "exactVersionError": null,
+      "distTags": {
+        "latest": "0.2.2-rc.1",
+        "alpha": "0.2.2-alpha.3",
+        "next": "0.2.2-rc.1"
+      }
+    },
+    {
+      "checkedAt": "2026-11-11T18:54:56.215Z",
+      "registry": "https://registry.npmjs.org/@deepseek-ai%2fdsh",
+      "version": "0.2.2-rc.2",
+      "metadataStatus": 200,
+      "exactVersionStatus": 404,
+      "packageName": "@deepseek-ai/dsh",
+      "indexListsVersion": false,
+      "exactVersionMatches": false,
+      "distIntegrity": null,
+      "tarball": null,
+      "exactVersionError": null,
+      "distTags": {
+        "latest": "0.2.2-rc.1",
+        "alpha": "0.2.2-alpha.3",
+        "next": "0.2.2-rc.1"
+      }
+    },
+    {
+      "checkedAt": "2026-11-12T02:01:16.754Z",
+      "registry": "https://registry.npmjs.org/@deepseek-ai%2fdsh",
+      "version": "0.2.2-rc.2",
+      "metadataStatus": 200,
+      "exactVersionStatus": 404,
+      "packageName": "@deepseek-ai/dsh",
+      "indexListsVersion": false,
+      "exactVersionMatches": false,
+      "distIntegrity": null,
+      "tarball": null,
+      "exactVersionError": null,
+      "distTags": {
+        "latest": "0.2.2-rc.1",
+        "alpha": "0.2.2-alpha.3",
+        "next": "0.2.2-rc.1"
+      }
+    },
+    {
+      "checkedAt": "2026-11-12T13:53:21.221Z",
+      "registry": "https://registry.npmjs.org/@deepseek-ai%2fdsh",
+      "version": "0.2.2-rc.2",
+      "metadataStatus": 200,
+      "exactVersionStatus": 200,
+      "packageName": "@deepseek-ai/dsh",
+      "indexListsVersion": true,
+      "exactVersionMatches": true,
+      "distIntegrity": "sha512-J727r2C471x2cYXGjqZ0D9T1ZyaYQDFH/Ynx8iq+85oslM4nky5YTBnbAuTtxMhW7nhY8wuAEfjjFCQ+K6Swgw==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh/-/dsh-0.2.2-rc.2.tgz",
+      "exactVersionError": null,
+      "distTags": {
+        "alpha": "0.2.2-alpha.3",
+        "next": "0.2.2-rc.2",
+        "latest": "0.2.2-rc.1"
+      }
+    },
+    {
+      "checkedAt": "2026-11-12T19:56:50.609Z",
+      "registry": "https://registry.npmjs.org/@deepseek-ai%2fdsh",
+      "version": "0.2.2-rc.2",
+      "metadataStatus": 200,
+      "exactVersionStatus": 200,
+      "packageName": "@deepseek-ai/dsh",
+      "indexListsVersion": true,
+      "exactVersionMatches": true,
+      "distIntegrity": "sha512-J727r2C471x2cYXGjqZ0D9T1ZyaYQDFH/Ynx8iq+85oslM4nky5YTBnbAuTtxMhW7nhY8wuAEfjjFCQ+K6Swgw==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh/-/dsh-0.2.2-rc.2.tgz",
+      "exactVersionError": null,
+      "distTags": {
+        "alpha": "0.2.2-alpha.3",
+        "next": "0.2.2-rc.2",
+        "latest": "0.2.2-rc.1"
+      }
+    },
+    {
+      "checkedAt": "2026-11-13T01:57:53.955Z",
+      "registry": "https://registry.npmjs.org/@deepseek-ai%2fdsh",
+      "version": "0.2.2-rc.2",
+      "metadataStatus": 200,
+      "exactVersionStatus": 200,
+      "packageName": "@deepseek-ai/dsh",
+      "indexListsVersion": true,
+      "exactVersionMatches": true,
+      "distIntegrity": "sha512-J727r2C471x2cYXGjqZ0D9T1ZyaYQDFH/Ynx8iq+85oslM4nky5YTBnbAuTtxMhW7nhY8wuAEfjjFCQ+K6Swgw==",
+      "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh/-/dsh-0.2.2-rc.2.tgz",
+      "exactVersionError": null,
+      "distTags": {
+        "alpha": "0.2.2-alpha.3",
+        "next": "0.2.2-rc.2",
+        "latest": "0.2.2-rc.1"
+      }
+    }
+  ],
+  "computerUseDistributionAudit": {
+    "checkedAt": "2026-11-11T18:57:12.545Z",
+    "capability": "official-computer-use-bundle",
+    "sourceOnly": true,
+    "sourceProofs": [
+      {
+        "file": "candidate-bundles.ts",
+        "path": "packages/util/official-bundles/src/bundles.ts",
+        "url": "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/util/official-bundles/src/bundles.ts",
+        "gitBlobSha1": "b84847a4aa88e0e52b1423ee3a7512890926b360",
+        "sha256": "b498ab7e29a0a01a6b24d6c926857cfb0c8df28ba4173b68eb7972d064bce225"
+      },
+      {
+        "file": "candidate-cua-package.json",
+        "path": "packages/experimental/cua-bundle/package.json",
+        "url": "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/experimental/cua-bundle/package.json",
+        "gitBlobSha1": "e1f00299c6d280aece0e168bd62ce1cbde5177ac",
+        "sha256": "576762f126131b1a537ea06e2c47a509b017a49cd5ea261d72b18dd5a9871f65"
+      },
+      {
+        "file": "candidate-cua-README.md",
+        "path": "packages/experimental/cua-bundle/README.md",
+        "url": "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/experimental/cua-bundle/README.md",
+        "gitBlobSha1": "50109f10665cbb57350e15de92702af51ad3673a",
+        "sha256": "5597cfb57cd713f5091f730a60f90a18fe9d2672912e495984ebe27bfa197930"
+      },
+      {
+        "file": "candidate-driver-README.md",
+        "path": "packages/experimental/computer-use-cua-driver-native/README.md",
+        "url": "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/experimental/computer-use-cua-driver-native/README.md",
+        "gitBlobSha1": "3d5fb83810bbcfa6af22a864e4acfe391e4be5ab",
+        "sha256": "3b941a85f8d92ede99af54f8979d302dddeef22a1e1042e3d45c846005453667"
+      },
+      {
+        "file": "current-cua-package.json",
+        "path": "packages/experimental/cua-bundle/package.json",
+        "url": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/experimental/cua-bundle/package.json",
+        "gitBlobSha1": "3ae4224f582f6b7fcdc074f69c22f0895736065e",
+        "sha256": "b5a80f5b58da879c67ed6e26f4af21e1a2af24215e4f2a676c421cfa0a365d11"
+      },
+      {
+        "file": "current-bundles.ts",
+        "path": "packages/util/official-bundles/src/bundles.ts",
+        "url": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/util/official-bundles/src/bundles.ts",
+        "gitBlobSha1": "0ba7f2323519053088c265f57a709636af298b7c",
+        "sha256": "f756990817b152b67af8df317e53859706d05217c8daee3523148a05dbfe1da8"
+      },
+      {
+        "file": "candidate-cli-package.json",
+        "path": "apps/cli/package.json",
+        "url": "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/apps/cli/package.json",
+        "gitBlobSha1": "0407a54d4835296a5632c2da075dd569c02467fd",
+        "sha256": "014a4d3ad8effd1317986652e27f60a3cb88c5eb2d8da953236d1b2d91fb8b9f"
+      }
+    ],
+    "current": {
+      "version": "0.2.2-rc.1",
+      "distribution": "official-on-demand",
+      "platforms": [
+        "darwin"
+      ]
+    },
+    "candidate": {
+      "version": "0.2.2-rc.2",
+      "distribution": "shipped-optional",
+      "defaultEnabled": false,
+      "cliSourceDependency": "workspace:*",
+      "platforms": [
+        "darwin"
+      ]
+    },
+    "targetPlatform": "win32",
+    "windowsStatus": "upstream-platform-restricted",
+    "localIntegration": [
+      "src/features/agent/AgentBrowserPreviewPanel.tsx",
+      "src-tauri/src/services/harness_preview.rs",
+      "packages/lolicode-harness-runtime/host-operations.mjs"
+    ],
+    "findings": [
+      "The bundle moved from the on-demand roster into the shipped optional roster. The candidate CLI source lists the bundle as a dependency.",
+      "The bundle manifest still declares darwin. The candidate documentation describes Windows support as in development.",
+      "Release item 76 still needs its own browser/Stagehand verification. This platform finding applies to the official Computer Use bundle in item 71."
+    ],
+    "acceptance": [
+      "Once the exact official npm release exists, verify the installed bundle manifest and default profile selection in isolation.",
+      "For Computer Use, exercise the official enablement and native permissions on the documented supported macOS host. Record the Windows restriction in the product capability list.",
+      "Exercise Stagehand extension discovery independently on the supported browser path."
+    ],
+    "npmExactVersionAvailable": false,
+    "packageContentsVerified": false,
+    "providerActivated": false,
+    "productWiringValidated": false,
+    "productSynced": false
+  },
+  "teamCompatibilityAudit": {
+    "checkedAt": "2026-11-12T02:12:48.875Z",
+    "sourceOnlyForCandidate": true,
+    "sourceProofs": [
+      {
+        "id": "team-readme",
+        "commit": "ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c",
+        "path": "packages/team/agent-team/README.md",
+        "url": "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/team/agent-team/README.md",
+        "gitBlobSha1": "665cb0e48712d3333f4ac1ed0fcc0889fcf60360",
+        "sha256": "03317888d553b25792b509db6799a21585c0f6ce22bfb0cebd64a9895283a692"
+      },
+      {
+        "id": "sdk-server",
+        "commit": "ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c",
+        "path": "packages/sdk/server/src/server.ts",
+        "url": "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/sdk/server/src/server.ts",
+        "gitBlobSha1": "bccfa6634e071c5bf1fad2f6b2fde80b0c8e503b",
+        "sha256": "d64bdfc1b76af96645378e02e2a1d1fe8b2416a09e41b37512084c7899472122"
+      },
+      {
+        "id": "sdk-server-old",
+        "commit": "66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db",
+        "path": "packages/sdk/server/src/server.ts",
+        "url": "https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/sdk/server/src/server.ts",
+        "gitBlobSha1": "1879b23e2eeb57d080f2d38401ab5a0a81ba03d7",
+        "sha256": "193b097b11fe1ee71efa230f8c9bdccdc98b50ff7c0c47d81fc7b0de285dd916"
+      },
+      {
+        "id": "team-package",
+        "commit": "ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c",
+        "path": "packages/team/agent-team/package.json",
+        "url": "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/team/agent-team/package.json",
+        "gitBlobSha1": "52289a6345d18f15a840ddb0db5686657a1b05f9",
+        "sha256": "19dc245b3565ad9e669960473933b8a9c59859e532a9d815e913a464d0929295"
+      },
+      {
+        "id": "team-index.ts",
+        "commit": "ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c",
+        "path": "packages/team/agent-team/src/index.ts",
+        "url": "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/team/agent-team/src/index.ts",
+        "gitBlobSha1": "91b7c2caa05743806b86b370ef59a88e776b7631",
+        "sha256": "644e2e8eeb198d464cc53b983e6d74c24f75112d2a848037e979ac3b9ef29458"
+      },
+      {
+        "id": "team-journal.ts",
+        "commit": "ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c",
+        "path": "packages/team/agent-team/src/journal.ts",
+        "url": "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/team/agent-team/src/journal.ts",
+        "gitBlobSha1": "fd7c7fcfadbcfc336a41b5328719999e9e294e78",
+        "sha256": "e1fade64e0851016dd4013509d5a7c53de7476b621a7fbba7147c02fbc8b3b9d"
+      },
+      {
+        "id": "team-projection.ts",
+        "commit": "ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c",
+        "path": "packages/team/agent-team/src/projection.ts",
+        "url": "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/team/agent-team/src/projection.ts",
+        "gitBlobSha1": "dfad8265cc66a19372db78c5c13fad983b308681",
+        "sha256": "3f4bfe9aaa6d61dbd3e59a85166659ff2956fc26689459db2dfee0a1712bfd96"
+      },
+      {
+        "id": "base-layer",
+        "commit": "ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c",
+        "path": "packages/bundle/base/cordis.patch.yml",
+        "url": "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/bundle/base/cordis.patch.yml",
+        "gitBlobSha1": "18286618f9467bd886db043438a7b71bf7ea53a9",
+        "sha256": "026fa70d7746609549ea7607f5b60c76fd19476e13549729dc1171f0a1d96cc8"
+      },
+      {
+        "id": "bundle-roster",
+        "commit": "ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c",
+        "path": "packages/util/official-bundles/src/bundles.ts",
+        "url": "https://github.com/deepseek-ai/deepseek-harness/blob/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c/packages/util/official-bundles/src/bundles.ts",
+        "gitBlobSha1": "b84847a4aa88e0e52b1423ee3a7512890926b360",
+        "sha256": "b498ab7e29a0a01a6b24d6c926857cfb0c8df28ba4173b68eb7972d064bce225"
+      }
+    ],
+    "candidate": {
+      "version": "0.2.2-rc.2",
+      "npmExactStatus": 404,
+      "baseLayerPlugins": [
+        "agent-team",
+        "tool-agent-team"
+      ],
+      "retiredProfile": "@deepseek-ai/dsh-experimental-agent-team-profile",
+      "defaultEnabled": false,
+      "defaultScope": "New roots and ordinary forks before the first model step.",
+      "restoreScope": "Saved root mode takes precedence. An existing historical board implies enabled if no selection was saved. Historical roster and mailbox events are ignored by the projection.",
+      "directChildResume": "SDK session/resume rejects persisted subagent origins. Resume the root and use the subagent continuation API."
+    },
+    "lolicode": {
+      "entrypoints": [
+        "packages/lolicode-harness-runtime/host-operations.mjs",
+        "src-tauri/src/services/harness_desktop.rs"
+      ],
+      "mapping": "The desktop root restore uses session/resume. Secretary workers use startActivation and parent-scoped subagents.prompt.",
+      "baseline": {
+        "version": "0.2.2-rc.1",
+        "tests": [
+          "manual secretary work starts one native child and follows up after restart",
+          "stopping a worker parks its inbox and the same request can resume after restart"
+        ],
+        "passed": 2,
+        "log": "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1112-morning/secretary-baseline.log",
+        "sourceComparison": "Identical after normalizing the isolated JavaScript checkout from CRLF to LF."
+      }
+    },
+    "pendingAcceptance": [
+      "Enable the candidate SDK default and exercise a new root and an ordinary fork. Restore explicit on/off selections and an unmarked existing root.",
+      "Restore an old board and mailbox fixture. Verify owner recovery and no mailbox redelivery.",
+      "Restore the root in the isolated desktop, exercise secretary child follow-up and a parked inbox, and verify that direct child session/resume fails as documented.",
+      "Verify the Agent Teams entrypoint and controls in the desktop before accepting product parity."
+    ],
+    "candidateRuntimeValidated": false,
+    "productSynced": false
+  },
+  "checks": [
+    {
+      "checkedAt": "2026-11-12T13:53:31.265Z",
+      "completedAt": "2026-11-12T13:59:38.110Z",
+      "localBranch": "dev",
+      "localCommit": "58223d59fd59f45dc24e8ff3ecb5d45596c2d247",
+      "version": "0.2.2-rc.2",
+      "upstreamCommit": "ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c",
+      "superagentHead": "8c32a9dc5d72c033816c6a8110b37f40cf94fba4",
+      "artifactIntegrityVerified": true,
+      "newer": [],
+      "observedExistingProductUpgrade": {
+        "commit": "85f28a2e14c1aa2533df2569319a48a1f3c41081",
+        "from": "0.2.2-rc.1",
+        "to": "0.2.2-rc.2",
+        "performedByAutomation": false
+      },
+      "sourceHashesVerified": {
+        "previous": 126,
+        "current": 76,
+        "installedFilesMatchingGit": 7
+      },
+      "snapshot": {
+        "root": "D:/lc-dsh-1112-verify",
+        "head": "58223d59fd59f45dc24e8ff3ecb5d45596c2d247",
+        "carriedFiles": 26,
+        "manifest": "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1112-evening/snapshot.json"
+      },
+      "runtime": {
+        "prepare": true,
+        "bundle": true,
+        "distributionFiles": 28457,
+        "log": "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1112-evening/bundle.log"
+      },
+      "sdk": {
+        "tests": 48,
+        "passed": 48,
+        "failed": 0,
+        "skipped": 0,
+        "log": "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1112-evening/sdk-bundled.log",
+        "actualBundledNode": true,
+        "crossVersionFixture": {
+          "from": "0.2.2-rc.1",
+          "to": "0.2.2-rc.2",
+          "baselineRoot": "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/resources/agent/harness-runtime"
+        },
+        "testScopes": [
+          "rc.1 root and worker continuation",
+          "Team cold projection",
+          "nested secretary ownership and approvals",
+          "native Plan and Goal",
+          "images and one-shot approval",
+          "terminal and Ralph",
+          "PTC MCP approval"
+        ]
+      },
+      "build": {
+        "tests": 33,
+        "passed": 33,
+        "failed": 0,
+        "skipped": 0,
+        "log": "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1112-evening/build-tests.log"
+      },
+      "frontend": {
+        "files": 7,
+        "passed": 373,
+        "log": "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1112-evening/frontend.log"
+      },
+      "typecheck": {
+        "passed": true,
+        "log": "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1112-evening/typecheck.log"
+      },
+      "team": {
+        "mode": "resume",
+        "teamService": true,
+        "officeService": true,
+        "explicitOffSurvives": true,
+        "unmarkedResumeKeepsDefaultOff": true,
+        "newRootDefaultOn": true,
+        "log": "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1112-evening/team-resume-result.json",
+        "desktopEntryVerified": false
+      },
+      "cli": {
+        "workInProgress": true,
+        "pin": "0.2.2-rc.1",
+        "current": {
+          "tests": 8,
+          "passed": 4,
+          "failed": 4,
+          "skipped": 0,
+          "log": "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1112-evening/cli.log"
+        },
+        "comparison": {
+          "tests": 4,
+          "passed": 4,
+          "failed": 0,
+          "skipped": 0,
+          "log": "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1112-evening/cli-rc2-comparison.log"
+        },
+        "rc2Override": {
+          "tests": 8,
+          "passed": 8,
+          "failed": 0,
+          "skipped": 0,
+          "log": "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1112-evening/cli-rc2-full.log"
+        },
+        "override": "LOLICODE_RUNTIME_DIR",
+        "manifestChanged": false,
+        "note": "The existing CLI fixtures expose four write/approval/shell failures with its rc.1 dependency and current shared overlays. All eight pass with the tested rc.2 bundle."
+      },
+      "desktop": {
+        "checkedAt": "2026-11-12T13:54:04.9551001+00:00",
+        "elevated": true,
+        "enableLUA": 0,
+        "gate": "scripts/tests/harness-desktop-acceptance.mjs requires non-elevated WebView2 debugging",
+        "status": "blocked-non-elevated-host-unavailable",
+        "performed": false,
+        "log": "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1112-evening/desktop-context.json",
+        "pending": [
+          "normal desktop flow",
+          "cross-turn background jobs",
+          "native Goal and Plan approvals",
+          "right dock",
+          "secretary website handoff",
+          "saved channels and permissions"
+        ]
+      },
+      "previousTrial": {
+        "head": "5374c6a9a547f3eeedd52e6132b9b276ebedcd38",
+        "root": "D:/lc-dsh-1112-rc2",
+        "log": "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1112-afternoon/sdk-focused-diagnostics.log",
+        "note": "Before the independently landed compatibility commit, the candidate hit removed listChildren and missing agentTeam cold projection. Current commit has fresh bundled regressions."
+      },
+      "productCodeChanged": false,
+      "isolatedProductCodeChanged": false,
+      "productSynced": false,
+      "fullParity": false,
+      "action": "dev already contains the independent rc.2 upgrade. Reverified the matching isolated bundle, SDK and frontend. Native Windows remains pending and the in-progress CLI pin has four failures with current overlays.",
+      "validationLogs": [
+        "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1112-evening/upstream.json",
+        "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1112-evening/rc2-registry.json",
+        "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1112-evening/installed-artifact-proof.json",
+        "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1112-evening/snapshot.json",
+        "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1112-evening/prepare-runtime.log",
+        "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1112-evening/bundle.log",
+        "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1112-evening/sdk-bundled.log",
+        "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1112-evening/typecheck.log",
+        "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1112-evening/frontend.log",
+        "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1112-evening/build-tests.log",
+        "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1112-evening/team-resume-result.json",
+        "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1112-evening/cli.log",
+        "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1112-evening/cli-rc2-comparison.log",
+        "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1112-evening/cli-rc2-full.log",
+        "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1112-evening/desktop-context.json"
+      ]
+    },
+    {
+      "checkedAt": "2026-11-12T19:56:52.829Z",
+      "completedAt": "2026-11-12T20:00:39.774Z",
+      "localBranch": "dev",
+      "localCommit": "58223d59fd59f45dc24e8ff3ecb5d45596c2d247",
+      "version": "0.2.2-rc.2",
+      "upstreamCommit": "ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c",
+      "superagentHead": "8c32a9dc5d72c033816c6a8110b37f40cf94fba4",
+      "newer": [],
+      "artifactIntegrityVerified": true,
+      "sourceHashesVerified": 76,
+      "cliPinCompatibilityAudit": "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1113-early/cli-pin-proof.json",
+      "desktop": {
+        "checkedAt": "2026-11-12T19:59:22.7639959+00:00",
+        "elevated": true,
+        "enableLUA": 0,
+        "status": "blocked-non-elevated-host-unavailable",
+        "performed": false
+      },
+      "runtimePreparationPerformed": false,
+      "fullSdkRegressionPerformed": false,
+      "typecheckPerformed": false,
+      "targetedCliValidationPerformed": true,
+      "productCodeChanged": false,
+      "isolatedProductCodeChanged": true,
+      "productSynced": false,
+      "action": "No newer eligible version. Prepared and validated the standalone CLI rc.2 pin in isolation, including a saved-channel and native-history migration fixture.",
+      "validationLogs": [
+        "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1113-early/upstream.json",
+        "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1113-early/rc2-registry.json",
+        "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1113-early/cli-pin-proof.json",
+        "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1113-early/desktop-context.json",
+        "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1113-early/cli-lock.log",
+        "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1113-early/cli-lock-proof.log",
+        "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1113-early/cli-install.log",
+        "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1113-early/cli-overlay.log",
+        "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1113-early/cli-runtime-version.log",
+        "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1113-early/cli-sdk.log",
+        "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1113-early/cli-cross-version.log"
+      ]
+    },
+    {
+      "checkedAt": "2026-11-13T01:57:56.698Z",
+      "completedAt": "2026-11-13T02:03:47.724Z",
+      "localBranch": "dev",
+      "localCommit": "58223d59fd59f45dc24e8ff3ecb5d45596c2d247",
+      "version": "0.2.2-rc.2",
+      "upstreamCommit": "ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c",
+      "superagentHead": "8c32a9dc5d72c033816c6a8110b37f40cf94fba4",
+      "artifactIntegrityVerified": true,
+      "newer": [],
+      "sourceHashesVerified": 76,
+      "officeCapabilityAudit": {
+        "checkedAt": "2026-11-13T02:03:47.724Z",
+        "sourceCommit": "58223d59fd59f45dc24e8ff3ecb5d45596c2d247",
+        "isolated": "D:/lc-dsh-1112-verify",
+        "version": "0.2.2-rc.2",
+        "sdk": {
+          "steps": [
+            {
+              "step": 1,
+              "office": []
+            },
+            {
+              "step": 2,
+              "office": [
+                "office_convert",
+                "office_recalculate",
+                "office_render"
+              ]
+            },
+            {
+              "step": 3,
+              "office": [
+                "office_convert",
+                "office_recalculate",
+                "office_render"
+              ]
+            },
+            {
+              "step": 4,
+              "office": [
+                "office_convert",
+                "office_recalculate",
+                "office_render"
+              ]
+            }
+          ],
+          "sourceUnchanged": true,
+          "workspaceOutputs": [],
+          "convertedPdfBytes": 23951,
+          "renderedPage": 2,
+          "privatePdfOutput": true,
+          "workbookRecalculateExposed": true,
+          "workbookRecalculationPerformed": false,
+          "log": "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1113-morning/office-sdk.log",
+          "bundledRuntime": true
+        },
+        "frontend": {
+          "passed": 29,
+          "log": "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1113-morning/document-viewer.log",
+          "scope": "Document viewer component fixtures, including PDF pagination, zoom, cancellation and stale revisions."
+        },
+        "localEntrypoints": [
+          "src/features/agent/AgentDocumentViewer.tsx",
+          "src/lib/api/agent-documents.ts",
+          "src-tauri/src/commands/agent_documents.rs"
+        ],
+        "pending": [
+          "Native desktop document preview and full acceptance",
+          "Workbook recalculation execution",
+          "Older Office skill and remote workspace behavior"
+        ],
+        "productSynced": false
+      },
+      "installedDevelopment": {
+        "checkedAt": "2026-11-13T02:02:28.734Z",
+        "sourceFingerprintMatches": true,
+        "sourceDirectory": "D:\\projectGithub\\TAI-Switch",
+        "exeExists": true,
+        "launcherExists": true,
+        "harness": "0.2.2-rc.2",
+        "launchPerformed": false
+      },
+      "automationSchedule": {
+        "localTime": "04:00",
+        "frequency": "daily",
+        "timezone": "Asia/Singapore",
+        "command": "pnpm build:dev",
+        "desktopShortcut": "LoliCode 开发版"
+      },
+      "runtimePreparationPerformed": false,
+      "fullSdkRegressionPerformed": false,
+      "typecheckPerformed": false,
+      "desktopValidationPerformed": false,
+      "targetedSdkValidationPerformed": true,
+      "targetedFrontendValidationPerformed": true,
+      "productCodeChanged": false,
+      "isolatedProductCodeChanged": false,
+      "productSynced": false,
+      "action": "No newer eligible release. Verified inherited Office skill activation, conversion and second-page rendering, plus the local document viewer. Existing development installation matches the current source fingerprint.",
+      "validationLogs": [
+        "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1113-morning/upstream.json",
+        "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1113-morning/rc2-registry.json",
+        "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1113-morning/office-sdk.log",
+        "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1113-morning/office-runtime-proof.json",
+        "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1113-morning/document-viewer.log",
+        "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1113-morning/installed-development.json"
+      ]
+    },
+    {
+      "checkedAt": "2026-11-13T18:04:42.024Z",
+      "completedAt": "2026-11-13T18:17:40.307Z",
+      "localBranch": "dev",
+      "localCommit": "ef27ea9b1b3b55a97bd3d13b1fe82a8e65c4c501",
+      "version": "0.2.2-rc.2",
+      "upstreamCommit": "ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c",
+      "superagentHead": "8c32a9dc5d72c033816c6a8110b37f40cf94fba4",
+      "artifactIntegrityVerified": true,
+      "newer": [
+        "0.2.2-rc.3"
+      ],
+      "sourceHashesVerified": {
+        "current": 76,
+        "candidate": 2
+      },
+      "issueDetails": [
+        {
+          "number": 26,
+          "priority": "execution interruption",
+          "status": "existing-fix-reverified",
+          "commit": "2b4893250",
+          "log": "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1114-night/issue-26.log",
+          "finding": "The screenshot shows a generic unconfirmed receipt. The prior gateway lifetime fix passed the compiled one-hour and transport-drop regression. This does not identify every source of an unconfirmed receipt.",
+          "url": "https://github.com/treasureGrove/LoliCode/issues/26",
+          "attachment": "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1114-night/issue-26.png"
+        },
+        {
+          "number": 23,
+          "priority": "native Plan and Goal",
+          "status": "existing-fix-reverified",
+          "commit": "ef27ea9b1",
+          "log": "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1114-night/issue-23-retry.log",
+          "finding": "225 component tests pass, including slash command, Plan approval and Goal controls. The current worktree also contains existing unsynced UI changes. Full desktop acceptance remains pending.",
+          "url": "https://github.com/treasureGrove/LoliCode/issues/23",
+          "attachment": "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1114-night/issue-23.png"
+        },
+        {
+          "number": 24,
+          "priority": "companion animation",
+          "status": "open-feature-gap",
+          "log": "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1114-night/issue-24.log",
+          "finding": "28 actor tests pass. Existing ambient animations and manual movement do not add autonomous walking. Movement behavior and animation assets remain open.",
+          "url": "https://github.com/treasureGrove/LoliCode/issues/24",
+          "attachment": null
+        },
+        {
+          "number": 25,
+          "priority": "tavern conversation quality",
+          "status": "needs-quality-reproduction",
+          "finding": "The attachment shows repeated stage directions and question cadence. No reproducible missing-history failure has been established. Preserve prior evidence and use a multi-turn quality fixture before changing the conversation pipeline.",
+          "url": "https://github.com/treasureGrove/LoliCode/issues/25",
+          "attachment": "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1114-night/issue-25.png"
+        }
+      ],
+      "isolatedCandidate": {
+        "root": "D:/lc-dsh-1114-rc3",
+        "baseCommit": "ef27ea9b1b3b55a97bd3d13b1fe82a8e65c4c501",
+        "files": [
+          {
+            "file": "THIRD_PARTY_NOTICES.md",
+            "candidateSha256": "6d772923213be757cddd92e38303c8d5cfb6aa98aaf0e5733f9b860ae2220934",
+            "currentSha256": "65d6277abc75132ae4f7c085d95322af749ad80d66b3130c5a479a25ebcfd9b6"
+          },
+          {
+            "file": "docs/guides/native-build-check.md",
+            "candidateSha256": "c5bad35c43f28443982aa644990630ea9bfeb9586b8be243bc549fb7f7798953",
+            "currentSha256": "b7fbb297c7537bf2ef733338d1b8736c2933337817aa05b9e59984ef425e2361"
+          },
+          {
+            "file": "packages/lolicode-harness-runtime/README.md",
+            "candidateSha256": "2f71fbd23096ff911140fcbd91839b59d3e7b89464fda0432b8ddfb2cd8028d0",
+            "currentSha256": "f5688a9792fcfa2841d2819f3b31a8c78488aa7fd8ded92e179601f007d79744"
+          },
+          {
+            "file": "packages/lolicode-harness-runtime/package.json",
+            "candidateSha256": "b84acf2cddbe248d3e4ead0f784311460acbedc8ad48834a4ae11e3b092537fc",
+            "currentSha256": "02aaaf94de20fa8142c1dd7105258f672f2dbc039514d9a2027d11127a714b1a"
+          },
+          {
+            "file": "packages/lolicode-harness-runtime/package-lock.json",
+            "candidateSha256": "7bef24be0c08cad20d7c5bb4f0b6fd2d080588027e2f230b5b1d07ac0c192184",
+            "currentSha256": "3b1c7a82332f4be070b2c5a5fadc2d14983819993da4f686049c0cba9a2b58fe"
+          },
+          {
+            "file": "scripts/build/prepare-lolicode-harness-runtime.mjs",
+            "candidateSha256": "f7831914d999e26b1c5b1e0756513db97d76df3ffed627b8b3c22442b5ca3f2d",
+            "currentSha256": "d6271f94eee0a60873f49ce6d5d243357c73bdde6a495bb1271ac237aa1d7929"
+          },
+          {
+            "file": "packages/lolicode-harness-runtime/tests/host-operations.test.mjs",
+            "candidateSha256": "0b061073b3d7d326a928f82288101c5a0c550c25b3cdf956bcc00131f5e92e60",
+            "currentSha256": "d71a09c7a2a317d09990a9ec74cf052d16c76b66b61e0ab7aa97fe99fa5d574f"
+          }
+        ],
+        "officialPackageModified": false
+      },
+      "candidateValidation": {
+        "runtimePrepared": true,
+        "bundle": true,
+        "sdk": {
+          "passed": 49,
+          "failed": 0,
+          "baseline": "rc.1 synthetic root and worker"
+        },
+        "typecheck": true,
+        "frontend": {
+          "passed": 225
+        },
+        "desktop": {
+          "performed": false,
+          "log": "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1114-night/desktop-context.json"
+        },
+        "realUserDataUsed": false
+      },
+      "installedDevelopment": {
+        "checkedAt": "2026-11-13T18:10:30.764Z",
+        "sourceMatches": true,
+        "binary": true,
+        "launcher": true,
+        "harness": "0.2.2-rc.2",
+        "source": "D:\\projectGithub\\TAI-Switch",
+        "launchPerformed": false,
+        "rebuilt": true,
+        "shortcutVerified": true,
+        "log": "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1114-night/active-dev-build.log"
+      },
+      "action": "Reverified existing issue fixes and rebuilt the active rc.2 development installation. Verified official rc.3 in isolation, including its owner-only import route. Candidate desktop wiring and acceptance remain pending.",
+      "productCodeChanged": false,
+      "isolatedProductCodeChanged": true,
+      "productSynced": false,
+      "validationLogs": [
+        "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1114-night/upstream.json",
+        "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1114-night/rc3-registry.json",
+        "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1114-night/snapshot.json",
+        "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1114-night/issue-26.log",
+        "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1114-night/issue-23-retry.log",
+        "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1114-night/issue-24.log",
+        "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1114-night/active-dev-build.log",
+        "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1114-night/installed-development.json",
+        "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1114-night/prepare-runtime.log",
+        "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1114-night/bundle.log",
+        "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1114-night/typecheck.log",
+        "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1114-night/sdk-bundled.log",
+        "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1114-night/sdk-bundled-final.log",
+        "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1114-night/rc3-installed-sources-proof.json",
+        "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1114-night/import-probe-proof.json",
+        "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1114-night/desktop-context.json"
+      ]
+    }
+  ],
+  "installedArtifactProof": "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1112-evening/installed-artifact-proof.json",
+  "previousPin": {
+    "version": "0.2.2-rc.1",
+    "upstreamCommit": "66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db"
+  },
+  "cliPinCompatibilityAudit": {
+    "checkedAt": "2026-11-12T20:00:39.774Z",
+    "root": "D:/lc-dsh-1113-cli",
+    "sourceCommit": "58223d59fd59f45dc24e8ff3ecb5d45596c2d247",
+    "sourceHashes": {
+      "packages/lolicode-cli/.gitignore": "6a75a7b7f63384d7d9ce8a712e2a76c81fe5595683623a215e13748232f82003",
+      "packages/lolicode-cli/bin/lolicode.mjs": "26c2edfb7332641f1583b1d6de5a6c171ecc5a578a2ee4fa5bb6de1c4ac1b189",
+      "packages/lolicode-cli/package-lock.json": "ae592c9e6d37b79cb0298aa3615f96d57fc848d99c35239674230676a403c193",
+      "packages/lolicode-cli/package.json": "03c10646c14e750808e15e9f7b830d46032e77376c5202ae52ca01aa066c1dcb",
+      "packages/lolicode-cli/scripts/prepare-runtime.mjs": "2d82e46dd7bff324b87b4f9b0b717176972627ae97d264b2353a33276829f8fd",
+      "packages/lolicode-cli/src/config.mjs": "d2d29050e2ccd70da774da66373305cb332372967b0b3bf0358fbe8b545f0f9b",
+      "packages/lolicode-cli/src/main.mjs": "cf4b97c2ad576295dd0d38fa2a9577fbfde6dd33a6f197952f1a91e642d60ab1",
+      "packages/lolicode-cli/src/runtime.mjs": "1fdbe20c37b35e99d6a043a8093af64fe5a4c78e3294a43605d38e9c87a253bc",
+      "packages/lolicode-cli/src/session.mjs": "8442adc69bfae21bd3c69d578a6b2fd6b6e6c98f26fe003661bb17f37be14a1d",
+      "packages/lolicode-cli/src/ui.mjs": "9e57a2e58659c3f5c9462da29885be2fd81fe9e1a51db0e2b949a5a77fa779dc",
+      "packages/lolicode-cli/tests/cli.test.mjs": "a816b8dfc6622bd4bd26e9e95fe05bcf5f1c641bf5d3bb6b419969144c607fa9",
+      "packages/lolicode-harness-runtime/host-mcp.mjs": "382735e6944d0403a1fa7b0163cb90d574c4c73bcb3900a5f7076c8e0631e3f0",
+      "packages/lolicode-harness-runtime/host-native-reader-context.mjs": "c912459a7481ecfc6cf0f99d4866774d9b8128bb10167f89f7ed901dc15019f9",
+      "packages/lolicode-harness-runtime/host-operations.cordis.patch.yml": "25f867ff806ae7085a75adf2751e115cda76120dfb0d2ac3d3349ba848b73a83",
+      "packages/lolicode-harness-runtime/host-operations.mjs": "70cf7acbc1dad0e759ad0b7f3e849c8890f6e2cc8b3ab4934984d5412d43cf3d",
+      "packages/lolicode-harness-runtime/host-remote.mjs": "b05a8fbcd78bb6ffeaac77bf10cd7be64d432b22f658fc8de1d80502bb8b5bd3",
+      "packages/lolicode-harness-runtime/host-runtime-prepare.mjs": "a67cd3bfde7ed748b29616c3417e6157d2c664c4ba47fe8f38188757a39693ee",
+      "packages/lolicode-harness-runtime/host-secretary-report.mjs": "fc1e6638894647e29f2f5dfd026c03d356df65162a40f480f8995c10b52e04f8",
+      "packages/lolicode-harness-runtime/host-session-markdown.mjs": "05a5e839bf6481c6ef6946a56a05495a33d5377e62ac9f2c3fd336ea3028ea3f",
+      "packages/lolicode-harness-runtime/host-session-native.mjs": "1d5d5620d4f185f59accb5948db3dcee2b9a78435552ad0bbd38e152ec339d65",
+      "packages/lolicode-harness-runtime/host-terminal.mjs": "9f50d3123d7d1a944077cba350663f19af490c5d8cadd7e759ec24150b30e971",
+      "packages/lolicode-harness-runtime/host-workspace.mjs": "f327fde64a5008bef3a70ca083165bb908f096d38b7b8d9f60b66bc0839f5342",
+      "packages/lolicode-harness-runtime/profile.cordis.patch.yml": "1aa8f780d2433c59ccf660e0c612f13144d3b55abca82fcd30a9ec776d1382db",
+      "LICENSE": "912b6a597d10c43b40a0909349ed95b052b17efb6502b4898e1b35dafb896755",
+      "THIRD_PARTY_NOTICES.md": "65d6277abc75132ae4f7c085d95322af749ad80d66b3130c5a479a25ebcfd9b6"
+    },
+    "currentPackageVersion": "0.2.2-rc.1",
+    "candidatePackageVersion": "0.2.2-rc.2",
+    "upstreamCommit": "ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c",
+    "integrity": "sha512-J727r2C471x2cYXGjqZ0D9T1ZyaYQDFH/Ynx8iq+85oslM4nky5YTBnbAuTtxMhW7nhY8wuAEfjjFCQ+K6Swgw==",
+    "status": "validated-isolated-not-synced",
+    "changedFiles": [
+      {
+        "file": "packages/lolicode-cli/package.json",
+        "candidatePath": "D:\\lc-dsh-1113-cli\\packages\\lolicode-cli\\package.json",
+        "candidateSha256": "2dc20e85710709543fb728f6415eb27db13d952e85b309648291ca754b2d1212",
+        "originalSha256": "03c10646c14e750808e15e9f7b830d46032e77376c5202ae52ca01aa066c1dcb"
+      },
+      {
+        "file": "packages/lolicode-cli/package-lock.json",
+        "candidatePath": "D:\\lc-dsh-1113-cli\\packages\\lolicode-cli\\package-lock.json",
+        "candidateSha256": "4dd2051aeeb609be3f387b8e099766c930b17579d11fac3701e9d05fe241c45d",
+        "originalSha256": "ae592c9e6d37b79cb0298aa3615f96d57fc848d99c35239674230676a403c193"
+      }
+    ],
+    "npm": {
+      "registry": "https://registry.npmjs.org",
+      "lockEntryCount": 742,
+      "dependencyLifecycleScripts": false
+    },
+    "standaloneRuntime": true,
+    "runtimeOverride": false,
+    "passed": [
+      "8 existing CLI tests with its own rc.2 install",
+      "1 cross-version CLI session and saved channel fixture using rc.1 then standalone rc.2"
+    ],
+    "crossVersion": {
+      "fixture": "cli-pin-upgrade.test.mjs",
+      "savedConfigBytesPreserved": true,
+      "sessionIdPreserved": true,
+      "keyStoredInConfig": false,
+      "realUserDataUsed": false
+    },
+    "validationLogs": [
+      "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1113-early/cli-lock.log",
+      "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1113-early/cli-lock-proof.log",
+      "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1113-early/cli-install.log",
+      "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1113-early/cli-overlay.log",
+      "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1113-early/cli-runtime-version.log",
+      "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1113-early/cli-sdk.log",
+      "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1113-early/cli-cross-version.log"
+    ],
+    "desktopAcceptancePerformed": false,
+    "productSynced": false,
+    "localCliUntracked": true
+  },
+  "officeCapabilityAudit": {
+    "checkedAt": "2026-11-13T02:03:47.724Z",
+    "sourceCommit": "58223d59fd59f45dc24e8ff3ecb5d45596c2d247",
+    "isolated": "D:/lc-dsh-1112-verify",
+    "version": "0.2.2-rc.2",
+    "sdk": {
+      "steps": [
+        {
+          "step": 1,
+          "office": []
+        },
+        {
+          "step": 2,
+          "office": [
+            "office_convert",
+            "office_recalculate",
+            "office_render"
+          ]
+        },
+        {
+          "step": 3,
+          "office": [
+            "office_convert",
+            "office_recalculate",
+            "office_render"
+          ]
+        },
+        {
+          "step": 4,
+          "office": [
+            "office_convert",
+            "office_recalculate",
+            "office_render"
+          ]
+        }
+      ],
+      "sourceUnchanged": true,
+      "workspaceOutputs": [],
+      "convertedPdfBytes": 23951,
+      "renderedPage": 2,
+      "privatePdfOutput": true,
+      "workbookRecalculateExposed": true,
+      "workbookRecalculationPerformed": false,
+      "log": "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1113-morning/office-sdk.log",
+      "bundledRuntime": true
+    },
+    "frontend": {
+      "passed": 29,
+      "log": "D:/projectGithub/lolicode-harness-audit-20261110/src-tauri/target/audit-logs/1113-morning/document-viewer.log",
+      "scope": "Document viewer component fixtures, including PDF pagination, zoom, cancellation and stale revisions."
+    },
+    "localEntrypoints": [
+      "src/features/agent/AgentDocumentViewer.tsx",
+      "src/lib/api/agent-documents.ts",
+      "src-tauri/src/commands/agent_documents.rs"
+    ],
+    "pending": [
+      "Native desktop document preview and full acceptance",
+      "Workbook recalculation execution",
+      "Older Office skill and remote workspace behavior"
+    ],
+    "productSynced": false
+  },
+  "nextCandidate": {
+    "version": "0.2.2-rc.3",
+    "upstreamCommit": "38a6a5c965aa99ab525161efb7cc5cf1fe62fced",
+    "archive": "docs/architecture/harness-upstream/38a6a5c965aa99ab525161efb7cc5cf1fe62fced.json",
+    "status": "isolated-validation-pending",
+    "npmExactStatus": 200,
+    "integrityVerified": true,
+    "isolatedUpgradePerformed": true,
+    "productSynced": false
+  }
+}

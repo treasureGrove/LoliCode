@@ -587,6 +587,179 @@ export interface AgentHarnessPluginCatalog {
   pendingReload: boolean;
 }
 
+export type DshLocalizedText = string | Record<string, string>;
+
+export interface DshMarketSourceSummary {
+  url: string;
+  title?: DshLocalizedText | null;
+  description?: DshLocalizedText | null;
+  pluginCount?: number | null;
+  fetchedAt?: number | null;
+  fromCache: boolean;
+  error?: string | null;
+  presetLabel?: string | null;
+}
+
+export interface DshMarketSourcePreset {
+  url: string;
+  label: string;
+  description: string;
+  added: boolean;
+}
+
+export interface DshMarketInstalledPlugin {
+  name: string;
+  version: string;
+  enabled: boolean;
+  installedAt: string;
+  sourceType: string;
+  sourceSpec: string;
+  registry?: string | null;
+  marketplaceUrl?: string | null;
+  title?: DshLocalizedText | null;
+  description?: DshLocalizedText | null;
+  icon?: string | null;
+  author?: string | null;
+  homepage?: string | null;
+  repository?: { url: string; directory?: string } | null;
+  category?: string | null;
+  hasBundle: boolean;
+  hasClient: boolean;
+  patchFiles: string[];
+}
+
+export interface DshOfficialOnDemandItem {
+  name: string;
+  title: string;
+  titleEn: string;
+  description: string;
+  descriptionEn: string;
+  targetVersion: string;
+  installed: boolean;
+  installedVersion?: string | null;
+  enabled: boolean;
+}
+
+export interface DshMarketOverview {
+  runtimeVersion: string;
+  sources: DshMarketSourceSummary[];
+  presets: DshMarketSourcePreset[];
+  selectedSource?: string | null;
+  installed: DshMarketInstalledPlugin[];
+  onDemandOfficial: DshOfficialOnDemandItem[];
+  harnessBundles: AgentHarnessPluginCatalog["bundles"];
+  pendingReload: boolean;
+  enabledCount: number;
+  revision: number;
+}
+
+export interface DshMarketQuery {
+  sourceUrl?: string;
+  text?: string;
+  category?: string | null;
+  compatibleOnly?: boolean;
+  installedOnly?: boolean;
+  sort?: "index" | "relevance" | "published" | "name";
+  offset?: number;
+  limit?: number;
+  refresh?: boolean;
+}
+
+export interface DshMarketCategoryItem {
+  id: string;
+  title: DshLocalizedText;
+  count: number;
+}
+
+export interface DshMarketPluginItem {
+  name: string;
+  title?: DshLocalizedText | null;
+  description?: DshLocalizedText | null;
+  icon?: string | null;
+  author?: string | null;
+  homepage?: string | null;
+  repository?: { url: string; directory?: string } | null;
+  category?: string | null;
+  categoryTitle?: DshLocalizedText | null;
+  keywords: string[];
+  latestVersion?: string | null;
+  defaultVersion?: string | null;
+  publishedAt?: number | null;
+  enginesDsh?: string | null;
+  compatible: boolean;
+  exempted: boolean;
+  installed: boolean;
+  installedVersion?: string | null;
+  enabled: boolean;
+  updateAvailable: boolean;
+  sourceType: string;
+  registry?: string | null;
+  versionsCount: number;
+}
+
+export interface DshMarketPage {
+  sourceUrl: string;
+  feedTitle?: DshLocalizedText | null;
+  feedDescription?: DshLocalizedText | null;
+  total: number;
+  totalInFeed: number;
+  fetchedAt?: number | null;
+  fromCache: boolean;
+  categories: DshMarketCategoryItem[];
+  items: DshMarketPluginItem[];
+  nextOffset?: number | null;
+  error?: string | null;
+}
+
+export interface DshMarketVersionEntry {
+  version: string;
+  publishTimestamp: number;
+  sourceType: string;
+  registry?: string | null;
+  gitUrl?: string | null;
+  gitCommit?: string | null;
+  gitPath?: string | null;
+  enginesDsh?: string | null;
+  compatible: boolean;
+  exempted: boolean;
+}
+
+export interface DshMarketDetail {
+  name: string;
+  runtimeVersion: string;
+  title?: DshLocalizedText | null;
+  description?: DshLocalizedText | null;
+  icon?: string | null;
+  author?: string | null;
+  homepage?: string | null;
+  repository?: { url: string; directory?: string } | null;
+  category?: string | null;
+  categoryTitle?: DshLocalizedText | null;
+  keywords: string[];
+  versions: DshMarketVersionEntry[];
+  defaultVersion?: string | null;
+  latestVersion?: string | null;
+  compatible: boolean;
+  exempted: boolean;
+  compatibilityIssue?: string | null;
+  installed: boolean;
+  enabled: boolean;
+  installedVersion?: string | null;
+  hasBundle?: boolean | null;
+  hasClient?: boolean | null;
+  readme?: string | null;
+  readmeOrigin?: string | null;
+  readmeError?: string | null;
+}
+
+export interface DshMarketInstallRequest {
+  nameOrSpec: string;
+  version?: string;
+  registry?: string;
+  sourceUrl?: string;
+  acceptIncompatible?: boolean;
+}
+
 export interface AgentExtensionConfig {
   revision: number;
   mcp: Record<string, unknown>;

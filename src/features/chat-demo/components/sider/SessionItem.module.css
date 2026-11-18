@@ -1,0 +1,88 @@
+.item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  height: 36px;
+  padding: 6px 6px 6px 10px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--dsw-alias-label-primary);
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+
+  &.active {
+    background-color: var(--dsw-specific-sidebar-nav-item-active-accent);
+    color: var(--dsw-alias-brand-primary-invert);
+    font-weight: 500;
+  }
+
+  @media (hover: hover) {
+    &:not(.active):hover {
+      background-color: var(--dsw-specific-sidebar-nav-item-hover);
+    }
+
+    &:hover,
+    &.active {
+      .action {
+        display: flex;
+      }
+    }
+  }
+}
+
+.title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  line-height: 18px;
+}
+
+.action {
+  display: none;
+  flex-shrink: 0;
+  margin-left: 4px;
+}
+
+.renameInput {
+  box-sizing: border-box;
+  width: 100%;
+  height: 40px;
+  padding: 0 10px;
+  border-radius: 12px;
+  border: 1px solid var(--dsw-alias-brand-primary);
+  background-color: var(--dsw-specific-input-major);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 14px;
+  outline: none;
+}
+
+@media (hover: none) {
+  .action {
+    display: flex;
+  }
+}
+
+@media not all and (min-width: 768px) {
+  .item {
+    height: 44px;
+    padding: 11px 6px 11px 12px;
+    border-radius: 16px;
+    font-size: 16px;
+  }
+
+  .title {
+    line-height: 22px;
+  }
+
+  .renameInput {
+    height: 44px;
+    padding: 0 12px;
+    border-radius: 16px;
+    font-size: 16px;
+  }
+}

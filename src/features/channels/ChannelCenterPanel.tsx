@@ -61,6 +61,7 @@ import {
 import { ManagedChannelLoginPanel } from "./ManagedChannelLoginPanel";
 import { NativeSubscriptionLoginPanel } from "./NativeSubscriptionLoginPanel";
 import { ChannelConnectionPanel } from "./ChannelConnectionPanel";
+import { ChannelGatewayPanel } from "./ChannelGatewayPanel";
 import { ChannelModelList } from "./ChannelModelList";
 import { AppsPage } from "@/features/apps/AppsPage";
 import "./channels.css";
@@ -100,6 +101,7 @@ export function ChannelCenterPanel({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [response, setResponse] = useState<ChannelApplyResponse | null>(null);
+  const [connectionRefresh, setConnectionRefresh] = useState(0);
   const [preset, setPreset] = useState("deepseek");
   const [sourceProtocol, setSourceProtocol] = useState<ChannelProtocol>(
     CHANNEL_PRESET_MAP.deepseek.protocol,
@@ -542,6 +544,40 @@ export function ChannelCenterPanel({
 
   const selected = selectedChannelModels(snapshot);
   const disabled = loading || loadFailed || Boolean(busy) || accountBusy;
+  const gatewayDisabled =
+    disabled ||
+    conflict ||
+    dirty ||
+    formTouched ||
+    saving ||
+    !selected.some(
+      ({ channel }) =>
+        channel.authKind !== "claude_subscription" &&
+        channel.authKind !== "gemini_subscription" &&
+        channel.authKind !== "lolicode_account",
+    );
+  const setToolConnection = async (
+    target: ChannelConnection["app"],
+    mode: "native" | "lolicode",
+  ) => {
+    let result: ChannelConnection | undefined;
+    await run(
+      `connection-${target}`,
+      async () => {
+        const saved =
+          mode === "lolicode" ? await persist() : snapshotRef.current;
+        result = await channelCenterApi.setConnection(
+          target,
+          mode,
+          saved.revision,
+        );
+        if (mounted.current) setConnectionRefresh((value) => value + 1);
+      },
+      false,
+      mode === "native",
+    );
+    return result;
+  };
   const selectedPreset = CHANNEL_PRESET_MAP[preset];
   const selectedAccountPreset = ACCOUNT_CHANNEL_PRESET_MAP[preset];
   const filteredChannels = snapshot.channels.map((channel) => ({
@@ -1116,6 +1152,16 @@ export function ChannelCenterPanel({
           )}
         </section>
 
+        <ChannelGatewayPanel
+          disabled={disabled || saving}
+          routeDisabled={gatewayDisabled}
+          revision={snapshot.revision}
+          refreshToken={connectionRefresh}
+          onConnect={async () =>
+            Boolean(await setToolConnection("claude", "lolicode"))
+          }
+        />
+
         <section className={CARD} aria-labelledby="channel-target-heading">
           <h2
             id="channel-target-heading"
@@ -1173,7 +1219,10 @@ export function ChannelCenterPanel({
                   setResponse(null);
                   const saved = await persist();
                   const result = await channelCenterApi.apply(saved.revision);
-                  if (mounted.current) setResponse(result);
+                  if (mounted.current) {
+                    setResponse(result);
+                    setConnectionRefresh((value) => value + 1);
+                  }
                 })
               }
             >
@@ -1196,37 +1245,9 @@ export function ChannelCenterPanel({
           </div>
           <ChannelConnectionPanel
             disabled={Boolean(busy) || accountBusy || saving}
-            routeDisabled={
-              disabled ||
-              conflict ||
-              dirty ||
-              formTouched ||
-              saving ||
-              !selected.some(
-                ({ channel }) =>
-                  channel.authKind !== "claude_subscription" &&
-                  channel.authKind !== "gemini_subscription",
-              )
-            }
-            refreshToken={response}
-            onSet={async (target, mode) => {
-              let result: ChannelConnection | undefined;
-              await run(
-                `connection-${target}`,
-                async () => {
-                  const saved =
-                    mode === "lolicode" ? await persist() : snapshotRef.current;
-                  result = await channelCenterApi.setConnection(
-                    target,
-                    mode,
-                    saved.revision,
-                  );
-                },
-                false,
-                mode === "native",
-              );
-              return result;
-            }}
+            routeDisabled={gatewayDisabled}
+            refreshToken={connectionRefresh}
+            onSet={setToolConnection}
           />
           {response && (
             <div className="mt-5 space-y-2" aria-live="polite">

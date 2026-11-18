@@ -89,6 +89,17 @@ export interface ChannelConnection {
   message?: string | null;
 }
 
+export interface ChannelGatewayStatus {
+  running: boolean;
+  baseUrl: string | null;
+  revision: number | null;
+  savedRevision: number;
+  modelCount: number;
+  defaultModel: string | null;
+  totalRequests: number;
+  activeConnections: number;
+}
+
 export type ZhipuLoginProvider = "bigmodel" | "zai";
 
 export interface ZhipuLoginFlow {
@@ -114,6 +125,18 @@ export const channelCenterApi = {
   apply: (expectedRevision?: number) =>
     invoke<ChannelApplyResponse>("apply_channel_center", { expectedRevision }),
   getConnections: () => invoke<ChannelConnection[]>("get_channel_connections"),
+  getGatewayStatus: () =>
+    invoke<ChannelGatewayStatus>("get_channel_gateway_status"),
+  startGateway: (expectedRevision?: number) =>
+    invoke<ChannelGatewayStatus>("start_channel_gateway", { expectedRevision }),
+  getGatewayClaudeConfig: () =>
+    invoke<Record<string, unknown>>("get_channel_gateway_claude_config"),
+  checkGateway: () => invoke<ChannelGatewayStatus>("check_channel_gateway"),
+  openGatewayClaude: () =>
+    invoke<boolean>("open_provider_terminal", {
+      app: "claude",
+      providerId: "tai-channel-gateway",
+    }),
   setConnection: (
     target: ChannelConnection["app"],
     mode: "native" | "lolicode",

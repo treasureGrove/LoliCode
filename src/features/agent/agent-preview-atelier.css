@@ -341,8 +341,6 @@
   margin: 0 14px 14px;
   padding: 12px;
   overflow: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--atelier-champagne) transparent;
   border: 1px solid var(--preview-rule);
   border-radius: 10px;
   background: var(--atelier-toolbar, var(--wb-hover));

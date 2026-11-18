@@ -103,6 +103,11 @@ fn is_gateway(app: &AppType, live: &Value) -> bool {
             let path = url.path().trim_end_matches('/');
             let catalog = path.strip_prefix("/tai/catalogs/").is_some_and(|suffix| {
                 let revision = suffix.strip_suffix("/v1").unwrap_or(suffix);
+                let revision = if *app == AppType::Claude {
+                    revision.strip_suffix("/clients/claude").unwrap_or(revision)
+                } else {
+                    revision
+                };
                 !revision.is_empty() && revision.bytes().all(|byte| byte.is_ascii_digit())
             });
             loopback && url.scheme() == "http" && (matches!(path, "/tai" | "/tai/v1") || catalog)

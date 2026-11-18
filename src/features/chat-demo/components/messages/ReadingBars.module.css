@@ -1,0 +1,330 @@
+.bars {
+  display: block;
+}
+
+.loading .bar {
+  fill: var(--dsw-static-neutral-300);
+}
+
+[data-ds-dark-theme] {
+  .loading .bar {
+    fill: var(--dsw-static-neutral-550);
+  }
+}
+
+.sweep {
+  fill: #000;
+  fill-opacity: 0;
+  animation-duration: 1.5s;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+.sweep1 {
+  animation-name: tts-sweep-1;
+}
+
+.sweep2 {
+  animation-name: tts-sweep-2;
+}
+
+.sweep3 {
+  animation-name: tts-sweep-3;
+}
+
+.sweep4 {
+  animation-name: tts-sweep-4;
+}
+
+@keyframes tts-sweep-1 {
+  0% {
+    fill-opacity: 0.4;
+  }
+
+  4.17% {
+    fill-opacity: 0.38;
+  }
+
+  8.33% {
+    fill-opacity: 0.325;
+  }
+
+  12.5% {
+    fill-opacity: 0.25;
+  }
+
+  16.67% {
+    fill-opacity: 0.174;
+  }
+
+  20.83% {
+    fill-opacity: 0.109;
+  }
+
+  25% {
+    fill-opacity: 0.061;
+  }
+
+  29.17% {
+    fill-opacity: 0.031;
+  }
+
+  33.33% {
+    fill-opacity: 0.014;
+  }
+
+  37.5% {
+    fill-opacity: 0.006;
+  }
+
+  41.67% {
+    fill-opacity: 0.002;
+  }
+
+  45.83%,
+  100% {
+    fill-opacity: 0;
+  }
+}
+
+@keyframes tts-sweep-2 {
+  0% {
+    fill-opacity: 0.014;
+  }
+
+  4.17% {
+    fill-opacity: 0.031;
+  }
+
+  8.33% {
+    fill-opacity: 0.061;
+  }
+
+  12.5% {
+    fill-opacity: 0.109;
+  }
+
+  16.67% {
+    fill-opacity: 0.174;
+  }
+
+  20.83% {
+    fill-opacity: 0.25;
+  }
+
+  25% {
+    fill-opacity: 0.325;
+  }
+
+  29.17% {
+    fill-opacity: 0.38;
+  }
+
+  33.33% {
+    fill-opacity: 0.4;
+  }
+
+  37.5% {
+    fill-opacity: 0.38;
+  }
+
+  41.67% {
+    fill-opacity: 0.325;
+  }
+
+  45.83% {
+    fill-opacity: 0.25;
+  }
+
+  50% {
+    fill-opacity: 0.174;
+  }
+
+  54.17% {
+    fill-opacity: 0.109;
+  }
+
+  58.33% {
+    fill-opacity: 0.061;
+  }
+
+  62.5% {
+    fill-opacity: 0.031;
+  }
+
+  66.67% {
+    fill-opacity: 0.014;
+  }
+
+  70.83% {
+    fill-opacity: 0.006;
+  }
+
+  75% {
+    fill-opacity: 0.002;
+  }
+
+  79.17%,
+  100% {
+    fill-opacity: 0;
+  }
+}
+
+@keyframes tts-sweep-3 {
+  0%,
+  20.83% {
+    fill-opacity: 0;
+  }
+
+  25% {
+    fill-opacity: 0.002;
+  }
+
+  29.17% {
+    fill-opacity: 0.006;
+  }
+
+  33.33% {
+    fill-opacity: 0.014;
+  }
+
+  37.5% {
+    fill-opacity: 0.031;
+  }
+
+  41.67% {
+    fill-opacity: 0.061;
+  }
+
+  45.83% {
+    fill-opacity: 0.109;
+  }
+
+  50% {
+    fill-opacity: 0.174;
+  }
+
+  54.17% {
+    fill-opacity: 0.25;
+  }
+
+  58.33% {
+    fill-opacity: 0.325;
+  }
+
+  62.5% {
+    fill-opacity: 0.38;
+  }
+
+  66.67% {
+    fill-opacity: 0.4;
+  }
+
+  70.83% {
+    fill-opacity: 0.38;
+  }
+
+  75% {
+    fill-opacity: 0.325;
+  }
+
+  79.17% {
+    fill-opacity: 0.25;
+  }
+
+  83.33% {
+    fill-opacity: 0.174;
+  }
+
+  87.5% {
+    fill-opacity: 0.109;
+  }
+
+  91.67% {
+    fill-opacity: 0.061;
+  }
+
+  95.83% {
+    fill-opacity: 0.031;
+  }
+
+  100% {
+    fill-opacity: 0.014;
+  }
+}
+
+@keyframes tts-sweep-4 {
+  0%,
+  54.17% {
+    fill-opacity: 0;
+  }
+
+  58.33% {
+    fill-opacity: 0.002;
+  }
+
+  62.5% {
+    fill-opacity: 0.006;
+  }
+
+  66.67% {
+    fill-opacity: 0.014;
+  }
+
+  70.83% {
+    fill-opacity: 0.031;
+  }
+
+  75% {
+    fill-opacity: 0.061;
+  }
+
+  79.17% {
+    fill-opacity: 0.109;
+  }
+
+  83.33% {
+    fill-opacity: 0.174;
+  }
+
+  87.5% {
+    fill-opacity: 0.25;
+  }
+
+  91.67% {
+    fill-opacity: 0.325;
+  }
+
+  95.83% {
+    fill-opacity: 0.38;
+  }
+
+  100% {
+    fill-opacity: 0.4;
+  }
+}
+
+.playing {
+  animation: tts-settle 0.15s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.playing .bar {
+  fill: var(--dsw-alias-brand-primary);
+}
+
+@keyframes tts-settle {
+  from {
+    transform: scaleY(0.2857);
+  }
+
+  to {
+    transform: scaleY(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .playing,
+  .sweep {
+    animation: none;
+  }
+}

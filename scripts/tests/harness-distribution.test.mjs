@@ -11,7 +11,10 @@ import {
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { pruneHarnessSourceMaps } from "../build/harness-distribution.mjs";
+import {
+  pruneHarnessRedundantAssets,
+  pruneHarnessSourceMaps,
+} from "../build/harness-distribution.mjs";
 
 const sourceMap = JSON.stringify({
   version: 3,
@@ -95,4 +98,49 @@ test("rejects root and nested directory links before pruning any files", (t) => 
   assert.throws(() => pruneHarnessSourceMaps(link), /real directory/);
   // Remove only the owned link, never its target recursively.
   rmSync(link);
+});
+
+test("prunes redundant WASM kit, PDBs, non-target prebuilds and domino tests while preserving target runtime", (t) => {
+  const f = fixture(t);
+  const keep = [
+    f.put("@deepseek-ai/libreoffice-kit-win32-x64/package.json", "{}"),
+    f.put("@deepseek-ai/libreoffice-kit-win32-x64/prebuilds.json", "{}"),
+    f.put("@deepseek-ai/libreoffice-kit-win32-x64/bin/dsoffice.exe", "exe"),
+    f.put("node-pty/prebuilds/win32-x64/conpty.node", "node"),
+    f.put("node-pty/third_party/conpty/1.0/win10-x64/OpenConsole.exe", "con"),
+    f.put("@mixmark-io/domino/lib/index.js", "domino"),
+  ];
+  const removed = [
+    f.put("@deepseek-ai/libreoffice-kit-wasm/assets/dsoffice.wasm", "wasm"),
+    f.put("node-pty/prebuilds/win32-x64/conpty.pdb", "pdb"),
+    f.put("node-pty/prebuilds/win32-arm64/conpty.node", "arm"),
+    f.put("node-pty/third_party/conpty/1.0/win10-arm64/OpenConsole.exe", "arm"),
+    f.put("@mixmark-io/domino/test/html5lib-tests.json", "test"),
+    f.put("@mixmark-io/domino/.yarn/plugins/p.cjs", "yarn"),
+  ];
+  const report = pruneHarnessRedundantAssets(f.modules, {
+    platform: "win32",
+    arch: "x64",
+  });
+  assert.equal(report.removedFiles, removed.length);
+  for (const file of keep) assert(existsSync(file), file);
+  for (const file of removed) assert(!existsSync(file), file);
+  assert(
+    !existsSync(path.join(f.modules, "@deepseek-ai/libreoffice-kit-wasm")),
+  );
+  assert(!existsSync(path.join(f.modules, "@mixmark-io/domino/test")));
+});
+
+test("preserves libreoffice-kit-wasm when native engine for target platform is absent", (t) => {
+  const f = fixture(t);
+  const wasm = f.put(
+    "@deepseek-ai/libreoffice-kit-wasm/assets/dsoffice.wasm",
+    "wasm",
+  );
+  const report = pruneHarnessRedundantAssets(f.modules, {
+    platform: "linux",
+    arch: "x64",
+  });
+  assert.equal(report.removedFiles, 0);
+  assert(existsSync(wasm));
 });

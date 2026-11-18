@@ -16,24 +16,30 @@
 }
 
 :root .lolicode-workbench.wb-unified .wb-sidebar {
-  --wb-sidebar: var(--bg-sidebar);
-  --wb-input: var(--bg-card);
-  --wb-panel: var(--bg-card);
-  --wb-text: var(--text-1);
-  --wb-muted: var(--text-3);
-  --wb-border: hsl(var(--border));
-  --wb-hover: var(--bg-subtle);
-  --wb-selected: var(--bg-selected);
-  --wb-accent: var(--action-text);
-  --wb-accent-soft: var(--action-soft);
+  --wb-sidebar: #66172d;
+  --wb-input: rgb(34 6 15 / 34%);
+  --wb-panel: #581226;
+  --wb-text: #fff6f2;
+  --wb-muted: rgb(252 222 230 / 70%);
+  --wb-border: rgb(255 224 226 / 16%);
+  --wb-hover: rgb(255 246 242 / 10%);
+  --wb-selected: rgb(255 246 242 / 19%);
+  --wb-accent: #fff8f4;
+  --wb-accent-soft: rgb(255 246 242 / 19%);
   margin: 0;
   padding: 0;
   border: 0;
   border-radius: 0;
-  background: var(--bg-sidebar);
+  background: linear-gradient(180deg, #741d35 0%, #61152b 54%, #4c0f21 100%);
+  color: #fff6f2;
   box-shadow: none;
   backdrop-filter: none;
   animation: none;
+}
+
+:root.dark .lolicode-workbench.wb-unified .wb-sidebar {
+  --wb-sidebar: #310b19;
+  background: linear-gradient(180deg, #431122 0%, #310b19 56%, #220712 100%);
 }
 
 :root .lolicode-workbench.wb-unified .wb-sidebar::before,
@@ -44,16 +50,25 @@
 
 :root .lolicode-workbench.wb-unified .wb-sidebar .wb-nav {
   padding: 0;
-  gap: 0;
+  gap: 6px;
 }
 
 :root .lolicode-workbench.wb-unified .wb-sidebar .wb-create-task {
   margin: 0;
-  color: var(--action-text);
+  color: #6b1931;
   border: 0;
-  border-radius: 10px;
-  background: transparent;
-  box-shadow: none;
+  border-radius: 12px;
+  background: #fff9f3;
+  box-shadow: 0 3px 10px rgb(34 6 14 / 20%);
+}
+
+:root.dark .lolicode-workbench.wb-unified .wb-sidebar .wb-create-task {
+  color: #fff8fa;
+  border: 1px solid rgb(255 212 225 / 22%);
+  background: linear-gradient(180deg, #a82d52 0%, #861f3f 100%);
+  box-shadow:
+    inset 0 1px 0 rgb(255 240 245 / 22%),
+    0 4px 12px rgb(10 2 6 / 38%);
 }
 
 :root
@@ -65,11 +80,23 @@
   min-height: 38px;
   padding: 9px 12px;
   font-size: var(--workspace-label);
-  font-weight: 500;
+  font-weight: 600;
+  color: #6b1931;
+}
+
+:root.dark
+  .lolicode-workbench.wb-unified
+  .wb-sidebar
+  .wb-create-task
+  > .wb-nav-create,
+:root.dark .lolicode-workbench.wb-unified .wb-sidebar .wb-create-task-options {
+  color: #fff7f2;
+  border-left-color: rgb(255 232 224 / 22%);
 }
 
 :root .lolicode-workbench.wb-unified .wb-sidebar .wb-create-task-options {
-  border-left: 0;
+  border-left: 1px solid rgb(107 25 49 / 14%);
+  color: #6b1931;
 }
 
 :root
@@ -81,30 +108,43 @@
   .lolicode-workbench.wb-unified
   .wb-sidebar
   .wb-create-task-options:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--action-text) 10%, var(--action-soft));
+  background: #f8ebef;
+  box-shadow: none;
+}
+
+:root.dark
+  .lolicode-workbench.wb-unified
+  .wb-sidebar
+  .wb-create-task
+  > .wb-nav-create:hover:not(:disabled),
+:root.dark
+  .lolicode-workbench.wb-unified
+  .wb-sidebar
+  .wb-create-task-options:hover:not(:disabled) {
+  background: rgb(255 240 245 / 10%);
   box-shadow: none;
 }
 
 :root .lolicode-workbench.wb-unified .wb-sidebar .wb-search {
   flex-shrink: 0;
-  margin: 2px 0 18px;
+  margin: 2px 0 16px;
   padding: 8px 10px;
   min-height: 34px;
-  background: color-mix(in srgb, var(--bg-card) 65%, transparent);
-  border: 1px solid hsl(var(--border) / 0.7);
-  border-radius: 9px;
+  background: rgb(32 5 14 / 32%);
+  border: 1px solid rgb(255 224 226 / 16%);
+  border-radius: 10px;
   font-size: var(--workspace-caption);
+  color: rgb(252 222 230 / 76%);
 }
 
 :root .lolicode-workbench.wb-unified .wb-sidebar .wb-search:focus-within {
-  border-color: var(--action-text);
-  box-shadow: 0 0 0 2px var(--action-soft);
+  border-color: #e6c387;
+  box-shadow: 0 0 0 2px rgb(230 195 135 / 22%);
 }
 
 :root .lolicode-workbench.wb-unified .wb-sidebar .wb-projects {
   min-height: 0;
-  padding: 0 0 12px;
-  scrollbar-width: thin;
+  padding: 2px 6px 16px;
 }
 
 :root .lolicode-workbench.wb-unified .wb-sidebar .wb-section-label {
@@ -112,7 +152,7 @@
   align-items: center;
   gap: 5px;
   padding: 4px 5px 12px;
-  color: var(--text-3);
+  color: rgb(252 222 230 / 68%);
   font-size: var(--workspace-caption);
   letter-spacing: 0;
 }
@@ -137,7 +177,7 @@
   min-height: 34px;
   margin: 0;
   border: 0;
-  color: var(--text-2);
+  color: rgb(255 245 242 / 90%);
 }
 
 :root
@@ -151,25 +191,34 @@
 :root .lolicode-workbench.wb-unified .wb-sidebar .wb-workspace-sessions {
   margin-left: 13px;
   padding: 3px 0 3px 8px;
-  border-left: 1px solid hsl(var(--border));
+  border-left: 1px solid rgb(255 224 226 / 18%);
 }
 
 :root .lolicode-workbench.wb-unified .wb-sidebar .wb-session-row {
   min-height: 34px;
   padding: 9px 28px 9px 10px;
-  border-radius: 7px;
+  border-radius: 9px;
   font-size: var(--workspace-caption);
-  color: var(--text-2);
+  color: rgb(255 240 236 / 84%);
 }
 
 :root
   .lolicode-workbench.wb-unified
   .wb-sidebar
   .wb-session-row[aria-pressed="true"] {
-  background: var(--action-soft);
-  color: var(--action-text);
-  box-shadow: none;
-  font-weight: 500;
+  background: var(--wb-selected);
+  color: #fff9f4;
+  font-weight: 550;
+  box-shadow: inset 0 0 0 1px rgb(255 232 224 / 24%);
+}
+
+:root
+  .lolicode-workbench.wb-unified
+  .wb-sidebar
+  .wb-nav-button[data-nav-active="true"] {
+  background: var(--wb-selected);
+  color: #fff9f4;
+  box-shadow: inset 0 0 0 1px rgb(230 195 135 / 42%);
 }
 
 :root
@@ -177,8 +226,8 @@
   .wb-sidebar
   .wb-session-row[aria-pressed="true"]
   ~ .wb-session-menu {
-  background: var(--action-soft);
-  color: var(--action-text);
+  background: rgb(255 246 242 / 19%);
+  color: #fff9f4;
 }
 
 :root .lolicode-workbench.wb-unified .wb-main {
@@ -363,8 +412,65 @@
 
 :root .lolicode-workbench.wb-unified .wb-chat {
   padding: 20px 18px 24px;
-  scrollbar-gutter: stable;
-  scrollbar-width: thin;
+}
+
+:root .lolicode-workbench.wb-unified p.wb-notice {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 8px;
+  max-width: calc(100% - 36px);
+  margin: 12px 18px 2px;
+  padding: 6px 12px;
+  border: 1px solid hsl(var(--border) / 0.72);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-subtle) 84%, transparent);
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+:root .lolicode-workbench.wb-unified div.wb-notice {
+  margin: 12px 18px 2px;
+}
+
+:root .lolicode-workbench.wb-unified .wb-changes {
+  width: min(840px, calc(100% - 36px));
+  margin: 6px auto 12px;
+  border: 1px solid hsl(var(--border) / 0.85);
+  border-radius: 9px;
+  background: var(--bg-card);
+  box-shadow: var(--shadow-sm);
+}
+
+:root .lolicode-workbench.wb-unified .wb-changes > summary {
+  padding: 9px 14px;
+  font-size: 12.5px;
+}
+
+:root .lolicode-workbench.wb-unified ::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+:root .lolicode-workbench.wb-unified ::-webkit-scrollbar-track,
+:root .lolicode-workbench.wb-unified ::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+:root .lolicode-workbench.wb-unified ::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 9999px;
+  background-clip: padding-box;
+  background-color: color-mix(in srgb, var(--text-3) 26%, transparent);
+}
+
+:root .lolicode-workbench.wb-unified *:hover::-webkit-scrollbar-thumb {
+  background-color: color-mix(in srgb, var(--text-3) 44%, transparent);
+}
+
+:root .lolicode-workbench.wb-unified ::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in srgb, var(--text-2) 64%, transparent);
 }
 
 :root .lolicode-workbench.wb-unified .wb-chat-content {

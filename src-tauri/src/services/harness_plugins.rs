@@ -11,25 +11,40 @@ use std::{
 };
 use tauri::{AppHandle, Manager};
 
-const BUNDLES: [(&str, &str); 2] = [
+const BUNDLES: [(&str, &str); 7] = [
     ("terminal", "@deepseek-ai/dsh-experimental-terminal-bundle"),
     ("ralph", "@deepseek-ai/dsh-experimental-ralph-bundle"),
+    ("session-search", "@deepseek-ai/dsh-experimental-session-search"),
+    ("session-titles", "@deepseek-ai/dsh-experimental-session-titles-bundle"),
+    ("badge-skill", "@deepseek-ai/dsh-experimental-badge-skill-bundle"),
+    ("worktree", "@deepseek-ai/dsh-experimental-tool-worktree"),
+    ("auto-review", "@deepseek-ai/dsh-experimental-auto-review"),
 ];
 static SELECTION_WRITE: Mutex<()> = Mutex::new(());
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq, Serialize)]
 pub(super) struct PluginSelection {
     enabled: BTreeSet<String>,
+    #[serde(default)]
+    marketplace: Vec<super::dsh_marketplace::SelectedMarketBundle>,
+}
+
+#[derive(Serialize)]
+struct PersistedPluginSelection<'a> {
+    enabled: &'a BTreeSet<String>,
 }
 
 impl PluginSelection {
     pub(super) fn load(profile: &Path) -> Result<Self, String> {
-        match fs::read(selection_file(profile)) {
+        let mut selection = match fs::read(selection_file(profile)) {
             Ok(bytes) => serde_json::from_slice(&bytes)
-                .map_err(|_| "Harness 插件配置无效，原文件已保留".into()),
-            Err(error) if error.kind() == ErrorKind::NotFound => Ok(Self::default()),
-            Err(_) => Err("无法读取 Harness 插件配置".into()),
-        }
+                .map_err(|_| "Harness 插件配置无效，原文件已保留".to_owned())?,
+            Err(error) if error.kind() == ErrorKind::NotFound => Self::default(),
+            Err(_) => return Err("无法读取 Harness 插件配置".into()),
+        };
+        selection.marketplace =
+            super::dsh_marketplace::selected_bundles(profile).unwrap_or_default();
+        Ok(selection)
     }
 
     pub(super) fn patches(&self, paths: &HarnessPaths) -> Vec<PathBuf> {
@@ -39,17 +54,21 @@ impl PluginSelection {
             .filter_map(|(_, package)| available_bundle(paths, package).map(|(patch, _)| patch))
             .collect()
     }
+
+    pub(super) fn sync_home(&self, profile: &Path, home: &Path) -> Result<(), String> {
+        super::dsh_marketplace::sync_home_sdk_profile(profile, home, &self.marketplace)
+    }
 }
 
 fn selection_file(profile: &Path) -> PathBuf {
     profile.join("agent/harness-plugins.json")
 }
 
-#[derive(Deserialize, Serialize)]
-struct PackageInfo {
-    name: String,
-    description: String,
-    version: String,
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub(crate) struct PackageInfo {
+    pub(crate) name: String,
+    pub(crate) description: String,
+    pub(crate) version: String,
 }
 
 fn available_bundle(paths: &HarnessPaths, package: &str) -> Option<(PathBuf, PackageInfo)> {
@@ -60,19 +79,19 @@ fn available_bundle(paths: &HarnessPaths, package: &str) -> Option<(PathBuf, Pac
         .then_some((patch, manifest))
 }
 
-#[derive(Serialize)]
-struct BundleEntry {
-    id: &'static str,
+#[derive(Clone, Debug, Serialize)]
+pub(crate) struct BundleEntry {
+    pub(crate) id: &'static str,
     #[serde(flatten)]
-    package: PackageInfo,
-    enabled: bool,
+    pub(crate) package: PackageInfo,
+    pub(crate) enabled: bool,
 }
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct PluginCatalog {
-    bundles: Vec<BundleEntry>,
-    pending_reload: bool,
+    pub(crate) bundles: Vec<BundleEntry>,
+    pub(crate) pending_reload: bool,
 }
 
 fn read_or_update(
@@ -106,8 +125,13 @@ fn read_or_update(
             } else {
                 selection.enabled.remove(&id);
             }
-            config::write_json_file_private(&selection_file(profile), &selection)
-                .map_err(|_| "无法保存 Harness 插件配置")?;
+            config::write_json_file_private(
+                &selection_file(profile),
+                &PersistedPluginSelection {
+                    enabled: &selection.enabled,
+                },
+            )
+            .map_err(|_| "无法保存 Harness 插件配置")?;
             bundle.enabled = enabled;
         }
     }
@@ -120,15 +144,16 @@ pub(crate) async fn catalog(
 ) -> Result<PluginCatalog, String> {
     let paths = HarnessPaths::resolve(app)?;
     let profile = config::get_app_config_dir();
+    let changed = change.is_some();
     let (selection, bundles) =
         tokio::task::spawn_blocking(move || read_or_update(&profile, &paths, change))
             .await
             .map_err(|_| "Harness 插件配置读取未完成")??;
-    let pending_reload = app
-        .state::<InprocessAgentState>()
-        .harness
-        .plugin_reload_pending(&selection)
-        .await;
+    let harness = &app.state::<InprocessAgentState>().harness;
+    if changed {
+        let _ = harness.retire_idle(None).await;
+    }
+    let pending_reload = harness.plugin_reload_pending(&selection).await;
     Ok(PluginCatalog {
         bundles,
         pending_reload,
@@ -165,7 +190,7 @@ mod tests {
 
         let (initial, bundles) = read_or_update(&profile, &paths, None).unwrap();
         assert!(initial.patches(&paths).is_empty());
-        assert_eq!(bundles.len(), 2);
+        assert_eq!(bundles.len(), BUNDLES.len());
         assert!(!selection_file(&profile).exists());
         assert!(read_or_update(&profile, &paths, Some(("../arbitrary".into(), true))).is_err());
         assert!(!selection_file(&profile).exists());

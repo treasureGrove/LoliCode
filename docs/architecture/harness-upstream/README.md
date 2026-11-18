@@ -1,6 +1,6 @@
 # Harness 上游能力核对记录
 
-每次巡检先读 `last-check.json`，再读取其中按上游提交引用的清单。当前基线为官方 `0.2.2-rc.1` / `66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db`。版本、源码标签和 npm tarball 摘要已交叉核对；完整性一致不等于所有客户端能力已接入。
+每次巡检先读 `last-check.json`，再读取其中按上游提交引用的清单。当前基线为官方 `0.2.2-rc.2` / `ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c`。版本、源码标签和 npm tarball 摘要已交叉核对；完整性一致不等于所有客户端能力已接入。
 
 Harness 清单记录运行配置、宿主覆盖层、数据边界、公开能力对应的 LoliCode 入口和验收方法。SuperAgent 单独记录最初参考提交及任务报告参考提交。后续升级应保留旧档，另建目标提交的清单，覆盖中间发布，而不是覆盖基线。
 
@@ -46,3 +46,35 @@ Harness 清单记录运行配置、宿主覆盖层、数据边界、公开能力
 同轮补做显式 `prepare-lolicode-harness-runtime.mjs --bundle`，确认内置asset与当前宿主源码SHA一致，并用实际内置node.exe/官方包/归档CLI通过8项V3树验收。默认准备仅安装SDK依赖，不能据其认定内置asset已更新。该8项属于命令行验收，不能替代原生保存/取消或完整Windows流程；候选继续隔离。
 
 2026-11-09 上午巡检无合格更高版本，dev / ab870bc7f与18项隔离源码指纹未变。跟进第4条“收起后仅最终回复”：固定上游4份源码已核对blob SHA，5项纯客户端契约测试覆盖16种独立偏好组合、默认/旧值、原生轮次强制展开及订阅清理。源码对比确认当前消息视图未暴露原生Turn/Step/seq及每轮结束原因，不能用“每个用户消息之间只留最后一段”代替上游过程折叠。已细化兼容投影、偏好与流式/后台/插入/部分历史验收要求；状态保持partial，没有实现或同步该功能。纯上游契约验收不等于LoliCode界面可用，原生Windows门禁仍待通过。
+
+2026-11-09 下午巡检实际已是 `feature/repository-organization` / `6ec06fbfc`，不是dev，且原生会话复用代码在本轮持续修改。未切分支或写产品代码。官方仍0.2.2-rc.1，126条原文及包摘要一致。独立stock SDK中通过1个被动follow专项：16条原生事件、双订阅完全相同的增量、关闭一个不影响另一个、新snapshot含未见后缀、冷进程和缺失会话拒绝均验证，无Agent/模型/HTTP监听，读取不改fixture日志。未测试当前分支helper或实验预览，也未验证客户端RemoteJournal断线补齐或真实Assistant流。新增原生控制器能力项并细化第119条；优先官方事件/投影契约，不以扩张旧DTO代替复用。旧18项候选源码未变，但基线已落后当前整改，未来须基于已合入dev的最新代码重新对齐，不得覆盖新reader或恢复已退役引擎。
+
+2026-11-09 晚间巡检仍无合格新版。当前已提交基线为feature/repository-organization / a6dbceb8b，产品源码干净，仅保留4份审计改动。已从该实际提交新建D盘隔离工作树，未用旧候选代替当前代码：运行时准备/内置打包、SDK30项、原生聊天组件/Hook/通道53项及typecheck通过；内置native helper与源码SHA一致，实际内置冷读缺失会话的exit=2契约也通过。当前默认聊天已读官方wire事件和Assistant attempt，原先旧DTO缺失不再是该路径的前提；完整官方UI Chat仍未挂载。原生Windows门禁因已复核的管理员shell前提未重跑，无真实UI或v1.0.6升级验收。非dev分支不写产品更新，旧ZIP/cwd候选仍需在最新dev兼容对齐后再验收，未推送或发布。
+
+2026-11-10 凌晨巡检仍无合格新版，feature/repository-organization / a6dbceb8b及12项当前/18项旧候选源码指纹未变。本轮用实际内置Node/native helper通过9项限定历史读取检查：5项项目内V0–V3历史及中断轮次、3项上游明确拒绝的chronology样本、1项无cwd日志的上游地址限制。V3固定水位分页4页合回23条事件，两次冷进程结果一致，源bytes/mtime/文件集不变，读取不发布后继。独立projections接口在migration-required存储上返回无当前水位的cache hints；无cwd的有效日志可由persistence读，但官方controller按源码返回not-found，不能据此断言数据删除，也不能给用户日志补cwd绕过。边界源码/初始探针及最终证据均保留；没有真实用户数据、Windows UI或v1.0.6覆盖升级验收，未同步产品代码。
+
+2026-11-10 上午巡检：官方发布/npm仍为0.2.2-rc.1（66491b05），SuperAgent公开提交未变；实际feature/repository-organization/a6db，非dev不写产品。新增明文历史存储专项10项通过，必须分开理解：测试专用SDK组合显式compression=none后5类V0–V3样本只读成功、3类chronology预期拒绝、1类cwd-less地址限制；另1项确认真实未修改冷读取CLI固定默认zstd，对有效plain目录返回编码不匹配。上游要求一个root一种encoding，禁止把转换、mixed-root fallback或dual-write当作可复用能力。独立冷进程与固定cut四页23事件一致，源bytes/mtime/文件集保持不变、读取不发布后继。配置模式接入仍属宿主缺口，不能把SDK专用组合通过写成产品支持；用户数据、Windows UI、附件目录与v1.0.6覆盖安装仍待验证。证据和两次初始探针均保留在1110-morning，fullParity=false，产品源码/锁文件未改、未切分支或同步。
+
+2026-11-10 下午巡检：官方发布/npm仍0.2.2-rc.1，SuperAgent无公开变化。实际feature/repository-organization已到c7214fd，初始34份dirty/untracked，含渠道/gateway/warm及SDK工作；不改活动产品、不切分支。a6db匹配隔离证据不再代表当前源码；新的冷读取已改用独立official-service composition，源审计不等于运行验收。使用旧隔离树中未修改的同版官方依赖，仅验证stock附件seam的4个子用例（5个test nodes/5个独立进程）：规范化图片与流式文件重启可读、只读和拒绝不改对象、无效batch不发布、完整stream检测自建fixture损坏且不修复。无LoliCode host/Agent/model/HTTP或用户数据，未验证历史会话、eager upload/receipt、真实视觉或Windows/覆盖安装。当前产品/旧候选仍须dev新基线隔离和全部门禁；未同步/提交/推送/发布，fullParity=false。
+
+2026-11-10 晚间仍无合格新版，实际feature/repository-organization/08b870154。为避免用a6db旧源码代替当前整改，已新建D盘08b精确隔离树并带入15份非审计WIP源码/文档/测试，排除用户数据和构建缓存。官方runtime准备/bundle、全部5个SDK测试文件（42项）、typecheck与3文件55项组件/hook检查通过；当前内置专用reader重验Zstd历史9项（5支持+3拒绝+1cwd限制）及V4附件ref专项3项/2子用例。正常重读保持source不变；只删自身合成image后仍保留相同历史ref，store明确NOT_FOUND，不能算实际媒体展示/模型送图或historical附件catalog已通过。初次类型检查早于runtime依赖安装完成，安装后复跑通过、原日志保留。当前管理员上下文仍阻止现有WebView2原生验收，未构建/重复尝试；用户渠道/真实历史/v1.0.6安装与旧ZIP/cwd候选门禁仍待，fullParity=false。没有产品源码或版本修改、目标分支切换或同步、提交/推送/发布。
+
+2026-11-11 凌晨仍无合格新版本，08b870及19份已有dirty/untracked未变，现有隔离快照15份携带/9份native源码指纹仍匹配。本轮不重复既有回归或原生失败前提，只核对官方data-only bundle API和本地静态注册，新增按发布commit归档的66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db-bundles.json：15个optional+3个on-demand共18项，2项已有terminal/Ralph宿主入口；其余13个optional及两个无平台声明的外部子代理有15项接线/激活/真实功能待办。官方CUA catalog声明仅darwin且默认隐藏，在Windows单列上游平台限制，不记已同步，也不算Windows待补开关。未导入provider或执行patch/安装/启用插件；包存在、stock SDK template、隐藏与真实active状态分开记录。experimental从pending-audit变为partial仅表示catalog出处和状态已逐项核对，真实激活/UI/图展开及用户数据/安装门禁仍未通过，fullParity=false。
+
+2026-11-11 上午巡检：官方仍无合格新版本，feature/repository-organization/08b870及现有隔离基线未变。核对固定7份官方Web/Electron源码Git blob，归档8类与LoliCode宿主/前端的对照及复验方法；Web patch的119个distinct ID只是静态声明/覆盖，不是活跃服务数。用同版原样官方bundle和合成HOME在本地回环运行stock Web，正常启动凭据交换、HTML及同源JS入口200通过；未持久化临时凭据、未执行JS/打开浏览器/调用模型，初次readiness超时与带脱敏诊断的通过重试均保留。官方Electron私有Host与Tauri/SDK载体分开，轨迹、右栏、手机、权限/后台与总秘书原生交付仍需真实验收；public-clients只改partial，fullParity=false。无产品源码/版本修改、启用插件、同步、切分支、推送或发布。
+
+2026-11-11 下午巡检确认官方仍为 0.2.2-rc.1，当前隔离源码与检出一致。引用文本三项专项通过。固定上游格式化和识别函数保留多行内容与原始 UTF-16 偏移。现有草稿账本保留请求 ID，并保护发送期间的新编辑。三条合成引用在六次本地模拟模型请求和 SDK 退出后的原生历史冷读中保持一致。选区、原子编辑、预览、实际发送重试和队列撤回仍待验收，引用状态保留为 `needs-host-ui`。
+
+2026-11-11 晚间发现 GitHub 已发布 `0.2.2-rc.2`，标签指向 `ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c`。两次核对均见 npm 包索引缺少该版本，精确版本接口返回 404，因此可安装基线仍为 `0.2.2-rc.1`。候选提交的 76 条发布说明、17 个验收方向及 12 对固定源码已归档至 [`ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c.json`](./ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c.json)。优先复验具名子代理与 Team 的共享会话、MCP 管理、提交去重、工作树归档清理和 Windows 目录授权。候选按需目录已移除旧 CUA 条目，分发和平台范围待核实。取得官方 npm 精确版本与完整性摘要后进入隔离升级验收。
+
+2026-11-12 凌晨复查 `0.2.2-rc.2`。GitHub 标签与上轮一致，npm 索引仍缺少精确版本，接口返回 404。七份固定源码补齐了 Computer Use 分发证据。该插件从按需安装移到随包提供的可选列表，默认关闭，清单仍只声明 `darwin`。候选归档第 71 条已记录 Windows 平台限制，第 76 条 Stagehand 仍独立验收。
+
+2026-11-12 上午复查。rc.2 官方标签仍为 ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c，npm 精确接口返回 404。九份固定源码确认 rc.2 的 Team 模式默认关闭，配置默认值仅用于新建根会话，历史会话按原状态恢复。SDK 要求通过根会话继续已有子任务。隔离副本的 rc.1 总秘书重启续作与停驻队列恢复测试均通过。候选包仍待官方 npm 发布，Team 和子任务兼容性留待候选桌面验收。
+
+2026-11-12 晚间复查。当前 dev 58223d59f 已由仓库提交升到官方 rc.2。隔离副本通过 48 项捆绑 SDK、373 项前端、33 项构建回归和类型检查，覆盖 rc.1 主会话与子任务续聊。SDK 验证了 Team 选择的持久化，桌面入口仍待验收。当前 Windows 进程处于提升状态，非提升 WebView2 验收待运行。未跟踪 CLI 的 rc.1 锁配合当前覆盖层时有 4 项失败，使用隔离 rc.2 运行时的 8 项均通过。 GitHub 与 npm 均指向当前 rc.2，SuperAgent 提交未变。能力状态和日志见 `last-check.json`。
+
+2026-11-13 凌晨复查。官方仍为 0.2.2-rc.2，SuperAgent 提交未变。隔离的独立 CLI 固定 rc.2 并从官方 npm 安装，8 项回归及 1 项 rc.1→rc.2 续聊通过。续聊保留会话 ID 和渠道配置字节。CLI 依赖变更保留在隔离副本，当前桌面验收仍等待非提升的 WebView2 环境。
+
+2026-11-13 上午复查。官方仍为 0.2.2-rc.2，SuperAgent 提交未变。隔离运行时验证 Office 技能加载、DOCX 转 PDF 和第 2 页渲染，文档查看器 29 项测试通过。Windows 桌面验收仍待运行。
+
+2026-11-14 凌晨复查。本地 dev ef27ea9b1 的 rc.2 开发版已重新编译安装，源码指纹和桌面快捷方式已核对。#26 一小时网关回归通过，#23 的 Plan/Goal 相关前端套件 225 项通过。#24 自主移动与 #25 对话质量仍开放。官方 rc.3 已在隔离副本通过运行时捆绑、49 项 SDK 与类型检查。官方导入路由已导入并重读合成会话，桌面入口及非提升 WebView2 验收仍待完成。rc.3 保留在 D:/lc-dsh-1114-rc3，产品源码和用户修改均保留。

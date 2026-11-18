@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from "react";
+import { memo, useEffect, useId, useState } from "react";
 import { Brain, Check, ChevronDown } from "lucide-react";
 import {
   Popover,
@@ -23,7 +23,7 @@ const TRANSPORT_LABELS = {
 // common choices, not a capability declaration or an automatic default.
 const COMMON_REASONING_EFFORTS = ["low", "medium", "high", "xhigh", "max"];
 
-export function AgentReasoningPicker({
+export const AgentReasoningPicker = memo(function AgentReasoningPicker({
   model,
   value,
   onSelect,
@@ -192,4 +192,4 @@ export function AgentReasoningPicker({
       </PopoverContent>
     </Popover>
   );
-}
+});

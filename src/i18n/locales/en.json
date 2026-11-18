@@ -8,6 +8,14 @@
     "copyLink": "Copy link",
     "copyPath": "Copy path"
   },
+  "agentMarketplace": {
+    "name": "Plugin Marketplace",
+    "open": "Open Plugin Marketplace"
+  },
+  "agentAutomation": {
+    "name": "Automation",
+    "open": "Open Automation"
+  },
   "agentSecretary": {
     "companion": {
       "unknown": "Work status is unconfirmed",
@@ -5271,8 +5279,8 @@
     "add": "Add app",
     "retained": "Open your apps from here. Disabling an app keeps its stories, characters and project records.",
     "tavern": {
-      "title": "Tavern",
-      "description": "Import character cards, manage stories and world books, and roleplay using shared model channels."
+      "title": "DeepSeek Chat",
+      "description": "Lightweight chat client powered by open-source chat-demo with message branching, deep thinking, web search, voice input/TTS, KaTeX/Mermaid, and ZIP history backup."
     },
     "unreal": {
       "title": "UEBox · Unreal workspace",

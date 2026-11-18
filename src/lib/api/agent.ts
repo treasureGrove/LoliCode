@@ -20,6 +20,11 @@ import type {
   AgentExtensionConfig,
   AgentHarnessPluginCatalog,
   AgentPluginStore,
+  DshMarketDetail,
+  DshMarketInstallRequest,
+  DshMarketOverview,
+  DshMarketPage,
+  DshMarketQuery,
   AgentPermissionDecision,
   AgentProjectResult,
   AgentQuestionAnswer,
@@ -447,6 +452,51 @@ export const agentApi = {
       id,
       enabled,
     }),
+  getDshMarketplaceOverview: () =>
+    invoke<DshMarketOverview>("get_dsh_marketplace_overview"),
+  queryDshMarketplace: (query: DshMarketQuery) =>
+    invoke<DshMarketPage>("query_dsh_marketplace", { query }),
+  getDshMarketplaceDetail: (
+    name: string,
+    version?: string,
+    sourceUrl?: string,
+  ) =>
+    invoke<DshMarketDetail>("get_dsh_marketplace_detail", {
+      name,
+      ...(version ? { version } : {}),
+      ...(sourceUrl ? { sourceUrl } : {}),
+    }),
+  addDshMarketplaceSource: (url: string) =>
+    invoke<DshMarketOverview>("add_dsh_marketplace_source", { url }),
+  removeDshMarketplaceSource: (url: string) =>
+    invoke<DshMarketOverview>("remove_dsh_marketplace_source", { url }),
+  selectDshMarketplaceSource: (url: string) =>
+    invoke<DshMarketOverview>("select_dsh_marketplace_source", { url }),
+  refreshDshMarketplaceSource: (sourceUrl?: string) =>
+    invoke<DshMarketOverview>("refresh_dsh_marketplace_source", {
+      ...(sourceUrl ? { sourceUrl } : {}),
+    }),
+  installDshMarketplacePlugin: (request: DshMarketInstallRequest) =>
+    invoke<DshMarketOverview>("install_dsh_marketplace_plugin", { request }),
+  setDshMarketplacePluginEnabled: (name: string, enabled: boolean) =>
+    invoke<DshMarketOverview>("set_dsh_marketplace_plugin_enabled", {
+      name,
+      enabled,
+    }),
+  updateDshMarketplacePlugin: (
+    name: string,
+    version?: string,
+    registry?: string,
+    acceptIncompatible?: boolean,
+  ) =>
+    invoke<DshMarketOverview>("update_dsh_marketplace_plugin", {
+      name,
+      ...(version ? { version } : {}),
+      ...(registry ? { registry } : {}),
+      ...(acceptIncompatible !== undefined ? { acceptIncompatible } : {}),
+    }),
+  uninstallDshMarketplacePlugin: (name: string) =>
+    invoke<DshMarketOverview>("uninstall_dsh_marketplace_plugin", { name }),
   connectMcp: () => invoke<AgentExtensions>("connect_agent_mcp"),
   getPluginStore: () => invoke<AgentPluginStore>("get_agent_plugin_store"),
   addPluginMarketplace: (source: string) =>

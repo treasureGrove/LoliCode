@@ -17,7 +17,10 @@ import {
 } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { pruneHarnessSourceMaps } from "./harness-distribution.mjs";
+import {
+  pruneHarnessRedundantAssets,
+  pruneHarnessSourceMaps,
+} from "./harness-distribution.mjs";
 
 const runtime = fileURLToPath(
   new URL("../../packages/lolicode-harness-runtime/", import.meta.url),
@@ -493,6 +496,7 @@ export function reusableBundlePayload(
       manifest.platform === expected.platform &&
       manifest.arch === expected.arch &&
       manifest.dependenciesInputsSha256 === dependencyHash &&
+      manifest.redundantAssets?.policy === "target-redundant-assets-v1" &&
       (!expected.nodeChecksum ||
         manifest.nodeSha256 === expected.nodeChecksum) &&
       manifest.nodeSha256 ===
@@ -623,9 +627,15 @@ export async function bundleHarness({
     const distribution = reuse
       ? cached.distribution
       : pruneHarnessSourceMaps(path.join(stage, "node_modules"));
+    const redundantAssets = reuse
+      ? cached.redundantAssets
+      : pruneHarnessRedundantAssets(path.join(stage, "node_modules"), {
+          platform: identity.platform,
+          arch: identity.arch,
+        });
     if (!reuse)
       console.log(
-        `Harness distribution: ${distribution.outputFiles}/${distribution.inputFiles} files; removed ${distribution.removedFiles} debug maps (${(distribution.removedBytes / 1048576).toFixed(1)} MiB).`,
+        `Harness distribution: ${distribution.outputFiles - redundantAssets.removedFiles}/${distribution.inputFiles} files; removed ${distribution.removedFiles} debug maps (${(distribution.removedBytes / 1048576).toFixed(1)} MiB) and ${redundantAssets.removedFiles} redundant assets (${(redundantAssets.removedBytes / 1048576).toFixed(1)} MiB).`,
       );
     const entry = path.join(
       reuse ? directory : stage,
@@ -641,6 +651,7 @@ export async function bundleHarness({
       inputsSha256: inputsHash,
       dependenciesInputsSha256: dependenciesHash,
       distribution,
+      redundantAssets,
       packageFilesSha256: reuse
         ? cached.packageFilesSha256
         : dependencyInventory(path.join(stage, "node_modules")),

@@ -1,0 +1,139 @@
+.message {
+  position: relative;
+
+  &:hover .actions,
+  &:focus-within .actions {
+    opacity: 1;
+  }
+
+  :global(.ds-assistant-message-main-content) {
+    padding-bottom: 6px;
+  }
+}
+
+.waiting {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+}
+
+.waitingDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--dsw-alias-label-dimmed);
+  animation: fading 0.9s linear infinite;
+
+  &:nth-child(2) {
+    animation-delay: 0.1s;
+  }
+
+  &:nth-child(3) {
+    animation-delay: 0.2s;
+  }
+}
+
+@keyframes fading {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+
+  33%,
+  66% {
+    opacity: 1;
+  }
+}
+
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--dsw-alias-state-error-primary);
+
+  > svg {
+    flex-shrink: 0;
+    margin-top: 4px;
+  }
+
+  > span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+  }
+}
+
+.noticeAction {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: var(--dsw-alias-brand-text);
+  text-decoration: none;
+  cursor: pointer;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+.bottom {
+  position: relative;
+  left: -6px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-top: 12px;
+  padding-bottom: 10px;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  opacity: 0;
+  transition: opacity var(--ds-transition-duration) var(--ds-ease-in-out);
+}
+
+.alwaysShow {
+  opacity: 1;
+}
+
+.continueButton {
+  margin-left: auto;
+}
+
+.summary {
+  display: flex;
+  align-items: center;
+  width: fit-content;
+  margin-top: 16px;
+  padding: 4px 10px 4px 4px;
+  border-radius: 100px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  background-color: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-primary);
+  font: var(--dsw-font-markdown-small);
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.3s;
+
+  > span:first-child {
+    margin-left: 0;
+  }
+
+  > span:last-child {
+    margin-left: 6px;
+  }
+
+  &:hover,
+  &.summaryActive {
+    background-color: var(--dsw-alias-interactive-bg-hover);
+    --search-row-site-logo-color: var(--dsw-alias-interactive-bg-hover);
+  }
+}

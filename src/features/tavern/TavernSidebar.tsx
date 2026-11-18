@@ -5,7 +5,7 @@ import {
   tavernSnapshotQuery,
   type TavernSnapshot,
 } from "@/lib/api/tavern";
-import companion from "@/assets/atelier/companion.png";
+import companion from "@/assets/atelier/companion.png?inline";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,8 +32,16 @@ export function TavernSidebar({
     refetchOnMount: false,
   });
   return (
-    <div className="lolicode-sidebar-tavern-directory flex min-h-0 flex-1 flex-col pt-4">
-      <div className="min-h-0 flex-1 space-y-1 overflow-y-auto">
+    <div className="lolicode-sidebar-tavern-directory flex min-h-0 flex-1 flex-col pt-3">
+      {!compact && (
+        <div className="wb-section-label">
+          <span>角色好友</span>
+          <span className="wb-workspace-count">
+            {(characters ?? []).length}
+          </span>
+        </div>
+      )}
+      <div className="min-h-0 flex-1 space-y-1 overflow-y-auto pr-0.5">
         {(characters ?? []).map((character) => (
           <TavernSidebarCharacter
             key={character.id}
@@ -43,21 +51,21 @@ export function TavernSidebar({
             onSelect={() => onSelect(character.id)}
           />
         ))}
+      </div>
+      <div className="pt-2">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
               type="button"
               aria-label="添加好友"
               title={compact ? "添加好友" : undefined}
-              className="flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left text-sm hover:bg-subtle"
+              className="lolicode-tavern-add-btn"
             >
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-subtle text-fg-2">
-                <Plus className="h-5 w-5" aria-hidden="true" />
-              </span>
+              <Plus className="h-4 w-4 shrink-0" aria-hidden="true" />
               {!compact && <span className="truncate">添加好友</span>}
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent side="right" align="start" sideOffset={8}>
+          <DropdownMenuContent side="right" align="end" sideOffset={8}>
             <DropdownMenuItem onSelect={() => onAdd("preset")}>
               <BookHeart className="mr-2 h-4 w-4" aria-hidden="true" />
               从预设添加
@@ -79,7 +87,12 @@ function TavernSidebarCharacter({
   selected,
   onSelect,
 }: {
-  character: { id: string; name: string; hasAvatar: boolean };
+  character: {
+    id: string;
+    name: string;
+    hasAvatar: boolean;
+    tags?: string[];
+  };
   compact: boolean;
   selected: boolean;
   onSelect: () => void;
@@ -100,9 +113,9 @@ function TavernSidebarCharacter({
       aria-label={character.name}
       title={compact ? character.name : undefined}
       aria-current={selected ? "page" : undefined}
-      className={`flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left text-sm transition-colors hover:bg-subtle ${selected ? "bg-action/20 font-semibold text-action-text ring-1 ring-inset ring-action/30" : ""}`}
+      className="lolicode-tavern-friend"
     >
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-subtle">
+      <span className="lolicode-tavern-friend-avatar">
         {image ? (
           <img
             src={image}
@@ -115,7 +128,16 @@ function TavernSidebarCharacter({
           character.name.slice(0, 1)
         )}
       </span>
-      {!compact && <span className="truncate">{character.name}</span>}
+      {!compact && (
+        <span className="min-w-0 flex-1">
+          <span className="block truncate">{character.name}</span>
+          {character.tags && character.tags.length > 0 && (
+            <span className="lolicode-tavern-friend-sub truncate">
+              {character.tags.slice(0, 2).join(" · ")}
+            </span>
+          )}
+        </span>
+      )}
     </button>
   );
 }

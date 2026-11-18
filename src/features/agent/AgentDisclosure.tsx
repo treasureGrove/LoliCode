@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { animateHeightReveal } from "@/lib/motion";
 
 export interface AgentDisclosureState {
   open: boolean;
@@ -35,9 +36,10 @@ export function AgentDisclosure({
   const body = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
-    if (!expanded || !body.current) return;
+    const element = body.current;
+    if (!expanded || !element) return;
     for (const [path, position] of state.scroll) {
-      let node: Element | undefined = body.current;
+      let node: Element | undefined = element;
       for (const index of path ? path.split(".") : []) {
         node = node?.children[Number(index)];
       }
@@ -46,6 +48,7 @@ export function AgentDisclosure({
         node.scrollLeft = position.left;
       }
     }
+    return animateHeightReveal(element);
   }, [expanded, state]);
 
   return (

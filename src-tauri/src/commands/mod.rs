@@ -24,6 +24,7 @@ mod custom_icon;
 mod deeplink;
 mod desktop;
 mod discovery;
+pub(crate) mod dsh_marketplace;
 mod env;
 mod failover;
 mod global_proxy;

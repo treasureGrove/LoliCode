@@ -102,6 +102,7 @@ fn client_for_uri(uri: &http::Uri) -> Result<&'static str, ProxyError> {
     }
     match segments.get(2).copied() {
         Some("lolicode") => Ok("lolicode"),
+        Some("claude") => Ok("claude"),
         Some("tavern") => Ok("tavern"),
         Some("workbuddy") => Ok("workbuddy"),
         Some("deepseek-harness") => Ok("deepseek-harness"),
@@ -116,7 +117,8 @@ pub(crate) fn catalog_client_base_url(
     catalog_base: &str,
     client: &str,
 ) -> Result<String, AppError> {
-    if !is_attributed_client(client) {
+    // Claude Code retains the established `claude` usage accounting semantics.
+    if client != "claude" && !is_attributed_client(client) {
         return Err(AppError::InvalidInput("未知的客户端配置入口".into()));
     }
     Ok(format!(
@@ -312,13 +314,15 @@ pub(crate) async fn handle_models(
     request: Request,
 ) -> Result<Json<Value>, ProxyError> {
     authorize_request(&state, &request)?;
-    client_for_uri(request.uri())?;
+    let client = client_for_uri(request.uri())?;
     let snapshot = snapshot_for_uri(&state, request.uri())?;
     let data: Vec<Value> = snapshot
         .channels
         .iter()
         .filter(|source| {
-            source.enabled && channel_center::native_auth_target(&source.auth_kind).is_none()
+            source.enabled
+                && channel_center::native_auth_target(&source.auth_kind).is_none()
+                && (client != "claude" || source.auth_kind != "lolicode_account")
         })
         .flat_map(|source| {
             source.models.iter().filter_map(move |model| {
@@ -331,6 +335,23 @@ pub(crate) async fn handle_models(
                     "created": 0,
                     "owned_by": source.name,
                 });
+                if client == "claude" {
+                    let mut id = channel_center::claude_route_id(source, model);
+                    if model
+                        .effective_context_limit()
+                        .is_some_and(|limit| limit >= 1_000_000)
+                    {
+                        id.push_str("[1M]");
+                    }
+                    entry["id"] = json!(id);
+                    entry["type"] = json!("model");
+                    entry["display_name"] = json!(format!(
+                        "{} · {}",
+                        source.name,
+                        model.name.as_deref().unwrap_or(&model.id)
+                    ));
+                    entry["created_at"] = json!("1970-01-01T00:00:00Z");
+                }
                 // Explicitly project public capabilities; a ChannelSource also
                 // contains credentials and must never be serialized here.
                 if let Some(name) = &model.name {
@@ -364,7 +385,13 @@ pub(crate) async fn handle_models(
             })
         })
         .collect();
-    Ok(Json(json!({"object": "list", "data": data})))
+    if client == "claude" {
+        Ok(Json(json!({"data": data, "has_more": false,
+            "first_id": data.first().map(|entry| &entry["id"]),
+            "last_id": data.last().map(|entry| &entry["id"])})))
+    } else {
+        Ok(Json(json!({"object": "list", "data": data})))
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -2600,6 +2627,7 @@ mod tests {
         assert!(previous_response.status().is_success());
         for app in [
             "lolicode",
+            "claude",
             "tavern",
             "workbuddy",
             "deepseek-harness",

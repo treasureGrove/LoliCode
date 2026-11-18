@@ -24,7 +24,6 @@
   padding: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  scrollbar-width: thin;
   list-style: none;
 }
 .wb-message-queue-item {

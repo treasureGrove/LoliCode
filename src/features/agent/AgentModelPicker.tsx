@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { memo, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Check, ChevronDown, Search, Settings2, RefreshCw } from "lucide-react";
 import {
   Popover,
@@ -29,7 +29,10 @@ export const agentModelLabel = (model: AgentModel) => {
   return model.isFree ? `${label} · free` : label;
 };
 
-export function AgentModelPicker({
+const groupKey = (model: AgentModel) =>
+  JSON.stringify([model.providerId, model.channelName]);
+
+export const AgentModelPicker = memo(function AgentModelPicker({
   models,
   value,
   onSelect,
@@ -68,29 +71,30 @@ export function AgentModelPicker({
     if (disabled) setOpen(false);
   }, [disabled]);
   const selected = models.find((model) => model.id === value);
-  const groupKey = (model: AgentModel) =>
-    JSON.stringify([model.providerId, model.channelName]);
   const needle = query.trim().toLocaleLowerCase();
-  const groups = new Map<string, { label: string; models: AgentModel[] }>();
-  for (const model of models) {
-    if (
-      needle &&
-      ![
-        modelName(model),
-        humanLabel(model.channelName),
-        model.modelId,
-        model.isFree ? "free" : "",
-      ].some((text) => text.toLocaleLowerCase().includes(needle))
-    )
-      continue;
-    const key = groupKey(model);
-    const group = groups.get(key) || {
-      label: humanLabel(model.channelName) || "模型渠道",
-      models: [],
-    };
-    group.models.push(model);
-    groups.set(key, group);
-  }
+  const groups = useMemo(() => {
+    const next = new Map<string, { label: string; models: AgentModel[] }>();
+    for (const model of models) {
+      if (
+        needle &&
+        ![
+          modelName(model),
+          humanLabel(model.channelName),
+          model.modelId,
+          model.isFree ? "free" : "",
+        ].some((text) => text.toLocaleLowerCase().includes(needle))
+      )
+        continue;
+      const key = groupKey(model);
+      const group = next.get(key) || {
+        label: humanLabel(model.channelName) || "模型渠道",
+        models: [],
+      };
+      group.models.push(model);
+      next.set(key, group);
+    }
+    return next;
+  }, [models, needle]);
 
   return (
     <Popover
@@ -310,4 +314,4 @@ export function AgentModelPicker({
       </PopoverContent>
     </Popover>
   );
-}
+});

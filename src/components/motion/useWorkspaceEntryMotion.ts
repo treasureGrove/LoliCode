@@ -21,11 +21,11 @@ export function useWorkspaceEntryMotion(
       : surface.current;
     if (!element?.animate) return;
     // The viewport keeps its opaque theme. Leave the pane's geometry intact,
-    // including native preview bounds, while the foreground comes into view.
+    // including native preview bounds, so switching views never forces full-page repaints.
     const frames = targetSelector
-      ? [{ opacity: 0.94 }, { opacity: 1 }]
+      ? [{ opacity: 0.9 }, { opacity: 1 }]
       : [
-          { translate: "0 -3px", opacity: 0.88 },
+          { translate: "0 -3px", opacity: 0.9 },
           { translate: "none", opacity: 1 },
         ];
     const animation = element.animate(frames, {

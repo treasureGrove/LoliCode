@@ -189,6 +189,54 @@ pub fn get_channel_connections(
     crate::services::channel_connections::list(state.inner()).map_err(|error| error.to_string())
 }
 
+#[tauri::command]
+pub async fn get_channel_gateway_status(
+    state: State<'_, AppState>,
+) -> Result<crate::services::channel_gateway::GatewayStatus, String> {
+    crate::services::channel_gateway::status(state.inner())
+        .await
+        .map_err(|error| crate::error_for_log(&error.to_string()))
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub async fn start_channel_gateway(
+    state: State<'_, AppState>,
+    expected_revision: Option<u64>,
+    copilot: State<'_, CopilotAuthState>,
+    codex: State<'_, CodexOAuthState>,
+    xai: State<'_, XaiOAuthState>,
+) -> Result<crate::services::channel_gateway::GatewayStatus, String> {
+    let snapshot = channel_center::agent_source_snapshot(state.db.as_ref())
+        .map_err(|error| error.to_string())?;
+    let accounts = managed_accounts(&copilot, &codex, &xai).await;
+    channel_center::validate_managed_account_references(&snapshot, &accounts)
+        .map_err(|error| error.to_string())?;
+    crate::services::channel_gateway::start(
+        state.inner(),
+        Some(expected_revision.unwrap_or(snapshot.revision)),
+    )
+    .await
+    .map_err(|error| crate::error_for_log(&error.to_string()))
+}
+
+#[tauri::command]
+pub async fn get_channel_gateway_claude_config(
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value, String> {
+    crate::services::channel_gateway::claude_config(state.inner())
+        .await
+        .map_err(|error| crate::error_for_log(&error.to_string()))
+}
+
+#[tauri::command]
+pub async fn check_channel_gateway(
+    state: State<'_, AppState>,
+) -> Result<crate::services::channel_gateway::GatewayStatus, String> {
+    crate::services::channel_gateway::check(state.inner())
+        .await
+        .map_err(|error| crate::error_for_log(&error.to_string()))
+}
+
 #[expect(
     clippy::too_many_arguments,
     reason = "Named arguments and managed auth states preserve the existing Tauri IPC contract."

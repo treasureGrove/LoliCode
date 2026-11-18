@@ -1,5 +1,11 @@
 import { useEffect, useState } from "react";
 import { Clock3, FolderOpen, Workflow } from "lucide-react";
+import { MotionSurface } from "@/components/motion/MotionSurface";
+import {
+  SegmentThumb,
+  useSlidingIndicator,
+} from "@/components/ui/sliding-indicator";
+import { useNavigationDirection } from "@/lib/motion";
 import type {
   AgentCatalog,
   AgentNativeActivity,
@@ -81,6 +87,16 @@ export function AgentOperationsPanel({
     if (activity?.features) return activity.features[feature] === true;
     return activity?.inProcess !== true;
   };
+  const {
+    ref: tabsRef,
+    rect: tabThumbRect,
+    animate: tabThumbAnimate,
+  } = useSlidingIndicator<HTMLDivElement>(
+    'button[aria-selected="true"]',
+    `${open}:${tab}:${ready}`,
+  );
+  const tabRank = tab === "workflows" ? 0 : tab === "automation" ? 1 : 2;
+  const tabDirection = useNavigationDirection(tabRank, tab);
   return (
     <AgentToolPanel
       open={open}
@@ -92,10 +108,12 @@ export function AgentOperationsPanel({
     >
       <div className="wb-operations-panel">
         <div
+          ref={tabsRef}
           className="wb-extension-tabs"
           role="tablist"
           aria-label="项目与任务管理"
         >
+          <SegmentThumb rect={tabThumbRect} animate={tabThumbAnimate} />
           {(
             [
               ["workflows", "工作流", Workflow],
@@ -123,7 +141,9 @@ export function AgentOperationsPanel({
             </button>
           ))}
         </div>
-        <div
+        <MotionSurface
+          motionKey={tab}
+          direction={tabDirection}
           className="wb-extension-list"
           role="tabpanel"
           id="agent-operations-content"
@@ -219,7 +239,7 @@ export function AgentOperationsPanel({
                 }}
               />
             ))}
-        </div>
+        </MotionSurface>
       </div>
     </AgentToolPanel>
   );

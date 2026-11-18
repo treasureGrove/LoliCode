@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { memo, useRef } from "react";
 import { ChevronRight, FileDiff } from "lucide-react";
 import type { AgentDiff } from "@/types/agent";
 import { SessionDiff } from "@/features/sessions/reader/SessionDiff";
@@ -10,7 +10,11 @@ import {
 } from "./AgentDisclosure";
 
 /** Display only authoritative diffs returned by the running engine. */
-export function AgentChanges({ diffs }: { diffs: AgentDiff[] }) {
+export const AgentChanges = memo(function AgentChanges({
+  diffs,
+}: {
+  diffs: AgentDiff[];
+}) {
   const files = useRef(new Map<string, AgentDisclosureState>());
   if (!diffs.length) return null;
   return (
@@ -84,4 +88,4 @@ export function AgentChanges({ diffs }: { diffs: AgentDiff[] }) {
       }
     </AgentDisclosure>
   );
-}
+});

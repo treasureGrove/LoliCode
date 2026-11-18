@@ -631,23 +631,37 @@ fn short_error(value: &str) -> String {
 }
 
 fn response_text(value: &Value) -> Option<String> {
-    let content = value.pointer("/choices/0/message/content")?;
-    if let Some(text) = content.as_str() {
-        return Some(text.to_string());
+    let message = value.pointer("/choices/0/message")?;
+    let reasoning = message
+        .get("reasoning_content")
+        .or_else(|| message.get("reasoning"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|text| !text.is_empty());
+    let content = message.get("content")?;
+    let main_text = if let Some(text) = content.as_str() {
+        Some(text.to_string())
+    } else {
+        let blocks = content.as_array()?;
+        let text = blocks
+            .iter()
+            .filter(|block| {
+                block
+                    .get("type")
+                    .and_then(Value::as_str)
+                    .is_none_or(|kind| kind == "text")
+            })
+            .filter_map(|block| block.get("text").and_then(Value::as_str))
+            .collect::<Vec<_>>()
+            .join("");
+        (!text.is_empty()).then_some(text)
+    }?;
+    if let Some(reasoning) = reasoning {
+        if !main_text.trim_start().starts_with("<think>") {
+            return Some(format!("<think>\n{reasoning}\n</think>\n\n{main_text}"));
+        }
     }
-    let blocks = content.as_array()?;
-    let text = blocks
-        .iter()
-        .filter(|block| {
-            block
-                .get("type")
-                .and_then(Value::as_str)
-                .is_none_or(|kind| kind == "text")
-        })
-        .filter_map(|block| block.get("text").and_then(Value::as_str))
-        .collect::<Vec<_>>()
-        .join("");
-    (!text.is_empty()).then_some(text)
+    Some(main_text)
 }
 
 fn build_request_messages(character: &StoredCharacter, story: &TavernStory) -> Vec<Value> {

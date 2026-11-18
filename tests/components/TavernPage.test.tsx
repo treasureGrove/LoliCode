@@ -574,4 +574,65 @@ describe("Tavern bundled character flow", () => {
     expect(stored.stories.map(({ id }) => id)).toContain("latest");
     expect(calls("create_tavern_story")).toHaveLength(1);
   });
+
+  it("couples deep-thinking bubbles, alternate greeting branches, regeneration, and zero-quota indicators into the character chat UI", async () => {
+    const user = userEvent.setup();
+    localEnabled = true;
+    stored.characters = [
+      {
+        ...character,
+        alternateGreetings: ["第二段开场白：欢迎回到工坊！"],
+      },
+    ];
+    stored.stories = [
+      {
+        id: "coupled-story",
+        characterId: character.id,
+        title: "深度耦合对话",
+        createdAt: 1,
+        updatedAt: 2,
+        isGenerating: false,
+        messages: [
+          {
+            id: "greeting-1",
+            role: "assistant",
+            text: character.firstMes,
+            createdAt: 1,
+            failed: false,
+          },
+          {
+            id: "user-1",
+            role: "user",
+            text: "今天工坊有什么新发明？",
+            createdAt: 2,
+            failed: false,
+          },
+          {
+            id: "assistant-1",
+            role: "assistant",
+            text: "<think>\n先想想桌上的齿轮机关\n</think>\n\n我刚刚拼好了一台发条八音盒！",
+            createdAt: 3,
+            failed: false,
+          },
+        ],
+      },
+    ];
+    mount();
+    expect(await screen.findByText("本机离线 · 0 额度")).toBeVisible();
+    expect(screen.getByText("深度思考 · 角色内心推演")).toBeInTheDocument();
+    expect(screen.getByText("先想想桌上的齿轮机关")).toBeInTheDocument();
+    expect(screen.getByText("我刚刚拼好了一台发条八音盒！")).toBeVisible();
+
+    // Alternate greeting branch switching on the opening message
+    expect(screen.getByText("1/2")).toBeVisible();
+    expect(screen.getByText(character.firstMes)).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "下一版本" }));
+    expect(screen.getByText("第二段开场白：欢迎回到工坊！")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "上一版本" }));
+    expect(screen.getByText(character.firstMes)).toBeVisible();
+
+    // Regenerate the assistant reply and switch between versions
+    await user.click(screen.getByRole("button", { name: "重新生成回复" }));
+    expect(await screen.findByText("来啦，坐下来聊一会儿吧。")).toBeVisible();
+  });
 });

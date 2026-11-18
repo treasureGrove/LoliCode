@@ -57,6 +57,10 @@ const WIDTH = 192;
 const HEIGHT = 250;
 const MARGIN = 8;
 const VIDEO_REACTION_MS = 5200;
+const AMBIENT_STEP = 40;
+const AMBIENT_STEP_MS = 650;
+const ACTIVE_CONTROLS =
+  'input, textarea, select, [contenteditable="true"], [role="dialog"], [role="alertdialog"]';
 const COMPANION_VIDEOS = {
   idle: companionIdle,
   pet: companionGreeting,
@@ -120,6 +124,8 @@ export function AgentCompanion({
   >();
   const ambientSequence = useRef(0);
   const previousAmbient = useRef<keyof typeof AMBIENT_VIDEOS | null>(null);
+  const [roaming, setRoaming] = useState(false);
+  const roamTimer = useRef<ReturnType<typeof setTimeout>>();
   const reactionRef = useRef(reaction);
   reactionRef.current = reaction;
   const [now, setNow] = useState(Date.now);
@@ -173,6 +179,15 @@ export function AgentCompanion({
     if (persist) updatePet({ ...petRef.current, position: bounded });
   }
 
+  function stopRoaming() {
+    if (roamTimer.current === undefined) return;
+    clearTimeout(roamTimer.current);
+    roamTimer.current = undefined;
+    const painted = root.current?.getBoundingClientRect();
+    if (painted?.width) moveTo({ x: painted.left, y: painted.top });
+    setRoaming(false);
+  }
+
   function leaveDock() {
     const current = docking.dockRef.current;
     if (!current) return;
@@ -201,6 +216,7 @@ export function AgentCompanion({
   }
 
   function interact(action: "feed" | "pet" | "sleep" | "wake") {
+    stopRoaming();
     lastInteraction.current = Date.now();
     setAmbient(undefined);
     setNow(lastInteraction.current);
@@ -276,6 +292,7 @@ export function AgentCompanion({
   ) {
     if (event.button !== 0 || event.isPrimary === false || gesture.current)
       return;
+    stopRoaming();
     lastInteraction.current = Date.now();
     setAmbient(undefined);
     if (kind === "food" && cooldown > 0) return;
@@ -348,6 +365,7 @@ export function AgentCompanion({
   }
 
   useEffect(() => {
+    if (!visible) return;
     const timer = setInterval(() => {
       const time = Date.now();
       const current = petRef.current;
@@ -387,6 +405,7 @@ export function AgentCompanion({
             !document.hidden &&
             !reduced &&
             !petRef.current.sleeping &&
+            !panelOpenRef.current &&
             !gesture.current &&
             !docking.dockRef.current &&
             reactionRef.current === "idle" &&
@@ -405,6 +424,34 @@ export function AgentCompanion({
               key: ++ambientSequence.current,
               source: AMBIENT_VIDEOS[next],
             });
+            if (
+              next === "curious" &&
+              !document.activeElement?.closest(ACTIVE_CONTROLS) &&
+              !document.querySelector('[aria-modal="true"]')
+            ) {
+              const anchor = clampPosition(
+                petRef.current.position ?? homePosition(),
+              );
+              const current = positionRef.current;
+              const destination = clampPosition({
+                x:
+                  current.x === anchor.x
+                    ? anchor.x +
+                      (anchor.x < window.innerWidth / 2
+                        ? AMBIENT_STEP
+                        : -AMBIENT_STEP)
+                    : anchor.x,
+                y: current.y,
+              });
+              if (destination.x !== current.x) {
+                setRoaming(true);
+                moveTo(destination);
+                roamTimer.current = setTimeout(() => {
+                  roamTimer.current = undefined;
+                  setRoaming(false);
+                }, AMBIENT_STEP_MS);
+              }
+            }
           }
           schedule();
         },
@@ -415,6 +462,7 @@ export function AgentCompanion({
     return () => {
       cancelled = true;
       clearTimeout(timer);
+      stopRoaming();
     };
   }, [visible, builtInCompanion]);
 
@@ -442,11 +490,13 @@ export function AgentCompanion({
 
   useEffect(() => {
     const onResize = () => {
+      stopRoaming();
       finishGesture(true);
       if (docking.dockRef.current) docking.refresh();
       else moveTo(positionRef.current, true);
     };
     const onBlur = () => {
+      stopRoaming();
       finishGesture(true);
       saveCompanionState(advanceCompanionState(petRef.current));
     };
@@ -460,12 +510,28 @@ export function AgentCompanion({
       }
     };
     const onOutside = (event: globalThis.PointerEvent) => {
-      if (!root.current?.contains(event.target as Node)) setPanelOpen(false);
+      if (!root.current?.contains(event.target as Node)) {
+        stopRoaming();
+        setPanelOpen(false);
+      }
+    };
+    const onFocus = (event: FocusEvent) => {
+      if (
+        event.target instanceof Element &&
+        event.target.closest(ACTIVE_CONTROLS)
+      ) {
+        stopRoaming();
+      }
+    };
+    const onVisibility = () => {
+      if (document.hidden) stopRoaming();
     };
     window.addEventListener("resize", onResize);
     window.addEventListener("blur", onBlur);
     window.addEventListener("pagehide", onBlur);
     window.addEventListener("keydown", onKey, true);
+    document.addEventListener("focus", onFocus, true);
+    document.addEventListener("visibilitychange", onVisibility);
     document.addEventListener("pointerdown", onOutside);
     return () => {
       const current = gesture.current;
@@ -479,6 +545,8 @@ export function AgentCompanion({
       window.removeEventListener("blur", onBlur);
       window.removeEventListener("pagehide", onBlur);
       window.removeEventListener("keydown", onKey, true);
+      document.removeEventListener("focus", onFocus, true);
+      document.removeEventListener("visibilitychange", onVisibility);
       document.removeEventListener("pointerdown", onOutside);
     };
   }, []);
@@ -630,6 +698,7 @@ export function AgentCompanion({
       data-motion={motion}
       data-panel-open={panelOpen}
       data-dragging={dragging ?? undefined}
+      data-roaming={roaming || undefined}
       data-docked={rest}
       data-dock-id={docking.dock?.id}
       data-settling={docking.settling || undefined}
@@ -689,6 +758,7 @@ export function AgentCompanion({
               const change = delta[event.key];
               if (change) {
                 event.preventDefault();
+                stopRoaming();
                 lastInteraction.current = Date.now();
                 setAmbient(undefined);
                 leaveDock();
@@ -801,7 +871,10 @@ export function AgentCompanion({
               title={t("companion.details")}
               aria-expanded={panelOpen}
               aria-controls="companion-care-panel"
-              onClick={() => setPanelOpen(!panelOpen)}
+              onClick={() => {
+                stopRoaming();
+                setPanelOpen(!panelOpen);
+              }}
             >
               <Heart size={16} aria-hidden="true" />
             </button>

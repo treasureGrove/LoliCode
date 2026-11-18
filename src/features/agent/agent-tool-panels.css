@@ -1,5 +1,6 @@
 .wb-tool-panel-content {
   min-height: 100%;
+  background: var(--bg-app);
 }
 .wb-tool-panel.wb-extensions {
   width: 100%;

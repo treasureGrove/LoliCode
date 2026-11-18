@@ -26,6 +26,10 @@ const submissionKey = (project: string, id: string) =>
   `${PREFIX}${encodeURIComponent(project)}:${encodeURIComponent(id)}`;
 const submissionsInFlight = new Set<string>();
 const stopsInFlight = new Map<string, Promise<void>>();
+const draftTokenCache = new Map<
+  string,
+  { raw: string; token: AgentDraftToken | null }
+>();
 
 function decodeDraft(raw: string | null, key: string): AgentDraftToken | null {
   try {
@@ -43,9 +47,17 @@ function decodeDraft(raw: string | null, key: string): AgentDraftToken | null {
 function readDraftToken(key: string): AgentDraftToken | null {
   try {
     const raw = localStorage.getItem(draftRecordKey(key));
-    if (raw !== null) return decodeDraft(raw, key);
+    if (raw !== null) {
+      const cached = draftTokenCache.get(key);
+      if (cached && cached.raw === raw) return cached.token;
+      const token = decodeDraft(raw, key);
+      draftTokenCache.set(key, { raw, token });
+      return token;
+    }
+    draftTokenCache.delete(key);
   } catch {}
   try {
+    if (sessionStorage.length === 0) return null;
     const token = decodeDraft(
       sessionStorage.getItem(legacyRevisionKey(key)),
       key,
@@ -60,13 +72,14 @@ export function readAgentDraft(key: string): string {
   const token = readDraftToken(key);
   if (token) return token.text;
   try {
-    return sessionStorage.getItem(key) || "";
+    return sessionStorage.length > 0 ? sessionStorage.getItem(key) || "" : "";
   } catch {
     return "";
   }
 }
 
 function removeLegacyDraft(key: string) {
+  if (sessionStorage.length === 0) return;
   sessionStorage.removeItem(key);
   sessionStorage.removeItem(legacyRevisionKey(key));
 }
@@ -74,7 +87,9 @@ function removeLegacyDraft(key: string) {
 export function saveAgentDraft(key: string, text: string): AgentDraftToken {
   const token = { key, text, revision: crypto.randomUUID() };
   try {
-    localStorage.setItem(draftRecordKey(key), JSON.stringify(token));
+    const raw = JSON.stringify(token);
+    localStorage.setItem(draftRecordKey(key), raw);
+    draftTokenCache.set(key, { raw, token });
     removeLegacyDraft(key);
   } catch {
     /* Keep the editor's in-memory draft if browser storage is unavailable. */
@@ -93,6 +108,7 @@ export function clearSubmittedAgentDraft(token: AgentDraftToken): boolean {
   try {
     removeLegacyDraft(token.key);
     localStorage.removeItem(draftRecordKey(token.key));
+    draftTokenCache.delete(token.key);
     return true;
   } catch {
     return false;
@@ -109,11 +125,14 @@ export function restoreAgentDraft(token: AgentDraftToken): boolean {
   try {
     if (
       localStorage.getItem(draftRecordKey(token.key)) !== null ||
-      sessionStorage.getItem(legacyRevisionKey(token.key)) !== null ||
-      sessionStorage.getItem(token.key) !== null
+      (sessionStorage.length > 0 &&
+        (sessionStorage.getItem(legacyRevisionKey(token.key)) !== null ||
+          sessionStorage.getItem(token.key) !== null))
     )
       return false;
-    localStorage.setItem(draftRecordKey(token.key), JSON.stringify(token));
+    const raw = JSON.stringify(token);
+    localStorage.setItem(draftRecordKey(token.key), raw);
+    draftTokenCache.set(token.key, { raw, token });
     return true;
   } catch {
     return false;
