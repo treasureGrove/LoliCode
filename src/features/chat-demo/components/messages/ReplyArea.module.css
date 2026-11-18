@@ -59,7 +59,7 @@
 .withLine,
 .content {
   &::after {
-    content: '';
+    content: "";
     position: absolute;
     left: 7.5px;
     top: 31px;
@@ -152,7 +152,7 @@
 
   &.clickable::before,
   &.active::before {
-    content: '';
+    content: "";
     position: absolute;
     z-index: -1;
     left: -10px;

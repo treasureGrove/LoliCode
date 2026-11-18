@@ -1,7 +1,7 @@
-import clsx from 'clsx'
-import type { ButtonHTMLAttributes, ReactNode } from 'react'
-import { Tooltip, type TooltipPlacement } from './Tooltip.js'
-import styles from './IconButton.module.css'
+import clsx from "clsx";
+import type { ButtonHTMLAttributes, ReactNode } from "react";
+import { Tooltip, type TooltipPlacement } from "./Tooltip.js";
+import styles from "./IconButton.module.css";
 
 /**
  * xs 为 28px（图标 16px）、m 为 34px、xl 为 44px（图标 20px）。
@@ -9,19 +9,19 @@ import styles from './IconButton.module.css'
  */
 export const IconButton = ({
   icon,
-  size = 'xs',
-  tone = 'tertiary',
+  size = "xs",
+  tone = "tertiary",
   tooltip,
   tooltipPlacement,
   className,
   ...props
 }: {
-  icon: ReactNode
-  size?: 'xs' | 'm' | 'xl'
-  tone?: 'tertiary' | 'primary'
-  tooltip?: string
-  tooltipPlacement?: TooltipPlacement
-} & Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'title'>) => {
+  icon: ReactNode;
+  size?: "xs" | "m" | "xl";
+  tone?: "tertiary" | "primary";
+  tooltip?: string;
+  tooltipPlacement?: TooltipPlacement;
+} & Omit<ButtonHTMLAttributes<HTMLButtonElement>, "title">) => {
   const button = (
     <button
       type="button"
@@ -31,12 +31,12 @@ export const IconButton = ({
     >
       {icon}
     </button>
-  )
+  );
   return tooltip ? (
     <Tooltip content={tooltip} placement={tooltipPlacement}>
       {button}
     </Tooltip>
   ) : (
     button
-  )
-}
+  );
+};

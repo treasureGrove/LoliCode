@@ -92,7 +92,8 @@
   white-space: normal;
   cursor: pointer;
   user-select: none;
-  transition: background-color var(--ds-transition-duration) var(--ds-ease-in-out);
+  transition: background-color var(--ds-transition-duration)
+    var(--ds-ease-in-out);
 
   &:hover {
     background: var(--dsw-alias-interactive-bg-hover);

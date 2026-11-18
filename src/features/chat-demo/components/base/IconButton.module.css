@@ -9,7 +9,8 @@
   background-color: transparent;
   cursor: pointer;
   font-size: 16px;
-  transition: background-color var(--ds-transition-duration) var(--ds-ease-in-out);
+  transition: background-color var(--ds-transition-duration)
+    var(--ds-ease-in-out);
   outline: none;
 
   &:active:not(:disabled) {

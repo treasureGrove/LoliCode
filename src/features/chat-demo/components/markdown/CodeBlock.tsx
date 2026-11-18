@@ -1,16 +1,16 @@
-import { useTranslate } from '../../i18n/index.js'
-import { memo, useEffect, useMemo, useReducer, useState } from 'react'
-import Prism from 'prismjs'
+import { useTranslate } from "../../i18n/index.js";
+import { memo, useEffect, useMemo, useReducer, useState } from "react";
+import Prism from "prismjs";
 import {
   getHighlightLang,
   isHighlightLoaded,
   loadHighlight,
-} from '../../services/markdown/highlight.js'
-import { IconCheckOutline16, IconCopyOutline16 } from '../base/icons.js'
-import { showToast } from '../base/toastState.js'
-import { copyText } from '../../utils/clipboard.js'
-import { MermaidDiagram } from './MermaidDiagram.js'
-import styles from './CodeBlock.module.css'
+} from "../../services/markdown/highlight.js";
+import { IconCheckOutline16, IconCopyOutline16 } from "../base/icons.js";
+import { showToast } from "../base/toastState.js";
+import { copyText } from "../../utils/clipboard.js";
+import { MermaidDiagram } from "./MermaidDiagram.js";
+import styles from "./CodeBlock.module.css";
 
 /** 代码块标题栏：左侧语言名，右侧复制 */
 const CodeInfoRow = ({
@@ -19,24 +19,27 @@ const CodeInfoRow = ({
   showDiagram,
   onToggleDiagram,
 }: {
-  code: string
-  infostring: string
-  showDiagram: boolean
-  onToggleDiagram?: () => void
+  code: string;
+  infostring: string;
+  showDiagram: boolean;
+  onToggleDiagram?: () => void;
 }) => {
-  const t = useTranslate()
-  const [copied, setCopied] = useState(false)
+  const t = useTranslate();
+  const [copied, setCopied] = useState(false);
   return (
     <div className={styles.container}>
       {onToggleDiagram ? (
-        <div className="md-code-block-switch" aria-label={t('mermaidSwitchLabel')}>
+        <div
+          className="md-code-block-switch"
+          aria-label={t("mermaidSwitchLabel")}
+        >
           <button
             type="button"
             className={styles.button}
             aria-pressed={showDiagram}
             onClick={() => !showDiagram && onToggleDiagram()}
           >
-            {t('mermaidDiagram')}
+            {t("mermaidDiagram")}
           </button>
           <button
             type="button"
@@ -44,7 +47,7 @@ const CodeInfoRow = ({
             aria-pressed={!showDiagram}
             onClick={() => showDiagram && onToggleDiagram()}
           >
-            {t('mermaidCode')}
+            {t("mermaidCode")}
           </button>
         </div>
       ) : (
@@ -55,19 +58,19 @@ const CodeInfoRow = ({
         className={styles.button}
         onClick={async () => {
           if (!(await copyText(code))) {
-            showToast({ key: 'copyFailed' })
-            return
+            showToast({ key: "copyFailed" });
+            return;
           }
-          setCopied(true)
-          setTimeout(() => setCopied(false), 1500)
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1500);
         }}
       >
         {copied ? <IconCheckOutline16 /> : <IconCopyOutline16 />}
-        <span>{t(copied ? 'copied' : 'copy')}</span>
+        <span>{t(copied ? "copied" : "copy")}</span>
       </button>
     </div>
-  )
-}
+  );
+};
 
 /** 代码块：语言包按需加载，不支持或尚未加载的语言按纯文本显示 */
 export const CodeBlock = memo(function CodeBlock({
@@ -75,34 +78,34 @@ export const CodeBlock = memo(function CodeBlock({
   infostring,
   loading = false,
 }: {
-  code: string
-  infostring: string
-  loading?: boolean
+  code: string;
+  infostring: string;
+  loading?: boolean;
 }) {
-  const isMermaid = infostring.toLowerCase() === 'mermaid'
-  const [showDiagram, setShowDiagram] = useState(true)
+  const isMermaid = infostring.toLowerCase() === "mermaid";
+  const [showDiagram, setShowDiagram] = useState(true);
   // 语言包注册在全局 Prism 上，每次渲染直接判断；加载完成后触发一次重渲染
-  const rerender = useReducer((n: number) => n + 1, 0)[1]
-  const lang = getHighlightLang(infostring)
-  const loaded = lang !== null && isHighlightLoaded(lang)
+  const rerender = useReducer((n: number) => n + 1, 0)[1];
+  const lang = getHighlightLang(infostring);
+  const loaded = lang !== null && isHighlightLoaded(lang);
   useEffect(() => {
     if (lang === null || loaded) {
-      return
+      return;
     }
-    let unmounted = false
+    let unmounted = false;
     loadHighlight(lang).then(() => {
       if (!unmounted) {
-        rerender()
+        rerender();
       }
-    })
+    });
     return () => {
-      unmounted = true
-    }
-  }, [lang, loaded, rerender])
+      unmounted = true;
+    };
+  }, [lang, loaded, rerender]);
   const renderedHtml = useMemo(() => {
-    const name = lang !== null && loaded ? lang : 'plaintext'
-    return Prism.highlight(code, Prism.languages[name], name)
-  }, [code, lang, loaded])
+    const name = lang !== null && loaded ? lang : "plaintext";
+    return Prism.highlight(code, Prism.languages[name], name);
+  }, [code, lang, loaded]);
   return (
     <div className="md-code-block">
       <div className="md-code-block-banner">
@@ -110,7 +113,9 @@ export const CodeBlock = memo(function CodeBlock({
           code={code}
           infostring={infostring}
           showDiagram={showDiagram}
-          onToggleDiagram={isMermaid ? () => setShowDiagram((show) => !show) : undefined}
+          onToggleDiagram={
+            isMermaid ? () => setShowDiagram((show) => !show) : undefined
+          }
         />
       </div>
       {isMermaid && showDiagram ? (
@@ -119,5 +124,5 @@ export const CodeBlock = memo(function CodeBlock({
         <pre dangerouslySetInnerHTML={{ __html: renderedHtml }}></pre>
       )}
     </div>
-  )
-})
+  );
+});

@@ -1,9 +1,9 @@
-import clsx from 'clsx'
-import { useTranslate } from '../../i18n/index.js'
-import { IconMicFill16, IconMicOutline16 } from '../base/icons.js'
-import { Tooltip } from '../base/Tooltip.js'
-import type { VoiceInputStatus } from './useVoiceInput.js'
-import styles from './VoiceButton.module.css'
+import clsx from "clsx";
+import { useTranslate } from "../../i18n/index.js";
+import { IconMicFill16, IconMicOutline16 } from "../base/icons.js";
+import { Tooltip } from "../base/Tooltip.js";
+import type { VoiceInputStatus } from "./useVoiceInput.js";
+import styles from "./VoiceButton.module.css";
 
 /**
  * 语音输入按钮。
@@ -17,41 +17,45 @@ export const VoiceButton = ({
   seconds,
   onClick,
 }: {
-  status: VoiceInputStatus
+  status: VoiceInputStatus;
   /** 非安全上下文中按钮置灰，tooltip 提示录音需要 HTTPS */
-  disabled?: boolean
+  disabled?: boolean;
   /** 本次录音已录秒数，录音中显示在按钮左侧 */
-  seconds: number
-  onClick: () => void
+  seconds: number;
+  onClick: () => void;
 }) => {
-  const t = useTranslate()
-  const recording = status === 'recording'
+  const t = useTranslate();
+  const recording = status === "recording";
 
   const label = disabled
-    ? t('voiceInputRequiresHttps')
+    ? t("voiceInputRequiresHttps")
     : recording
-      ? t('voiceInputStop')
-      : status === 'transcribing'
-        ? t('voiceInputCancel')
-        : t('voiceInput')
+      ? t("voiceInputStop")
+      : status === "transcribing"
+        ? t("voiceInputCancel")
+        : t("voiceInput");
 
   return (
     <>
-      {recording ? <span className={styles.timer}>{t('voiceInputTimer', { seconds })}</span> : null}
+      {recording ? (
+        <span className={styles.timer}>
+          {t("voiceInputTimer", { seconds })}
+        </span>
+      ) : null}
       <Tooltip content={label}>
         <button
           type="button"
           className={clsx(
             styles.button,
             recording && styles.recording,
-            disabled && styles.disabled
+            disabled && styles.disabled,
           )}
           aria-label={label}
           aria-pressed={recording}
           aria-disabled={disabled}
           onClick={() => {
             if (!disabled) {
-              onClick()
+              onClick();
             }
           }}
         >
@@ -66,7 +70,7 @@ export const VoiceButton = ({
                 <IconMicFill16 />
               </span>
             </span>
-          ) : status === 'transcribing' ? (
+          ) : status === "transcribing" ? (
             <span className={styles.loading} />
           ) : (
             <IconMicOutline16 />
@@ -74,5 +78,5 @@ export const VoiceButton = ({
         </button>
       </Tooltip>
     </>
-  )
-}
+  );
+};

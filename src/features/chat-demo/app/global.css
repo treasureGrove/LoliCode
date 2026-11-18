@@ -27,7 +27,7 @@
   background-color: var(--dsw-alias-bg-base);
   -webkit-text-size-adjust: none;
   -webkit-tap-highlight-color: transparent;
-  font-feature-settings: 'kern';
+  font-feature-settings: "kern";
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }

@@ -43,7 +43,8 @@
   cursor: pointer;
   user-select: none;
   outline: none;
-  transition: background-color var(--ds-transition-duration) var(--ds-ease-in-out);
+  transition: background-color var(--ds-transition-duration)
+    var(--ds-ease-in-out);
 
   svg {
     flex-shrink: 0;
@@ -180,7 +181,8 @@
   cursor: pointer;
   user-select: none;
   outline: none;
-  transition: background-color var(--ds-transition-duration) var(--ds-ease-in-out);
+  transition: background-color var(--ds-transition-duration)
+    var(--ds-ease-in-out);
 
   &:hover,
   &.themeOptionSelected {

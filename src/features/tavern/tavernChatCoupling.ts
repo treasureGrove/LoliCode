@@ -192,8 +192,7 @@ export function parseTavernRichMessage(rawText: string): ParsedTavernMessage {
   }
 
   const content = working || (thinking ? "" : rawText);
-  const isRichMarkdown =
-    sources.length > 0 || RICH_MARKDOWN_RE.test(content);
+  const isRichMarkdown = sources.length > 0 || RICH_MARKDOWN_RE.test(content);
 
   return {
     thinking,
@@ -359,7 +358,9 @@ function fallbackWebSpeech(
   }
 }
 
-export function useTavernReadAloudStatus(messageId: string): "idle" | "loading" | "playing" {
+export function useTavernReadAloudStatus(
+  messageId: string,
+): "idle" | "loading" | "playing" {
   const dsStatus = useChatDemoReadAloud((state) =>
     state.messageId === messageId ? state.status : "idle",
   );
@@ -376,7 +377,11 @@ interface BrowserSpeechRecognitionInstance {
   lang: string;
   continuous: boolean;
   interimResults: boolean;
-  onresult: ((event: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
+  onresult:
+    | ((event: {
+        results: ArrayLike<ArrayLike<{ transcript: string }>>;
+      }) => void)
+    | null;
   onerror: (() => void) | null;
   start: () => void;
   stop: () => void;
@@ -716,8 +721,7 @@ export async function parseTavernImportArchive(
       .filter((m) => m.text.trim().length > 0);
 
     return {
-      id:
-        typeof raw.id === "string" ? raw.id : `imported-story-${now}-${idx}`,
+      id: typeof raw.id === "string" ? raw.id : `imported-story-${now}-${idx}`,
       characterId,
       title:
         typeof raw.title === "string" && raw.title.trim()

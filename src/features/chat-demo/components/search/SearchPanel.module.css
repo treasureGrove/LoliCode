@@ -47,7 +47,8 @@
   margin-bottom: 6px;
   padding: 12px;
   border-radius: 12px;
-  transition: background-color var(--ds-transition-duration) var(--ds-ease-in-out);
+  transition: background-color var(--ds-transition-duration)
+    var(--ds-ease-in-out);
 
   &:hover {
     background: var(--dsw-alias-interactive-bg-hover);

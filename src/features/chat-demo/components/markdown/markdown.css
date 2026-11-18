@@ -123,7 +123,10 @@
 .ds-markdown .ds-markdown-task-list-item > .ds-markdown-task-checkbox {
   color: var(--dsw-alias-label-secondary);
 }
-.ds-markdown .ds-markdown-task-list-item > .ds-markdown-task-checkbox + .ds-markdown-paragraph {
+.ds-markdown
+  .ds-markdown-task-list-item
+  > .ds-markdown-task-checkbox
+  + .ds-markdown-paragraph {
   display: inline;
 }
 
@@ -311,7 +314,9 @@
 }
 
 .md-code-block {
-  --dsl-code-block-banner-background-color: var(--dsw-alias-markdown-code-block-banner);
+  --dsl-code-block-banner-background-color: var(
+    --dsw-alias-markdown-code-block-banner
+  );
   --dsl-code-block-border-radius: 12px;
   --dsl-code-block-banner-font: var(--dsw-font-xs-13);
   --dsl-code-block-content-font: var(--dsw-font-markdown-code-block);
@@ -350,7 +355,7 @@
   display: flex;
   gap: 4px;
 
-  [aria-pressed='true'] {
+  [aria-pressed="true"] {
     background: var(--dsw-alias-markdown-code-block);
     color: var(--dsw-alias-label-primary);
   }

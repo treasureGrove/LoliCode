@@ -30,7 +30,8 @@
   color: var(--dsw-alias-label-primary);
   cursor: pointer;
   outline: none;
-  transition: background-color var(--ds-transition-duration) var(--ds-ease-in-out);
+  transition: background-color var(--ds-transition-duration)
+    var(--ds-ease-in-out);
 
   &:active:not(.recording):not(.disabled) {
     background-color: var(--dsw-alias-interactive-bg-hover);

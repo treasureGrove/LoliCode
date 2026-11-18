@@ -1,11 +1,15 @@
-import clsx from 'clsx'
-import { useState } from 'react'
-import { createPortal } from 'react-dom'
-import { useAnchoredPosition, useDismiss } from './anchored.js'
-import { IconCheckOutline16, IconChevronDownOutline14 } from './icons.js'
-import styles from './Select.module.css'
+import clsx from "clsx";
+import { useState } from "react";
+import { createPortal } from "react-dom";
+import { useAnchoredPosition, useDismiss } from "./anchored.js";
+import { IconCheckOutline16, IconChevronDownOutline14 } from "./icons.js";
+import styles from "./Select.module.css";
 
-export type SelectOption<T extends string> = { value: T; label: string; lang?: string }
+export type SelectOption<T extends string> = {
+  value: T;
+  label: string;
+  lang?: string;
+};
 
 /**
  * 胶囊形选择器：触发器高 36px、圆角 18px、浅灰底，下拉菜单选中项右侧打勾；
@@ -20,23 +24,25 @@ export const Select = <T extends string>({
   className,
   disabled = false,
 }: {
-  value: T
-  options: SelectOption<T>[]
-  onChange: (value: T) => void
-  placeholder?: string
-  ariaLabel?: string
-  className?: string
-  disabled?: boolean
+  value: T;
+  options: SelectOption<T>[];
+  onChange: (value: T) => void;
+  placeholder?: string;
+  ariaLabel?: string;
+  className?: string;
+  disabled?: boolean;
 }) => {
-  const [open, setOpen] = useState(false)
-  const current = options.find((option) => option.value === value)
+  const [open, setOpen] = useState(false);
+  const current = options.find((option) => option.value === value);
   // 菜单贴右侧展开，最多 320px 高，超出在菜单内滚动
   const { anchorRef, floatingRef, position } = useAnchoredPosition<
     HTMLButtonElement,
     HTMLDivElement
-  >(open, { align: 'end', maxHeight: 320, minSpace: 160 })
+  >(open, { align: "end", maxHeight: 320, minSpace: 160 });
   // Esc 只关菜单，不让外层弹窗一起关闭
-  useDismiss(open, [anchorRef, floatingRef], () => setOpen(false), { captureEscape: true })
+  useDismiss(open, [anchorRef, floatingRef], () => setOpen(false), {
+    captureEscape: true,
+  });
 
   return (
     <>
@@ -76,8 +82,8 @@ export const Select = <T extends string>({
                   aria-selected={option.value === value}
                   className={styles.option}
                   onClick={() => {
-                    setOpen(false)
-                    onChange(option.value)
+                    setOpen(false);
+                    onChange(option.value);
                   }}
                 >
                   <span>{option.label}</span>
@@ -85,9 +91,9 @@ export const Select = <T extends string>({
                 </div>
               ))}
             </div>,
-            document.body
+            document.body,
           )
         : null}
     </>
-  )
-}
+  );
+};

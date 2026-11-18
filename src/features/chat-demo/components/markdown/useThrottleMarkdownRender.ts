@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from "react";
 
 /** 两次更新的最长间隔 */
-const MAX_WAIT = 2000
+const MAX_WAIT = 2000;
 /** 上次渲染耗时的倍数，过了这段时间才允许下次更新 */
-const TIME_CONSUMING_RATE = 2
+const TIME_CONSUMING_RATE = 2;
 
 /**
  * 流式过程中按渲染耗时节流 Markdown 内容的更新：
@@ -13,32 +13,32 @@ const TIME_CONSUMING_RATE = 2
  */
 export const useThrottleMarkdownRender = (content: string, enable: boolean) => {
   // 首次渲染从挂载时开始计时
-  const startRef = useRef(performance.now())
-  const updatableAtRef = useRef(0)
-  const [output, setOutput] = useState(content)
+  const startRef = useRef(performance.now());
+  const updatableAtRef = useRef(0);
+  const [output, setOutput] = useState(content);
 
   useEffect(() => {
-    const now = performance.now()
+    const now = performance.now();
     updatableAtRef.current =
-      now + Math.min(MAX_WAIT, (now - startRef.current) * TIME_CONSUMING_RATE)
-  }, [output])
+      now + Math.min(MAX_WAIT, (now - startRef.current) * TIME_CONSUMING_RATE);
+  }, [output]);
 
   useEffect(() => {
     if (!enable) {
-      return
+      return;
     }
     const update = () => {
-      startRef.current = performance.now()
-      setOutput(content)
-    }
-    const delay = updatableAtRef.current - performance.now()
+      startRef.current = performance.now();
+      setOutput(content);
+    };
+    const delay = updatableAtRef.current - performance.now();
     if (delay <= 0) {
-      update()
-      return
+      update();
+      return;
     }
-    const timer = setTimeout(update, delay)
-    return () => clearTimeout(timer)
-  }, [content, enable])
+    const timer = setTimeout(update, delay);
+    return () => clearTimeout(timer);
+  }, [content, enable]);
 
-  return enable ? output : content
-}
+  return enable ? output : content;
+};

@@ -26,7 +26,10 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--search-view-card-secondary-color, var(--dsw-alias-label-secondary));
+  color: var(
+    --search-view-card-secondary-color,
+    var(--dsw-alias-label-secondary)
+  );
 }
 
 .divider {
@@ -39,14 +42,20 @@
 .date {
   flex-shrink: 0;
   font-weight: 400;
-  color: var(--search-view-card-secondary-color, var(--dsw-alias-label-secondary));
+  color: var(
+    --search-view-card-secondary-color,
+    var(--dsw-alias-label-secondary)
+  );
 }
 
 .title {
   display: -webkit-box;
   margin-top: 6px;
   overflow: hidden;
-  font: var(--search-view-card-title-font, 500 16px/25px var(--dsw-font-family));
+  font: var(
+    --search-view-card-title-font,
+    500 16px/25px var(--dsw-font-family)
+  );
   color: var(--dsw-alias-label-primary);
   line-clamp: 2;
   -webkit-line-clamp: 2;
@@ -59,7 +68,10 @@
   overflow: hidden;
   font-size: 13px;
   line-height: 20px;
-  color: var(--search-view-card-secondary-color, var(--dsw-alias-label-secondary));
+  color: var(
+    --search-view-card-secondary-color,
+    var(--dsw-alias-label-secondary)
+  );
   line-clamp: 2;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;

@@ -62,7 +62,8 @@ button.image {
 
 .retryOverlay {
   background-color: rgba(0, 0, 0, 0.4);
-  transition: background-color var(--ds-transition-duration) var(--ds-ease-in-out);
+  transition: background-color var(--ds-transition-duration)
+    var(--ds-ease-in-out);
 
   button:hover > & {
     background-color: rgba(0, 0, 0, 0.5);

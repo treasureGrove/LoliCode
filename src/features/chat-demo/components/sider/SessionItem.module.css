@@ -10,7 +10,9 @@
   line-height: 20px;
   color: var(--dsw-alias-label-primary);
   cursor: pointer;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
 
   &.active {
     background-color: var(--dsw-specific-sidebar-nav-item-active-accent);

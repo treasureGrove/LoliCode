@@ -1,29 +1,52 @@
-import type { ReactNode } from 'react'
+import type { ReactNode } from "react";
 
-const IMAGE_EXTS = ['JPG', 'JPEG', 'PNG', 'GIF', 'WEBP', 'BMP', 'SVG', 'HEIC', 'TIF', 'TIFF']
-const TABLE_EXTS = ['XLS', 'XLSX', 'CSV']
-const PPT_EXTS = ['PPT', 'PPTX']
+const IMAGE_EXTS = [
+  "JPG",
+  "JPEG",
+  "PNG",
+  "GIF",
+  "WEBP",
+  "BMP",
+  "SVG",
+  "HEIC",
+  "TIF",
+  "TIFF",
+];
+const TABLE_EXTS = ["XLS", "XLSX", "CSV"];
+const PPT_EXTS = ["PPT", "PPTX"];
 
 /** ext 为大写扩展名 */
 export function FileIcon({ ext }: { ext: string }) {
   if (IMAGE_EXTS.includes(ext)) {
-    return <ImageIcon />
+    return <ImageIcon />;
   }
-  if (ext === 'PDF') {
-    return <PdfIcon />
+  if (ext === "PDF") {
+    return <PdfIcon />;
   }
   if (TABLE_EXTS.includes(ext)) {
-    return <TableFileIcon />
+    return <TableFileIcon />;
   }
   if (PPT_EXTS.includes(ext)) {
-    return <PptFileIcon />
+    return <PptFileIcon />;
   }
-  return <OtherFileIcon />
+  return <OtherFileIcon />;
 }
 
-function FileIconFrame({ color, children }: { color: string; children: ReactNode }) {
+function FileIconFrame({
+  color,
+  children,
+}: {
+  color: string;
+  children: ReactNode;
+}) {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28" fill="none">
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="28"
+      height="28"
+      viewBox="0 0 28 28"
+      fill="none"
+    >
       <path
         d="M8.48924 28H19.5108C21.6479 28 22.7165 28 23.5594 27.6509C24.6833 27.1853 25.5762 26.2924 26.0417 25.1685C26.3909 24.3256 26.3909 23.257 26.3909 21.1199V8.79443C26.3909 8.32877 26.3909 8.09593 26.3471 7.87507C26.2887 7.58058 26.173 7.30042 26.0067 7.05048C25.882 6.86303 25.7177 6.69799 25.3893 6.36792L20.0611 1.01354C19.7304 0.681235 19.5651 0.515081 19.3769 0.38885C19.126 0.220541 18.8443 0.103463 18.5481 0.0443412C18.3259 0 18.0915 0 17.6226 0H8.48924C6.35209 0 5.28351 0 4.4406 0.349145C3.31672 0.814671 2.4238 1.70759 1.95828 2.83147C1.60913 3.67438 1.60913 4.74296 1.60913 6.88011V21.1199C1.60913 23.257 1.60913 24.3256 1.95828 25.1685C2.4238 26.2924 3.31672 27.1853 4.4406 27.6509C5.28351 28 6.35209 28 8.48924 28Z"
         fill={color}
@@ -35,7 +58,7 @@ function FileIconFrame({ color, children }: { color: string; children: ReactNode
       />
       {children}
     </svg>
-  )
+  );
 }
 
 function OtherFileIcon() {
@@ -45,7 +68,7 @@ function OtherFileIcon() {
       <path d="M8.10132 16.4688H19.8948" stroke="white" strokeWidth="1.6" />
       <path d="M8.10132 20.252H16.0199" stroke="white" strokeWidth="1.6" />
     </FileIconFrame>
-  )
+  );
 }
 
 function PdfIcon() {
@@ -57,20 +80,44 @@ function PdfIcon() {
         transform="translate(-40)"
       />
     </FileIconFrame>
-  )
+  );
 }
 
 function TableFileIcon() {
   return (
     <FileIconFrame color="#3FB67F">
       <g transform="translate(-80)" fill="white">
-        <rect x="89.3879" y="11.6172" width="4.24569" height="4.24569" rx=".458674" />
-        <rect x="89.3879" y="16.5879" width="4.24569" height="4.24569" rx=".458674" />
-        <rect x="94.3665" y="11.6172" width="4.24569" height="4.24569" rx=".458674" />
-        <rect x="94.3665" y="16.5879" width="4.24569" height="4.24569" rx=".458674" />
+        <rect
+          x="89.3879"
+          y="11.6172"
+          width="4.24569"
+          height="4.24569"
+          rx=".458674"
+        />
+        <rect
+          x="89.3879"
+          y="16.5879"
+          width="4.24569"
+          height="4.24569"
+          rx=".458674"
+        />
+        <rect
+          x="94.3665"
+          y="11.6172"
+          width="4.24569"
+          height="4.24569"
+          rx=".458674"
+        />
+        <rect
+          x="94.3665"
+          y="16.5879"
+          width="4.24569"
+          height="4.24569"
+          rx=".458674"
+        />
       </g>
     </FileIconFrame>
-  )
+  );
 }
 
 function ImageIcon() {
@@ -82,7 +129,7 @@ function ImageIcon() {
         <path d="M131.86 11.3997C131.86 12.286 131.142 13.0045 130.256 13.0045C129.369 13.0045 128.651 12.286 128.651 11.3997C128.651 10.5134 129.369 9.79492 130.256 9.79492C131.142 9.79492 131.86 10.5134 131.86 11.3997Z" />
       </g>
     </FileIconFrame>
-  )
+  );
 }
 
 function PptFileIcon() {
@@ -93,5 +140,5 @@ function PptFileIcon() {
         <path d="M174.089 10.3672C177.049 10.3672 179.45 12.7674 179.45 15.7283H174.089V10.3672Z" />
       </g>
     </FileIconFrame>
-  )
+  );
 }

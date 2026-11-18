@@ -1,12 +1,12 @@
-import { useEffect, type ReactNode } from 'react'
-import { createPortal } from 'react-dom'
-import { useIsMobile } from '../../app/viewport.js'
-import { useAnchoredPosition, useDelayedOpen } from './anchored.js'
-import styles from './Tooltip.module.css'
+import { useEffect, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { useIsMobile } from "../../app/viewport.js";
+import { useAnchoredPosition, useDelayedOpen } from "./anchored.js";
+import styles from "./Tooltip.module.css";
 
-export type TooltipPlacement = 'top' | 'bottom'
+export type TooltipPlacement = "top" | "bottom";
 
-const ENTER_DELAY = 100
+const ENTER_DELAY = 100;
 
 /**
  * 悬停 100ms 后出现，离开立即消失，移动端不显示。
@@ -14,33 +14,38 @@ const ENTER_DELAY = 100
  */
 export const Tooltip = ({
   content,
-  placement = 'top',
+  placement = "top",
   children,
 }: {
-  content: ReactNode
-  placement?: TooltipPlacement
-  children: ReactNode
+  content: ReactNode;
+  placement?: TooltipPlacement;
+  children: ReactNode;
 }) => {
-  const isMobile = useIsMobile()
-  const { open, setOpen, schedule, cancel } = useDelayedOpen()
-  const { anchorRef, floatingRef, position } = useAnchoredPosition<HTMLSpanElement, HTMLDivElement>(
-    open,
-    { side: placement, align: 'center', measureFirstChild: true, measureKey: content }
-  )
+  const isMobile = useIsMobile();
+  const { open, setOpen, schedule, cancel } = useDelayedOpen();
+  const { anchorRef, floatingRef, position } = useAnchoredPosition<
+    HTMLSpanElement,
+    HTMLDivElement
+  >(open, {
+    side: placement,
+    align: "center",
+    measureFirstChild: true,
+    measureKey: content,
+  });
 
-  useEffect(() => () => cancel(), [cancel])
+  useEffect(() => () => cancel(), [cancel]);
 
   // 滚动时收起提示。
   useEffect(() => {
     if (!open) {
-      return
+      return;
     }
-    const onScroll = () => setOpen(false)
-    window.addEventListener('scroll', onScroll, true)
-    return () => window.removeEventListener('scroll', onScroll, true)
-  }, [open, setOpen])
+    const onScroll = () => setOpen(false);
+    window.addEventListener("scroll", onScroll, true);
+    return () => window.removeEventListener("scroll", onScroll, true);
+  }, [open, setOpen]);
 
-  const visible = open && !isMobile && Boolean(content)
+  const visible = open && !isMobile && Boolean(content);
 
   return (
     <>
@@ -58,13 +63,13 @@ export const Tooltip = ({
               ref={floatingRef}
               role="tooltip"
               className={styles.tooltip}
-              style={position ?? { top: 0, left: 0, visibility: 'hidden' }}
+              style={position ?? { top: 0, left: 0, visibility: "hidden" }}
             >
               {content}
             </div>,
-            document.body
+            document.body,
           )
         : null}
     </>
-  )
-}
+  );
+};

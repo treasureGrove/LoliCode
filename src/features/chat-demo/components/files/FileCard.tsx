@@ -1,10 +1,10 @@
-import clsx from 'clsx'
-import type { ReactNode } from 'react'
-import { useTranslate } from '../../i18n/index.js'
-import { formatSize, getExtension } from '../../services/attachments.js'
-import { IconCloseFill14, IconRefreshOutline16 } from '../base/icons.js'
-import { FileIcon } from './FileIcon.js'
-import styles from './FileCard.module.css'
+import clsx from "clsx";
+import type { ReactNode } from "react";
+import { useTranslate } from "../../i18n/index.js";
+import { formatSize, getExtension } from "../../services/attachments.js";
+import { IconCloseFill14, IconRefreshOutline16 } from "../base/icons.js";
+import { FileIcon } from "./FileIcon.js";
+import styles from "./FileCard.module.css";
 
 /**
  * 文档文件卡片：图标 + 文件名 + 「扩展名 大小」或状态文案。
@@ -14,53 +14,61 @@ import styles from './FileCard.module.css'
 export const FileCard = ({
   name,
   size,
-  status = 'done',
+  status = "done",
   error,
   onRetry,
   onRemove,
   onOpen,
 }: {
-  name: string
-  size: number
-  status?: 'uploading' | 'done' | 'error'
-  error?: string
-  onRetry?: () => void
-  onRemove?: () => void
-  onOpen?: () => void
+  name: string;
+  size: number;
+  status?: "uploading" | "done" | "error";
+  error?: string;
+  onRetry?: () => void;
+  onRemove?: () => void;
+  onOpen?: () => void;
 }) => {
-  const t = useTranslate()
-  const ext = getExtension(name)
-  let icon: ReactNode = <FileIcon ext={ext} />
-  let description = [ext, formatSize(size)].filter(Boolean).join(' ')
-  if (status === 'uploading') {
-    icon = <span className={styles.spinner} />
-    description = t('uploadFileStatusUploading')
-  } else if (status === 'error') {
+  const t = useTranslate();
+  const ext = getExtension(name);
+  let icon: ReactNode = <FileIcon ext={ext} />;
+  let description = [ext, formatSize(size)].filter(Boolean).join(" ");
+  if (status === "uploading") {
+    icon = <span className={styles.spinner} />;
+    description = t("uploadFileStatusUploading");
+  } else if (status === "error") {
     // 不可重试（过大、格式不支持）时保留文件图标并显示原因
     if (onRetry) {
-      icon = <IconRefreshOutline16 />
+      icon = <IconRefreshOutline16 />;
     }
-    description = error ?? t('uploadFileStatusFailed')
+    description = error ?? t("uploadFileStatusFailed");
   }
-  const onClick = status === 'error' ? onRetry : status === 'done' ? onOpen : undefined
+  const onClick =
+    status === "error" ? onRetry : status === "done" ? onOpen : undefined;
   return (
     <div
       className={clsx(
         styles.card,
         onRemove && styles.editable,
-        status === 'error' && (onRemove || onRetry) && styles.failed,
-        onClick && styles.clickable
+        status === "error" && (onRemove || onRetry) && styles.failed,
+        onClick && styles.clickable,
       )}
       title={
-        status === 'error'
+        status === "error"
           ? onRetry
-            ? t('uploadRetry', { message: description })
+            ? t("uploadRetry", { message: description })
             : description
           : name
       }
       onClick={onClick}
     >
-      <div className={clsx(styles.icon, status === 'error' && onRetry && styles.retry)}>{icon}</div>
+      <div
+        className={clsx(
+          styles.icon,
+          status === "error" && onRetry && styles.retry,
+        )}
+      >
+        {icon}
+      </div>
       <div className={styles.content}>
         <div className={styles.caption}>{name}</div>
         <div className={styles.subCaption}>{description}</div>
@@ -68,16 +76,19 @@ export const FileCard = ({
       {onRemove ? (
         <button
           type="button"
-          className={clsx(styles.remove, status === 'error' && !onRetry && styles.invalidRemove)}
-          aria-label={t('delete')}
+          className={clsx(
+            styles.remove,
+            status === "error" && !onRetry && styles.invalidRemove,
+          )}
+          aria-label={t("delete")}
           onClick={(event) => {
-            event.stopPropagation()
-            onRemove()
+            event.stopPropagation();
+            onRemove();
           }}
         >
           <IconCloseFill14 />
         </button>
       ) : null}
     </div>
-  )
-}
+  );
+};
