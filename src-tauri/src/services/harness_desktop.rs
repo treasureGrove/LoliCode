@@ -2309,8 +2309,7 @@ fn park_worker_queues(record: &mut SessionRecord) {
 }
 
 fn save_record(file: &Path, record: &SessionRecord) -> Result<(), String> {
-    let bytes =
-        serde_json::to_vec(record).map_err(|_| "无法保存 Harness 会话，原记录已保留")?;
+    let bytes = serde_json::to_vec(record).map_err(|_| "无法保存 Harness 会话，原记录已保留")?;
     config::atomic_write_private(file, &bytes)
         .map_err(|_| "无法保存 Harness 会话，原记录已保留")?;
     // A reader already loading the old record may finish its current

@@ -154,7 +154,11 @@ impl MarketplaceState {
             }
             changed = true;
         }
-        if self.selected_source.as_ref().is_none_or(|url| !self.sources.contains(url)) {
+        if self
+            .selected_source
+            .as_ref()
+            .is_none_or(|url| !self.sources.contains(url))
+        {
             let next = self.sources.first().cloned();
             if next != self.selected_source {
                 self.selected_source = next;
@@ -430,10 +434,7 @@ fn load_state(profile: &Path) -> Result<MarketplaceState, String> {
 }
 
 fn save_state(profile: &Path, state: &mut MarketplaceState) -> Result<(), String> {
-    state.revision = state
-        .revision
-        .checked_add(1)
-        .ok_or("插件市场版本号溢出")?;
+    state.revision = state.revision.checked_add(1).ok_or("插件市场版本号溢出")?;
     let root = market_root(profile);
     fs::create_dir_all(&root).map_err(|_| "无法创建插件市场配置目录")?;
     let bytes = serde_json::to_vec_pretty(state).map_err(|_| "插件市场配置编码失败")?;
@@ -582,7 +583,9 @@ fn parse_semver(raw: &str) -> Option<ParsedSemver> {
     })
 }
 
-fn parse_partial_tuple(raw: &str) -> Option<(Option<u64>, Option<u64>, Option<u64>, Vec<PreIdent>)> {
+fn parse_partial_tuple(
+    raw: &str,
+) -> Option<(Option<u64>, Option<u64>, Option<u64>, Vec<PreIdent>)> {
     let s = raw.trim().trim_start_matches(['v', '=']);
     if s.is_empty() || s == "*" || s.eq_ignore_ascii_case("x") {
         return Some((None, None, None, Vec::new()));
@@ -677,8 +680,10 @@ fn comparator_matches(runtime: &ParsedSemver, token: &str) -> Option<bool> {
                 pre: vec![PreIdent::Num(0)],
             }
         };
-        return Some(cmp_semver(runtime, &lower) != std::cmp::Ordering::Less
-            && cmp_semver(runtime, &upper) == std::cmp::Ordering::Less);
+        return Some(
+            cmp_semver(runtime, &lower) != std::cmp::Ordering::Less
+                && cmp_semver(runtime, &upper) == std::cmp::Ordering::Less,
+        );
     }
     if let Some(rest) = token.strip_prefix('~') {
         let (maj, min, pat, pre) = parse_partial_tuple(rest)?;
@@ -704,8 +709,10 @@ fn comparator_matches(runtime: &ParsedSemver, token: &str) -> Option<bool> {
                 pre: vec![PreIdent::Num(0)],
             }
         };
-        return Some(cmp_semver(runtime, &lower) != std::cmp::Ordering::Less
-            && cmp_semver(runtime, &upper) == std::cmp::Ordering::Less);
+        return Some(
+            cmp_semver(runtime, &lower) != std::cmp::Ordering::Less
+                && cmp_semver(runtime, &upper) == std::cmp::Ordering::Less,
+        );
     }
     let (op, ver_str) = if let Some(r) = token.strip_prefix(">=") {
         (">=", r)
@@ -744,8 +751,10 @@ fn comparator_matches(runtime: &ParsedSemver, token: &str) -> Option<bool> {
                 pre: vec![PreIdent::Num(0)],
             }
         };
-        return Some(cmp_semver(runtime, &lower) != std::cmp::Ordering::Less
-            && cmp_semver(runtime, &upper) == std::cmp::Ordering::Less);
+        return Some(
+            cmp_semver(runtime, &lower) != std::cmp::Ordering::Less
+                && cmp_semver(runtime, &upper) == std::cmp::Ordering::Less,
+        );
     }
     let target = ParsedSemver {
         major: maj,
@@ -827,7 +836,12 @@ fn resolve_relative_icon(raw_icon: Option<&str>, base_url: &str) -> Option<Strin
     None
 }
 
-fn parse_feed(url: &str, raw: &Value, fetched_at: u64, from_cache: bool) -> Result<CachedFeed, String> {
+fn parse_feed(
+    url: &str,
+    raw: &Value,
+    fetched_at: u64,
+    from_cache: bool,
+) -> Result<CachedFeed, String> {
     if raw["format"] != 1 {
         return Err("插件索引格式不是受支持的 format: 1".into());
     }
@@ -1000,7 +1014,11 @@ async fn http_client(timeout_secs: u64) -> Result<reqwest::Client, String> {
         .map_err(|_| "无法初始化网络客户端".to_owned())
 }
 
-async fn fetch_bounded_bytes(url: &str, max_bytes: usize, timeout_secs: u64) -> Result<Vec<u8>, String> {
+async fn fetch_bounded_bytes(
+    url: &str,
+    max_bytes: usize,
+    timeout_secs: u64,
+) -> Result<Vec<u8>, String> {
     let client = http_client(timeout_secs).await?;
     let mut response = client
         .get(url)
@@ -1266,9 +1284,7 @@ fn copy_or_hardlink_dir(src: &Path, dst: &Path, depth: usize) -> Result<(), Stri
     fs::create_dir_all(dst).map_err(|_| "无法创建插件同步目录")?;
     for entry in fs::read_dir(src).map_err(|_| "无法读取插件缓存目录")? {
         let entry = entry.map_err(|_| "无法枚举插件缓存目录")?;
-        let file_type = entry
-            .file_type()
-            .map_err(|_| "无法检查插件文件类型")?;
+        let file_type = entry.file_type().map_err(|_| "无法检查插件文件类型")?;
         if file_type.is_symlink() {
             continue;
         }
@@ -1277,8 +1293,7 @@ fn copy_or_hardlink_dir(src: &Path, dst: &Path, depth: usize) -> Result<(), Stri
             copy_or_hardlink_dir(&entry.path(), &target_path, depth + 1)?;
         } else if file_type.is_file() {
             if fs::hard_link(entry.path(), &target_path).is_err() {
-                fs::copy(entry.path(), &target_path)
-                    .map_err(|_| "无法同步插件文件到会话环境")?;
+                fs::copy(entry.path(), &target_path).map_err(|_| "无法同步插件文件到会话环境")?;
             }
         }
     }
@@ -1360,11 +1375,7 @@ pub async fn overview(app: &AppHandle) -> Result<MarketOverview, String> {
         .collect();
 
     let enabled_market = state.installed.iter().filter(|p| p.enabled).count();
-    let enabled_harness = harness_catalog
-        .bundles
-        .iter()
-        .filter(|b| b.enabled)
-        .count();
+    let enabled_harness = harness_catalog.bundles.iter().filter(|b| b.enabled).count();
 
     Ok(MarketOverview {
         runtime_version,
@@ -1475,8 +1486,12 @@ pub async fn query(query: MarketplaceQuery) -> Result<MarketplacePage, String> {
                 continue;
             }
         }
-        let default_v =
-            pick_default_version(&plugin.versions, runtime_version, &plugin.name, &state.exemptions);
+        let default_v = pick_default_version(
+            &plugin.versions,
+            runtime_version,
+            &plugin.name,
+            &state.exemptions,
+        );
         let (compatible, exempted) = match default_v {
             Some(v) => is_version_compatible(
                 v.engines_dsh.as_deref(),
@@ -1537,10 +1552,12 @@ pub async fn query(query: MarketplaceQuery) -> Result<MarketplacePage, String> {
             let p = entry.plugin;
             let dv = entry.default_v;
             let update_available = match (entry.installed_entry, dv) {
-                (Some(inst), Some(v)) => match (parse_semver(&v.version), parse_semver(&inst.version)) {
-                    (Some(nv), Some(iv)) => cmp_semver(&nv, &iv) == std::cmp::Ordering::Greater,
-                    _ => v.version != inst.version,
-                },
+                (Some(inst), Some(v)) => {
+                    match (parse_semver(&v.version), parse_semver(&inst.version)) {
+                        (Some(nv), Some(iv)) => cmp_semver(&nv, &iv) == std::cmp::Ordering::Greater,
+                        _ => v.version != inst.version,
+                    }
+                }
                 _ => false,
             };
             MarketplacePluginItem {
@@ -1600,12 +1617,7 @@ async fn fetch_readme_for_package(
     // Prefer installed local README first when installed.
     let installed_pkg_dir = profile_dir(profile).join("node_modules").join(name);
     if installed_pkg_dir.is_dir() {
-        for candidate in [
-            "README.zh-CN.md",
-            "README.zh.md",
-            "README.md",
-            "readme.md",
-        ] {
+        for candidate in ["README.zh-CN.md", "README.zh.md", "README.md", "readme.md"] {
             let path = installed_pkg_dir.join(candidate);
             if path.is_file() {
                 if let Ok(text) = read_bounded_utf8(&path, MAX_DETAIL_BYTES) {
@@ -1626,12 +1638,11 @@ async fn fetch_readme_for_package(
             "jsdelivr",
         ));
     }
-    candidates.push((
-        format!("https://unpkg.com/{spec}/README.md"),
-        "unpkg",
-    ));
+    candidates.push((format!("https://unpkg.com/{spec}/README.md"), "unpkg"));
     if let Some(repo_url) = repository.and_then(|r| r["url"].as_str()) {
-        if let Some(raw_base) = github_raw_base(repo_url, repository.and_then(|r| r["directory"].as_str())) {
+        if let Some(raw_base) =
+            github_raw_base(repo_url, repository.and_then(|r| r["directory"].as_str()))
+        {
             for file in ["README.zh-CN.md", "README.zh.md", "README.md"] {
                 candidates.push((format!("{raw_base}/{file}"), "repository"));
             }
@@ -1790,21 +1801,23 @@ pub async fn get_detail(
         .or_else(|| versions.iter().find(|v| v.compatible))
         .or_else(|| versions.first());
 
-    let compatibility_issue = chosen_version
-        .filter(|v| !v.compatible)
-        .and_then(|v| {
-            v.engines_dsh.as_ref().map(|req| {
-                format!(
-                    "{}@{} 要求 DeepSeek Harness {}（当前为 {}）",
-                    name, v.version, req, runtime_version
-                )
-            })
-        });
+    let compatibility_issue = chosen_version.filter(|v| !v.compatible).and_then(|v| {
+        v.engines_dsh.as_ref().map(|req| {
+            format!(
+                "{}@{} 要求 DeepSeek Harness {}（当前为 {}）",
+                name, v.version, req, runtime_version
+            )
+        })
+    });
 
     let repository = feed_entry
         .and_then(|e| e.repository.clone())
         .or_else(|| installed_entry.and_then(|i| i.repository.clone()))
-        .or_else(|| local_pkg.as_ref().and_then(|m| m.get("repository").cloned()));
+        .or_else(|| {
+            local_pkg
+                .as_ref()
+                .and_then(|m| m.get("repository").cloned())
+        });
 
     let readme_version = chosen_version
         .map(|v| v.version.as_str())
@@ -1815,10 +1828,9 @@ pub async fn get_detail(
     let category = feed_entry
         .and_then(|e| e.category.clone())
         .or_else(|| installed_entry.and_then(|i| i.category.clone()));
-    let category_title = category.as_deref().and_then(|cid| {
-        feed.as_ref()
-            .and_then(|f| f.categories.get(cid).cloned())
-    });
+    let category_title = category
+        .as_deref()
+        .and_then(|cid| feed.as_ref().and_then(|f| f.categories.get(cid).cloned()));
 
     Ok(MarketplaceDetail {
         name: name.clone(),
@@ -1846,9 +1858,7 @@ pub async fn get_detail(
         repository,
         category,
         category_title,
-        keywords: feed_entry
-            .map(|e| e.keywords.clone())
-            .unwrap_or_default(),
+        keywords: feed_entry.map(|e| e.keywords.clone()).unwrap_or_default(),
         default_version: chosen_version.map(|v| v.version.clone()),
         latest_version: versions.first().map(|v| v.version.clone()),
         compatible: chosen_version.map(|v| v.compatible).unwrap_or(true),
@@ -1918,7 +1928,10 @@ pub async fn select_source(app: &AppHandle, raw_url: String) -> Result<MarketOve
     overview(app).await
 }
 
-pub async fn refresh_source(app: &AppHandle, source_url: Option<String>) -> Result<MarketOverview, String> {
+pub async fn refresh_source(
+    app: &AppHandle,
+    source_url: Option<String>,
+) -> Result<MarketOverview, String> {
     let profile = config::get_app_config_dir();
     let state = load_state(&profile)?;
     let targets = if let Some(url) = source_url.filter(|u| !u.trim().is_empty()) {
@@ -1990,9 +2003,7 @@ async fn fetch_npm_package_doc(
 }
 
 fn pick_matching_npm_version(doc: &Value, requested_range: Option<&str>) -> Result<String, String> {
-    let versions_obj = doc["versions"]
-        .as_object()
-        .ok_or("npm 包不包含可用版本")?;
+    let versions_obj = doc["versions"].as_object().ok_or("npm 包不包含可用版本")?;
     if let Some(range) = requested_range.map(str::trim).filter(|r| !r.is_empty()) {
         if versions_obj.contains_key(range) {
             return Ok(range.to_owned());
@@ -2161,18 +2172,10 @@ fn unpack_npm_tgz(tgz_bytes: &[u8], destination: &Path) -> Result<(), String> {
         } else if let Some(l) = next_long_name.take() {
             l
         } else {
-            let name_part = String::from_utf8_lossy(
-                header[..100]
-                    .split(|&b| b == 0)
-                    .next()
-                    .unwrap_or(&[]),
-            );
-            let prefix_part = String::from_utf8_lossy(
-                header[345..500]
-                    .split(|&b| b == 0)
-                    .next()
-                    .unwrap_or(&[]),
-            );
+            let name_part =
+                String::from_utf8_lossy(header[..100].split(|&b| b == 0).next().unwrap_or(&[]));
+            let prefix_part =
+                String::from_utf8_lossy(header[345..500].split(|&b| b == 0).next().unwrap_or(&[]));
             if prefix_part.is_empty() {
                 name_part.into_owned()
             } else {
@@ -2211,7 +2214,21 @@ fn unpack_npm_tgz(tgz_bytes: &[u8], destination: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn inspect_bundle_manifest(pkg_dir: &Path, expected_name: Option<&str>) -> Result<(String, String, bool, bool, Vec<String>, Option<Value>, Option<Value>), String> {
+fn inspect_bundle_manifest(
+    pkg_dir: &Path,
+    expected_name: Option<&str>,
+) -> Result<
+    (
+        String,
+        String,
+        bool,
+        bool,
+        Vec<String>,
+        Option<Value>,
+        Option<Value>,
+    ),
+    String,
+> {
     let manifest_path = pkg_dir.join("package.json");
     let bytes = fs::read(&manifest_path).map_err(|_| "插件目录缺少有效的 package.json")?;
     let manifest: Value =
@@ -2272,9 +2289,12 @@ fn inspect_bundle_manifest(pkg_dir: &Path, expected_name: Option<&str>) -> Resul
 fn sanitize_bundle_patch_path(pkg_dir: &Path, relative: &str) -> Option<PathBuf> {
     let rel = Path::new(relative.trim_start_matches("./"));
     if rel.is_absolute()
-        || rel
-            .components()
-            .any(|c| matches!(c, Component::ParentDir | Component::RootDir | Component::Prefix(_)))
+        || rel.components().any(|c| {
+            matches!(
+                c,
+                Component::ParentDir | Component::RootDir | Component::Prefix(_)
+            )
+        })
     {
         return None;
     }
@@ -2432,7 +2452,10 @@ fn parse_spec_name_and_version(spec: &str) -> (String, Option<String>) {
     let trimmed = spec.trim();
     if let Some(rest) = trimmed.strip_prefix('@') {
         if let Some((pkg, ver)) = rest.split_once('@') {
-            return (format!("@{pkg}"), (!ver.is_empty()).then_some(ver.to_owned()));
+            return (
+                format!("@{pkg}"),
+                (!ver.is_empty()).then_some(ver.to_owned()),
+            );
         }
         return (trimmed.to_owned(), None);
     }
@@ -2472,8 +2495,8 @@ pub async fn install_plugin(
 
     let candidate_path = PathBuf::from(&spec);
     let installed_record = if candidate_path.is_dir() {
-        let canonical = fs::canonicalize(&candidate_path)
-            .map_err(|_| "无法访问所选本地插件目录")?;
+        let canonical =
+            fs::canonicalize(&candidate_path).map_err(|_| "无法访问所选本地插件目录")?;
         let (pkg_name, pkg_ver, has_bundle, has_client, patch_files, description, repository) =
             inspect_bundle_manifest(&canonical, None)?;
         if !has_bundle {
@@ -2579,7 +2602,11 @@ pub async fn install_plugin(
             author: feed_meta
                 .as_ref()
                 .and_then(|m| m.author.clone())
-                .or_else(|| version_manifest["author"]["name"].as_str().map(str::to_owned)),
+                .or_else(|| {
+                    version_manifest["author"]["name"]
+                        .as_str()
+                        .map(str::to_owned)
+                }),
             homepage: feed_meta
                 .as_ref()
                 .and_then(|m| m.homepage.clone())
@@ -2733,7 +2760,8 @@ mod tests {
         assert!(!valid_npm_package_name("a/b/c"));
 
         assert_eq!(
-            normalize_index_url("https://cdn.jsdelivr.net/npm/dsh-plugin-catalog/index.json").unwrap(),
+            normalize_index_url("https://cdn.jsdelivr.net/npm/dsh-plugin-catalog/index.json")
+                .unwrap(),
             "https://cdn.jsdelivr.net/npm/dsh-plugin-catalog/index.json"
         );
         assert!(normalize_index_url("file:///etc/passwd").is_err());
@@ -2743,11 +2771,23 @@ mod tests {
 
     #[test]
     fn evaluates_semver_ranges_with_prerelease_like_dsh() {
-        assert!(semver_satisfies_with_prerelease("0.2.2-rc.2", ">=0.2.1-rc.1"));
-        assert!(semver_satisfies_with_prerelease("0.2.2-rc.2", ">=0.2.1-rc.4 <0.3.0-0"));
-        assert!(semver_satisfies_with_prerelease("0.2.2-rc.2", "^0.2.2-rc.1"));
+        assert!(semver_satisfies_with_prerelease(
+            "0.2.2-rc.2",
+            ">=0.2.1-rc.1"
+        ));
+        assert!(semver_satisfies_with_prerelease(
+            "0.2.2-rc.2",
+            ">=0.2.1-rc.4 <0.3.0-0"
+        ));
+        assert!(semver_satisfies_with_prerelease(
+            "0.2.2-rc.2",
+            "^0.2.2-rc.1"
+        ));
         assert!(!semver_satisfies_with_prerelease("0.2.2-rc.2", ">=0.2.3"));
-        assert!(!semver_satisfies_with_prerelease("0.2.2-rc.2", "0.2.1-rc.5"));
+        assert!(!semver_satisfies_with_prerelease(
+            "0.2.2-rc.2",
+            "0.2.1-rc.5"
+        ));
     }
 
     #[test]
@@ -2814,7 +2854,10 @@ mod tests {
         let valid_tgz = build_tgz_with_entry("package/package.json", b'0', br#"{"name":"a"}"#);
         let ok_dir = temp.path().join("ok");
         unpack_npm_tgz(&valid_tgz, &ok_dir).unwrap();
-        assert_eq!(fs::read_to_string(ok_dir.join("package.json")).unwrap(), r#"{"name":"a"}"#);
+        assert_eq!(
+            fs::read_to_string(ok_dir.join("package.json")).unwrap(),
+            r#"{"name":"a"}"#
+        );
 
         let symlink_tgz = build_tgz_with_entry("package/evil", b'2', b"");
         assert!(unpack_npm_tgz(&symlink_tgz, &temp.path().join("sym")).is_err());
@@ -2830,7 +2873,11 @@ mod tests {
         let home = temp.path().join("session-home");
         let src_pkg = profile_dir(&profile).join("node_modules/dsh-plan-note");
         fs::create_dir_all(&src_pkg).unwrap();
-        fs::write(src_pkg.join("package.json"), r#"{"name":"dsh-plan-note","version":"0.1.2"}"#).unwrap();
+        fs::write(
+            src_pkg.join("package.json"),
+            r#"{"name":"dsh-plan-note","version":"0.1.2"}"#,
+        )
+        .unwrap();
 
         let mut state = MarketplaceState::default();
         state
@@ -2846,19 +2893,28 @@ mod tests {
         sync_home_sdk_profile(&profile, &home, &selected).unwrap();
 
         let sdk = home.join("profiles/sdk");
-        let manifest: Value = serde_json::from_slice(&fs::read(sdk.join("package.json")).unwrap()).unwrap();
+        let manifest: Value =
+            serde_json::from_slice(&fs::read(sdk.join("package.json")).unwrap()).unwrap();
         assert_eq!(manifest["dependencies"]["dsh-plan-note"], "0.1.2");
         assert_eq!(
             manifest["dsh"]["profile"]["bundles"],
-            json!(["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-sdk-app", "dsh-plan-note"])
+            json!([
+                "@deepseek-ai/dsh-base",
+                "@deepseek-ai/dsh-sdk-app",
+                "dsh-plan-note"
+            ])
         );
-        assert!(sdk.join("node_modules/dsh-plan-note/package.json").is_file());
-        let compat: Value = serde_json::from_slice(&fs::read(sdk.join("compatibility.json")).unwrap()).unwrap();
+        assert!(sdk
+            .join("node_modules/dsh-plan-note/package.json")
+            .is_file());
+        let compat: Value =
+            serde_json::from_slice(&fs::read(sdk.join("compatibility.json")).unwrap()).unwrap();
         assert_eq!(compat["dsh-plan-note@0.1.2"], json!(["0.2.2-rc.2"]));
 
         // Disabling clears marketplace bundles and stale files cleanly.
         sync_home_sdk_profile(&profile, &home, &[]).unwrap();
-        let cleared: Value = serde_json::from_slice(&fs::read(sdk.join("package.json")).unwrap()).unwrap();
+        let cleared: Value =
+            serde_json::from_slice(&fs::read(sdk.join("package.json")).unwrap()).unwrap();
         assert_eq!(
             cleared["dsh"]["profile"]["bundles"],
             json!(["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-sdk-app"])

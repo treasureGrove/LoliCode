@@ -14,9 +14,18 @@ use tauri::{AppHandle, Manager};
 const BUNDLES: [(&str, &str); 7] = [
     ("terminal", "@deepseek-ai/dsh-experimental-terminal-bundle"),
     ("ralph", "@deepseek-ai/dsh-experimental-ralph-bundle"),
-    ("session-search", "@deepseek-ai/dsh-experimental-session-search"),
-    ("session-titles", "@deepseek-ai/dsh-experimental-session-titles-bundle"),
-    ("badge-skill", "@deepseek-ai/dsh-experimental-badge-skill-bundle"),
+    (
+        "session-search",
+        "@deepseek-ai/dsh-experimental-session-search",
+    ),
+    (
+        "session-titles",
+        "@deepseek-ai/dsh-experimental-session-titles-bundle",
+    ),
+    (
+        "badge-skill",
+        "@deepseek-ai/dsh-experimental-badge-skill-bundle",
+    ),
     ("worktree", "@deepseek-ai/dsh-experimental-tool-worktree"),
     ("auto-review", "@deepseek-ai/dsh-experimental-auto-review"),
 ];
