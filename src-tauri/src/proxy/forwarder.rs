@@ -19,6 +19,7 @@ use super::{
         codex_chat_history::CodexChatHistoryStore, gemini_shadow::GeminiShadowStore, get_adapter,
         AuthInfo, AuthStrategy, ProviderAdapter, ProviderType,
     },
+    request_attribution::{apply_request_attribution, USER_AGENT},
     thinking_budget_rectifier::{rectify_thinking_budget, should_rectify_thinking_budget},
     thinking_rectifier::{
         normalize_thinking_type, rectify_anthropic_request, should_rectify_thinking_signature,
@@ -2313,10 +2314,11 @@ impl RequestForwarder {
         };
 
         // 预计算上游 host 值（用于在原位替换 host header）
-        let upstream_host = url
-            .parse::<http::Uri>()
-            .ok()
-            .and_then(|u| u.authority().map(|a| a.to_string()));
+        let upstream_uri = url.parse::<http::Uri>().ok();
+        let upstream_host = upstream_uri
+            .as_ref()
+            .and_then(http::Uri::authority)
+            .map(ToString::to_string);
 
         // OpenCode Go places two hard requirements on clients
         // (<https://opencode.ai/docs/go/>); satisfy both, only for its upstream.
@@ -2606,13 +2608,12 @@ impl RequestForwarder {
             ordered_headers.append("x-app", http::HeaderValue::from_static("cli"));
         }
 
-        if !saw_user_agent {
-            if let Some(ua) = custom_user_agent
-                .as_ref()
-                .or(opencode_fallback_user_agent.as_ref())
-            {
-                ordered_headers.append(http::header::USER_AGENT, ua.clone());
-            }
+        if !is_copilot && !saw_user_agent {
+            let ua = custom_user_agent
+                .clone()
+                .or_else(|| opencode_fallback_user_agent.clone())
+                .unwrap_or_else(|| http::HeaderValue::from_static(USER_AGENT));
+            ordered_headers.append(http::header::USER_AGENT, ua);
         }
 
         // 如果原始请求中没有 anthropic-beta 且有值需要添加，追加
@@ -2669,6 +2670,13 @@ impl RequestForwarder {
                 .and_then(|meta| meta.local_proxy_request_overrides.as_ref()),
             is_copilot,
         );
+
+        if !is_copilot {
+            apply_request_attribution(
+                &mut ordered_headers,
+                upstream_uri.as_ref().and_then(http::Uri::host),
+            );
+        }
 
         // 托管 OAuth 的 workspace 由账号绑定决定，覆盖客户端或本地代理配置的旧值。
         if let Some(ref account_id) = codex_oauth_account_id {

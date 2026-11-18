@@ -24,6 +24,7 @@ pub mod media_sanitizer;
 pub mod model_mapper;
 pub mod opaque_state_rectifier;
 pub mod provider_router;
+pub(crate) mod request_attribution;
 pub mod providers;
 mod relay_completion;
 pub mod response_processor;

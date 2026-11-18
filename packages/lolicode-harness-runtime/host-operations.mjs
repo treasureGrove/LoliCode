@@ -27,6 +27,21 @@ const secretaryInstructions = [
   "Ask workers to report their assignment outcome with report_task and present verified deliverables. Keep blocked or waiting work visible until it can resume.",
   "For a website, have the worker build and verify the site, then call present on the runnable HTML entry (for example index.html). LoliCode serves that entry and its sibling assets in the desktop preview. Use present to hand off other deliverable files too.",
 ].join("\n");
+const agentName = "LoliCode";
+const agentUrl = "https://lolicode.com";
+const clientHeader = "X-LoliCode-Client";
+const openRouterCategories = "programming-app,cli-agent";
+
+function isOpenRouterUrl(baseURL) {
+  if (typeof baseURL !== "string" || !baseURL.trim()) return false;
+  try {
+    const hostname = new URL(baseURL).hostname.toLowerCase();
+    return hostname === "openrouter.ai" || hostname.endsWith(".openrouter.ai");
+  } catch {
+    return false;
+  }
+}
+
 const openingMethods = new Set([
   "session/prompt",
   "session/query",
@@ -725,6 +740,24 @@ export function apply(ctx, config = {}) {
   const transport = new JsonRpcLineTransport(config.input ?? process.stdin, output);
   const server = new LoliCodeSdkServer(ctx, transport, { maxTokensAsSuccess: config.maxTokensAsSuccess }, output);
   ctx.provide("sdkSessionActivation", { ready: true });
+  // Keep the Harness product identity used by the native DeepSeek protocol.
+  process.env.DSH_USER_AGENT_SUFFIX ??= agentName;
+  ctx.on("llm-pi-ai/request-headers", (request, headers, next) => {
+    if (!headers.has(clientHeader)) headers.set(clientHeader, agentName);
+    if (isOpenRouterUrl(request?.baseURL)) {
+      if (!headers.has("http-referer")) {
+        headers.set("HTTP-Referer", headers.get("referer") ?? agentUrl);
+      }
+      if (!headers.has("x-openrouter-title") && !headers.has("x-title")) {
+        headers.set("X-OpenRouter-Title", agentName);
+        headers.set("X-Title", agentName);
+      }
+      if (!headers.has("x-openrouter-categories")) {
+        headers.set("X-OpenRouter-Categories", openRouterCategories);
+      }
+    }
+    return next();
+  });
   // Stock SDK notifications carry the durable settlement. Forward the
   // upstream transient frames on the same transport for the desktop view.
   ctx.on("agent/assistant-stream", ({ agent, frame }) => {

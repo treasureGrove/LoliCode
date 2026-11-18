@@ -45,6 +45,9 @@ async function fixture(t, handler) {
     try {
       assert.equal(request.url, "/v1/chat/completions");
       assert.equal(request.headers.authorization, `Bearer ${key}`);
+      assert.equal(request.headers["x-lolicode-client"], "LoliCode");
+      assert.equal(request.headers["x-openrouter-title"], undefined);
+      assert.equal(request.headers["http-referer"], undefined);
       const chunks = [];
       for await (const chunk of request) chunks.push(chunk);
       const body = JSON.parse(Buffer.concat(chunks));
