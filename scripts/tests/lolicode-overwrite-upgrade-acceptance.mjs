@@ -1,6 +1,6 @@
 // Run from an elevated Windows shell using Node 24:
 // node scripts/tests/lolicode-overwrite-upgrade-acceptance.mjs <published-baseline.exe> [<candidate-setup.exe> <source-snapshot.json> <verified-candidate-sha256>]
-// Known baselines: 1.0.6 (native 4.1.6, legacy migration), 1.1.0 through 1.1.2 (Harness).
+// Known baselines: 1.0.6 (native 4.1.6, legacy migration), 1.1.0 through 1.1.3 (Harness).
 // A baseline-only run rehearses the released installer and real transcript creation.
 // Upgrade runs restart/resume, then reinstall the identical candidate and resume
 // again, all in the same disposable account/profile with fresh prompts/request IDs.
@@ -74,6 +74,15 @@ function publishedBaseline(sha256) {
         "65148951a01f35489ca62db09604fece14686b926d7fde610b45b3c93453927e",
       executableSha256:
         "f401314f309fdadaa817335c79a7192c27b81e21a112067617aed33e802395ad",
+    },
+    {
+      productVersion: "1.1.3",
+      buildVersion: "1.1.3",
+      engine: "harness",
+      installerSha256:
+        "bf1aa48202e9204ed9ce13992b221d26e0588ab73217d8011ba00e3c73e59139",
+      executableSha256:
+        "bc639927e42ea4f027a1f2d76a978801f0225e9dcd762052c11b14483f109dc8",
     },
   ];
   const baseline = baselines.find((item) => item.installerSha256 === sha256);
