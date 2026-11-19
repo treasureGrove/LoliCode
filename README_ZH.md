@@ -2,13 +2,13 @@
 
 [English](README.md) · [日本語](README_JA.md) · [Deutsch](README_DE.md)
 
-**简单易用、扩展性强的二次元美少女 Agent。**
+**一个有桌面伙伴的编程 Agent Harness。接入你选的模型，在自己的项目里执行任务、查看工具调用和审阅改动。**
 
-LoliCode 把桌面编程 Agent、统一模型渠道和二次元工作空间放在一起。选好模型、打开文件夹就能开始；需要更多能力时，再探索高级配置。
+打开项目，让 Agent 读取文件、运行测试，再看具体改了哪几行。也可以把 GitHub Issue 交给 Loli 秘书，在独立工作树里处理，审阅后创建草稿 PR。桌宠会在需要你授权或回答时指向对应任务。
 
-[下载官网](https://lolicode.com/) · [社区与账户](https://lolicode.com/all) · [源码仓库](https://github.com/treasureGrove/LoliCode) · [文档](docs/README.md) · [更新记录](CHANGELOG.md)
+[下载 Windows 版](https://github.com/treasureGrove/LoliCode-Releases/releases/latest) · [看界面演示](https://lolicode.com/#film) · [秘书如何处理 Issue](docs/guides/lolicode-secretary.md#接收和回复-github-工作) · [文档](docs/README.md)
 
-维护代码先读[架构与目录入口](ARCHITECTURE.md)；用 [LoliCode.code-workspace](LoliCode.code-workspace) 打开工程，可收起依赖、构建产物和日志。
+[![LoliCode 新版工作台功能演示](docs/images/lolicode/workspace-tour.gif)](https://lolicode.com/#film)
 
 ## 现在可以做什么
 
@@ -19,7 +19,7 @@ LoliCode 把桌面编程 Agent、统一模型渠道和二次元工作空间放�
 - **有角色气质的桌面**：二次元主题、粉毛 Q 版看板娘、紧凑工具进度和文件侧栏预览。
 - **用量与更新**：查看已记录用量，检查 LoliCode 独立发布的更新。社区账户与模型渠道账户互相独立。
 
-当前采用 **Tauri 2、React、TypeScript 与 Rust**，默认 Agent 在应用内 Rust 核心运行，不要求另装 OpenCode 或 ZCode。具体边界见[当前 Agent 能力说明](docs/guides/lolicode-inprocess-agent.md)。
+桌面界面使用 **React 和 TypeScript**。**DeepSeek Harness** 运行 Agent 执行循环，**Tauri 2 和 Rust** 提供文件、终端、权限和模型网关等宿主能力。[查看运行架构](ARCHITECTURE.md)
 
 Windows、macOS、Linux 都是产品目标。目前公开提供 **Windows x64 NSIS 安装版和便携 ZIP**，macOS 与 Linux 尚未发布安装包。每个版本的验证范围以发布记录为准。
 
@@ -35,18 +35,19 @@ LoliCode 为兼容已有数据，继续使用历史目录 `~/.tai-switch`。迁�
 
 ## 后续方向
 
-围绕同一个主 Agent，逐步接入 **UE 工具应用**和**酒馆式角色交互应用**。它们是并列业务应用，按需共享 Agent 能力。高级记忆提供者、语音、更多看板娘交互，以及侧重前端和 3D 的轻量模型 **sillyDog（小笨狗，暂定名）**，也在后续方向中。
+酒馆已经支持角色卡和对话。后续方向包括更深入的 Unreal Editor 集成、高级记忆、语音和更多桌宠交互。
 
 上述能力尚未全部交付。接入以功能和组件为单位，不把参考项目的整套程序搬进来。详见[产品愿景](docs/guides/lolicode-product-vision.md)、[第一期计划](docs/guides/lolicode-phase-one-plan.md)和[能力与来源清单](docs/guides/lolicode-platform-capabilities.json)。
 
 ## 本地开发与热重载
 
-准备 Node.js 22.12+（或 Vite 支持的版本）、pnpm 10.12.3、`rust-toolchain.toml` 固定的 Rust 工具链及 [Tauri 平台依赖](https://v2.tauri.app/start/prerequisites/)。
+使用 `.node-version` 指定的 Node.js（Harness 要求 24.9+）、pnpm 10.12.3、`rust-toolchain.toml` 指定的 Rust 工具链及 [Tauri 平台依赖](https://v2.tauri.app/start/prerequisites/)。维护入口见[架构与目录](ARCHITECTURE.md)和 [LoliCode 工作区](LoliCode.code-workspace)。
 
 ```sh
 git clone https://github.com/treasureGrove/LoliCode.git
 cd LoliCode
 pnpm install --frozen-lockfile
+pnpm prepare:harness-runtime
 pnpm dev
 ```
 
@@ -80,6 +81,6 @@ cargo test --manifest-path src-tauri/Cargo.toml --lib
 
 ## 反馈、来源与许可
 
-问题与建议请提交到 [LoliCode Issues](https://github.com/treasureGrove/LoliCode/issues)。另见[获取帮助](SUPPORT.md)、[安全策略](SECURITY.md)与[行为准则](CODE_OF_CONDUCT.md)。
+问题与建议请提交到 [LoliCode Issues](https://github.com/treasureGrove/LoliCode/issues)。也可以浏览[社区与账户](https://lolicode.com/all)、[更新记录](CHANGELOG.md)、[获取帮助](SUPPORT.md)、[安全策略](SECURITY.md)与[行为准则](CODE_OF_CONDUCT.md)。
 
 LoliCode 独立维护，配置基础源自 CC Switch。原始 [MIT 许可证](LICENSE)、版权声明和[基线记录](FORK_BASELINE.md)继续保留；其他复用组件见[第三方声明](THIRD_PARTY_NOTICES.md)。参考某个项目不代表已经集成其完整应用或兼容其全部插件生态。

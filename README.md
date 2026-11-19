@@ -2,13 +2,13 @@
 
 [简体中文](README_ZH.md) · [日本語](README_JA.md) · [Deutsch](README_DE.md)
 
-**A simple, extensible anime-girl Agent for coding and creation.**
+**A desktop coding agent harness with an anime companion. Connect your model, run tools in your project, and review the changes.**
 
-LoliCode brings a desktop coding Agent, shared model channels, and an anime-inspired workspace together. Start with a model and a folder; explore advanced configuration when you need it.
+Open a folder and ask the agent to read files, run tests, and show its edits. For GitHub work, hand an issue to Loli Secretary. It can work in an isolated Git worktree and prepare a draft pull request for your review. Your desktop companion points you to tasks that need permission or an answer.
 
-[Download](https://lolicode.com/) · [Community and account](https://lolicode.com/all) · [Source](https://github.com/treasureGrove/LoliCode) · [Documentation](docs/README.md) · [Release notes](CHANGELOG.md)
+[Download for Windows](https://github.com/treasureGrove/LoliCode-Releases/releases/latest) · [Watch the workspace tour](https://lolicode.com/#film) · [Secretary workflow (中文)](docs/guides/lolicode-secretary.md) · [Documentation](docs/README.md)
 
-For source maintenance, start with the [architecture guide](ARCHITECTURE.md) and open [LoliCode.code-workspace](LoliCode.code-workspace) for a focused source view.
+[![LoliCode workspace tour](docs/images/lolicode/workspace-tour.gif)](https://lolicode.com/#film)
 
 ## What you can use today
 
@@ -19,7 +19,7 @@ For source maintenance, start with the [architecture guide](ARCHITECTURE.md) and
 - **A characterful desktop:** an anime-inspired theme and a pink-haired chibi companion, with compact tool progress and a file-preview panel.
 - **Usage and updates:** view recorded usage and check for independently published LoliCode updates. The LoliCode community account is separate from model-provider accounts.
 
-The current implementation uses **Tauri 2, React, TypeScript, and Rust**. The default Agent runs inside the desktop application as a Rust core; a separate OpenCode or ZCode installation is not required. See [current Agent capabilities and limitations](docs/guides/lolicode-inprocess-agent.md).
+The desktop interface uses **React and TypeScript**. The bundled **DeepSeek Harness** runs the agent loop. The **Tauri 2 and Rust** host supplies file and terminal tools, permissions, and the model gateway. [Architecture guide](ARCHITECTURE.md)
 
 Windows, macOS, and Linux are product targets. Current public packages are **Windows x64 NSIS installers and portable ZIPs**; macOS and Linux packages have not been published. Check each release for its actual validation coverage.
 
@@ -35,11 +35,13 @@ LoliCode keeps the historical `~/.tai-switch` data directory for compatibility. 
 
 ## What comes next
 
-LoliCode will grow around the same main Agent. Planned built-in applications include **UE tools** and **Tavern-style character interaction** as peer applications, sharing selected Agent capabilities. Advanced memory providers, voice, richer companion interaction, and the lightweight frontend/3D-focused **sillyDog** model are future directions.
+Tavern already supports character cards and conversations. Future directions include deeper Unreal Editor integration, advanced memory providers, voice, and richer companion interaction.
 
-These are plans, not shipped features. We adopt useful capabilities and components rather than bundling complete upstream products. Read the [product vision](docs/guides/lolicode-product-vision.md), [first milestone plan](docs/guides/lolicode-phase-one-plan.md), and [source/capability ledger](docs/guides/lolicode-platform-capabilities.json).
+Read the [product vision](docs/guides/lolicode-product-vision.md), [first milestone plan](docs/guides/lolicode-phase-one-plan.md), and [source/capability ledger](docs/guides/lolicode-platform-capabilities.json).
 
 ## Develop locally
+
+Start with the [architecture guide](ARCHITECTURE.md) and open [LoliCode.code-workspace](LoliCode.code-workspace) for a focused source view.
 
 Use the Node.js version pinned in `.node-version` (Harness requires 24.9+), pnpm 10.12.3, the Rust toolchain pinned in `rust-toolchain.toml`, and the [Tauri platform prerequisites](https://v2.tauri.app/start/prerequisites/).
 
@@ -81,6 +83,6 @@ See [Contributing](CONTRIBUTING.md) for development and [the release guide](docs
 
 ## Help, sources, and license
 
-Report problems in [LoliCode Issues](https://github.com/treasureGrove/LoliCode/issues). See [Support](SUPPORT.md), [Security](SECURITY.md), and the [Code of Conduct](CODE_OF_CONDUCT.md).
+Report problems in [LoliCode Issues](https://github.com/treasureGrove/LoliCode/issues). See the [community](https://lolicode.com/all), [release notes](CHANGELOG.md), [Support](SUPPORT.md), [Security](SECURITY.md), and the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 LoliCode is maintained independently. Its configuration foundation originates from CC Switch; the original [MIT license](LICENSE), copyright notices, and [pinned baseline](FORK_BASELINE.md) remain intact. Other reused components and their notices are listed in [Third-party notices](THIRD_PARTY_NOTICES.md). Reference projects and future integration candidates do not imply that their complete programs or plugin ecosystems are included.

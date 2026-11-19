@@ -8,7 +8,7 @@ LoliCode は、選んだモデルがプロジェクトのファイルを読み�
 
 [Windows 安定版](https://github.com/treasureGrove/LoliCode-Releases/releases/latest) · [画面デモ](https://lolicode.com/#film) · [Issue からドラフト PR まで（中国語）](docs/guides/lolicode-secretary.md) · [コミュニティ・アカウント](https://lolicode.com/all) · [ソース](https://github.com/treasureGrove/LoliCode) · [ドキュメント](docs/README.md) · [更新履歴](CHANGELOG.md)
 
-コードの保守は[構成ガイド](ARCHITECTURE.md)から始めてください。[LoliCode.code-workspace](LoliCode.code-workspace) を開くと、依存関係・生成物・ログを非表示にできます。
+[![モデル選択、ツール実行、差分レビューのデモ](docs/images/lolicode/workspace-tour.gif)](https://lolicode.com/#film)
 
 ## 現在使える機能
 
@@ -40,6 +40,8 @@ LoliCode は既存データとの互換性のため、保存先に歴史的な `
 これらは開発計画であり、現在すべて利用できるわけではありません。参照元のアプリ全体を取り込むのではなく、必要な機能やコンポーネントを接続します。[製品構想](docs/guides/lolicode-product-vision.md)、[最初のマイルストーン](docs/guides/lolicode-phase-one-plan.md)、[機能と出典](docs/guides/lolicode-platform-capabilities.json)を参照してください。
 
 ## ローカル開発
+
+コードの保守は[構成ガイド](ARCHITECTURE.md)から始めてください。[LoliCode.code-workspace](LoliCode.code-workspace) を開くと、依存関係・生成物・ログを非表示にできます。
 
 `.node-version` 指定の Node.js（Harness の最低要件は 24.9.0）、pnpm 10.12.3、`rust-toolchain.toml` 指定の Rust を用意し、[Tauri の前提条件](https://v2.tauri.app/start/prerequisites/)を確認します。
 

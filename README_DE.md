@@ -8,7 +8,7 @@ LoliCode gibt dem Modell deiner Wahl die Werkzeuge, um Projektdateien zu bearbei
 
 [Stabile Windows-Version](https://github.com/treasureGrove/LoliCode-Releases/releases/latest) · [Demo ansehen](https://lolicode.com/#film) · [Vom Issue zum PR-Entwurf (Chinesisch)](docs/guides/lolicode-secretary.md) · [Community und Konto](https://lolicode.com/all) · [Quellcode](https://github.com/treasureGrove/LoliCode) · [Dokumentation](docs/README.md) · [Änderungen](CHANGELOG.md)
 
-Für die Codepflege: [Architektur und Verzeichnisse](ARCHITECTURE.md). [LoliCode.code-workspace](LoliCode.code-workspace) blendet Abhängigkeiten, Build-Ausgaben und Protokolle aus.
+[![Modellauswahl, Werkzeugaufrufe und Codeänderungen in LoliCode](docs/images/lolicode/workspace-tour.gif)](https://lolicode.com/#film)
 
 ## Bereits verfügbar
 
@@ -40,6 +40,8 @@ LoliCode behält aus Kompatibilitätsgründen das historische Datenverzeichnis `
 Diese Funktionen sind noch nicht vollständig ausgeliefert. Wir binden gezielte Fähigkeiten und Komponenten ein. Die vollständigen Programme der Referenzprojekte werden dadurch nicht automatisch übernommen. Siehe [Produktvision](docs/guides/lolicode-product-vision.md), [erster Meilenstein](docs/guides/lolicode-phase-one-plan.md) und [Funktions- und Quellenverzeichnis](docs/guides/lolicode-platform-capabilities.json).
 
 ## Lokal entwickeln
+
+Für die Codepflege: [Architektur und Verzeichnisse](ARCHITECTURE.md). [LoliCode.code-workspace](LoliCode.code-workspace) blendet Abhängigkeiten, Build-Ausgaben und Protokolle aus.
 
 Für die lokale Entwicklung brauchst du die in `.node-version` festgelegte Node.js-Version (Harness benötigt mindestens 24.9.0), pnpm 10.12.3, die Rust-Version aus `rust-toolchain.toml` und die [Tauri-Plattformabhängigkeiten](https://v2.tauri.app/start/prerequisites/).
 

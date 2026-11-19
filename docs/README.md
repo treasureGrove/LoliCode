@@ -15,14 +15,14 @@ LoliCode is a simple, extensible desktop Agent with an anime-inspired identity. 
 
 ## 当前实现 / Current implementation
 
-- [内置 Agent 的实际能力与限制](guides/lolicode-inprocess-agent.md)。
+- [当前桌面 Harness 的执行架构](../ARCHITECTURE.md)与 [Loli 秘书的派工、授权及草稿 PR](guides/lolicode-secretary.md)。
 - [Agent 交互约定](guides/lolicode-agent-interactions.md)。
 - [渠道中心与模型配置](CHANNEL_CENTER.md)。
 - [通过 LoliCode Gateway 使用 Claude Code](guides/lolicode-claude-gateway.md)。
 - [本机记忆](architecture/agent-memory.md)、[外部模型接入](architecture/external-model-config.md)与[本机用量](guides/local-agent-usage.md)。
 - [工作流、闲时任务与 CLI 市场](guides/agent-workflows-cli-adapter.md)。
 - [原生 Agent 的实际 GLM 验收](architecture/native-agent-live-acceptance.md)。
-- [v1.0.5 交付记录](guides/lolicode-v1.0.5-delivery.md)：当前 Windows 下载、Credit 额度、签名更新、功能验收与已知边界。
+- [当前 Windows 稳定版和发行说明](https://github.com/treasureGrove/LoliCode-Releases/releases/latest)。
 - [Cherry Atelier 界面与装饰资源](guides/cherry-atelier-ui.md)。
 - [4.0.18 交付记录](guides/lolicode-4.0.18-delivery.md)：该版本的历史验证证据，不替代当前版本验收。
 - [4.0.15 交付记录](guides/lolicode-4.0.15-delivery.md)：该版本的历史验证证据，不替代当前版本验收。

@@ -2,7 +2,13 @@
 
 LoliCode release information is maintained independently in this repository. Published packages are available from the [LoliCode website](https://lolicode.com/) and [public LoliCode Releases](https://github.com/treasureGrove/LoliCode-Releases/releases).
 
-## Unreleased
+## [1.1.4](https://github.com/treasureGrove/LoliCode-Releases/releases/tag/lolicode-v1.1.4) — 2026-11-18
+
+- OpenRouter requests identify LoliCode while preserving custom request headers.
+- [1.1.3](https://github.com/treasureGrove/LoliCode-Releases/releases/tag/lolicode-v1.1.3) introduced the DeepSeek Harness plugin marketplace, improved the workspace and reduced Windows download sizes.
+- [1.1.2](https://github.com/treasureGrove/LoliCode-Releases/releases/tag/lolicode-v1.1.2) added slash commands for plans and goals and improved long task and subtask recovery.
+
+## Earlier 4.x release notes
 
 - Add signed whole-interface update staging, native-build compatibility checks, a Tauri asset provider and next-boot health confirmation/rollback. Settings expose checking, staging and an idle-only restart; error recovery can restore a usable interface. Native changes still require an application update. This is not included in the published RC2; actual packaged application/update acceptance remains pending.
 
