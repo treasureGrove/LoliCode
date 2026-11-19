@@ -272,7 +272,14 @@ async function verifyDockTools(fixture) {
       };
     };
     const switchTo = async (view) => {
-      const button = await waitFor(() => findButton(view === "agent" ? "编程工作台" : "角色对话", nav()), view + " navigation");
+      const button = await waitFor(() => {
+        const sidebar = nav();
+        if (!sidebar) return;
+        const labels = sidebar.dataset.sidebarCompact === "true"
+          ? { agent: "切换到代理", tavern: "切换到对话" }
+          : { agent: "编程工作台", tavern: "角色对话" };
+        return findButton(labels[view], sidebar);
+      }, view + " navigation");
       button.click();
       await waitFor(() => document.querySelector(`#content-area[data-view="${view}"]`) && geometry(view),
         view + " sidebar geometry");
@@ -1634,16 +1641,22 @@ async function run(fixture) {
         document.querySelector("#agent-message");
     }, "the original project and its restored composer");
     const { session: oldChief } = await invoke("get_agent_session", { sessionId: chiefId });
+    const projectMenu = await waitFor(() => document.querySelector(
+      ".wb-project-row button.wb-project-menu-trigger:not(:disabled)",
+    ), "the original project's actions");
+    projectMenu.focus();
+    projectMenu.dispatchEvent(new KeyboardEvent("keydown", {
+      key: "Enter", code: "Enter", keyCode: 13, bubbles: true, cancelable: true,
+    }));
     const oldChiefButton = await waitFor(() => Array.from(
-      document.querySelectorAll(".wb-current-workspace-sessions button.wb-session-row"),
-    ).find((button) => !button.disabled && button.querySelector("span")?.textContent === oldChief.title),
-    "the migrated secretary in the original project's session list");
+      document.querySelectorAll('[role="menuitem"]'),
+    ).find((item) => item.textContent.trim() === `打开项目秘书：${oldChief.title}`),
+    "the migrated secretary in the original project's actions");
     oldChiefButton.click();
     await waitFor(
-      () => oldChiefButton.getAttribute("aria-pressed") === "true" &&
-        secretaryButton.getAttribute("aria-pressed") === "false" && document.querySelector("#agent-message") &&
+      () => secretaryButton.getAttribute("aria-pressed") === "false" && document.querySelector("#agent-message") &&
         document.querySelector(".wb-titlebar h1")?.textContent === oldChief.title &&
-        document.querySelector("main")?.innerText.includes("Loli 秘书"),
+        document.querySelector('nav[aria-label="秘书会话"]'),
       "the migrated secretary selected in the real workbench",
     );
     await invoke("send_agent_message", {

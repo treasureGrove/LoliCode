@@ -101,6 +101,12 @@
     },
     "history": "Real rc.1 and rc.2 root and worker sessions resumed using the bundled rc.5 runtime. Cold reads preserved the original bytes.",
     "publicWeb": "Host registration and execution passed with and without a configured search provider using a mock service.",
-    "chatImport": "The official import route added two synthetic sessions, reported one missing entry, kept a real PNG, and preserved history and attachment bytes on relocation to an isolated per-session home. Desktop import UI and session registration were outside this probe."
+    "chatImport": "The official import route added two synthetic sessions, reported one missing entry, kept a real PNG, and preserved history and attachment bytes on relocation to an isolated per-session home. Desktop import UI and session registration were outside this probe.",
+    "windowsDesktop": {
+      "full": "Passed under a disposable standard Windows account. Verified image input, approval, workspace switching, keyboard steering, history after restart, existing project secretary from the project menu, global secretary delegation, native website delivery, worker queue recovery, browser tools, and automation.",
+      "dock": "Passed under a standard Windows account. Verified compact sidebar navigation, split panes, native browsers, project tree, interactive terminal, folding and restoring after restart.",
+      "nativeModes": "Passed Plan approval and Goal across restart in the same bundled rc.5 runtime.",
+      "backgroundJobs": "Passed cross-turn execution, wake, and cancellation in the same bundled rc.5 runtime."
+    }
   }
 }
