@@ -2229,14 +2229,17 @@ export function apply(ctx) {
   }
 });
 
-test("real rc.1 root and worker histories resume under the selected rc.2 runtime", {
+test("root and worker histories from the previous runtime resume under the current pin", {
   timeout: 90_000, skip: !process.env.LOLICODE_TEST_BASELINE_RUNTIME_ROOT,
 }, async (t) => {
   const baseline = process.env.LOLICODE_TEST_BASELINE_RUNTIME_ROOT;
   assert.ok(path.isAbsolute(baseline));
   const sdkVersion = async directory => JSON.parse(await readFile(path.join(directory, "node_modules/@deepseek-ai/dsh/package.json"), "utf8")).version;
-  assert.equal(await sdkVersion(baseline), "0.2.2-rc.1");
-  assert.equal(await sdkVersion(root), "0.2.2-rc.2");
+  const baselineVersion = await sdkVersion(baseline);
+  assert.match(baselineVersion, /^0\.2\.2-rc\.[12]$/);
+  const candidateVersion = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8")).dependencies["@deepseek-ai/dsh"];
+  assert.equal(await sdkVersion(root), candidateVersion);
+  assert.notEqual(baselineVersion, candidateVersion);
   const sessionId = "rc1-root-continued-in-rc2";
   const childSessionId = "b643ecea-f069-454f-8f52-898cbbfd32d7";
   const calls = [];
@@ -2302,5 +2305,5 @@ test("real rc.1 root and worker histories resume under the selected rc.2 runtime
   }
   assert.equal(runtime.modelError, undefined);
   assert.deepEqual(calls, ["rc1-root", "rc1-child", "rc2-root", "rc2-child", "rc2-root-notified"]);
-  t.diagnostic(`rc.1 root/worker logs continued under ${root}; Node ${process.execPath}; cold reads preserved original bytes.`);
+  t.diagnostic(`${baselineVersion} root/worker logs continued under ${candidateVersion}; Node ${process.execPath}; cold reads preserved original bytes.`);
 });

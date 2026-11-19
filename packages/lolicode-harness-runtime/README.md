@@ -1,12 +1,12 @@
 # LoliCode Harness runtime
 
 This directory pins the official `@deepseek-ai/dsh` npm distribution to
-`0.2.2-rc.2`, whose upstream release tag resolves to
-`ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c`. The lock records the artifact
+`0.2.2-rc.5`, whose upstream release tag resolves to
+`9c2670d3bce5275e0d1610272958121af87787bb`. The lock records the artifact
 integrity and the complete npm dependency closure. This package is independent
 of the desktop app's pnpm workspace.
 
-The root also pins `zod` to `4.6.6`, matching the official rc.2 Harness
+The root also pins `zod` to `4.6.6`, matching the official rc.5 Harness
 packages. This lets npm share one compatible copy instead of installing a
 separate copy beneath each Harness component. Recheck the direct and peer
 dependency ranges when upgrading this pin. Keep the official package contents
