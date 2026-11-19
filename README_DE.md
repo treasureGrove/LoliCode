@@ -2,16 +2,16 @@
 
 [English](README.md) · [简体中文](README_ZH.md) · [日本語](README_JA.md)
 
-**Mit dem eigenen KI-Modell direkt am Desktop programmieren.**
+**Mit 小笨狗, deiner Anime-Begleiterin, am Desktop programmieren. LoliCode verbindet das Modell deiner Wahl mit deinem Projekt. So kannst du Werkzeuge ausführen, Testergebnisse ansehen und Codeänderungen prüfen.**
 
 LoliCode gibt dem Modell deiner Wahl die Werkzeuge, um Projektdateien zu bearbeiten und Befehle auszuführen. Übergib zum Beispiel ein GitHub-Issue an Loli Secretary. Der Agent bearbeitet es in einem eigenen Git-Worktree. Du gibst angeforderte Aktionen frei, prüfst die Änderungen und kannst anschließend einen Pull Request als Entwurf erstellen.
 
-[Stabile Windows-Version](https://github.com/treasureGrove/LoliCode-Releases/releases/latest) · [Demo ansehen](https://lolicode.com/#film) · [Vom Issue zum PR-Entwurf (Chinesisch)](docs/guides/lolicode-secretary.md) · [Community und Konto](https://lolicode.com/all) · [Quellcode](https://github.com/treasureGrove/LoliCode) · [Dokumentation](docs/README.md) · [Änderungen](CHANGELOG.md)
+[Stabile Windows-Version](https://github.com/treasureGrove/LoliCode-Releases/releases/latest) · [43-Sekunden-Demo mit 小笨狗 ansehen](https://lolicode.com/#film) · [Vom Issue zum PR-Entwurf (Chinesisch)](docs/guides/lolicode-secretary.md) · [Community und Konto](https://lolicode.com/all) · [Quellcode](https://github.com/treasureGrove/LoliCode) · [Dokumentation](docs/README.md) · [Änderungen](CHANGELOG.md)
 
 <a href="https://lolicode.com/#film">
   <picture>
-    <source media="(prefers-reduced-motion: reduce)" srcset="https://raw.githubusercontent.com/treasureGrove/LoliCode/main/docs/images/lolicode/workspace-tour-still.webp">
-    <img src="docs/images/lolicode/workspace-tour.webp" width="960" alt="Testergebnis und Codeänderung in LoliCode prüfen">
+    <source media="(prefers-reduced-motion: reduce)" srcset="https://raw.githubusercontent.com/treasureGrove/LoliCode/main/docs/images/lolicode/companion-tour-still.webp">
+    <img src="docs/images/lolicode/companion-tour.webp" width="896" height="504" alt="Die Demo zeigt, wie du über die Desktop-Begleiterin eine Aufgabe zur Freigabe öffnest und anschließend Werkzeugaufrufe und Codeänderungen prüfst">
   </picture>
 </a>
 

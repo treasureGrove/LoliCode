@@ -2,16 +2,16 @@
 
 [简体中文](README_ZH.md) · [日本語](README_JA.md) · [Deutsch](README_DE.md)
 
-**A desktop coding agent harness with an anime companion. Connect your model, run tools in your project, and review the changes.**
+**Code alongside 小笨狗, LoliCode’s anime desktop companion. This desktop coding agent harness connects your model to your project so you can run tools, check test results, and review edits.**
 
 Open a folder and ask the agent to read files, run tests, and show its edits. For GitHub work, hand an issue to Loli Secretary. It can work in an isolated Git worktree and prepare a draft pull request for your review. Your desktop companion points you to tasks that need permission or an answer.
 
-[Download for Windows](https://github.com/treasureGrove/LoliCode-Releases/releases/latest) · [Watch the workspace tour](https://lolicode.com/#film) · [Secretary workflow (中文)](docs/guides/lolicode-secretary.md) · [Documentation](docs/README.md)
+[Download for Windows](https://github.com/treasureGrove/LoliCode-Releases/releases/latest) · [Watch the 43-second companion demo](https://lolicode.com/#film) · [Secretary workflow (中文)](docs/guides/lolicode-secretary.md) · [Documentation](docs/README.md)
 
 <a href="https://lolicode.com/#film">
   <picture>
-    <source media="(prefers-reduced-motion: reduce)" srcset="https://raw.githubusercontent.com/treasureGrove/LoliCode/main/docs/images/lolicode/workspace-tour-still.webp">
-    <img src="docs/images/lolicode/workspace-tour.webp" width="960" alt="Inspect a test run and review the code diff in LoliCode">
+    <source media="(prefers-reduced-motion: reduce)" srcset="https://raw.githubusercontent.com/treasureGrove/LoliCode/main/docs/images/lolicode/companion-tour-still.webp">
+    <img src="docs/images/lolicode/companion-tour.webp" width="896" height="504" alt="Watch the desktop companion open a task for approval, then inspect the tool calls and code diff">
   </picture>
 </a>
 

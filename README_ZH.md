@@ -2,16 +2,16 @@
 
 [English](README.md) · [日本語](README_JA.md) · [Deutsch](README_DE.md)
 
-**一个有桌面伙伴的编程 Agent Harness。接入你选的模型，在自己的项目里执行任务、查看工具调用和审阅改动。**
+**和二次元桌宠小笨狗一起写代码。LoliCode 是桌面编程 Agent Harness，接入你选的模型，在自己的项目里运行工具、检查测试结果和审阅改动。**
 
 打开项目，让 Agent 读取文件、运行测试，再看具体改了哪几行。也可以把 GitHub Issue 交给 Loli 秘书，在独立工作树里处理，审阅后创建草稿 PR。桌宠会在需要你授权或回答时指向对应任务。
 
-[下载 Windows 版](https://github.com/treasureGrove/LoliCode-Releases/releases/latest) · [看界面演示](https://lolicode.com/#film) · [秘书如何处理 Issue](docs/guides/lolicode-secretary.md#接收和回复-github-工作) · [文档](docs/README.md)
+[下载 Windows 版](https://github.com/treasureGrove/LoliCode-Releases/releases/latest) · [观看小笨狗的 43 秒工作台演示](https://lolicode.com/#film) · [秘书如何处理 Issue](docs/guides/lolicode-secretary.md#接收和回复-github-工作) · [文档](docs/README.md)
 
 <a href="https://lolicode.com/#film">
   <picture>
-    <source media="(prefers-reduced-motion: reduce)" srcset="https://raw.githubusercontent.com/treasureGrove/LoliCode/main/docs/images/lolicode/workspace-tour-still.webp">
-    <img src="docs/images/lolicode/workspace-tour.webp" width="960" alt="在 LoliCode 中展开测试结果并审阅代码差异">
+    <source media="(prefers-reduced-motion: reduce)" srcset="https://raw.githubusercontent.com/treasureGrove/LoliCode/main/docs/images/lolicode/companion-tour-still.webp">
+    <img src="docs/images/lolicode/companion-tour.webp" width="896" height="504" alt="跟着桌宠小笨狗打开待授权的任务、查看工具调用和代码差异，点击观看完整演示">
   </picture>
 </a>
 

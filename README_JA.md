@@ -2,16 +2,16 @@
 
 [English](README.md) · [简体中文](README_ZH.md) · [Deutsch](README_DE.md)
 
-**普段使っている AI モデルを、デスクトップで動くコーディングエージェントに。**
+**デスクトップの相棒「小笨狗」と一緒にコーディング。LoliCode は、好きなモデルでプロジェクト内のツールを実行し、テスト結果やコードの差分を確認できるデスクトップ用エージェントハーネスです。**
 
 LoliCode は、選んだモデルがプロジェクトのファイルを読み書きし、コマンドを実行するためのデスクトップ環境です。たとえば GitHub の Issue を Loli 秘書に任せると、専用の Git ワークツリーで作業を進めます。必要な操作を承認し、差分を確認してから、ドラフトのプルリクエストを作成できます。
 
-[Windows 安定版](https://github.com/treasureGrove/LoliCode-Releases/releases/latest) · [画面デモ](https://lolicode.com/#film) · [Issue からドラフト PR まで（中国語）](docs/guides/lolicode-secretary.md) · [コミュニティ・アカウント](https://lolicode.com/all) · [ソース](https://github.com/treasureGrove/LoliCode) · [ドキュメント](docs/README.md) · [更新履歴](CHANGELOG.md)
+[Windows 安定版](https://github.com/treasureGrove/LoliCode-Releases/releases/latest) · [小笨狗と作業する様子を43秒で見る](https://lolicode.com/#film) · [Issue からドラフト PR まで（中国語）](docs/guides/lolicode-secretary.md) · [コミュニティ・アカウント](https://lolicode.com/all) · [ソース](https://github.com/treasureGrove/LoliCode) · [ドキュメント](docs/README.md) · [更新履歴](CHANGELOG.md)
 
 <a href="https://lolicode.com/#film">
   <picture>
-    <source media="(prefers-reduced-motion: reduce)" srcset="https://raw.githubusercontent.com/treasureGrove/LoliCode/main/docs/images/lolicode/workspace-tour-still.webp">
-    <img src="docs/images/lolicode/workspace-tour.webp" width="960" alt="LoliCode でテスト結果とコードの差分を確認するデモ">
+    <source media="(prefers-reduced-motion: reduce)" srcset="https://raw.githubusercontent.com/treasureGrove/LoliCode/main/docs/images/lolicode/companion-tour-still.webp">
+    <img src="docs/images/lolicode/companion-tour.webp" width="896" height="504" alt="小笨狗から承認待ちのタスクを開き、ツールの実行結果とコードの差分を確認するデモ">
   </picture>
 </a>
 
