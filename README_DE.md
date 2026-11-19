@@ -8,7 +8,12 @@ LoliCode gibt dem Modell deiner Wahl die Werkzeuge, um Projektdateien zu bearbei
 
 [Stabile Windows-Version](https://github.com/treasureGrove/LoliCode-Releases/releases/latest) · [Demo ansehen](https://lolicode.com/#film) · [Vom Issue zum PR-Entwurf (Chinesisch)](docs/guides/lolicode-secretary.md) · [Community und Konto](https://lolicode.com/all) · [Quellcode](https://github.com/treasureGrove/LoliCode) · [Dokumentation](docs/README.md) · [Änderungen](CHANGELOG.md)
 
-[![Modellauswahl, Werkzeugaufrufe und Codeänderungen in LoliCode](docs/images/lolicode/workspace-tour.gif)](https://lolicode.com/#film)
+<a href="https://lolicode.com/#film">
+  <picture>
+    <source media="(prefers-reduced-motion: reduce)" srcset="https://raw.githubusercontent.com/treasureGrove/LoliCode/main/docs/images/lolicode/workspace-tour-still.webp">
+    <img src="docs/images/lolicode/workspace-tour.webp" width="960" alt="Testergebnis und Codeänderung in LoliCode prüfen">
+  </picture>
+</a>
 
 ## Bereits verfügbar
 

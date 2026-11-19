@@ -8,7 +8,12 @@ LoliCode は、選んだモデルがプロジェクトのファイルを読み�
 
 [Windows 安定版](https://github.com/treasureGrove/LoliCode-Releases/releases/latest) · [画面デモ](https://lolicode.com/#film) · [Issue からドラフト PR まで（中国語）](docs/guides/lolicode-secretary.md) · [コミュニティ・アカウント](https://lolicode.com/all) · [ソース](https://github.com/treasureGrove/LoliCode) · [ドキュメント](docs/README.md) · [更新履歴](CHANGELOG.md)
 
-[![モデル選択、ツール実行、差分レビューのデモ](docs/images/lolicode/workspace-tour.gif)](https://lolicode.com/#film)
+<a href="https://lolicode.com/#film">
+  <picture>
+    <source media="(prefers-reduced-motion: reduce)" srcset="https://raw.githubusercontent.com/treasureGrove/LoliCode/main/docs/images/lolicode/workspace-tour-still.webp">
+    <img src="docs/images/lolicode/workspace-tour.webp" width="960" alt="LoliCode でテスト結果とコードの差分を確認するデモ">
+  </picture>
+</a>
 
 ## 現在使える機能
 

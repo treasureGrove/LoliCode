@@ -8,7 +8,12 @@ Open a folder and ask the agent to read files, run tests, and show its edits. Fo
 
 [Download for Windows](https://github.com/treasureGrove/LoliCode-Releases/releases/latest) · [Watch the workspace tour](https://lolicode.com/#film) · [Secretary workflow (中文)](docs/guides/lolicode-secretary.md) · [Documentation](docs/README.md)
 
-[![LoliCode workspace tour](docs/images/lolicode/workspace-tour.gif)](https://lolicode.com/#film)
+<a href="https://lolicode.com/#film">
+  <picture>
+    <source media="(prefers-reduced-motion: reduce)" srcset="https://raw.githubusercontent.com/treasureGrove/LoliCode/main/docs/images/lolicode/workspace-tour-still.webp">
+    <img src="docs/images/lolicode/workspace-tour.webp" width="960" alt="Inspect a test run and review the code diff in LoliCode">
+  </picture>
+</a>
 
 ## What you can use today
 

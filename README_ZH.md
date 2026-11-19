@@ -8,7 +8,12 @@
 
 [下载 Windows 版](https://github.com/treasureGrove/LoliCode-Releases/releases/latest) · [看界面演示](https://lolicode.com/#film) · [秘书如何处理 Issue](docs/guides/lolicode-secretary.md#接收和回复-github-工作) · [文档](docs/README.md)
 
-[![LoliCode 新版工作台功能演示](docs/images/lolicode/workspace-tour.gif)](https://lolicode.com/#film)
+<a href="https://lolicode.com/#film">
+  <picture>
+    <source media="(prefers-reduced-motion: reduce)" srcset="https://raw.githubusercontent.com/treasureGrove/LoliCode/main/docs/images/lolicode/workspace-tour-still.webp">
+    <img src="docs/images/lolicode/workspace-tour.webp" width="960" alt="在 LoliCode 中展开测试结果并审阅代码差异">
+  </picture>
+</a>
 
 ## 现在可以做什么
 
