@@ -81,6 +81,8 @@ const markdown = [
   "",
   ...notes.items.map((item) => `- ${item.zh}`),
   "",
+  "[查看源码和 Star](https://github.com/treasureGrove/LoliCode) · [提交问题或建议](https://github.com/treasureGrove/LoliCode/issues)",
+  "",
 ].join("\n");
 writeFileSync(path.join(stage, "release-notes.md"), markdown);
 writeFileSync(path.join(artifacts, "release-notes.md"), markdown);
