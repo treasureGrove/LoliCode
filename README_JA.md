@@ -2,11 +2,11 @@
 
 [English](README.md) · [简体中文](README_ZH.md) · [Deutsch](README_DE.md)
 
-**使いやすく、拡張しやすい、アニメ美少女 Agent。**
+**普段使っている AI モデルを、デスクトップで動くコーディングエージェントに。**
 
-LoliCode はデスクトップのコーディング Agent、共通のモデル設定、アニメ調のワークスペースを一つにまとめます。モデルを選び、フォルダーを開けば作業を始められます。高度な設定は必要になったときに利用できます。
+LoliCode は、選んだモデルがプロジェクトのファイルを読み書きし、コマンドを実行するためのデスクトップ環境です。たとえば GitHub の Issue を Loli 秘書に任せると、専用の Git ワークツリーで作業を進めます。必要な操作を承認し、差分を確認してから、ドラフトのプルリクエストを作成できます。
 
-[ダウンロード](https://lolicode.com/) · [コミュニティ・アカウント](https://lolicode.com/all) · [ソース](https://github.com/treasureGrove/LoliCode) · [ドキュメント](docs/README.md) · [更新履歴](CHANGELOG.md)
+[Windows 安定版](https://github.com/treasureGrove/LoliCode-Releases/releases/latest) · [画面デモ](https://lolicode.com/#film) · [Issue からドラフト PR まで（中国語）](docs/guides/lolicode-secretary.md) · [コミュニティ・アカウント](https://lolicode.com/all) · [ソース](https://github.com/treasureGrove/LoliCode) · [ドキュメント](docs/README.md) · [更新履歴](CHANGELOG.md)
 
 コードの保守は[構成ガイド](ARCHITECTURE.md)から始めてください。[LoliCode.code-workspace](LoliCode.code-workspace) を開くと、依存関係・生成物・ログを非表示にできます。
 
@@ -19,7 +19,7 @@ LoliCode はデスクトップのコーディング Agent、共通のモデル�
 - **キャラクターのいるデスクトップ**：アニメ調テーマ、ピンク髪のちびマスコット、コンパクトなツール進捗、ファイルのサイドプレビュー。
 - **使用量と更新**：記録された使用量と LoliCode 独自の更新を確認。コミュニティアカウントとモデル提供元のアカウントは別です。
 
-現在は **Tauri 2・React・TypeScript・Rust** を使用しています。標準 Agent はアプリ内の Rust コアで動作し、OpenCode や ZCode の別途インストールは不要です。[現在の Agent の対応範囲](docs/guides/lolicode-inprocess-agent.md)も参照してください。
+エージェントの実行は、アプリに同梱された **DeepSeek Harness** が担います。**Tauri 2 と Rust** がツール呼び出しやモデルへの接続を仲介し、**React と TypeScript** が画面を構成します。[アーキテクチャ（中国語）](ARCHITECTURE.md)
 
 Windows、macOS、Linux を対象としています。現在の公開パッケージは **Windows x64 の NSIS インストール版とポータブル ZIP** です。macOS と Linux のパッケージはまだ公開していません。検証範囲は各リリースを確認してください。
 
@@ -41,12 +41,13 @@ LoliCode は既存データとの互換性のため、保存先に歴史的な `
 
 ## ローカル開発
 
-Node.js 22.12+（または Vite が対応するバージョン）、pnpm 10.12.3、`rust-toolchain.toml` の Rust、[Tauri の前提条件](https://v2.tauri.app/start/prerequisites/)を用意します。
+`.node-version` 指定の Node.js（Harness の最低要件は 24.9.0）、pnpm 10.12.3、`rust-toolchain.toml` 指定の Rust を用意し、[Tauri の前提条件](https://v2.tauri.app/start/prerequisites/)を確認します。
 
 ```sh
 git clone https://github.com/treasureGrove/LoliCode.git
 cd LoliCode
 pnpm install --frozen-lockfile
+pnpm prepare:harness-runtime
 pnpm dev
 ```
 

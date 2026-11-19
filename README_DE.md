@@ -2,11 +2,11 @@
 
 [English](README.md) · [简体中文](README_ZH.md) · [日本語](README_JA.md)
 
-**Ein einfach bedienbarer, erweiterbarer Agent mit Anime-Mädchen-Design.**
+**Mit dem eigenen KI-Modell direkt am Desktop programmieren.**
 
-LoliCode verbindet einen Desktop-Agenten für Programmierung, gemeinsame Modellzugänge und eine Arbeitsumgebung im Anime-Stil. Modell auswählen, Projektordner öffnen und loslegen; erweiterte Einstellungen stehen bei Bedarf bereit.
+LoliCode gibt dem Modell deiner Wahl die Werkzeuge, um Projektdateien zu bearbeiten und Befehle auszuführen. Übergib zum Beispiel ein GitHub-Issue an Loli Secretary. Der Agent bearbeitet es in einem eigenen Git-Worktree. Du gibst angeforderte Aktionen frei, prüfst die Änderungen und kannst anschließend einen Pull Request als Entwurf erstellen.
 
-[Download](https://lolicode.com/) · [Community und Konto](https://lolicode.com/all) · [Quellcode](https://github.com/treasureGrove/LoliCode) · [Dokumentation](docs/README.md) · [Änderungen](CHANGELOG.md)
+[Stabile Windows-Version](https://github.com/treasureGrove/LoliCode-Releases/releases/latest) · [Demo ansehen](https://lolicode.com/#film) · [Vom Issue zum PR-Entwurf (Chinesisch)](docs/guides/lolicode-secretary.md) · [Community und Konto](https://lolicode.com/all) · [Quellcode](https://github.com/treasureGrove/LoliCode) · [Dokumentation](docs/README.md) · [Änderungen](CHANGELOG.md)
 
 Für die Codepflege: [Architektur und Verzeichnisse](ARCHITECTURE.md). [LoliCode.code-workspace](LoliCode.code-workspace) blendet Abhängigkeiten, Build-Ausgaben und Protokolle aus.
 
@@ -19,7 +19,7 @@ Für die Codepflege: [Architektur und Verzeichnisse](ARCHITECTURE.md). [LoliCode
 - **Ein Desktop mit Charakter:** Anime-Design, ein rosahaariges Chibi-Maskottchen, kompakte Werkzeugfortschritte und Dateivorschau in einer Seitenleiste.
 - **Verbrauch und Updates:** erfasste Nutzung anzeigen und eigenständige LoliCode-Updates prüfen. Das Community-Konto ist von den Konten der Modellanbieter getrennt.
 
-Die aktuelle Anwendung verwendet **Tauri 2, React, TypeScript und Rust**. Der Standard-Agent läuft als Rust-Kern innerhalb der Anwendung; eine separate Installation von OpenCode oder ZCode ist nicht erforderlich. Details stehen in der [Beschreibung des aktuellen Agenten](docs/guides/lolicode-inprocess-agent.md).
+Die mitgelieferte Laufzeit **DeepSeek Harness** führt die Agentenaufgaben aus. **Tauri 2 und Rust** stellen die Werkzeuge und den Modellzugang bereit. Die Oberfläche ist in **React und TypeScript** geschrieben. [Architektur (Chinesisch)](ARCHITECTURE.md)
 
 Windows, macOS und Linux sind Zielplattformen. Derzeit sind **Windows-x64-NSIS-Installer und portable ZIPs** veröffentlicht; Pakete für macOS und Linux stehen noch aus. Der geprüfte Umfang steht in den jeweiligen Versionshinweisen.
 
@@ -41,12 +41,13 @@ Diese Funktionen sind noch nicht vollständig ausgeliefert. Wir binden gezielte 
 
 ## Lokal entwickeln
 
-Voraussetzungen: Node.js 22.12+ oder eine von Vite unterstützte Version, pnpm 10.12.3, Rust gemäß `rust-toolchain.toml` und die [Tauri-Plattformabhängigkeiten](https://v2.tauri.app/start/prerequisites/).
+Für die lokale Entwicklung brauchst du die in `.node-version` festgelegte Node.js-Version (Harness benötigt mindestens 24.9.0), pnpm 10.12.3, die Rust-Version aus `rust-toolchain.toml` und die [Tauri-Plattformabhängigkeiten](https://v2.tauri.app/start/prerequisites/).
 
 ```sh
 git clone https://github.com/treasureGrove/LoliCode.git
 cd LoliCode
 pnpm install --frozen-lockfile
+pnpm prepare:harness-runtime
 pnpm dev
 ```
 
