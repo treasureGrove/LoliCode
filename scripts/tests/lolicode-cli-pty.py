@@ -16,10 +16,10 @@ import time
 
 
 def main():
-    node, cli = map(str, map(Path, sys.argv[1:3]))
+    node, cli = (str(Path(argument).resolve()) for argument in sys.argv[1:3])
     with tempfile.TemporaryDirectory(prefix="lolicode-cli-pty-") as temporary:
         root = Path(temporary)
-        project = root / "project"
+        project = root / "project with spaces"
         project.mkdir()
         errors = []
         requests = []
@@ -82,10 +82,10 @@ def main():
         threading.Thread(target=server.serve_forever, daemon=True).start()
         pid, descriptor = pty.fork()
         if pid == 0:
-            os.chdir(project)
+            os.chdir(root)
             environment = {**{name: value for name, value in os.environ.items() if not name.startswith("LOLICODE_")}, "LOLICODE_HOME": str(root / "home"),
                            "TERM": "xterm-256color"}
-            os.execve(node, [node, cli, "--no-animation"], environment)
+            os.execve(node, [node, cli, "mini", str(project), "--no-animation"], environment)
         transcript = bytearray()
         cursor = 0
 
@@ -119,6 +119,7 @@ def main():
             raise AssertionError(f"Missing terminal output {text!r}. Requests: {requests}. Model errors: {errors}. Journals: {journals}. Terminal: {transcript.decode(errors='replace')}")
 
         try:
+            wait_for(str(project))
             wait_for("lolicode ›")
             os.write(descriptor, b"test\n")
             wait_for("这条消息没有发送")
@@ -126,7 +127,11 @@ def main():
             os.write(descriptor, b"/help\n")
             wait_for("/connect")
             wait_for("lolicode ›")
-            os.write(descriptor, b"/connect\n")
+            os.write(descriptor, b"/conn")
+            wait_for("/conn")
+            os.write(descriptor, b"\t")
+            wait_for("ect")
+            os.write(descriptor, b"\n")
             wait_for("渠道名称 [default]:")
             os.write(descriptor, b"\n")
             wait_for("API 地址")
@@ -142,6 +147,7 @@ def main():
             wait_for("you ›")
             assert b"pty-fixture-key" not in transcript, "Secret echoed to terminal"
             assert "pty-fixture-key" not in (root / "home/config.json").read_text(), "Secret persisted in config"
+            os.write(descriptor, b"\x1b[A\x15")
             os.write(descriptor, b"/model does_not_exist\n")
             wait_for("Unknown channel")
             wait_for("you ›")
@@ -181,7 +187,7 @@ def main():
             decoded = transcript.decode(errors="replace")
             print(re.sub(r"\x1b\[[0-9;?]*[a-zA-Z]", "", decoded))
             assert b"pty-fixture-key" not in transcript
-            print(json.dumps({"platform": "linux", "terminal": "pty", "firstRunStaysOpen": True, "connectWizard": True, "secretHidden": True, "invalidModelRecoverable": True, "approvalReject": True, "approvalAllow": True, "structuredQuestion": True, "ctrlC": True, "result": "passed"}))
+            print(json.dumps({"platform": "linux", "terminal": "pty", "firstRunStaysOpen": True, "projectArgument": True, "slashCompletion": True, "connectWizard": True, "secretHidden": True, "secretNotInHistory": True, "invalidModelRecoverable": True, "approvalReject": True, "approvalAllow": True, "structuredQuestion": True, "ctrlC": True, "result": "passed"}))
         finally:
             try:
                 os.killpg(pid, signal.SIGKILL)

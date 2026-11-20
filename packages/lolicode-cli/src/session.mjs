@@ -35,33 +35,35 @@ function textContent(message) {
     .join("");
 }
 
+export async function resumeMetadata(resume, directory) {
+  const project =
+    directory || resume === true
+      ? await projectDirectory(directory)
+      : undefined;
+  const id = resume === true ? (await sessions(project))[0]?.id : resume;
+  if (!id)
+    throw new Error(
+      "No saved session in this project. Start one with `lolicode`.",
+    );
+  const metadata = await readJson(sessionFile(id));
+  if (!metadata) throw new Error(`Session does not exist: ${id}`);
+  if (typeof metadata.cwd !== "string" || !path.isAbsolute(metadata.cwd))
+    throw new Error(`Invalid project directory for session ${id}.`);
+  const cwd = await projectDirectory(metadata.cwd);
+  if (project && cwd !== project)
+    throw new Error("Resume this session in its original project directory.");
+  return { ...metadata, id, cwd };
+}
+
 export async function openSession(options, ui) {
-  let metadata;
-  if (options.resume) {
-    const cwd = await projectDirectory(options.cwd);
-    const id =
-      options.resume === true ? (await sessions(cwd))[0]?.id : options.resume;
-    if (!id)
-      throw new Error(
-        "No saved session in this project. Start one with `lolicode`.",
-      );
-    metadata = await readJson(sessionFile(id));
-    if (!metadata) throw new Error(`Session does not exist: ${id}`);
-    if (options.cwd && metadata.cwd !== cwd)
-      throw new Error("Resume this session in its original project directory.");
-    await projectDirectory(metadata.cwd);
-  } else {
-    metadata = {
-      id: `lc_${randomUUID().replaceAll("-", "")}`,
-      cwd: await projectDirectory(options.cwd),
-      createdAt: new Date().toISOString(),
-    };
-  }
-  const channel = await selectedChannel({
-    ...options,
-    channel: options.channel || metadata.channel,
-    model: options.model || (!options.channel ? metadata.model : undefined),
-  });
+  const metadata = options.resume
+    ? await resumeMetadata(options.resume, options.cwd)
+    : {
+        id: `lc_${randomUUID().replaceAll("-", "")}`,
+        cwd: await projectDirectory(options.cwd),
+        createdAt: new Date().toISOString(),
+      };
+  const channel = await selectedChannel(options, metadata);
   const release = await sessionLock(metadata.id);
   const persist = async () =>
     saveJson(sessionFile(metadata.id), {

@@ -12,7 +12,7 @@ import path from "node:path";
 import os from "node:os";
 import { randomUUID } from "node:crypto";
 
-export const version = "0.1.0-alpha.2";
+export const version = "0.1.0-alpha.3";
 export const home = path.resolve(
   process.env.LOLICODE_HOME || path.join(os.homedir(), ".lolicode", "cli"),
 );
@@ -86,19 +86,42 @@ export async function loadConfig() {
   return config;
 }
 
-export async function selectedChannel(options = {}) {
+export async function selectedChannel(options = {}, saved = {}) {
   const config = await loadConfig();
-  const selected = options.channel || config.selected;
+  // Registered channel names can qualify a model. Other slashes can be part
+  // of the actual API model ID (for example an OpenRouter organization).
+  const [prefix, ...suffix] = options.model?.split("/") ?? [];
+  const qualified =
+    !options.channel &&
+    !options.baseUrl &&
+    suffix.length > 0 &&
+    Object.hasOwn(config.channels, prefix);
+  const selected =
+    options.channel ||
+    (qualified && prefix) ||
+    saved.channel ||
+    config.selected;
+  const model = qualified ? suffix.join("/") : options.model;
   let channel =
     selected && Object.hasOwn(config.channels, selected)
       ? config.channels[selected]
       : undefined;
   if (selected && !channel) throw new Error(`Unknown channel: ${selected}`);
-  if (process.env.LOLICODE_BASE_URL || options.baseUrl) {
+  const baseURL =
+    options.baseUrl ||
+    (!options.channel &&
+      !qualified &&
+      !saved.channel &&
+      process.env.LOLICODE_BASE_URL);
+  if (baseURL) {
     channel = {
       ...channel,
-      baseURL: options.baseUrl || process.env.LOLICODE_BASE_URL,
-      model: options.model || process.env.LOLICODE_MODEL || channel?.model,
+      baseURL,
+      model:
+        model ||
+        (!options.channel && saved.model) ||
+        process.env.LOLICODE_MODEL ||
+        channel?.model,
       api:
         options.api ||
         process.env.LOLICODE_API ||
@@ -109,17 +132,18 @@ export async function selectedChannel(options = {}) {
   }
   if (!channel)
     throw new Error(
-      "Set up a model with `lolicode configure`, or set LOLICODE_BASE_URL, LOLICODE_MODEL and LOLICODE_API_KEY.",
+      "Set up a model with `lolicode auth login`, or set LOLICODE_BASE_URL, LOLICODE_MODEL and LOLICODE_API_KEY.",
     );
   channel = validateChannel({
     ...channel,
-    ...(options.model && { model: options.model }),
+    model:
+      model ?? (!options.channel && saved.model ? saved.model : channel.model),
   });
   if (!process.env[channel.apiKeyEnv])
     throw new Error(
       `Set ${channel.apiKeyEnv} in your environment before starting. API keys are never stored in the CLI configuration.`,
     );
-  return { ...channel, name: selected || "environment" };
+  return { ...channel, name: baseURL ? "environment" : selected };
 }
 
 export function validId(id) {
@@ -130,7 +154,10 @@ export const sessionFile = (id) => {
   return path.join(home, "sessions", `${id}.json`);
 };
 export async function projectDirectory(directory = process.cwd()) {
-  const project = await realpath(path.resolve(directory));
+  const expanded = /^~(?:[\\/]|$)/.test(directory)
+    ? path.join(os.homedir(), directory.slice(1))
+    : directory;
+  const project = await realpath(path.resolve(expanded));
   const { stat } = await import("node:fs/promises");
   if (!(await stat(project)).isDirectory())
     throw new Error("The project path must be a directory.");

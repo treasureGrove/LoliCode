@@ -3,6 +3,17 @@ import { stripVTControlCharacters } from "node:util";
 import { Writable } from "node:stream";
 import { version } from "./config.mjs";
 
+export const slashCommands = [
+  ["/connect", "连接模型"],
+  ["/new", "新会话"],
+  ["/sessions", "列出会话"],
+  ["/resume [ID]", "恢复会话"],
+  ["/models", "列出模型"],
+  ["/model <渠道[/模型]>", "切换模型"],
+  ["/help", "查看命令"],
+  ["/exit", "离开"],
+];
+
 export function clean(value) {
   return stripVTControlCharacters(String(value)).replace(
     /[\x00-\x08\x0b-\x1f\x7f]/g,
@@ -41,6 +52,15 @@ export class Terminal {
         input: process.stdin,
         output: this.terminalOutput,
         terminal: true,
+        completer: (line) => {
+          if (!this.completeCommands || !line.startsWith("/"))
+            return [[], line];
+          const names = slashCommands.map(([command]) => command.split(" ")[0]);
+          return [names.filter((name) => name.startsWith(line)), line];
+        },
+      });
+      this.input.on("history", (history) => {
+        if (this.hidingInput) history.shift();
       });
       this.input.on("SIGINT", () => this.onInterrupt?.());
     }
@@ -58,18 +78,16 @@ export class Terminal {
     process.stderr.write(
       `${this.pink(`  / \\__\n (  \u2022\u1d25\u2022)  LoliCode CLI ${version}\n  / > \u2661    little paws, big ideas.`)}\n`,
     );
-    this.note(
-      `\n  你的终端编程伙伴 · 在这里对话、修改项目、运行工具\n  项目 ${cwd}\n  /help 命令 · /connect 连接模型 · /exit 离开\n`,
-    );
+    this.note(`\n  项目 ${cwd}\n  /help 命令 · Tab 补全 · /exit 离开\n`);
   }
   connectionRequired(reason) {
     this.note(
-      `还差一步：连接你的模型 🐾\n${reason}\n\n输入 /connect 开始引导；/help 查看命令。\n你仍在 LoliCode 会话中，这里的文字不会作为系统命令执行。\n`,
+      `还差一步，连接你的模型 🐾\n${reason}\n\n输入 /connect 开始配置，或 /help 查看命令。\n`,
     );
   }
   connected(metadata, approval = "review") {
     this.note(
-      `\n● ${metadata.model} · 权限 ${approval}\n直接输入任务开始聊天，/new 开启新会话。\n`,
+      `\n● ${metadata.channel ? `${metadata.channel}/` : ""}${metadata.model} · 权限 ${approval}\n直接输入任务开始聊天，/new 开启新会话。\n`,
     );
   }
   spinner(label = "小爪爪正在忙") {
@@ -92,11 +110,12 @@ export class Terminal {
       process.stderr.write("\r\x1b[2K");
     }
   }
-  ask(prompt, { secret = false } = {}) {
+  ask(prompt, { secret = false, commands = false } = {}) {
     if (!this.input) return Promise.resolve(undefined);
     const operation = this.queue.then(async () => {
       this.stopSpinner();
       this.questionAbort = new AbortController();
+      this.completeCommands = commands && !secret;
       try {
         if (secret) {
           process.stderr.write(clean(prompt));
@@ -108,6 +127,7 @@ export class Terminal {
       } catch {
         return undefined;
       } finally {
+        this.completeCommands = false;
         if (secret) {
           this.hidingInput = false;
           process.stderr.write("\n");

@@ -36,7 +36,7 @@ def main():
     root = Path(__file__).resolve().parent
     if root.parent != Path("/tmp") or not root.name.startswith("lolicode-cli-validation-"):
         raise RuntimeError("Use a dedicated /tmp/lolicode-cli-validation-* directory.")
-    package = root / "lolicode-cli-0.1.0-alpha.2.tgz"
+    package = root / "lolicode-cli-0.1.0-alpha.3.tgz"
     if len(sys.argv) != 2 or digest(package) != sys.argv[1]:
         raise RuntimeError("CLI artifact SHA-256 does not match.")
 
@@ -57,7 +57,7 @@ def main():
     installed = root / "installed"
     run([
         str(node), str(npm), "install", "--prefix", str(installed),
-        "--cache", str(root / "npm-cache"), "--ignore-scripts", "--no-audit", "--no-fund", str(package),
+        "--cache", str(root / "npm-cache"), "--prefer-offline", "--ignore-scripts", "--no-audit", "--no-fund", str(package),
     ], root, environment, root / "install.log")
     cli = installed / "node_modules/@lolicode/cli/bin/lolicode.mjs"
     environment["LOLICODE_TEST_CLI"] = str(cli)

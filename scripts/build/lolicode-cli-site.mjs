@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { mkdir, readFile, copyFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -15,7 +15,7 @@ if (!output.startsWith(releaseRoot))
   throw new Error(
     "Site output must be inside this worktree's release directory.",
   );
-const batch = "20261120-cli-alpha2-v1";
+const batch = "20261120-cli-alpha3-v1";
 const source = path.join(repository, "deploy/lolicode-cli-site/public/cli");
 const packageManifest = JSON.parse(
   await readFile(
@@ -59,10 +59,26 @@ const manifest = Buffer.from(
   `${JSON.stringify({ batch, package: product.package, files }, null, 2)}\n`,
 );
 await writeFile(path.join(output, "manifest.json"), manifest);
-await copyFile(
+const template = await readFile(
   path.join(repository, "deploy/lolicode-cli-alpha2/deploy.py"),
-  path.join(output, "deploy.py"),
+  "utf8",
 );
+const deployment = template
+  .replaceAll("20261120-cli-alpha2-v1", batch)
+  .replaceAll(
+    "lolicode-cli-preview-20261120-alpha2.conf",
+    "lolicode-cli-preview-20261120-alpha3.conf",
+  )
+  .replaceAll("0.1.0-alpha.2", version)
+  .replace(
+    "d0a2277c2c23973ae043ca089b12cfaf6950f630466de8710939af7edefe9e82",
+    "fd91a9face558ef92d5b0915ef60e3d020ef43e85ae68c4f7c2c08167a3b2ac6",
+  )
+  .replace(
+    "a95cdb99d2f3582687816365318ca36d8c2208d93af1089d563e13c25ebc7bdf",
+    "258c2cd5c2bf84af9bbf791de6ea159c3a2bacd556797075e22a8bd9c4b2cf22",
+  );
+await writeFile(path.join(output, "deploy.py"), deployment);
 console.log(
   JSON.stringify({
     output,

@@ -246,6 +246,123 @@ test(
 );
 
 test(
+  "OpenCode-style aliases select a saved channel, keep session context and emit JSONL",
+  { timeout: 60000 },
+  async (t) => {
+    const f = await fixture(t, (body, response, number) => {
+      assert.equal(body.model, "org/fixture");
+      if (number > 1)
+        assert.match(JSON.stringify(body.messages), /alias history marker/);
+      reply(response, { content: "alias works" });
+    });
+    const from = path.join(f.root, "launch directory");
+    await mkdir(from);
+    const env = { ...f.env, LOLICODE_BASE_URL: "http://127.0.0.1:9/v1" };
+    const invoke = (args) => run(args, { cwd: from, env });
+    const add = await invoke([
+      "models",
+      "add",
+      "local",
+      "--base-url",
+      f.env.LOLICODE_BASE_URL,
+      "-m",
+      "org/default",
+    ]);
+    assert.equal(add.code, 0, add.stderr);
+    assert.match(
+      (await invoke(["models", "local"])).stdout,
+      /local\/org\/default/,
+    );
+    const auth = await invoke(["auth", "ls", "--format", "json"]);
+    assert.deepEqual(
+      JSON.parse(auth.stdout).channels.map(({ name, keyConfigured }) => [
+        name,
+        keyConfigured,
+      ]),
+      [["local", true]],
+    );
+    assert.ok(!auth.stdout.includes(key));
+
+    const first = await invoke([
+      "run",
+      "alias history marker",
+      "--dir",
+      f.cwd,
+      "-m",
+      "local/org/fixture",
+      "--format",
+      "json",
+    ]);
+    assert.equal(first.code, 0, first.stdout + first.stderr);
+    assert.equal(first.stderr, "");
+    const frames = first.stdout
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    assert.ok(frames.some(({ type }) => type === "text_delta"));
+    const { sessionId, status } = frames.at(-1);
+    assert.equal(status, "ok");
+
+    const latest = await invoke([
+      "run",
+      "-c",
+      "--dir",
+      f.cwd,
+      "continue it",
+      "--json",
+    ]);
+    assert.equal(latest.code, 0, latest.stdout + latest.stderr);
+    assert.equal(JSON.parse(latest.stdout).sessionId, sessionId);
+    const byId = await invoke([
+      "run",
+      "-s",
+      sessionId,
+      "same session",
+      "--json",
+    ]);
+    assert.equal(byId.code, 0, byId.stdout + byId.stderr);
+    assert.equal(JSON.parse(byId.stdout).sessionId, sessionId);
+
+    const listed = await invoke([
+      "session",
+      "list",
+      "-n",
+      "1",
+      "--format",
+      "json",
+    ]);
+    const [row, extra] = JSON.parse(listed.stdout);
+    assert.equal(row.id, sessionId);
+    assert.equal(row.cwd, f.cwd);
+    assert.equal(extra, undefined);
+    const filtered = await invoke([
+      "session",
+      "list",
+      "--dir",
+      from,
+      "--format",
+      "json",
+    ]);
+    assert.deepEqual(JSON.parse(filtered.stdout), []);
+    const mismatch = await invoke([
+      "run",
+      "-s",
+      sessionId,
+      "--dir",
+      from,
+      "wrong directory",
+      "--json",
+    ]);
+    assert.equal(mismatch.code, 1);
+    assert.match(
+      JSON.parse(mismatch.stdout).error,
+      /original project directory/,
+    );
+    assert.equal(f.calls.length, 3);
+  },
+);
+
+test(
   "real Harness writes inside the workspace with explicit workspace policy",
   { timeout: 60000 },
   async (t) => {
