@@ -4,15 +4,35 @@
   "description": "Your little coding companion in the terminal. Windows, Linux and macOS.",
   "type": "module",
   "license": "MIT",
-  "engines": { "node": ">=24.9.0" },
-  "bin": { "lolicode": "bin/lolicode.mjs" },
-  "files": ["bin", "src", "runtime", "README.md", "LICENSE", "THIRD_PARTY_NOTICES.md"],
+  "engines": {
+    "node": ">=24.9.0"
+  },
+  "bin": {
+    "lolicode": "bin/lolicode.mjs"
+  },
+  "files": [
+    "bin",
+    "src",
+    "runtime",
+    "npm-shrinkwrap.json",
+    "README.md",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md"
+  ],
   "scripts": {
     "prepare:runtime": "node scripts/prepare-runtime.mjs",
     "prepack": "node scripts/prepare-runtime.mjs",
     "test": "node --test tests/*.test.mjs"
   },
-  "dependencies": { "@deepseek-ai/dsh": "0.2.2-rc.1" },
+  "dependencies": {
+    "@deepseek-ai/dsh": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-sdk-protocol": "0.2.2-rc.5",
+    "zod": "4.6.6"
+  },
   "homepage": "https://lolicode.com/cli/",
-  "repository": { "type": "git", "url": "https://github.com/treasureGrove/LoliCode.git", "directory": "packages/lolicode-cli" }
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/treasureGrove/LoliCode.git",
+    "directory": "packages/lolicode-cli"
+  }
 }

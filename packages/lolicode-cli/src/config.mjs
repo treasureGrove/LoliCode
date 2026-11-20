@@ -1,68 +1,130 @@
-import { mkdir, readFile, rename, writeFile, chmod, realpath, open, unlink } from "node:fs/promises";
+import {
+  mkdir,
+  readFile,
+  rename,
+  writeFile,
+  chmod,
+  realpath,
+  open,
+  unlink,
+} from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { randomUUID } from "node:crypto";
 
 export const version = "0.1.0-alpha.1";
-export const home = path.resolve(process.env.LOLICODE_HOME || path.join(os.homedir(), ".lolicode", "cli"));
-export const apis = ["openai-completions", "openai-responses", "anthropic-messages"];
+export const home = path.resolve(
+  process.env.LOLICODE_HOME || path.join(os.homedir(), ".lolicode", "cli"),
+);
+export const apis = [
+  "openai-completions",
+  "openai-responses",
+  "anthropic-messages",
+];
 
 export async function readJson(file, fallback) {
-  try { return JSON.parse(await readFile(file, "utf8")); }
-  catch (error) { if (error.code === "ENOENT") return fallback; throw new Error(`Cannot read ${file}: ${error.message}`); }
+  try {
+    return JSON.parse(await readFile(file, "utf8"));
+  } catch (error) {
+    if (error.code === "ENOENT") return fallback;
+    throw new Error(`Cannot read ${file}: ${error.message}`);
+  }
 }
 
 export async function saveJson(file, value) {
   await mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
   const temporary = `${file}.${randomUUID()}.tmp`;
   try {
-    await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600, flag: "wx" });
+    await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, {
+      mode: 0o600,
+      flag: "wx",
+    });
     await rename(temporary, file);
     if (process.platform !== "win32") await chmod(file, 0o600);
-  } finally { await unlink(temporary).catch(() => {}); }
+  } finally {
+    await unlink(temporary).catch(() => {});
+  }
 }
 
 export function validateChannel(channel) {
-  if (!channel || typeof channel !== "object" || !channel.model?.trim()) throw new Error("A model name is required (--model).");
+  if (
+    !channel ||
+    typeof channel !== "object" ||
+    typeof channel.model !== "string" ||
+    !channel.model.trim()
+  )
+    throw new Error("A model name is required (--model).");
   const url = new URL(channel.baseURL);
-  if (!["https:", "http:"].includes(url.protocol) || url.username || url.password || url.search || url.hash) {
-    throw new Error("The API base URL must be an HTTP(S) URL without credentials, query or fragment.");
+  if (
+    !["https:", "http:"].includes(url.protocol) ||
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash
+  ) {
+    throw new Error(
+      "The API base URL must be an HTTP(S) URL without credentials, query or fragment.",
+    );
   }
-  if (url.protocol === "http:" && !["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)) {
-    throw new Error("Use HTTPS for remote model endpoints; HTTP is supported for localhost only.");
-  }
-  if (!apis.includes(channel.api)) throw new Error(`Supported API protocols: ${apis.join(", ")}`);
-  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(channel.apiKeyEnv)) throw new Error("--api-key-env must be an environment variable name.");
+  if (!apis.includes(channel.api))
+    throw new Error(`Supported API protocols: ${apis.join(", ")}`);
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(channel.apiKeyEnv))
+    throw new Error("--api-key-env must be an environment variable name.");
   return { ...channel, baseURL: url.href.replace(/\/$/, "") };
 }
 
 export async function loadConfig() {
-  const config = await readJson(path.join(home, "config.json"), { channels: {} });
-  if (!config.channels || typeof config.channels !== "object" || Array.isArray(config.channels)) throw new Error("Invalid CLI channel configuration.");
+  const config = await readJson(path.join(home, "config.json"), {
+    channels: {},
+  });
+  if (
+    !config.channels ||
+    typeof config.channels !== "object" ||
+    Array.isArray(config.channels)
+  )
+    throw new Error("Invalid CLI channel configuration.");
   return config;
 }
 
 export async function selectedChannel(options = {}) {
   const config = await loadConfig();
   const selected = options.channel || config.selected;
-  let channel = selected ? config.channels[selected] : undefined;
+  let channel =
+    selected && Object.hasOwn(config.channels, selected)
+      ? config.channels[selected]
+      : undefined;
   if (selected && !channel) throw new Error(`Unknown channel: ${selected}`);
   if (process.env.LOLICODE_BASE_URL || options.baseUrl) {
     channel = {
       ...channel,
       baseURL: options.baseUrl || process.env.LOLICODE_BASE_URL,
       model: options.model || process.env.LOLICODE_MODEL || channel?.model,
-      api: options.api || process.env.LOLICODE_API || channel?.api || "openai-completions",
+      api:
+        options.api ||
+        process.env.LOLICODE_API ||
+        channel?.api ||
+        "openai-completions",
       apiKeyEnv: options.apiKeyEnv || "LOLICODE_API_KEY",
     };
   }
-  if (!channel) throw new Error("Set up a model with `lolicode configure`, or set LOLICODE_BASE_URL, LOLICODE_MODEL and LOLICODE_API_KEY.");
-  channel = validateChannel({ ...channel, ...(options.model && { model: options.model }) });
-  if (!process.env[channel.apiKeyEnv]) throw new Error(`Set ${channel.apiKeyEnv} in your environment before starting. API keys are never stored in the CLI configuration.`);
+  if (!channel)
+    throw new Error(
+      "Set up a model with `lolicode configure`, or set LOLICODE_BASE_URL, LOLICODE_MODEL and LOLICODE_API_KEY.",
+    );
+  channel = validateChannel({
+    ...channel,
+    ...(options.model && { model: options.model }),
+  });
+  if (!process.env[channel.apiKeyEnv])
+    throw new Error(
+      `Set ${channel.apiKeyEnv} in your environment before starting. API keys are never stored in the CLI configuration.`,
+    );
   return { ...channel, name: selected || "environment" };
 }
 
-export function validId(id) { return typeof id === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(id); }
+export function validId(id) {
+  return typeof id === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(id);
+}
 export const sessionFile = (id) => {
   if (!validId(id)) throw new Error("Invalid session ID.");
   return path.join(home, "sessions", `${id}.json`);
@@ -70,7 +132,8 @@ export const sessionFile = (id) => {
 export async function projectDirectory(directory = process.cwd()) {
   const project = await realpath(path.resolve(directory));
   const { stat } = await import("node:fs/promises");
-  if (!(await stat(project)).isDirectory()) throw new Error("The project path must be a directory.");
+  if (!(await stat(project)).isDirectory())
+    throw new Error("The project path must be a directory.");
   return project;
 }
 
@@ -79,11 +142,17 @@ export async function sessionLock(id) {
   const file = path.join(home, "locks", `${id}.lock`);
   if (!validId(id)) throw new Error("Invalid session ID.");
   let handle;
-  try { handle = await open(file, "wx", 0o600); }
-  catch (error) {
+  try {
+    handle = await open(file, "wx", 0o600);
+  } catch (error) {
     if (error.code !== "EEXIST") throw error;
-    throw new Error(`Session ${id} is already open. If a previous process crashed, remove its lock after checking no CLI is using it: ${file}`);
+    throw new Error(
+      `Session ${id} is already open. If a previous process crashed, remove its lock after checking no CLI is using it: ${file}`,
+    );
   }
   await handle.writeFile(String(process.pid));
-  return async () => { await handle.close(); await unlink(file).catch(() => {}); };
+  return async () => {
+    await handle.close();
+    await unlink(file).catch(() => {});
+  };
 }

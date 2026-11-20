@@ -2,3 +2,4 @@ runtime/
 LICENSE
 THIRD_PARTY_NOTICES.md
 *.tgz
+npm-shrinkwrap.json

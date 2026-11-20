@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#9e2445" />
+    <title>LoliCode CLI · 终端里的小狗编程搭子</title>
+    <meta
+      name="description"
+      content="LoliCode CLI 官方下载与安装指南。在 Windows、Linux 终端里读项目、修改代码、执行命令，支持流式对话、会话恢复和 JSON 自动化。"
+    />
+    <link rel="canonical" href="https://lolicode.com/cli/" />
+    <link rel="icon" href="/desktop-assets/favicon-32.png" />
+    <link rel="stylesheet" href="/cli/site.css" />
+    <script src="/cli/site.js" defer></script>
+  </head>
+  <body>
+    <a class="skip" href="#main">跳到正文</a>
+    <header class="header">
+      <a class="brand" href="/" aria-label="LoliCode 官网"
+        ><img
+          src="/desktop-assets/site-icon-192.png"
+          alt=""
+          width="36"
+          height="36"
+        /><span>LoliCode <b>CLI</b></span></a
+      >
+      <nav aria-label="主导航">
+        <a href="#install">安装</a><a href="#use">用法</a
+        ><a href="/">桌面版 ↗</a>
+      </nav>
+    </header>
+    <main id="main">
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="release">0.1.0-alpha.1 · Windows / Linux</p>
+          <h1>打开终端，<br />小狗也在。<span aria-hidden="true">♡</span></h1>
+          <p class="intro">
+            读项目、写代码、跑命令。把任务交给
+            LoliCode，在熟悉的终端里，继续你的创作。
+          </p>
+          <a class="button" href="#install"
+            >把小狗带进终端 <span aria-hidden="true">↓</span></a
+          >
+          <p class="requirement">需要 Node.js 24.9 或更新版本</p>
+        </div>
+        <div class="terminal-scene">
+          <div class="terminal" aria-label="LoliCode CLI 交互示意">
+            <div class="terminal-top">
+              <span aria-hidden="true">● ● ●</span><span>~/my-project</span
+              ><span>交互示意</span>
+            </div>
+            <div class="terminal-body">
+              <pre class="dog">  / \__
+ (  •ᴥ•)  <strong>LoliCode CLI</strong>
+  / &gt; ♡   little paws, big ideas.</pre>
+              <p><span class="prompt">you ›</span> 帮我读一下这个项目</p>
+              <p class="tool">
+                🐾 read package.json<br />🐾 list_directory src/
+              </p>
+              <p>
+                我先看看项目入口和脚本，<br />再带你了解主要模块。<span
+                  class="caret"
+                  aria-hidden="true"
+                  >▍</span
+                >
+              </p>
+              <div class="terminal-bottom">
+                <span>review</span><span>你的项目 · 你的模型</span>
+              </div>
+            </div>
+          </div>
+          <p class="scene-caption">
+            一点粉色，一双小爪，和认认真真的工具调用。
+          </p>
+        </div>
+      </section>
+
+      <section
+        class="install section"
+        id="install"
+        aria-labelledby="install-title"
+      >
+        <div class="section-heading">
+          <p class="eyebrow">开始使用</p>
+          <h2 id="install-title">几行命令，见面。</h2>
+          <p>
+            先准备
+            <a
+              href="https://nodejs.org/en/download"
+              target="_blank"
+              rel="noopener noreferrer"
+              >Node.js 24 LTS ↗</a
+            >，再安装 CLI。
+          </p>
+        </div>
+        <div class="install-layout">
+          <div class="install-main">
+            <div class="tabs" role="tablist" aria-label="选择操作系统">
+              <button
+                id="tab-windows"
+                role="tab"
+                aria-controls="panel-windows"
+                aria-selected="true"
+              >
+                Windows
+              </button>
+              <button
+                id="tab-linux"
+                role="tab"
+                aria-controls="panel-linux"
+                aria-selected="false"
+              >
+                Linux
+              </button>
+            </div>
+            <div
+              id="panel-windows"
+              class="os-panel"
+              role="tabpanel"
+              aria-labelledby="tab-windows"
+            >
+              <p class="shell-label">在 PowerShell 中运行</p>
+              <div class="code-wrap">
+                <button
+                  class="copy"
+                  data-copy="install-windows"
+                  aria-label="复制 Windows 安装命令"
+                >
+                  复制
+                </button>
+                <pre
+                  id="install-windows"
+                ><code>npm.cmd install --global --ignore-scripts https://lolicode.com/cli/downloads/lolicode-cli-0.1.0-alpha.1.tgz
+lolicode.cmd --version</code></pre>
+              </div>
+              <p class="helper">如果终端提示找不到命令，重新打开终端后再试。</p>
+            </div>
+            <div
+              id="panel-linux"
+              class="os-panel"
+              role="tabpanel"
+              aria-labelledby="tab-linux"
+            >
+              <p class="shell-label">在 Bash / Zsh 中运行</p>
+              <div class="code-wrap">
+                <button
+                  class="copy"
+                  data-copy="install-linux"
+                  aria-label="复制 Linux 安装命令"
+                >
+                  复制
+                </button>
+                <pre
+                  id="install-linux"
+                ><code>npm install --global --prefix "$HOME/.local" --ignore-scripts https://lolicode.com/cli/downloads/lolicode-cli-0.1.0-alpha.1.tgz
+export PATH="$HOME/.local/bin:$PATH"
+lolicode --version</code></pre>
+              </div>
+              <p class="helper">
+                把 PATH 设置加入 shell 配置文件后，新终端也可以直接使用。
+              </p>
+            </div>
+            <p class="download-links">
+              <a href="/cli/downloads/lolicode-cli-0.1.0-alpha.1.tgz"
+                >下载 npm 包 ↓</a
+              ><a href="/cli/latest.json">查看版本与 SHA-256 ↗</a
+              ><a
+                href="https://github.com/treasureGrove/LoliCode-Releases/releases/tag/lolicode-cli-v0.1.0-alpha.1"
+                >GitHub 发布页 ↗</a
+              >
+            </p>
+          </div>
+          <aside class="install-aside">
+            <span class="paw" aria-hidden="true">🐾</span>
+            <h3>第一次见面</h3>
+            <p>安装后，进入你的项目目录。</p>
+            <pre><code>cd your-project
+lolicode configure
+lolicode</code></pre>
+            <p>填写 API 地址、模型名和密钥环境变量名称，就可以开始对话。</p>
+            <p class="small">
+              密钥从环境变量读取。模型调用费用由你使用的服务商计费。
+            </p>
+          </aside>
+        </div>
+      </section>
+
+      <section class="section use" id="use" aria-labelledby="use-title">
+        <div class="section-heading">
+          <p class="eyebrow">按你的习惯来</p>
+          <h2 id="use-title">聊一会儿，或交给脚本。</h2>
+        </div>
+        <div class="use-grid">
+          <article>
+            <h3>带着任务启动</h3>
+            <p>
+              在项目里提需求，查看工具执行过程。默认在修改和运行命令前询问你。
+            </p>
+            <pre><code>lolicode "解释这个项目的结构"
+lolicode run "修复测试" --approval workspace</code></pre>
+          </article>
+          <article>
+            <h3>回来接着做</h3>
+            <p>对话和工具记录保存在本机，离开终端后可以恢复。</p>
+            <pre><code>lolicode sessions
+lolicode resume</code></pre>
+          </article>
+          <article>
+            <h3>给自动化一个入口</h3>
+            <p>
+              一次输出
+              JSON，或逐行接收事件。超时、权限和输入状态都有对应退出码。
+            </p>
+            <pre><code>lolicode run "检查项目" --json
+git diff | lolicode run "审阅改动" --stdin --json</code></pre>
+          </article>
+          <article>
+            <h3>选择熟悉的模型</h3>
+            <p>连接兼容 API 或 LoliCode 渠道网关，保存多个渠道，按任务切换。</p>
+            <pre><code>lolicode models
+lolicode models use my-model
+lolicode doctor</code></pre>
+          </article>
+        </div>
+      </section>
+
+      <section
+        class="section configuration"
+        aria-labelledby="configuration-title"
+      >
+        <div>
+          <p class="eyebrow">模型配置</p>
+          <h2 id="configuration-title">你的模型，<br />也可以跟过来。</h2>
+          <p>
+            支持 OpenAI Completions、OpenAI Responses 和 Anthropic Messages
+            协议。使用服务商提供的实际地址与模型名。
+          </p>
+          <p>
+            下面展示 Linux 环境变量配置。Windows PowerShell 使用
+            <code>$env:变量名 = '值'</code>。
+          </p>
+        </div>
+        <div class="code-wrap">
+          <button
+            class="copy"
+            data-copy="configure-example"
+            aria-label="复制模型环境变量示例"
+          >
+            复制
+          </button>
+          <pre
+            id="configure-example"
+          ><code>export LOLICODE_BASE_URL='https://api.deepseek.com/v1'
+export LOLICODE_MODEL='deepseek-chat'
+export LOLICODE_API_KEY='你的 API Key'
+
+cd your-project
+lolicode</code></pre>
+        </div>
+      </section>
+
+      <section class="section faq" aria-labelledby="faq-title">
+        <h2 id="faq-title">还有这些小事</h2>
+        <details>
+          <summary>这一版支持哪些系统？</summary>
+          <p>
+            首版已验收 Windows x64 和 Linux x64。需要 Node.js 24.9
+            或更新版本。其他系统和架构会继续验证。
+          </p>
+        </details>
+        <details>
+          <summary>可以关闭颜色和动画吗？</summary>
+          <p>
+            可以。使用 <code>--plain</code> 或设置
+            <code>NO_COLOR=1</code> 关闭颜色，使用
+            <code>--no-animation</code> 关闭等待动效。
+          </p>
+        </details>
+        <details>
+          <summary>权限如何控制？</summary>
+          <p>
+            默认 <code>review</code> 模式逐次确认修改和命令。<code
+              >workspace</code
+            >
+            允许项目操作，<code>plan</code> 使用只读工具，<code>full</code>
+            显式开启无限制执行。脚本模式遇到确认请求时返回相应状态，方便你接手。
+          </p>
+        </details>
+        <details>
+          <summary>会话和配置保存在哪里？</summary>
+          <p>
+            默认位于 <code>~/.lolicode/cli</code>。可以通过
+            <code>LOLICODE_HOME</code> 指定目录，使用
+            <code>lolicode resume</code> 恢复该项目的最近一次 CLI 会话。
+          </p>
+        </details>
+      </section>
+    </main>
+    <footer>
+      <a class="brand" href="/">LoliCode</a>
+      <p>little paws, big ideas.</p>
+      <a href="https://lolicode.com/all">遇到问题，来社区聊聊 ↗</a>
+    </footer>
+    <p
+      id="copy-status"
+      class="copy-status"
+      role="status"
+      aria-live="polite"
+    ></p>
+  </body>
+</html>
