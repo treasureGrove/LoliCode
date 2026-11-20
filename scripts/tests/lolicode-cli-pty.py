@@ -83,11 +83,9 @@ def main():
         pid, descriptor = pty.fork()
         if pid == 0:
             os.chdir(project)
-            environment = {**os.environ, "LOLICODE_HOME": str(root / "home"),
-                           "LOLICODE_BASE_URL": f"http://127.0.0.1:{server.server_port}/v1",
-                           "LOLICODE_MODEL": "fixture", "LOLICODE_API_KEY": "pty-fixture-key",
+            environment = {**{name: value for name, value in os.environ.items() if not name.startswith("LOLICODE_")}, "LOLICODE_HOME": str(root / "home"),
                            "TERM": "xterm-256color"}
-            os.execve(node, [node, cli, "PTY_REJECT_TASK_9017", "--no-animation"], environment)
+            os.execve(node, [node, cli, "--no-animation"], environment)
         transcript = bytearray()
         cursor = 0
 
@@ -121,6 +119,33 @@ def main():
             raise AssertionError(f"Missing terminal output {text!r}. Requests: {requests}. Model errors: {errors}. Journals: {journals}. Terminal: {transcript.decode(errors='replace')}")
 
         try:
+            wait_for("lolicode ›")
+            os.write(descriptor, b"test\n")
+            wait_for("这条消息没有发送")
+            wait_for("lolicode ›")
+            os.write(descriptor, b"/help\n")
+            wait_for("/connect")
+            wait_for("lolicode ›")
+            os.write(descriptor, b"/connect\n")
+            wait_for("渠道名称 [default]:")
+            os.write(descriptor, b"\n")
+            wait_for("API 地址")
+            os.write(descriptor, f"http://127.0.0.1:{server.server_port}/v1\n".encode())
+            wait_for("模型名称:")
+            os.write(descriptor, b"fixture\n")
+            wait_for("密钥环境变量名称")
+            os.write(descriptor, b"\n")
+            wait_for("协议 [openai-completions]:")
+            os.write(descriptor, b"\n")
+            wait_for("API Key（输入隐藏")
+            os.write(descriptor, b"pty-fixture-key\n")
+            wait_for("you ›")
+            assert b"pty-fixture-key" not in transcript, "Secret echoed to terminal"
+            assert "pty-fixture-key" not in (root / "home/config.json").read_text(), "Secret persisted in config"
+            os.write(descriptor, b"/model does_not_exist\n")
+            wait_for("Unknown channel")
+            wait_for("you ›")
+            os.write(descriptor, b"PTY_REJECT_TASK_9017\n")
             wait_for("允许这一次？[y/N]")
             os.write(descriptor, b"n\n")
             wait_for("REJECTED_OK")
@@ -155,7 +180,8 @@ def main():
             assert not errors, errors
             decoded = transcript.decode(errors="replace")
             print(re.sub(r"\x1b\[[0-9;?]*[a-zA-Z]", "", decoded))
-            print(json.dumps({"platform": "linux", "terminal": "pty", "approvalReject": True, "approvalAllow": True, "structuredQuestion": True, "ctrlC": True, "result": "passed"}))
+            assert b"pty-fixture-key" not in transcript
+            print(json.dumps({"platform": "linux", "terminal": "pty", "firstRunStaysOpen": True, "connectWizard": True, "secretHidden": True, "invalidModelRecoverable": True, "approvalReject": True, "approvalAllow": True, "structuredQuestion": True, "ctrlC": True, "result": "passed"}))
         finally:
             try:
                 os.killpg(pid, signal.SIGKILL)

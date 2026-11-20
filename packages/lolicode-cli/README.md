@@ -2,7 +2,7 @@
 
 把 LoliCode 带进终端。粉色小狗陪你读项目、修改代码、运行命令，也能通过 JSON 接入脚本。
 
-首个公开版本为 `0.1.0-alpha.1`。运行需要 Node.js **24.9 或更新版本**。CLI 使用桌面端同版本的 DeepSeek Harness 和共享宿主覆盖层，支持独立运行。
+当前版本为 `0.1.0-alpha.2`。运行需要 Node.js **24.9 或更新版本**。CLI 使用桌面端同版本的 DeepSeek Harness 和共享宿主覆盖层，支持独立运行。
 
 ## 安装
 
@@ -11,14 +11,14 @@
 Windows PowerShell：
 
 ```powershell
-npm.cmd install --global --ignore-scripts https://github.com/treasureGrove/LoliCode-Releases/releases/download/lolicode-cli-v0.1.0-alpha.1/lolicode-cli-0.1.0-alpha.1.tgz
+npm.cmd install --global --ignore-scripts https://github.com/treasureGrove/LoliCode-Releases/releases/download/lolicode-cli-v0.1.0-alpha.2/lolicode-cli-0.1.0-alpha.2.tgz
 lolicode.cmd --version
 ```
 
 Linux：
 
 ```sh
-npm install --global --prefix "$HOME/.local" --ignore-scripts https://github.com/treasureGrove/LoliCode-Releases/releases/download/lolicode-cli-v0.1.0-alpha.1/lolicode-cli-0.1.0-alpha.1.tgz
+npm install --global --prefix "$HOME/.local" --ignore-scripts https://github.com/treasureGrove/LoliCode-Releases/releases/download/lolicode-cli-v0.1.0-alpha.2/lolicode-cli-0.1.0-alpha.2.tgz
 export PATH="$HOME/.local/bin:$PATH"
 lolicode --version
 ```
@@ -27,7 +27,11 @@ lolicode --version
 
 ## 配置模型
 
-运行 `lolicode configure`，填写渠道名称、API 基础地址、模型名和保存 API Key 的环境变量名称。密钥由环境变量提供，配置文件保存环境变量名称。
+进入项目目录运行 `lolicode`（Windows 也可用 `lolicode.cmd`），启动后就是持续对话界面。尚未配置模型时会留在 `lolicode ›`，不会退出到 CMD、PowerShell 或 Linux shell。
+
+输入 `/connect`，按引导填写渠道名称、API 基础地址、模型名和保存 API Key 的环境变量名称。已有渠道可以直接选用。没有对应环境变量时，可隐藏输入仅本次进程有效的 API Key；密钥不写入配置或磁盘。重启后需要再次输入，或提前设置环境变量。`/cancel` 返回对话，`/exit` 退出。
+
+`lolicode configure` 仍可在启动前保存渠道配置，密钥由环境变量提供。CMD 使用 `set 变量名=值`，PowerShell 使用 `$env:变量名 = '值'`。终端里的自然语言任务应在 LoliCode 的 `you ›` 提示后输入。
 
 也可以直接使用环境变量。Windows PowerShell：
 
@@ -74,7 +78,7 @@ lolicode resume SESSION_ID
 lolicode sessions
 ```
 
-交互命令有 `/help`、`/new`、`/sessions`、`/resume ID`、`/models`、`/model NAME` 与 `/exit`。`Ctrl+C` 停止当前任务。`--plain` 或 `NO_COLOR=1` 关闭颜色，`--no-animation` 关闭等待动效。
+交互命令有 `/help`、`/connect`、`/new`、`/sessions`、`/resume ID`、`/models`、`/model NAME` 与 `/exit`。配置或命令错误会留在会话里供你修正。`Ctrl+C` 停止当前任务。`--plain` 或 `NO_COLOR=1` 关闭颜色，`--no-animation` 关闭等待动效。
 
 权限模式：
 

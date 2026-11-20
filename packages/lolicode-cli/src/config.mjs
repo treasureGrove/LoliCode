@@ -12,7 +12,7 @@ import path from "node:path";
 import os from "node:os";
 import { randomUUID } from "node:crypto";
 
-export const version = "0.1.0-alpha.1";
+export const version = "0.1.0-alpha.2";
 export const home = path.resolve(
   process.env.LOLICODE_HOME || path.join(os.homedir(), ".lolicode", "cli"),
 );

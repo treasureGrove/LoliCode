@@ -33,7 +33,7 @@
     <main id="main">
       <section class="hero">
         <div class="hero-copy">
-          <p class="release">0.1.0-alpha.1 · Windows / Linux</p>
+          <p class="release">0.1.0-alpha.2 · Windows / Linux</p>
           <h1>打开终端，<br />小狗也在。<span aria-hidden="true">♡</span></h1>
           <p class="intro">
             读项目、写代码、跑命令。把任务交给
@@ -120,7 +120,7 @@
               role="tabpanel"
               aria-labelledby="tab-windows"
             >
-              <p class="shell-label">在 PowerShell 中运行</p>
+              <p class="shell-label">在 Windows CMD 或 PowerShell 中运行</p>
               <div class="code-wrap">
                 <button
                   class="copy"
@@ -131,8 +131,8 @@
                 </button>
                 <pre
                   id="install-windows"
-                ><code>npm.cmd install --global --ignore-scripts https://lolicode.com/cli/downloads/lolicode-cli-0.1.0-alpha.1.tgz
-lolicode.cmd --version</code></pre>
+                ><code>npm.cmd install --global --ignore-scripts https://lolicode.com/cli/downloads/lolicode-cli-0.1.0-alpha.2.tgz
+lolicode.cmd</code></pre>
               </div>
               <p class="helper">如果终端提示找不到命令，重新打开终端后再试。</p>
             </div>
@@ -153,7 +153,7 @@ lolicode.cmd --version</code></pre>
                 </button>
                 <pre
                   id="install-linux"
-                ><code>npm install --global --prefix "$HOME/.local" --ignore-scripts https://lolicode.com/cli/downloads/lolicode-cli-0.1.0-alpha.1.tgz
+                ><code>npm install --global --prefix "$HOME/.local" --ignore-scripts https://lolicode.com/cli/downloads/lolicode-cli-0.1.0-alpha.2.tgz
 export PATH="$HOME/.local/bin:$PATH"
 lolicode --version</code></pre>
               </div>
@@ -162,11 +162,11 @@ lolicode --version</code></pre>
               </p>
             </div>
             <p class="download-links">
-              <a href="/cli/downloads/lolicode-cli-0.1.0-alpha.1.tgz"
+              <a href="/cli/downloads/lolicode-cli-0.1.0-alpha.2.tgz"
                 >下载 npm 包 ↓</a
               ><a href="/cli/latest.json">查看版本与 SHA-256 ↗</a
               ><a
-                href="https://github.com/treasureGrove/LoliCode-Releases/releases/tag/lolicode-cli-v0.1.0-alpha.1"
+                href="https://github.com/treasureGrove/LoliCode-Releases/releases/tag/lolicode-cli-v0.1.0-alpha.2"
                 >GitHub 发布页 ↗</a
               >
             </p>
@@ -174,13 +174,13 @@ lolicode --version</code></pre>
           <aside class="install-aside">
             <span class="paw" aria-hidden="true">🐾</span>
             <h3>第一次见面</h3>
-            <p>安装后，进入你的项目目录。</p>
+            <p>安装后，进入项目目录，启动持续对话界面。</p>
             <pre><code>cd your-project
-lolicode configure
-lolicode</code></pre>
-            <p>填写 API 地址、模型名和密钥环境变量名称，就可以开始对话。</p>
+lolicode
+/connect</code></pre>
+            <p>在 LoliCode 提示符中输入 /connect，连接模型后就可以直接聊任务。缺配置时也会留在界面里。</p>
             <p class="small">
-              密钥从环境变量读取。模型调用费用由你使用的服务商计费。
+              密钥可从环境变量读取，也可隐藏输入供本次会话使用，不写入配置。模型调用费用由你使用的服务商计费。
             </p>
           </aside>
         </div>

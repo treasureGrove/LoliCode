@@ -15,7 +15,7 @@ if (!output.startsWith(releaseRoot))
   throw new Error(
     "Site output must be inside this worktree's release directory.",
   );
-const batch = "20261120-cli-alpha1-v1";
+const batch = "20261120-cli-alpha2-v1";
 const source = path.join(repository, "deploy/lolicode-cli-site/public/cli");
 const packageManifest = JSON.parse(
   await readFile(
@@ -60,7 +60,7 @@ const manifest = Buffer.from(
 );
 await writeFile(path.join(output, "manifest.json"), manifest);
 await copyFile(
-  path.join(repository, "deploy/lolicode-cli-site/deploy.py"),
+  path.join(repository, "deploy/lolicode-cli-alpha2/deploy.py"),
   path.join(output, "deploy.py"),
 );
 console.log(

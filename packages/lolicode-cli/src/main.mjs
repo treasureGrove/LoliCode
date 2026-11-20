@@ -170,29 +170,72 @@ async function manageModels(words, options, ui) {
   );
 }
 
-async function configure(options, ui) {
+async function configure(options, ui, { connect = false } = {}) {
   if (!ui.canAsk)
     throw new Error(
       "Interactive setup needs a terminal. Use `lolicode models add NAME --base-url URL --model MODEL --api-key-env ENV` in scripts.",
     );
-  ui.note("配置模型渠道 · API Key 请放在环境变量中，不会写入配置。\n");
-  const name = (await ui.ask("渠道名称 [default]: "))?.trim() || "default";
-  const baseUrl = (
-    await ui.ask("API 地址（例如 https://api.deepseek.com/v1）: ")
-  )?.trim();
-  const model = (await ui.ask("模型名称: "))?.trim();
-  const apiKeyEnv =
-    (await ui.ask("密钥环境变量名称 [LOLICODE_API_KEY]: "))?.trim() ||
-    "LOLICODE_API_KEY";
-  const api =
-    (await ui.ask("协议 [openai-completions]: "))?.trim() ||
-    "openai-completions";
-  await manageModels(
-    ["add", name],
-    { ...options, baseUrl, model, apiKeyEnv, api },
-    ui,
+  ui.note(
+    "连接模型渠道 · 输入 /cancel 可返回会话。\n配置只保存地址、模型和环境变量名称。\n",
   );
-  ui.note(`设置 ${apiKeyEnv} 后，进入项目目录运行 lolicode。`);
+  const config = await loadConfig();
+  const defaultName = config.selected || "default";
+  const nameAnswer = await ui.ask(`渠道名称 [${defaultName}]: `);
+  if (nameAnswer === undefined || nameAnswer.trim() === "/cancel") return false;
+  const name = nameAnswer.trim() || defaultName;
+  const existing =
+    connect && Object.hasOwn(config.channels, name)
+      ? config.channels[name]
+      : undefined;
+  const values = [];
+  for (const prompt of existing
+    ? []
+    : [
+        "API 地址（例如 https://api.deepseek.com/v1）: ",
+        "模型名称: ",
+        "密钥环境变量名称 [LOLICODE_API_KEY]: ",
+        "协议 [openai-completions]: ",
+      ]) {
+    const answer = await ui.ask(prompt);
+    if (answer === undefined || answer.trim() === "/cancel") return false;
+    values.push(answer.trim());
+  }
+  const channel = existing
+    ? validateChannel(existing)
+    : validateChannel({
+        baseURL: values[0],
+        model: values[1],
+        apiKeyEnv: values[2] || "LOLICODE_API_KEY",
+        api: values[3] || "openai-completions",
+      });
+  const { baseURL: baseUrl, model, apiKeyEnv, api } = channel;
+  validateChannel({ baseURL: baseUrl, model, apiKeyEnv, api });
+  let sessionKey;
+  if (connect && !process.env[apiKeyEnv]) {
+    ui.note(
+      "可临时输入 API Key，仅本次进程使用，不保存到磁盘。也可以先设置环境变量后再启动。\n",
+    );
+    sessionKey = await ui.ask("API Key（输入隐藏，回车稍后连接）: ", {
+      secret: true,
+    });
+    if (sessionKey === undefined || sessionKey.trim() === "/cancel")
+      return false;
+  }
+  if (!existing)
+    await manageModels(
+      ["add", name],
+      { ...options, baseUrl, model, apiKeyEnv, api },
+      ui,
+    );
+  if (connect) {
+    await manageModels(["use", name], options, ui);
+    options.channel = name;
+  }
+  if (sessionKey?.trim()) process.env[apiKeyEnv] = sessionKey.trim();
+  if (!process.env[apiKeyEnv])
+    ui.note(`设置 ${apiKeyEnv} 后连接模型。当前仍可使用 /help 和 /exit。`);
+  else if (!connect) ui.note("配置已就绪，进入项目目录运行 lolicode。 ");
+  return true;
 }
 
 async function doctor(options) {
@@ -316,10 +359,10 @@ export async function main(args = process.argv.slice(2)) {
       throw new Error(
         "Provide a task: lolicode run 'your task', or pipe input to lolicode run -.",
       );
-    if (!once) ui.banner(await projectDirectory(options.cwd));
-    session = await openSession(options, ui);
+    const cwd = await projectDirectory(options.cwd);
+    if (!once) ui.banner(cwd);
     signalHandler = () => {
-      if (session.active) {
+      if (session?.active) {
         ui.note("正在停止当前任务…");
         void session.cancel();
       } else {
@@ -328,52 +371,98 @@ export async function main(args = process.argv.slice(2)) {
     };
     process.on("SIGINT", signalHandler);
     ui.onInterrupt = signalHandler;
+    let channelReady = true;
+    try {
+      await selectedChannel(options);
+    } catch (error) {
+      if (once) throw error;
+      channelReady = false;
+      ui.connectionRequired(error.message);
+    }
+    if (channelReady) {
+      session = await openSession(options, ui);
+      if (!once) ui.connected(session.metadata, options.approval);
+    }
     if (prompt?.trim()) {
-      const result = await session.run(prompt);
+      if (!session)
+        ui.note("任务还未发送。先输入 /connect 连接模型，再输入你的任务。\n");
+      const result = session ? await session.run(prompt) : undefined;
       if (once) {
         process.exitCode = exitStatus(result);
         return;
       }
     }
     while (ui.canAsk) {
-      const input = (await ui.ask("you › "))?.trim();
+      const input = (await ui.ask(session ? "you › " : "lolicode › "))?.trim();
       if (input === undefined || input === "/exit" || input === "/quit") break;
       if (!input) continue;
-      if (input === "/help") {
-        output(
-          "/new 新会话 · /resume [ID] 恢复 · /sessions 历史 · /models 渠道 · /model NAME 切换渠道 · /exit 离开",
+      try {
+        if (input === "/help") {
+          output(
+            "/connect 连接模型 · /new 新会话 · /resume [ID] 恢复 · /sessions 历史 · /models 渠道 · /model NAME 切换渠道 · /exit 离开",
+          );
+          continue;
+        }
+        if (input === "/connect" || input === "/configure") {
+          if (!(await configure(options, ui, { connect: true }))) continue;
+          await selectedChannel(options);
+          const next = {
+            ...options,
+            cwd,
+            ...(session && { resume: session.metadata.id }),
+          };
+          await session?.close();
+          session = undefined;
+          session = await openSession(next, ui);
+          ui.connected(session.metadata, options.approval);
+          continue;
+        }
+        if (input === "/sessions") {
+          await listSessions({ ...options, cwd });
+          continue;
+        }
+        if (input === "/models") {
+          await manageModels([], options, ui);
+          continue;
+        }
+        if (
+          input === "/new" ||
+          input.startsWith("/resume") ||
+          input.startsWith("/model ")
+        ) {
+          const resume = input.startsWith("/resume")
+            ? input.split(/\s+/)[1] || true
+            : input.startsWith("/model ")
+              ? session?.metadata.id
+              : undefined;
+          const channel = input.startsWith("/model ")
+            ? input.slice(7).trim()
+            : options.channel;
+          // Validate a replacement before closing the current runtime.
+          await selectedChannel({ ...options, channel });
+          const next = { ...options, resume, channel, cwd };
+          await session?.close();
+          session = undefined;
+          session = await openSession(next, ui);
+          ui.connected(session.metadata, options.approval);
+          continue;
+        }
+        if (input.startsWith("/")) {
+          ui.note("没有这个命令，输入 /help 查看可用命令。\n");
+          continue;
+        }
+        if (!session) {
+          ui.note(
+            "还没连接模型，这条消息没有发送。输入 /connect 开始配置，或 /exit 离开。\n",
+          );
+          continue;
+        }
+        await session.run(input);
+      } catch (error) {
+        ui.note(
+          `暂时没有完成：${error.message}\n你仍在会话中，可以调整配置后继续。\n`,
         );
-        continue;
       }
-      if (input === "/sessions") {
-        await listSessions({ ...options, cwd: session.metadata.cwd });
-        continue;
-      }
-      if (input === "/models") {
-        await manageModels([], options, ui);
-        continue;
-      }
-      if (
-        input === "/new" ||
-        input.startsWith("/resume") ||
-        input.startsWith("/model ")
-      ) {
-        const resume = input.startsWith("/resume")
-          ? input.split(/\s+/)[1] || true
-          : input.startsWith("/model ")
-            ? session.metadata.id
-            : undefined;
-        const channel = input.startsWith("/model ")
-          ? input.slice(7).trim()
-          : options.channel;
-        // Validate a replacement before closing the current runtime.
-        await selectedChannel({ ...options, channel });
-        const next = { ...options, resume, channel, cwd: session.metadata.cwd };
-        await session.close();
-        session = await openSession(next, ui);
-        continue;
-      }
-      await session.run(input);
     }
   } catch (error) {
     process.exitCode = error.name === "AbortError" ? 130 : 1;

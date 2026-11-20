@@ -34,9 +34,9 @@ def main():
         raise RuntimeError("Expected a numeric release ID.")
     api = "https://api.github.com/repos/treasureGrove/LoliCode-Releases"
     release = request(f"{api}/releases/{release_id}", token)
-    if release["tag_name"] != "lolicode-cli-v0.1.0-alpha.1" or not release["draft"] or not release["prerelease"]:
+    if release["tag_name"] != "lolicode-cli-v0.1.0-alpha.2" or not release["draft"] or not release["prerelease"]:
         raise RuntimeError("Unexpected release state.")
-    allowed = {"lolicode-cli-0.1.0-alpha.1.tgz", "LoliCode-CLI-README.md", "SHA256SUMS"}
+    allowed = {"lolicode-cli-0.1.0-alpha.2.tgz", "LoliCode-CLI-README.md", "SHA256SUMS"}
     if set(parameters["files"]) != allowed:
         raise RuntimeError("Unexpected release inventory.")
     for name, expected in parameters["files"].items():
