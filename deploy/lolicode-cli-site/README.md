@@ -25,3 +25,5 @@ python3 deploy.py production MANIFEST_SHA
 恢复点包含 `baseline.json`、`snippet.before`、`snippet.after`、`test.before`、`site-sha.json` 和阶段验收记录。若需要回退，在核对当前状态后运行 `rollback MANIFEST_SHA`。有后续并发改动时会拒绝覆盖。
 
 独立 CLI 发布的源码与安装说明在 `packages/lolicode-cli/README.md`。Windows 和 Linux 安装件验证由 `scripts/tests/lolicode-cli-installed.mjs`、`lolicode-cli-linux.py` 与 `lolicode-cli-pty.py` 记录。
+
+本次 GitHub CLI 附件上传在本机网络返回 301，已使用现有官网服务器完成上传。`scripts/release/lolicode-cli-publish.mjs upload ARTIFACT_DIRECTORY RELEASE_ID ssh` 将现有 GitHub 凭据通过进程 stdin 交给 `lolicode-cli-upload.py`，检查上传目标、文件清单和 SHA-256。凭据仅在进程内存中使用。`publish` 操作核对全部附件后发布 CLI 预发行版本。运行这批固定工具前，先检查它们声明的版本、目录、Release ID 与实际候选一致。

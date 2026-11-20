@@ -12,6 +12,8 @@ import stat
 import subprocess
 import sys
 import tempfile
+import time
+from urllib.error import URLError
 from urllib.request import Request, urlopen
 import xml.etree.ElementTree as ET
 
@@ -22,7 +24,7 @@ SITE = Path("/var/www/lolicode-site/releases") / BATCH
 SNIPPET = Path("/etc/nginx/snippets/lolicode-home-production-20261016-home-v3.conf")
 TEST = Path("/etc/nginx/sites-available/test.conf")
 MAIN = Path("/etc/nginx/sites-available/lolicode.conf")
-PREVIEW = Path("/etc/nginx/snippets/lolicode-cli-preview-20261120.conf")
+PREVIEW = Path("/etc/nginx/snippets/lolicode-cli-preview-20261120-v2.conf")
 LOCK = Path("/run/lock/lolicode-forum-maintenance.lock")
 FLAG = Path("/var/www/ops/MAINTENANCE_ON")
 CSP = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'"
@@ -172,6 +174,7 @@ def preview_config(before):
         blocks.append(block[:-2] + b'    add_header X-Robots-Tag "noindex, nofollow" always;\n}\n')
     # The homepage continues to reference its existing immutable assets.
     blocks.extend(re.findall(rb"(?ms)^location (?:\^~|=) /desktop-assets/[^\n]* \{\n.*?^\}\n", before))
+    blocks.append(location(before, "= /downloads/updates/latest.json"))
     return b"\n".join(blocks) + cli_routes(True)
 
 
@@ -199,12 +202,19 @@ def verify(host, preview=False):
 
     def get(item):
         route, name = item
-        with urlopen(Request(f"https://{host}{route}", headers={"Cache-Control": "no-cache"}), timeout=30) as response:
-            data = response.read()
-            require(response.status == 200 and sha(data) == files[name], f"Unexpected published bytes: {route}")
-            if preview and route in ("/", "/cli/"):
-                require("noindex" in response.headers.get("X-Robots-Tag", ""), f"Preview is indexable: {route}")
-            return {"path": route, "status": response.status, "sha256": sha(data)}
+        # A successful reload acknowledges the signal before every old worker exits.
+        for attempt in range(12):
+            try:
+                with urlopen(Request(f"https://{host}{route}", headers={"Cache-Control": "no-cache"}), timeout=30) as response:
+                    data = response.read()
+                    require(response.status == 200 and sha(data) == files[name], f"Unexpected published bytes: {route}; got {sha(data)}, expected {files[name]}")
+                    if preview and route in ("/", "/cli/"):
+                        require("noindex" in response.headers.get("X-Robots-Tag", ""), f"Preview is indexable: {route}")
+                    return {"path": route, "status": response.status, "sha256": sha(data)}
+            except (URLError, RuntimeError):
+                if attempt == 11:
+                    raise
+                time.sleep(0.5)
 
     with ThreadPoolExecutor(max_workers=4) as pool:
         checks = list(pool.map(get, paths.items()))
