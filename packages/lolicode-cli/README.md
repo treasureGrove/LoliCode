@@ -2,7 +2,7 @@
 
 把 LoliCode 带进终端。粉色小狗陪你读项目、修改代码、运行命令，也能通过 JSON 接入脚本。
 
-当前版本为 `0.1.0-alpha.6`。运行需要 Node.js **24.9 或更新版本**。CLI 使用桌面端同版本的 DeepSeek Harness 和共享宿主覆盖层，支持独立运行。
+当前版本为 `0.1.0-alpha.7`。运行需要 Node.js **24.9 或更新版本**。CLI 使用桌面端同版本的 DeepSeek Harness 和共享宿主覆盖层，支持独立运行。
 
 ## 安装
 
@@ -11,14 +11,14 @@
 在 Windows 上打开 CMD 或 PowerShell。
 
 ```powershell
-npm.cmd install --global --ignore-scripts --prefer-online https://github.com/treasureGrove/LoliCode-Releases/releases/download/lolicode-cli-v0.1.0-alpha.6/lolicode-cli-0.1.0-alpha.6.tgz
+npm.cmd install --global --ignore-scripts --prefer-online https://github.com/treasureGrove/LoliCode-Releases/releases/download/lolicode-cli-v0.1.0-alpha.7/lolicode-cli-0.1.0-alpha.7.tgz
 lolicode.cmd
 ```
 
 在 Linux 上打开 Bash 或 Zsh。
 
 ```sh
-npm install --global --prefix "$HOME/.local" --ignore-scripts --prefer-online https://github.com/treasureGrove/LoliCode-Releases/releases/download/lolicode-cli-v0.1.0-alpha.6/lolicode-cli-0.1.0-alpha.6.tgz
+npm install --global --prefix "$HOME/.local" --ignore-scripts --prefer-online https://github.com/treasureGrove/LoliCode-Releases/releases/download/lolicode-cli-v0.1.0-alpha.7/lolicode-cli-0.1.0-alpha.7.tgz
 export PATH="$HOME/.local/bin:$PATH"
 lolicode
 ```

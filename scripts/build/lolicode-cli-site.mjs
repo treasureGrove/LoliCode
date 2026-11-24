@@ -15,7 +15,7 @@ if (!output.startsWith(releaseRoot))
   throw new Error(
     "Site output must be inside this worktree's release directory.",
   );
-const batch = "20261124-cli-alpha6-v1";
+const batch = "20261124-cli-alpha7-v1";
 const source = path.join(repository, "deploy/lolicode-cli-site/public/cli");
 const packageManifest = JSON.parse(
   await readFile(
@@ -67,12 +67,12 @@ const deployment = template
   .replaceAll("20261120-cli-alpha2-v1", batch)
   .replaceAll(
     "lolicode-cli-preview-20261120-alpha2.conf",
-    "lolicode-cli-preview-20261124-alpha6.conf",
+    "lolicode-cli-preview-20261124-alpha7.conf",
   )
   .replaceAll("0.1.0-alpha.2", version)
   .replace(
     "d0a2277c2c23973ae043ca089b12cfaf6950f630466de8710939af7edefe9e82",
-    "6e142948ee10a2f3542606de728f44770373aadab8c7bb118554ae559cf38766",
+    "939ffb5739117cecccebbb51f706c34db21909d639cc9891e717e115db3655fc",
   )
   .replace(
     "a95cdb99d2f3582687816365318ca36d8c2208d93af1089d563e13c25ebc7bdf",

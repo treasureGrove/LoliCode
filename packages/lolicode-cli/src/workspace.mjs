@@ -30,6 +30,7 @@ export class WorkspaceTerminal {
   constructor({ approval = "review" } = {}) {
     this.approval = approval;
     this.color = !Object.hasOwn(process.env, "NO_COLOR");
+    this.colorDepth = process.stderr.getColorDepth();
     this.safeGlyphs = process.platform === "win32" && !process.env.WT_SESSION;
   }
 
@@ -317,6 +318,7 @@ export class WorkspaceTerminal {
       rows,
       previousRows: previous?.rows,
       color: this.color,
+      colorDepth: this.colorDepth,
       safeGlyphs: this.safeGlyphs,
       version,
       cwd: this.cwd,
