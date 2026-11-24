@@ -15,7 +15,7 @@ if (!output.startsWith(releaseRoot))
   throw new Error(
     "Site output must be inside this worktree's release directory.",
   );
-const batch = "20261120-cli-alpha3-v1";
+const batch = "20261124-cli-alpha4-v1";
 const source = path.join(repository, "deploy/lolicode-cli-site/public/cli");
 const packageManifest = JSON.parse(
   await readFile(
@@ -37,7 +37,7 @@ const product = {
     encoding: "utf8",
   }).trim(),
   testedPlatforms: ["windows-x64", "linux-x64"],
-  publishedDate: "2026-11-20",
+  publishedDate: "2026-11-24",
   package: {
     filename,
     size: artifactBytes.length,
@@ -67,16 +67,16 @@ const deployment = template
   .replaceAll("20261120-cli-alpha2-v1", batch)
   .replaceAll(
     "lolicode-cli-preview-20261120-alpha2.conf",
-    "lolicode-cli-preview-20261120-alpha3.conf",
+    "lolicode-cli-preview-20261124-alpha4.conf",
   )
   .replaceAll("0.1.0-alpha.2", version)
   .replace(
     "d0a2277c2c23973ae043ca089b12cfaf6950f630466de8710939af7edefe9e82",
-    "fd91a9face558ef92d5b0915ef60e3d020ef43e85ae68c4f7c2c08167a3b2ac6",
+    "d7231352c65ce09e232cacaeeaae93eef7699ea3d8b8b863e00535034b112b12",
   )
   .replace(
     "a95cdb99d2f3582687816365318ca36d8c2208d93af1089d563e13c25ebc7bdf",
-    "258c2cd5c2bf84af9bbf791de6ea159c3a2bacd556797075e22a8bd9c4b2cf22",
+    "c91a66143342a5db00161098f0a3d19393d31973344b2bbb0a5d94ececed1e25",
   );
 await writeFile(path.join(output, "deploy.py"), deployment);
 console.log(

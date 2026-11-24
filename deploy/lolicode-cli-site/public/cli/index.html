@@ -33,7 +33,7 @@
     <main id="main">
       <section class="hero">
         <div class="hero-copy">
-          <p class="release">0.1.0-alpha.3 · Windows / Linux</p>
+          <p class="release">0.1.0-alpha.4 · Windows / Linux</p>
           <h1>打开终端，<br />小狗也在。<span aria-hidden="true">♡</span></h1>
           <p class="intro">
             读项目、写代码、跑命令。把任务交给
@@ -131,7 +131,7 @@
                 </button>
                 <pre
                   id="install-windows"
-                ><code>npm.cmd install --global --ignore-scripts https://lolicode.com/cli/downloads/lolicode-cli-0.1.0-alpha.3.tgz
+                ><code>npm.cmd install --global --ignore-scripts https://lolicode.com/cli/downloads/lolicode-cli-0.1.0-alpha.4.tgz
 lolicode.cmd</code></pre>
               </div>
               <p class="helper">如果终端提示找不到命令，重新打开终端后再试。</p>
@@ -153,20 +153,20 @@ lolicode.cmd</code></pre>
                 </button>
                 <pre
                   id="install-linux"
-                ><code>npm install --global --prefix "$HOME/.local" --ignore-scripts https://lolicode.com/cli/downloads/lolicode-cli-0.1.0-alpha.3.tgz
+                ><code>npm install --global --prefix "$HOME/.local" --ignore-scripts https://lolicode.com/cli/downloads/lolicode-cli-0.1.0-alpha.4.tgz
 export PATH="$HOME/.local/bin:$PATH"
-lolicode --version</code></pre>
+lolicode</code></pre>
               </div>
               <p class="helper">
                 把 PATH 设置加入 shell 配置文件后，新终端也可以直接使用。
               </p>
             </div>
             <p class="download-links">
-              <a href="/cli/downloads/lolicode-cli-0.1.0-alpha.3.tgz"
+              <a href="/cli/downloads/lolicode-cli-0.1.0-alpha.4.tgz"
                 >下载 npm 包 ↓</a
               ><a href="/cli/latest.json">查看版本与 SHA-256 ↗</a
               ><a
-                href="https://github.com/treasureGrove/LoliCode-Releases/releases/tag/lolicode-cli-v0.1.0-alpha.3"
+                href="https://github.com/treasureGrove/LoliCode-Releases/releases/tag/lolicode-cli-v0.1.0-alpha.4"
                 >GitHub 发布页 ↗</a
               >
             </p>
@@ -174,12 +174,11 @@ lolicode --version</code></pre>
           <aside class="install-aside">
             <span class="paw" aria-hidden="true">🐾</span>
             <h3>第一次见面</h3>
-            <p>安装后，进入项目目录，启动持续对话界面。</p>
-            <pre><code>lolicode "./your-project"
-/connect</code></pre>
-            <p>在 LoliCode 提示符中输入 /connect，连接模型后就可以直接聊任务。缺配置时也会留在界面里。</p>
+            <p>安装后，在项目目录打开 CMD 或 PowerShell，运行 <code>lolicode.cmd</code>。Linux 运行 <code>lolicode</code>。</p>
+            <pre><code>lolicode › /connect</code></pre>
+            <p>看到 <code>lolicode ›</code> 后输入 <code>/connect</code>，按服务商提供的地址、模型名和协议配置渠道。CLI 的渠道独立于桌面版。</p>
             <p class="small">
-              密钥可从环境变量读取，也可隐藏输入供本次会话使用，不写入配置。模型调用费用由你使用的服务商计费。
+              缺少密钥环境变量时，可以隐藏粘贴 API Key，供本次会话使用。看到 <code>you ›</code> 就可以输入任务。重开 CLI 后，若还缺密钥，再用 <code>/connect</code> 选用已保存的渠道。
             </p>
           </aside>
         </div>
@@ -215,10 +214,11 @@ git diff | lolicode run "审阅改动" --stdin --json</code></pre>
           </article>
           <article>
             <h3>配置与选择模型</h3>
-            <p>保存渠道，用渠道名和模型名选择。对话中输入 <code>/</code> 查看命令，按 Tab 补全。</p>
-            <pre><code>lolicode auth login
-lolicode models
-lolicode -m my-channel/MODEL</code></pre>
+            <p>在系统终端运行 <code>auth login</code> 配置渠道。缺少密钥时，粘贴临时 Key 会进入本次聊天，直接回车只保存渠道。已有密钥环境变量时，保存渠道后返回终端。</p>
+            <pre><code>lolicode.cmd auth login
+lolicode.cmd auth list
+lolicode.cmd -m my-channel/MODEL</code></pre>
+            <p>Linux 用 <code>lolicode</code>。对话中输入 <code>/</code> 查看命令，按 Tab 补全。</p>
           </article>
         </div>
       </section>
@@ -232,7 +232,7 @@ lolicode -m my-channel/MODEL</code></pre>
           <h2 id="configuration-title">你的模型，<br />也可以跟过来。</h2>
           <p>
             支持 OpenAI Completions、OpenAI Responses 和 Anthropic Messages
-            协议。使用服务商提供的实际地址与模型名。
+            协议。用服务商提供的 API 基础地址和模型名，选择与之匹配的协议。
           </p>
           <p>
             下面展示 Linux 环境变量配置。Windows PowerShell 使用

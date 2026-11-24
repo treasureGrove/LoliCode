@@ -55,7 +55,7 @@ export async function resumeMetadata(resume, directory) {
   return { ...metadata, id, cwd };
 }
 
-export async function openSession(options, ui) {
+export async function openSession(options, ui, sessionKeys) {
   const metadata = options.resume
     ? await resumeMetadata(options.resume, options.cwd)
     : {
@@ -63,7 +63,7 @@ export async function openSession(options, ui) {
         cwd: await projectDirectory(options.cwd),
         createdAt: new Date().toISOString(),
       };
-  const channel = await selectedChannel(options, metadata);
+  const channel = await selectedChannel(options, metadata, sessionKeys);
   const release = await sessionLock(metadata.id);
   const persist = async () =>
     saveJson(sessionFile(metadata.id), {
@@ -73,7 +73,7 @@ export async function openSession(options, ui) {
   metadata.channel = channel.name === "environment" ? undefined : channel.name;
   metadata.model = channel.model;
   let state;
-  const secret = process.env[channel.apiKeyEnv];
+  const secret = channel.apiKey;
   const redact = (value) =>
     clean(secret ? String(value).split(secret).join("[redacted]") : value);
   let runtime;

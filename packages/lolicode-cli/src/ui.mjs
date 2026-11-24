@@ -1,6 +1,6 @@
 import { createInterface } from "node:readline/promises";
 import { stripVTControlCharacters } from "node:util";
-import { Writable } from "node:stream";
+import { PassThrough, Writable } from "node:stream";
 import { version } from "./config.mjs";
 
 export const slashCommands = [
@@ -39,6 +39,9 @@ export class Terminal {
       !json && !streamJson && !!process.stdin.isTTY && !!process.stderr.isTTY;
     this.animate = this.color && !noAnimation && !process.env.CI;
     if (this.canAsk) {
+      this.terminalInput = new PassThrough();
+      this.terminalInput.isTTY = true;
+      this.terminalInput.setRawMode = (mode) => process.stdin.setRawMode(mode);
       this.terminalOutput = new Writable({
         write: (chunk, encoding, callback) => {
           if (!this.hidingInput) process.stderr.write(chunk, encoding);
@@ -49,7 +52,7 @@ export class Terminal {
         get: () => process.stderr.columns,
       });
       this.input = createInterface({
-        input: process.stdin,
+        input: this.terminalInput,
         output: this.terminalOutput,
         terminal: true,
         completer: (line) => {
@@ -63,6 +66,31 @@ export class Terminal {
         if (this.hidingInput) history.shift();
       });
       this.input.on("SIGINT", () => this.onInterrupt?.());
+      this.receiveInput = (chunk) => {
+        if (!this.acceptingInput) {
+          if (chunk.includes(3)) this.onInterrupt?.();
+          return;
+        }
+        const end = chunk.findIndex((byte) => byte === 10 || byte === 13);
+        if (end === -1) {
+          this.terminalInput.write(chunk);
+          return;
+        }
+        // Subsequent pasted lines have no prompt yet. Dropping them avoids
+        // echoing a key before the hidden input prompt is active.
+        this.acceptingInput = false;
+        this.terminalInput.write(chunk.subarray(0, end + 1));
+      };
+      process.stdin.on("data", this.receiveInput);
+      this.input.once("close", () => {
+        this.canAsk = false;
+        this.cancelQuestion();
+        process.stdin.off("data", this.receiveInput);
+        process.stdin.off("end", this.closeInput);
+        process.stdin.pause();
+      });
+      this.closeInput = () => this.close();
+      process.stdin.once("end", this.closeInput);
     }
     this.queue = Promise.resolve();
   }
@@ -82,7 +110,7 @@ export class Terminal {
   }
   connectionRequired(reason) {
     this.note(
-      `还差一步，连接你的模型 🐾\n${reason}\n\n输入 /connect 开始配置，或 /help 查看命令。\n`,
+      `还差一步，连接你的模型 🐾\n${reason}\n\n在 lolicode › 后输入 /connect，可按提示填写模型并隐藏输入 API Key。\n`,
     );
   }
   connected(metadata, approval = "review") {
@@ -113,6 +141,7 @@ export class Terminal {
   ask(prompt, { secret = false, commands = false } = {}) {
     if (!this.input) return Promise.resolve(undefined);
     const operation = this.queue.then(async () => {
+      if (!this.canAsk) return undefined;
       this.stopSpinner();
       this.questionAbort = new AbortController();
       this.completeCommands = commands && !secret;
@@ -121,12 +150,14 @@ export class Terminal {
           process.stderr.write(clean(prompt));
           this.hidingInput = true;
         }
+        this.acceptingInput = true;
         return await this.input.question(secret ? "" : clean(prompt), {
           signal: this.questionAbort.signal,
         });
       } catch {
         return undefined;
       } finally {
+        this.acceptingInput = false;
         this.completeCommands = false;
         if (secret) {
           this.hidingInput = false;

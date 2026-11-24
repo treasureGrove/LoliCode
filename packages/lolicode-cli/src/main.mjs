@@ -9,6 +9,7 @@ import {
   validateChannel,
   selectedChannel,
   projectDirectory,
+  supportedNode,
 } from "./config.mjs";
 import { resolveRuntime } from "./runtime.mjs";
 import { Terminal, clean, slashCommands } from "./ui.mjs";
@@ -20,7 +21,7 @@ Usage: lolicode [project] [options]        Start an interactive session
        lolicode mini [project] [options]   Start the terminal prompt
        lolicode run [options] <message>    Run one task and exit
        lolicode session list              List saved sessions
-       lolicode auth login [channel]      Set up a model channel
+       lolicode auth login [channel]      Set up a model and start chat with a temporary key
        lolicode auth list                 Show configured channels and key status
        lolicode models [channel]          List configured channel/model IDs
        lolicode doctor                   Check runtime and configuration
@@ -56,7 +57,7 @@ Models:
 
 Set LOLICODE_BASE_URL, LOLICODE_MODEL, LOLICODE_API_KEY for environment-only setup.
 LOLICODE_HOME overrides the CLI data directory (default: ~/.lolicode/cli).
-API keys are read from environment variables and never saved to configuration.
+API keys come from environment variables or hidden interactive input.
 Review asks before changes. Workspace allows project operations. Full allows
 unrestricted tools and must be selected explicitly. These modes are tool policies,
 enforced by the shared Harness runtime. Noninteractive approval requests are rejected.
@@ -167,7 +168,7 @@ const output = (value) =>
     `${typeof value === "string" ? clean(value) : JSON.stringify(value)}\n`,
   );
 
-async function manageModels(words, options) {
+async function manageModels(words, options, sessionKeys) {
   const config = await loadConfig();
   const [action = "list", name] = words;
   if (action === "list" || (!name && !["add", "use"].includes(action))) {
@@ -181,7 +182,7 @@ async function manageModels(words, options) {
         api: channel.api,
         baseURL: channel.baseURL,
         apiKeyEnv: channel.apiKeyEnv,
-        keyConfigured: !!process.env[channel.apiKeyEnv],
+        keyConfigured: sessionKeys?.has(name) || !!process.env[channel.apiKeyEnv],
       }));
     if (options.json) output({ channels });
     else if (!channels.length)
@@ -227,7 +228,7 @@ async function manageModels(words, options) {
 async function configure(
   options,
   ui,
-  { connect = false, login = false, channelName } = {},
+  { connect = false, login = false, channelName, sessionKeys } = {},
 ) {
   if (!ui.canAsk)
     throw new Error(
@@ -274,7 +275,7 @@ async function configure(
       });
   const { baseURL: baseUrl, model, apiKeyEnv, api } = channel;
   let sessionKey;
-  if (connect && !process.env[apiKeyEnv]) {
+  if (select && !process.env[apiKeyEnv] && !sessionKeys?.has(name)) {
     ui.note(
       "可临时输入 API Key，仅本次进程使用，不保存到磁盘。也可以先设置环境变量后再启动。\n",
     );
@@ -283,6 +284,7 @@ async function configure(
     });
     if (sessionKey === undefined || sessionKey.trim() === "/cancel")
       return false;
+    sessionKey = sessionKey.trim();
   }
   if (!existing)
     await manageModels(["add", name], {
@@ -294,18 +296,19 @@ async function configure(
       select,
     });
   else await manageModels(["use", name], options);
-  if (sessionKey?.trim()) process.env[apiKeyEnv] = sessionKey.trim();
-  if (!process.env[apiKeyEnv])
-    ui.note(`设置 ${apiKeyEnv} 后运行 lolicode 连接模型。`);
-  else if (!connect) ui.note("配置已就绪，进入项目目录运行 lolicode。 ");
-  return name;
+  if (sessionKey) sessionKeys.set(name, sessionKey);
+  if (!process.env[apiKeyEnv] && !sessionKeys?.has(name))
+    ui.note(`渠道已保存。设置 ${apiKeyEnv}，或启动 lolicode 后输入 /connect 再填写 API Key。`);
+  else if (!connect && !sessionKey)
+    ui.note("配置已就绪，进入项目目录运行 lolicode。");
+  return { name, enteredKey: !!sessionKey };
 }
 
 async function doctor(options) {
   const checks = [
     {
       name: "node",
-      ok: Number(process.versions.node.split(".")[0]) >= 24,
+      ok: supportedNode(),
       detail: process.version,
     },
     {
@@ -381,6 +384,7 @@ export async function main(args = process.argv.slice(2)) {
   let session;
   let signalHandler;
   let options = {};
+  const sessionKeys = new Map();
   try {
     const parsed = argumentsFor(args);
     options = parsed.options;
@@ -393,9 +397,10 @@ export async function main(args = process.argv.slice(2)) {
       output(version);
       return;
     }
-    if (Number(process.versions.node.split(".")[0]) < 24)
+    if (!supportedNode())
       throw new Error("LoliCode CLI requires Node.js 24.9 or newer.");
     ui = new Terminal(options);
+    ui.onInterrupt = () => ui.close();
     const command = words[0];
     const rest = words.slice(1);
     if (command === "session") {
@@ -407,12 +412,23 @@ export async function main(args = process.argv.slice(2)) {
       return;
     }
     if (command === "auth") {
-      if (rest[0] === "login" && rest.length <= 2)
-        await configure(options, ui, { login: true, channelName: rest[1] });
-      else if (["list", "ls"].includes(rest[0]) && rest.length === 1)
+      if (rest[0] === "login" && rest.length <= 2) {
+        const login = await configure(options, ui, {
+          login: true,
+          channelName: rest[1],
+          sessionKeys,
+        });
+        if (!login?.enteredKey) return;
+        options = {
+          ...options,
+          channel: login.name,
+          model: undefined,
+          baseUrl: undefined,
+        };
+      } else if (["list", "ls"].includes(rest[0]) && rest.length === 1) {
         await manageModels([], options);
-      else throw new Error("Use lolicode auth login [CHANNEL] or auth list.");
-      return;
+        return;
+      } else throw new Error("Use lolicode auth login [CHANNEL] or auth list.");
     }
     if (["configure", "models", "doctor", "sessions"].includes(command)) {
       if (command === "models") await manageModels(rest, options);
@@ -432,7 +448,7 @@ export async function main(args = process.argv.slice(2)) {
         );
     } else if (command === "run") {
       prompt ||= rest.join(" ");
-    } else {
+    } else if (command !== "auth") {
       const input = command === "mini" ? rest : words;
       const directory = options.cwd
         ? undefined
@@ -485,7 +501,7 @@ export async function main(args = process.argv.slice(2)) {
     process.on("SIGINT", signalHandler);
     ui.onInterrupt = signalHandler;
     try {
-      session = await openSession({ ...options, cwd }, ui);
+      session = await openSession({ ...options, cwd }, ui, sessionKeys);
       if (!once) ui.connected(session.metadata, options.approval);
     } catch (error) {
       if (once) throw error;
@@ -520,23 +536,24 @@ export async function main(args = process.argv.slice(2)) {
           continue;
         }
         if (action === "/connect" || action === "/configure") {
-          const channel = await configure(options, ui, {
+          const connection = await configure(options, ui, {
             connect: true,
             channelName: argument,
+            sessionKeys,
           });
-          if (!channel) continue;
+          if (!connection) continue;
           const next = {
             ...options,
-            channel,
+            channel: connection.name,
             model: undefined,
             baseUrl: undefined,
             cwd,
             ...(session && { resume: session.metadata.id }),
           };
-          await selectedChannel(next);
+          await selectedChannel(next, {}, sessionKeys);
           await session?.close();
           session = undefined;
-          session = await openSession(next, ui);
+          session = await openSession(next, ui, sessionKeys);
           options = next;
           ui.connected(session.metadata, options.approval);
           continue;
@@ -546,7 +563,7 @@ export async function main(args = process.argv.slice(2)) {
           continue;
         }
         if (input === "/models") {
-          await manageModels([], options);
+          await manageModels([], options, sessionKeys);
           continue;
         }
         if (input === "/new" || action === "/resume" || action === "/model") {
@@ -569,10 +586,10 @@ export async function main(args = process.argv.slice(2)) {
             next.baseUrl = undefined;
           }
           // Validate the target before leaving the current session.
-          await selectedChannel(next, target);
+          await selectedChannel(next, target, sessionKeys);
           await session?.close();
           session = undefined;
-          session = await openSession(next, ui);
+          session = await openSession(next, ui, sessionKeys);
           options = next;
           ui.connected(session.metadata, options.approval);
           continue;

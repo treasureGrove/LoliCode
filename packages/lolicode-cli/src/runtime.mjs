@@ -120,6 +120,7 @@ export async function startRuntime({
       stdio: ["pipe", "pipe", "pipe"],
       env: {
         ...process.env,
+        [channel.apiKeyEnv]: channel.apiKey,
         DSH_HOME: path.join(home, "harness"),
         DSH_TELEMETRY_DISABLED: "1",
       },
@@ -153,7 +154,7 @@ export async function startRuntime({
       ]);
     } catch (error) {
       // A provider can echo its Authorization header in an error response.
-      const secret = process.env[channel.apiKeyEnv];
+      const secret = channel.apiKey;
       if (secret)
         error.message = error.message.split(secret).join("[redacted]");
       throw error;

@@ -2,36 +2,38 @@
 
 把 LoliCode 带进终端。粉色小狗陪你读项目、修改代码、运行命令，也能通过 JSON 接入脚本。
 
-当前版本为 `0.1.0-alpha.3`。运行需要 Node.js **24.9 或更新版本**。CLI 使用桌面端同版本的 DeepSeek Harness 和共享宿主覆盖层，支持独立运行。
+当前版本为 `0.1.0-alpha.4`。运行需要 Node.js **24.9 或更新版本**。CLI 使用桌面端同版本的 DeepSeek Harness 和共享宿主覆盖层，支持独立运行。
 
 ## 安装
 
 先安装 [Node.js 24 LTS](https://nodejs.org/en/download)，再安装官网提供的 npm 包。
 
-Windows PowerShell：
+在 Windows 上打开 CMD 或 PowerShell，运行：
 
 ```powershell
-npm.cmd install --global --ignore-scripts https://github.com/treasureGrove/LoliCode-Releases/releases/download/lolicode-cli-v0.1.0-alpha.3/lolicode-cli-0.1.0-alpha.3.tgz
-lolicode.cmd --version
+npm.cmd install --global --ignore-scripts https://github.com/treasureGrove/LoliCode-Releases/releases/download/lolicode-cli-v0.1.0-alpha.4/lolicode-cli-0.1.0-alpha.4.tgz
+lolicode.cmd
 ```
 
 Linux：
 
 ```sh
-npm install --global --prefix "$HOME/.local" --ignore-scripts https://github.com/treasureGrove/LoliCode-Releases/releases/download/lolicode-cli-v0.1.0-alpha.3/lolicode-cli-0.1.0-alpha.3.tgz
+npm install --global --prefix "$HOME/.local" --ignore-scripts https://github.com/treasureGrove/LoliCode-Releases/releases/download/lolicode-cli-v0.1.0-alpha.4/lolicode-cli-0.1.0-alpha.4.tgz
 export PATH="$HOME/.local/bin:$PATH"
-lolicode --version
+lolicode
 ```
 
 把上面的 PATH 设置加入 shell 配置文件后，新终端也可以直接使用。下载地址、版本与校验值见 [LoliCode CLI 官网](https://lolicode.com/cli/)。
 
 ## 配置模型
 
-进入项目目录运行 `lolicode`（Windows 也可用 `lolicode.cmd`），启动后就是持续对话界面。尚未配置模型时会留在 `lolicode ›`，不会退出到 CMD、PowerShell 或 Linux shell。
+在项目目录启动 `lolicode.cmd`（Windows CMD 或 PowerShell）或 `lolicode`（Linux）。看到 `lolicode ›` 后输入 `/connect`，按提示填写渠道名称、服务商的 API 基础地址、模型名和协议。CLI 使用独立的渠道配置，桌面版里保存的渠道需要在 CLI 配置一次。
 
-输入 `/connect`，按引导填写渠道名称、API 基础地址、模型名和保存 API Key 的环境变量名称。已有渠道可以直接选用。没有对应环境变量时，可隐藏输入仅本次进程有效的 API Key；密钥不写入配置或磁盘。重启后需要再次输入，或提前设置环境变量。`/cancel` 返回对话，`/exit` 退出。
+已有渠道可以直接选用。缺少渠道指定的密钥环境变量时，可以在隐藏输入框里粘贴 API Key，密钥仅在本次进程中有效。看到 `you ›` 就可以输入任务。重开 CLI 后，若没有设置环境变量，在 `lolicode ›` 再用 `/connect` 选中渠道并输入 Key。输入 `/cancel` 返回对话，`/exit` 退出。
 
-`lolicode auth login [渠道]` 可在启动前保存渠道配置，`lolicode auth list` 查看渠道和密钥是否已设置。密钥由环境变量提供。CMD 使用 `set 变量名=值`，PowerShell 使用 `$env:变量名 = '值'`。
+也可以在系统终端运行 `lolicode.cmd auth login`（Linux 用 `lolicode auth login`）。缺少密钥时，粘贴临时 Key 即可进入本次聊天，直接回车则只保存渠道。已有对应密钥环境变量时，命令保存渠道后返回系统终端。用 `lolicode auth list` 查看已保存的渠道和密钥状态。
+
+CMD 使用 `set 变量名=值` 设置环境变量，PowerShell 使用 `$env:变量名 = '值'`。
 
 也可以直接使用环境变量。Windows PowerShell：
 
@@ -51,7 +53,7 @@ export LOLICODE_API_KEY='你的 API Key'
 lolicode
 ```
 
-使用实际服务提供的地址、模型名与密钥。可接入 LoliCode 渠道网关的兼容 API 地址，也可以直接连接模型服务。协议选项包括 `openai-completions`、`openai-responses` 和 `anthropic-messages`，分别按服务要求设置 `--api` 与 API 基础地址。
+按模型服务商提供的信息填写 API 基础地址、模型名和密钥，并选择匹配的协议。可以连接 LoliCode 渠道网关提供的兼容 API。协议选项包括 `openai-completions`、`openai-responses` 和 `anthropic-messages`，可通过 `--api` 设置。
 
 Anthropic Messages 使用服务根地址，例如 `https://api.anthropic.com`，运行时会追加 `/v1/messages`。
 

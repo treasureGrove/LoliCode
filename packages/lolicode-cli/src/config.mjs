@@ -12,7 +12,7 @@ import path from "node:path";
 import os from "node:os";
 import { randomUUID } from "node:crypto";
 
-export const version = "0.1.0-alpha.3";
+export const version = "0.1.0-alpha.4";
 export const home = path.resolve(
   process.env.LOLICODE_HOME || path.join(os.homedir(), ".lolicode", "cli"),
 );
@@ -21,6 +21,11 @@ export const apis = [
   "openai-responses",
   "anthropic-messages",
 ];
+
+export function supportedNode() {
+  const [major, minor] = process.versions.node.split(".").map(Number);
+  return major > 24 || (major === 24 && minor >= 9);
+}
 
 export async function readJson(file, fallback) {
   try {
@@ -86,7 +91,7 @@ export async function loadConfig() {
   return config;
 }
 
-export async function selectedChannel(options = {}, saved = {}) {
+export async function selectedChannel(options = {}, saved = {}, sessionKeys) {
   const config = await loadConfig();
   // Registered channel names can qualify a model. Other slashes can be part
   // of the actual API model ID (for example an OpenRouter organization).
@@ -132,18 +137,21 @@ export async function selectedChannel(options = {}, saved = {}) {
   }
   if (!channel)
     throw new Error(
-      "Set up a model with `lolicode auth login`, or set LOLICODE_BASE_URL, LOLICODE_MODEL and LOLICODE_API_KEY.",
+      "CLI 尚未配置模型渠道。运行 lolicode auth login，或设置 LOLICODE_BASE_URL、LOLICODE_MODEL 和 LOLICODE_API_KEY。",
     );
   channel = validateChannel({
     ...channel,
     model:
       model ?? (!options.channel && saved.model ? saved.model : channel.model),
   });
-  if (!process.env[channel.apiKeyEnv])
+  const name = baseURL ? "environment" : selected;
+  const apiKey =
+    (!baseURL && sessionKeys?.get(name)) || process.env[channel.apiKeyEnv];
+  if (!apiKey)
     throw new Error(
-      `Set ${channel.apiKeyEnv} in your environment before starting. API keys are never stored in the CLI configuration.`,
+      `渠道 ${name} 缺少 API Key。设置环境变量 ${channel.apiKeyEnv}，或在交互终端通过 /connect 输入临时密钥。`,
     );
-  return { ...channel, name: baseURL ? "environment" : selected };
+  return { ...channel, name, apiKey };
 }
 
 export function validId(id) {
