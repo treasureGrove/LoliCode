@@ -23,6 +23,7 @@ def main():
         project.mkdir()
         errors = []
         requests = []
+        task_marker = re.compile(r"PTY_(?:DRAFT|HANG_TASK|REJECT_TASK|ALLOW_TASK|QUESTION_TASK)_9017")
 
         class Model(BaseHTTPRequestHandler):
             def log_message(self, *_):
@@ -32,8 +33,11 @@ def main():
                 try:
                     requests.append({"path": self.path, "length": self.headers.get("Content-Length")})
                     body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
-                    prompt = next(message["content"] for message in reversed(body["messages"]) if message["role"] == "user")
-                    prompt = str(prompt)
+                    # The Harness may append its own messages with the user role.
+                    prompt = next(
+                        str(message["content"]) for message in reversed(body["messages"])
+                        if message["role"] == "user" and task_marker.search(str(message["content"]))
+                    )
                     if "PTY_HANG_TASK_9017" in prompt:
                         self.send_response(200)
                         self.send_header("Content-Type", "text/event-stream")
