@@ -33,7 +33,7 @@
     <main id="main">
       <section class="hero">
         <div class="hero-copy">
-          <p class="release">0.1.0-alpha.4 · Windows / Linux</p>
+          <p class="release">0.1.0-alpha.5 · Windows / Linux</p>
           <h1>打开终端，<br />小狗也在。<span aria-hidden="true">♡</span></h1>
           <p class="intro">
             读项目、写代码、跑命令。把任务交给
@@ -131,7 +131,7 @@
                 </button>
                 <pre
                   id="install-windows"
-                ><code>npm.cmd install --global --ignore-scripts --prefer-online https://lolicode.com/cli/downloads/lolicode-cli-0.1.0-alpha.4.tgz
+                ><code>npm.cmd install --global --ignore-scripts --prefer-online https://lolicode.com/cli/downloads/lolicode-cli-0.1.0-alpha.5.tgz
 lolicode.cmd</code></pre>
               </div>
               <p class="helper">如果终端提示找不到命令，重新打开终端后再试。</p>
@@ -153,7 +153,7 @@ lolicode.cmd</code></pre>
                 </button>
                 <pre
                   id="install-linux"
-                ><code>npm install --global --prefix "$HOME/.local" --ignore-scripts --prefer-online https://lolicode.com/cli/downloads/lolicode-cli-0.1.0-alpha.4.tgz
+                ><code>npm install --global --prefix "$HOME/.local" --ignore-scripts --prefer-online https://lolicode.com/cli/downloads/lolicode-cli-0.1.0-alpha.5.tgz
 export PATH="$HOME/.local/bin:$PATH"
 lolicode</code></pre>
               </div>
@@ -162,23 +162,26 @@ lolicode</code></pre>
               </p>
             </div>
             <p class="download-links">
-              <a href="/cli/downloads/lolicode-cli-0.1.0-alpha.4.tgz"
+              <a href="/cli/downloads/lolicode-cli-0.1.0-alpha.5.tgz"
                 >下载 npm 包 ↓</a
               ><a href="/cli/latest.json">查看版本与 SHA-256 ↗</a
               ><a
-                href="https://github.com/treasureGrove/LoliCode-Releases/releases/tag/lolicode-cli-v0.1.0-alpha.4"
+                href="https://github.com/treasureGrove/LoliCode-Releases/releases/tag/lolicode-cli-v0.1.0-alpha.5"
                 >GitHub 发布页 ↗</a
               >
             </p>
           </div>
           <aside class="install-aside">
             <span class="paw" aria-hidden="true">🐾</span>
-            <h3>第一次见面</h3>
-            <p>安装后，在项目目录打开 CMD 或 PowerShell，运行 <code>lolicode.cmd</code>。Linux 运行 <code>lolicode</code>。</p>
-            <pre><code>lolicode › /connect</code></pre>
-            <p>看到 <code>lolicode ›</code> 后输入 <code>/connect</code>，按服务商提供的地址、模型名和协议配置渠道。CLI 的渠道独立于桌面版。</p>
+            <h3>在对话里连接模型</h3>
+            <p>在项目目录运行 <code>lolicode.cmd</code>，Linux 运行 <code>lolicode</code>，即可进入对话。</p>
+            <pre><code>you › /connect</code></pre>
+            <p>
+              选 DeepSeek、OpenAI、Anthropic 或已保存的渠道。用方向键和回车或序号选择，按 Esc 取消。
+              选择预设后，选模型并在隐藏输入提示中粘贴 API Key。
+            </p>
             <p class="small">
-              请等每条提示出现后再填写。缺少密钥环境变量时，在隐藏输入提示出现后粘贴 API Key。看到 <code>you ›</code> 就可以输入任务。重开 CLI 后，若还缺密钥，再用 <code>/connect</code> 选用已保存的渠道。
+              连接前输入的任务会留作草稿，连好后输入 <code>/send</code> 发送。临时 Key 仅供本次进程使用。
             </p>
           </aside>
         </div>
@@ -214,11 +217,13 @@ git diff | lolicode run "审阅改动" --stdin --json</code></pre>
           </article>
           <article>
             <h3>配置与选择模型</h3>
-            <p>在系统终端运行 <code>auth login</code> 配置渠道。缺少密钥时，粘贴临时 Key 会进入本次聊天，直接回车只保存渠道。已有密钥环境变量时，保存渠道后返回终端。</p>
-            <pre><code>lolicode.cmd auth login
-lolicode.cmd auth list
-lolicode.cmd -m my-channel/MODEL</code></pre>
-            <p>Linux 用 <code>lolicode</code>。对话中输入 <code>/</code> 查看命令，按 Tab 补全。</p>
+            <p>在对话里用 <code>/models</code> 选择已保存渠道的模型，也可以用 <code>/connect NAME</code> 直接连接指定渠道。</p>
+            <pre><code>you › /connect
+you › /models</code></pre>
+            <p>
+              在系统终端运行 <code>lolicode auth login NAME</code> 配置指定渠道，或用
+              <code>lolicode models --format json</code> 获取列表。Windows 用 <code>lolicode.cmd</code>。
+            </p>
           </article>
         </div>
       </section>
@@ -228,15 +233,17 @@ lolicode.cmd -m my-channel/MODEL</code></pre>
         aria-labelledby="configuration-title"
       >
         <div>
-          <p class="eyebrow">模型配置</p>
-          <h2 id="configuration-title">你的模型，<br />也可以跟过来。</h2>
+          <p class="eyebrow">进阶设置</p>
+          <h2 id="configuration-title">自定义模型与网关</h2>
           <p>
-            支持 OpenAI Completions、OpenAI Responses 和 Anthropic Messages
-            协议。用服务商提供的 API 基础地址和模型名，选择与之匹配的协议。
+            在 <code>/connect</code> 中选自定义渠道，填写 API 基础地址并选择协议，再输入模型 ID。
+            支持 OpenAI Completions、OpenAI Responses 和 Anthropic Messages。
+            预设也可以手填模型 ID。
           </p>
           <p>
-            下面展示 Linux 环境变量配置。Windows PowerShell 使用
-            <code>$env:变量名 = '值'</code>。
+            已保存渠道重开后可在 <code>/connect</code> 中补输密钥，也可预设环境变量。
+            DeepSeek、OpenAI 和 Anthropic 分别读取 <code>DEEPSEEK_API_KEY</code>、
+            <code>OPENAI_API_KEY</code> 和 <code>ANTHROPIC_API_KEY</code>。
           </p>
         </div>
         <div class="code-wrap">
@@ -249,8 +256,8 @@ lolicode.cmd -m my-channel/MODEL</code></pre>
           </button>
           <pre
             id="configure-example"
-          ><code>export LOLICODE_BASE_URL='https://api.deepseek.com/v1'
-export LOLICODE_MODEL='deepseek-chat'
+          ><code>export LOLICODE_BASE_URL='https://api.deepseek.com'
+export LOLICODE_MODEL='deepseek-flash'
 export LOLICODE_API_KEY='你的 API Key'
 
 cd your-project
@@ -263,7 +270,7 @@ lolicode</code></pre>
         <details>
           <summary>这一版支持哪些系统？</summary>
           <p>
-            首版已验收 Windows x64 和 Linux x64。需要 Node.js 24.9
+            已验收 Windows x64 和 Linux x64。需要 Node.js 24.9
             或更新版本。其他系统和架构会继续验证。
           </p>
         </details>

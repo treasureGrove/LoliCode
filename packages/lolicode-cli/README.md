@@ -2,53 +2,59 @@
 
 把 LoliCode 带进终端。粉色小狗陪你读项目、修改代码、运行命令，也能通过 JSON 接入脚本。
 
-当前版本为 `0.1.0-alpha.4`。运行需要 Node.js **24.9 或更新版本**。CLI 使用桌面端同版本的 DeepSeek Harness 和共享宿主覆盖层，支持独立运行。
+当前版本为 `0.1.0-alpha.5`。运行需要 Node.js **24.9 或更新版本**。CLI 使用桌面端同版本的 DeepSeek Harness 和共享宿主覆盖层，支持独立运行。
 
 ## 安装
 
 先安装 [Node.js 24 LTS](https://nodejs.org/en/download)，再安装官网提供的 npm 包。
 
-在 Windows 上打开 CMD 或 PowerShell，运行：
+在 Windows 上打开 CMD 或 PowerShell。
 
 ```powershell
-npm.cmd install --global --ignore-scripts https://github.com/treasureGrove/LoliCode-Releases/releases/download/lolicode-cli-v0.1.0-alpha.4/lolicode-cli-0.1.0-alpha.4.tgz
+npm.cmd install --global --ignore-scripts --prefer-online https://github.com/treasureGrove/LoliCode-Releases/releases/download/lolicode-cli-v0.1.0-alpha.5/lolicode-cli-0.1.0-alpha.5.tgz
 lolicode.cmd
 ```
 
-Linux：
+在 Linux 上打开 Bash 或 Zsh。
 
 ```sh
-npm install --global --prefix "$HOME/.local" --ignore-scripts https://github.com/treasureGrove/LoliCode-Releases/releases/download/lolicode-cli-v0.1.0-alpha.4/lolicode-cli-0.1.0-alpha.4.tgz
+npm install --global --prefix "$HOME/.local" --ignore-scripts --prefer-online https://github.com/treasureGrove/LoliCode-Releases/releases/download/lolicode-cli-v0.1.0-alpha.5/lolicode-cli-0.1.0-alpha.5.tgz
 export PATH="$HOME/.local/bin:$PATH"
 lolicode
 ```
 
 把上面的 PATH 设置加入 shell 配置文件后，新终端也可以直接使用。下载地址、版本与校验值见 [LoliCode CLI 官网](https://lolicode.com/cli/)。
 
-## 配置模型
+## 在对话里连接模型
 
-在项目目录启动 `lolicode.cmd`（Windows CMD 或 PowerShell）或 `lolicode`（Linux）。看到 `lolicode ›` 后输入 `/connect`，按提示填写渠道名称、服务商的 API 基础地址、模型名和协议。CLI 使用独立的渠道配置，桌面版里保存的渠道需要在 CLI 配置一次。
+在项目目录运行 `lolicode.cmd`（Windows）或 `lolicode`（Linux），会直接看到 `you ›` 对话输入行。先输入 `/connect` 打开服务商菜单。可以用方向键和回车选择，也可以用序号选择。按 Esc 返回对话。
 
-已有渠道可以直接选用。缺少渠道指定的密钥环境变量时，可以在隐藏输入框里粘贴 API Key，密钥仅在本次进程中有效。看到 `you ›` 就可以输入任务。重开 CLI 后，若没有设置环境变量，在 `lolicode ›` 再用 `/connect` 选中渠道并输入 Key。输入 `/cancel` 返回对话，`/exit` 退出。
+- **DeepSeek、OpenAI 或 Anthropic**。从预设里选模型，也可以手填模型 ID。API 地址和协议由预设提供。看到隐藏输入提示后，粘贴服务商的 API Key。
+- **已保存的渠道**。选中渠道即可复用配置。缺少环境变量时，只需补输 API Key。
+- **自定义渠道**。填写服务商的 API 基础地址，选协议，再填模型 ID。可用于接入兼容网关。
 
-也可以在系统终端运行 `lolicode.cmd auth login`（Linux 用 `lolicode auth login`）。缺少密钥时，粘贴临时 Key 即可进入本次聊天，直接回车则只保存渠道。已有对应密钥环境变量时，命令保存渠道后返回系统终端。用 `lolicode auth list` 查看已保存的渠道和密钥状态。
+在对话中用 `/models` 选择已保存渠道的模型。连接前输入的任务会留作草稿，连好后输入 `/send` 发送。CLI 渠道独立于桌面版。
+
+临时输入的 Key 仅供本次进程使用。希望新终端也能读取 Key，可以提前设置对应的环境变量。预设分别使用 `DEEPSEEK_API_KEY`、`OPENAI_API_KEY` 和 `ANTHROPIC_API_KEY`。
+
+`/connect NAME` 可以直接连接指定渠道。也可以在系统终端运行 `lolicode.cmd auth login NAME`（Linux 用 `lolicode auth login NAME`）。缺少密钥时，粘贴临时 Key 即可进入本次聊天，直接回车则只保存渠道。已有对应密钥环境变量时，命令保存渠道后返回系统终端。用 `lolicode auth list` 查看已保存的渠道和密钥状态。
 
 CMD 使用 `set 变量名=值` 设置环境变量，PowerShell 使用 `$env:变量名 = '值'`。
 
-也可以直接使用环境变量。Windows PowerShell：
+也可以直接用环境变量完成配置。在 Windows PowerShell 中运行以下命令。
 
 ```powershell
-$env:LOLICODE_BASE_URL = 'https://api.deepseek.com/v1'
-$env:LOLICODE_MODEL = 'deepseek-chat'
+$env:LOLICODE_BASE_URL = 'https://api.deepseek.com'
+$env:LOLICODE_MODEL = 'deepseek-flash'
 $env:LOLICODE_API_KEY = '你的 API Key'
 lolicode.cmd
 ```
 
-Linux：
+在 Linux 终端中运行以下命令。
 
 ```sh
-export LOLICODE_BASE_URL='https://api.deepseek.com/v1'
-export LOLICODE_MODEL='deepseek-chat'
+export LOLICODE_BASE_URL='https://api.deepseek.com'
+export LOLICODE_MODEL='deepseek-flash'
 export LOLICODE_API_KEY='你的 API Key'
 lolicode
 ```
@@ -83,9 +89,9 @@ lolicode run --dir "./your-project" -m my-model/MODEL "解释这个项目的结�
 
 `--continue`（`-c`）恢复这个项目的最近会话，`--session`（`-s`）指定 LoliCode 会话 ID。两者也可用于 `run`。`session list` 默认列出所有项目，可用 `--dir` 筛选，`--format json` 输出 JSON 数组。
 
-`lolicode models` 列出已配置的模型。用 `-m 渠道/模型` 从已保存渠道选择模型，渠道名是第一个斜杠之前的部分。用 `--channel NAME -m MODEL` 可以传服务商的原始模型 ID，包括含斜杠的 ID。`resume`、`sessions`、`configure` 和 `--cwd` 也可以继续使用。
+`lolicode models` 在系统终端列出已配置的模型，可加 `--format json` 供脚本读取。用 `-m 渠道/模型` 从已保存渠道选择模型，渠道名是第一个斜杠之前的部分。用 `--channel NAME -m MODEL` 可以传服务商的原始模型 ID，包括含斜杠的 ID。`resume`、`sessions`、`configure` 和 `--cwd` 也可以继续使用。
 
-在提示符输入 `/` 并回车可查看命令，输入前缀后按 Tab 可补全。常用命令有 `/connect`、`/new`、`/sessions`、`/resume ID`、`/models`、`/model 渠道[/模型]` 与 `/exit`。`Ctrl+C` 停止当前任务。`--plain` 或 `NO_COLOR=1` 关闭颜色，`--no-animation` 关闭等待动效。
+在提示符输入 `/` 并回车可查看命令，输入前缀后按 Tab 可补全。常用命令有 `/connect`、`/models`、`/send`、`/new`、`/sessions`、`/resume ID`、`/model 渠道[/模型]` 与 `/exit`。`Ctrl+C` 停止当前任务。`--plain` 或 `NO_COLOR=1` 关闭颜色，`--no-animation` 关闭等待动效。
 
 权限模式：
 

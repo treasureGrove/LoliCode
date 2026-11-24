@@ -47,7 +47,9 @@ def main():
                             time.sleep(0.3)
                         return
                     following_tool = body["messages"][-1]["role"] == "tool"
-                    if following_tool:
+                    if "PTY_DRAFT_9017" in prompt:
+                        delta, reason = {"content": "DRAFT_OK"}, "stop"
+                    elif following_tool:
                         result = str(body["messages"][-1])
                         if "PTY_QUESTION_TASK_9017" in prompt:
                             assert "rose" in result, result
@@ -120,37 +122,47 @@ def main():
 
         try:
             wait_for(str(project))
-            wait_for("lolicode ›")
-            os.write(descriptor, b"test\n")
-            wait_for("这条消息没有发送")
-            wait_for("lolicode ›")
+            wait_for("you ›")
+            os.write(descriptor, b"PTY_DRAFT_9017\n")
+            wait_for("已保留草稿")
+            wait_for("you ›")
+            assert not requests, "Unconnected input reached the provider"
             os.write(descriptor, b"/help\npretend-pasted-api-key\n")
             wait_for("/connect")
-            wait_for("lolicode ›")
+            wait_for("you ›")
             assert b"pretend-pasted-api-key" not in transcript, "Pasted input echoed between prompts"
             os.write(descriptor, b"/help\n")
             wait_for("/connect")
-            wait_for("lolicode ›")
+            wait_for("you ›")
             os.write(descriptor, b"/conn")
             wait_for("/conn")
             os.write(descriptor, b"\t")
             wait_for("ect")
             os.write(descriptor, b"\n")
-            wait_for("渠道名称 [default]:")
-            os.write(descriptor, b"\n")
+            wait_for("选择服务商")
+            wait_for("› 1")
+            os.write(descriptor, b"4\n")
             wait_for("API 地址")
             os.write(descriptor, f"http://127.0.0.1:{server.server_port}/v1\n".encode())
-            wait_for("模型名称:")
+            wait_for("选择接口协议")
+            wait_for("› 1")
+            os.write(descriptor, b"\n")
+            wait_for("模型 ID:")
             os.write(descriptor, b"fixture\n")
-            wait_for("密钥环境变量名称")
-            os.write(descriptor, b"\n")
-            wait_for("协议 [openai-completions]:")
-            os.write(descriptor, b"\n")
             wait_for("API Key（输入隐藏")
             os.write(descriptor, b"pty-fixture-key\n")
             wait_for("you ›")
             assert b"pty-fixture-key" not in transcript, "Secret echoed to terminal"
             assert "pty-fixture-key" not in (root / "home/config.json").read_text(), "Secret persisted in config"
+            assert not requests, "Connecting sent a model request before /send"
+            os.write(descriptor, b"/send\n")
+            wait_for("DRAFT_OK")
+            wait_for("you ›")
+            os.write(descriptor, b"/models\n")
+            wait_for("选择模型")
+            wait_for("› 1")
+            os.write(descriptor, b"\n")
+            wait_for("you ›")
             os.write(descriptor, b"\x1b[A\x15")
             os.write(descriptor, b"/model does_not_exist\n")
             wait_for("Unknown channel")
