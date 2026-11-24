@@ -15,6 +15,7 @@ import { resolveRuntime } from "./runtime.mjs";
 import { Terminal, clean, slashCommands } from "./ui.mjs";
 import { openSession, resumeMetadata, sessions } from "./session.mjs";
 import { chooseConnection, chooseModel } from "./onboarding.mjs";
+import { WorkspaceTerminal, canUseWorkspace } from "./workspace.mjs";
 
 const help = `LoliCode ${version} · little paws, big ideas.
 
@@ -47,7 +48,7 @@ Options:
   -n, --max-count <number>  Limit the number of sessions shown
       --stdin               Append stdin to the prompt (or use '-' as the prompt)
       --timeout <seconds>   Cancel a task after this time
-      --plain               Disable colors
+      --plain               Use the line-by-line terminal without colors
       --no-animation        Disable the activity animation
   -h, --help                Show help
   -v, --version             Show version
@@ -169,7 +170,7 @@ const output = (value) =>
     `${typeof value === "string" ? clean(value) : JSON.stringify(value)}\n`,
   );
 
-async function manageModels(words, options, sessionKeys) {
+async function manageModels(words, options, sessionKeys, write = output) {
   const config = await loadConfig();
   const [action = "list", name] = words;
   if (action === "list" || (!name && !["add", "use"].includes(action))) {
@@ -185,12 +186,12 @@ async function manageModels(words, options, sessionKeys) {
         apiKeyEnv: channel.apiKeyEnv,
         keyConfigured: sessionKeys?.has(name) || !!process.env[channel.apiKeyEnv],
       }));
-    if (options.json) output({ channels });
+    if (options.json) write({ channels });
     else if (!channels.length)
-      output("还没有模型渠道。运行 lolicode auth login 开始配置。");
+      write("还没有模型渠道。运行 lolicode auth login 开始配置。");
     else
       for (const channel of channels)
-        output(
+        write(
           `${channel.selected ? "*" : " "} ${channel.name}/${channel.model} · ${channel.api} · ${channel.keyConfigured ? "key ready" : `set ${channel.apiKeyEnv}`}`,
         );
     return;
@@ -219,7 +220,7 @@ async function manageModels(words, options, sessionKeys) {
   } else
     throw new Error("Use models list, models add NAME, or models use NAME.");
   await saveJson(path.join(home, "config.json"), config);
-  output(
+  write(
     options.json
       ? { status: "ok", channel: name }
       : `已${action === "add" ? "添加" : "选择"}渠道 ${name}。🐾`,
@@ -235,7 +236,7 @@ async function configure(
     throw new Error(
       "Interactive setup needs a terminal. Use `lolicode models add NAME --base-url URL --model MODEL --api-key-env ENV` in scripts.",
     );
-  ui.note(
+  if (!ui.fullScreen) ui.note(
     "连接模型渠道 · 输入 /cancel 可返回会话。\n配置只保存地址、模型和环境变量名称。\n",
   );
   const config = await loadConfig();
@@ -250,16 +251,18 @@ async function configure(
   const { baseURL: baseUrl, model, apiKeyEnv, api } = channel;
   let sessionKey;
   if (select && !process.env[apiKeyEnv] && !sessionKeys?.has(name)) {
-    ui.note(
-      `连接地址 ${baseUrl}\nKey 在本次进程有效。下次可设置 ${apiKeyEnv}，或选中已保存渠道后重新输入。\n`,
-    );
+    const detail = `连接地址 ${baseUrl}\n本次使用 · 下次可以从 ${apiKeyEnv} 读取`;
+    if (!ui.fullScreen) ui.note(detail);
     sessionKey = await ui.ask("API Key（输入隐藏，回车稍后连接）: ", {
       secret: true,
+      detail,
     });
     if (sessionKey === undefined || sessionKey.trim() === "/cancel")
       return false;
     sessionKey = sessionKey.trim();
   }
+  // The workspace footer displays the selected model after this dialog closes.
+  const write = ui.fullScreen ? () => {} : output;
   if (!existing)
     await manageModels(["add", name], {
       ...options,
@@ -268,8 +271,8 @@ async function configure(
       apiKeyEnv,
       api,
       select,
-    });
-  else await manageModels(["use", name], options);
+    }, sessionKeys, write);
+  else await manageModels(["use", name], options, sessionKeys, write);
   if (sessionKey) sessionKeys.set(name, sessionKey);
   const ready = !!process.env[apiKeyEnv] || !!sessionKeys?.has(name);
   if (!ready)
@@ -352,7 +355,7 @@ async function doctor(options) {
   process.exitCode = checks.every((check) => check.ok) ? 0 : 1;
 }
 
-async function listSessions(options, { allProjects = false } = {}) {
+async function listSessions(options, { allProjects = false, write = output } = {}) {
   const cwd =
     allProjects && !options.cwd
       ? undefined
@@ -361,13 +364,13 @@ async function listSessions(options, { allProjects = false } = {}) {
   const items = options.maxCount
     ? savedSessions.slice(0, options.maxCount)
     : savedSessions;
-  if (options.format === "json") output(items);
-  else if (options.json) output({ sessions: items });
+  if (options.format === "json") write(items);
+  else if (options.json) write({ sessions: items });
   else if (!items.length)
-    output(cwd ? "这个项目还没有保存的会话。" : "还没有保存的会话。");
+    write(cwd ? "这个项目还没有保存的会话。" : "还没有保存的会话。");
   else
     for (const item of items)
-      output(
+      write(
         `${item.id} · ${item.status} · ${item.title || "New session"} · ${item.updatedAt}${cwd ? "" : ` · ${item.cwd}`}`,
       );
 }
@@ -406,10 +409,13 @@ export async function main(args = process.argv.slice(2)) {
     }
     if (!supportedNode())
       throw new Error("LoliCode CLI requires Node.js 24.9 or newer.");
-    ui = new Terminal(options);
-    ui.onInterrupt = () => ui.close();
     const command = words[0];
     const rest = words.slice(1);
+    const linear = ["mini", "run", "auth", "configure", "models", "doctor", "sessions", "session"];
+    ui = !linear.includes(command) && !options.prompt && canUseWorkspace(options)
+      ? new WorkspaceTerminal(options)
+      : new Terminal(options);
+    ui.onInterrupt = () => ui.close();
     if (command === "session") {
       if (rest.length !== 1 || rest[0] !== "list")
         throw new Error(
@@ -531,6 +537,7 @@ export async function main(args = process.argv.slice(2)) {
     };
 
     const send = async (message) => {
+      if (draft !== message) ui.user?.(message);
       draft = message;
       if (!current) {
         ui.note("已保留草稿。输入 /connect 连接服务商，再用 /send 发送。");
@@ -559,7 +566,7 @@ export async function main(args = process.argv.slice(2)) {
       try {
         const [action, argument] = input.split(/\s+/, 2);
         if (input === "/help" || input === "/") {
-          output(
+          (ui.fullScreen ? ui.note.bind(ui) : output)(
             slashCommands
               .map(
                 ([command, description]) =>
@@ -588,7 +595,9 @@ export async function main(args = process.argv.slice(2)) {
           continue;
         }
         if (input === "/sessions") {
-          await listSessions({ ...options, cwd });
+          await listSessions({ ...options, cwd }, {
+            write: ui.fullScreen ? ui.note.bind(ui) : output,
+          });
           continue;
         }
         if (input === "/models") {
@@ -635,6 +644,10 @@ export async function main(args = process.argv.slice(2)) {
             options = next;
             ui.connected();
           } else await changeSession(next, target);
+          if (input === "/new") {
+            draft = undefined;
+            ui.reset?.();
+          }
           continue;
         }
         if (input === "/send") {

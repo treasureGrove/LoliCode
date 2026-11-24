@@ -107,7 +107,8 @@ export async function openSession(options, ui, sessionKeys) {
           if (text) {
             state.text.push(text);
             if (!state.streamed) ui.text(text);
-            ui.text("\n\n");
+            if (ui.endMessage) ui.endMessage();
+            else ui.text("\n\n");
             ui.event({ type: "message", sessionId: metadata.id, text });
           }
           state.streamed = false;
@@ -117,10 +118,11 @@ export async function openSession(options, ui, sessionKeys) {
             name: data.name,
             arguments: data.arguments,
           });
-          if (!ui.json && !ui.streamJson)
-            ui.note(
-              `  🐾 ${data.name} ${redact(data.arguments).slice(0, 200)}`,
-            );
+          if (!ui.json && !ui.streamJson) {
+            const summary = `${data.name} ${redact(data.arguments).slice(0, 200)}`;
+            if (ui.tool) ui.tool(summary);
+            else ui.note(`  🐾 ${summary}`);
+          }
           ui.event({
             type: "tool_call",
             sessionId: metadata.id,
@@ -157,10 +159,11 @@ export async function openSession(options, ui, sessionKeys) {
             if (state) state.approvalRequired = true;
             return { outcome: "rejected" };
           }
-          ui.note(
-            `\n需要确认 · ${params.toolName}\n${redact(params.reason || "")}${call ? `\n${redact(call.arguments)}` : ""}`,
-          );
-          const answer = await ui.ask("允许这一次？[y/N] ");
+          const detail = `需要确认 · ${params.toolName}\n${redact(params.reason || "")}${call ? `\n${redact(call.arguments)}` : ""}`;
+          ui.note(detail);
+          const answer = await ui.ask("允许这一次？[y/N] ", {
+            detail: call ? `${params.toolName} ${redact(call.arguments)}` : detail,
+          });
           return {
             outcome: /^y(es)?$/i.test(answer?.trim() || "")
               ? "allowed-once"
@@ -181,7 +184,12 @@ export async function openSession(options, ui, sessionKeys) {
               ui.note(
                 `  ${redact(option.label)}${option.description ? ` — ${redact(option.description)}` : ""}`,
               );
-            const answer = await ui.ask("> ");
+            const answer = await ui.ask(ui.fullScreen ? "回复问题" : "> ", {
+              detail: [
+                redact(question.question || question.title || question.id),
+                ...(question.options || []).map((option) => redact(option.label)),
+              ].join("\n"),
+            });
             if (answer === undefined) return { cancelled: true };
             const labels = (question.options || []).map(
               (option) => option.label,
@@ -224,7 +232,7 @@ export async function openSession(options, ui, sessionKeys) {
     metadata.status = "idle";
     await persist();
     ui.stopSpinner();
-    if (!ui.json && !ui.streamJson)
+    if (!ui.json && !ui.streamJson && !ui.fullScreen)
       ui.note(
         `${channel.model} · ${options.approval || "review"} · ${metadata.id}`,
       );
@@ -289,7 +297,9 @@ export async function openSession(options, ui, sessionKeys) {
         ...(state.error && { error: state.error }),
       };
       ui.result(result);
-      if (!ui.json && !ui.streamJson && status !== "ok")
+      if (ui.fullScreen && status === "cancelled")
+        ui.note("已停止当前任务。");
+      else if (!ui.json && !ui.streamJson && status !== "ok")
         ui.note(
           `任务状态：${status}。使用 lolicode resume ${metadata.id} 继续。`,
         );

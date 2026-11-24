@@ -7,7 +7,7 @@
     <title>LoliCode CLI · 终端里的小狗编程搭子</title>
     <meta
       name="description"
-      content="LoliCode CLI 官方下载与安装指南。在 Windows、Linux 终端里读项目、修改代码、执行命令，支持流式对话、会话恢复和 JSON 自动化。"
+      content="LoliCode CLI 官方下载与安装指南。在 Windows、Linux 终端的全屏对话中读项目、修改代码、执行命令，支持会话恢复和 JSON 自动化。"
     />
     <link rel="canonical" href="https://lolicode.com/cli/" />
     <link rel="icon" href="/desktop-assets/favicon-32.png" />
@@ -33,11 +33,11 @@
     <main id="main">
       <section class="hero">
         <div class="hero-copy">
-          <p class="release">0.1.0-alpha.5 · Windows / Linux</p>
+          <p class="release">0.1.0-alpha.6 · Windows / Linux</p>
           <h1>打开终端，<br />小狗也在。<span aria-hidden="true">♡</span></h1>
           <p class="intro">
-            读项目、写代码、跑命令。把任务交给
-            LoliCode，在熟悉的终端里，继续你的创作。
+            直接进入全屏对话，随时切换模型。固定输入框让你一边回看回复，
+            一边继续提需求。
           </p>
           <a class="button" href="#install"
             >把小狗带进终端 <span aria-hidden="true">↓</span></a
@@ -47,31 +47,27 @@
         <div class="terminal-scene">
           <div class="terminal" aria-label="LoliCode CLI 交互示意">
             <div class="terminal-top">
-              <span aria-hidden="true">● ● ●</span><span>~/my-project</span
-              ><span>交互示意</span>
+              <span>LoliCode</span><span>~/my-project</span
+              ><span>全屏对话示意</span>
             </div>
             <div class="terminal-body">
-              <pre class="dog">  / \__
- (  •ᴥ•)  <strong>LoliCode CLI</strong>
-  / &gt; ♡   little paws, big ideas.</pre>
-              <p><span class="prompt">you ›</span> 帮我读一下这个项目</p>
-              <p class="tool">
-                🐾 read package.json<br />🐾 list_directory src/
-              </p>
+              <p><span class="prompt">你</span><br />帮我读一下这个项目</p>
+              <p class="tool">工具 · read package.json</p>
               <p>
-                我先看看项目入口和脚本，<br />再带你了解主要模块。<span
-                  class="caret"
-                  aria-hidden="true"
-                  >▍</span
-                >
+                <span class="prompt">LoliCode</span><br />
+                入口在 src/index.ts。我会从启动流程讲起。
               </p>
+              <div class="code-wrap">
+                <pre><code>消息
+&gt; 帮我找一下测试入口<span class="caret" aria-hidden="true">▍</span></code></pre>
+              </div>
               <div class="terminal-bottom">
-                <span>review</span><span>你的项目 · 你的模型</span>
+                <span>模型 deepseek-flash</span><span>Ctrl+P 命令</span>
               </div>
             </div>
           </div>
           <p class="scene-caption">
-            一点粉色，一双小爪，和认认真真的工具调用。
+            用 PgUp、PgDn 回看回复，按 Esc 关闭弹窗。
           </p>
         </div>
       </section>
@@ -131,7 +127,7 @@
                 </button>
                 <pre
                   id="install-windows"
-                ><code>npm.cmd install --global --ignore-scripts --prefer-online https://lolicode.com/cli/downloads/lolicode-cli-0.1.0-alpha.5.tgz
+                ><code>npm.cmd install --global --ignore-scripts --prefer-online https://lolicode.com/cli/downloads/lolicode-cli-0.1.0-alpha.6.tgz
 lolicode.cmd</code></pre>
               </div>
               <p class="helper">如果终端提示找不到命令，重新打开终端后再试。</p>
@@ -153,7 +149,7 @@ lolicode.cmd</code></pre>
                 </button>
                 <pre
                   id="install-linux"
-                ><code>npm install --global --prefix "$HOME/.local" --ignore-scripts --prefer-online https://lolicode.com/cli/downloads/lolicode-cli-0.1.0-alpha.5.tgz
+                ><code>npm install --global --prefix "$HOME/.local" --ignore-scripts --prefer-online https://lolicode.com/cli/downloads/lolicode-cli-0.1.0-alpha.6.tgz
 export PATH="$HOME/.local/bin:$PATH"
 lolicode</code></pre>
               </div>
@@ -162,11 +158,11 @@ lolicode</code></pre>
               </p>
             </div>
             <p class="download-links">
-              <a href="/cli/downloads/lolicode-cli-0.1.0-alpha.5.tgz"
+              <a href="/cli/downloads/lolicode-cli-0.1.0-alpha.6.tgz"
                 >下载 npm 包 ↓</a
               ><a href="/cli/latest.json">查看版本与 SHA-256 ↗</a
               ><a
-                href="https://github.com/treasureGrove/LoliCode-Releases/releases/tag/lolicode-cli-v0.1.0-alpha.5"
+                href="https://github.com/treasureGrove/LoliCode-Releases/releases/tag/lolicode-cli-v0.1.0-alpha.6"
                 >GitHub 发布页 ↗</a
               >
             </p>
@@ -174,8 +170,8 @@ lolicode</code></pre>
           <aside class="install-aside">
             <span class="paw" aria-hidden="true">🐾</span>
             <h3>在对话里连接模型</h3>
-            <p>在项目目录运行 <code>lolicode.cmd</code>，Linux 运行 <code>lolicode</code>，即可进入对话。</p>
-            <pre><code>you › /connect</code></pre>
+            <p>在项目目录运行 <code>lolicode.cmd</code>，Linux 运行 <code>lolicode</code>。看到「未连接」时，在底部「消息」输入框打开服务商弹窗。</p>
+            <pre><code>/connect</code></pre>
             <p>
               选 DeepSeek、OpenAI、Anthropic 或已保存的渠道。用方向键和回车或序号选择，按 Esc 取消。
               选择预设后，选模型并在隐藏输入提示中粘贴 API Key。
@@ -195,7 +191,8 @@ lolicode</code></pre>
           <article>
             <h3>打开项目或执行任务</h3>
             <p>
-              在项目里提需求，查看工具执行过程。默认在修改和运行命令前询问你。
+              按 Enter 发送消息。用 PgUp、PgDn 回看，键入 <code>/</code> 或按 Ctrl+P 查看命令。
+              终端支持时，可按 Shift+Enter 或 Alt+Enter 换行。
             </p>
             <pre><code>lolicode "./your-project"
 lolicode run --dir "./your-project" "解释项目"</code></pre>
@@ -217,9 +214,9 @@ git diff | lolicode run "审阅改动" --stdin --json</code></pre>
           </article>
           <article>
             <h3>配置与选择模型</h3>
-            <p>在对话里用 <code>/models</code> 选择已保存渠道的模型，也可以用 <code>/connect NAME</code> 直接连接指定渠道。</p>
-            <pre><code>you › /connect
-you › /models</code></pre>
+            <p>用 <code>/models</code> 打开模型弹窗，按 Esc 返回。用 <code>/connect NAME</code> 可直接连接指定渠道。</p>
+            <pre><code>/connect
+/models</code></pre>
             <p>
               在系统终端运行 <code>lolicode auth login NAME</code> 配置指定渠道，或用
               <code>lolicode models --format json</code> 获取列表。Windows 用 <code>lolicode.cmd</code>。
@@ -275,11 +272,10 @@ lolicode</code></pre>
           </p>
         </details>
         <details>
-          <summary>可以关闭颜色和动画吗？</summary>
+          <summary>怎么使用逐行界面？</summary>
           <p>
-            可以。使用 <code>--plain</code> 或设置
-            <code>NO_COLOR=1</code> 关闭颜色，使用
-            <code>--no-animation</code> 关闭等待动效。
+            运行 <code>lolicode mini</code> 可切换到逐行界面。使用 <code>--plain</code> 可打开无颜色的逐行界面。
+            设置 <code>NO_COLOR=1</code> 可关闭颜色，逐行界面支持 <code>--no-animation</code>。
           </p>
         </details>
         <details>

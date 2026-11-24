@@ -2,7 +2,7 @@
 
 把 LoliCode 带进终端。粉色小狗陪你读项目、修改代码、运行命令，也能通过 JSON 接入脚本。
 
-当前版本为 `0.1.0-alpha.5`。运行需要 Node.js **24.9 或更新版本**。CLI 使用桌面端同版本的 DeepSeek Harness 和共享宿主覆盖层，支持独立运行。
+当前版本为 `0.1.0-alpha.6`。运行需要 Node.js **24.9 或更新版本**。CLI 使用桌面端同版本的 DeepSeek Harness 和共享宿主覆盖层，支持独立运行。
 
 ## 安装
 
@@ -11,14 +11,14 @@
 在 Windows 上打开 CMD 或 PowerShell。
 
 ```powershell
-npm.cmd install --global --ignore-scripts --prefer-online https://github.com/treasureGrove/LoliCode-Releases/releases/download/lolicode-cli-v0.1.0-alpha.5/lolicode-cli-0.1.0-alpha.5.tgz
+npm.cmd install --global --ignore-scripts --prefer-online https://github.com/treasureGrove/LoliCode-Releases/releases/download/lolicode-cli-v0.1.0-alpha.6/lolicode-cli-0.1.0-alpha.6.tgz
 lolicode.cmd
 ```
 
 在 Linux 上打开 Bash 或 Zsh。
 
 ```sh
-npm install --global --prefix "$HOME/.local" --ignore-scripts --prefer-online https://github.com/treasureGrove/LoliCode-Releases/releases/download/lolicode-cli-v0.1.0-alpha.5/lolicode-cli-0.1.0-alpha.5.tgz
+npm install --global --prefix "$HOME/.local" --ignore-scripts --prefer-online https://github.com/treasureGrove/LoliCode-Releases/releases/download/lolicode-cli-v0.1.0-alpha.6/lolicode-cli-0.1.0-alpha.6.tgz
 export PATH="$HOME/.local/bin:$PATH"
 lolicode
 ```
@@ -27,13 +27,13 @@ lolicode
 
 ## 在对话里连接模型
 
-在项目目录运行 `lolicode.cmd`（Windows）或 `lolicode`（Linux），会直接看到 `you ›` 对话输入行。先输入 `/connect` 打开服务商菜单。可以用方向键和回车选择，也可以用序号选择。按 Esc 返回对话。
+在项目目录运行 `lolicode.cmd`（Windows）或 `lolicode`（Linux），会直接打开全屏对话。底部固定显示「消息」输入框和当前模型。模型显示「未连接」时，在输入框中运行 `/connect` 打开服务商弹窗。用方向键或序号选择，按 Enter 确认，按 Esc 返回对话。
 
 - **DeepSeek、OpenAI 或 Anthropic**。从预设里选模型，也可以手填模型 ID。API 地址和协议由预设提供。看到隐藏输入提示后，粘贴服务商的 API Key。
 - **已保存的渠道**。选中渠道即可复用配置。缺少环境变量时，只需补输 API Key。
 - **自定义渠道**。填写服务商的 API 基础地址，选协议，再填模型 ID。可用于接入兼容网关。
 
-在对话中用 `/models` 选择已保存渠道的模型。连接前输入的任务会留作草稿，连好后输入 `/send` 发送。CLI 渠道独立于桌面版。
+在对话中用 `/models` 打开模型弹窗，选择已保存渠道的模型。连接前输入的任务会留作草稿，连好后用 `/send` 发送。CLI 渠道独立于桌面版。
 
 临时输入的 Key 仅供本次进程使用。希望新终端也能读取 Key，可以提前设置对应的环境变量。预设分别使用 `DEEPSEEK_API_KEY`、`OPENAI_API_KEY` 和 `ANTHROPIC_API_KEY`。
 
@@ -91,7 +91,11 @@ lolicode run --dir "./your-project" -m my-model/MODEL "解释这个项目的结�
 
 `lolicode models` 在系统终端列出已配置的模型，可加 `--format json` 供脚本读取。用 `-m 渠道/模型` 从已保存渠道选择模型，渠道名是第一个斜杠之前的部分。用 `--channel NAME -m MODEL` 可以传服务商的原始模型 ID，包括含斜杠的 ID。`resume`、`sessions`、`configure` 和 `--cwd` 也可以继续使用。
 
-在提示符输入 `/` 并回车可查看命令，输入前缀后按 Tab 可补全。常用命令有 `/connect`、`/models`、`/send`、`/new`、`/sessions`、`/resume ID`、`/model 渠道[/模型]` 与 `/exit`。`Ctrl+C` 停止当前任务。`--plain` 或 `NO_COLOR=1` 关闭颜色，`--no-animation` 关闭等待动效。
+按 Enter 发送消息。终端支持组合键时，用 Shift+Enter 或 Alt+Enter 插入换行。用 PgUp、PgDn 回看对话，底部输入框始终可用。
+
+在输入框键入 `/` 或按 Ctrl+P 查看命令，用方向键选中，再按 Tab 补全。常用命令有 `/connect`、`/models`、`/send`、`/new`、`/sessions`、`/resume ID`、`/model 渠道[/模型]` 与 `/exit`。任务运行时可按 Ctrl+C 停止。
+
+`lolicode mini` 使用逐行界面。加 `--plain` 可使用无颜色的逐行界面，设置 `NO_COLOR=1` 可关闭颜色。逐行界面可用 `--no-animation` 关闭等待动效。
 
 权限模式：
 
