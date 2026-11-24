@@ -131,7 +131,7 @@
                 </button>
                 <pre
                   id="install-windows"
-                ><code>npm.cmd install --global --ignore-scripts https://lolicode.com/cli/downloads/lolicode-cli-0.1.0-alpha.4.tgz
+                ><code>npm.cmd install --global --ignore-scripts --prefer-online https://lolicode.com/cli/downloads/lolicode-cli-0.1.0-alpha.4.tgz
 lolicode.cmd</code></pre>
               </div>
               <p class="helper">如果终端提示找不到命令，重新打开终端后再试。</p>
@@ -153,7 +153,7 @@ lolicode.cmd</code></pre>
                 </button>
                 <pre
                   id="install-linux"
-                ><code>npm install --global --prefix "$HOME/.local" --ignore-scripts https://lolicode.com/cli/downloads/lolicode-cli-0.1.0-alpha.4.tgz
+                ><code>npm install --global --prefix "$HOME/.local" --ignore-scripts --prefer-online https://lolicode.com/cli/downloads/lolicode-cli-0.1.0-alpha.4.tgz
 export PATH="$HOME/.local/bin:$PATH"
 lolicode</code></pre>
               </div>
@@ -178,7 +178,7 @@ lolicode</code></pre>
             <pre><code>lolicode › /connect</code></pre>
             <p>看到 <code>lolicode ›</code> 后输入 <code>/connect</code>，按服务商提供的地址、模型名和协议配置渠道。CLI 的渠道独立于桌面版。</p>
             <p class="small">
-              缺少密钥环境变量时，可以隐藏粘贴 API Key，供本次会话使用。看到 <code>you ›</code> 就可以输入任务。重开 CLI 后，若还缺密钥，再用 <code>/connect</code> 选用已保存的渠道。
+              请等每条提示出现后再填写。缺少密钥环境变量时，在隐藏输入提示出现后粘贴 API Key。看到 <code>you ›</code> 就可以输入任务。重开 CLI 后，若还缺密钥，再用 <code>/connect</code> 选用已保存的渠道。
             </p>
           </aside>
         </div>
