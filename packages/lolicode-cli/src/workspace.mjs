@@ -1,6 +1,5 @@
 import { emitKeypressEvents } from "node:readline";
 import { PassThrough } from "node:stream";
-import { version } from "./config.mjs";
 import { clean, slashCommands } from "./ui.mjs";
 import { renderWorkspace } from "./workspace-render.mjs";
 
@@ -320,7 +319,6 @@ export class WorkspaceTerminal {
       color: this.color,
       colorDepth: this.colorDepth,
       safeGlyphs: this.safeGlyphs,
-      version,
       cwd: this.cwd,
       model: this.model,
       approval: this.approval,

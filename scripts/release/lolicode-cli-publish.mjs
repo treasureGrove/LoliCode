@@ -15,7 +15,7 @@ if (
   );
 }
 const repository = "treasureGrove/LoliCode-Releases";
-const tag = "lolicode-cli-v0.1.0-alpha.7";
+const tag = "lolicode-cli-v0.1.0-alpha.8";
 const api = `https://api.github.com/repos/${repository}`;
 const token = execFileSync("gh", ["auth", "token"], {
   encoding: "utf8",
@@ -48,7 +48,7 @@ let release = await (await request(`${api}/releases/${releaseId}`)).json();
 if (release.tag_name !== tag || !release.prerelease)
   throw new Error("Unexpected release identity or channel.");
 const files = [
-  "lolicode-cli-0.1.0-alpha.7.tgz",
+  "lolicode-cli-0.1.0-alpha.8.tgz",
   "LoliCode-CLI-README.md",
   "SHA256SUMS",
 ];
@@ -67,7 +67,7 @@ if (action === "upload" && transport === "ssh") {
       "-o",
       "BatchMode=yes",
       "lolicode",
-      "python3 /tmp/lolicode-cli-validation-20261124-alpha7/lolicode-cli-upload.py",
+      "python3 /tmp/lolicode-cli-validation-20261124-alpha8/lolicode-cli-upload.py",
     ],
     {
       input: `${JSON.stringify({ token, releaseId: Number(releaseId), files: Object.fromEntries([...expected].map(([name, value]) => [name, value.digest])) })}\n`,

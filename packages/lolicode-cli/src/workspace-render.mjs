@@ -6,46 +6,55 @@ const nonprinting = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/gu;
 const emoji = /\p{Emoji_Presentation}|\p{Regional_Indicator}|[\ufe0f\u20e3]/u;
 const wide = /[\u1100-\u115f\u2329\u232a\u2e80-\ua4cf\uac00-\ud7a3\uf900-\ufaff\ufe10-\ufe19\ufe30-\ufe6f\uff01-\uff60\uffe0-\uffe6\u{20000}-\u{3fffd}]/u;
 
-const cocoa = [0x211820, 234];
-const header = [0x35232e, 235];
-const cream = [0xf8eadc, 230];
-const petal = [0xf0a9bc, 218];
-const blush = [0xe7c2b0, 223];
-const taupe = [0xba9ea8, 249];
-const panel = [0x352730, 236];
-const raised = [0x412d38, 237];
-const rail = [0x8c5b72, 95];
-const pinkInk = [0x3e2433, 235];
+const canvas = [0x211b1e, 234];
+const cream = [0xfff6ea, 230];
+const rose = [0xf8afc4, 218];
+const gold = [0xf1ba76, 216];
+const muted = [0xb5a3a7, 249];
+const panel = [0x30272b, 236];
+const cherry = [0x5d142a, 52];
+const selection = [0x6e1831, 89];
+const backdrop = [0x181416, 233];
 const palette = {
-  base: [cream, cocoa],
-  rose: [petal, cocoa],
-  warm: [blush, cocoa],
-  muted: [taupe, cocoa],
-  bar: [cream, header],
-  barMuted: [taupe, header],
-  badge: [pinkInk, petal],
-  user: [cream, panel],
-  userLabel: [petal, panel],
-  userRail: [petal, raised],
+  base: [cream, canvas],
+  rose: [rose, canvas],
+  gold: [gold, canvas],
+  muted: [muted, canvas],
   panel: [cream, panel],
-  panelTitle: [blush, raised],
-  panelMuted: [taupe, panel],
-  panelAccent: [petal, panel],
-  composerRail: [petal, rail],
-  panelShadow: [taupe, [0x181217, 233]],
-  selected: [cream, [0x62384e, 95]],
-  selectedRail: [petal, [0x884f69, 131]],
-  active: [blush, header],
-  inactive: [taupe, header],
+  panelMuted: [muted, panel],
+  panelAccent: [rose, panel],
+  selected: [cream, selection],
+  selectedAccent: [rose, selection],
+  dim: [[0x816c74, 243], backdrop],
+  hero: [cream, cherry],
+  heroTitle: [cream, cherry, true],
+  heroGold: [gold, cherry],
+  fur: [cream, [0xc8957c, 180]],
+  ear: [cream, [0x885947, 95]],
+  hair: [cream, [0xea8da5, 211]],
+  hairLight: [cream, [0xf5adc0, 218]],
+  muzzle: [cream, cream],
+  cheek: [cream, [0xf4b4b2, 217]],
+  eye: [cream, [0x422430, 53]],
+  bow: [cream, [0xb23b5c, 125]],
 };
 
+// Each pixel occupies two terminal columns so the character stays in proportion.
 const puppy = [
-  "   __       __   ",
-  " /'  \\___/'  \\  ",
-  "|   ( o o )   | ",
-  " \\__/  v  \\__/  ",
-  "     '---'      ",
+  "    hhhhh    ",
+  " eehllhhhee  ",
+  "eecchhhhccee ",
+  "eecocccoccee ",
+  " efpcocpfe   ",
+  "   ccccc  c  ",
+  "   bbcbff f  ",
+  "  fccccccf   ",
+  "  ccc  ccc   ",
 ];
+const pixels = {
+  b: "bow", c: "muzzle", e: "ear", f: "fur", h: "hair", l: "hairLight", o: "eye", p: "cheek",
+};
+const puppyAscii = [" /\\___/\\ ", "( /o o\\ )", " U( v )U ", "  /|_|\\~ "];
 
 const withoutAnsi = (value) =>
   stripVTControlCharacters(String(value ?? ""))
@@ -113,12 +122,12 @@ function createCanvas(width, height, color, colorDepth) {
   const blank = { glyph: " ", cells: 1, style: "base" };
   const lines = Array.from({ length: height }, () => Array(width).fill(blank));
   const colorCodes = color && Object.fromEntries(
-    Object.entries(palette).map(([style, [fg, bg]]) => {
+    Object.entries(palette).map(([style, [fg, bg, bold]]) => {
       const rgb = ([number]) => `${number >> 16};${(number >> 8) & 255};${number & 255}`;
       const code = colorDepth >= 24
         ? `38;2;${rgb(fg)};48;2;${rgb(bg)}`
         : `38;5;${fg[1]};48;5;${bg[1]}`;
-      return [style, `${esc}${code}m`];
+      return [style, `${esc}${bold ? 1 : 22};${code}m`];
     }),
   );
 
@@ -141,6 +150,15 @@ function createCanvas(width, height, color, colorDepth) {
       line[x] = { glyph, cells, style };
       if (cells === 2) line[x + 1] = null;
       x += cells;
+    }
+  }
+
+  function dim() {
+    const dimBlank = { ...blank, style: "dim" };
+    for (const line of lines) {
+      for (const [column, cell] of line.entries()) {
+        if (cell) line[column] = cell === blank ? dimBlank : { ...cell, style: "dim" };
+      }
     }
   }
 
@@ -170,7 +188,7 @@ function createCanvas(width, height, color, colorDepth) {
     }
     return { frame: output.join(""), rows };
   }
-  return { frame, paint };
+  return { frame, paint, dim };
 }
 
 function fill(paint, row, left, span, style) {
@@ -189,10 +207,10 @@ function outline(paint, top, left, span, height, style, title) {
 }
 
 const historyStyles = {
-  user: { label: "你", title: "userLabel", body: "user" },
-  assistant: { label: "小笨狗", title: "warm", body: "base" },
+  user: { label: "你", title: "muted", body: "base" },
+  assistant: { label: "小笨狗", title: "rose", body: "base" },
   note: { label: "", title: "muted", body: "muted" },
-  tool: { label: "工具", title: "warm", body: "muted" },
+  tool: { label: "工具", title: "gold", body: "muted" },
 };
 const lineCache = new WeakMap();
 
@@ -216,8 +234,8 @@ function historyLines(entries, span, safeGlyphs) {
   });
 }
 
-function renderDialog(paint, width, height, dialog, safeGlyphs, color) {
-  const span = Math.min(60, width - 2);
+function renderDialog({ paint, dim }, width, height, dialog, safeGlyphs, color) {
+  const span = Math.min(54, width - 2);
   if (span < 8 || height < 6) return undefined;
   const left = Math.floor((width - span) / 2);
   const inner = span - 6;
@@ -227,25 +245,25 @@ function renderDialog(paint, width, height, dialog, safeGlyphs, color) {
   const menu = Array.isArray(dialog.labels);
   const requested = menu ? Math.max(dialog.labels.length, 1) : 1;
   const roomy = height >= 16;
-  const padding = roomy ? 1 : 0;
-  const visible = Math.max(1, Math.min(requested, height - detail.length - 5 - padding * 2));
-  const panelHeight = visible + detail.length + 4 + padding * 2;
+  const topPadding = roomy ? 1 : 0;
+  const visible = Math.max(1, Math.min(requested, height - detail.length - 5 - topPadding));
+  const panelHeight = visible + detail.length + 4 + topPadding;
   const top = Math.floor((height - panelHeight) / 2);
-  if (color && roomy) {
-    for (let row = top + 1; row <= top + panelHeight; row++)
-      fill(paint, row, left + 2, Math.min(span, width - left - 2), "panelShadow");
-  }
+  if (color) dim();
   for (let row = top; row < top + panelHeight; row++) fill(paint, row, left, span, "panel");
   const title = clipped(dialog.title, span - 6, safeGlyphs);
-  if (color) fill(paint, top, left, span, "panelTitle");
-  else outline(paint, top, left, span, panelHeight, "panelTitle");
-  paint(top, left + 3, title, "panelTitle");
-  detail.forEach((line, index) => paint(top + 1 + padding + index, left + 3, line, "panelMuted", inner));
-  const firstRow = top + 1 + padding + detail.length;
+  if (!color && !topPadding) {
+    outline(paint, top, left, span, panelHeight, "panelAccent", ` ${title} `);
+  } else {
+    if (!color) outline(paint, top, left, span, panelHeight, "panelAccent");
+    paint(top + topPadding, left + 3, title, "panelAccent", inner);
+  }
+  detail.forEach((line, index) => paint(top + 1 + topPadding + index, left + 3, line, "panelMuted", inner));
+  const firstRow = top + 1 + topPadding + detail.length;
   const footer = menu
-    ? "上下键选择   Enter 确认   Esc 返回"
-    : "Enter 确认    Esc 返回";
-  paint(top + panelHeight - 2, left + 3, clipped(footer, inner, safeGlyphs), "panelMuted");
+    ? "上下键 选择   Enter 确认   Esc 返回"
+    : "Enter 确认   Esc 返回";
+  paint(top + panelHeight - 2, left + 3, clipped(dialog.digits ? `编号 ${dialog.digits}` : footer, inner, safeGlyphs), "panelMuted");
 
   if (menu) {
     const selected = Math.max(0, Math.min(dialog.labels.length - 1, dialog.selected ?? 0));
@@ -258,12 +276,11 @@ function renderDialog(paint, width, height, dialog, safeGlyphs, color) {
       const active = index === selected;
       const style = active ? "selected" : "panel";
       fill(paint, firstRow + offset, left + 2, span - 4, style);
-      if (active) paint(firstRow + offset, left + 2, ">", "selectedRail");
-      const numbered = `${index + 1}   ${label}`;
-      paint(firstRow + offset, left + 4, clipped(numbered, span - 6, safeGlyphs), style);
-    }
-    if (dialog.digits) {
-      paint(top + panelHeight - 3, left + 3, clipped(`编号 ${dialog.digits}`, inner, safeGlyphs), "panelMuted");
+      if (active) paint(firstRow + offset, left + 3, ">", "selectedAccent");
+      const number = String(index + 1).padStart(String(dialog.labels.length).length);
+      paint(firstRow + offset, left + 5, number, active ? "selectedAccent" : "panelMuted", inner - 2);
+      const labelWidth = inner - 3 - number.length;
+      paint(firstRow + offset, left + 6 + number.length, clipped(label, labelWidth, safeGlyphs), style, labelWidth);
     }
     return undefined;
   }
@@ -274,14 +291,52 @@ function renderDialog(paint, width, height, dialog, safeGlyphs, color) {
   const field = wrap(display, Math.max(1, inner - 3), { safeGlyphs, cursor });
   paint(firstRow, left + 3, "> ", "panelAccent");
   paint(firstRow, left + 5, field.lines[field.position.row], "panel", inner - 2);
-  return { row: firstRow, column: left + 5 + field.position.column };
+  return { row: firstRow, column: Math.min(left + span - 2, left + 5 + field.position.column) };
+}
+
+function renderWelcome(paint, width, span, top, height, color) {
+  const title = "LoliCode";
+  const greeting = "和小笨狗一起写代码。";
+  if (color && span >= 64 && height >= puppy.length + 2) {
+    const left = Math.floor((width - 64) / 2);
+    const heroHeight = puppy.length + 2;
+    const first = top + Math.floor((height - heroHeight) / 2);
+    for (let row = first; row < first + heroHeight; row++) fill(paint, row, left, 64, "hero");
+    for (const [row, line] of puppy.entries()) {
+      for (const [column, pixel] of [...line].entries()) {
+        if (pixels[pixel]) fill(paint, first + 1 + row, left + 4 + column * 2, 2, pixels[pixel]);
+      }
+    }
+    paint(first + 1, left + 28, "+", "heroGold");
+    paint(first + 4, left + 33, title, "heroTitle");
+    paint(first + 6, left + 33, greeting, "hero");
+    return;
+  }
+
+  const showPuppy = height >= 8 && span >= 20;
+  const showGreeting = height >= 3 && span >= displayWidth(greeting);
+  const blockHeight = (showPuppy ? puppyAscii.length + 1 : 0) + (showGreeting ? 3 : 1);
+  let row = top + Math.floor((height - blockHeight) / 2);
+  const center = (value, style) => {
+    paint(row++, Math.floor((width - displayWidth(value)) / 2), value, style);
+  };
+  if (showPuppy) {
+    for (const line of puppyAscii) center(line, "rose");
+    row++;
+  }
+  center(title, "base");
+  if (showGreeting) {
+    row++;
+    center(greeting, "muted");
+  }
 }
 
 export function renderWorkspace(state) {
   const width = Math.max(1, (state.columns || 80) - 1);
   const height = Math.max(1, state.rows || 24);
   const color = state.color && (state.colorDepth ?? 8) >= 8;
-  const { paint, frame } = createCanvas(width, height, color, state.colorDepth);
+  const canvas = createCanvas(width, height, color, state.colorDepth);
+  const { paint, frame } = canvas;
   const safe = state.safeGlyphs;
   const render = (cursor, scrollMax) => ({
     ...frame(cursor, state.previousRows),
@@ -289,18 +344,13 @@ export function renderWorkspace(state) {
     height,
     scrollMax,
   });
-  const margin = Math.max(width >= 80 ? 3 : width >= 32 ? 2 : 0, Math.floor((width - 110) / 2));
+  const margin = Math.max(width >= 32 ? 2 : 0, Math.floor((width - 86) / 2));
   const span = width - margin * 2;
   const cell = (row, left, value, style, available = width - left) =>
     paint(row, left, clipped(value, available, safe), style, available);
 
-  const brand = width >= 34 ? " U^.^U " : "";
-  fill(paint, 0, margin, span, "bar");
-  cell(0, margin, brand, "badge");
-  cell(0, margin + brand.length, "  LoliCode", "bar");
-  const version = String(state.version ?? "");
-  if (width >= 40) cell(0, width - margin - version.length - 2, version, "barMuted");
   if (height < 7 || width < 16) {
+    cell(0, 0, "LoliCode", "rose");
     const dialog = state.dialog;
     const menu = Array.isArray(dialog?.labels);
     const rawInput = dialog?.text ?? state.composer?.text ?? "";
@@ -317,7 +367,12 @@ export function renderWorkspace(state) {
       : undefined;
     return render(cursor, 0);
   }
-  cell(1, margin + 1, state.cwd || "", "muted", span - 2);
+  const roomy = height >= 16;
+  const headerRow = roomy ? 1 : 0;
+  const hasHistory = state.entries?.length > 0;
+  const brand = hasHistory ? "LoliCode  " : "";
+  cell(headerRow, margin, brand, "rose", span);
+  cell(headerRow, margin + brand.length, state.cwd, "muted", span - brand.length);
 
   const composer = state.composer || {};
   const text = withoutAnsi(composer.text);
@@ -325,7 +380,7 @@ export function renderWorkspace(state) {
   const inputRows = Math.min(field.lines.length, height >= 21 ? 4 : height >= 13 ? 2 : 1);
   const composerHeight = inputRows + 2;
   const composerTop = height - composerHeight - 1;
-  const transcriptStart = height >= 14 ? 3 : 2;
+  const transcriptStart = headerRow + (roomy ? 3 : 2);
   const suggestionCount = Math.min(5, Math.max(0, composerTop - transcriptStart - 3));
   const highlighted = composer.suggestionIndex ?? 0;
   const firstSuggestion = Math.max(0, highlighted - suggestionCount + 1);
@@ -338,30 +393,15 @@ export function renderWorkspace(state) {
   const viewport = history.slice(Math.max(0, end - available), end);
   for (const [index, entry] of viewport.entries()) {
     const row = transcriptStart + index;
-    if (entry.kind === "user" && color) {
-      fill(paint, row, margin, span, entry.style);
-      fill(paint, row, margin, 1, "userRail");
-    }
-    const marker = !color && entry.kind === "user" ? "| " : "";
-    paint(row, margin + 2, marker + entry.text, entry.style, span - 4);
+    if (entry.kind === "user") paint(row, margin, safe ? "|" : "│", "rose", 1);
+    paint(row, margin + 2, entry.text, entry.style, span - 4);
   }
-  if (!state.dialog && !history.length && available >= 3) {
-    const showPuppy = available >= 10 && span >= 28;
-    const blockHeight = showPuppy ? 9 : 3;
-    const start = transcriptStart + Math.floor((available - blockHeight) / 2);
-    const center = (row, value, style) =>
-      cell(row, Math.max(margin, Math.floor((width - displayWidth(value)) / 2)), value, style, span);
-    if (showPuppy) {
-      puppy.forEach((line, index) => center(start + index, line, index < 2 ? "rose" : "warm"));
-    }
-    const titleRow = start + (showPuppy ? 6 : 0);
-    center(titleRow, "今天想做点什么？", "base");
-    const hint = state.model ? "试试「帮我找一下项目入口」" : "从 /connect 连接一个模型";
-    center(titleRow + 2, hint, "muted");
-  }
+  if (!state.dialog && !history.length && available > 0)
+    renderWelcome(paint, width, span, transcriptStart, available, color);
+
   const statusRow = composerTop - 1;
   const status = scroll ? "查看历史 · Ctrl+End 回到底部" : state.status;
-  cell(statusRow, margin + 2, status, "muted", span - 4);
+  cell(statusRow, margin, status, scroll ? "muted" : "gold", span);
   suggestions.forEach((item, index) => {
     const row = composerTop - suggestions.length - 1 + index;
     const active = firstSuggestion + index === highlighted;
@@ -371,37 +411,33 @@ export function renderWorkspace(state) {
   });
 
   if (color) {
-    fill(paint, composerTop, margin, span, "panelTitle");
-    paint(composerTop, margin + 2, "消息", "panelTitle");
-    if (span >= 40) paint(composerTop, width - margin - 13, "Enter 发送", "panelTitle");
-    for (let row = 1; row <= inputRows; row++) {
-      fill(paint, composerTop + row, margin, span, "panel");
-      fill(paint, composerTop + row, margin, 1, "composerRail");
-    }
-    fill(paint, composerTop + composerHeight - 1, margin, span, "panel");
+    for (let row = 0; row < composerHeight; row++) fill(paint, composerTop + row, margin, span, "panel");
   } else {
-    outline(paint, composerTop, margin, span, composerHeight, "panelTitle", " 消息 ");
+    outline(paint, composerTop, margin, span, composerHeight, "panelAccent");
   }
   paint(composerTop + 1, margin + 2, ">", "panelAccent");
   const fieldStart = Math.max(0, field.position.row - inputRows + 1);
   if (!text && composer.active) {
-    cell(composerTop + 1, margin + 4, "输入任务，或键入 / 查看命令", "panelMuted", span - 6);
+    cell(composerTop + 1, margin + 4, "给小笨狗一个任务", "panelMuted", span - 6);
   } else {
     field.lines.slice(fieldStart, fieldStart + inputRows).forEach((line, index) =>
       paint(composerTop + 1 + index, margin + 4, line, "panel", span - 6));
   }
-  const footer = state.model ? [state.model, state.approval].filter(Boolean).join("  /  ") : "未连接";
-  const actions = width >= 75
-    ? "/connect 连接   /models 模型   Ctrl+P 命令"
-    : width >= 45 ? "/connect  /models  /help" : "/connect";
-  const actionsWidth = displayWidth(actions);
+  const modelAction = state.model ? "/models" : "/connect";
+  const actions = span >= 68 ? `${modelAction}   Ctrl+P 命令` : modelAction;
+  const actionsWidth = displayWidth(actions, safe);
   const footerWidth = Math.max(0, span - actionsWidth - 2);
-  const modelLabel = clipped(footer, Math.max(0, footerWidth - 3), safe);
-  if (footerWidth > 3)
-    cell(height - 1, margin, `  ${modelLabel} `, state.model ? "active" : "inactive", footerWidth);
-  cell(height - 1, width - margin - actionsWidth, actions, "muted");
+  const footer = state.model || "未连接模型";
+  const approval = state.model && state.approval ? ` · ${state.approval}` : "";
+  const approvalWidth = displayWidth(approval, safe);
+  const showApproval = approval && (approvalWidth + 8 <= footerWidth);
+  const modelWidth = showApproval ? footerWidth - approvalWidth : footerWidth;
+  const modelLabel = clipped(footer, modelWidth, safe);
+  cell(height - 1, margin, modelLabel, state.model ? "base" : "muted", modelWidth);
+  if (showApproval) cell(height - 1, margin + displayWidth(modelLabel, safe), approval, "muted", approvalWidth);
+  cell(height - 1, width - margin - actionsWidth, actions, "rose");
   const cursor = state.dialog
-    ? renderDialog(paint, width, height, state.dialog, safe, color)
+    ? renderDialog(canvas, width, height, state.dialog, safe, color)
     : composer.active
       ? { row: composerTop + 1 + field.position.row - fieldStart, column: margin + 4 + field.position.column }
       : undefined;
