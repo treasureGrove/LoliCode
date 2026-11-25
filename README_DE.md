@@ -1,21 +1,28 @@
-# LoliCode
+<h1 align="center">LoliCode</h1>
 
-[English](README.md) · [简体中文](README_ZH.md) · [日本語](README_JA.md)
+<p align="center"><strong>Eine KI-Programmierumgebung mit Anime-Begleiterin auf dem Desktop.</strong><br>
+Verbinde dein bevorzugtes Modell, öffne ein Projekt und prüfe die Änderungen und Testergebnisse des Agenten.</p>
 
-**Mit 小笨狗, deiner Anime-Begleiterin, am Desktop programmieren. LoliCode verbindet das Modell deiner Wahl mit deinem Projekt. So kannst du Werkzeuge ausführen, Testergebnisse ansehen und Codeänderungen prüfen.**
+<p align="center">
+  <strong><a href="https://lolicode.com/#download">Für Windows x64 herunterladen</a></strong><br>
+  <a href="https://github.com/treasureGrove/LoliCode-Releases/releases/latest">Installer und portable ZIP auf GitHub</a> ·
+  <a href="https://lolicode.com/#film">Demo ansehen</a> ·
+  <a href="docs/README.md">Dokumentation</a>
+</p>
 
-LoliCode gibt dem Modell deiner Wahl die Werkzeuge, um Projektdateien zu bearbeiten und Befehle auszuführen. Übergib zum Beispiel ein GitHub-Issue an Loli Secretary. Der Agent bearbeitet es in einem eigenen Git-Worktree. Du gibst angeforderte Aktionen frei, prüfst die Änderungen und kannst anschließend einen Pull Request als Entwurf erstellen.
+<p align="center">
+  <a href="README.md">English</a> · <a href="README_ZH.md">简体中文</a> · <a href="README_JA.md">日本語</a>
+</p>
 
-[Stabile Windows-Version](https://github.com/treasureGrove/LoliCode-Releases/releases/latest) · [43-Sekunden-Demo mit 小笨狗 ansehen](https://lolicode.com/#film) · [Vom Issue zum PR-Entwurf (Chinesisch)](docs/guides/lolicode-secretary.md) · [Community und Konto](https://lolicode.com/all) · [Quellcode](https://github.com/treasureGrove/LoliCode) · [Dokumentation](docs/README.md) · [Änderungen](CHANGELOG.md)
+<p align="center">
+  <a href="https://lolicode.com/#film"><img src="docs/images/lolicode/companion-tour-still.webp" width="760" alt="LoliCode-Demo mit der Desktop-Begleiterin 小笨狗 ansehen"></a>
+</p>
 
-<a href="https://lolicode.com/#film">
-  <picture>
-    <source media="(prefers-reduced-motion: reduce)" srcset="https://raw.githubusercontent.com/treasureGrove/LoliCode/main/docs/images/lolicode/companion-tour-still.webp">
-    <img src="docs/images/lolicode/companion-tour.webp" width="896" height="504" alt="Die Demo zeigt, wie du über die Desktop-Begleiterin eine Aufgabe zur Freigabe öffnest und anschließend Werkzeugaufrufe und Codeänderungen prüfst">
-  </picture>
-</a>
+<p align="center">Wenn dir LoliCode gefällt, kannst du es oben im Repository mit <strong>Star</strong> speichern.</p>
 
 ## Bereits verfügbar
+
+Übergib ein GitHub-Issue an [Loli Secretary (Chinesisch)](docs/guides/lolicode-secretary.md). Der Agent bearbeitet es in einem eigenen Git-Worktree. Du gibst angeforderte Aktionen frei, prüfst die Änderungen und kannst anschließend einen Pull Request als Entwurf erstellen.
 
 - **Ein zentraler Agent:** gestreamte Gespräche, Projektdateien, Terminalwerkzeuge, Berechtigungsabfragen, Rückfragen und Auswahlmöglichkeiten, Abbruch, Gesprächsverlauf und Änderungsansicht.
 - **Gemeinsame Modelle und Zugänge:** API-Anbieter, unterstützte Kontoanmeldungen, Modellverzeichnisse und verfügbare Modelloptionen verwalten. Kontextgrenzen und Denkstufen hängen von den Angaben und Fähigkeiten des jeweiligen Dienstes ab.
@@ -69,5 +76,7 @@ Prüfungen stehen im [Beitragsleitfaden](CONTRIBUTING.md), Paketbau und Signieru
 ## Hilfe, Herkunft und Lizenz
 
 Für Rückmeldungen stehen [LoliCode Issues](https://github.com/treasureGrove/LoliCode/issues), [Support](SUPPORT.md), [Sicherheitsrichtlinie](SECURITY.md) und [Verhaltenskodex](CODE_OF_CONDUCT.md) bereit.
+
+[Community und Konto](https://lolicode.com/all) · [Änderungen](CHANGELOG.md)
 
 LoliCode wird unabhängig gepflegt. Die Konfigurationsgrundlage stammt aus CC Switch; die ursprüngliche [MIT-Lizenz](LICENSE), Urheberrechtshinweise und die [Basisrevision](FORK_BASELINE.md) bleiben erhalten. Weitere übernommene Komponenten stehen in den [Drittanbieterhinweisen](THIRD_PARTY_NOTICES.md). Die Nennung eines Referenzprojekts bedeutet keine vollständige Integration oder Plugin-Kompatibilität.

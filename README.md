@@ -1,21 +1,28 @@
-# LoliCode
+<h1 align="center">LoliCode</h1>
 
-[简体中文](README_ZH.md) · [日本語](README_JA.md) · [Deutsch](README_DE.md)
+<p align="center"><strong>An AI coding workspace with an anime desktop companion.</strong><br>
+Connect your model, open a project, and review the agent’s edits and test results.</p>
 
-**Code alongside 小笨狗, LoliCode’s anime desktop companion. This desktop coding agent harness connects your model to your project so you can run tools, check test results, and review edits.**
+<p align="center">
+  <strong><a href="https://lolicode.com/#download">Download for Windows x64</a></strong><br>
+  <a href="https://github.com/treasureGrove/LoliCode-Releases/releases/latest">GitHub installer &amp; portable ZIP</a> ·
+  <a href="https://lolicode.com/#film">Watch the demo</a> ·
+  <a href="docs/README.md">Docs</a>
+</p>
 
-Open a folder and ask the agent to read files, run tests, and show its edits. For GitHub work, hand an issue to Loli Secretary. It can work in an isolated Git worktree and prepare a draft pull request for your review. Your desktop companion points you to tasks that need permission or an answer.
+<p align="center">
+  <a href="README_ZH.md">简体中文</a> · <a href="README_JA.md">日本語</a> · <a href="README_DE.md">Deutsch</a>
+</p>
 
-[Download for Windows](https://github.com/treasureGrove/LoliCode-Releases/releases/latest) · [Watch the 43-second companion demo](https://lolicode.com/#film) · [Secretary workflow (中文)](docs/guides/lolicode-secretary.md) · [Documentation](docs/README.md)
+<p align="center">
+  <a href="https://lolicode.com/#film"><img src="docs/images/lolicode/companion-tour-still.webp" width="760" alt="Watch the LoliCode workspace demo with the pink-haired desktop companion 小笨狗"></a>
+</p>
 
-<a href="https://lolicode.com/#film">
-  <picture>
-    <source media="(prefers-reduced-motion: reduce)" srcset="https://raw.githubusercontent.com/treasureGrove/LoliCode/main/docs/images/lolicode/companion-tour-still.webp">
-    <img src="docs/images/lolicode/companion-tour.webp" width="896" height="504" alt="Watch the desktop companion open a task for approval, then inspect the tool calls and code diff">
-  </picture>
-</a>
+<p align="center">If you’d like to keep LoliCode handy, click <strong>Star</strong> at the top of this repository.</p>
 
 ## What you can use today
+
+Hand a GitHub issue to [Loli Secretary (中文)](docs/guides/lolicode-secretary.md) to work in an isolated Git worktree and prepare a draft pull request for your review. The desktop companion points you to tasks that need permission or an answer.
 
 - **One main Agent workspace:** streaming conversations, project files, terminal tools, permissions, questions, cancellation, session history, and file-change review.
 - **Shared channels and models:** manage API providers and supported account authorizations, discover models, and select available model options. Context limits and reasoning settings depend on the information and capabilities supplied by the upstream service.

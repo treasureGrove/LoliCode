@@ -1,21 +1,28 @@
-# LoliCode
+<h1 align="center">LoliCode</h1>
 
-[English](README.md) · [日本語](README_JA.md) · [Deutsch](README_DE.md)
+<p align="center"><strong>和桌宠小笨狗一起写代码。</strong><br>
+接入你常用的模型，打开项目，让 Agent 改代码、跑测试，再逐行审阅改动。</p>
 
-**和二次元桌宠小笨狗一起写代码。LoliCode 是桌面编程 Agent Harness，接入你选的模型，在自己的项目里运行工具、检查测试结果和审阅改动。**
+<p align="center">
+  <strong><a href="https://lolicode.com/#download">下载 Windows x64 版</a></strong><br>
+  <a href="https://github.com/treasureGrove/LoliCode-Releases/releases/latest">GitHub 安装版与便携版</a> ·
+  <a href="https://lolicode.com/#film">观看实机演示</a> ·
+  <a href="docs/README.md">文档</a>
+</p>
 
-打开项目，让 Agent 读取文件、运行测试，再看具体改了哪几行。也可以把 GitHub Issue 交给 Loli 秘书，在独立工作树里处理，审阅后创建草稿 PR。桌宠会在需要你授权或回答时指向对应任务。
+<p align="center">
+  <a href="README.md">English</a> · <a href="README_JA.md">日本語</a> · <a href="README_DE.md">Deutsch</a>
+</p>
 
-[下载 Windows 版](https://github.com/treasureGrove/LoliCode-Releases/releases/latest) · [观看小笨狗的 43 秒工作台演示](https://lolicode.com/#film) · [秘书如何处理 Issue](docs/guides/lolicode-secretary.md#接收和回复-github-工作) · [文档](docs/README.md)
+<p align="center">
+  <a href="https://lolicode.com/#film"><img src="docs/images/lolicode/companion-tour-still.webp" width="760" alt="LoliCode 工作台演示封面，点击观看桌宠小笨狗和实际编程流程"></a>
+</p>
 
-<a href="https://lolicode.com/#film">
-  <picture>
-    <source media="(prefers-reduced-motion: reduce)" srcset="https://raw.githubusercontent.com/treasureGrove/LoliCode/main/docs/images/lolicode/companion-tour-still.webp">
-    <img src="docs/images/lolicode/companion-tour.webp" width="896" height="504" alt="跟着桌宠小笨狗打开待授权的任务、查看工具调用和代码差异，点击观看完整演示">
-  </picture>
-</a>
+<p align="center">喜欢 LoliCode 的话，可以点仓库右上角的 <strong>Star</strong>，下次方便找到。</p>
 
 ## 现在可以做什么
+
+把 GitHub Issue 交给 [Loli 秘书](docs/guides/lolicode-secretary.md#接收和回复-github-工作)，它会在独立工作树里处理，供你审阅后创建草稿 PR。桌宠会在需要你授权或回答时指向对应任务。
 
 - **一个主 Agent 工作台**：流式对话、项目文件读写、终端工具、权限确认、提问与选项、停止任务、会话历史和文件变更查看。
 - **统一模型与渠道**：管理 API 渠道及支持的账户授权，获取模型目录，选择模型和可用参数。上下文、思考强度等能力取决于上游实际提供的信息与支持情况。

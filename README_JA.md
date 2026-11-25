@@ -1,21 +1,28 @@
-# LoliCode
+<h1 align="center">LoliCode</h1>
 
-[English](README.md) · [简体中文](README_ZH.md) · [Deutsch](README_DE.md)
+<p align="center"><strong>デスクトップの相棒「小笨狗」と一緒にコーディング。</strong><br>
+好きなモデルをつないでプロジェクトを開き、エージェントの変更やテスト結果を確認できます。</p>
 
-**デスクトップの相棒「小笨狗」と一緒にコーディング。LoliCode は、好きなモデルでプロジェクト内のツールを実行し、テスト結果やコードの差分を確認できるデスクトップ用エージェントハーネスです。**
+<p align="center">
+  <strong><a href="https://lolicode.com/#download">Windows x64 版をダウンロード</a></strong><br>
+  <a href="https://github.com/treasureGrove/LoliCode-Releases/releases/latest">GitHub のインストーラーとポータブル版</a> ·
+  <a href="https://lolicode.com/#film">デモを見る</a> ·
+  <a href="docs/README.md">ドキュメント</a>
+</p>
 
-LoliCode は、選んだモデルがプロジェクトのファイルを読み書きし、コマンドを実行するためのデスクトップ環境です。たとえば GitHub の Issue を Loli 秘書に任せると、専用の Git ワークツリーで作業を進めます。必要な操作を承認し、差分を確認してから、ドラフトのプルリクエストを作成できます。
+<p align="center">
+  <a href="README.md">English</a> · <a href="README_ZH.md">简体中文</a> · <a href="README_DE.md">Deutsch</a>
+</p>
 
-[Windows 安定版](https://github.com/treasureGrove/LoliCode-Releases/releases/latest) · [小笨狗と作業する様子を43秒で見る](https://lolicode.com/#film) · [Issue からドラフト PR まで（中国語）](docs/guides/lolicode-secretary.md) · [コミュニティ・アカウント](https://lolicode.com/all) · [ソース](https://github.com/treasureGrove/LoliCode) · [ドキュメント](docs/README.md) · [更新履歴](CHANGELOG.md)
+<p align="center">
+  <a href="https://lolicode.com/#film"><img src="docs/images/lolicode/companion-tour-still.webp" width="760" alt="デスクトップの相棒「小笨狗」が登場する LoliCode のデモを見る"></a>
+</p>
 
-<a href="https://lolicode.com/#film">
-  <picture>
-    <source media="(prefers-reduced-motion: reduce)" srcset="https://raw.githubusercontent.com/treasureGrove/LoliCode/main/docs/images/lolicode/companion-tour-still.webp">
-    <img src="docs/images/lolicode/companion-tour.webp" width="896" height="504" alt="小笨狗から承認待ちのタスクを開き、ツールの実行結果とコードの差分を確認するデモ">
-  </picture>
-</a>
+<p align="center">LoliCode が気に入ったら、リポジトリ上部の <strong>Star</strong> から保存できます。</p>
 
 ## 現在使える機能
+
+GitHub の Issue を [Loli 秘書（中国語）](docs/guides/lolicode-secretary.md)に任せると、専用の Git ワークツリーで作業を進めます。必要な操作を承認し、差分を確認してから、ドラフトのプルリクエストを作成できます。
 
 - **一つのメイン Agent**：ストリーミング会話、プロジェクト内のファイル操作、ターミナル、権限確認、質問・選択肢、停止、会話履歴、変更内容の確認。
 - **モデルと接続先の共通管理**：API 接続先や対応するアカウント認証、モデル一覧、利用可能なモデル設定を管理。コンテキスト長や推論強度は上流サービスの情報と対応状況に依存します。
@@ -69,5 +76,7 @@ pnpm dev --additional-watch-folders ../crates/lolicode-agent
 ## サポート・出典・ライセンス
 
 [LoliCode Issues](https://github.com/treasureGrove/LoliCode/issues)、[サポート](SUPPORT.md)、[セキュリティ方針](SECURITY.md)、[行動規範](CODE_OF_CONDUCT.md)を利用してください。
+
+[コミュニティ・アカウント](https://lolicode.com/all) · [更新履歴](CHANGELOG.md)
 
 LoliCode は独立して保守しています。設定基盤は CC Switch に由来し、元の [MIT ライセンス](LICENSE)、著作権表示、[ベースライン記録](FORK_BASELINE.md)を保持しています。他の再利用コンポーネントは[第三者通知](THIRD_PARTY_NOTICES.md)に記載しています。参照プロジェクトの全機能やプラグイン互換性を約束するものではありません。
