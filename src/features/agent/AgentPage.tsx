@@ -336,7 +336,8 @@ function projectDockKey(path: string) {
 const compareSidebarSessions = (a: AgentSession, b: AgentSession) =>
   Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) ||
   b.updatedAt - a.updatedAt;
-// Secretary conversations belong to the top-level entry and its task switcher.
+// The top-level entry opens the global secretary. Old project secretaries
+// remain available through the project menu without becoming ordinary tasks.
 const isWorkspaceTask = (session: AgentSession) =>
   session.coordination?.role !== "secretary" &&
   session.coordination?.role !== "worker";
@@ -4686,6 +4687,22 @@ export function AgentPage({
         .sort(compareSidebarSessions),
     [sessions, showArchived, sessionQuery, withCommittedTitle],
   );
+  const secretaryProjectPath = workspace?.standalone
+    ? undefined
+    : workspace?.path;
+  const projectSecretaries = useMemo(
+    () =>
+      sessions
+        .filter(
+          (session) =>
+            session.projectPath === secretaryProjectPath &&
+            session.coordination?.role === "secretary" &&
+            Boolean(session.archived) === showArchived,
+        )
+        .map(withCommittedTitle)
+        .sort(compareSidebarSessions),
+    [secretaryProjectPath, sessions, showArchived, withCommittedTitle],
+  );
   const workspaceExpanded = workspace
     ? (expandedWorkspaces[workspace.path] ?? true)
     : false;
@@ -5192,6 +5209,15 @@ export function AgentPage({
                     isCurrentWorkspace
                       ? () => navigateWorkspace(() => void createSession())
                       : undefined
+                  }
+                  secretaries={
+                    isCurrentWorkspace ? projectSecretaries : undefined
+                  }
+                  onOpenSecretary={(id) =>
+                    navigateWorkspace(() => {
+                      setError(null);
+                      setSessionId(id);
+                    })
                   }
                   onTogglePin={() => void updateProject(project)}
                   onRename={

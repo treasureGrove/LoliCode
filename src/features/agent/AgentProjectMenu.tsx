@@ -6,6 +6,7 @@ import {
   Pin,
   PinOff,
   Plus,
+  UsersRound,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -33,6 +34,8 @@ export const AgentProjectMenu = memo(function AgentProjectMenu({
   disabled,
   inProjectList,
   onCreateTask,
+  secretaries,
+  onOpenSecretary,
   onRename,
   onTogglePin,
   onRemove,
@@ -44,6 +47,8 @@ export const AgentProjectMenu = memo(function AgentProjectMenu({
   disabled: boolean;
   inProjectList?: boolean;
   onCreateTask?: () => void;
+  secretaries?: ReadonlyArray<{ id: string; title: string }>;
+  onOpenSecretary?: (sessionId: string) => void;
   onRename?: (name: string) => Promise<void>;
   onTogglePin: () => void;
   onRemove: () => void;
@@ -106,6 +111,13 @@ export const AgentProjectMenu = memo(function AgentProjectMenu({
               {standalone ? "新建独立任务" : "在此项目中新建任务"}
             </DropdownMenuItem>
           )}
+          {onOpenSecretary &&
+            secretaries?.map(({ id, title }) => (
+              <DropdownMenuItem key={id} onSelect={() => onOpenSecretary(id)}>
+                <UsersRound size={14} />
+                打开项目秘书：{title || "秘书会话"}
+              </DropdownMenuItem>
+            ))}
           {onRename && (
             <DropdownMenuItem
               onSelect={() => {

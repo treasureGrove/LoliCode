@@ -1671,7 +1671,7 @@ describe("AgentPage", () => {
   });
 
   it.each([false, true])(
-    "opens ordinary project tasks instead of old secretaries on startup and project switches (saved secretary: %s)",
+    "opens an old secretary through project actions while startup and project switches select ordinary tasks (saved secretary: %s)",
     async (savedSecretary) => {
       const other = "D:/fixture/other";
       const chief: AgentSession = {
@@ -1730,6 +1730,21 @@ describe("AgentPage", () => {
         screen.getByRole("heading", { name: session.title }),
       ).toBeInTheDocument();
       expect(agentApi.getSession).not.toHaveBeenCalledWith(chief.id);
+      fireEvent.keyDown(
+        screen.getByRole("button", { name: "管理项目：project" }),
+        { key: "Enter" },
+      );
+      fireEvent.click(
+        screen.getByRole("menuitem", { name: `打开项目秘书：${chief.title}` }),
+      );
+      await flush();
+      expect(
+        screen.getByRole("heading", { name: chief.title }),
+      ).toBeInTheDocument();
+      expect(agentApi.getSession).toHaveBeenCalledWith(chief.id);
+      expect(
+        screen.getByRole("button", { name: "打开 Loli 秘书" }),
+      ).toHaveAttribute("aria-pressed", "false");
       fireEvent.click(screen.getByRole("button", { name: "other" }));
       await flush();
       expect(

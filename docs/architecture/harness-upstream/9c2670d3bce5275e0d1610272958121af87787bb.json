@@ -1,0 +1,112 @@
+{
+  "version": "0.2.2-rc.5",
+  "commit": "9c2670d3bce5275e0d1610272958121af87787bb",
+  "release": "https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.5",
+  "npmTarball": "https://registry.npmjs.org/@deepseek-ai/dsh/-/dsh-0.2.2-rc.5.tgz",
+  "npmBytes": 2201324,
+  "npmIntegrity": "sha512-cNbp12tLYLUTXaVli7zwwMjzmmEVCD1PRldg4oKtXM4+lFYckcaliMS2PU/FoThB4iAN/fKOSID0nrtRZU4Gjw==",
+  "artifactIntegrityVerified": true,
+  "baseline": {
+    "version": "0.2.2-rc.2",
+    "commit": "ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c"
+  },
+  "sourceComparison": "https://github.com/deepseek-ai/deepseek-harness/compare/dsh-v0.2.2-rc.2...dsh-v0.2.2-rc.5",
+  "dependencyFindings": [
+    "The exact official release updates the pinned Harness package family. The root manifest adds @deepseek-ai/dsh-deepseek-chat-import.",
+    "Registry metadata for the 326 prior dsh-* packages retains existing dependency, peer, optional and engine ranges apart from the exact Harness version. The import plugin also uses zod 4.6.6.",
+    "Node >=24.9.0 remains the published floor. The runtime npm lock remains independent of the desktop pnpm and Cargo locks.",
+    "Regenerating the runtime lock resolved newer versions of @smithy/core, encodeurl, jose, standardwebhooks and ws under the existing ranges. Node 24.19.0, zod 4.6.6 and the desktop locks stay at their existing pins."
+  ],
+  "surfaceFindings": [
+    "Compared the installed rc.2 and rc.5 SDK JSON-RPC server, SDK app and minimal composition, public protocol, session format, JSONL persistence, subagent control, Plan and Goal shipped JavaScript and declarations after normalizing version pins. These examined surfaces are unchanged.",
+    "The examined Session Controller generated declaration adds deepseekChatImport/owner-only. The base composition changes Web provider defaults. The published import patch must be selected separately from the stock SDK composition."
+  ],
+  "capabilities": [
+    {
+      "since": "0.2.2-rc.3",
+      "capability": "DeepSeek chat export import",
+      "upstream": "https://github.com/deepseek-ai/deepseek-harness/tree/9c2670d3bce5275e0d1610272958121af87787bb/packages/experimental/deepseek-chat-import",
+      "lolicode": [
+        "src-tauri/src/services/harness_desktop.rs",
+        "src/lib/api/agent.ts",
+        "src/features/agent/AgentPage.tsx"
+      ],
+      "status": "official plugin ships in npm; desktop host and UI verification pending",
+      "notes": "Upstream optional patch adds an owner-only upload route and a Web sidebar entry. The prior rc.3 audit proved the upstream route with synthetic data. LoliCode still needs desktop workspace admission and independent session storage registration.",
+      "acceptance": "In a disposable profile, import a synthetic DeepSeek ZIP into the selected workspace. Check non-owner and unknown workspace rejection, partial errors, session list refresh, attachments, and continuation after closing and reopening the app."
+    },
+    {
+      "since": "0.2.2-rc.3",
+      "capability": "Windows desktop updater restart",
+      "upstream": "https://github.com/deepseek-ai/deepseek-harness/blob/38a6a5c965aa99ab525161efb7cc5cf1fe62fced/apps/desktop/installer/restart-status.h",
+      "lolicode": [
+        "src-tauri/nsis/installer.nsi",
+        "src-tauri/src/commands/settings.rs"
+      ],
+      "status": "separate desktop host; candidate native verification pending",
+      "notes": "Upstream changes the restart helper working directory. LoliCode manages installation and relaunch through its own Tauri and NSIS integration.",
+      "acceptance": "Use an isolated Windows install to apply and relaunch an update from the prior signed installer. Verify the active executable, working directory, saved channels and resumable sessions."
+    },
+    {
+      "since": "0.2.2-rc.4",
+      "capability": "Unexpected DeepSeek model response",
+      "upstream": "https://github.com/deepseek-ai/deepseek-harness/blob/3f321d32bfe382212a8ed8785c1d47a5a300aa23/packages/llm/llm-deepseek/src/translate.ts",
+      "lolicode": [
+        "src-tauri/src/services/harness_gateway.rs",
+        "src-tauri/src/services/harness_desktop.rs",
+        "packages/lolicode-harness-runtime/tests/host-operations.test.mjs"
+      ],
+      "status": "inherited on official DeepSeek adapter; desktop gateway parity pending",
+      "notes": "The native DeepSeek response translator handles refusal responses. Configured LoliCode channels use the scoped llm-pi-ai route and need their own regression coverage.",
+      "acceptance": "Replay abnormal responses on a synthetic official DeepSeek endpoint and on the LoliCode channel gateway. Verify an actionable error, preserved prior turns, one terminal state, and a successful next turn."
+    },
+    {
+      "since": "0.2.2-rc.4",
+      "capability": "LiveShare desktop tunnel startup",
+      "upstream": "https://github.com/deepseek-ai/deepseek-harness/blob/3f321d32bfe382212a8ed8785c1d47a5a300aa23/packages/experimental/liveshare/src/host/tunnel-worker.ts",
+      "lolicode": [
+        "src-tauri/src/services/dsh_marketplace.rs",
+        "src/features/agent/AgentDeepSeekMarketplacePanel.tsx"
+      ],
+      "status": "separate Electron host fix; LoliCode sharing integration and service verification pending",
+      "notes": "Upstream explicitly starts the tunnel worker in the Electron host Node mode. Plugin listing alone does not provide the upstream desktop sharing surface.",
+      "acceptance": "With an authorized LiveShare service test account in an isolated workspace, create a share from the target desktop host, connect as the intended viewer, terminate the share, and observe worker shutdown and revoked access."
+    },
+    {
+      "since": "0.2.2-rc.5",
+      "capability": "Automatic search provider selection by model route",
+      "upstream": "https://github.com/deepseek-ai/deepseek-harness/blob/9c2670d3bce5275e0d1610272958121af87787bb/docs/upgrade-guide/v0.2.2-rc.4/web-search-deepseek-model-default/guide.zh.md",
+      "lolicode": [
+        "packages/lolicode-harness-runtime/profile.cordis.patch.yml",
+        "src-tauri/src/services/agent_web.rs",
+        "src-tauri/src/services/harness_gateway.rs",
+        "packages/lolicode-harness-runtime/tests/host-operations.test.mjs"
+      ],
+      "status": "desktop keeps existing host tool; official provider and credentials verification pending",
+      "notes": "The upstream base leaves searchProvider unset and the web service selects Messages search for deepseek-official and deepseek-account, and DeepSeek Search API for other routes. An explicit provider overrides automatic selection. The Messages endpoint and credentials are separate from the selected model channel. The LoliCode SDK explicitly disables upstream tool-web and registers the approval-gated public-web host tools. Its local llm-pi-ai gateway route does not identify as either upstream official route.",
+      "acceptance": "Exercise the existing host web tools with and without search configured. For future official provider integration, use separate test credentials and mocked endpoints to verify the two upstream routes, explicit provider precedence, absence of channel credential forwarding, approval and result presentation. Verify the actual service separately."
+    }
+  ],
+  "isolatedValidation": {
+    "baseCommit": "348546a5a",
+    "bundledRuntime": "Windows x64, Node 24.19.0",
+    "typecheck": "passed",
+    "rendererBuild": "passed",
+    "packagingTests": {
+      "passed": 19
+    },
+    "sdkTests": {
+      "passed": 49,
+      "failed": 0
+    },
+    "history": "Real rc.1 and rc.2 root and worker sessions resumed using the bundled rc.5 runtime. Cold reads preserved the original bytes.",
+    "publicWeb": "Host registration and execution passed with and without a configured search provider using a mock service.",
+    "chatImport": "The official import route added two synthetic sessions, reported one missing entry, kept a real PNG, and preserved history and attachment bytes on relocation to an isolated per-session home. Desktop import UI and session registration were outside this probe.",
+    "windowsDesktop": {
+      "full": "Passed under a disposable standard Windows account. Verified image input, approval, workspace switching, keyboard steering, history after restart, existing project secretary from the project menu, global secretary delegation, native website delivery, worker queue recovery, browser tools, and automation.",
+      "dock": "Passed under a standard Windows account. Verified compact sidebar navigation, split panes, native browsers, project tree, interactive terminal, folding and restoring after restart.",
+      "nativeModes": "Passed Plan approval and Goal across restart in the same bundled rc.5 runtime.",
+      "backgroundJobs": "Passed cross-turn execution, wake, and cancellation in the same bundled rc.5 runtime."
+    }
+  }
+}

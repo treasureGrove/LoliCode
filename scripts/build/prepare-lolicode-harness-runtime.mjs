@@ -31,7 +31,7 @@ const pinnedVersion = JSON.parse(
   readFileSync(path.join(runtime, "package.json"), "utf8"),
 ).dependencies[packageName];
 const pinnedIntegrity =
-  "sha512-J727r2C471x2cYXGjqZ0D9T1ZyaYQDFH/Ynx8iq+85oslM4nky5YTBnbAuTtxMhW7nhY8wuAEfjjFCQ+K6Swgw==";
+  "sha512-cNbp12tLYLUTXaVli7zwwMjzmmEVCD1PRldg4oKtXM4+lFYckcaliMS2PU/FoThB4iAN/fKOSID0nrtRZU4Gjw==";
 const registry = "https://registry.npmjs.org/";
 const repository = fileURLToPath(new URL("../../", import.meta.url));
 const destination = path.join(
