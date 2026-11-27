@@ -10,7 +10,7 @@ import { installSecretaryReport, reportToolName } from "./host-secretary-report.
 import {
   formatBoundedSessionMarkdown, logCold, logMissing, materializedSessionPath, sessionMarkdownError,
 } from "./host-session-markdown.mjs";
-import { followNativeSession, nativePagination, nativeSessionError, notifyNativeSessionFrame, prepareNativeSession, readNativeSession } from "./host-session-native.mjs";
+import { findLocalCatalogChild, followNativeSession, nativePagination, nativeSessionError, notifyNativeSessionFrame, prepareNativeSession, readNativeSession } from "./host-session-native.mjs";
 
 export { Config };
 export const name = "lolicode-host-operations";
@@ -379,6 +379,24 @@ class LoliCodeSdkServer extends HarnessSdkJsonRpcServer {
     return undefined;
   }
 
+  #nativeTarget(root, childId, directChild) {
+    if (typeof directChild !== "boolean" || (directChild && childId === undefined)) {
+      throw new Error("Invalid native child scope");
+    }
+    if (childId === undefined) return root;
+    if (!validSessionId(childId) || childId === root.session.id) throw new Error("Invalid LoliCode worker session");
+    if (!this.#ctx.agents.get(childId)) return null;
+    const child = this.#ownedWorker(root, childId);
+    if (!child) throw new Error("Worker is not owned by this LoliCode session");
+    if (directChild) {
+      const projection = this.#ctx.get("sessionProjections")?.snapshot(root.session, new Set(["subagentCatalog"]));
+      if (child.session.header.parentSession !== root.session.id || !findLocalCatalogChild(projection?.values.subagentCatalog, childId)) {
+        throw new Error("Worker is not a direct child of this LoliCode session");
+      }
+    }
+    return child;
+  }
+
   async #readSessionMarkdown(params) {
     const root = this.#ownedRoot(readSessionId(params, "childSessionId"));
     const { childSessionId } = params;
@@ -406,20 +424,15 @@ class LoliCodeSdkServer extends HarnessSdkJsonRpcServer {
 
   async #readNativeSession(params) {
     if (!params || Object.keys(params).some((key) =>
-      !["sessionId", "childSessionId", "beforeSeq", "throughSeq", "maxMessages"].includes(key))) {
+      !["sessionId", "childSessionId", "directChild", "beforeSeq", "throughSeq", "maxMessages"].includes(key))) {
       throw new Error("Invalid native session parameters");
     }
-    const { sessionId, childSessionId, ...request } = params;
+    const { sessionId, childSessionId, directChild = false, ...request } = params;
     if (!validSessionId(sessionId)) throw new Error("Invalid LoliCode session");
     const pagination = nativePagination(request);
     const root = this.#ownedRoot(sessionId);
-    let selected = root;
-    if (childSessionId !== undefined) {
-      if (!validSessionId(childSessionId) || childSessionId === sessionId) throw new Error("Invalid LoliCode worker session");
-      if (!this.#ctx.agents.get(childSessionId)) return null;
-      selected = this.#ownedWorker(root, childSessionId);
-      if (!selected) throw new Error("Worker is not owned by this LoliCode session");
-    }
+    const selected = this.#nativeTarget(root, childSessionId, directChild);
+    if (!selected) return null;
     try {
       if (!await materializedSessionPath(this.#ctx.sessionPersistence, selected.session.id)) throw new Error(logMissing);
       return await readNativeSession(this.#ctx, selected.session.id, pagination);
@@ -430,22 +443,17 @@ class LoliCodeSdkServer extends HarnessSdkJsonRpcServer {
 
   async #followNativeSession(params) {
     if (!params || Object.keys(params).some((key) =>
-      !["sessionId", "childSessionId", "subscriptionId", "maxMessages"].includes(key))) {
+      !["sessionId", "childSessionId", "directChild", "subscriptionId", "maxMessages"].includes(key))) {
       throw new Error("Invalid native follow parameters");
     }
-    const { sessionId, childSessionId, subscriptionId, maxMessages } = params;
+    const { sessionId, childSessionId, directChild = false, subscriptionId, maxMessages } = params;
     if (!validSessionId(sessionId) || !validSessionId(subscriptionId)) throw new Error("Invalid native subscription");
     if (this.#nativeFollows.has(subscriptionId)) throw new Error("Native subscription already exists");
     if (this.#nativeFollows.size >= 8) throw new Error("Too many native subscriptions");
     const pagination = nativePagination({ maxMessages });
     const root = this.#ownedRoot(sessionId);
-    let selected = root;
-    if (childSessionId !== undefined) {
-      if (!validSessionId(childSessionId) || childSessionId === sessionId) throw new Error("Invalid LoliCode worker session");
-      if (!this.#ctx.agents.get(childSessionId)) return null;
-      selected = this.#ownedWorker(root, childSessionId);
-      if (!selected) throw new Error("Worker is not owned by this LoliCode session");
-    }
+    const selected = this.#nativeTarget(root, childSessionId, directChild);
+    if (!selected) return null;
     const entry = { abort: new AbortController(), done: undefined };
     const ready = Promise.withResolvers();
     this.#nativeFollows.set(subscriptionId, entry);

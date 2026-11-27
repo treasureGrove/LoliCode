@@ -30,6 +30,18 @@ pub(crate) fn run_post_import_sync(app_state: &AppState) -> Result<(), AppError>
     }
     app_state.usage_cache.invalidate_all();
 
+    // A restored snapshot can have the same revision or an older one.
+    let proxy = app_state.proxy_service.clone();
+    tauri::async_runtime::spawn(async move {
+        proxy
+            .emit(
+                "channel-center-updated",
+                json!({ "source": "database-restore" }),
+            )
+            .await;
+        proxy.notify_channel_runtime_changed().await;
+    });
+
     if failures.is_empty() {
         Ok(())
     } else {

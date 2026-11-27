@@ -275,6 +275,7 @@ enum Control {
     },
     FollowNative {
         child: Option<String>,
+        direct_child: bool,
         id: String,
         max_messages: Option<u32>,
         reply: oneshot::Sender<Result<Option<HarnessNativeSubscription>, String>>,
@@ -589,6 +590,37 @@ impl HarnessDesktop {
         })
     }
 
+    async fn verified_native_read_context(
+        &self,
+        app: &AppHandle,
+        carrier: &InprocessAgentState,
+        id: &str,
+        root: Option<&str>,
+    ) -> Result<VerifiedSessionRead, String> {
+        let Some(root) = root else {
+            return self.verified_read_context(app, carrier, id).await;
+        };
+        let sdk_id = id
+            .strip_prefix("lc:")
+            .filter(|id| {
+                (1..=128).contains(&id.len())
+                    && id.bytes().all(|byte| matches!(byte, b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'_' | b'-'))
+            })
+            .ok_or("无效的 Harness 子代理编号")?;
+        if id == root {
+            return Err("当前会话不是自己的子代理".into());
+        }
+        let mut context = self.verified_read_context(app, carrier, root).await?;
+        if context.owner_id != root || context.child.is_some() {
+            return Err("无效的 Harness 根会话".into());
+        }
+        // Only the selected root has desktop metadata. The SDK or cold reader
+        // must establish the child relationship inside this root's private store.
+        context.sdk_id = sdk_id.to_owned();
+        context.child = Some(sdk_id.to_owned());
+        Ok(context)
+    }
+
     pub(crate) async fn read_session_markdown(
         &self,
         app: &AppHandle,
@@ -628,28 +660,36 @@ impl HarnessDesktop {
         read_cold_session_markdown(&HarnessPaths::resolve(app)?, &sessions, &context.sdk_id).await
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Native reads carry an explicit root scope and existing pagination"
+    )]
     pub(crate) async fn read_session_native(
         &self,
         app: &AppHandle,
         carrier: &InprocessAgentState,
         id: &str,
+        root: Option<&str>,
         before_seq: Option<u64>,
         through_seq: Option<u64>,
         max_messages: Option<u32>,
     ) -> Result<Value, String> {
         let request = native_read_request(before_seq, through_seq, max_messages)?;
         let context = self
-            .verified_read_context(app, carrier, id)
+            .verified_native_read_context(app, carrier, id, root)
             .await
             .map_err(native_context_error)?;
+        let mut live_request = request.clone();
+        if root.is_some() {
+            live_request["directChild"] = json!(true);
+        }
         if let Some(controls) = &context.controls {
             let child = context.child.clone();
-            let live_request = request.clone();
             let response = tokio::time::timeout(
                 Duration::from_secs(55),
                 forward_live_control(controls, |reply| Control::ReadNative {
                     child,
-                    request: live_request,
+                    request: live_request.clone(),
                     reply,
                 }),
             )
@@ -657,8 +697,10 @@ impl HarnessDesktop {
             .map_err(|_| "读取原生会话超时，请重试")?;
             match response {
                 Some(Ok(Some(mut value))) => {
-                    value["messageAliases"] =
-                        to_value(self.native_aliases_for_context(context).await?)?;
+                    if root.is_none() {
+                        value["messageAliases"] =
+                            to_value(self.native_aliases_for_context(context).await?)?;
+                    }
                     return Ok(value);
                 }
                 Some(Err(error)) => return Err(error),
@@ -671,11 +713,13 @@ impl HarnessDesktop {
                 .strip_prefix("lc:")
                 .ok_or("无效的 Harness 会话归属")?;
             if let Some(mut value) = reader
-                .read_session_native(owner, context.child.as_deref(), &request)
+                .read_session_native(owner, context.child.as_deref(), &live_request)
                 .await?
             {
-                value["messageAliases"] =
-                    to_value(self.native_aliases_for_context(context).await?)?;
+                if root.is_none() {
+                    value["messageAliases"] =
+                        to_value(self.native_aliases_for_context(context).await?)?;
+                }
                 return Ok(value);
             }
         }
@@ -686,9 +730,12 @@ impl HarnessDesktop {
             &sessions,
             &context.sdk_id,
             &request,
+            root.and_then(|id| id.strip_prefix("lc:")),
         )
         .await?;
-        value["messageAliases"] = to_value(self.native_aliases_for_context(context).await?)?;
+        if root.is_none() {
+            value["messageAliases"] = to_value(self.native_aliases_for_context(context).await?)?;
+        }
         Ok(value)
     }
 
@@ -732,11 +779,16 @@ impl HarnessDesktop {
         .map_err(|_| "无法读取原生会话消息关联".to_owned())?
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Native subscriptions carry an explicit root scope and delivery channel"
+    )]
     pub(crate) async fn watch_session_native(
         &self,
         window: &WebviewWindow,
         carrier: &InprocessAgentState,
         id: &str,
+        root: Option<&str>,
         subscription_id: &str,
         max_messages: Option<u32>,
         on_frame: Channel<Value>,
@@ -754,12 +806,13 @@ impl HarnessDesktop {
         let open = async {
             carrier.ensure_started(app).await?;
             let context = self
-                .verified_read_context(app, carrier, id)
+                .verified_native_read_context(app, carrier, id, root)
                 .await
                 .map_err(native_context_error)?;
             if let Some(controls) = context.controls {
                 forward_live_control(&controls, |reply| Control::FollowNative {
                     child: context.child,
+                    direct_child: root.is_some(),
                     id: subscription_id.to_owned(),
                     max_messages,
                     reply,
@@ -776,6 +829,7 @@ impl HarnessDesktop {
                     .follow_session_native(
                         owner,
                         context.child.as_deref(),
+                        root.is_some(),
                         subscription_id.to_owned(),
                         max_messages,
                     )
@@ -3260,6 +3314,7 @@ fn reply_live_native_follow(
     client: &HarnessClient,
     sdk_id: &str,
     child: Option<String>,
+    direct_child: bool,
     id: String,
     max_messages: Option<u32>,
     reply: oneshot::Sender<Result<Option<HarnessNativeSubscription>, String>>,
@@ -3268,7 +3323,7 @@ fn reply_live_native_follow(
     let sdk_id = sdk_id.to_owned();
     tokio::spawn(async move {
         let result = client
-            .follow_session_native(&sdk_id, child.as_deref(), id, max_messages)
+            .follow_session_native(&sdk_id, child.as_deref(), direct_child, id, max_messages)
             .await;
         // A cancelled opening drops a successfully created subscription here,
         // invoking its observer-only cleanup without touching the running Agent.
@@ -3909,11 +3964,12 @@ async fn run_turn(
                 }
                 Control::FollowNative {
                     child,
+                    direct_child,
                     id,
                     max_messages,
                     reply,
                 } => {
-                    reply_live_native_follow(&client, sdk_id, child, id, max_messages, reply);
+                    reply_live_native_follow(&client, sdk_id, child, direct_child, id, max_messages, reply);
                 }
                 Control::WorkerEnqueue { reply, .. } => {
                     let _ = reply.send(Err("子任务正在启动，请稍后再加入队列".into()));
@@ -4123,8 +4179,8 @@ async fn run_compaction(
                     Some(Control::ReadNative { child, request, reply }) => {
                         reply_live_native(client, sdk_id, child, request, reply);
                     }
-                    Some(Control::FollowNative { child, id, max_messages, reply }) => {
-                        reply_live_native_follow(client, sdk_id, child, id, max_messages, reply);
+                    Some(Control::FollowNative { child, direct_child, id, max_messages, reply }) => {
+                        reply_live_native_follow(client, sdk_id, child, direct_child, id, max_messages, reply);
                     }
                     Some(Control::StopWorker { reply, .. } | Control::Approval { reply, .. }
                         | Control::Enqueue { reply, .. } | Control::WorkerEnqueue { reply, .. }
@@ -4576,8 +4632,8 @@ async fn observe_turn(
                 Some(Control::ReadNative { child, request, reply }) => {
                     reply_live_native(client, sdk_id, child, request, reply);
                 }
-                Some(Control::FollowNative { child, id, max_messages, reply }) => {
-                    reply_live_native_follow(client, sdk_id, child, id, max_messages, reply);
+                Some(Control::FollowNative { child, direct_child, id, max_messages, reply }) => {
+                    reply_live_native_follow(client, sdk_id, child, direct_child, id, max_messages, reply);
                 }
                 Some(Control::ModeCommand { args, reply }) => {
                     let result = accept_mode_command(turn, client, sdk_id, args).await.map(|accepted| {

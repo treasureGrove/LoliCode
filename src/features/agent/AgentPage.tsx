@@ -53,7 +53,6 @@ import {
   ScrollText,
   RefreshCw,
   Info,
-  ListChecks,
   Store,
   Clock3,
 } from "lucide-react";
@@ -148,6 +147,7 @@ import {
   normalizeAgentCommand,
 } from "./AgentCommandTextarea";
 import { AgentActivityStatus } from "./AgentActivityStatus";
+import { AgentTaskProgress } from "./AgentTaskProgress";
 import { AgentModelPicker } from "./AgentModelPicker";
 import { AgentReasoningPicker } from "./AgentReasoningPicker";
 import { AgentContextPicker } from "./AgentContextPicker";
@@ -4652,6 +4652,24 @@ export function AgentPage({
     Boolean(sessionId && stopping[sessionId]);
   const showTaskProgress =
     queuedHere || stoppingHere || runningHere || snapshot?.status === "error";
+  const taskSubagentRoot =
+    usesNativeTranscript &&
+    sessionId &&
+    nativeSession.sessionId === sessionId &&
+    selectedSession?.id === sessionId &&
+    !selectedSession.coordination &&
+    !workspace?.remote
+      ? sessionId
+      : undefined;
+  const catalogEventSeq = useMemo(
+    () =>
+      taskSubagentRoot
+        ? nativeSession.events.findLast(
+            ({ type }) => type === "subagent/catalog",
+          )?.seq
+        : undefined,
+    [taskSubagentRoot, nativeSession.events],
+  );
   const sendingHere = busy === "send" && busySessionId === sessionId;
   const steeringHere = busy === "steer" && busySessionId === sessionId;
   const enqueuingHere = busy === "enqueue" && busySessionId === sessionId;
@@ -5604,13 +5622,17 @@ export function AgentPage({
                 <Folder aria-hidden="true" />
               </button>
             )}
-            {workspace && sessionId && showTaskProgress && (
-              <button
-                type="button"
-                className="wb-task-progress"
-                aria-controls={taskProgressId}
-                title="查看当前任务进度"
-                onClick={() => {
+            {workspace && sessionId && (
+              <AgentTaskProgress
+                key={`${workspace.path}\0${sessionId}`}
+                active={isActive && !activeTool}
+                rootSessionId={taskSubagentRoot}
+                projectPath={workspace.path}
+                projections={nativeSession.read?.projections}
+                catalogEventSeq={catalogEventSeq}
+                showProgress={showTaskProgress}
+                progressId={taskProgressId}
+                onJumpToProgress={() => {
                   const scroll = scrollRef.current;
                   if (!scroll) return;
                   pinChatTail();
@@ -5619,11 +5641,7 @@ export function AgentPage({
                     preventScroll: true,
                   });
                 }}
-                style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
-              >
-                <ListChecks aria-hidden="true" />
-                任务进度
-              </button>
+              />
             )}
             <AgentHelpMenu
               onOpenAbout={onOpenAbout}

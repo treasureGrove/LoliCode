@@ -166,6 +166,69 @@ async function fixture(t, onModelCall, onHostRequest) {
   };
 }
 
+test("ordinary subagents are readable through their own root live and after shutdown", { timeout: 60_000 }, async (t) => {
+  const sessionId = "native-child-root";
+  const otherRoot = "native-child-unrelated-root";
+  const childPrompt = "Inspect the synthetic child fixture";
+  const childAnswer = "Synthetic child result was recorded.";
+  const childReady = Promise.withResolvers();
+  const tool = (response, name, args) => modelReply(response, {
+    tool_calls: [{ index: 0, id: `native_child_${name}`, type: "function", function: { name, arguments: JSON.stringify(args) } }],
+  }, "tool_calls");
+  const runtime = await fixture(t, (body, response) => {
+    const messages = body.messages;
+    const hasPrompt = (content) => messages.some(message => message.role === "user" && JSON.stringify(message.content).includes(content));
+    if (hasPrompt("Initialize unrelated root")) return modelReply(response, "Unrelated root answer");
+    if (hasPrompt(childPrompt)) return childReady.resolve(response);
+    if (!messages.some(message => message.tool_call_id === "native_child_subagent")) {
+      return tool(response, "subagent", { description: "Native observation fixture", prompt: childPrompt });
+    }
+    if (!messages.some(message => message.tool_call_id === "native_child_wait_agent")) {
+      return tool(response, "wait_agent", { timeout_ms: 10000 });
+    }
+    return modelReply(response, "Synthetic parent finished.");
+  });
+  const client = await runtime.start();
+  const method = "lolicode/session/read-native";
+  let childId;
+  let heldResponse;
+  try {
+    await client.open(otherRoot);
+    await client.prompt(otherRoot, "Initialize unrelated root");
+    await client.wait(otherRoot);
+    await client.open(sessionId);
+    await client.prompt(sessionId, "Check only the owned subagent catalog.");
+    heldResponse = await childReady.promise;
+    const parent = await client.request(method, { sessionId });
+    const [entry] = parent.projections.values.subagentCatalog;
+    assert.equal(entry.label, "Native observation fixture");
+    childId = entry.id;
+    const scope = { sessionId, childSessionId: childId, directChild: true };
+    const active = await client.request(method, scope);
+    assert.ok(active.page.records.some(({ event }) => event.type === "user/message"));
+    const subscriptionId = "ordinary-child-follow";
+    assert.deepEqual(await client.request("lolicode/session/follow-native", { ...scope, subscriptionId }), {});
+    await client.request("lolicode/session/unfollow-native", { subscriptionId });
+    await assert.rejects(client.request(method, { ...scope, sessionId: otherRoot }), /Worker is not owned/);
+    modelReply(heldResponse, childAnswer);
+    heldResponse = undefined;
+    await client.wait(sessionId);
+  } finally {
+    if (heldResponse) modelReply(heldResponse, childAnswer);
+    await client.shutdown();
+  }
+
+  const sessions = path.join(runtime.home, "sessions");
+  const readerHome = path.join(runtime.home, "cold-observer");
+  await mkdir(readerHome);
+  const coldRead = (parentId) => execFileAsync(process.execPath, [
+    path.join(root, "host-session-native.mjs"), sessions, childId, "{}", readerHome, parentId,
+  ], { env: {}, windowsHide: true });
+  const { stdout } = await coldRead(sessionId);
+  assert.match(JSON.stringify(JSON.parse(stdout).page.records), /Synthetic child result was recorded/);
+  await assert.rejects(coldRead(otherRoot), { code: 4, stderr: "LOLICODE_SESSION_NATIVE_CHILD_NOT_OWNED\n" });
+});
+
 test("native history crosses the official Gateway without flattening events or activating cold Agents", { timeout: 60_000 }, async (t) => {
   const sessionId = "native-history-root";
   const method = "lolicode/session/read-native";

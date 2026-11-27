@@ -242,7 +242,7 @@ export const TavernTranscript = memo(function TavernTranscript({
   const branchActiveIndex = useTavernBranches((state) => state.activeIndex);
   const selectBranchVersion = useTavernBranches((state) => state.selectVersion);
 
-  const first = Math.min(start, messages.length - 1);
+  const first = Math.min(start, Math.max(0, messages.length - 1));
   const tail = messages.at(-1)?.id;
   const scrollRef = useRef<HTMLDivElement>(null);
   const followTail = useRef(true);
@@ -650,8 +650,8 @@ export const TavernTranscript = memo(function TavernTranscript({
           </div>
         )}
         {sending && (
-          <div className="wb-chat-message">
-            <span className="wb-chat-avatar" aria-hidden="true">
+          <div className="wb-chat-message" aria-hidden="true">
+            <span className="wb-chat-avatar">
               {avatarUrl ? (
                 <img src={avatarUrl} alt="" decoding="async" />
               ) : (
@@ -661,9 +661,12 @@ export const TavernTranscript = memo(function TavernTranscript({
               )}
             </span>
             <div className="wb-chat-message-body">
-              <div className="wb-chat-bubble wb-message-assistant inline-flex items-center gap-2 text-xs text-fg-3">
-                <LoaderCircle className="h-3.5 w-3.5 animate-spin text-action-text" />
-                <span>{t("tavern.generating")}</span>
+              <div className="wb-chat-bubble wb-message-assistant inline-flex min-h-9 items-center">
+                <span className="tavern-typing-dots">
+                  <span />
+                  <span />
+                  <span />
+                </span>
               </div>
             </div>
           </div>

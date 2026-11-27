@@ -8,6 +8,20 @@
     "copyLink": "リンクをコピー",
     "copyPath": "パスをコピー"
   },
+  "agentReasoningTranslation": {
+    "provider": "翻訳サービス",
+    "google": "Google 翻訳",
+    "targetLanguage": "翻訳先",
+    "followInterfaceLanguage": "表示言語に合わせる",
+    "consent": "有効にすると、展開した思考内容が翻訳のために {{provider}} に送信されます。",
+    "enable": "自動翻訳を有効にする",
+    "disable": "自動翻訳を無効にする",
+    "original": "原文を表示",
+    "translated": "翻訳を表示",
+    "pending": "翻訳中…",
+    "failed": "翻訳できなかったため、原文を表示しています。",
+    "retry": "翻訳を再試行"
+  },
   "agentMarketplace": {
     "name": "プラグイン市場",
     "open": "プラグイン市場を開く"
@@ -4437,7 +4451,7 @@
     "you": "あなた",
     "youShort": "私",
     "messageCount": "このストーリーのメッセージ {{count}} 件",
-    "generating": "生成中…",
+    "typing": "相手が入力中…",
     "generationFailed": "生成に失敗しました。送信した内容は保持されています",
     "generationFailedShort": "失敗 · 再送信できます",
     "loadEarlier": "以前のメッセージを読み込む",

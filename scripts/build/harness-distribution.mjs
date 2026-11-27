@@ -121,6 +121,23 @@ export function pruneHarnessRedundantAssets(
       candidates.push([file, bytes]);
       continue;
     }
+    // Frame forwarding loads the binary for this platform and architecture.
+    // Leave the matching SDK, source, and license available in the bundle.
+    if (
+      rel.length === 6 &&
+      rel[0] === "@deepseek-ai" &&
+      rel[1] === "libreoffice-kit" &&
+      rel[2] === "frame-forwarding" &&
+      rel[3] === "prebuilds" &&
+      rel[4] !== target &&
+      /^(?:darwin|win32)-(?:arm64|x64)$/.test(rel[4]) &&
+      /^(?:frame-forwarding\.node|(?:lib)?dsh_frame_forwarding_sdk\.(?:a|lib)|manifest\.json)$/.test(
+        rel[5],
+      )
+    ) {
+      candidates.push([file, bytes]);
+      continue;
+    }
     if (rel[0] === "node-pty") {
       if (file.toLowerCase().endsWith(".pdb")) {
         candidates.push([file, bytes]);

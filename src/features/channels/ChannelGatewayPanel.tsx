@@ -1,11 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { Copy, Loader2, Network, Play, RefreshCw, Unplug } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Notice } from "@/components/ui/notice";
-import {
-  channelCenterApi,
-  type ChannelGatewayStatus,
-} from "@/lib/api/channel-center";
+import { channelCenterApi } from "@/lib/api/channel-center";
+import { cn } from "@/lib/utils";
+import { useChannelRuntimeStatus } from "./useChannelRuntimeStatus";
 
 export function ChannelGatewayPanel({
   disabled,
@@ -20,54 +19,25 @@ export function ChannelGatewayPanel({
   refreshToken: unknown;
   onConnect: () => Promise<boolean>;
 }) {
-  const [status, setStatus] = useState<ChannelGatewayStatus | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { status, loading, failed, mounted, refresh, applyStatus } =
+    useChannelRuntimeStatus(
+      channelCenterApi.getGatewayStatus,
+      refreshToken,
+      5_000,
+    );
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ error: boolean; text: string } | null>(
     null,
   );
-  const mounted = useRef(false);
-  const generation = useRef(0);
-  const load = useCallback(async () => {
-    const request = ++generation.current;
-    setLoading(true);
-    try {
-      const result = await channelCenterApi.getGatewayStatus();
-      if (mounted.current && generation.current === request) {
-        setStatus(result);
-        setNotice(null);
-      }
-    } catch {
-      if (mounted.current && generation.current === request) {
-        setStatus(null);
-        setNotice({
-          error: true,
-          text: "无法读取 Gateway 状态，请刷新后重试。",
-        });
-      }
-    } finally {
-      if (mounted.current && generation.current === request) setLoading(false);
-    }
-  }, []);
-  useEffect(() => {
-    mounted.current = true;
-    void load();
-    return () => {
-      mounted.current = false;
-      generation.current += 1;
-    };
-  }, [load, refreshToken]);
-
   const run = async (action: string, operation: () => Promise<string>) => {
-    if (disabled || loading || busy) return;
-    generation.current += 1;
+    if (disabled || loading || failed || busy) return;
     setBusy(action);
     setNotice(null);
     try {
       const text = await operation();
       if (mounted.current) setNotice({ error: false, text });
     } catch {
-      if (mounted.current)
+      if (mounted.current) {
         setNotice({
           error: true,
           text:
@@ -79,15 +49,17 @@ export function ChannelGatewayPanel({
                   ? "未能进入 Claude Code。请确认工具已安装；连接配置完成后也可在项目终端手动运行 claude。"
                   : "操作未完成，请确认渠道已保存、账户已授权且服务端口可用后重试。",
         });
-    } finally {
-      if (mounted.current) {
-        generation.current += 1;
-        setLoading(false);
-        setBusy(null);
+        if (action !== "copy") void refresh();
       }
+    } finally {
+      if (mounted.current) setBusy(null);
     }
   };
-  const available = status?.running && Boolean(status.baseUrl);
+  const available = status?.running && status.baseUrl;
+  const catalogCurrent =
+    available &&
+    status.revision === revision &&
+    status.revision === status.savedRevision;
   const blocked = disabled || loading || Boolean(busy);
   return (
     <section
@@ -102,24 +74,41 @@ export function ChannelGatewayPanel({
         >
           <Network className="h-4 w-4" /> Gateway 路由服务
         </h2>
-        <div className="flex items-center gap-3">
-          <span role="status" className="text-caption text-fg-2">
-            {loading
-              ? "读取中…"
-              : available
-                ? "Gateway 运行中"
-                : status?.running
-                  ? "服务已运行，Gateway 待启用"
-                  : "Gateway 未启动"}
+        <div className="flex flex-wrap items-center gap-2">
+          <span
+            role="status"
+            className={cn(
+              "rounded-full px-2.5 py-1 text-caption font-medium",
+              failed
+                ? "bg-warning-soft text-warning-text"
+                : available
+                  ? "bg-success-soft text-success-text"
+                  : "bg-subtle text-fg-2",
+            )}
+          >
+            {failed
+              ? "状态暂时无法确认"
+              : !status
+                ? "读取中…"
+                : available
+                  ? "Gateway 运行中"
+                  : status?.running
+                    ? "服务已运行，Gateway 待启用"
+                    : "Gateway 未启动"}
           </span>
           <Button
             size="compact"
             variant="quiet"
             disabled={blocked}
-            onClick={() => void load()}
+            onClick={() => void refresh(true)}
             aria-label="刷新 Gateway 状态"
           >
-            <RefreshCw className="h-3.5 w-3.5" />
+            <RefreshCw
+              className={cn(
+                "h-3.5 w-3.5",
+                loading && "motion-safe:animate-spin",
+              )}
+            />
             刷新
           </Button>
         </div>
@@ -151,7 +140,7 @@ export function ChannelGatewayPanel({
           </div>
         </dl>
       )}
-      {available && status.revision !== revision && (
+      {available && !catalogCurrent && !failed && (
         <p className="mt-3 text-caption text-fg-2">
           渠道目录已更新，请先更新路由目录，再进入 Claude Code 应用新模型。
         </p>
@@ -160,12 +149,14 @@ export function ChannelGatewayPanel({
         <Button
           size="compact"
           variant="neutral"
-          disabled={blocked || routeDisabled}
+          disabled={blocked || failed || routeDisabled}
           onClick={() =>
             void run("start", async () => {
               const next = await channelCenterApi.startGateway(revision);
-              if (mounted.current) setStatus(next);
-              return "路由服务已启动，点击“进入 Claude Code”即可使用。";
+              applyStatus(next);
+              return available
+                ? "路由目录已更新，可以进入 Claude Code。"
+                : "路由服务已启动，可以进入 Claude Code。";
             })
           }
         >
@@ -174,24 +165,19 @@ export function ChannelGatewayPanel({
           ) : (
             <Play className="h-3.5 w-3.5" />
           )}
-          {available ? "更新路由目录" : "1. 启动路由服务"}
+          {available ? "更新路由目录" : "启动路由服务"}
         </Button>
         <Button
           size="compact"
           variant="solid"
-          disabled={
-            blocked ||
-            routeDisabled ||
-            !available ||
-            status.revision !== revision
-          }
+          disabled={blocked || routeDisabled || failed || !catalogCurrent}
           onClick={() =>
             void run("enter", async () => {
               if (!(await onConnect())) throw new Error("connection failed");
               if (!mounted.current) return "";
               const next = await channelCenterApi.getGatewayStatus();
               if (!mounted.current) return "";
-              setStatus(next);
+              applyStatus(next);
               if (!(await channelCenterApi.openGatewayClaude()))
                 throw new Error("terminal did not open");
               return "已打开使用 Gateway 的 Claude Code。可用 /status 查看连接，/model 选择模型。";
@@ -199,16 +185,16 @@ export function ChannelGatewayPanel({
           }
         >
           <Unplug className="h-3.5 w-3.5" />
-          2. 进入 Claude Code
+          进入 Claude Code
         </Button>
         <Button
           size="compact"
           variant="neutral"
-          disabled={blocked || !available}
+          disabled={blocked || failed || !available}
           onClick={() =>
             void run("check", async () => {
               const next = await channelCenterApi.checkGateway();
-              if (mounted.current) setStatus(next);
+              applyStatus(next);
               return "本机 Gateway 认证与模型目录检查通过；此检查不调用上游模型。";
             })
           }
@@ -218,7 +204,7 @@ export function ChannelGatewayPanel({
         <Button
           size="compact"
           variant="quiet"
-          disabled={blocked || !available}
+          disabled={blocked || failed || !available}
           onClick={() =>
             void run("copy", async () => {
               const config = await channelCenterApi.getGatewayClaudeConfig();
@@ -238,8 +224,19 @@ export function ChannelGatewayPanel({
           请先保存渠道修改，并启用至少一个可通过 Gateway 调用的模型。
         </p>
       )}
+      {failed && (
+        <Notice
+          className="mt-3"
+          tone="warning"
+          title={
+            status
+              ? "无法读取 Gateway 状态，当前显示上次读取的数据。"
+              : "无法读取 Gateway 状态，请刷新后重试。"
+          }
+        />
+      )}
       {notice && (
-        <div className="mt-3">
+        <div role="status" className="mt-3">
           <Notice
             tone={notice.error ? "warning" : "neutral"}
             title={notice.text}

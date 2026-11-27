@@ -321,6 +321,7 @@ impl HarnessClient {
         &self,
         root_id: &str,
         child_id: Option<&str>,
+        direct_child: bool,
         id: String,
         max_messages: Option<u32>,
     ) -> Result<Option<HarnessNativeSubscription>, String> {
@@ -354,6 +355,9 @@ impl HarnessClient {
         params["subscriptionId"] = json!(id);
         if let Some(child) = child_id {
             params["childSessionId"] = json!(child);
+        }
+        if direct_child {
+            params["directChild"] = json!(true);
         }
         match self.request("lolicode/session/follow-native", params).await {
             Ok(Value::Null) => Ok(None),
@@ -452,12 +456,14 @@ pub(super) async fn read_cold_session_native(
     sessions: &Path,
     session_id: &str,
     request: &Value,
+    parent: Option<&str>,
 ) -> Result<Value, String> {
     read_cold_session_native_until(
         paths,
         sessions,
         session_id,
         request,
+        parent,
         Instant::now() + RPC_TIMEOUT,
     )
     .await
@@ -468,6 +474,7 @@ async fn read_cold_session_native_until(
     sessions: &Path,
     session_id: &str,
     request: &Value,
+    parent: Option<&str>,
     deadline: Instant,
 ) -> Result<Value, String> {
     timeout_at(deadline, async {
@@ -495,6 +502,9 @@ async fn read_cold_session_native_until(
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
             .kill_on_drop(true);
+        if let Some(parent) = parent {
+            command.arg(parent);
+        }
         #[cfg(windows)]
         {
             command.creation_flags(0x08000000);
@@ -527,6 +537,7 @@ async fn read_cold_session_native_until(
                     ),
                     Some(2) => Err(NATIVE_MISSING.into()),
                     Some(3) => Err(NATIVE_TOO_LARGE.into()),
+                    Some(4) => Err("此子代理不属于当前会话".into()),
                     _ => Err(NATIVE_READ_FAILED.into()),
                 }
             };
@@ -1113,8 +1124,15 @@ mod tests {
             let sessions = fixture.path().to_owned();
             let run = tokio::spawn(async move {
                 let deadline = Instant::now() + Duration::from_secs(3);
-                read_cold_session_native_until(&paths, &sessions, "fixture", &json!({}), deadline)
-                    .await
+                read_cold_session_native_until(
+                    &paths,
+                    &sessions,
+                    "fixture",
+                    &json!({}),
+                    None,
+                    deadline,
+                )
+                .await
             });
             timeout(Duration::from_secs(2), async {
                 while !marker.exists() {
@@ -1167,14 +1185,14 @@ mod tests {
             let writer = tokio::spawn(write_frames(host_out, writes));
             let first_client = client.clone();
             let first = tokio::spawn(async move {
-                first_client.follow_session_native("root", None, "first".into(), Some(12)).await
+                first_client.follow_session_native("root", None, false, "first".into(), Some(12)).await
             });
             let first_open = receive(&mut sdk_in).await.unwrap().unwrap();
             sdk_out.write_all(&encode(&json!({"jsonrpc":"2.0","id":first_open["id"],"result":{}})).unwrap()).await.unwrap();
             let mut first = first.await.unwrap().unwrap().unwrap();
             let second_client = client.clone();
             let second = tokio::spawn(async move {
-                second_client.follow_session_native("root", None, "second".into(), Some(12)).await
+                second_client.follow_session_native("root", None, false, "second".into(), Some(12)).await
             });
             let second_open = receive(&mut sdk_in).await.unwrap().unwrap();
             sdk_out.write_all(&encode(&json!({"jsonrpc":"2.0","id":second_open["id"],"result":{}})).unwrap()).await.unwrap();
@@ -1200,7 +1218,7 @@ mod tests {
             assert_eq!(cancelled["method"], "lolicode/session/unfollow-native");
             assert_eq!(cancelled["params"]["subscriptionId"], "first");
             // Cleanup must settle upstream before this ID becomes reusable.
-            assert!(client.follow_session_native("root", None, "first".into(), Some(12)).await.is_err());
+            assert!(client.follow_session_native("root", None, false, "first".into(), Some(12)).await.is_err());
             sdk_out.write_all(&encode(&json!({"jsonrpc":"2.0","id":cancelled["id"],"result":{}})).unwrap()).await.unwrap();
             while client.native_follows.0.lock().unwrap().contains_key("first") {
                 tokio::task::yield_now().await;
@@ -1216,7 +1234,7 @@ mod tests {
             // cleanup capability; a late successful reply cannot leak a watch.
             let opening_client = client.clone();
             let opening = tokio::spawn(async move {
-                opening_client.follow_session_native("root", None, "opening".into(), Some(12)).await
+                opening_client.follow_session_native("root", None, false, "opening".into(), Some(12)).await
             });
             let started = receive(&mut sdk_in).await.unwrap().unwrap();
             opening.abort();

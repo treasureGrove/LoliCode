@@ -256,6 +256,7 @@ const AgentExecutionGroup = memo(function AgentExecutionGroup({
               projectPath={projectPath}
               sessionId={sessionId}
               disclosureState={stateFor(key)}
+              streaming={active}
             />
           ) : null,
         )

@@ -14,6 +14,10 @@ ManifestDPIAwareness PerMonitorV2
 !else
   ; Set the compression algorithm. We default to LZMA.
   SetCompressor /SOLID "{{compression}}"
+  !if "{{compression}}" == "lzma"
+    ; Reuse matches across the bundled SDK without changing the installed files.
+    SetCompressorDictSize 32
+  !endif
 !endif
 
 !include MUI2.nsh

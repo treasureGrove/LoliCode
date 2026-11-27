@@ -26,6 +26,8 @@ export interface AgentNativeSessionRead {
 }
 
 export interface AgentNativeSessionPageOptions {
+  /** Required for a child inspected directly from an ordinary root. */
+  rootSessionId?: string;
   beforeSeq?: number;
   throughSeq?: number;
   maxMessages?: number;

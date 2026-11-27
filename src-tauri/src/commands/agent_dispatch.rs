@@ -437,11 +437,12 @@ pub async fn prepare_agent_session(
 pub async fn read_agent_session_native(
     app: AppHandle,
     session_id: String,
+    root_session_id: Option<String>,
     before_seq: Option<u64>,
     through_seq: Option<u64>,
     max_messages: Option<u32>,
 ) -> Result<Value, String> {
-    if legacy_id(&session_id)? {
+    if root_session_id.is_none() && legacy_id(&session_id)? {
         return Err("旧引擎迁移会话没有完整的原生 Harness 历史".into());
     }
     let carrier = app.state::<InprocessAgentState>();
@@ -452,6 +453,7 @@ pub async fn read_agent_session_native(
             &app,
             &carrier,
             &session_id,
+            root_session_id.as_deref(),
             before_seq,
             through_seq,
             max_messages,
@@ -480,11 +482,12 @@ pub async fn watch_agent_session_native(
     app: AppHandle,
     window: WebviewWindow,
     session_id: String,
+    root_session_id: Option<String>,
     subscription_id: String,
     max_messages: Option<u32>,
     on_frame: Channel<Value>,
 ) -> Result<bool, String> {
-    if legacy_id(&session_id)? {
+    if root_session_id.is_none() && legacy_id(&session_id)? {
         return Err("旧引擎迁移会话没有完整的原生 Harness 历史".into());
     }
     let carrier = app.state::<InprocessAgentState>();
@@ -494,6 +497,7 @@ pub async fn watch_agent_session_native(
             &window,
             &carrier,
             &session_id,
+            root_session_id.as_deref(),
             &subscription_id,
             max_messages,
             on_frame,

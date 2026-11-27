@@ -12,11 +12,13 @@ import { ChannelCenterPanel } from "@/features/channels/ChannelCenterPanel";
 import {
   channelCenterApi,
   type ChannelCenterSnapshot,
+  type ChannelConnection,
   type ChannelSource,
 } from "@/lib/api/channel-center";
 import { discardUnsavedChanges, hasUnsavedChanges } from "@/lib/unsavedChanges";
 import { settingsApi } from "@/lib/api";
 import type { ManagedAuthDeviceCodeResponse } from "@/lib/api/auth";
+import { emitTauriEvent } from "../msw/tauriMocks";
 
 vi.mock("@/lib/api/channel-center", () => ({
   channelCenterApi: {
@@ -113,25 +115,40 @@ const populated: ChannelCenterSnapshot = {
 };
 
 let saved: ChannelCenterSnapshot;
+let savedConnections: ChannelConnection[];
 
 beforeEach(() => {
+  savedConnections = [
+    {
+      app: "codex",
+      mode: "native",
+      configured: false,
+      hasNativeProfile: false,
+    },
+    {
+      app: "claude",
+      mode: "native",
+      configured: false,
+      hasNativeProfile: false,
+    },
+  ];
   vi.mocked(channelCenterApi.getConnections)
     .mockReset()
-    .mockResolvedValue([
-      {
-        app: "codex",
-        mode: "native",
-        configured: false,
-        hasNativeProfile: false,
-      },
-      {
-        app: "claude",
-        mode: "native",
-        configured: false,
-        hasNativeProfile: false,
-      },
-    ]);
-  vi.mocked(channelCenterApi.setConnection).mockReset();
+    .mockImplementation(async () => structuredClone(savedConnections));
+  vi.mocked(channelCenterApi.setConnection)
+    .mockReset()
+    .mockImplementation(async (app, mode) => {
+      const connection = {
+        app,
+        mode,
+        configured: true,
+        hasNativeProfile: true,
+      };
+      savedConnections = savedConnections.map((item) =>
+        item.app === app ? connection : item,
+      );
+      return connection;
+    });
   discardUnsavedChanges();
   copilot.accounts = [];
   copilot.defaultAccountId = null;
@@ -224,12 +241,6 @@ function modelList(channel = "DeepSeek") {
 describe("ChannelCenterPanel", () => {
   it("can activate one tool route from saved models without reapplying other tools", async () => {
     saved = structuredClone(populated);
-    vi.mocked(channelCenterApi.setConnection).mockResolvedValue({
-      app: "codex",
-      mode: "lolicode",
-      configured: true,
-      hasNativeProfile: true,
-    });
     render(<ChannelCenterPanel />);
     await ready();
     const route = screen.getByRole("button", {
@@ -252,26 +263,12 @@ describe("ChannelCenterPanel", () => {
     vi.mocked(channelCenterApi.get).mockRejectedValue(
       new Error("synthetic catalog read failure"),
     );
-    vi.mocked(channelCenterApi.getConnections).mockResolvedValue([
-      {
-        app: "codex",
-        mode: "lolicode",
-        configured: true,
-        hasNativeProfile: true,
-      },
-      {
-        app: "claude",
-        mode: "native",
-        configured: false,
-        hasNativeProfile: false,
-      },
-    ]);
-    vi.mocked(channelCenterApi.setConnection).mockResolvedValue({
+    savedConnections[0] = {
       app: "codex",
-      mode: "native",
+      mode: "lolicode",
       configured: true,
       hasNativeProfile: true,
-    });
+    };
     render(<ChannelCenterPanel />);
     await ready();
     const native = screen.getByRole("button", { name: "Codex 使用原生配置" });
@@ -287,6 +284,31 @@ describe("ChannelCenterPanel", () => {
     expect(channelCenterApi.save).not.toHaveBeenCalled();
     await waitFor(() => expect(native).toHaveAttribute("aria-pressed", "true"));
   });
+
+  it.each(["channel-runtime-updated", "channel-connection-changed"])(
+    "refreshes tool status when %s is emitted",
+    async (eventName) => {
+      saved = structuredClone(populated);
+      render(<ChannelCenterPanel />);
+      await ready();
+      const route = screen.getByRole("button", {
+        name: "Codex 使用LoliCode 路由",
+      });
+      expect(route).toHaveAttribute("aria-pressed", "false");
+
+      savedConnections[0] = {
+        app: "codex",
+        mode: "lolicode",
+        configured: true,
+        hasNativeProfile: true,
+      };
+      act(() => emitTauriEvent(eventName, null));
+
+      await waitFor(() =>
+        expect(route).toHaveAttribute("aria-pressed", "true"),
+      );
+    },
+  );
 
   it("automatically saves a model window choice without applying external tools", async () => {
     saved = structuredClone(populated);
@@ -1355,6 +1377,149 @@ describe("ChannelCenterPanel", () => {
     expect(screen.getByRole("checkbox", { name: "Hermes" })).not.toBeChecked();
     expect(hasUnsavedChanges()).toBe(true);
   });
+
+  it("refreshes a clean open editor when the channel catalog changes elsewhere", async () => {
+    saved = structuredClone(populated);
+    render(<ChannelCenterPanel />);
+    await ready();
+    fireEvent.click(screen.getByRole("button", { name: "修改" }));
+
+    saved.revision = 1;
+    saved.channels[0].name = "DeepSeek 团队账号";
+    saved.channels[0].apiKey = "updated-elsewhere";
+    act(() => emitTauriEvent("channel-center-updated", { revision: 1 }));
+
+    await screen.findByLabelText("DeepSeek 团队账号 渠道");
+    expect(screen.getByLabelText("API Key")).toHaveValue("updated-elsewhere");
+    expect(hasUnsavedChanges()).toBe(false);
+    expect(channelCenterApi.save).not.toHaveBeenCalled();
+
+    const reads = vi.mocked(channelCenterApi.get).mock.calls.length;
+    act(() => emitTauriEvent("channel-center-updated", { revision: 1 }));
+    expect(channelCenterApi.get).toHaveBeenCalledTimes(reads);
+  });
+
+  it("protects a draft for an existing channel until the user confirms reloading", async () => {
+    saved = structuredClone(populated);
+    render(<ChannelCenterPanel />);
+    await ready();
+    fireEvent.click(screen.getByRole("button", { name: "修改" }));
+    fireEvent.change(screen.getByLabelText("API Key"), {
+      target: { value: "unsaved-channel-key" },
+    });
+
+    saved.revision = 1;
+    saved.channels[0].apiKey = "updated-elsewhere";
+    act(() => emitTauriEvent("channel-center-updated", { revision: 1 }));
+
+    await screen.findByText(
+      "渠道列表已被另一处修改。请重新加载后再配置；本页的选择已保留。",
+    );
+    expect(screen.getByLabelText("API Key")).toHaveValue("unsaved-channel-key");
+    expect(hasUnsavedChanges()).toBe(true);
+    expect(channelCenterApi.save).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "重新加载" }));
+    const dialog = screen.getByRole("dialog", {
+      name: "重新加载已保存的选择？",
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "重新加载" }));
+    await ready();
+    expect(screen.getByLabelText("API Key")).toHaveValue("updated-elsewhere");
+    expect(hasUnsavedChanges()).toBe(false);
+    expect(channelCenterApi.save).not.toHaveBeenCalled();
+  });
+
+  it("checks again after a restore arrives during a catalog read", async () => {
+    saved = structuredClone(populated);
+    render(<ChannelCenterPanel />);
+    await ready();
+    const beforeRestore = structuredClone(saved);
+    let finishRead!: (snapshot: ChannelCenterSnapshot) => void;
+    vi.mocked(channelCenterApi.get).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishRead = resolve;
+        }),
+    );
+    act(() => emitTauriEvent("tauri://focus", null));
+    expect(channelCenterApi.get).toHaveBeenCalledTimes(2);
+
+    saved.channels[0].name = "备份渠道";
+    act(() =>
+      emitTauriEvent("channel-center-updated", { source: "database-restore" }),
+    );
+    expect(channelCenterApi.get).toHaveBeenCalledTimes(2);
+    await act(async () => finishRead(beforeRestore));
+
+    expect(await screen.findByLabelText("备份渠道 渠道")).toBeInTheDocument();
+    expect(channelCenterApi.get).toHaveBeenCalledTimes(3);
+    expect(channelCenterApi.save).not.toHaveBeenCalled();
+  });
+
+  it("drains channel events queued during the initial load", async () => {
+    let finishInitialLoad!: (snapshot: ChannelCenterSnapshot) => void;
+    vi.mocked(channelCenterApi.get).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishInitialLoad = resolve;
+        }),
+    );
+    render(<ChannelCenterPanel />);
+
+    saved = { ...structuredClone(populated), revision: 1 };
+    act(() => emitTauriEvent("channel-center-updated", { revision: 1 }));
+    expect(channelCenterApi.get).toHaveBeenCalledTimes(1);
+    await act(async () => finishInitialLoad(structuredClone(initial)));
+
+    expect(await screen.findByLabelText("DeepSeek 渠道")).toBeInTheDocument();
+    expect(channelCenterApi.get).toHaveBeenCalledTimes(2);
+  });
+
+  it("retains the last good catalog when a manual refresh fails and retries", async () => {
+    saved = structuredClone(populated);
+    render(<ChannelCenterPanel />);
+    await ready();
+    vi.mocked(channelCenterApi.get).mockRejectedValueOnce(
+      new Error("读取渠道失败，请重试"),
+    );
+    const refresh = screen.getByRole("button", { name: "刷新渠道" });
+    fireEvent.click(refresh);
+
+    await screen.findByText("读取渠道失败，请重试");
+    expect(screen.getByLabelText("DeepSeek 渠道")).toBeInTheDocument();
+    saved.channels[0].name = "已更新渠道";
+    saved.revision = 1;
+    fireEvent.click(refresh);
+
+    expect(await screen.findByLabelText("已更新渠道 渠道")).toBeInTheDocument();
+    expect(screen.queryByText("读取渠道失败，请重试")).not.toBeInTheDocument();
+  });
+
+  it("does not roll back a completed model save with an older foreground read", async () => {
+    saved = structuredClone(populated);
+    render(<ChannelCenterPanel />);
+    await ready();
+    const beforeSave = structuredClone(saved);
+    let finishRead!: (snapshot: ChannelCenterSnapshot) => void;
+    vi.mocked(channelCenterApi.get).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishRead = resolve;
+        }),
+    );
+    fireEvent(window, new Event("focus"));
+    const hermes = screen.getByRole("checkbox", { name: "Hermes" });
+    fireEvent.click(hermes);
+    await waitFor(() => expect(saved.revision).toBe(1));
+    await waitFor(() => expect(hasUnsavedChanges()).toBe(false));
+    await act(async () => finishRead(beforeSave));
+
+    expect(hermes).not.toBeChecked();
+    expect(channelCenterApi.save).toHaveBeenCalledTimes(1);
+    expect(channelCenterApi.get).toHaveBeenCalledTimes(4);
+  });
+
   it("keeps the secret draft and performs no apply when saving an added channel fails", async () => {
     vi.mocked(channelCenterApi.save).mockRejectedValue(
       new Error("401 test-secret-key"),

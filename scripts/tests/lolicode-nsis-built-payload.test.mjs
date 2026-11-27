@@ -143,10 +143,12 @@ const harnessPayloadFiles = [
   "node.exe",
   "NODE-LICENSE",
   "runtime-manifest.json",
+  "installer-files.gz",
   "profile.cordis.patch.yml",
   "host-operations.cordis.patch.yml",
   "host-operations.mjs",
   "host-mcp.mjs",
+  "host-reasoning-translation.mjs",
   "node_modules\\@deepseek-ai\\dsh\\LICENSE",
   "node_modules\\@deepseek-ai\\dsh\\lib\\bin.js",
 ];
@@ -262,24 +264,34 @@ function generatedPayloadLayout(source) {
     markers.length,
     "Generated payload boundaries are missing",
   );
-  for (const { line } of scriptLines(
-    source.slice(offsets[1].next, offsets[2].start),
-  ))
-    assert(
-      !line || line.startsWith(";"),
+  const installerOperations = [
+    ...scriptLines(source.slice(offsets[1].next, offsets[2].start)),
+  ]
+    .map(({ line }) => line)
+    .filter((line) => line && !line.startsWith(";"));
+  if (installerOperations.length) {
+    assert.deepEqual(
+      installerOperations,
+      [
+        "!ifmacrodef LOLICODE_RECONCILE_HARNESS",
+        "!insertmacro LOLICODE_RECONCILE_HARNESS",
+        "!endif",
+      ],
       "External binary payload requires explicit fixture support",
     );
+  }
   return {
     bundledHookIncludes,
     definitions,
     block: source.slice(offsets[0].next, offsets[1].start),
+    reconcileHarness: installerOperations.length > 0,
   };
 }
 
 function payloadFromGeneratedScript(filename, boundary = defaultBoundary) {
   const generatedScriptPath = boundary.generatedScript(filename);
   const source = readFileSync(generatedScriptPath, "utf8");
-  const { bundledHookIncludes, definitions, block } =
+  const { bundledHookIncludes, definitions, block, reconcileHarness } =
     generatedPayloadLayout(source);
   const helpers = resourceHelpers(source);
   assert.equal(
@@ -336,8 +348,16 @@ function payloadFromGeneratedScript(filename, boundary = defaultBoundary) {
   const files = [];
   const operations = [];
   const destinations = new Set();
+  const detailChanges = [];
   for (const { line } of scriptLines(block)) {
     if (!line || line.startsWith(";")) continue;
+    if (
+      line === "SetDetailsPrint textonly" ||
+      line === "SetDetailsPrint lastused"
+    ) {
+      detailChanges.push(line);
+      continue;
+    }
     if (line === 'File "${MAINBINARYSRCPATH}"') {
       assert(!files.some((file) => file.destination === "LoliCode.exe"));
       const file = {
@@ -371,6 +391,12 @@ function payloadFromGeneratedScript(filename, boundary = defaultBoundary) {
     const file = { destination, source: boundary.sourceFile(resource[2]) };
     files.push(file);
     operations.push({ type: "file", ...file, nsisDestination: resource[1] });
+  }
+  if (detailChanges.length) {
+    assert.deepEqual(detailChanges, [
+      "SetDetailsPrint textonly",
+      "SetDetailsPrint lastused",
+    ]);
   }
   assert.equal(
     files.filter((file) => file.destination === "LoliCode.exe").length,
@@ -415,6 +441,7 @@ function payloadFromGeneratedScript(filename, boundary = defaultBoundary) {
     operations,
     version,
     hooksPath: bundledHooks,
+    reconcileHarness,
     companionLicenseFiles: companionLicenses.length,
     generatedScriptPath,
     generatedScriptSha256: sha256(generatedScriptPath),
@@ -540,7 +567,10 @@ test("actual NSIS payload parser handles over 30 MiB and 70000 resources without
     const bytes = readFileSync(filename);
     assert(bytes.length >= 30 * 1024 * 1024);
     const payload = parse();
-    assert.equal(payload.files.length, resources.length + 18);
+    assert.equal(
+      payload.files.length,
+      resources.length + harnessPayloadFiles.length + 9,
+    );
     assert.equal(
       payload.files.filter((file) =>
         file.destination.startsWith("agent\\synthetic\\"),
@@ -917,6 +947,9 @@ test(
             `  File /a "/oname=${operation.nsisDestination ?? quoted(operation.destination)}" "${quoted(operation.source)}"`,
           );
         }
+      }
+      if (payload.reconcileHarness) {
+        lines.push("  !insertmacro LOLICODE_RECONCILE_HARNESS");
       }
       lines.push(
         '  IfFileExists "$PLUGINSDIR\\LoliCode.exe" 0 +3',

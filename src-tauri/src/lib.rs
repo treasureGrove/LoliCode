@@ -2034,6 +2034,8 @@ pub fn run() {
             commands::get_agent_extensions,
             commands::harness_plugins::get_agent_harness_plugins,
             commands::harness_plugins::set_agent_harness_plugin_enabled,
+            commands::agent_reasoning_translation::translate_agent_reasoning,
+            commands::agent_reasoning_translation::cancel_agent_reasoning_translation,
             commands::dsh_marketplace::get_dsh_marketplace_overview,
             commands::dsh_marketplace::query_dsh_marketplace,
             commands::dsh_marketplace::get_dsh_marketplace_detail,

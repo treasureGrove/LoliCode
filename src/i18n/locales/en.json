@@ -8,6 +8,20 @@
     "copyLink": "Copy link",
     "copyPath": "Copy path"
   },
+  "agentReasoningTranslation": {
+    "provider": "Translation service",
+    "google": "Google Translate",
+    "targetLanguage": "Translate to",
+    "followInterfaceLanguage": "Follow interface language",
+    "consent": "When enabled, expanded reasoning is sent to {{provider}} for translation.",
+    "enable": "Enable automatic translation",
+    "disable": "Disable automatic translation",
+    "original": "Show original",
+    "translated": "Show translation",
+    "pending": "Translating…",
+    "failed": "Translation failed. Showing original.",
+    "retry": "Retry translation"
+  },
   "agentMarketplace": {
     "name": "Plugin Marketplace",
     "open": "Open Plugin Marketplace"
@@ -4443,7 +4457,7 @@
     "you": "You",
     "youShort": "Me",
     "messageCount": "{{count}} messages in this story",
-    "generating": "Generating…",
+    "typing": "Typing…",
     "generationFailed": "Generation failed; your message was kept",
     "generationFailedShort": "Failed · retry by sending again",
     "loadEarlier": "Load earlier messages",

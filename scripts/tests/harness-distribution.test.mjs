@@ -109,6 +109,15 @@ test("prunes redundant WASM kit, PDBs, non-target prebuilds and domino tests whi
     f.put("node-pty/prebuilds/win32-x64/conpty.node", "node"),
     f.put("node-pty/third_party/conpty/1.0/win10-x64/OpenConsole.exe", "con"),
     f.put("@mixmark-io/domino/lib/index.js", "domino"),
+    f.put(
+      "@deepseek-ai/libreoffice-kit/frame-forwarding/prebuilds/win32-x64/frame-forwarding.node",
+      "node",
+    ),
+    f.put(
+      "@deepseek-ai/libreoffice-kit/frame-forwarding/prebuilds/win32-x64/dsh_frame_forwarding_sdk.lib",
+      "sdk",
+    ),
+    f.put("@deepseek-ai/libreoffice-kit/frame-forwarding/LICENSE", "license"),
   ];
   const removed = [
     f.put("@deepseek-ai/libreoffice-kit-wasm/assets/dsoffice.wasm", "wasm"),
@@ -117,6 +126,18 @@ test("prunes redundant WASM kit, PDBs, non-target prebuilds and domino tests whi
     f.put("node-pty/third_party/conpty/1.0/win10-arm64/OpenConsole.exe", "arm"),
     f.put("@mixmark-io/domino/test/html5lib-tests.json", "test"),
     f.put("@mixmark-io/domino/.yarn/plugins/p.cjs", "yarn"),
+    f.put(
+      "@deepseek-ai/libreoffice-kit/frame-forwarding/prebuilds/darwin-x64/frame-forwarding.node",
+      "node",
+    ),
+    f.put(
+      "@deepseek-ai/libreoffice-kit/frame-forwarding/prebuilds/darwin-x64/libdsh_frame_forwarding_sdk.a",
+      "sdk",
+    ),
+    f.put(
+      "@deepseek-ai/libreoffice-kit/frame-forwarding/prebuilds/darwin-x64/manifest.json",
+      "{}",
+    ),
   ];
   const report = pruneHarnessRedundantAssets(f.modules, {
     platform: "win32",

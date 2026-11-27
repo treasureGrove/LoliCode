@@ -1,6 +1,6 @@
 // Runs a hidden Windows development build with a disposable profile and model.
 // Run from a non-elevated shell so WebView2 honors the fixture debugging port.
-// Usage: node scripts/tests/harness-desktop-acceptance.mjs [--permissions | --output-links | --compact | --dock-tools | --background-jobs | --native-modes | --switching | --session-export | --titles | --warm-session]
+// Usage: node scripts/tests/harness-desktop-acceptance.mjs [--permissions | --output-links | --compact | --dock-tools | --background-jobs | --native-modes | --switching | --session-export | --titles | --warm-session | --ordinary-subagents | --reasoning-translation | --model-refusal]
 // Add --prepare-session to --warm-session to await real background SDK readiness before sending.
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
@@ -43,6 +43,38 @@ const switchingProfileScale = switchingOnly && process.env.LOLICODE_HARNESS_DESK
 const sessionExportOnly = process.argv.includes("--session-export");
 const titlesOnly = process.argv.includes("--titles");
 const warmSessionOnly = process.argv.includes("--warm-session");
+const ordinarySubagentsOnly = process.argv.includes("--ordinary-subagents");
+const reasoningTranslationOnly = process.argv.includes("--reasoning-translation");
+const modelRefusalOnly = process.argv.includes("--model-refusal");
+const modelRefusal = {
+  prompt: "HARNESS_DESKTOP_MESSAGES_REFUSAL",
+  recoveryPrompt: "HARNESS_DESKTOP_MESSAGES_RECOVERY",
+  partialText: "The synthetic model started an answer.",
+  partialReasoning: "The fixture is considering the request.",
+  answer: "The same session answered successfully.",
+  inputTokens: 14,
+  finalOutputTokens: 8,
+};
+let modelRefusalTurns = 0;
+const reasoningTranslation = {
+  prompt: "HARNESS_DESKTOP_SYNTHETIC_TRANSLATION_FIXTURE",
+  repeatPrompt: "HARNESS_DESKTOP_SYNTHETIC_TRANSLATION_REPEAT",
+  first: "The red apple is on the table.",
+  second: "The blue bicycle is beside the window.",
+  answer: "The synthetic reasoning fixture is complete.",
+  repeatAnswer: "The repeated reasoning fixture is complete.",
+};
+let reasoningConversationTurns = 0;
+let releaseReasoningReply;
+const ordinarySubagents = {
+  rootPrompt: "ORDINARY_SUBAGENT_DESKTOP_ROOT",
+  childPrompt: "ORDINARY_SUBAGENT_DESKTOP_CHILD",
+  foreignPrompt: "ORDINARY_SUBAGENT_DESKTOP_FOREIGN",
+  label: "Read-only native worker fixture",
+  childAnswer: "The worker independently checked the sample.",
+  rootAnswer: "The ordinary root recorded the worker outcome.",
+  foreignAnswer: "An unrelated root answered independently.",
+};
 const prepareSession = process.argv.includes("--prepare-session");
 assert.ok(!prepareSession || warmSessionOnly, "--prepare-session requires --warm-session");
 const warmSession = {
@@ -354,7 +386,7 @@ async function readBody(request, limit = 2 * 1024 * 1024) {
   return Buffer.concat(chunks).toString("utf8");
 }
 
-async function reply(response, delta, finishReason, pauseBetweenTextChunks = false) {
+function streamReply(response) {
   const chunk = (value, finish = null) => ({
     id: "chatcmpl-desktop-harness-fixture",
     created: 1,
@@ -366,6 +398,17 @@ async function reply(response, delta, finishReason, pauseBetweenTextChunks = fal
   const write = (value, finish) =>
     response.write(`data: ${JSON.stringify(chunk(value, finish))}\n\n`);
   write({ role: "assistant" });
+  return {
+    write,
+    finish(value) {
+      write({}, value);
+      response.end("data: [DONE]\n\n");
+    },
+  };
+}
+
+async function reply(response, delta, finishReason, pauseBetweenTextChunks = false) {
+  const { write, finish } = streamReply(response);
   if (pauseBetweenTextChunks) {
     const midpoint = Math.floor(delta.content.length / 2);
     write({ content: delta.content.slice(0, midpoint) });
@@ -376,8 +419,40 @@ async function reply(response, delta, finishReason, pauseBetweenTextChunks = fal
   } else {
     write(delta);
   }
-  write({}, finishReason);
-  response.end("data: [DONE]\n\n");
+  finish(finishReason);
+}
+
+function messagesReply(response, { text, reasoning, stopReason = "end_turn" }) {
+  response.writeHead(200, { "Content-Type": "text/event-stream" });
+  const write = (type, data = {}) =>
+    response.write(`event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`);
+  write("message_start", { message: {
+    id: "msg-desktop-refusal-fixture", type: "message", role: "assistant", model,
+    content: [], stop_reason: null, stop_sequence: null,
+    usage: { input_tokens: modelRefusal.inputTokens, output_tokens: 1 },
+  } });
+  if (reasoning) {
+    write("content_block_start", { index: 0, content_block: { type: "thinking", thinking: "" } });
+    write("content_block_delta", { index: 0, delta: { type: "thinking_delta", thinking: reasoning } });
+    write("content_block_stop", { index: 0 });
+  }
+  const index = reasoning ? 1 : 0;
+  write("content_block_start", { index, content_block: { type: "text", text: "" } });
+  write("content_block_delta", { index, delta: { type: "text_delta", text } });
+  write("content_block_stop", { index });
+  write("message_delta", {
+    delta: { stop_reason: stopReason, stop_sequence: null },
+    usage: { output_tokens: stopReason === "refusal" ? 5 : modelRefusal.finalOutputTokens },
+  });
+  if (stopReason === "refusal") {
+    // A later Messages summary may update usage without clearing the refusal.
+    write("message_delta", {
+      delta: { stop_reason: "end_turn", stop_sequence: null },
+      usage: { output_tokens: modelRefusal.finalOutputTokens },
+    });
+  }
+  write("message_stop");
+  response.end();
 }
 
 function toolReply(response, name, args, id) {
@@ -472,10 +547,27 @@ const modelServer = createServer(async (request, response) => {
       return;
     }
     assert.equal(request.method, "POST", `Unexpected fixture model request ${request.method} ${request.url}`);
-    assert.equal(request.url, "/v1/chat/completions");
+    assert.equal(request.url, modelRefusalOnly ? "/v1/messages" : "/v1/chat/completions");
     assert.equal(request.headers.authorization, `Bearer ${fixtureKey}`);
     const body = JSON.parse(await readBody(request));
     assert.equal(body.model, model);
+    if (modelRefusalOnly) {
+      assert.equal(body.stream, true, "The Anthropic channel must stream its Messages response");
+      if (JSON.stringify(body.system ?? "").includes("Create a concise title for an AI coding-assistant session")) {
+        messagesReply(response, { text: "桌面拒答验收" });
+        return;
+      }
+      const lastPrompt = JSON.stringify(body.messages.findLast(({ role }) => role === "user"));
+      const turn = ++modelRefusalTurns;
+      assert.ok(turn <= 2, "The fixture should make one Messages request per turn");
+      assert.ok(lastPrompt.includes(turn === 1 ? modelRefusal.prompt : modelRefusal.recoveryPrompt));
+      messagesReply(response, turn === 1 ? {
+        text: modelRefusal.partialText,
+        reasoning: modelRefusal.partialReasoning,
+        stopReason: "refusal",
+      } : { text: modelRefusal.answer });
+      return;
+    }
     const allMessages = JSON.stringify(body.messages);
     const userMessages = JSON.stringify(
       body.messages.filter((message) => message.role === "user"),
@@ -512,6 +604,63 @@ const modelServer = createServer(async (request, response) => {
         }
       } else {
         await reply(response, { content: "桌面验收会话" }, "stop");
+      }
+      return;
+    }
+    if (ordinarySubagentsOnly) {
+      const { childPrompt, childAnswer, rootPrompt, rootAnswer, foreignPrompt, foreignAnswer, label } = ordinarySubagents;
+      if (userMessages.includes(childPrompt)) {
+        await reply(response, { content: childAnswer }, "stop", () =>
+          new Promise((resolve) => {
+            releaseWorkerReply = resolve;
+            response.once("close", resolve);
+          }),
+        );
+      } else if (userMessages.includes(foreignPrompt)) {
+        await reply(response, { content: foreignAnswer }, "stop");
+      } else if (userMessages.includes(rootPrompt) && !hasResult("ordinary-subagent")) {
+        assert.ok(hasTool("subagent"), "The ordinary root is missing the official subagent tool");
+        toolReply(response, "subagent", { description: label, prompt: childPrompt }, "ordinary-subagent");
+      } else {
+        assert.ok(userMessages.includes(rootPrompt), "Unexpected ordinary subagent fixture prompt");
+        await reply(response, { content: rootAnswer }, "stop");
+      }
+      return;
+    }
+    if (reasoningTranslationOnly) {
+      const turn = ++reasoningConversationTurns;
+      const prompt = body.messages
+        .filter(({ role }) => role === "user")
+        .map((message) => JSON.stringify(message))
+        .findLast((message) => message.includes(reasoningTranslation.prompt) ||
+          message.includes(reasoningTranslation.repeatPrompt));
+      assert.ok(prompt, "Missing the synthetic user prompt");
+      if (turn === 2) {
+        assert.ok(prompt.includes(reasoningTranslation.repeatPrompt));
+        const { write, finish } = streamReply(response);
+        write({ reasoning_content: reasoningTranslation.first });
+        write({ content: reasoningTranslation.repeatAnswer });
+        finish("stop");
+        return;
+      }
+      assert.equal(turn, 1, "Expected two reasoning fixture turns");
+      assert.ok(prompt.includes(reasoningTranslation.prompt),
+        "The reasoning translation fixture received an unexpected prompt");
+      const { write, finish } = streamReply(response);
+      const partialLength = 12;
+      write({ reasoning_content: `${reasoningTranslation.first}\n\n${reasoningTranslation.second.slice(0, partialLength)}` });
+      const release = Promise.withResolvers();
+      releaseReasoningReply = release.resolve;
+      response.once("close", release.resolve);
+      try {
+        await release.promise;
+        if (!response.destroyed) {
+          write({ reasoning_content: reasoningTranslation.second.slice(partialLength) });
+          write({ content: reasoningTranslation.answer });
+          finish("stop");
+        }
+      } finally {
+        releaseReasoningReply = undefined;
       }
       return;
     }
@@ -1258,8 +1407,48 @@ const vitePlugin = {
       return accountModule;
   },
   transform(source, id) {
-    if (!sessionExportOnly) return;
     const file = id.split("?")[0].replaceAll("\\", "/");
+    if (reasoningTranslationOnly && file.endsWith("/src/lib/api/agent.ts")) {
+      const nativeImport = 'import { Channel, invoke } from "@tauri-apps/api/core";';
+      assert.ok(source.includes(nativeImport), "Cannot restrict fixture translation to synthetic text");
+      const allowed = JSON.stringify([reasoningTranslation.first, reasoningTranslation.second]);
+      return source.replace(nativeImport, [
+        'import { Channel, invoke as nativeInvoke } from "@tauri-apps/api/core";',
+        "function invoke<T>(command: string, args?: Record<string, unknown>, options?: Parameters<typeof nativeInvoke>[2]): Promise<T> {",
+        '  if (command === "translate_agent_reasoning") {',
+        '    const primary = args?.targetLanguage === "zh-CN" && ["bing", "google"].includes(String(args?.provider));',
+        '    const repeated = args?.targetLanguage === "zh-TW" && args?.provider === "google";',
+        `    if (!${allowed}.includes(String(args?.text)) || (!primary && !repeated)) {`,
+        '      return Promise.reject(new Error("Only synthetic fixture text may reach the public translator."));',
+        "    }",
+        "    const tree = Array.from(document.querySelectorAll('details.wb-reasoning')).map((node) => ({",
+        "      open: node.hasAttribute('open'),",
+        "      activeAttempt: node.closest('[data-native-attempt]')?.getAttribute('data-native-attempt'),",
+        "      committedEvent: node.closest('[data-native-event-seq]')?.getAttribute('data-native-event-seq'),",
+        "    }));",
+        '    const request = { text: args?.text, provider: args?.provider, targetLanguage: args?.targetLanguage, id: args?.requestId, tree, translation: undefined as string | undefined, status: "pending", cancelRequested: false, cancelAccepted: false };',
+        "    (globalThis.__fixtureReasoningTranslationRequests ??= []).push(request);",
+        "    const task = nativeInvoke<T>(command, args, options);",
+        '    void task.then((result) => { request.translation = String(result); request.status = "completed"; }, (error) => {',
+        '      request.status = String(error).includes("思考内容翻译已取消") ? "cancelled" : "failed";',
+        "    });",
+        `    const hold = repeated && args?.text === ${JSON.stringify(reasoningTranslation.first)} && globalThis.__fixtureHoldReasoningTranslation;`,
+        "    return hold ? task.then(async (result) => { await hold; return result; }) : task;",
+        "  }",
+        '  if (command === "cancel_agent_reasoning_translation") {',
+        "    const request = globalThis.__fixtureReasoningTranslationRequests?.find(({ id }) => id === args?.requestId);",
+        "    if (request) {",
+        "      request.cancelRequested = true;",
+        "      const task = nativeInvoke<T>(command, args, options);",
+        "      void task.then(() => { request.cancelAccepted = true; }, () => {});",
+        "      return task;",
+        "    }",
+        "  }",
+        "  return nativeInvoke<T>(command, args, options);",
+        "}",
+      ].join("\n"));
+    }
+    if (!sessionExportOnly) return;
     if (!file.endsWith("/src/lib/clipboard.ts") && !file.endsWith("/src/lib/api/agent.ts"))
       return;
     const nativeImport = 'import { invoke } from "@tauri-apps/api/core";';
@@ -1393,6 +1582,13 @@ const vitePlugin = {
         }
         releaseKeyboardReply();
         response.end("ok");
+      } else if (reasoningTranslationOnly && request.url === `${namespace}/release-reasoning-reply` && request.method === "POST") {
+        if (!releaseReasoningReply) {
+          response.writeHead(409).end();
+          return;
+        }
+        releaseReasoningReply();
+        response.writeHead(204).end();
       } else if (request.url === `${namespace}/release-worker-reply` && request.method === "POST") {
         if (!releaseWorkerReply) {
           response.writeHead(409).end();
@@ -1693,6 +1889,9 @@ try {
     nativeModes,
     titles: titlesOnly ? titles : undefined,
     warmSession: warmSessionOnly ? warmSession : undefined,
+    ordinarySubagents: ordinarySubagentsOnly ? ordinarySubagents : undefined,
+    reasoningTranslation: reasoningTranslationOnly ? reasoningTranslation : undefined,
+    modelRefusal: modelRefusalOnly ? modelRefusal : undefined,
     sessionExport: sessionExportOnly ? sessionExport : undefined,
     switching: switchingOnly ? await seedSwitchingHistory() : undefined,
     workerFollowup,
@@ -1718,7 +1917,7 @@ try {
     }),
   );
   console.log(`Isolated desktop acceptance reports: ${reportPath}`);
-  if (!permissionsOnly && !outputLinksOnly && !compactOnly && !backgroundJobsOnly && !dockToolsOnly && !nativeModesOnly && !switchingOnly && !sessionExportOnly && !titlesOnly && !warmSessionOnly) {
+  if (!ordinarySubagentsOnly && !permissionsOnly && !outputLinksOnly && !compactOnly && !backgroundJobsOnly && !dockToolsOnly && !nativeModesOnly && !switchingOnly && !sessionExportOnly && !titlesOnly && !warmSessionOnly && !reasoningTranslationOnly && !modelRefusalOnly) {
     const first = await launch(env, "initial");
     assert.equal(first.sendScrollFollow, true);
     assert.ok(observed.image && observed.approved && observed.rejected);
@@ -1757,7 +1956,29 @@ try {
     await assert.rejects(readFile(path.join(project, "manual-worker.txt")), { code: "ENOENT" });
     for (const [file, contents] of legacyFiles) assert.equal(await readFile(file, "utf8"), contents);
   }
-  if (warmSessionOnly) {
+  if (modelRefusalOnly) {
+    const result = await launch(env, "model-refusal");
+    assert.ok(result.refusalReported && result.partialAttemptRetained &&
+      result.refusalUsageRetained && result.sameSessionRecovered);
+    assert.equal(modelRefusalTurns, 2);
+  } else if (reasoningTranslationOnly) {
+    const result = await launch(env, "reasoning-translation");
+    assert.ok(result.nativeReasoning && result.consent && result.partialStream &&
+      result.translation && result.originalToggle && result.retainedNativeText &&
+      result.googleRequiresConsent && result.googleTranslation &&
+      result.sharedPendingTranslation &&
+      result.sharedPendingTranslationProof?.nativeRequests === 1 &&
+      result.sharedPendingTranslationProof?.translatedBlocks === 2);
+    assert.equal(reasoningConversationTurns, 2);
+  } else if (ordinarySubagentsOnly) {
+    const result = await launch(env, "ordinary-subagents");
+    assert.ok(result.ordinarySubagents?.active && result.ordinarySubagents?.completed &&
+      result.ordinarySubagents?.foreignRejected);
+    fixture.ordinarySubagents.state = result.ordinarySubagents;
+    const restarted = await launch(env, "ordinary-subagents-restart");
+    assert.equal(restarted.sessionId, result.sessionId);
+    assert.equal(restarted.coldOrdinarySubagent, true);
+  } else if (warmSessionOnly) {
     const result = await launch(env, "warm-session");
     assert.ok(result.warmSession && result.warmReuse && result.stopIsolated &&
       result.configurationRestart && result.projectClosed && result.nativeHistoryVerified);

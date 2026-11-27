@@ -18,6 +18,10 @@ import {
   type AgentMessageIdentity,
 } from "./AgentMessageFrame";
 import { AgentReasoningPart, AgentTextPart, AgentToolPart } from "./AgentParts";
+import {
+  AgentReasoningSessionCache,
+  type AgentReasoningSessionTranslations,
+} from "./AgentReasoningTranslation";
 
 type JsonObject = Record<string, unknown>;
 type ToolView = Extract<AgentPart, { type: "tool" }>;
@@ -159,6 +163,7 @@ function Content({
   tools,
   projectPath,
   sessionId,
+  streaming = false,
   cachedImages = [],
   cachedDocuments = [],
 }: {
@@ -167,6 +172,7 @@ function Content({
   tools: ReadonlyMap<string, ToolEvents>;
   projectPath: string;
   sessionId?: string;
+  streaming?: boolean;
   cachedImages?: readonly AgentImageAttachment[];
   cachedDocuments?: readonly AgentDocumentAttachment[];
 }) {
@@ -193,6 +199,7 @@ function Content({
               part={{ text: block.text }}
               projectPath={projectPath}
               sessionId={sessionId}
+              streaming={streaming}
             />
           );
         if (block.type === "tool-call")
@@ -273,6 +280,7 @@ function AttemptContent({
         {...props}
         values={assembled.values}
         data={{ turn: attempt.turn, step: attempt.step }}
+        streaming
       />
       {assembled.error && (
         <p role="status" className="text-caption text-fg-3">
@@ -521,6 +529,12 @@ export const AgentNativeTranscript = memo(function AgentNativeTranscript({
 }: AgentNativeTranscriptProps) {
   const { rows, tools } = useMemo(() => nativeRows(events), [events]);
   const identity = `${projectPath}\0${sessionId || ""}`;
+  // The live attempt and its committed history row mount separate reasoning
+  // blocks. A completed translation can be reused when the transcript changes.
+  const reasoningCache = useMemo<AgentReasoningSessionTranslations>(
+    () => new Map(),
+    [identity],
+  );
   const [window, setWindow] = useState(() => ({
     identity,
     first: rows[Math.max(0, rows.length - 40)]?.event.seq,
@@ -589,27 +603,32 @@ export const AgentNativeTranscript = memo(function AgentNativeTranscript({
           {loadingEarlier ? "正在加载更早的消息…" : "加载更早的消息"}
         </button>
       )}
-      <NativeTranscriptRows
-        rows={rows}
-        start={start}
-        tools={tools}
-        projectPath={projectPath}
-        sessionId={sessionId}
-        imageAttachmentsByMessage={imageAttachmentsByMessage}
-        documentAttachmentsByMessage={documentAttachmentsByMessage}
-        messageAliases={messageAliases}
-        userIdentity={userIdentity}
-      />
-      {activeAttempt && (
-        <div
-          data-native-turn={activeAttempt.turn}
-          data-native-step={activeAttempt.step}
-          data-native-attempt={activeAttempt.attemptId}
-          className="min-w-0"
-        >
-          <AttemptContent {...contentProps} attempt={activeAttempt} />
-        </div>
-      )}
+      <AgentReasoningSessionCache.Provider
+        key={identity}
+        value={reasoningCache}
+      >
+        <NativeTranscriptRows
+          rows={rows}
+          start={start}
+          tools={tools}
+          projectPath={projectPath}
+          sessionId={sessionId}
+          imageAttachmentsByMessage={imageAttachmentsByMessage}
+          documentAttachmentsByMessage={documentAttachmentsByMessage}
+          messageAliases={messageAliases}
+          userIdentity={userIdentity}
+        />
+        {activeAttempt && (
+          <div
+            data-native-turn={activeAttempt.turn}
+            data-native-step={activeAttempt.step}
+            data-native-attempt={activeAttempt.attemptId}
+            className="min-w-0"
+          >
+            <AttemptContent {...contentProps} attempt={activeAttempt} />
+          </div>
+        )}
+      </AgentReasoningSessionCache.Provider>
     </>
   );
 });

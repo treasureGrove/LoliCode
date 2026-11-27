@@ -1245,6 +1245,7 @@ fn finish_reason(reason: Option<&str>) -> &'static str {
     match reason {
         Some("tool_use") => "tool_calls",
         Some("max_tokens") => "length",
+        Some("refusal") => "content_filter",
         _ => "stop",
     }
 }
@@ -1508,6 +1509,7 @@ where
         let mut id = format!("chatcmpl-{}", uuid::Uuid::new_v4());
         let mut tools = std::collections::HashMap::new();
         let mut reported_usage = json!({});
+        let mut refused = false;
         let mut finished = false;
         while let Some(chunk) = input.next().await {
             let chunk = match chunk {
@@ -1581,7 +1583,12 @@ where
                         if let Some(usage)=event.get("usage").and_then(Value::as_object) {
                             reported_usage.as_object_mut().expect("usage object").extend(usage.clone());
                         }
-                        if let Some(reason) = event.pointer("/delta/stop_reason").and_then(Value::as_str) {
+                        // A refusal stays terminal while later events can still report usage.
+                        if let Some(reason) = event.pointer("/delta/stop_reason")
+                            .and_then(Value::as_str)
+                            .filter(|_| !refused)
+                        {
+                            refused = reason == "refusal";
                             yield Ok(chat_chunk(&id,&model,json!({}),json!(finish_reason(Some(reason)))));
                         }
                     }
@@ -2375,6 +2382,61 @@ mod tests {
         assert!(output.contains("文件"));
         assert!(output.contains("tool_calls"));
         assert!(output.contains("\"total_tokens\":7"));
+        assert!(output.ends_with("data: [DONE]\n\n"));
+    }
+
+    #[tokio::test]
+    async fn messages_refusal_remains_a_content_filter_in_chat_responses() {
+        let model = "test/model";
+        let message = json!({
+            "id":"fixture-refusal","type":"message","role":"assistant","model":model,
+            "content":[
+                {"type":"thinking","thinking":"Fixture reasoning."},
+                {"type":"text","text":"Fixture partial reply."}
+            ],
+            "stop_reason":"refusal","stop_details":{"explanation":"provider refusal detail"},
+            "usage":{"input_tokens":3,"output_tokens":4,"cache_read_input_tokens":7}
+        });
+        let chat = messages_json_to_chat(message, model);
+        assert_eq!(chat["choices"][0]["finish_reason"], "content_filter");
+        assert_eq!(chat["usage"]["total_tokens"], 14);
+        assert!(chat.get("stop_details").is_none());
+
+        let events = [
+            json!({"type":"message_start","message":{"id":"fixture-refusal",
+                "usage":{"input_tokens":3,"cache_read_input_tokens":7}}}),
+            json!({"type":"content_block_delta","index":0,
+                "delta":{"type":"thinking_delta","thinking":"Fixture reasoning."}}),
+            json!({"type":"content_block_delta","index":1,
+                "delta":{"type":"text_delta","text":"Fixture partial reply."}}),
+            json!({"type":"message_delta","delta":{"stop_reason":"refusal",
+                "stop_details":{"explanation":"provider refusal detail"}},"usage":{"output_tokens":1}}),
+            json!({"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":4}}),
+            json!({"type":"message_stop"}),
+        ];
+        let sse: String = events
+            .iter()
+            .map(|event| format!("data: {event}\n\n"))
+            .collect();
+        let stream = messages_sse_to_chat(
+            futures::stream::once(async { Ok::<_, std::io::Error>(Bytes::from(sse)) }),
+            model.into(),
+        );
+        let bytes = axum::body::to_bytes(axum::body::Body::from_stream(stream), MAX_REQUEST_BYTES)
+            .await
+            .unwrap();
+        let output = std::str::from_utf8(&bytes).unwrap();
+        let chunks: Vec<_> = output.split("\n\n").filter_map(sse_json).collect();
+        let reasons: Vec<_> = chunks
+            .iter()
+            .filter_map(|chunk| chunk.pointer("/choices/0/finish_reason")?.as_str())
+            .collect();
+        assert_eq!(reasons, ["content_filter"]);
+        assert!(output.contains("Fixture reasoning."));
+        assert!(output.contains("Fixture partial reply."));
+        assert!(!output.contains("provider refusal detail"));
+        assert_eq!(chunks.last().unwrap()["usage"]["total_tokens"], 14);
+        assert_eq!(output.matches("data: [DONE]").count(), 1);
         assert!(output.ends_with("data: [DONE]\n\n"));
     }
 

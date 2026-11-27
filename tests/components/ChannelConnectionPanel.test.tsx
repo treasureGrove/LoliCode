@@ -96,7 +96,8 @@ describe("tool connection choice", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Codex 使用LoliCode 路由" }),
     );
-    await screen.findByText("切换未完成，已重新读取实际配置状态，请重试。");
+    await screen.findByText("切换未完成，请核对实际连接方式后重试。");
+    expect(channelCenterApi.getConnections).toHaveBeenCalledTimes(2);
     await waitFor(() =>
       expect(
         screen.getByRole("button", { name: "Codex 使用原生配置" }),

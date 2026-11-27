@@ -83,6 +83,7 @@ const messagePayload = (
 
 /** Thin desktop transport. Engine state and credentials stay in the backend. */
 export type AgentSessionSyncDirection = "both" | "import" | "export";
+export type AgentReasoningTranslationProvider = "bing" | "google";
 
 export interface AgentSessionSyncResult {
   imported: number;
@@ -104,7 +105,10 @@ export const agentApi = {
     sessionId: string,
     subscriptionId: string,
     onMessage: (message: AgentNativeSessionWatchMessage) => void,
-    options: { maxMessages?: number } = {},
+    options: Pick<
+      AgentNativeSessionPageOptions,
+      "maxMessages" | "rootSessionId"
+    > = {},
   ) => {
     const onFrame = new Channel<AgentNativeSessionWatchMessage>();
     onFrame.onmessage = (message) => {
@@ -149,6 +153,20 @@ export const agentApi = {
     invoke<void>("prepare_agent_session", { sessionId }),
   readSessionMarkdown: (sessionId: string) =>
     invoke<string>("read_agent_session_markdown", { sessionId }),
+  translateReasoning: (
+    text: string,
+    targetLanguage: string,
+    requestId: string,
+    provider: AgentReasoningTranslationProvider,
+  ) =>
+    invoke<string>("translate_agent_reasoning", {
+      text,
+      targetLanguage,
+      requestId,
+      provider,
+    }),
+  cancelReasoningTranslation: (requestId: string) =>
+    invoke<void>("cancel_agent_reasoning_translation", { requestId }),
   syncSessions: (direction: AgentSessionSyncDirection = "both") =>
     invoke<AgentSessionSyncResult>("sync_agent_sessions", { direction }),
   getNativeActivity: () =>

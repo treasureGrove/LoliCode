@@ -1,4 +1,4 @@
-import { memo, useCallback } from "react";
+import { memo, useCallback, useRef } from "react";
 import {
   CheckCircle2,
   ChevronRight,
@@ -21,6 +21,10 @@ import { AgentWebLink } from "./AgentWebLink";
 import { AgentImage } from "./AgentImage";
 import { AgentAttachmentImage } from "./AgentAttachmentImage";
 import { AgentDisclosure, type AgentDisclosureState } from "./AgentDisclosure";
+import {
+  AgentReasoningTranslation,
+  type AgentReasoningTranslationCache,
+} from "./AgentReasoningTranslation";
 import { isAgentCancellation } from "./AgentRunError";
 import { parseAutomationProposal } from "@/lib/agentAutomation";
 import { AgentAutomationProposalCard } from "./AgentAutomationProposalCard";
@@ -304,12 +308,15 @@ export const AgentReasoningPart = memo(function AgentReasoningPart({
   projectPath,
   sessionId,
   disclosureState,
+  streaming = false,
 }: {
   part: { text: string };
   projectPath: string;
   sessionId?: string;
   disclosureState?: AgentDisclosureState;
+  streaming?: boolean;
 }) {
+  const translatedFragments = useRef<AgentReasoningTranslationCache>();
   return (
     <AgentDisclosure
       className="wb-reasoning wb-disclosure my-2 text-caption"
@@ -326,11 +333,18 @@ export const AgentReasoningPart = memo(function AgentReasoningPart({
       }
     >
       {() => (
-        <AgentTextPart
+        <AgentReasoningTranslation
           text={part.text}
-          projectPath={projectPath}
-          sessionId={sessionId}
-          variant="note"
+          streaming={streaming}
+          cache={translatedFragments}
+          original={
+            <AgentTextPart
+              text={part.text}
+              projectPath={projectPath}
+              sessionId={sessionId}
+              variant="note"
+            />
+          }
         />
       )}
     </AgentDisclosure>

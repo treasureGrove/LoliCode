@@ -40,6 +40,7 @@ pub(crate) mod harness_plugins;
 mod harness_preview;
 pub(crate) use harness_preview::{PreviewBounds, PreviewPresentation};
 mod harness_questions;
+pub(crate) mod harness_reasoning_translation;
 mod harness_remote;
 mod harness_runtime;
 mod harness_secretary;

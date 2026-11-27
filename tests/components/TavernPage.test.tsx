@@ -86,12 +86,14 @@ let failStory: boolean;
 let failPresets: boolean;
 let localEnabled: boolean;
 let pauseAdd: (() => Promise<unknown>) | undefined;
+let pauseSend: Promise<void> | undefined;
 beforeEach(() => {
   stored = { characters: [], stories: [] };
   failStory = false;
   failPresets = false;
   localEnabled = false;
   pauseAdd = undefined;
+  pauseSend = undefined;
   Element.prototype.scrollIntoView = vi.fn();
   vi.mocked(invoke)
     .mockReset()
@@ -126,6 +128,7 @@ beforeEach(() => {
         return;
       }
       if (command === "send_tavern_message") {
+        if (pauseSend) await pauseSend;
         const { storyId, text, modelId } = args as {
           storyId: string;
           text: string;
@@ -268,14 +271,26 @@ describe("Tavern history rendering", () => {
     fireEvent.keyDown(input, { key: "Enter", shiftKey: true });
     fireEvent.keyDown(input, { key: "Enter", isComposing: true });
     expect(calls("send_tavern_message")).toHaveLength(0);
+    let finishReply!: () => void;
+    pauseSend = new Promise<void>((resolve) => {
+      finishReply = resolve;
+    });
     fireEvent.keyDown(input, { key: "Enter" });
-    await waitFor(() => expect(calls("send_tavern_message")).toHaveLength(1));
+    expect(await screen.findByText("对方正在输入…")).toBeVisible();
+    const main = screen.getByRole("main");
+    expect(main.querySelectorAll(".tavern-typing-dots > span")).toHaveLength(3);
+    expect(screen.getByRole("button", { name: zh.tavern.send })).toBeDisabled();
+    expect(calls("send_tavern_message")).toHaveLength(1);
     expect(calls("send_tavern_message")[0][1]).toMatchObject({
       storyId: "composer-story",
       text: "hello",
       modelId: "tavern-local:sbg-v2-9b-q4-16k",
     });
-    await waitFor(() => expect(input).toHaveValue(""));
+    finishReply();
+    expect(await screen.findByText("来啦，坐下来聊一会儿吧。")).toBeVisible();
+    expect(screen.queryByText("对方正在输入…")).not.toBeInTheDocument();
+    expect(main.querySelector(".tavern-typing-dots")).toBeNull();
+    expect(input).toHaveValue("");
   });
 
   it("renders only the recent history at first and keeps the visible anchor when loading earlier messages", async () => {
@@ -525,7 +540,7 @@ describe("Tavern bundled character flow", () => {
       },
     ];
     mount();
-    await screen.findByText("对方正在输入...");
+    await screen.findByText("对方正在输入…");
     const dialog = await openGallery(user);
     expect(
       within(dialog).getByRole("button", { name: "与sillyLoli开始故事" }),

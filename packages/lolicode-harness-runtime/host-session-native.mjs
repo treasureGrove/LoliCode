@@ -3,6 +3,7 @@ import { TYPERT_REMOTE } from "@deepseek-ai/dsh-api-session-controller/remote";
 import { logMissing, logUnreadable, sessionMarkdownError } from "./host-session-markdown.mjs";
 
 export const nativeTooLarge = "LOLICODE_SESSION_NATIVE_TOO_LARGE";
+const nativeChildNotOwned = "LOLICODE_SESSION_NATIVE_CHILD_NOT_OWNED";
 const maximumBytes = 8 * 1024 * 1024;
 const maximumPendingOutput = 16 * 1024 * 1024;
 const readers = new WeakMap();
@@ -89,13 +90,27 @@ export function notifyNativeSessionFrame(transport, output, subscriptionId, fram
 
 export function nativeSessionError(error) {
   if (error?.message === nativeTooLarge) return nativeTooLarge;
+  if (error?.message === nativeChildNotOwned) return nativeChildNotOwned;
   if (error?.code === "session/not-found" || error?.code === "subagent/not-found") return logMissing;
   return sessionMarkdownError(error);
 }
 
-async function nativeSessionAccess(ctx, sessionId) {
+export function findLocalCatalogChild(entries, id) {
+  return entries?.find(entry => entry.id === id && (entry.mode === "one-shot" || entry.mode === "continuable"));
+}
+
+async function nativeSessionAccess(ctx, sessionId, parentId) {
   const host = ctx.root;
   const peer = await readerPeer(host);
+  if (parentId !== undefined) {
+    // The desktop supplied a verified root's private store. Authorize this
+    // exact direct edge using the official projection of the parent's own log.
+    // The official address validator then checks the child's header and descriptor.
+    using parent = await host.sessionQuery.observeSession(parentId, { signal: AbortSignal.timeout(30_000) });
+    const entry = findLocalCatalogChild(parent.projections?.values.subagentCatalog, sessionId);
+    if (!entry || parent.header.origin === "subagent") throw new Error(nativeChildNotOwned);
+    return { host, peer, address: { kind: "subagent", parentSessionId: parentId, childSessionId: sessionId, mode: entry.mode } };
+  }
   const header = host.sessions.get(sessionId)?.header ?? (await host.sessionPersistence.stat(sessionId))?.header;
   const address = header?.origin === "subagent"
     ? { kind: "subagent", parentSessionId: header.parentSession, childSessionId: sessionId, mode: "unknown" }
@@ -104,9 +119,9 @@ async function nativeSessionAccess(ctx, sessionId) {
 }
 
 /** Caller must establish desktop root/child ownership before invoking this. */
-export async function readNativeSession(ctx, sessionId, request = {}) {
+export async function readNativeSession(ctx, sessionId, request = {}, parentId) {
   const pagination = nativePagination(request);
-  const { host, peer, address } = await nativeSessionAccess(ctx, sessionId);
+  const { host, peer, address } = await nativeSessionAccess(ctx, sessionId, parentId);
   const signal = AbortSignal.timeout(30_000);
   async function invoke(method, request) {
     const descriptor = TYPERT_REMOTE.methods[`session/${method}`];
@@ -146,8 +161,10 @@ export async function followNativeSession(ctx, sessionId, request, signal) {
   })();
 }
 
-async function readColdNative(sessions, sessionId, request, suppliedHome) {
-  if (!path.isAbsolute(sessions ?? "") || !/^[A-Za-z0-9_-]{1,128}$/.test(sessionId ?? "")) {
+async function readColdNative(sessions, sessionId, request, suppliedHome, parentId) {
+  const validId = /^[A-Za-z0-9_-]{1,128}$/;
+  if (!path.isAbsolute(sessions ?? "") || !validId.test(sessionId ?? "") ||
+      (parentId !== undefined && (!validId.test(parentId) || parentId === sessionId))) {
     throw new Error(logUnreadable);
   }
   const pagination = nativePagination(request);
@@ -164,7 +181,7 @@ async function readColdNative(sessions, sessionId, request, suppliedHome) {
     process.chdir(home);
     const { createNativeReaderContext } = await import("./host-native-reader-context.mjs");
     ctx = await createNativeReaderContext(home, sessions);
-    return await readNativeSession(ctx, sessionId, pagination);
+    return await readNativeSession(ctx, sessionId, pagination, parentId);
   } finally {
     try {
       if (ctx) await ctx.fiber.dispose();
@@ -182,12 +199,12 @@ async function readColdNative(sessions, sessionId, request, suppliedHome) {
 
 if (import.meta.main) {
   try {
-    const [, , sessions, sessionId, request = "{}", home] = process.argv;
+    const [, , sessions, sessionId, request = "{}", home, parentId] = process.argv;
     if (Buffer.byteLength(request, "utf8") > 1024) throw new Error(logUnreadable);
-    process.stdout.write(JSON.stringify(await readColdNative(sessions, sessionId, JSON.parse(request), home)));
+    process.stdout.write(JSON.stringify(await readColdNative(sessions, sessionId, JSON.parse(request), home, parentId)));
   } catch (error) {
     const message = nativeSessionError(error);
     process.stderr.write(`${message}\n`);
-    process.exitCode = message === logMissing ? 2 : message === nativeTooLarge ? 3 : 1;
+    process.exitCode = message === logMissing ? 2 : message === nativeTooLarge ? 3 : message === nativeChildNotOwned ? 4 : 1;
   }
 }

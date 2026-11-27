@@ -8,6 +8,20 @@
     "copyLink": "複製連結",
     "copyPath": "複製路徑"
   },
+  "agentReasoningTranslation": {
+    "provider": "翻譯服務",
+    "google": "Google 翻譯",
+    "targetLanguage": "翻譯成",
+    "followInterfaceLanguage": "跟隨介面語言",
+    "consent": "開啟後，展開的思考內容會傳送至 {{provider}}。",
+    "enable": "開啟自動翻譯",
+    "disable": "關閉自動翻譯",
+    "original": "顯示原文",
+    "translated": "顯示譯文",
+    "pending": "翻譯中…",
+    "failed": "翻譯失敗，已顯示原文",
+    "retry": "重試翻譯"
+  },
   "agentMarketplace": {
     "name": "外掛市場",
     "open": "開啟外掛市場"
@@ -4438,7 +4452,7 @@
     "you": "你",
     "youShort": "我",
     "messageCount": "本故事 {{count}} 則訊息",
-    "generating": "正在生成…",
+    "typing": "對方正在輸入…",
     "generationFailed": "生成失敗，已保留你傳送的訊息",
     "generationFailedShort": "失敗，可重新傳送",
     "loadEarlier": "載入更早的訊息",

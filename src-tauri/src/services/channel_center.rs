@@ -8,6 +8,7 @@ use crate::provider::{Provider, ProviderMeta};
 use crate::store::AppState;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
+use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, HashSet};
 use std::str::FromStr;
 use std::sync::{Mutex, OnceLock};
@@ -631,9 +632,11 @@ pub fn claude_route_matches(
         .strip_suffix("[1M]")
         .or_else(|| published.strip_suffix("[1m]"))
         .unwrap_or(published);
-    published == claude_route_id(channel, model)
-        || published == claude_desktop_gateway_alias(&route_id(channel, model))
-        || published == claude_gateway_alias(&route_id(channel, model))
+    let route = route_id(channel, model);
+    published == claude_code_gateway_alias(&route)
+        || published == claude_desktop_gateway_alias(&route)
+        || published == legacy_claude_desktop_gateway_alias(&route)
+        || published == claude_gateway_alias(&route)
 }
 fn blank_model(id: String) -> ChannelModel {
     ChannelModel {
@@ -1680,10 +1683,11 @@ pub(crate) fn gateway_provider(
             .models
             .iter()
             .map(|model| {
+                let alias = claude_desktop_gateway_alias(&model.id);
                 (
-                    claude_desktop_gateway_alias(&model.id),
+                    alias.clone(),
                     crate::provider::ClaudeDesktopModelRoute {
-                        model: claude_desktop_gateway_alias(&model.id),
+                        model: alias,
                         label_override: model.name.clone(),
                         supports_1m: model.effective_context_limit().map(|c| c >= 1_000_000),
                     },
@@ -1716,6 +1720,12 @@ fn claude_code_gateway_alias(route: &str) -> String {
 }
 
 fn claude_desktop_gateway_alias(route: &str) -> String {
+    // Claude Desktop can reject model IDs that contain another provider's
+    // name. Keep the route opaque and put the real model in the display label.
+    format!("claude-sonnet-tai-{:x}", Sha256::digest(route.as_bytes()))
+}
+
+fn legacy_claude_desktop_gateway_alias(route: &str) -> String {
     match route.split_once('/') {
         Some((source, model)) => {
             let key: String = source
@@ -4578,6 +4588,11 @@ mod tests {
             model,
             &claude_desktop_gateway_alias("one/model-b")
         ));
+        assert!(claude_route_matches(
+            channel,
+            model,
+            &legacy_claude_desktop_gateway_alias("one/model-b")
+        ));
         assert!(!claude_route_matches(
             channel,
             model,
@@ -4595,6 +4610,55 @@ mod tests {
             claude_desktop_gateway_alias("a--b/c"),
             claude_desktop_gateway_alias("a/b--c")
         );
+    }
+
+    #[test]
+    fn claude_desktop_catalog_keeps_provider_names_in_labels_and_routes_old_ids() {
+        let mut catalog = snapshot();
+        let channel = &mut catalog.channels[0];
+        channel.models[0].id = "deepseek/deepseek-flash".into();
+        channel.models[0].name = Some("DeepSeek Flash".into());
+        channel.models[0].context_limit = Some(1_000_000);
+        channel.models[1].context_limit = Some(128_000);
+        let channel = &catalog.channels[0];
+        let model = &channel.models[0];
+        let route = route_id(channel, model);
+        let source = aggregate_source(
+            &catalog,
+            "http://127.0.0.1:15721/tai/catalogs/9/v1",
+            "fake-local",
+            "anthropic",
+        );
+        let desktop = gateway_provider(&AppType::ClaudeDesktop, &source, &route).unwrap();
+        crate::claude_desktop_config::validate_provider(&desktop).unwrap();
+        let routes = &desktop.meta.unwrap().claude_desktop_model_routes;
+        let alias = claude_desktop_gateway_alias(&route);
+        let digest = alias.strip_prefix("claude-sonnet-tai-").unwrap();
+        assert_eq!(digest.len(), 64);
+        assert!(digest
+            .bytes()
+            .all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f')));
+        assert_eq!(routes[&alias].model, alias);
+        assert_eq!(routes[&alias].label_override, source.models[0].name);
+        assert_eq!(routes[&alias].supports_1m, Some(true));
+        assert_eq!(
+            routes[&claude_desktop_gateway_alias(&source.models[1].id)].supports_1m,
+            Some(false)
+        );
+        for published in [
+            alias.clone(),
+            format!("{alias}[1m]"),
+            legacy_claude_desktop_gateway_alias(&route),
+            claude_gateway_alias(&route),
+            claude_route_id(channel, model),
+        ] {
+            assert!(claude_route_matches(channel, model, &published));
+            assert!(!claude_route_matches(
+                channel,
+                &channel.models[1],
+                &published
+            ));
+        }
     }
 
     #[test]

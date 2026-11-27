@@ -2,6 +2,14 @@
 
 LoliCode release information is maintained independently in this repository. Published packages are available from the [LoliCode website](https://lolicode.com/) and [public LoliCode Releases](https://github.com/treasureGrove/LoliCode-Releases/releases).
 
+## [1.1.5](https://github.com/treasureGrove/LoliCode-Releases/releases/tag/lolicode-v1.1.5) — 2026-11-27
+
+- Redesign the Channel Center to show app connections, gateway status, and published models together. Refresh these statuses after a backup restore.
+- Show subtask progress in Agent conversations. Add opt-in translation of expanded reasoning with a choice of provider and target language.
+- Update DeepSeek Harness to 0.2.2-rc.5, restore access to legacy project secretaries, and improve subagent transcript loading and recovery.
+- Improve Claude Desktop model routing and keep previous route IDs usable. Add a typing indicator to Tavern and fix the empty conversation display.
+- Improve Windows installer and portable ZIP compression and omit frame-forwarding binaries for other architectures.
+
 ## [1.1.4](https://github.com/treasureGrove/LoliCode-Releases/releases/tag/lolicode-v1.1.4) — 2026-11-18
 
 - OpenRouter requests identify LoliCode while preserving custom request headers.

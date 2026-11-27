@@ -102,6 +102,7 @@ impl ProxyService {
     /// 停止代理服务器。同 [`Self::start`]，结束后让托盘比对一次。
     pub async fn stop(&self) -> Result<(), String> {
         let result = self.stop_server().await;
+        self.notify_channel_runtime_changed().await;
         self.notify_tray().await;
         result
     }
@@ -167,6 +168,8 @@ impl ProxyService {
         if let Some(server) = started {
             *server_guard = Some(server);
             log::info!("代理服务器已启动: {}:{}", info.address, info.port);
+            drop(server_guard);
+            self.notify_channel_runtime_changed().await;
         }
         Ok(info)
     }
@@ -254,6 +257,10 @@ impl ProxyService {
                 log::warn!("发送事件 {event} 失败: {error}");
             }
         }
+    }
+
+    pub(crate) async fn notify_channel_runtime_changed(&self) {
+        self.emit("channel-runtime-updated", Value::Null).await;
     }
 
     async fn stop_server(&self) -> Result<(), String> {
@@ -527,12 +534,18 @@ impl ProxyService {
         // 判断是否需要重启（地址或端口变更）
         let require_restart = new_config.listen_address != previous.listen_address
             || new_config.listen_port != previous.listen_port;
-        self.apply_saved_config(
-            &mut server_guard,
-            require_restart,
-            SavedProxyConfig::Legacy(previous),
-        )
-        .await
+        let result = self
+            .apply_saved_config(
+                &mut server_guard,
+                require_restart,
+                SavedProxyConfig::Legacy(previous),
+            )
+            .await;
+        drop(server_guard);
+        if require_restart && !matches!(result, Ok(false)) {
+            self.notify_channel_runtime_changed().await;
+        }
+        result
     }
 
     /// 设置页「保存并重启服务」：只写四个全局字段。各应用自己的重试次数和超时不碰——
@@ -553,12 +566,18 @@ impl ProxyService {
 
         let require_restart = config.listen_address != previous.listen_address
             || config.listen_port != previous.listen_port;
-        self.apply_saved_config(
-            &mut server_guard,
-            require_restart,
-            SavedProxyConfig::Global(previous),
-        )
-        .await
+        let result = self
+            .apply_saved_config(
+                &mut server_guard,
+                require_restart,
+                SavedProxyConfig::Global(previous),
+            )
+            .await;
+        drop(server_guard);
+        if require_restart && !matches!(result, Ok(false)) {
+            self.notify_channel_runtime_changed().await;
+        }
+        result
     }
 
     /// 让运行中的服务用上刚写进库的配置：地址或端口变了就重启（返回 true），否则实时应用。

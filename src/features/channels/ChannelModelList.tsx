@@ -13,6 +13,7 @@ export function ChannelModelList({
   channel,
   models,
   disabled,
+  searching,
   collapsed,
   onToggle,
   onModelsChange,
@@ -20,6 +21,7 @@ export function ChannelModelList({
   channel: ChannelSource;
   models: ChannelModel[];
   disabled: boolean;
+  searching: boolean;
   collapsed: boolean;
   onToggle: () => void;
   onModelsChange: (models: ChannelModel[]) => void;
@@ -36,7 +38,7 @@ export function ChannelModelList({
     );
   return (
     <div>
-      <div className="lolicode-model-toolbar flex flex-wrap items-center gap-2">
+      <div className="lolicode-model-toolbar" data-expanded={!collapsed}>
         <Button
           variant="quiet"
           size="compact"
@@ -49,54 +51,63 @@ export function ChannelModelList({
               collapsed && "-rotate-90",
             )}
           />
-          {collapsed ? "展开" : "收起"} {safe(channel.name)} 模型
+          <span className="truncate">
+            {collapsed ? "展开" : "收起"} {safe(channel.name)} 模型
+          </span>
         </Button>
-        <span className="text-caption text-fg-3">{models.length} 个匹配</span>
-        <div className="ml-auto flex flex-wrap gap-1">
-          <Button
-            size="compact"
-            variant="quiet"
-            disabled={disabled || !channel.enabled}
-            onClick={() =>
-              onModelsChange(
-                channel.models.map((model) => ({
-                  ...model,
-                  enabled: model.supportsTools !== false,
-                })),
-              )
-            }
-          >
-            全选
-          </Button>
-          <Button
-            size="compact"
-            variant="quiet"
-            disabled={disabled || !channel.enabled}
-            onClick={() =>
-              onModelsChange(
-                channel.models.map((model) => ({ ...model, enabled: false })),
-              )
-            }
-          >
-            全不选
-          </Button>
-          <Button
-            size="compact"
-            variant="quiet"
-            disabled={disabled || !channel.enabled}
-            title="选择上游明确支持工具调用的模型；未知能力仍可手动选择"
-            onClick={() =>
-              onModelsChange(
-                channel.models.map((model) => ({
-                  ...model,
-                  enabled: model.supportsTools === true,
-                })),
-              )
-            }
-          >
-            适合 Agent
-          </Button>
-        </div>
+        {searching && (
+          <span className="text-caption text-fg-3">{models.length} 个匹配</span>
+        )}
+        {!collapsed && channel.models.length > 0 && (
+          <div className="lolicode-model-bulk-actions">
+            {searching && (
+              <span className="text-caption text-fg-3">整组操作</span>
+            )}
+            <Button
+              size="compact"
+              variant="quiet"
+              disabled={disabled || !channel.enabled}
+              onClick={() =>
+                onModelsChange(
+                  channel.models.map((model) => ({
+                    ...model,
+                    enabled: model.supportsTools !== false,
+                  })),
+                )
+              }
+            >
+              全选
+            </Button>
+            <Button
+              size="compact"
+              variant="quiet"
+              disabled={disabled || !channel.enabled}
+              onClick={() =>
+                onModelsChange(
+                  channel.models.map((model) => ({ ...model, enabled: false })),
+                )
+              }
+            >
+              全不选
+            </Button>
+            <Button
+              size="compact"
+              variant="quiet"
+              disabled={disabled || !channel.enabled}
+              title="选择上游明确支持工具调用的模型；未知能力仍可手动选择"
+              onClick={() =>
+                onModelsChange(
+                  channel.models.map((model) => ({
+                    ...model,
+                    enabled: model.supportsTools === true,
+                  })),
+                )
+              }
+            >
+              适合 Agent
+            </Button>
+          </div>
+        )}
       </div>
       {!collapsed &&
         (models.length ? (
@@ -161,7 +172,7 @@ export function ChannelModelList({
                     value={model.selectedContextLimit}
                     disabled={disabled || !channel.enabled}
                     label={`${title} 上下文窗口`}
-                    className="ml-6 mt-2 max-w-full"
+                    className="lolicode-model-context"
                     onSelect={(limit) =>
                       update(model.id, {
                         selectedContextLimit: limit ?? undefined,

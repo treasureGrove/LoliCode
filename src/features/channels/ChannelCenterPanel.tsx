@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { useReducedMotion } from "framer-motion";
 import {
   CheckCircle2,
@@ -7,10 +8,13 @@ import {
   EyeOff,
   Layers3,
   Loader2,
+  Pencil,
   Plus,
   RefreshCw,
   Search,
   SlidersHorizontal,
+  Users,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input, fieldClass } from "@/components/ui/input";
@@ -71,11 +75,17 @@ const EMPTY_SNAPSHOT: ChannelCenterSnapshot = {
   targets: ["opencode", "hermes", "openclaw"],
 };
 const CARD = "lolicode-channel-section";
+const CHANNEL_SYNC_INTERVAL_MS = 15_000;
+const CHANNEL_SYNC_CONFLICT =
+  "渠道列表已被另一处修改。请重新加载后再配置；本页的选择已保留。";
+
+type ChannelRefreshRequest = { revision?: number };
 
 export interface ChannelCenterPanelProps {
   onNavigationBlockedChange?: (blocked: boolean) => void;
   initialAccountManagerOpen?: boolean;
   initialToolsOpen?: boolean;
+  showIntro?: boolean;
 }
 
 /** One catalog of upstream channels; target writers stay behind the backend API. */
@@ -83,13 +93,17 @@ export function ChannelCenterPanel({
   onNavigationBlockedChange,
   initialAccountManagerOpen = false,
   initialToolsOpen = false,
+  showIntro = true,
 }: ChannelCenterPanelProps = {}) {
   const reducedMotion = useReducedMotion();
   const [snapshot, setSnapshot] =
     useState<ChannelCenterSnapshot>(EMPTY_SNAPSHOT);
   const [loading, setLoading] = useState(true);
-  const [loadFailed, setLoadFailed] = useState(false);
-  const [conflict, setConflict] = useState(false);
+  const [loadFailed, updateLoadFailed] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
+  const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null);
+  const [conflict, updateConflict] = useState(false);
   const [reloadRequested, setReloadRequested] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
@@ -101,6 +115,11 @@ export function ChannelCenterPanel({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [response, setResponse] = useState<ChannelApplyResponse | null>(null);
+  const [catalogFeedback, setCatalogFeedback] = useState<{
+    channelId: string;
+    modelCount: number | null;
+    message?: string;
+  } | null>(null);
   const [connectionRefresh, setConnectionRefresh] = useState(0);
   const [preset, setPreset] = useState("deepseek");
   const [sourceProtocol, setSourceProtocol] = useState<ChannelProtocol>(
@@ -109,11 +128,11 @@ export function ChannelCenterPanel({
   const [name, setName] = useState("");
   const [baseUrl, setBaseUrl] = useState(CHANNEL_PRESET_MAP.deepseek.baseUrl);
   const [apiKey, setApiKey] = useState("");
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [formTouched, setFormTouched] = useState(false);
+  const [editingId, updateEditingId] = useState<string | null>(null);
+  const [formTouched, updateFormTouched] = useState(false);
   const [search, setSearch] = useState("");
   const [resetRequested, setResetRequested] = useState(false);
-  const [accountBusy, setAccountBusy] = useState(false);
+  const [accountBusy, updateAccountBusy] = useState(false);
   const [accountManagerOpen, setAccountManagerOpen] = useState(
     initialAccountManagerOpen,
   );
@@ -121,13 +140,21 @@ export function ChannelCenterPanel({
     useState<ManagedAuthProvider | null>(null);
   const mounted = useRef(true);
   const loadGeneration = useRef(0);
+  const loadingRef = useRef(true);
+  const loadFailedRef = useRef(false);
+  const conflictRef = useRef(false);
+  const refreshInFlight = useRef(false);
+  const pendingRefresh = useRef<ChannelRefreshRequest | null>(null);
   const busyRef = useRef(false);
+  const accountBusyRef = useRef(false);
   const snapshotRef = useRef(snapshot);
+  const committedSnapshot = useRef<ChannelCenterSnapshot | null>(null);
   const editVersion = useRef(0);
+  const editingIdRef = useRef<string | null>(null);
+  const formTouchedRef = useRef(false);
   const formVersion = useRef(0);
   const cleanVersion = useRef(0);
   const saveInFlight = useRef<Promise<ChannelCenterSnapshot> | null>(null);
-  const formRef = useRef<HTMLFormElement>(null);
   const blocked =
     dirty || formTouched || Boolean(busy) || accountBusy || saving;
   const tracker = useUnsavedChangesTracker();
@@ -139,10 +166,83 @@ export function ChannelCenterPanel({
     if (initialToolsOpen) setToolsOpen(true);
   }, [initialToolsOpen]);
 
-  const replaceSnapshot = (next: ChannelCenterSnapshot) => {
+  const replaceSnapshot = useCallback((next: ChannelCenterSnapshot) => {
     snapshotRef.current = next;
     setSnapshot(next);
-  };
+  }, []);
+  const setEditingId = useCallback((id: string | null) => {
+    editingIdRef.current = id;
+    updateEditingId(id);
+  }, []);
+  const setFormTouched = useCallback((touched: boolean) => {
+    formTouchedRef.current = touched;
+    updateFormTouched(touched);
+  }, []);
+  const setLoadFailed = useCallback((failed: boolean) => {
+    loadFailedRef.current = failed;
+    updateLoadFailed(failed);
+  }, []);
+  const setConflict = useCallback((next: boolean) => {
+    conflictRef.current = next;
+    updateConflict(next);
+  }, []);
+
+  const resetForm = useCallback(() => {
+    formVersion.current += 1;
+    setName("");
+    setBaseUrl(CHANNEL_PRESET_MAP.deepseek.baseUrl);
+    setApiKey("");
+    setShowKey(false);
+    setPreset("deepseek");
+    setSourceProtocol(CHANNEL_PRESET_MAP.deepseek.protocol);
+    setEditingId(null);
+    setFormTouched(false);
+    setResetRequested(false);
+  }, [setEditingId, setFormTouched]);
+
+  const editChannel = useCallback(
+    (channel: ChannelSource) => {
+      formVersion.current += 1;
+      setEditingId(channel.id);
+      setName(channel.name);
+      setBaseUrl(channel.baseUrl);
+      setApiKey(channel.apiKey);
+      setShowKey(false);
+      setPreset(matchChannelPreset(channel)?.id ?? "custom");
+      setSourceProtocol(channel.protocol);
+      setFormTouched(false);
+    },
+    [setEditingId, setFormTouched],
+  );
+
+  const installSavedSnapshot = useCallback(
+    (saved: ChannelCenterSnapshot) => {
+      committedSnapshot.current = saved;
+      replaceSnapshot(withValidDefault(saved));
+      cleanVersion.current = editVersion.current;
+      setDirty(false);
+      setSaveFailed(false);
+      setNotice(null);
+      setResponse(null);
+      setConnectionRefresh((value) => value + 1);
+      const id = editingIdRef.current;
+      if (!id) return;
+      const source = saved.channels.find((channel) => channel.id === id);
+      if (source?.authKind === "api_key") editChannel(source);
+      else resetForm();
+    },
+    [editChannel, replaceSnapshot, resetForm],
+  );
+
+  const confirmSynced = useCallback(() => {
+    if (loadFailedRef.current && !conflictRef.current) {
+      setError(null);
+      setSaveFailed(false);
+    }
+    setLoadFailed(false);
+    setRefreshError(null);
+    setLastSyncedAt(Date.now());
+  }, [setLoadFailed]);
 
   useEffect(() => {
     if (dirty || formTouched) tracker.markDirty();
@@ -162,50 +262,217 @@ export function ChannelCenterPanel({
     return () => window.removeEventListener("beforeunload", warnBeforeUnload);
   }, [blocked]);
 
+  const flushSnapshotRefresh = useCallback(
+    async function flush() {
+      const request = pendingRefresh.current;
+      if (
+        !request ||
+        !mounted.current ||
+        loadingRef.current ||
+        refreshInFlight.current ||
+        busyRef.current ||
+        accountBusyRef.current ||
+        saveInFlight.current
+      ) {
+        return;
+      }
+      pendingRefresh.current = null;
+      if (
+        request.revision !== undefined &&
+        request.revision === committedSnapshot.current?.revision
+      ) {
+        return;
+      }
+
+      const generation = loadGeneration.current;
+      const active = committedSnapshot.current;
+      refreshInFlight.current = true;
+      setRefreshing(true);
+      try {
+        const saved = await channelCenterApi.get();
+        if (!mounted.current || generation !== loadGeneration.current) return;
+        if (
+          active !== committedSnapshot.current ||
+          busyRef.current ||
+          accountBusyRef.current ||
+          saveInFlight.current
+        ) {
+          // A write started during the read. Re-read once it settles.
+          pendingRefresh.current ??= request;
+          return;
+        }
+        // A restored database can contain different channels at the same revision.
+        const changed =
+          saved.revision !== active?.revision ||
+          JSON.stringify(saved) !== JSON.stringify(active);
+        if (!changed) {
+          confirmSynced();
+          return;
+        }
+        if (
+          conflictRef.current ||
+          editVersion.current !== cleanVersion.current ||
+          (editingIdRef.current && formTouchedRef.current)
+        ) {
+          setRefreshError(null);
+          setConflict(true);
+          setError(CHANNEL_SYNC_CONFLICT);
+          return;
+        }
+        installSavedSnapshot(saved);
+        confirmSynced();
+      } catch (cause) {
+        if (!mounted.current || generation !== loadGeneration.current) return;
+        setRefreshError(
+          channelErrorMessage(
+            cause,
+            snapshotRef.current.channels.map((channel) => channel.apiKey),
+          ),
+        );
+      } finally {
+        if (mounted.current && generation === loadGeneration.current) {
+          refreshInFlight.current = false;
+          setRefreshing(false);
+          if (pendingRefresh.current) void flush();
+        }
+      }
+    },
+    [confirmSynced, installSavedSnapshot, setConflict],
+  );
+
+  const requestSnapshotRefresh = useCallback(
+    (revision?: number) => {
+      if (!mounted.current) return;
+      if (
+        revision !== undefined &&
+        revision === committedSnapshot.current?.revision
+      ) {
+        return;
+      }
+      if (!pendingRefresh.current) {
+        pendingRefresh.current = { revision };
+      } else if (pendingRefresh.current.revision !== revision) {
+        pendingRefresh.current = {};
+      }
+      void flushSnapshotRefresh();
+    },
+    [flushSnapshotRefresh],
+  );
+
   const load = useCallback(async () => {
     const generation = ++loadGeneration.current;
+    loadingRef.current = true;
+    refreshInFlight.current = false;
     setLoading(true);
+    setRefreshing(false);
+    setRefreshError(null);
     setLoadFailed(false);
     setConflict(false);
     setError(null);
     try {
       const saved = await channelCenterApi.get();
       if (!mounted.current || generation !== loadGeneration.current) return;
-      replaceSnapshot(withValidDefault(saved));
-      cleanVersion.current = editVersion.current;
-      setDirty(false);
-      setSaveFailed(false);
-      setResponse(null);
+      installSavedSnapshot(saved);
+      confirmSynced();
     } catch (cause) {
       if (!mounted.current || generation !== loadGeneration.current) return;
       setLoadFailed(true);
-      setError(channelErrorMessage(cause));
+      setError(
+        channelErrorMessage(
+          cause,
+          snapshotRef.current.channels.map((channel) => channel.apiKey),
+        ),
+      );
     } finally {
       if (mounted.current && generation === loadGeneration.current) {
+        loadingRef.current = false;
         setLoading(false);
+        void flushSnapshotRefresh();
       }
     }
-  }, []);
+  }, [
+    confirmSynced,
+    flushSnapshotRefresh,
+    installSavedSnapshot,
+    setConflict,
+    setLoadFailed,
+  ]);
+
+  const setAccountBusy = useCallback(
+    (next: boolean) => {
+      accountBusyRef.current = next;
+      updateAccountBusy(next);
+      if (!next) void flushSnapshotRefresh();
+    },
+    [flushSnapshotRefresh],
+  );
+
   useEffect(() => {
     mounted.current = true;
+    let disposed = false;
+    const stops: Array<() => void> = [];
+    const refreshForeground = () => {
+      if (document.visibilityState !== "hidden") requestSnapshotRefresh();
+    };
+    for (const name of [
+      "channel-center-updated",
+      "channel-runtime-updated",
+      "channel-connection-changed",
+      "tauri://focus",
+    ]) {
+      void listen<{ revision?: number } | null>(name, ({ payload }) => {
+        if (disposed) return;
+        if (name === "channel-center-updated") {
+          requestSnapshotRefresh(payload?.revision);
+        } else {
+          if (name === "tauri://focus") refreshForeground();
+          setConnectionRefresh((value) => value + 1);
+        }
+      })
+        .then((unlisten) => {
+          if (disposed) unlisten();
+          else stops.push(unlisten);
+        })
+        .catch(() => {});
+    }
+    window.addEventListener("focus", refreshForeground);
+    document.addEventListener("visibilitychange", refreshForeground);
+    const timer = window.setInterval(
+      refreshForeground,
+      CHANNEL_SYNC_INTERVAL_MS,
+    );
     void load();
     return () => {
+      disposed = true;
+      stops.forEach((stop) => stop());
+      window.removeEventListener("focus", refreshForeground);
+      document.removeEventListener("visibilitychange", refreshForeground);
+      window.clearInterval(timer);
       mounted.current = false;
       loadGeneration.current += 1;
+      refreshInFlight.current = false;
+      pendingRefresh.current = null;
     };
-  }, [load]);
+  }, [load, requestSnapshotRefresh]);
 
-  const resetForm = () => {
-    formVersion.current += 1;
-    setName("");
-    setBaseUrl(CHANNEL_PRESET_MAP.deepseek.baseUrl);
-    setApiKey("");
-    setShowKey(false);
-    setPreset("deepseek");
-    setSourceProtocol(CHANNEL_PRESET_MAP.deepseek.protocol);
-    setEditingId(null);
-    setFormTouched(false);
-    setResetRequested(false);
+  const reloadSavedSnapshot = () => {
+    if (busyRef.current || accountBusyRef.current || saveInFlight.current)
+      return;
+    if (dirty || (editingId && formTouched)) {
+      setReloadRequested(true);
+    } else {
+      void load();
+    }
+  };
+
+  const confirmSnapshotReload = () => {
+    setReloadRequested(false);
+    void load();
+  };
+
+  const refreshSavedSnapshot = () => {
+    if (loadFailed || conflict) reloadSavedSnapshot();
+    else requestSnapshotRefresh();
   };
 
   const selectPreset = (value: string) => {
@@ -237,7 +504,11 @@ export function ChannelCenterPanel({
     propagate = false,
     independent = false,
   ) => {
-    if (busyRef.current || (!independent && (loading || loadFailed))) {
+    if (
+      busyRef.current ||
+      (!independent &&
+        (loadingRef.current || loadFailedRef.current || conflictRef.current))
+    ) {
       if (propagate)
         throw new Error("请等待当前操作完成或重新加载渠道后再加入。");
       return;
@@ -257,14 +528,17 @@ export function ChannelCenterPanel({
           : "channel",
       );
       if (mounted.current) {
-        setConflict(String(cause).includes("另一处修改"));
+        if (String(cause).includes("另一处修改")) setConflict(true);
         if (label === "save" || label === "apply") setSaveFailed(true);
         setError(message);
       }
       if (propagate) throw new Error(message);
     } finally {
       busyRef.current = false;
-      if (mounted.current) setBusy(null);
+      if (mounted.current) {
+        setBusy(null);
+        void flushSnapshotRefresh();
+      }
     }
   };
 
@@ -290,9 +564,10 @@ export function ChannelCenterPanel({
       await channelCenterApi.save(normalized);
       if (!mounted.current) return normalized;
       cleanVersion.current = version;
+      committedSnapshot.current = { ...normalized, revision: expectedRevision };
       replaceSnapshot(
         editVersion.current === version
-          ? { ...normalized, revision: expectedRevision }
+          ? committedSnapshot.current
           : { ...snapshotRef.current, revision: expectedRevision },
       );
       setDirty(editVersion.current !== version);
@@ -308,16 +583,18 @@ export function ChannelCenterPanel({
       if (saved.revision !== expectedRevision) {
         setConflict(true);
         setDirty(true);
-        throw new Error(
-          "渠道列表已被另一处修改。请重新加载后再配置；本页的选择已保留。",
-        );
+        throw new Error(CHANNEL_SYNC_CONFLICT);
       }
+      committedSnapshot.current = saved;
       replaceSnapshot(
         editVersion.current === version
           ? withValidDefault(saved)
           : { ...snapshotRef.current, revision: saved.revision },
       );
+      setLastSyncedAt(Date.now());
+      setRefreshError(null);
       setError(null);
+      setConnectionRefresh((value) => value + 1);
       return saved;
     })();
     saveInFlight.current = operation;
@@ -325,7 +602,10 @@ export function ChannelCenterPanel({
       return await operation;
     } finally {
       if (saveInFlight.current === operation) saveInFlight.current = null;
-      if (mounted.current) setSaving(false);
+      if (mounted.current) {
+        setSaving(false);
+        void flushSnapshotRefresh();
+      }
     }
   };
 
@@ -345,7 +625,7 @@ export function ChannelCenterPanel({
       void persist().catch((cause) => {
         if (!mounted.current) return;
         setSaveFailed(true);
-        setConflict(String(cause).includes("另一处修改"));
+        if (String(cause).includes("另一处修改")) setConflict(true);
         setError(
           channelErrorMessage(
             cause,
@@ -580,12 +860,49 @@ export function ChannelCenterPanel({
   };
   const selectedPreset = CHANNEL_PRESET_MAP[preset];
   const selectedAccountPreset = ACCOUNT_CHANNEL_PRESET_MAP[preset];
-  const filteredChannels = snapshot.channels.map((channel) => ({
-    channel,
-    models: channel.models.filter((model) =>
-      matchesChannelModel(channel, model, search),
-    ),
-  }));
+  const searchNeedle = search.trim().toLocaleLowerCase();
+  const filteredChannels = snapshot.channels
+    .map((channel) => ({
+      channel,
+      models: channel.models.filter((model) =>
+        matchesChannelModel(channel, model, searchNeedle),
+      ),
+    }))
+    .filter(
+      ({ channel, models }) =>
+        !searchNeedle ||
+        models.length > 0 ||
+        channel.name.toLocaleLowerCase().includes(searchNeedle),
+    );
+  const inlineCatalogError =
+    !conflict &&
+    !loadFailed &&
+    catalogFeedback?.message !== undefined &&
+    error === catalogFeedback.message &&
+    filteredChannels.some(
+      ({ channel }) => channel.id === catalogFeedback.channelId,
+    );
+  const revealChannelForm = () => {
+    const heading = document.getElementById("channel-add-heading");
+    heading?.focus({ preventScroll: true });
+    heading?.scrollIntoView?.({
+      behavior: reducedMotion ? "auto" : "smooth",
+      block: "start",
+    });
+  };
+  const saveState = conflict
+    ? "配置有更新冲突"
+    : saving
+      ? "正在自动保存…"
+      : loadFailed
+        ? "暂时无法确认已保存配置"
+        : saveFailed
+          ? "自动保存失败，修改仍保留"
+          : dirty
+            ? "等待自动保存…"
+            : formTouched
+              ? "输入草稿尚未保存"
+              : "配置已自动保存";
 
   return (
     <div
@@ -593,49 +910,141 @@ export function ChannelCenterPanel({
       aria-busy={Boolean(busy) || loading}
     >
       <div className="lolicode-channel-content">
-        <header className="lolicode-channel-heading">
-          <div className="lolicode-channel-intro">
-            <span className="lolicode-channel-eyebrow">MODEL LIBRARY</span>
-            <h1>模型与渠道</h1>
-            <p className="mt-1 text-body text-fg-2">
-              连接喜欢的模型，让灵感随时就绪。
-            </p>
-          </div>
-          <div className="lolicode-channel-summary">
-            <span className="lolicode-channel-count">
-              <Layers3 className="h-3.5 w-3.5" aria-hidden="true" />
-              {snapshot.channels.length} 个渠道 · {selected.length} 个已选模型
-            </span>
-            <span
-              role="status"
-              className="lolicode-channel-save-state text-caption text-fg-3"
-            >
-              {!loading &&
-                !dirty &&
-                !formTouched &&
-                !loadFailed &&
-                !saveFailed &&
-                !saving && (
-                  <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
+        <div className="lolicode-channel-overview" data-show-intro={showIntro}>
+          <header className="lolicode-channel-heading">
+            {showIntro && (
+              <div className="lolicode-channel-intro">
+                <span
+                  className="lolicode-channel-heading-icon"
+                  aria-hidden="true"
+                >
+                  <Layers3 className="h-5 w-5" />
+                </span>
+                <div>
+                  <h1>模型与渠道</h1>
+                  <p className="text-body">
+                    管理渠道与默认模型，或将所选模型应用到本地工具。
+                  </p>
+                </div>
+              </div>
+            )}
+            <div className="lolicode-channel-page-actions">
+              <Button
+                variant="neutral"
+                size="compact"
+                title="同步已保存的渠道配置"
+                disabled={
+                  loading ||
+                  refreshing ||
+                  Boolean(busy) ||
+                  accountBusy ||
+                  saving
+                }
+                onClick={() => void refreshSavedSnapshot()}
+              >
+                <RefreshCw
+                  aria-hidden="true"
+                  className={cn("h-3.5 w-3.5", refreshing && "animate-spin")}
+                />
+                刷新渠道
+              </Button>
+              <Button
+                variant="neutral"
+                size="compact"
+                disabled={disabled}
+                onClick={() => {
+                  setAccountManagerTarget(null);
+                  setAccountManagerOpen(true);
+                }}
+              >
+                <Users className="h-3.5 w-3.5" aria-hidden="true" />
+                管理登录账号
+              </Button>
+              <Button
+                variant="solid"
+                size="compact"
+                disabled={disabled}
+                onClick={revealChannelForm}
+              >
+                {editingId ? (
+                  <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+                ) : (
+                  <Plus className="h-3.5 w-3.5" aria-hidden="true" />
                 )}
-              {saving
-                ? "正在自动保存…"
-                : loadFailed
-                  ? "暂时无法确认已保存配置"
-                  : saveFailed
-                    ? "自动保存失败，修改仍保留"
-                    : dirty
-                      ? "等待自动保存…"
-                      : formTouched
-                        ? "输入草稿尚未保存"
-                        : !loading
-                          ? "配置已自动保存"
-                          : ""}
-            </span>
-          </div>
-        </header>
+                {editingId ? "返回编辑" : "添加渠道"}
+              </Button>
+            </div>
+          </header>
 
-        {error && (
+          <div className="lolicode-channel-summary">
+            <div className="lolicode-channel-metrics">
+              <span className="lolicode-channel-count">
+                <strong>
+                  {loading && lastSyncedAt === null
+                    ? "—"
+                    : snapshot.channels.length}
+                </strong>{" "}
+                已连接渠道
+              </span>
+              <span className="lolicode-channel-count">
+                <strong>
+                  {loading && lastSyncedAt === null ? "—" : selected.length}
+                </strong>{" "}
+                已选模型
+              </span>
+            </div>
+            <div className="lolicode-channel-sync">
+              {refreshing ? (
+                <span className="lolicode-channel-save-state">
+                  <Loader2
+                    className="h-3 w-3 animate-spin"
+                    aria-hidden="true"
+                  />
+                  正在同步渠道…
+                </span>
+              ) : refreshError ? (
+                <span
+                  role="status"
+                  className="lolicode-channel-save-state text-warning-text"
+                >
+                  <CircleAlert className="h-3 w-3" aria-hidden="true" />
+                  同步失败，保留上次数据
+                </span>
+              ) : lastSyncedAt !== null ? (
+                <span>
+                  上次同步 {new Date(lastSyncedAt).toLocaleTimeString()}
+                </span>
+              ) : null}
+              {!loading && (
+                <span
+                  role="status"
+                  className={cn(
+                    "lolicode-channel-save-state",
+                    (conflict || loadFailed || saveFailed) &&
+                      "text-warning-text",
+                  )}
+                >
+                  {conflict || loadFailed || saveFailed ? (
+                    <CircleAlert className="h-3 w-3" aria-hidden="true" />
+                  ) : saving || dirty ? (
+                    <Loader2
+                      className="h-3 w-3 animate-spin"
+                      aria-hidden="true"
+                    />
+                  ) : !formTouched ? (
+                    <CheckCircle2
+                      className="h-3 w-3 text-success-text"
+                      aria-hidden="true"
+                    />
+                  ) : null}
+                  {saveState}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {error && !inlineCatalogError && (
           <div role="alert">
             <Notice
               tone="danger"
@@ -645,10 +1054,7 @@ export function ChannelCenterPanel({
                   <Button
                     variant="neutral"
                     size="compact"
-                    onClick={() => {
-                      if (dirty) setReloadRequested(true);
-                      else void load();
-                    }}
+                    onClick={() => void reloadSavedSnapshot()}
                   >
                     重新加载
                   </Button>
@@ -674,6 +1080,9 @@ export function ChannelCenterPanel({
             <Notice title={notice} />
           </div>
         )}
+        {refreshError && !error && (
+          <Notice tone="warning" title={refreshError} />
+        )}
         {loading && (
           <div
             role="status"
@@ -685,6 +1094,339 @@ export function ChannelCenterPanel({
         )}
 
         <section
+          className={cn(CARD, "lolicode-channel-catalog")}
+          aria-labelledby="channel-model-heading"
+        >
+          <div className="lolicode-channel-section-heading">
+            <div>
+              <h2 id="channel-model-heading" className="text-fg-1">
+                已连接渠道
+              </h2>
+              <p className="mt-1 text-caption text-fg-3">
+                启用渠道、刷新上游目录，或展开渠道选择模型。
+              </p>
+            </div>
+            {snapshot.channels.length > 0 && (
+              <div className="lolicode-channel-search">
+                <Search
+                  className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-3"
+                  aria-hidden="true"
+                />
+                <Input
+                  aria-label="搜索渠道或模型"
+                  className="pl-9 pr-8"
+                  value={search}
+                  placeholder="搜索渠道或模型"
+                  onChange={(event) => setSearch(event.target.value)}
+                />
+                {search && (
+                  <Button
+                    type="button"
+                    size="icon-compact"
+                    variant="quiet"
+                    aria-label="清除搜索"
+                    className="absolute right-0.5 top-1/2 -translate-y-1/2"
+                    onClick={() => setSearch("")}
+                  >
+                    <X className="h-3.5 w-3.5" aria-hidden="true" />
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
+          {snapshot.channels.length > 0 && (
+            <div className="lolicode-channel-default">
+              <div>
+                <Label htmlFor="channel-default-model">默认模型</Label>
+                <p className="mt-0.5 text-caption text-fg-3">
+                  从已启用的渠道和模型中选择。
+                </p>
+              </div>
+              <select
+                id="channel-default-model"
+                className={cn(fieldClass, "h-8")}
+                disabled={disabled || selected.length === 0}
+                value={snapshot.defaultModel || ""}
+                onChange={(event) =>
+                  updateSnapshot({
+                    ...snapshot,
+                    defaultModel: event.target.value,
+                  })
+                }
+              >
+                {selected.length === 0 && (
+                  <option value="">请先选择模型</option>
+                )}
+                {selected.map(({ channel, model, value }) => (
+                  <option key={value} value={value}>
+                    {channel.name} · {model.name || model.id}
+                    {channel.authKind === "lolicode_account" ? " · free" : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          {snapshot.channels.length === 0 && !loading && !loadFailed && (
+            <div className="lolicode-channel-empty">
+              <span className="lolicode-channel-empty-icon" aria-hidden="true">
+                <Layers3 className="h-6 w-6" />
+              </span>
+              <p className="font-medium text-fg-1">暂无已连接渠道</p>
+              <p className="text-caption text-fg-3">
+                通过 API Key 或订阅账号连接服务后，可在这里选择模型。
+              </p>
+            </div>
+          )}
+          {snapshot.channels.length > 0 && filteredChannels.length === 0 && (
+            <div className="lolicode-channel-empty" role="status">
+              <Search className="h-5 w-5 text-fg-3" aria-hidden="true" />
+              <p className="font-medium text-fg-1">没有匹配的渠道或模型</p>
+            </div>
+          )}
+          <div className="lolicode-channel-catalog-list">
+            {filteredChannels.map(({ channel, models }) => {
+              const collapseKey = searchNeedle
+                ? `search:${channel.id}`
+                : channel.id;
+              const isCollapsed = collapsed[collapseKey] ?? !searchNeedle;
+              const channelSelectedCount = channel.models.filter(
+                (model) =>
+                  model.enabled !== false && model.supportsTools !== false,
+              ).length;
+              const nativeSubscription =
+                channel.authKind === "claude_subscription" ||
+                channel.authKind === "gemini_subscription";
+              const activeRefresh = busy === `refresh-${channel.id}`;
+              const feedback =
+                catalogFeedback?.channelId === channel.id
+                  ? catalogFeedback
+                  : null;
+              const refreshFailed = feedback?.modelCount === null;
+              return (
+                <article
+                  key={channel.id}
+                  className="lolicode-saved-channel"
+                  data-enabled={channel.enabled}
+                  aria-label={`${channel.name} 渠道`}
+                >
+                  <div className="lolicode-saved-channel-heading">
+                    <div className="lolicode-saved-channel-identity">
+                      <ProviderIconBox
+                        icon={
+                          channel.authKind === "github_copilot"
+                            ? "githubcopilot"
+                            : channel.authKind === "zhipu_oauth"
+                              ? "zhipu"
+                              : channel.authKind === "codex_oauth"
+                                ? "openai"
+                                : channel.authKind === "xai_oauth"
+                                  ? "grok"
+                                  : channel.authKind === "claude_subscription"
+                                    ? "claude"
+                                    : channel.authKind === "gemini_subscription"
+                                      ? "gemini"
+                                      : matchChannelPreset(channel)?.icon ||
+                                        "newapi"
+                        }
+                        name={channel.name}
+                      />
+                      <div className="min-w-0">
+                        <h3 className="break-words font-semibold text-fg-1">
+                          {channel.name}
+                        </h3>
+                        <div className="lolicode-saved-channel-meta">
+                          <span>
+                            {channel.enabled ? "已选" : "保留"}{" "}
+                            {channelSelectedCount} / {channel.models.length}{" "}
+                            个模型
+                          </span>
+                          <span>
+                            {channel.authKind === "lolicode_account"
+                              ? "仅 LoliCode · 每日额度"
+                              : nativeSubscription
+                                ? "仅原生工具"
+                                : channel.authKind === "api_key"
+                                  ? "API Key"
+                                  : "订阅账号"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="lolicode-saved-channel-actions">
+                      <label
+                        className="lolicode-channel-enable"
+                        data-enabled={channel.enabled}
+                      >
+                        <Checkbox
+                          aria-label={`启用 ${channel.name}`}
+                          checked={channel.enabled}
+                          disabled={disabled}
+                          onCheckedChange={(enabled) =>
+                            updateSnapshot({
+                              ...snapshot,
+                              channels: snapshot.channels.map((item) =>
+                                item.id === channel.id
+                                  ? { ...item, enabled }
+                                  : item,
+                              ),
+                            })
+                          }
+                        />
+                        <span>{channel.enabled ? "已启用" : "已停用"}</span>
+                      </label>
+                      {(channel.authKind === "github_copilot" ||
+                        channel.authKind === "codex_oauth" ||
+                        channel.authKind === "xai_oauth") && (
+                        <Button
+                          variant="quiet"
+                          size="compact"
+                          disabled={disabled}
+                          onClick={() => {
+                            setAccountManagerTarget(
+                              channel.authKind as ManagedAuthProvider,
+                            );
+                            setAccountManagerOpen(true);
+                          }}
+                        >
+                          <Users className="h-3.5 w-3.5" aria-hidden="true" />
+                          账号管理
+                        </Button>
+                      )}
+                      {channel.authKind === "api_key" && (
+                        <Button
+                          variant="quiet"
+                          size="compact"
+                          disabled={disabled || formTouched}
+                          onClick={() => {
+                            editChannel(channel);
+                            revealChannelForm();
+                          }}
+                        >
+                          <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+                          修改
+                        </Button>
+                      )}
+                      <Button
+                        variant="neutral"
+                        size="compact"
+                        title={
+                          nativeSubscription
+                            ? "重新读取本机订阅状态"
+                            : "从服务商重新获取模型目录"
+                        }
+                        disabled={
+                          disabled ||
+                          conflict ||
+                          (editingId === channel.id && formTouched)
+                        }
+                        onClick={() => {
+                          setCatalogFeedback(null);
+                          void run(
+                            `refresh-${channel.id}`,
+                            async () => {
+                              const discovered =
+                                await upsertDiscovered(channel);
+                              if (mounted.current) {
+                                setResponse(null);
+                                setCatalogFeedback({
+                                  channelId: channel.id,
+                                  modelCount: discovered.models.length,
+                                });
+                              }
+                            },
+                            true,
+                          ).catch((cause: unknown) => {
+                            if (mounted.current)
+                              setCatalogFeedback({
+                                channelId: channel.id,
+                                modelCount: null,
+                                message:
+                                  cause instanceof Error
+                                    ? cause.message
+                                    : undefined,
+                              });
+                          });
+                        }}
+                      >
+                        {activeRefresh ? (
+                          <Loader2
+                            className="h-3.5 w-3.5 animate-spin"
+                            aria-hidden="true"
+                          />
+                        ) : (
+                          <RefreshCw
+                            className="h-3.5 w-3.5"
+                            aria-hidden="true"
+                          />
+                        )}
+                        {nativeSubscription ? "检测订阅" : "刷新模型"}
+                      </Button>
+                    </div>
+                  </div>
+                  {(activeRefresh || feedback) && (
+                    <p
+                      role={
+                        refreshFailed && inlineCatalogError ? "alert" : "status"
+                      }
+                      className={cn(
+                        "lolicode-saved-channel-feedback",
+                        activeRefresh
+                          ? "text-fg-2"
+                          : refreshFailed
+                            ? "text-warning-text"
+                            : "text-success-text",
+                      )}
+                    >
+                      {!activeRefresh &&
+                        feedback &&
+                        (refreshFailed ? (
+                          <CircleAlert
+                            className="h-3.5 w-3.5"
+                            aria-hidden="true"
+                          />
+                        ) : (
+                          <CheckCircle2
+                            className="h-3.5 w-3.5"
+                            aria-hidden="true"
+                          />
+                        ))}
+                      {activeRefresh
+                        ? "正在更新模型目录…"
+                        : refreshFailed
+                          ? (inlineCatalogError && feedback?.message) ||
+                            "更新模型目录失败，可重试。"
+                          : feedback &&
+                            `本次刷新完成，获取 ${feedback.modelCount} 个模型。`}
+                    </p>
+                  )}
+                  <ChannelModelList
+                    channel={channel}
+                    models={models}
+                    disabled={disabled}
+                    searching={Boolean(searchNeedle)}
+                    collapsed={isCollapsed}
+                    onToggle={() =>
+                      setCollapsed((value) => ({
+                        ...value,
+                        [collapseKey]: !isCollapsed,
+                      }))
+                    }
+                    onModelsChange={(models) =>
+                      updateSnapshot({
+                        ...snapshotRef.current,
+                        channels: snapshotRef.current.channels.map((item) =>
+                          item.id === channel.id ? { ...item, models } : item,
+                        ),
+                      })
+                    }
+                  />
+                </article>
+              );
+            })}
+          </div>
+        </section>
+
+        <section
           className={cn(CARD, "lolicode-channel-connect")}
           aria-labelledby="channel-add-heading"
         >
@@ -692,25 +1434,17 @@ export function ChannelCenterPanel({
             <div>
               <h2
                 id="channel-add-heading"
-                className="text-base font-semibold text-fg-1"
+                className="lolicode-channel-form-heading text-fg-1"
+                tabIndex={-1}
               >
-                添加渠道
+                {editingId ? "编辑渠道" : "添加渠道"}
               </h2>
               <p className="mt-1 text-caption text-fg-3">
-                选择服务，使用密钥或已有账号连接。
+                {editingId
+                  ? "有效的连接信息会自动保存。"
+                  : "选择服务，使用 API Key 或已有账号连接。"}
               </p>
             </div>
-            <Button
-              variant="quiet"
-              size="compact"
-              disabled={disabled}
-              onClick={() => {
-                setAccountManagerTarget(null);
-                setAccountManagerOpen(true);
-              }}
-            >
-              管理登录账号
-            </Button>
           </div>
           <div className="lolicode-channel-connect-grid">
             <ChannelPresetPicker
@@ -732,7 +1466,6 @@ export function ChannelCenterPanel({
               )}
               {!selectedAccountPreset ? (
                 <form
-                  ref={formRef}
                   noValidate
                   className="space-y-3"
                   onSubmit={(event) => {
@@ -751,9 +1484,11 @@ export function ChannelCenterPanel({
                           <p className="text-body font-medium text-fg-1">
                             {selectedPreset.name}
                           </p>
-                          <p className="mt-0.5 text-caption text-fg-3">
-                            服务地址已准备好，填写密钥即可。
-                          </p>
+                          {!editingId && (
+                            <p className="mt-0.5 text-caption text-fg-3">
+                              已预填服务地址。
+                            </p>
+                          )}
                         </div>
                       </div>
                     )}
@@ -827,8 +1562,10 @@ export function ChannelCenterPanel({
                       {!editingId && (
                         <Button
                           type="submit"
-                          variant="neutral"
-                          disabled={!baseUrl.trim() || !apiKey.trim()}
+                          variant="solid"
+                          disabled={
+                            conflict || !baseUrl.trim() || !apiKey.trim()
+                          }
                         >
                           {busy === "discover-api" ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
@@ -852,16 +1589,16 @@ export function ChannelCenterPanel({
                     </div>
                     <p className="text-caption text-fg-3">
                       {editingId
-                        ? "完整有效的修改会自动保存；不会自动请求模型目录。修改连接信息后，请单独刷新模型。"
+                        ? "修改地址或密钥后，可在渠道列表刷新模型。"
                         : preset === "custom"
                           ? "填入服务商的地址和密钥，自动获取模型。"
-                          : "自动获取此账号的模型列表；不同服务可以逐个加入。"}
+                          : "添加时会从服务商获取模型列表。"}
                     </p>
                   </fieldset>
                 </form>
               ) : selectedAccountPreset.authProvider === "zhipu_oauth" ? (
                 <ZhipuLoginPanel
-                  disabled={loading || loadFailed || Boolean(busy)}
+                  disabled={loading || loadFailed || conflict || Boolean(busy)}
                   onBusyChange={setAccountBusy}
                   onConnected={connectAccountChannel}
                 />
@@ -870,7 +1607,7 @@ export function ChannelCenterPanel({
                   key={selectedAccountPreset.authProvider}
                   authProvider={selectedAccountPreset.authProvider}
                   channels={snapshot.channels}
-                  disabled={loading || loadFailed || Boolean(busy)}
+                  disabled={loading || loadFailed || conflict || Boolean(busy)}
                   onBusyChange={setAccountBusy}
                   onConnected={connectAccountChannel}
                 />
@@ -878,228 +1615,12 @@ export function ChannelCenterPanel({
                 <NativeSubscriptionLoginPanel
                   key={selectedAccountPreset.nativeApp}
                   tool={selectedAccountPreset.nativeApp!}
-                  disabled={loading || loadFailed || Boolean(busy)}
+                  disabled={loading || loadFailed || conflict || Boolean(busy)}
                   onBusyChange={setAccountBusy}
                   onConnected={connectAccountChannel}
                 />
               )}
             </div>
-          </div>
-        </section>
-
-        <section className={CARD} aria-labelledby="channel-model-heading">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2
-                id="channel-model-heading"
-                className="text-base font-semibold text-fg-1"
-              >
-                选择模型
-              </h2>
-            </div>
-            <div className="relative w-full sm:w-64">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-3" />
-              <Input
-                aria-label="搜索渠道或模型"
-                className="pl-9"
-                value={search}
-                placeholder="搜索渠道或模型"
-                onChange={(event) => setSearch(event.target.value)}
-              />
-            </div>
-          </div>
-          {snapshot.channels.length === 0 && !loading && (
-            <div className="lolicode-channel-empty">
-              <span className="lolicode-channel-empty-icon" aria-hidden="true">
-                <Layers3 className="h-6 w-6" />
-              </span>
-              <p className="font-medium text-fg-2">你的模型库，从这里开始</p>
-              <p className="text-caption text-fg-3">
-                添加 API 或登录订阅账号后，模型会显示在这里。
-              </p>
-            </div>
-          )}
-          <div className="mt-4 space-y-3">
-            {filteredChannels.map(({ channel, models }) => (
-              <article
-                key={channel.id}
-                className="lolicode-saved-channel"
-                aria-label={`${channel.name} 渠道`}
-              >
-                <div className="lolicode-saved-channel-heading flex flex-wrap items-center justify-between gap-2">
-                  <label className="flex min-w-0 items-center gap-2 text-body font-medium text-fg-1">
-                    <Checkbox
-                      aria-label={`启用 ${channel.name}`}
-                      checked={channel.enabled}
-                      disabled={disabled}
-                      onCheckedChange={(enabled) =>
-                        updateSnapshot({
-                          ...snapshot,
-                          channels: snapshot.channels.map((item) =>
-                            item.id === channel.id
-                              ? { ...item, enabled }
-                              : item,
-                          ),
-                        })
-                      }
-                    />
-                    <ProviderIconBox
-                      icon={
-                        channel.authKind === "github_copilot"
-                          ? "githubcopilot"
-                          : channel.authKind === "zhipu_oauth"
-                            ? "zhipu"
-                            : channel.authKind === "codex_oauth"
-                              ? "openai"
-                              : channel.authKind === "xai_oauth"
-                                ? "grok"
-                                : channel.authKind === "claude_subscription"
-                                  ? "claude"
-                                  : channel.authKind === "gemini_subscription"
-                                    ? "gemini"
-                                    : matchChannelPreset(channel)?.icon ||
-                                      "newapi"
-                      }
-                      name={channel.name}
-                    />
-                    <span className="truncate">{channel.name}</span>
-                    {channel.authKind === "lolicode_account" && (
-                      <span className="text-caption text-fg-3">
-                        仅 LoliCode · 每日额度
-                      </span>
-                    )}
-                    {(channel.authKind === "claude_subscription" ||
-                      channel.authKind === "gemini_subscription") && (
-                      <span className="text-caption text-fg-3">仅原生工具</span>
-                    )}
-                    <span className="text-caption font-normal text-fg-3">
-                      {
-                        channel.models.filter(
-                          (model) =>
-                            model.enabled !== false &&
-                            model.supportsTools !== false,
-                        ).length
-                      }{" "}
-                      / {channel.models.length} 个模型
-                    </span>
-                  </label>
-                  <div className="flex flex-wrap gap-1">
-                    {(channel.authKind === "github_copilot" ||
-                      channel.authKind === "codex_oauth" ||
-                      channel.authKind === "xai_oauth") && (
-                      <Button
-                        variant="quiet"
-                        size="compact"
-                        disabled={disabled}
-                        onClick={() => {
-                          setAccountManagerTarget(
-                            channel.authKind as ManagedAuthProvider,
-                          );
-                          setAccountManagerOpen(true);
-                        }}
-                      >
-                        账号管理
-                      </Button>
-                    )}
-                    {channel.authKind === "api_key" && (
-                      <Button
-                        variant="quiet"
-                        size="compact"
-                        disabled={disabled || formTouched}
-                        onClick={() => {
-                          formVersion.current += 1;
-                          setEditingId(channel.id);
-                          setName(channel.name);
-                          setBaseUrl(channel.baseUrl);
-                          setApiKey(channel.apiKey);
-                          setShowKey(false);
-                          setPreset(
-                            matchChannelPreset(channel)?.id ?? "custom",
-                          );
-                          setSourceProtocol(channel.protocol);
-                          setFormTouched(false);
-                          formRef.current?.scrollIntoView?.({
-                            behavior: reducedMotion ? "auto" : "smooth",
-                            block: "center",
-                          });
-                        }}
-                      >
-                        修改
-                      </Button>
-                    )}
-                    <Button
-                      variant="quiet"
-                      size="compact"
-                      disabled={
-                        disabled || (editingId === channel.id && formTouched)
-                      }
-                      onClick={() =>
-                        void run(`refresh-${channel.id}`, async () => {
-                          await upsertDiscovered(channel);
-                          if (mounted.current) {
-                            setResponse(null);
-                            setNotice(`${channel.name} 的模型列表已更新。`);
-                          }
-                        })
-                      }
-                    >
-                      {busy === `refresh-${channel.id}` ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <RefreshCw className="h-3.5 w-3.5" />
-                      )}
-                      {channel.authKind === "claude_subscription" ||
-                      channel.authKind === "gemini_subscription"
-                        ? "检测订阅"
-                        : "刷新模型"}
-                    </Button>
-                  </div>
-                </div>
-                <ChannelModelList
-                  channel={channel}
-                  models={models}
-                  disabled={disabled}
-                  collapsed={collapsed[channel.id] ?? true}
-                  onToggle={() =>
-                    setCollapsed((value) => ({
-                      ...value,
-                      [channel.id]: !(value[channel.id] ?? true),
-                    }))
-                  }
-                  onModelsChange={(models) =>
-                    updateSnapshot({
-                      ...snapshotRef.current,
-                      channels: snapshotRef.current.channels.map((item) =>
-                        item.id === channel.id ? { ...item, models } : item,
-                      ),
-                    })
-                  }
-                />
-              </article>
-            ))}
-          </div>
-          <div className="mt-4 max-w-lg space-y-1.5">
-            <Label htmlFor="channel-default-model">默认模型</Label>
-            <select
-              id="channel-default-model"
-              className={cn(fieldClass, "h-8")}
-              disabled={disabled || selected.length === 0}
-              value={snapshot.defaultModel || ""}
-              onChange={(event) =>
-                updateSnapshot({
-                  ...snapshot,
-                  defaultModel: event.target.value,
-                })
-              }
-            >
-              {selected.length === 0 && <option value="">请先选择模型</option>}
-              {selected.map(({ channel, model, value }) => (
-                <option key={value} value={value}>
-                  {channel.name} · {model.name || model.id}
-                  {channel.authKind === "lolicode_account" ? " · free" : ""}
-                </option>
-              ))}
-            </select>
           </div>
         </section>
 
@@ -1343,15 +1864,16 @@ export function ChannelCenterPanel({
       <ConfirmDialog
         isOpen={reloadRequested}
         title="重新加载已保存的选择？"
-        message="本页的模型和工具选择会恢复为已保存版本。API 地址和密钥输入会保留。"
+        message={
+          editingId && formTouched
+            ? "本页尚未保存的渠道设置、模型和工具选择会恢复为已保存版本。"
+            : "本页的模型和工具选择会恢复为已保存版本。API 地址和密钥输入会保留。"
+        }
         confirmText="重新加载"
         cancelText="继续编辑"
         variant="info"
         pending={Boolean(busy)}
-        onConfirm={() => {
-          setReloadRequested(false);
-          void load();
-        }}
+        onConfirm={confirmSnapshotReload}
         onCancel={() => setReloadRequested(false)}
       />
     </div>

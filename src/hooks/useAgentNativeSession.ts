@@ -17,6 +17,7 @@ import type {
 type RealtimeState = "history" | "connecting" | "live" | "paused" | "failed";
 type NativeSessionView = {
   sessionId: string | null;
+  identity: string | null;
   events: SessionWireEvent[];
   read: AgentNativeSessionRead | null;
   cursor: number | undefined;
@@ -31,6 +32,7 @@ type NativeSessionView = {
 type Subscription = { id: string; revision: number; opened: boolean };
 type NativeSessionOptions = {
   enabled?: boolean;
+  rootSessionId?: string;
   activityRevision?: string | number | null;
 };
 type AssistantAttempt = {
@@ -39,8 +41,12 @@ type AssistantAttempt = {
   settled: boolean;
 };
 
-const empty = (sessionId: string | null): NativeSessionView => ({
+const empty = (
+  sessionId: string | null,
+  identity: string | null,
+): NativeSessionView => ({
   sessionId,
+  identity,
   events: [],
   read: null,
   cursor: undefined,
@@ -196,12 +202,15 @@ export function useAgentNativeSession(
   options: NativeSessionOptions = {},
 ) {
   const enabled = options.enabled ?? true;
+  const rootSessionId = options.rootSessionId;
+  const identity =
+    sessionId && (rootSessionId ? `${rootSessionId}\0${sessionId}` : sessionId);
   const enabledRef = useRef(enabled);
   enabledRef.current = enabled;
   const activity = useRef(options.activityRevision);
   activity.current = options.activityRevision;
   const observedActivity = useRef({
-    sessionId,
+    identity,
     value: options.activityRevision,
   });
   const retryAfterOpening = useRef(false);
@@ -213,18 +222,18 @@ export function useAgentNativeSession(
     setRetryRevision((revision) => revision + 1);
   }, []);
   const cache = useRef(new Map<string, NativeSessionView>());
-  const [view, setView] = useState(() => empty(sessionId));
+  const [view, setView] = useState(() => empty(sessionId, identity));
   const viewRef = useRef(view);
   viewRef.current = view;
-  const selected = useRef(sessionId);
-  selected.current = sessionId;
+  const selected = useRef({ sessionId, rootSessionId, identity });
+  selected.current = { sessionId, rootSessionId, identity };
   const generation = useRef(0);
   const subscription = useRef<Subscription | null>(null);
 
   const publish = useCallback((next: NativeSessionView) => {
-    if (next.sessionId && next.ready) {
-      cache.current.delete(next.sessionId);
-      cache.current.set(next.sessionId, {
+    if (next.identity && next.ready) {
+      cache.current.delete(next.identity);
+      cache.current.set(next.identity, {
         ...next,
         error: null,
         loading: false,
@@ -247,7 +256,14 @@ export function useAgentNativeSession(
   }, []);
 
   const watch = useCallback(
-    (id: string, revision: number, maxMessages: number, allowEmpty = false) => {
+    (
+      id: string,
+      scope: string,
+      rootId: string | undefined,
+      revision: number,
+      maxMessages: number,
+      allowEmpty = false,
+    ) => {
       const active: Subscription = {
         id: crypto.randomUUID(),
         revision,
@@ -255,7 +271,7 @@ export function useAgentNativeSession(
       };
       subscription.current = active;
       const current = () =>
-        selected.current === id &&
+        selected.current.identity === scope &&
         enabledRef.current &&
         generation.current === revision &&
         subscription.current === active;
@@ -466,6 +482,7 @@ export function useAgentNativeSession(
       try {
         pending = agentApi.watchSessionNative(id, active.id, accept, {
           maxMessages,
+          ...(rootId ? { rootSessionId: rootId } : {}),
         });
       } catch (cause) {
         fail(cause);
@@ -482,11 +499,13 @@ export function useAgentNativeSession(
           if (
             !live &&
             !retriedClosedRead.current &&
-            (viewRef.current.read?.state.active ||
+            ((rootId && !viewRef.current.read) ||
+              viewRef.current.read?.state.active ||
               viewRef.current.read?.state.running ||
               hasOpenTurn(viewRef.current.events, false))
           ) {
-            // The writer may have exited between the unary read and follow.
+            // The writer may have exited between the unary read and follow,
+            // including a child whose journal did not exist on the first read.
             // Read the now-cold log once to catch its final committed events;
             // an old interrupted journal must not cause an endless retry loop.
             retriedClosedRead.current = true;
@@ -533,10 +552,14 @@ export function useAgentNativeSession(
 
   const load = useCallback(
     async (older: boolean, preservePrefix = false) => {
-      const id = selected.current;
-      if (!id || !enabledRef.current) return;
+      const {
+        sessionId: id,
+        rootSessionId: rootId,
+        identity: scope,
+      } = selected.current;
+      if (!id || !scope || !enabledRef.current) return;
       const previous =
-        viewRef.current.sessionId === id ? viewRef.current : empty(id);
+        viewRef.current.identity === scope ? viewRef.current : empty(id, scope);
       if (
         older &&
         (!previous.hasMore ||
@@ -567,6 +590,7 @@ export function useAgentNativeSession(
           try {
             read = await agentApi.readSessionNative(id, {
               maxMessages: pageSize,
+              ...(rootId ? { rootSessionId: rootId } : {}),
               ...(older
                 ? {
                     beforeSeq: previous.events[0]?.seq,
@@ -577,7 +601,7 @@ export function useAgentNativeSession(
             break;
           } catch (cause) {
             if (
-              selected.current !== id ||
+              selected.current.identity !== scope ||
               generation.current !== revision ||
               !enabledRef.current
             )
@@ -587,7 +611,7 @@ export function useAgentNativeSession(
           }
         }
         if (
-          selected.current !== id ||
+          selected.current.identity !== scope ||
           generation.current !== revision ||
           !enabledRef.current
         )
@@ -632,10 +656,10 @@ export function useAgentNativeSession(
           error: null,
           realtime: older ? current.realtime : "connecting",
         });
-        if (!older) watch(id, revision, pageSize);
+        if (!older) watch(id, scope, rootId, revision, pageSize);
       } catch (cause) {
         if (
-          selected.current !== id ||
+          selected.current.identity !== scope ||
           generation.current !== revision ||
           !enabledRef.current
         )
@@ -649,7 +673,7 @@ export function useAgentNativeSession(
           });
           // An authorized resident root may already have a native in-memory
           // journal before its first prompt creates a JSONL file.
-          watch(id, revision, 12, basis.cursor === undefined);
+          watch(id, scope, rootId, revision, 12, basis.cursor === undefined);
           return;
         }
         const current = older ? viewRef.current : basis;
@@ -669,13 +693,14 @@ export function useAgentNativeSession(
     stop();
     retryAfterOpening.current = false;
     retriedClosedRead.current = false;
-    observedActivity.current = { sessionId, value: activity.current };
+    observedActivity.current = { identity, value: activity.current };
     const previous = viewRef.current;
     const basis =
-      previous.sessionId === sessionId
+      previous.identity === identity
         ? previous
-        : (sessionId && cache.current.get(sessionId)) || empty(sessionId);
-    if (previous.sessionId !== sessionId) publish(basis);
+        : (identity && cache.current.get(identity)) ||
+          empty(sessionId, identity);
+    if (previous.identity !== identity) publish(basis);
     if (sessionId && enabled) void load(false, true);
     else if (sessionId)
       publish({
@@ -688,15 +713,15 @@ export function useAgentNativeSession(
       generation.current++;
       stop();
     };
-  }, [sessionId, enabled, load, publish, stop]);
+  }, [sessionId, identity, enabled, load, publish, stop]);
 
   useEffect(() => {
     const previous = observedActivity.current;
-    observedActivity.current = { sessionId, value: options.activityRevision };
+    observedActivity.current = { identity, value: options.activityRevision };
     if (
       !enabled ||
       !sessionId ||
-      previous.sessionId !== sessionId ||
+      previous.identity !== identity ||
       previous.value === options.activityRevision
     )
       return;
@@ -710,6 +735,7 @@ export function useAgentNativeSession(
     void load(false, true);
   }, [
     sessionId,
+    identity,
     enabled,
     options.activityRevision,
     load,
@@ -728,12 +754,20 @@ export function useAgentNativeSession(
     retryAfterOpening.current = false;
     if (view.realtime !== "live" && view.realtime !== "paused")
       void load(false, true);
-  }, [sessionId, enabled, view.loading, view.realtime, retryRevision, load]);
+  }, [
+    sessionId,
+    identity,
+    enabled,
+    view.loading,
+    view.realtime,
+    retryRevision,
+    load,
+  ]);
 
   const visible =
-    view.sessionId === sessionId
+    view.identity === identity
       ? view
-      : (sessionId && cache.current.get(sessionId)) || empty(sessionId);
+      : (identity && cache.current.get(identity)) || empty(sessionId, identity);
   return {
     ...visible,
     refresh: () => {

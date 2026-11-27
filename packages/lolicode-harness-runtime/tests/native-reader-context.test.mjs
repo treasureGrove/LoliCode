@@ -96,6 +96,31 @@ async function seed(sessions, cwd, id, compression, teamMode) {
   }
 }
 
+async function seedMismatchedChild(sessions, cwd) {
+  const [{ Context }, session, projections, persistence] = await Promise.all([
+    importRuntime("@deepseek-ai/cordis"), importRuntime("@deepseek-ai/dsh-session"),
+    importRuntime("@deepseek-ai/dsh-session-projection"), importRuntime("@deepseek-ai/dsh-session-persistence-jsonl"),
+  ]);
+  const ctx = new Context();
+  try {
+    for (const [plugin, config] of [[session], [projections], [persistence, { root: sessions }]]) {
+      await ctx.plugin(plugin.default ?? plugin, config).await();
+    }
+    const parent = ctx.sessions.create("descriptor-fixture-parent", { meta: { cwd } });
+    const child = ctx.sessions.create("descriptor-fixture-child", { meta: {
+      cwd, origin: "subagent", parentSession: parent.id, delegationDepth: 1,
+    } });
+    parent.append("subagent/catalog", { version: 1, childId: child.id, childCreatedAt: child.header.createdAt, mode: "one-shot" });
+    child.append("subagent/descriptor", { version: 3, mode: "continuable", provider: "fixture", label: "Conflicting descriptor" });
+    for (const journal of [parent, child]) {
+      const handle = await ctx.sessionPersistence.create(journal.header);
+      try { await handle.append(journal.snapshotEvents()); await handle.flush(); } finally { await handle.close(); }
+    }
+  } finally {
+    await ctx.fiber.dispose();
+  }
+}
+
 async function guardedComparison(temporary) {
   // This runs in a dedicated process: any accidental shell/model/network
   // activation must fail, even when the parent environment has credentials.
@@ -119,6 +144,7 @@ async function guardedComparison(temporary) {
     ["team-disabled-fixture", false],
   ];
   for (const [id, teamMode] of fixtures) await seed(sessions, fullHome, id, "zstd", teamMode);
+  await seedMismatchedChild(sessions, fullHome);
   const patch = path.join(fullHome, "read-only.json");
   await writeFile(patch, JSON.stringify([
     { id: "sdk-app-startup", disabled: true }, { id: "sdk-jsonrpc-server", disabled: true },
@@ -144,6 +170,10 @@ async function guardedComparison(temporary) {
     assert.equal(lean.agents.list().length, 0);
     assert.equal(lean.get("webServer"), undefined);
     assert.equal(lean.get("pluginManager"), undefined);
+    await assert.rejects(
+      readNativeSession(lean, "descriptor-fixture-child", {}, "descriptor-fixture-parent"),
+      { code: "subagent/unauthorized" },
+    );
     for (const [id, teamMode] of fixtures) {
       const expected = await readNativeSession(full.ctx, id, { maxMessages: 200 });
       const actual = await readNativeSession(lean, id, { maxMessages: 200 });

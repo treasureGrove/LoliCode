@@ -1,0 +1,33 @@
+{
+  "version": "1.1.5",
+  "items": [
+    {
+      "type": "improve",
+      "zh": "重整渠道中心，集中查看应用连接、代理状态与可用模型。",
+      "zh-TW": "重整管道中心，集中查看應用程式連線、代理狀態與可用模型。",
+      "en": "See app connections, proxy status, and available models in the redesigned Channel Center.",
+      "ja": "チャネルセンターでアプリの接続、プロキシの状態、利用可能なモデルを確認できます。"
+    },
+    {
+      "type": "new",
+      "zh": "Agent 显示子任务进度。可手动开启思考内容翻译。",
+      "zh-TW": "Agent 顯示子任務進度。可手動開啟思考內容翻譯。",
+      "en": "See subtask progress in Agent conversations and opt in to reasoning translation.",
+      "ja": "Agent のサブタスク進捗を表示し、思考内容の翻訳を手動で有効にできます。"
+    },
+    {
+      "type": "fix",
+      "zh": "升级 Harness 至 rc.5，修复旧项目秘书和子代理会话的访问。",
+      "zh-TW": "升級 Harness 至 rc.5，修正舊專案秘書和子代理工作階段的存取。",
+      "en": "Update Harness to rc.5 and fix access to legacy project secretaries and subagent sessions.",
+      "ja": "Harness を rc.5 に更新し、旧プロジェクト秘書と子エージェントの履歴を改善しました。"
+    },
+    {
+      "type": "fix",
+      "zh": "改善 Claude Desktop 模型兼容性。酒馆新增输入中提示。",
+      "zh-TW": "改善 Claude Desktop 模型相容性。酒館新增輸入中提示。",
+      "en": "Improve Claude Desktop model compatibility and show a typing indicator in Tavern.",
+      "ja": "Claude Desktop のモデル互換性を改善し、酒場に入力中の表示を追加しました。"
+    }
+  ]
+}

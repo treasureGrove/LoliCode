@@ -711,12 +711,8 @@ export function TavernPage({
     </DropdownMenu>
   );
 
-  const statusText =
-    sending || selectedStory?.isGenerating
-      ? i18n.language.startsWith("zh")
-        ? "对方正在输入..."
-        : "Typing..."
-      : selectedStory?.title;
+  const isTyping = sending || selectedStory?.isGenerating;
+  const statusText = isTyping ? t("tavern.typing") : selectedStory?.title;
 
   return (
     <div
@@ -755,13 +751,11 @@ export function TavernPage({
               <span
                 className={cn(
                   "tavern-titlebar-story truncate",
-                  (sending || selectedStory?.isGenerating) && "is-typing",
+                  isTyping && "is-typing",
                 )}
+                role="status"
                 {...DRAG_REGION_ATTR}
               >
-                {(sending || selectedStory?.isGenerating) && (
-                  <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-current" />
-                )}
                 <span className="truncate">{statusText}</span>
               </span>
             )}
@@ -876,7 +870,7 @@ export function TavernPage({
             </div>
           )}
 
-          {selectedStory?.messages.length ? (
+          {selectedStory && (selectedStory.messages.length > 0 || sending) ? (
             <TavernTranscript
               key={selectedStory.id}
               active={isActive}
@@ -1149,12 +1143,8 @@ export function TavernPage({
                     }
                     onClick={() => void send()}
                   >
-                    {sending ? (
-                      <LoaderCircle className="wb-send-spinner h-4 w-4 animate-spin" />
-                    ) : (
-                      <Send className="h-4 w-4" />
-                    )}
-                    {sending ? t("tavern.generating") : t("tavern.send")}
+                    <Send className="h-4 w-4" aria-hidden="true" />
+                    {t("tavern.send")}
                   </Button>
                 </div>
               </div>

@@ -60,9 +60,9 @@ describe("Claude Code Gateway", () => {
     expect(channelCenterApi.startGateway).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "检查连接" })).toBeDisabled();
     expect(
-      screen.getByRole("button", { name: "2. 进入 Claude Code" }),
+      screen.getByRole("button", { name: "进入 Claude Code" }),
     ).toBeDisabled();
-    fireEvent.click(screen.getByRole("button", { name: "1. 启动路由服务" }));
+    fireEvent.click(screen.getByRole("button", { name: "启动路由服务" }));
     await screen.findByText("Gateway 运行中");
     expect(channelCenterApi.startGateway).toHaveBeenCalledWith(3);
     expect(props.onConnect).not.toHaveBeenCalled();
@@ -76,9 +76,7 @@ describe("Claude Code Gateway", () => {
     const onConnect = vi.fn().mockResolvedValue(false);
     render(<ChannelGatewayPanel {...props} onConnect={onConnect} />);
     await screen.findByText("Gateway 运行中");
-    fireEvent.click(
-      screen.getByRole("button", { name: "2. 进入 Claude Code" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "进入 Claude Code" }));
     await screen.findByText(/未能进入 Claude Code/);
     expect(screen.queryByText(/Claude Code 已连接/)).not.toBeInTheDocument();
     expect(channelCenterApi.startGateway).not.toHaveBeenCalled();
@@ -111,11 +109,9 @@ describe("Claude Code Gateway", () => {
   it("blocks starting and connecting with unsaved or unavailable channels", async () => {
     render(<ChannelGatewayPanel {...props} routeDisabled />);
     await screen.findByText("Gateway 未启动");
+    expect(screen.getByRole("button", { name: "启动路由服务" })).toBeDisabled();
     expect(
-      screen.getByRole("button", { name: "1. 启动路由服务" }),
-    ).toBeDisabled();
-    expect(
-      screen.getByRole("button", { name: "2. 进入 Claude Code" }),
+      screen.getByRole("button", { name: "进入 Claude Code" }),
     ).toBeDisabled();
   });
 
@@ -145,9 +141,7 @@ describe("Claude Code Gateway", () => {
     });
     render(<ChannelGatewayPanel {...props} onConnect={onConnect} />);
     await screen.findByText("Gateway 运行中");
-    fireEvent.click(
-      screen.getByRole("button", { name: "2. 进入 Claude Code" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "进入 Claude Code" }));
     await screen.findByText(/已打开使用 Gateway 的 Claude Code/);
     expect(onConnect).toHaveBeenCalledOnce();
     expect(channelCenterApi.openGatewayClaude).toHaveBeenCalledOnce();
@@ -159,8 +153,86 @@ describe("Claude Code Gateway", () => {
     render(<ChannelGatewayPanel {...props} revision={4} />);
     await screen.findByText("Gateway 运行中");
     expect(
-      screen.getByRole("button", { name: "2. 进入 Claude Code" }),
+      screen.getByRole("button", { name: "进入 Claude Code" }),
     ).toBeDisabled();
     expect(screen.getByRole("button", { name: "更新路由目录" })).toBeEnabled();
   });
+});
+
+it("refreshes live counts only while visible and preserves action feedback", async () => {
+  vi.useFakeTimers();
+  const hidden = vi.spyOn(document, "hidden", "get").mockReturnValue(false);
+  const status = vi.mocked(channelCenterApi.getGatewayStatus);
+  status.mockReset().mockResolvedValue(running);
+  vi.mocked(channelCenterApi.checkGateway).mockResolvedValue(running);
+  const feedback = /本机 Gateway 认证与模型目录检查通过/;
+
+  try {
+    const view = render(<ChannelGatewayPanel {...props} />);
+    await act(async () => {});
+    await act(async () =>
+      fireEvent.click(screen.getByRole("button", { name: "检查连接" })),
+    );
+    expect(screen.getByText(feedback)).toBeInTheDocument();
+
+    status.mockResolvedValue({
+      ...running,
+      totalRequests: 3,
+      activeConnections: 1,
+    });
+    await act(async () => vi.advanceTimersByTimeAsync(5000));
+    expect(screen.getByText(/3 次请求 · 1 个连接/)).toBeInTheDocument();
+    expect(screen.getByText(feedback)).toBeInTheDocument();
+
+    hidden.mockReturnValue(true);
+    await act(async () => vi.advanceTimersByTimeAsync(10_000));
+    expect(status).toHaveBeenCalledTimes(2);
+
+    status.mockResolvedValue({ ...running, totalRequests: 4 });
+    hidden.mockReturnValue(false);
+    await act(async () => fireEvent(document, new Event("visibilitychange")));
+    expect(screen.getByText(/4 次请求/)).toBeInTheDocument();
+
+    view.unmount();
+    await act(async () => vi.advanceTimersByTimeAsync(10_000));
+    expect(status).toHaveBeenCalledTimes(3);
+  } finally {
+    hidden.mockRestore();
+    vi.useRealTimers();
+  }
+});
+
+it("keeps the last snapshot on failure and ignores an older in-flight status", async () => {
+  const status = vi.mocked(channelCenterApi.getGatewayStatus);
+  status.mockReset().mockResolvedValue(running);
+  const view = render(<ChannelGatewayPanel {...props} />);
+  expect(await screen.findByText("Gateway 运行中")).toBeInTheDocument();
+
+  let finishOldRead!: (result: ChannelGatewayStatus) => void;
+  status
+    .mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishOldRead = resolve;
+        }),
+    )
+    .mockRejectedValueOnce(new Error("status unavailable"));
+  fireEvent.click(screen.getByRole("button", { name: "刷新 Gateway 状态" }));
+  view.rerender(<ChannelGatewayPanel {...props} refreshToken={1} />);
+  expect(await screen.findByText("状态暂时无法确认")).toBeInTheDocument();
+  expect(screen.getByText(running.baseUrl!)).toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "进入 Claude Code" }),
+  ).toBeDisabled();
+
+  await act(async () => finishOldRead(running));
+  expect(screen.getByText("状态暂时无法确认")).toBeInTheDocument();
+
+  status.mockResolvedValue({ ...running, savedRevision: 4 });
+  view.rerender(<ChannelGatewayPanel {...props} refreshToken={2} />);
+  expect(await screen.findByText("Gateway 运行中")).toBeInTheDocument();
+  expect(screen.getByText(/渠道目录已更新/)).toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "进入 Claude Code" }),
+  ).toBeDisabled();
 });

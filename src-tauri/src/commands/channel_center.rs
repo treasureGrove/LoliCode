@@ -159,9 +159,14 @@ pub async fn apply_channel_center(
     let accounts = managed_accounts(&copilot, &codex, &xai).await;
     channel_center::validate_managed_account_references(&snapshot, &accounts)
         .map_err(|error| error.to_string())?;
-    channel_center::apply(state.inner(), expected_revision)
-        .await
-        .map_err(|error| error.to_string())
+    let result = channel_center::apply(
+        state.inner(),
+        Some(expected_revision.unwrap_or(snapshot.revision)),
+    )
+    .await;
+    // Applying can affect multiple live configs even when a later target fails.
+    state.proxy_service.notify_channel_runtime_changed().await;
+    result.map_err(|error| error.to_string())
 }
 
 async fn managed_accounts(
@@ -211,12 +216,13 @@ pub async fn start_channel_gateway(
     let accounts = managed_accounts(&copilot, &codex, &xai).await;
     channel_center::validate_managed_account_references(&snapshot, &accounts)
         .map_err(|error| error.to_string())?;
-    crate::services::channel_gateway::start(
+    let result = crate::services::channel_gateway::start(
         state.inner(),
         Some(expected_revision.unwrap_or(snapshot.revision)),
     )
-    .await
-    .map_err(|error| crate::error_for_log(&error.to_string()))
+    .await;
+    state.proxy_service.notify_channel_runtime_changed().await;
+    result.map_err(|error| crate::error_for_log(&error.to_string()))
 }
 
 #[tauri::command]
@@ -252,17 +258,21 @@ pub async fn set_channel_connection(
     codex: State<'_, CodexOAuthState>,
     xai: State<'_, XaiOAuthState>,
 ) -> Result<crate::services::channel_connections::ChannelConnection, String> {
-    if mode == "lolicode" {
+    let expected_revision = if mode == "lolicode" {
         let snapshot =
             channel_center::load(state.db.as_ref()).map_err(|error| error.to_string())?;
         let accounts = managed_accounts(&copilot, &codex, &xai).await;
         channel_center::validate_managed_account_references(&snapshot, &accounts)
             .map_err(|error| error.to_string())?;
-    }
+        Some(expected_revision.unwrap_or(snapshot.revision))
+    } else {
+        expected_revision
+    };
     let result =
         crate::services::channel_connections::set(state.inner(), &target, &mode, expected_revision)
-            .await
-            .map_err(|error| crate::error_for_log(&error.to_string()))?;
+            .await;
+    state.proxy_service.notify_channel_runtime_changed().await;
+    let result = result.map_err(|error| crate::error_for_log(&error.to_string()))?;
     let _ = app.emit("channel-connection-changed", &result);
     Ok(result)
 }

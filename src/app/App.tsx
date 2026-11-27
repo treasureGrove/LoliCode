@@ -341,6 +341,18 @@ function App() {
     }
   });
 
+  useTauriEvent("channel-center-updated", () =>
+    queryClient.invalidateQueries({ queryKey: ["tavern", "catalog"] }),
+  );
+
+  useTauriEvent("channel-runtime-updated", async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["providers"] }),
+      queryClient.invalidateQueries({ queryKey: proxyKeys.takeoverStatus }),
+      queryClient.invalidateQueries({ queryKey: proxyKeys.status }),
+    ]);
+  });
+
   // 兼容配置应用后刷新共享缓存；原生代理状态直接改 DB，需要显式刷新。
   useTauriEvent("profile-applied", async () => {
     await queryClient.invalidateQueries({ queryKey: ["profiles"] });
@@ -825,13 +837,14 @@ function App() {
               id="main-content"
               className="min-h-0 flex-1 overflow-y-auto scroll-stable"
             >
-              <div className="px-6 pb-10 pt-4">
-                <ChannelCenterPanel
-                  onNavigationBlockedChange={setChannelNavigationBusy}
-                  initialAccountManagerOpen={currentView === "auth"}
-                  initialToolsOpen={currentView === "apps"}
-                />
-                {currentView === "channels" && (
+              <ChannelCenterPanel
+                onNavigationBlockedChange={setChannelNavigationBusy}
+                initialAccountManagerOpen={currentView === "auth"}
+                initialToolsOpen={currentView === "apps"}
+                showIntro={false}
+              />
+              {currentView === "channels" && (
+                <div className="mx-auto max-w-[1220px] px-3 pb-10">
                   <TavernLocalModelPanel
                     onChange={() =>
                       queryClient.invalidateQueries({
@@ -839,8 +852,8 @@ function App() {
                       })
                     }
                   />
-                )}
-              </div>
+                </div>
+              )}
             </div>
           </>
         );

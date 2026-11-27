@@ -391,6 +391,7 @@ export function SettingsPage({
           <>
             <ChannelCenterPanel
               onNavigationBlockedChange={onChannelNavigationBlockedChange}
+              showIntro={false}
             />
             <TavernLocalModelPanel
               onChange={() =>
@@ -588,13 +589,11 @@ export function SettingsPage({
         ) : (
           <MotionSurface motionKey={section}>
             <SettingsBody>
-              <p className="tai-settings-intro">
-                {section === "models"
-                  ? t("channelCenter.subtitle", {
-                      defaultValue: "添加一次，配置到你的 AI 工具",
-                    })
-                  : t(`settings.sectionDescriptions.${section}`)}
-              </p>
+              {section !== "models" && (
+                <p className="tai-settings-intro">
+                  {t(`settings.sectionDescriptions.${section}`)}
+                </p>
+              )}
               {renderSection()}
             </SettingsBody>
           </MotionSurface>

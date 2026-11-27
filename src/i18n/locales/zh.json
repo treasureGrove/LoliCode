@@ -8,6 +8,20 @@
     "copyLink": "复制链接",
     "copyPath": "复制路径"
   },
+  "agentReasoningTranslation": {
+    "provider": "翻译服务",
+    "google": "Google 翻译",
+    "targetLanguage": "翻译成",
+    "followInterfaceLanguage": "跟随界面语言",
+    "consent": "开启后，展开的思考内容会发送至 {{provider}}。",
+    "enable": "开启自动翻译",
+    "disable": "关闭自动翻译",
+    "original": "显示原文",
+    "translated": "显示译文",
+    "pending": "正在翻译…",
+    "failed": "翻译失败，已显示原文",
+    "retry": "重试翻译"
+  },
   "agentMarketplace": {
     "name": "插件市场",
     "open": "打开插件市场"
@@ -4440,7 +4454,7 @@
     "you": "你",
     "youShort": "我",
     "messageCount": "本故事 {{count}} 条消息",
-    "generating": "正在生成…",
+    "typing": "对方正在输入…",
     "generationFailed": "生成失败，已保留你发送的消息",
     "generationFailedShort": "失败，可重新发送",
     "loadEarlier": "加载更早的消息",

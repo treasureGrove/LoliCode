@@ -10,6 +10,7 @@ const compactKey = `${endpoint.pathname}:compact`;
 const backgroundJobsKey = `${endpoint.pathname}:background-jobs`;
 const nativeModesKey = `${endpoint.pathname}:native-modes`;
 const titlesKey = `${endpoint.pathname}:titles`;
+const ordinarySubagentsKey = `${endpoint.pathname}:ordinary-subagents`;
 const savedWorkerInput = "desktop-worker-queue-after-restart";
 const png =
   "iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAIAAABvFaqvAAAAK0lEQVR4nGNkaGCgCmCijjEMowYRAUYDmzAYDSPCYDSMCIPRMCIMBl8YAQAWVACw3XqkiQAAAABJRU5ErkJggg==";
@@ -41,6 +42,400 @@ async function requestReport(data) {
 
 const invoke = (command, args = {}) =>
   window.__TAURI_INTERNALS__.invoke(command, args);
+
+async function verifyModelRefusal(fixture) {
+  const proof = fixture.modelRefusal;
+  const key = `${endpoint.pathname}:model-refusal`;
+  const sessionId = sessionStorage.getItem(key);
+  if (!sessionId) {
+    await configureFixtureChannel(fixture, "anthropic");
+    await invoke("open_agent_project", { path: fixture.project });
+    const catalog = await invoke("get_agent_catalog");
+    const session = await invoke("create_agent_session", {
+      projectPath: fixture.project,
+      title: "模型拒答验收",
+      mode: "build",
+      modelId: catalog.defaultModel ?? catalog.models[0].id,
+    });
+    localStorage.setItem("cc-switch-last-view", "agent");
+    localStorage.setItem("lolicode.agent.last-selection.v1", JSON.stringify({
+      projectPath: session.projectPath,
+      sessionId: session.id,
+    }));
+    sessionStorage.setItem(key, session.id);
+    return { reload: true };
+  }
+
+  await waitFor(() => document.querySelector("#agent-message"), "the model refusal conversation");
+  const send = (text, requestId) => invoke("send_agent_message", {
+    sessionId, text, requestId, locale: "zh",
+  });
+  const read = () => invoke("get_agent_session", { sessionId });
+  const readEvents = async (allowUninitialized = false) => {
+    try {
+      const native = await invoke("read_agent_session_native", { sessionId, maxMessages: 20 });
+      return native.page.records.map(({ event }) => event);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!allowUninitialized || message !== "会话尚未形成原生 Harness 日志") throw error;
+      const state = await read();
+      if (state.status === "error") throw new Error(state.error || message);
+      return [];
+    }
+  };
+
+  await send(proof.prompt, "desktop-model-refusal");
+  const first = await waitFor(async () => {
+    const events = await readEvents(true);
+    const end = events.find(({ type }) => type === "turn/end");
+    if (!end) return false;
+    check(end.data.reason.kind === "error" && JSON.stringify(end.data.reason).includes("content_filter"),
+      "The Messages refusal must reach the native journal as a content-filter error");
+    check(!events.some(({ type, data }) => type === "assistant/message" && data.turn === end.data.turn),
+      "The refused output must not be committed as a normal assistant message");
+    const attempt = events.find(({ type, data }) => type === "assistant/attempt" && data.turn === end.data.turn);
+    const stream = attempt?.data.stream;
+    const recordedText = JSON.stringify(stream);
+    check(recordedText?.includes(proof.partialText) && recordedText.includes(proof.partialReasoning),
+      "The native attempt must retain both partial content blocks");
+    const usage = stream.find(({ type, chunk }) => type === "chunk" && chunk.type === "usage")?.chunk.usage;
+    check(usage?.inputTokens === proof.inputTokens &&
+      usage.outputTokens === proof.finalOutputTokens &&
+      usage.totalTokens === proof.inputTokens + proof.finalOutputTokens,
+    "Late token usage must remain intact even when Messages reports a refusal");
+    return { turn: end.data.turn, attemptSeq: attempt.seq };
+  }, "the durable refused turn", 30_000);
+  await waitFor(async () => {
+    const state = await read();
+    return state.status === "error" && Boolean(state.error) &&
+      document.querySelector(".wb-run-error-heading")?.textContent.includes("本轮运行失败");
+  }, "the desktop refusal failure", 30_000);
+
+  const attemptRow = () => document.querySelector(`[data-native-event-seq="${first.attemptSeq}"]`);
+  const disclosure = await waitFor(() => {
+    const summary = attemptRow()?.querySelector("summary");
+    return summary?.textContent.includes("此模型尝试未形成回复") && summary;
+  }, "the retained failed attempt disclosure");
+  disclosure.click();
+  await waitFor(() => attemptRow()?.textContent.includes(proof.partialText), "the retained partial output");
+
+  await send(proof.recoveryPrompt, "desktop-model-refusal-recovery");
+  await waitFor(async () => {
+    const events = await readEvents();
+    const later = events.find(({ type, data }) => type === "turn/end" && data.turn > first.turn);
+    if (!later) return false;
+    check(later.data.reason.kind === "completed", "The next turn must complete in the same session");
+    const answer = events.find(({ type, data }) => type === "assistant/message" &&
+      data.turn === later.data.turn && JSON.stringify(data.message).includes(proof.answer));
+    check(answer && events.some(({ seq }) => seq === first.attemptSeq),
+      "The same journal must retain both the failed attempt and the new answer");
+    return (await read()).status === "idle" &&
+      document.querySelector(`[data-native-event-seq="${answer.seq}"]`)?.textContent.includes(proof.answer);
+  }, "the same session recovering with a normal reply", 30_000);
+  return {
+    sessionId, refusalReported: true, partialAttemptRetained: true,
+    refusalUsageRetained: true, sameSessionRecovered: true,
+  };
+}
+
+async function verifyReasoningTranslation(fixture) {
+  const proof = fixture.reasoningTranslation;
+  const key = `${endpoint.pathname}:reasoning-translation`;
+  const preference = "lolicode:agent:reasoningTranslation";
+  const sessionId = sessionStorage.getItem(key);
+  if (!sessionId) {
+    await configureFixtureChannel(fixture);
+    const settings = await invoke("get_settings");
+    await invoke("save_settings", { settings: { ...settings, language: "zh" } });
+    await invoke("open_agent_project", { path: fixture.project });
+    const catalog = await invoke("get_agent_catalog");
+    const session = await invoke("create_agent_session", {
+      projectPath: fixture.project,
+      title: "思考翻译验收",
+      mode: "build",
+      modelId: catalog.defaultModel ?? catalog.models[0].id,
+    });
+    localStorage.setItem("language", "zh");
+    localStorage.setItem("cc-switch-last-view", "agent");
+    localStorage.setItem("lolicode.agent.last-selection.v1", JSON.stringify({
+      projectPath: session.projectPath,
+      sessionId: session.id,
+    }));
+    localStorage.removeItem(preference);
+    sessionStorage.setItem(key, session.id);
+    return { reload: true };
+  }
+
+  await waitFor(() => document.querySelector("#agent-message"), "the reasoning fixture conversation");
+  await invoke("send_agent_message", {
+    sessionId, text: proof.prompt, requestId: "desktop-synthetic-reasoning-translation", locale: "zh",
+  });
+  const disclosures = () => [...document.querySelectorAll("details.wb-reasoning")]
+    .filter((element) => element.querySelector("summary")?.textContent.includes("思考过程"));
+  const disclosure = () => disclosures()[0];
+  const button = (label) => [...(disclosure()?.querySelectorAll("button") ?? [])]
+    .find((element) => element.textContent.trim() === label);
+  const requests = () => globalThis.__fixtureReasoningTranslationRequests ?? [];
+  const providerSelect = () => [...(disclosure()?.querySelectorAll("select") ?? [])]
+    .find((select) => [...select.labels].some((label) => label.textContent.includes("翻译服务")));
+  const consentFor = (enable) =>
+    document.getElementById(enable.getAttribute("aria-describedby"))?.textContent;
+  const showsOriginal = () => disclosure()?.textContent.includes(proof.first) &&
+    disclosure()?.textContent.includes(proof.second);
+  const translatedText = () => {
+    const failure = [...(disclosure()?.querySelectorAll('[role="status"]') ?? [])]
+      .find((element) => element.textContent.includes("翻译失败"));
+    if (failure) throw new Error(`The public ${providerSelect()?.value} translator failed for synthetic fixture text`);
+    return disclosure()?.querySelector('[lang="zh-CN"]')?.textContent ?? "";
+  };
+  const closed = await waitFor(disclosure, "the native streamed reasoning disclosure");
+  check(!closed.open && requests().length === 0, "Collapsed reasoning must not be sent for translation");
+  closed.querySelector("summary").click();
+  const enable = await waitFor(() => button("开启自动翻译"), "the translation opt-in control");
+  await waitFor(() => disclosure()?.textContent.includes(proof.first), "the original streamed reasoning text");
+  check(localStorage.getItem(preference) !== "true" && requests().length === 0,
+    "Opening reasoning must not send it before consent");
+  check(providerSelect()?.value === "bing" && consentFor(enable)?.includes("Microsoft Bing"),
+    "The default opt-in must disclose Bing");
+  enable.click();
+  const translatedCharacters = (text) => text.match(/\p{Script=Han}/gu)?.length ?? 0;
+  const partial = await waitFor(() => {
+    const text = translatedText();
+    return translatedCharacters(text) && text.includes(proof.second.slice(0, 12)) && text;
+  }, "a translated complete paragraph and an untranslated streaming tail", 30_000);
+  check(!partial.includes(proof.first) && requests().length === 1 &&
+    requests()[0].text === proof.first && requests()[0].provider === "bing",
+    "Only the completed reasoning paragraph may be translated while streaming");
+  const release = await fetch(new URL("release-reasoning-reply", endpoint), { method: "POST" });
+  check(release.ok, "Could not release the synthetic model stream");
+  await waitFor(async () => {
+    const state = await invoke("get_agent_session", { sessionId });
+    if (state.status === "error") throw new Error(state.error || "The reasoning fixture turn failed");
+    return state.status === "idle" && document.body.textContent.includes(proof.answer);
+  }, "the completed synthetic assistant answer", 30_000);
+  if (!disclosure()?.open) disclosure()?.querySelector("summary").click();
+  await waitFor(() => {
+    const text = translatedText();
+    return translatedCharacters(text) > translatedCharacters(partial) &&
+      !text.includes(proof.second.slice(0, 12)) && requests().some(({ text }) => text === proof.second);
+  }, "the translated final reasoning paragraph", 30_000);
+
+  (await waitFor(() => button("显示原文"), "the show-original control")).click();
+  await waitFor(showsOriginal, "both original reasoning paragraphs");
+  (await waitFor(() => button("显示译文"), "the show-translation control")).click();
+  await waitFor(() => translatedCharacters(translatedText()) > translatedCharacters(partial),
+    "the restored translated view");
+  disclosure().querySelector("summary").click();
+  await waitFor(() => !disclosure()?.open && !button("关闭自动翻译"), "the collapsed translated disclosure");
+  disclosure().querySelector("summary").click();
+  await waitFor(() => translatedCharacters(translatedText()) > translatedCharacters(partial),
+    "both cached translations after reopening");
+  await waitFor(() => requests().every((request) => request.status !== "pending" &&
+    (!request.cancelRequested || request.cancelAccepted)), "translation IPC settlement", 20_000);
+  const translatedRequests = {
+    first: requests().filter(({ text }) => text === proof.first),
+    second: requests().filter(({ text }) => text === proof.second),
+  };
+  for (const [paragraph, attempts] of Object.entries(translatedRequests)) {
+    const completed = attempts.filter(({ status }) => status === "completed");
+    const cancelled = attempts.filter(({ status }) => status === "cancelled");
+    const completedTree = completed[0]?.tree ?? [];
+    const sameOpenBlock = (tree) => tree.some((node) => node.open &&
+      completedTree.some((other) => other.open &&
+        ((node.committedEvent && node.committedEvent === other.committedEvent) ||
+          (node.activeAttempt && node.activeAttempt === other.activeAttempt))));
+    check(completed.length === 1 && completed.length + cancelled.length === attempts.length &&
+      cancelled.length <= (paragraph === "second" ? 1 : 0) &&
+      cancelled.every(({ cancelRequested, cancelAccepted, tree }) =>
+        cancelRequested && cancelAccepted && sameOpenBlock(tree)),
+    `Each paragraph must complete once, and a retry must follow cancellation on the same block: ${JSON.stringify(translatedRequests)}`);
+  }
+  const select = providerSelect();
+  check(select?.querySelector('option[value="google"]'), "The thinking toolbar must offer Google");
+  const bingRequestCount = requests().length;
+  select.value = "google";
+  select.dispatchEvent(new Event("change", { bubbles: true }));
+  const googleEnable = await waitFor(() => {
+    const control = button("开启自动翻译");
+    return providerSelect()?.value === "google" && control && consentFor(control)?.includes("Google 翻译")
+      ? control
+      : null;
+  }, "a new Google opt-in that identifies the selected service");
+  await sleep(200);
+  check(showsOriginal() && !translatedText() && !button("显示原文") &&
+    requests().length === bingRequestCount,
+  "Switching to Google must show the original and send nothing until new consent");
+  googleEnable.click();
+  const googleTranslatedRequests = () => requests().slice(bingRequestCount);
+  await waitFor(() => {
+    const text = translatedText();
+    const attempts = googleTranslatedRequests();
+    check(attempts.length <= 2 && attempts.every(({ provider }) => provider === "google"),
+      "The new consent must send each paragraph only to Google");
+    return attempts.length === 2 && attempts.every(({ status, translation }) =>
+      status === "completed" && translatedCharacters(translation) > 0 && text.includes(translation));
+  }, "both native Google translations in the reasoning body", 45_000);
+  const googleRequests = googleTranslatedRequests();
+  check(googleRequests.map(({ text }) => text).join("\n") ===
+    [proof.first, proof.second].join("\n"),
+  "The newly accepted provider must translate each fixture paragraph once");
+  (await waitFor(() => button("关闭自动翻译"), "the off control")).click();
+  await waitFor(() => showsOriginal() && button("开启自动翻译"),
+    "restored original view after disabling");
+  const native = await invoke("read_agent_session_native", { sessionId, maxMessages: 8 });
+  const records = JSON.stringify(native.page.records);
+  check(records.includes(proof.first) && records.includes(proof.second),
+    "The translation must preserve native reasoning records");
+
+  const previousRequests = requests().length;
+  await invoke("send_agent_message", {
+    sessionId, text: proof.repeatPrompt, requestId: "desktop-synthetic-reasoning-repeat", locale: "zh",
+  });
+  const blocks = await waitFor(async () => {
+    const state = await invoke("get_agent_session", { sessionId });
+    if (state.status === "error") throw new Error(state.error || "The repeated reasoning fixture turn failed");
+    const settled = disclosures().filter((element) => element.closest("[data-native-event-seq]"));
+    return state.status === "idle" && settled.length === 2 &&
+      document.body.textContent.includes(proof.repeatAnswer) && settled;
+  }, "two committed disclosures with an identical complete reasoning paragraph", 30_000);
+  const [firstBlock, repeatedBlock] = blocks;
+  check(!repeatedBlock.open && requests().length === previousRequests,
+    "New reasoning must stay offline while translation is disabled");
+  if (!firstBlock.open) firstBlock.querySelector("summary").click();
+  const freshTarget = await waitFor(() =>
+    [...firstBlock.querySelectorAll("select")].find((control) =>
+      control.querySelector('option[value="zh-TW"]')),
+  "the thinking toolbar's target language selector");
+  freshTarget.value = "zh-TW";
+  freshTarget.dispatchEvent(new Event("change", { bubbles: true }));
+  const freshConsent = await waitFor(() => {
+    const control = button("开启自动翻译");
+    return freshTarget.value === "zh-TW" && control && consentFor(control)?.includes("Google 翻译") && control;
+  }, "explicit Google consent for the shared translation test");
+  check(requests().length === previousRequests, "Changing target must not send text before consent");
+  const freshRequests = () => requests().filter(({ provider, targetLanguage }) =>
+    provider === "google" && targetLanguage === "zh-TW");
+  const matchingRequests = () => freshRequests().filter(({ text }) => text === proof.first);
+  const hold = Promise.withResolvers();
+  globalThis.__fixtureHoldReasoningTranslation = hold.promise;
+  try {
+    freshConsent.click();
+    await waitFor(() => matchingRequests().length === 1, "one accepted native translation request");
+    repeatedBlock.querySelector("summary").click();
+    await waitFor(() => blocks.every((element) => element.open &&
+      [...element.querySelectorAll('[role="status"]')].some((status) =>
+        status.textContent.includes("正在翻译"))), "both reasoning blocks awaiting the same translation");
+    check(matchingRequests().length === 1,
+      "Opening an identical paragraph while translation is pending must not invoke the provider again");
+  } finally {
+    hold.resolve();
+    delete globalThis.__fixtureHoldReasoningTranslation;
+  }
+  await waitFor(() => {
+    const attempts = freshRequests();
+    check(attempts.length <= 2 && attempts.every(({ status }) => status !== "failed"),
+      "The shared translation and the distinct second paragraph must each settle once");
+    const [request] = matchingRequests();
+    return attempts.length === 2 && attempts.every(({ status }) => status === "completed") &&
+      request?.translation && translatedCharacters(request.translation) > 0 &&
+      blocks.every((element) => element.querySelector('[lang="zh-TW"]')?.textContent.includes(request.translation));
+  }, "both reasoning blocks rendering the same real translation", 45_000);
+  check(matchingRequests().length === 1 && !matchingRequests()[0].cancelRequested,
+    "Both blocks must render the result of exactly one native translation");
+  return {
+    sessionId, nativeReasoning: true, consent: true, partialStream: true,
+    translation: true, originalToggle: true, retainedNativeText: true,
+    translatedRequests, googleRequiresConsent: true, googleTranslation: true,
+    googleTranslatedRequests: googleRequests,
+    sharedPendingTranslation: true,
+    sharedPendingTranslationProof: { nativeRequests: matchingRequests().length, translatedBlocks: blocks.length },
+  };
+}
+
+async function verifyOrdinarySubagents(fixture) {
+  const proof = fixture.ordinarySubagents;
+  const resumed = fixture.phase === "ordinary-subagents-restart";
+  const existing = resumed ? proof.state : JSON.parse(sessionStorage.getItem(ordinarySubagentsKey) ?? "null");
+  const send = (sessionId, text, requestId) => invoke("send_agent_message", { sessionId, text, requestId, locale: "zh" });
+  if (!existing) {
+    await configureFixtureChannel(fixture);
+    await invoke("open_agent_project", { path: fixture.project });
+    const catalog = await invoke("get_agent_catalog");
+    const create = (title) => invoke("create_agent_session", {
+      projectPath: fixture.project,
+      title,
+      mode: "build",
+      permissionMode: "full_access",
+      modelId: catalog.defaultModel ?? catalog.models[0].id,
+    });
+    const root = await create("普通子代理的任务进度");
+    const foreign = await create("独立父会话");
+    await send(foreign.id, proof.foreignPrompt, "ordinary-subagent-foreign");
+    await waitFor(async () => {
+      const snapshot = await invoke("get_agent_session", { sessionId: foreign.id });
+      return snapshot.status === "idle" && JSON.stringify(snapshot.messages).includes(proof.foreignAnswer);
+    }, "the unrelated root's committed session");
+    localStorage.setItem("cc-switch-last-view", "agent");
+    localStorage.setItem("lolicode.agent.last-selection.v1", JSON.stringify({
+      projectPath: root.projectPath,
+      sessionId: root.id,
+    }));
+    sessionStorage.setItem(ordinarySubagentsKey, JSON.stringify({ root: root.id, foreign: foreign.id }));
+    return { reload: true };
+  }
+
+  await waitFor(() => document.querySelector("#agent-message"), "the ordinary root");
+  const dialog = () => [...document.querySelectorAll('[role="dialog"]')]
+    .find((element) => element.textContent.includes("子代理会话"));
+  const clickProgress = async () => {
+    const progress = await waitFor(() => document.querySelector('button.wb-task-progress[aria-haspopup="dialog"]'), "task progress with an owned child");
+    progress.click();
+    const open = await waitFor(() =>
+      [...document.querySelectorAll("button")].find((element) => element.textContent.includes(proof.label) && !element.disabled),
+    "the ordinary worker in task progress");
+    open.click();
+    const view = await waitFor(dialog, "the native child transcript modal");
+    check(!view.querySelector("textarea"), "The ordinary worker view must be read-only");
+    return view;
+  };
+  if (resumed) {
+    const view = await clickProgress();
+    await waitFor(() => view.textContent.includes(proof.childAnswer), "the child transcript after cold restart");
+    return { sessionId: existing.root, coldOrdinarySubagent: true };
+  }
+
+  await send(existing.root, proof.rootPrompt, "ordinary-subagent-root");
+  await waitFor(async () => (await fetch(new URL("worker-reply-ready", endpoint))).ok,
+    "the real worker's held SSE response");
+  const view = await clickProgress();
+  await waitFor(() => view.textContent.includes(proof.childPrompt), "the live native child prompt");
+  const parent = await invoke("read_agent_session_native", { sessionId: existing.root, maxMessages: 1 });
+  const child = parent.projections.values.subagentCatalog.find((entry) => entry.label === proof.label);
+  check(typeof child?.id === "string", "The native parent lost its owned child entry");
+  const readChild = (rootSessionId) => invoke("read_agent_session_native", {
+    rootSessionId,
+    sessionId: `lc:${child.id}`,
+    maxMessages: 8,
+  });
+  let foreignRejected = false;
+  try {
+    await readChild(existing.foreign);
+  } catch {
+    foreignRejected = true;
+  }
+  check(foreignRejected, "An unrelated root could read the child");
+  const release = await fetch(new URL("release-worker-reply", endpoint), { method: "POST" });
+  check(release.ok, "The worker model fixture could not finish");
+  await waitFor(() => view.textContent.includes(proof.childAnswer), "the child final answer without reopening");
+  await waitFor(async () => {
+    const native = await readChild(existing.root);
+    return JSON.stringify(native.page.records).includes(proof.childAnswer);
+  }, "the worker's committed native answer");
+  return {
+    sessionId: existing.root,
+    ordinarySubagents: { ...existing, child: child.id, active: true, completed: true, foreignRejected },
+  };
+}
 
 async function proveNativePage(url, click, count = 1, requireVisible = false) {
   const response = await fetch(new URL("native-preview-proof", endpoint), {
@@ -1179,7 +1574,7 @@ async function verifyWorkerQueue(chiefId, task, fixture) {
   }, "the child's inserted and ordinary queued messages completing in order");
 }
 
-async function configureFixtureChannel(fixture) {
+async function configureFixtureChannel(fixture, protocol = "openai_chat") {
   const proxy = await invoke("get_proxy_config");
   await invoke("update_proxy_config", {
     config: {
@@ -1205,7 +1600,7 @@ async function configureFixtureChannel(fixture) {
           baseUrl: `http://127.0.0.1:${fixture.modelPort}/v1`,
           apiKey: fixture.fixtureKey,
           authKind: "api_key",
-          protocol: "openai_chat",
+          protocol,
           enabled: true,
           models: [
             {
@@ -1384,6 +1779,10 @@ async function run(fixture) {
   const tray = await invoke("plugin:tray|get_by_id", { id: "lolicode" }).catch(() => null);
   if (tray !== null)
     await invoke("plugin:tray|set_visible", { rid: tray, visible: false }).catch(() => {});
+  if (fixture.phase === "model-refusal") return verifyModelRefusal(fixture);
+  if (fixture.phase === "reasoning-translation") return verifyReasoningTranslation(fixture);
+  if (fixture.phase === "ordinary-subagents" || fixture.phase === "ordinary-subagents-restart")
+    return verifyOrdinarySubagents(fixture);
   if (fixture.phase === "output-links") return verifyOutputLinks(fixture);
   if (fixture.phase === "warm-session") {
     const { verifyWarmSession } = await import("./warm-session.mjs");

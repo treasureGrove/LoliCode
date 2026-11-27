@@ -6,6 +6,7 @@ pub(crate) mod agent_files;
 mod agent_images;
 mod agent_mcp;
 mod agent_memory;
+pub(crate) mod agent_reasoning_translation;
 mod agent_secretary;
 mod agent_secretary_draft_pr;
 pub(crate) mod agent_secretary_github;

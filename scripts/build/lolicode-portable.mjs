@@ -127,7 +127,7 @@ function run(exe, args, options = {}) {
   );
   return result.stdout;
 }
-run(seven, ["a", "-tzip", "-mx=7", zip, "."], { cwd: stage });
+run(seven, ["a", "-tzip", "-mm=Deflate", "-mx=9", zip, "."], { cwd: stage });
 run(seven, ["t", zip]);
 run(seven, ["x", zip, `-o${extracted}`, "-y"]);
 function files(dir, prefix = "") {

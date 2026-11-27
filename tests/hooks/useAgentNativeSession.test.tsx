@@ -119,6 +119,32 @@ it("discards a previous session's late response and clears its content immediate
   expect(result.current.events).toEqual([event(5, "new-session")]);
 });
 
+it("clears a child immediately when the owning root changes and ignores its late history", async () => {
+  const oldPage = deferred<AgentNativeSessionRead>();
+  vi.mocked(agentApi.readSessionNative)
+    .mockResolvedValueOnce(response([event(5, "old-root-child")]))
+    .mockReturnValueOnce(oldPage.promise)
+    .mockRejectedValueOnce(new Error("会话归属不可验证"));
+  const { result, rerender } = renderHook(
+    ({ root }) => useAgentNativeSession("lc:child", { rootSessionId: root }),
+    { initialProps: { root: "lc:old-root" } },
+  );
+  await act(async () => {});
+  expect(result.current.events).toHaveLength(1);
+  act(() => {
+    void result.current.refresh();
+  });
+  rerender({ root: "lc:unrelated-root" });
+  expect(result.current.events).toHaveLength(0);
+  await act(async () => oldPage.resolve(response([event(6, "late-old-root")])));
+  expect(result.current.events).toHaveLength(0);
+  expect(result.current.error).toBe("会话归属不可验证");
+  expect(agentApi.readSessionNative).toHaveBeenLastCalledWith("lc:child", {
+    maxMessages: 12,
+    rootSessionId: "lc:unrelated-root",
+  });
+});
+
 it("a refresh supersedes an in-flight older page and starts a fresh cut", async () => {
   const older = deferred<AgentNativeSessionRead>();
   vi.mocked(agentApi.readSessionNative)
@@ -1122,6 +1148,34 @@ it("reads the authoritative cold log once if the active writer vanishes before f
   expect(result.current.events.at(-1)).toBe(ended);
   expect(result.current.realtime).toBe("history");
 });
+
+it.each([true, false])(
+  "tries the scoped child journal once after watch closes, with journal present: %s",
+  async (journalExists) => {
+    const missing = new Error("LOLICODE_SESSION_LOG_MISSING");
+    const childEvent = event(0, "child journal after retirement");
+    vi.mocked(agentApi.readSessionNative).mockRejectedValue(missing);
+    vi.mocked(agentApi.readSessionNative).mockRejectedValueOnce(missing);
+    if (journalExists) {
+      vi.mocked(agentApi.readSessionNative).mockResolvedValueOnce(
+        response([childEvent], false, 0),
+      );
+    }
+    const { result } = renderHook(() =>
+      useAgentNativeSession("lc:child", { rootSessionId: "lc:root" }),
+    );
+    await act(async () => {});
+    await act(async () => {});
+    expect(agentApi.readSessionNative).toHaveBeenCalledTimes(2);
+    expect(agentApi.readSessionNative).toHaveBeenLastCalledWith("lc:child", {
+      rootSessionId: "lc:root",
+      maxMessages: 12,
+    });
+    expect(result.current.events).toEqual(journalExists ? [childEvent] : []);
+    expect(result.current.realtime).toBe("history");
+    expect(result.current.error).toBeNull();
+  },
+);
 
 it("bounds cold catch-up for an interrupted journal and re-enables it for real activity and refresh", async () => {
   const started: SessionWireEvent = {
