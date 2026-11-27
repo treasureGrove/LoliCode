@@ -4,7 +4,7 @@
 
 本指南用于 **LoliCode 正式版**的安装验收、签名和发布。普通 `pnpm build` / `pnpm build:dev` 生成 **LoliCode Dev**，在 Windows 自动注册「LoliCode 开发版」入口，使用独立数据目录并禁用正式更新；详见[开发指南](lolicode-development.md)。正式构建入口为 `pnpm build:release`，下文直接执行 `pnpm tauri build` 的命令同样属于正式打包。GitHub 的 **LoliCode Windows stable release** 与 **LoliCode Windows development** 是独立工作流，Development 产物不能作为正式发布验收凭据。
 
-当前正式产品版本和原生更新版本均为 **v1.1.3**，见[本次交付记录](lolicode-v1.1.3-delivery.md)。本轮公开分发 **Windows x64 NSIS 安装版与便携 ZIP**，Android 保留既有 **0.1.0-alpha.4** 测试包；macOS 和 Linux 是产品目标，尚未发布对应安装包。真实发布结果记录在每版交付文档中，不能用待发布清单替代发布证据。
+当前正式产品版本和原生更新版本均为 **v1.1.5**，见[本次交付记录](lolicode-v1.1.5-delivery.md)。本轮公开分发 **Windows x64 NSIS 安装版与便携 ZIP**。Android 的公开测试包为 **0.1.0-alpha.4**，macOS 和 Linux 是产品目标。每版交付文档记录实际发布结果。
 
 从 **1.1.0** 开始统一版本号。`product-release.json` 中的两个版本字段，以及 Cargo、package、Tauri、正式更新清单、GitHub tag 和下载路径都使用同一个版本。新版检查 `/lolicode/updates/stable.json`，官网和工具站的下载页也读取这个地址。旧版仍检查 `/lolicode/updates/latest.json`，该地址提供一次性迁移清单。它用旧客户端可识别的 `4.2.0` 作为比较值，界面显示 1.1.0，安装的也是同一份签名 1.1.0 安装器。已经安装新版的用户直接进入新更新通道。历史包沿用其原有版本和下载路径。维护者可使用 `$lolicode-release` skill。
 
@@ -29,7 +29,7 @@ v1.0.0 本轮使用已验证的同版本 GitHub 下载通道，保留历史 R2 �
 
 ### Windows 覆盖更新
 
-**下一次包含 Harness rc.2 依赖去重的正式发布前置条件**：NSIS 当前覆盖资源时不会清理不再分发的旧 SDK 文件。必须先实现受管理的旧依赖清理，并用真实 rc.1 安装目录覆盖到 rc.2，验证 Node 实际解析到新根依赖、会话与配置保留及重复安装。开发版已移除文件后的空目录清理不等于正式安装器完成了这项迁移；未通过前不得将 rc.2 包提升到正式更新通道。详见 [rc.2 兼容记录](harness-rc2-compatibility.md)。
+NSIS 覆盖安装依据当前文件清单和历史 SHA-256 清单清理已废弃的 Harness 文件，并核对 Node 实际解析到当前根依赖。升级验收使用已发布安装器和隔离标准账户，核对原安装路径、渠道配置、会话字节与重复安装后的续聊。1.1.5 实测覆盖了 1.1.1 的 rc.1 和 1.1.4 的 rc.2 基线。[1.1.5 交付记录](lolicode-v1.1.5-delivery.md)
 
 v1.0.2 及后续安装包使用 `src-tauri/nsis/installer.nsi` 自定义模板，基于 Tauri CLI 2.10.1：NSIS 同版本修复与升版直接覆盖原目录，不调用旧卸载器。手动运行、`/P`、`/S`、`/UPDATE` 使用同一策略；Windows「已安装的应用」中的主动卸载入口保留，MSI 转 NSIS 仍沿用上游迁移流程。
 
